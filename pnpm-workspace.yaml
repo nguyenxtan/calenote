@@ -2,9 +2,12 @@ packages:
   - "."
 
 allowBuilds:
+  esbuild: true
   unrs-resolver: true
+  workerd: true
 
 minimumReleaseAgeExclude:
   - '@testing-library/user-event@14.6.7'
   - '@types/node@26.4.1'
   - lucide-react@1.39.0
+  - '@cloudflare/workers-types@5.20260902.1'

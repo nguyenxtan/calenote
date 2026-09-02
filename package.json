@@ -6,7 +6,9 @@
   "description": "Chat-first personal calendar assistant with BYOB Zalo and Telegram integrations.",
   "scripts": {
     "dev": "next dev",
+    "dev:worker": "wrangler dev",
     "build": "next build",
+    "deploy": "wrangler deploy",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -27,6 +29,7 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260902.1",
     "@opentelemetry/sdk-trace-base": "2.11.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -39,7 +42,8 @@
     "eslint-config-next": "16.3.4",
     "jsdom": "30.0.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "wrangler": "4.128.0"
   },
   "packageManager": "pnpm@11.19.0"
 }
