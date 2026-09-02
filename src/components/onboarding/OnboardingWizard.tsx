@@ -447,7 +447,7 @@ export function OnboardingWizard() {
                 Xem dashboard mẫu
                 <ArrowRight size={17} />
               </Link>
-              <a href="/docs/integrations" className={styles.textLink}>
+              <a href="/docs" className={styles.textLink}>
                 Đọc pipeline triển khai trong repo
                 <ChevronRight size={15} />
               </a>
