@@ -2,6 +2,7 @@
   "name": "calenote",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Chat-first personal calendar assistant with BYOB Zalo and Telegram integrations.",
   "scripts": {
     "dev": "next dev",
