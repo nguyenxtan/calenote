@@ -14,6 +14,7 @@
 .env.*.local
 
 # tooling
+.worktrees/
 *.tsbuildinfo
 .DS_Store
 pnpm-debug.log*
