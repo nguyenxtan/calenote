@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# testing
+/coverage/
+
+# local environment
+.env
+.env.local
+.env.*.local
+
+# tooling
+*.tsbuildinfo
+.DS_Store
+pnpm-debug.log*
