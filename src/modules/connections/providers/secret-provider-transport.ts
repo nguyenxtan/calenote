@@ -1,4 +1,4 @@
-import { request as httpsRequest } from "node:https";
+import { request as httpsRequest, type RequestOptions } from "node:https";
 import {
   context,
   SpanKind,
@@ -33,24 +33,33 @@ export function createSuppressedProviderContext(): Context {
   return suppressTracing(context.active());
 }
 
+export function createProviderRequestOptions(
+  input: ProviderRequest,
+  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+): RequestOptions {
+  return {
+    protocol: "https:",
+    hostname: input.hostname,
+    port: 443,
+    path: input.path,
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "content-length": "2",
+    },
+    signal,
+    timeout: REQUEST_TIMEOUT_MS,
+  };
+}
+
 export async function executeHttpsProviderRequest(
   input: ProviderRequest,
+  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 ): Promise<RawProviderResponse> {
   return new Promise((resolve, reject) => {
     const request = httpsRequest(
-      {
-        protocol: "https:",
-        hostname: input.hostname,
-        port: 443,
-        path: input.path,
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "content-length": "2",
-        },
-        timeout: REQUEST_TIMEOUT_MS,
-      },
+      createProviderRequestOptions(input, signal),
       (response) => {
         const chunks: Buffer[] = [];
         let byteLength = 0;

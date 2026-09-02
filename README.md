@@ -78,7 +78,8 @@ Success:
 ```
 
 API chỉ gọi hai hostname cố định bằng Node HTTPS, dùng POST, không theo redirect,
-có timeout, giới hạn request/response và trả lỗi đã làm sạch. Transport không dùng
+có deadline tuyệt đối 8 giây, giới hạn request/response và trả lỗi đã làm sạch. Body
+client chậm bị hủy sau 5 giây. Transport không dùng
 global `fetch`; auto HTTP tracing bị suppress và span thủ công không chứa URL/path
 có token. Response API có `Cache-Control: no-store`, không chứa token hoặc error
 description gốc từ provider.
@@ -172,7 +173,7 @@ docs/
 
 Trước khi cho người dùng kết nối bot thật lâu dài:
 
-1. Auth/session và tenant authorization.
+1. Auth/session, tenant authorization, rate limit và concurrency quota cho endpoint verify.
 2. PostgreSQL migrations + unique ownership constraints.
 3. KMS envelope encryption và HMAC token fingerprint.
 4. HTTPS webhook, secret validation, body/rate limits và idempotent inbound store.

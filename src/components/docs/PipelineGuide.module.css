@@ -48,7 +48,7 @@
   gap: 6px;
   align-items: center;
   margin-bottom: 55px;
-  color: rgb(255 255 255 / 55%);
+  color: rgb(255 255 255 / 92%);
   font-size: 10px;
   font-weight: 700;
 }
@@ -88,7 +88,7 @@
 .heroLead {
   max-width: 590px;
   margin: 22px 0 0;
-  color: rgb(255 255 255 / 62%);
+  color: rgb(255 255 255 / 92%);
   font-size: 14px;
   line-height: 1.65;
 }
@@ -123,7 +123,7 @@
 }
 
 .statusCard span {
-  color: rgb(255 255 255 / 52%);
+  color: rgb(255 255 255 / 92%);
   font-size: 10px;
 }
 
@@ -212,7 +212,7 @@
 }
 
 .flowCurrent .flowTop small {
-  color: rgb(255 255 255 / 42%);
+  color: rgb(255 255 255 / 92%);
 }
 
 .flow h3 {
@@ -231,7 +231,7 @@
 }
 
 .flowCurrent > p {
-  color: rgb(255 255 255 / 58%) !important;
+  color: rgb(255 255 255 / 92%) !important;
 }
 
 .flowState {
@@ -375,7 +375,7 @@
 }
 
 .connectCopy .eyebrow { color: var(--lime); }
-.connectCopy > p:last-child { color: rgb(255 255 255 / 60%); }
+.connectCopy > p:last-child { color: rgb(255 255 255 / 92%); }
 
 .commandCard {
   display: grid;
@@ -405,7 +405,7 @@
 
 .commandCard small {
   grid-column: 2;
-  color: rgb(255 255 255 / 42%);
+  color: rgb(255 255 255 / 92%);
   font-size: 10px;
   text-transform: uppercase;
 }

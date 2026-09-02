@@ -10,7 +10,8 @@ Token không được lưu bền vững, trả về browser, ghi log, đưa vào
 rotation hay revoke thực tế; “token hợp lệ” không đồng nghĩa bot đang hoạt động.
 
 Transport v0.1 không dùng global `fetch`: nó gọi Node HTTPS với hostname cố
-định, timeout và response byte cap. Automatic HTTP tracing bị suppress quanh
+định, deadline tuyệt đối 8 giây, socket-idle timeout và response byte cap.
+Request body vào có cap 2 KiB và deadline 5 giây. Automatic HTTP tracing bị suppress quanh
 request chứa token; span thủ công chỉ ghi provider, operation, hostname và mã
 HTTP, không ghi URL/path, exception thô hay token. `401` được xem là credential
 bị từ chối; `403` Zalo, `429`, `5xx`, timeout và lỗi mạng là provider tạm thời
@@ -81,10 +82,16 @@ riêng; so sánh secret constant-time. Adapter xác minh chữ ký/secret provid
 trước parse payload; giới hạn body, dedupe update ID, kiểm replay theo timestamp
 khi provider hỗ trợ, rate-limit và enqueue với idempotency key.
 
-Egress adapter chỉ gọi HTTPS hostname cố định: `api.telegram.org` và
-`bot-api.zaloplatforms.com`. Tắt redirect, đặt timeout/response limit,
-allowlist DNS/egress, chặn IP private, loopback, link-local, metadata và
-reserved để chống SSRF/DNS rebinding.
+Egress adapter v0.1 chỉ gọi HTTPS hostname cố định: `api.telegram.org` và
+`bot-api.zaloplatforms.com`, không theo redirect, có deadline/response limit.
+Trước production, network policy còn phải pin allowlist DNS/egress và chặn IP
+private, loopback, link-local, metadata, reserved sau mỗi lần resolve để chống
+DNS rebinding. Fixed hostname hiện tại không được trình bày như bằng chứng rằng
+network-level guard này đã hoàn tất.
+
+Trước khi public endpoint verify, bắt buộc thêm rate limit theo IP/user/provider,
+concurrency quota và alert quota provider ở gateway hoặc store dùng chung; limiter
+in-memory của một instance không được coi là đủ trong môi trường nhiều replica.
 
 ## /connect, group privacy, redaction
 

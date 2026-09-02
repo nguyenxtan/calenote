@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 2_048;
+const REQUEST_BODY_DEADLINE_MS = 5_000;
 
 const requestSchema = z.object({
   provider: z.enum(["zalo", "telegram"]),
@@ -30,23 +31,44 @@ function json(body: unknown, status: number): Response {
   });
 }
 
-async function readLimitedBody(request: Request): Promise<string | null> {
-  if (!request.body) return "";
+type BodyReadResult =
+  | { status: "ok"; body: string }
+  | { status: "too-large" }
+  | { status: "timeout" };
+
+async function readLimitedBody(
+  request: Request,
+  deadlineMs: number,
+): Promise<BodyReadResult> {
+  if (!request.body) return { status: "ok", body: "" };
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
+  let deadlineReached = false;
+  const timeoutId = setTimeout(() => {
+    deadlineReached = true;
+    void reader.cancel().catch(() => undefined);
+  }, deadlineMs);
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (deadlineReached) return { status: "timeout" };
+      if (done) break;
 
-    byteLength += value.byteLength;
-    if (byteLength > MAX_BODY_BYTES) {
-      await reader.cancel();
-      return null;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { status: "too-large" };
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    if (deadlineReached) return { status: "timeout" };
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const body = new Uint8Array(byteLength);
@@ -56,7 +78,7 @@ async function readLimitedBody(request: Request): Promise<string | null> {
     offset += chunk.byteLength;
   }
 
-  return new TextDecoder().decode(body);
+  return { status: "ok", body: new TextDecoder().decode(body) };
 }
 
 type BotTokenVerifier = (provider: BotProvider, token: string) => Promise<BotProfile>;
@@ -64,6 +86,7 @@ type BotTokenVerifier = (provider: BotProvider, token: string) => Promise<BotPro
 async function handleVerify(
   request: Request,
   verifier: BotTokenVerifier,
+  requestBodyDeadlineMs: number,
 ): Promise<Response> {
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
@@ -80,8 +103,8 @@ async function handleVerify(
 
   let rawBody: string;
   try {
-    const limitedBody = await readLimitedBody(request);
-    if (limitedBody === null) {
+    const bodyResult = await readLimitedBody(request, requestBodyDeadlineMs);
+    if (bodyResult.status === "too-large") {
       return json(
         {
           error: {
@@ -92,7 +115,18 @@ async function handleVerify(
         413,
       );
     }
-    rawBody = limitedBody;
+    if (bodyResult.status === "timeout") {
+      return json(
+        {
+          error: {
+            code: "REQUEST_TIMEOUT",
+            message: "Yêu cầu mất quá nhiều thời gian để gửi.",
+          },
+        },
+        408,
+      );
+    }
+    rawBody = bodyResult.body;
   } catch {
     return json({ error: { code: "INVALID_REQUEST", message: messages.invalidRequest } }, 400);
   }
@@ -137,8 +171,13 @@ async function handleVerify(
 
 export function createVerifyRoute(
   verifier: BotTokenVerifier = verifyBotToken,
+  options: { requestBodyDeadlineMs?: number } = {},
 ): (request: Request) => Promise<Response> {
-  return (request) => handleVerify(request, verifier);
+  const requestBodyDeadlineMs = Math.max(
+    1,
+    options.requestBodyDeadlineMs ?? REQUEST_BODY_DEADLINE_MS,
+  );
+  return (request) => handleVerify(request, verifier, requestBodyDeadlineMs);
 }
 
 export const POST = createVerifyRoute();

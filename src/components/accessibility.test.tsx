@@ -21,6 +21,14 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+function compositeHex(foreground: string, background: string, alpha: number): string {
+  const channel = (hex: string, offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16);
+  const mixed = [1, 3, 5].map((offset) =>
+    Math.round(channel(foreground, offset) * alpha + channel(background, offset) * (1 - alpha)),
+  );
+  return `#${mixed.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
 describe("accessibility guardrails", () => {
   it("has no automatically detectable onboarding violations", async () => {
     const { container } = render(<OnboardingWizard />);
@@ -45,6 +53,26 @@ describe("accessibility guardrails", () => {
       "#dce9df",
     ]) {
       expect(contrastRatio(faint!, background)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("keeps translucent light text readable on dark green surfaces", () => {
+    const files = [
+      "src/components/onboarding/OnboardingWizard.module.css",
+      "src/components/dashboard/DashboardShell.module.css",
+      "src/components/docs/PipelineGuide.module.css",
+    ];
+    // The dashboard's 22% lime radial overlay creates the lightest dark-panel area.
+    const lightestDarkPanel = "#487448";
+
+    for (const file of files) {
+      const css = readFileSync(resolve(process.cwd(), file), "utf8");
+      const textOpacities = [...css.matchAll(/color:\s*rgb\((?:255 255 255|253 252 246) \/ (\d+)%\)/g)];
+      for (const match of textOpacities) {
+        const foreground = match[0].includes("253 252 246") ? "#fdfcf6" : "#ffffff";
+        const composite = compositeHex(foreground, lightestDarkPanel, Number(match[1]) / 100);
+        expect(contrastRatio(composite, lightestDarkPanel), `${file}: ${match[0]}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 });

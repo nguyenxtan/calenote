@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { isTracingSuppressed } from "@opentelemetry/core";
 import {
   BasicTracerProvider,
@@ -7,11 +9,43 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { ProviderVerificationError } from "../provider-error";
 import {
+  createProviderRequestOptions,
   createSuppressedProviderContext,
+  executeHttpsProviderRequest,
   postSecretProviderJson,
 } from "../providers/secret-provider-transport";
 
 describe("secret-aware provider transport", () => {
+  it("attaches an absolute abort deadline to the full HTTPS request lifecycle", () => {
+    const signal = AbortSignal.abort();
+    const options = createProviderRequestOptions(
+      {
+        provider: "telegram",
+        hostname: "api.telegram.org",
+        path: "/botredacted/getMe",
+        operation: "getMe",
+      },
+      signal,
+    );
+
+    expect(options.signal).toBe(signal);
+    expect(options.timeout).toBe(8_000);
+  });
+
+  it("aborts a real HTTPS request when the absolute signal deadline fires", async () => {
+    await expect(
+      executeHttpsProviderRequest(
+        {
+          provider: "telegram",
+          hostname: "api.telegram.org",
+          path: "/botredacted/getMe",
+          operation: "getMe",
+        },
+        AbortSignal.timeout(1),
+      ),
+    ).rejects.toMatchObject({ code: "ABORT_ERR" });
+  });
+
   it("suppresses automatic HTTP tracing and exports only secret-free span metadata", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
     const globalFetch = vi.fn();

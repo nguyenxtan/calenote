@@ -193,10 +193,10 @@ Mọi provider identifier được lưu dạng string; không giả định inte
 
 ## 8. Security baseline
 
-- Token chỉ đi qua HTTPS, password input và server runtime; không nằm trong URL, analytics, localStorage hoặc log.
+- Token đi qua same-origin (HTTPS bắt buộc ở production; HTTP chỉ dùng loopback local), password input và server runtime; không nằm trong URL Calenote, analytics, localStorage hoặc log/trace.
 - Production lưu ciphertext bằng envelope encryption; khóa dữ liệu không nằm cùng database.
 - Dùng HMAC fingerprint để phát hiện một bot bị gắn cho hai workspace mà không cần so sánh plaintext.
-- Chỉ gọi đến hai hostname provider cố định, tắt redirect, đặt timeout và giới hạn body để giảm SSRF/DoS.
+- Chỉ gọi đến hai hostname provider cố định, không theo redirect, đặt deadline tuyệt đối và giới hạn body để giảm SSRF/DoS.
 - Webhook URL dùng `connectionPublicId` ngẫu nhiên, không lộ tenant id; secret header được so sánh constant-time.
 - Mã `/connect` tối thiểu 128 bit, hash khi lưu, TTL 10 phút, một lần dùng.
 - Direct chat là mặc định. Group phải có opt-in, quyền tối thiểu và không gửi nội dung lịch cá nhân ngoài ý muốn.
@@ -250,4 +250,3 @@ Mọi provider identifier được lưu dạng string; không giả định inte
 - Test, typecheck, lint và production build đều qua.
 - Giao diện được kiểm tra ở desktop và mobile.
 - README chỉ rõ đâu là chạy được và đâu là roadmap production.
-

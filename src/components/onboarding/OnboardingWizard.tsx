@@ -149,6 +149,7 @@ export function OnboardingWizard() {
         return;
       }
 
+      setScope("personal");
       setBot(payload.data.bot);
       setToken("");
       setVerifyState("idle");

@@ -142,4 +142,32 @@ describe("POST /api/v1/bot-connections/verify", () => {
     expect(pulls).toBe(2);
     expect(verifier).not.toHaveBeenCalled();
   });
+
+  it("aborts a slow request body on an absolute deadline", async () => {
+    const verifier = vi.fn();
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        closeTimer = setTimeout(() => controller.close(), 40);
+      },
+      cancel() {
+        clearTimeout(closeTimer);
+      },
+    });
+    const slowRequest = new Request(
+      "http://localhost/api/v1/bot-connections/verify",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        duplex: "half",
+      } as RequestInit & { duplex: "half" },
+    );
+
+    const response = await createVerifyRoute(verifier, { requestBodyDeadlineMs: 5 })(slowRequest);
+
+    expect(response.status).toBe(408);
+    expect((await response.json()).error.code).toBe("REQUEST_TIMEOUT");
+    expect(verifier).not.toHaveBeenCalled();
+  });
 });

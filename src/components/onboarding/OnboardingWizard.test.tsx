@@ -215,4 +215,46 @@ describe("OnboardingWizard", () => {
     expect(screen.getByRole("radio", { name: "Dùng trong nhóm" })).toBeDisabled();
     expect(screen.getByText("Bot này không được provider cho phép vào nhóm.")).toBeInTheDocument();
   });
+
+  it("resets scope to personal when another bot is verified", async () => {
+    const user = userEvent.setup();
+    const botResponse = (name: string, canJoinGroups: boolean) =>
+      new Response(
+        JSON.stringify({
+          data: {
+            bot: {
+              provider: "telegram",
+              providerBotId: name,
+              displayName: name,
+              handle: null,
+              accountType: null,
+              canJoinGroups,
+            },
+          },
+          meta: { tokenStored: false },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(botResponse("Group bot", true))
+        .mockResolvedValueOnce(botResponse("Private bot", false)),
+    );
+
+    render(<OnboardingWizard />);
+    await reachTokenStep(user, "Telegram");
+    await user.type(screen.getByLabelText("Bot token"), "first-safe-token");
+    await user.click(screen.getByRole("button", { name: "Xác minh token" }));
+    await user.click(await screen.findByRole("radio", { name: "Dùng trong nhóm" }));
+    expect(screen.getByRole("radio", { name: "Dùng trong nhóm" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Quay lại" }));
+    await user.type(screen.getByLabelText("Bot token"), "second-safe-token");
+    await user.click(screen.getByRole("button", { name: "Xác minh token" }));
+
+    expect(await screen.findByText("Private bot")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Dùng cho lịch cá nhân" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Dùng trong nhóm" })).toBeDisabled();
+  });
 });
