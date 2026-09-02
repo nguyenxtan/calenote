@@ -9,11 +9,16 @@ Nguồn chính thức: [xác thực](https://docs.zaloplatforms.com/docs/BOT/aut
 
 ## Tạo và xác minh bot
 
-1. Người dùng tạo bot bằng OA **Zalo Bot Manager / Bot Creator**; sau khi tạo, Zalo gửi Bot Token cho tài khoản Zalo của họ. [Hướng dẫn tạo bot](https://docs.zaloplatforms.com/docs/BOT/create_bot)
+1. Người dùng mở **Zalo Bot Manager / Bot Creator** bằng tài khoản Zalo của mình để tạo bot; đây không phải luồng Zalo OA OpenAPI. Sau khi tạo, Zalo gửi Bot Token cho tài khoản của họ. [Hướng dẫn tạo bot](https://docs.zaloplatforms.com/docs/BOT/create_bot)
 2. Server Calenote gọi `POST https://bot-api.zaloplatforms.com/bot<BOT_TOKEN>/getMe` với body rỗng. Không gọi provider từ browser.
 3. Chỉ khi response có `ok: true` và `result.id`, `result.account_name` hợp lệ, UI mới hiển thị “Token đã xác minh”. Ví dụ result còn có `account_type`, `can_join_groups`. [getMe](https://docs.zaloplatforms.com/docs/BOT/apis/getMe)
 
 Bot Token được truyền trong đường dẫn API; Zalo tài liệu hóa dạng ví dụ `12345689:abc-xyz`, không xem đó là regex an toàn để suy diễn. Token không hết hạn trừ khi chủ bot reset. Không ghi token vào URL application, log, analytics hay client storage.
+
+Trong adapter v0.1, chỉ error code/HTTP `401` được phân loại là token bị từ
+chối. `403` của Zalo (internal error), `429` (quota), `5xx`, timeout và lỗi mạng
+được trả thành provider tạm thời không sẵn sàng; UI không yêu cầu reset token
+trong các trường hợp đó. [Bảng mã lỗi](https://docs.zaloplatforms.com/docs/BOT/error_code)
 
 ## Nhận tin nhắn: local và production
 

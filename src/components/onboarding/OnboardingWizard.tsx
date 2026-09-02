@@ -21,7 +21,7 @@ import {
   UsersRound,
   Webhook,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { BotProfile, BotProvider } from "@/modules/connections/contracts";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import { ProgressRail } from "./ProgressRail";
@@ -77,19 +77,27 @@ export function OnboardingWizard() {
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [bot, setBot] = useState<BotProfile | null>(null);
-  const [scope, setScope] = useState<Scope | null>(null);
+  const [scope, setScope] = useState<Scope>("personal");
   const [verifyState, setVerifyState] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   const currentIndex = stepOrder.indexOf(step);
   const accountValid = name.trim().length >= 2 && /^\S+@\S+\.\S+$/.test(email);
   const guide = providerGuides[provider];
   const shortName = useMemo(() => name.trim().split(/\s+/).slice(-1)[0] || "bạn", [name]);
 
+  useEffect(() => {
+    return () => requestAbortRef.current?.abort();
+  }, []);
+
   function selectProvider(nextProvider: BotProvider) {
     if (nextProvider !== provider) {
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
       setToken("");
       setBot(null);
+      setScope("personal");
       setVerifyState("idle");
       setErrorMessage("");
     }
@@ -97,6 +105,7 @@ export function OnboardingWizard() {
   }
 
   function goBack() {
+    if (verifyState === "loading") return;
     const previous = stepOrder[Math.max(0, currentIndex - 1)];
     setStep(previous);
     setErrorMessage("");
@@ -108,14 +117,21 @@ export function OnboardingWizard() {
 
     setVerifyState("loading");
     setErrorMessage("");
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+    const requestedProvider = provider;
 
     try {
       const response = await fetch("/api/v1/bot-connections/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider, token }),
+        body: JSON.stringify({ provider: requestedProvider, token }),
+        signal: controller.signal,
       });
       const payload = (await response.json()) as VerifySuccess | VerifyFailure;
+
+      if (controller.signal.aborted) return;
 
       if (!response.ok || !("data" in payload) || !payload.data?.bot) {
         const message =
@@ -127,13 +143,24 @@ export function OnboardingWizard() {
         return;
       }
 
+      if (payload.data.bot.provider !== requestedProvider) {
+        setVerifyState("error");
+        setErrorMessage("Kết quả xác minh không khớp kênh đã chọn. Hãy thử lại.");
+        return;
+      }
+
       setBot(payload.data.bot);
       setToken("");
       setVerifyState("idle");
       setStep("scope");
     } catch {
+      if (controller.signal.aborted) return;
       setVerifyState("error");
       setErrorMessage("Mất kết nối đến Calenote. Kiểm tra mạng rồi thử lại.");
+    } finally {
+      if (requestAbortRef.current === controller) {
+        requestAbortRef.current = null;
+      }
     }
   }
 
@@ -159,6 +186,9 @@ export function OnboardingWizard() {
         </div>
 
         <div className={styles.chatPreview} aria-label="Ví dụ hội thoại">
+          <p className={styles.previewBoundary}>
+            Minh họa · Chat và nhắc lịch chưa hoạt động trong v0.1
+          </p>
           <div className={styles.chatUser}>Mai 8h nhắc tui gọi cho mẹ nha</div>
           <div className={styles.chatBot}>
             <span className={styles.miniBot} aria-hidden="true">
@@ -188,7 +218,12 @@ export function OnboardingWizard() {
 
         <div className={styles.card}>
           {step !== "account" && (
-            <button type="button" className={styles.backButton} onClick={goBack}>
+            <button
+              type="button"
+              className={styles.backButton}
+              onClick={goBack}
+              disabled={verifyState === "loading"}
+            >
               <ArrowLeft size={16} />
               Quay lại
             </button>
@@ -255,7 +290,9 @@ export function OnboardingWizard() {
                 description="Mỗi workspace dùng bot do chính bạn tạo và sở hữu. Bạn có thể thêm kênh khác sau."
               />
 
-              <div className={styles.providerList} role="radiogroup" aria-label="Chọn kênh bot">
+              <fieldset className={styles.choiceFieldset}>
+                <legend className={styles.visuallyHidden}>Chọn kênh bot</legend>
+                <div className={styles.providerList}>
                 <ProviderCard
                   provider="zalo"
                   selected={provider === "zalo"}
@@ -266,7 +303,8 @@ export function OnboardingWizard() {
                   selected={provider === "telegram"}
                   onSelect={() => selectProvider("telegram")}
                 />
-              </div>
+                </div>
+              </fieldset>
 
               <div className={styles.callout}>
                 <ShieldCheck size={18} />
@@ -372,43 +410,64 @@ export function OnboardingWizard() {
                   <Bot size={24} />
                 </span>
                 <div>
-                  <span>Đã xác minh qua {provider === "zalo" ? "Zalo" : "Telegram"}</span>
+                  <span>Đã xác minh qua {bot.provider === "zalo" ? "Zalo" : "Telegram"}</span>
                   <strong>{bot.displayName}</strong>
                   {bot.handle && <small>{bot.handle}</small>}
                 </div>
                 <CheckCircle2 size={22} className={styles.successIcon} />
               </div>
 
-              <div className={styles.scopeGrid}>
-                <button
-                  type="button"
-                  aria-label="Dùng cho lịch cá nhân"
+              <fieldset className={styles.choiceFieldset}>
+                <legend className={styles.visuallyHidden}>Chọn phạm vi sử dụng</legend>
+                <div className={styles.scopeGrid}>
+                <label
                   className={`${styles.scopeCard} ${scope === "personal" ? styles.scopeSelected : ""}`}
-                  onClick={() => setScope("personal")}
                 >
+                  <input
+                    type="radio"
+                    name="bot-scope"
+                    value="personal"
+                    checked={scope === "personal"}
+                    onChange={() => setScope("personal")}
+                    className={styles.choiceInput}
+                    aria-label="Dùng cho lịch cá nhân"
+                  />
                   <span className={styles.scopeIcon}><UserRound size={20} /></span>
                   <strong>Dùng cho lịch cá nhân</strong>
                   <small>Chỉ xử lý tin nhắn trực tiếp của bạn.</small>
                   {scope === "personal" && <Check size={16} className={styles.scopeCheck} />}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Dùng trong nhóm"
+                </label>
+                <label
                   className={`${styles.scopeCard} ${scope === "group" ? styles.scopeSelected : ""}`}
-                  onClick={() => setScope("group")}
                 >
+                  <input
+                    type="radio"
+                    name="bot-scope"
+                    value="group"
+                    checked={scope === "group"}
+                    onChange={() => setScope("group")}
+                    disabled={bot.canJoinGroups !== true}
+                    className={styles.choiceInput}
+                    aria-label="Dùng trong nhóm"
+                  />
                   <span className={styles.scopeIcon}><UsersRound size={20} /></span>
                   <strong>Dùng trong nhóm</strong>
-                  <small>{provider === "zalo" ? "Zalo group hiện đang Beta." : "Chỉ phản hồi khi được gọi."}</small>
+                  <small>
+                    {bot.canJoinGroups !== true
+                      ? "Bot này không được provider cho phép vào nhóm."
+                      : bot.provider === "zalo"
+                        ? "Zalo group hiện đang Beta."
+                        : "Chỉ phản hồi khi được gọi."}
+                  </small>
                   <span className={styles.betaBadge}>Beta</span>
                   {scope === "group" && <Check size={16} className={styles.scopeCheck} />}
-                </button>
-              </div>
+                </label>
+                </div>
+              </fieldset>
 
               <button
                 type="button"
                 className={styles.primaryButton}
-                disabled={!scope}
                 onClick={() => setStep("ready")}
               >
                 Hoàn tất thiết lập

@@ -77,7 +77,11 @@ Success:
 }
 ```
 
-API chỉ gọi hai hostname cố định, dùng POST, tắt redirect, có timeout/no-store, giới hạn request và trả lỗi đã làm sạch. Response không chứa token hoặc error description gốc từ provider.
+API chỉ gọi hai hostname cố định bằng Node HTTPS, dùng POST, không theo redirect,
+có timeout, giới hạn request/response và trả lỗi đã làm sạch. Transport không dùng
+global `fetch`; auto HTTP tracing bị suppress và span thủ công không chứa URL/path
+có token. Response API có `Cache-Control: no-store`, không chứa token hoặc error
+description gốc từ provider.
 
 ## Pipeline Zalo Bot Platform
 
@@ -175,4 +179,3 @@ Trước khi cho người dùng kết nối bot thật lâu dài:
 5. `/connect` 128-bit, hash, TTL 10 phút, one-use, direct-chat only.
 6. Outbox/queue/scheduler/delivery worker có retry giới hạn và audit đã redact.
 7. Rotate/revoke token cùng privacy policy cho group/team/pair.
-

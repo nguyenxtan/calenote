@@ -1,25 +1,31 @@
-import type { BotProfile, ProviderFetch } from "../contracts";
+import type { BotProfile, ProviderRequester } from "../contracts";
 import { ProviderVerificationError } from "../provider-error";
 import { isSafeProviderToken } from "../token-policy";
-import { isRecord, optionalBoolean, postProviderJson } from "./provider-http";
+import { isRecord, optionalBoolean, providerFailureFromPayload } from "./provider-http";
+import { postSecretProviderJson } from "./secret-provider-transport";
 
-const TELEGRAM_BOT_API_ORIGIN = "https://api.telegram.org";
+const TELEGRAM_BOT_API_HOSTNAME = "api.telegram.org";
 
 export async function verifyTelegramBotToken(
   token: string,
-  fetcher: ProviderFetch = fetch,
+  requester: ProviderRequester = postSecretProviderJson,
 ): Promise<BotProfile> {
   if (!isSafeProviderToken("telegram", token)) {
     throw new ProviderVerificationError("INVALID_TOKEN_FORMAT");
   }
 
-  const payload = await postProviderJson(
-    `${TELEGRAM_BOT_API_ORIGIN}/bot${token}/getMe`,
-    fetcher,
-  );
+  const payload = await requester({
+    provider: "telegram",
+    hostname: TELEGRAM_BOT_API_HOSTNAME,
+    path: `/bot${token}/getMe`,
+    operation: "getMe",
+  });
 
-  if (!isRecord(payload) || payload.ok !== true) {
-    throw new ProviderVerificationError("PROVIDER_REJECTED");
+  if (!isRecord(payload)) {
+    throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
+  }
+  if (payload.ok !== true) {
+    throw providerFailureFromPayload("telegram", payload);
   }
 
   const result = payload.result;

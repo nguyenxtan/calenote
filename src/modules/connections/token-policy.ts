@@ -1,12 +1,10 @@
 import type { BotProvider } from "./contracts";
 
-const tokenPatterns: Record<BotProvider, RegExp> = {
-  // Zalo currently documents a numeric bot id followed by a secret, separated by a colon.
-  zalo: /^\d{4,32}:[A-Za-z0-9._-]{3,448}$/,
-  // Telegram tokens use a numeric bot id and a URL-safe secret.
-  telegram: /^\d{4,32}:[A-Za-z0-9_-]{8,448}$/,
-};
+// Provider docs show examples, not a stable token grammar. Reject only bytes that
+// can escape or split the fixed API path; let getMe decide whether a token is valid.
+const unsafePathTokenCharacter = /[\u0000-\u0020\u007f/\\?#%]/u;
 
 export function isSafeProviderToken(provider: BotProvider, token: string): boolean {
-  return token.length <= 512 && tokenPatterns[provider].test(token);
+  void provider;
+  return token.length > 0 && token.length <= 512 && !unsafePathTokenCharacter.test(token);
 }

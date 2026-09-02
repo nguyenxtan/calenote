@@ -20,6 +20,9 @@ describe("OnboardingWizard", () => {
     render(<OnboardingWizard />);
 
     expect(screen.getByRole("heading", { name: "Thiết lập Calenote của bạn" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Minh họa · Chat và nhắc lịch chưa hoạt động trong v0.1"),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Tiếp tục chọn kênh" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Tên hiển thị"), "Bích Tuyền");
@@ -27,11 +30,23 @@ describe("OnboardingWizard", () => {
     await user.click(screen.getByRole("button", { name: "Tiếp tục chọn kênh" }));
 
     expect(screen.getByRole("heading", { name: "Bạn muốn chat ở đâu?" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Zalo Bot Platform/ })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: /Zalo Bot Platform/ })).toBeChecked();
     expect(screen.getByText("Zalo-first")).toBeInTheDocument();
+  });
+
+  it("supports native arrow-key selection between bot providers", async () => {
+    const user = userEvent.setup();
+    render(<OnboardingWizard />);
+
+    await user.type(screen.getByLabelText("Tên hiển thị"), "Bích Tuyền");
+    await user.type(screen.getByLabelText("Email"), "tuyen@example.com");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục chọn kênh" }));
+
+    const zalo = screen.getByRole("radio", { name: /Zalo Bot Platform/ });
+    zalo.focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(screen.getByRole("radio", { name: /Telegram/ })).toBeChecked();
   });
 
   it("verifies a Telegram token, clears the secret and keeps webhook state honest", async () => {
@@ -75,7 +90,7 @@ describe("OnboardingWizard", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Dùng cho lịch cá nhân" }));
+    expect(screen.getByRole("radio", { name: "Dùng cho lịch cá nhân" })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Hoàn tất thiết lập" }));
 
     expect(screen.getByRole("heading", { name: "Bot đã được xác minh" })).toBeInTheDocument();
@@ -113,6 +128,41 @@ describe("OnboardingWizard", () => {
     expect(screen.getByRole("button", { name: "Xác minh token" })).toBeEnabled();
   });
 
+  it("rejects a mismatched provider identity instead of attaching a stale result", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              bot: {
+                provider: "zalo",
+                providerBotId: "wrong-provider",
+                displayName: "Stale bot",
+                handle: null,
+                accountType: "BASIC",
+                canJoinGroups: true,
+              },
+            },
+            meta: { tokenStored: false },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    render(<OnboardingWizard />);
+    await reachTokenStep(user, "Telegram");
+    await user.type(screen.getByLabelText("Bot token"), "123456789:AAExample_secret-token");
+    await user.click(screen.getByRole("button", { name: "Xác minh token" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Kết quả xác minh không khớp kênh đã chọn. Hãy thử lại.",
+    );
+    expect(screen.queryByText("Stale bot")).not.toBeInTheDocument();
+  });
+
   it("does not lose the chosen provider when navigating back from token setup", async () => {
     const user = userEvent.setup();
     render(<OnboardingWizard />);
@@ -121,10 +171,48 @@ describe("OnboardingWizard", () => {
     await user.click(screen.getByRole("button", { name: "Quay lại" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("radio", { name: /Telegram/ })).toHaveAttribute(
-        "aria-checked",
-        "true",
-      );
+      expect(screen.getByRole("radio", { name: /Telegram/ })).toBeChecked();
     });
+  });
+
+  it("locks navigation while verifying and disables group scope when the bot cannot join", async () => {
+    const user = userEvent.setup();
+    const token = "123456789:AAExample_secret-token_123456789";
+    let resolveProvider!: (response: Response) => void;
+    const providerResponse = new Promise<Response>((resolve) => {
+      resolveProvider = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn(() => providerResponse));
+
+    render(<OnboardingWizard />);
+    await reachTokenStep(user, "Telegram");
+    await user.type(screen.getByLabelText("Bot token"), token);
+    await user.click(screen.getByRole("button", { name: "Xác minh token" }));
+
+    expect(screen.getByRole("button", { name: "Quay lại" })).toBeDisabled();
+
+    resolveProvider(
+      new Response(
+        JSON.stringify({
+          data: {
+            bot: {
+              provider: "telegram",
+              providerBotId: "123456789",
+              displayName: "Bot riêng tư",
+              handle: "@private_bot",
+              accountType: null,
+              canJoinGroups: false,
+            },
+          },
+          meta: { tokenStored: false },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    expect(await screen.findByText("Đã xác minh qua Telegram")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Dùng cho lịch cá nhân" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Dùng trong nhóm" })).toBeDisabled();
+    expect(screen.getByText("Bot này không được provider cho phép vào nhóm.")).toBeInTheDocument();
   });
 });

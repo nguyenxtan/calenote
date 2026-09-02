@@ -3,39 +3,28 @@ import { ProviderVerificationError } from "../provider-error";
 import { verifyTelegramBotToken } from "../providers/telegram";
 import { verifyZaloBotToken } from "../providers/zalo";
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 describe("Zalo Bot Platform adapter", () => {
-  it("calls the official getMe endpoint and normalizes the bot profile", async () => {
+  it("requests the official getMe operation and normalizes the bot profile", async () => {
     const token = "12345678:abc-xyz_789";
-    const fetcher = vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        result: {
-          id: "97531",
-          account_name: "Bé Lịch",
-          account_type: "BASIC",
-          can_join_groups: true,
-        },
-      }),
-    );
+    const requester = vi.fn(async () => ({
+      ok: true,
+      result: {
+        id: "97531",
+        account_name: "Bé Lịch",
+        account_type: "BASIC",
+        can_join_groups: true,
+      },
+    }));
 
-    const profile = await verifyZaloBotToken(token, fetcher);
+    const profile = await verifyZaloBotToken(token, requester);
 
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(fetcher).toHaveBeenCalledWith(
-      `https://bot-api.zaloplatforms.com/bot${token}/getMe`,
-      expect.objectContaining({
-        method: "POST",
-        redirect: "error",
-        cache: "no-store",
-      }),
-    );
+    expect(requester).toHaveBeenCalledOnce();
+    expect(requester).toHaveBeenCalledWith({
+      provider: "zalo",
+      hostname: "bot-api.zaloplatforms.com",
+      path: `/bot${token}/getMe`,
+      operation: "getMe",
+    });
     expect(profile).toEqual({
       provider: "zalo",
       providerBotId: "97531",
@@ -48,41 +37,66 @@ describe("Zalo Bot Platform adapter", () => {
   });
 
   it("rejects a path-shaped token before making a request", async () => {
-    const fetcher = vi.fn();
+    const requester = vi.fn();
 
-    await expect(verifyZaloBotToken("12345678:abc/../../getMe", fetcher)).rejects.toMatchObject({
+    await expect(verifyZaloBotToken("12345678:abc/../../getMe", requester)).rejects.toMatchObject({
       code: "INVALID_TOKEN_FORMAT",
     });
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(requester).not.toHaveBeenCalled();
+  });
+
+  it("does not infer a strict Zalo token regex from the documentation example", async () => {
+    const futureSafeToken = "bot.v2:secret~!$&'()*+,;=@";
+    const requester = vi.fn(async () => ({
+      ok: true,
+      result: { id: "1", account_name: "Future-safe bot" },
+    }));
+
+    await expect(verifyZaloBotToken(futureSafeToken, requester)).resolves.toMatchObject({
+      displayName: "Future-safe bot",
+    });
+    expect(requester).toHaveBeenCalledOnce();
+  });
+
+  it("classifies the documented Zalo 401 as a rejected credential", async () => {
+    const requester = vi.fn(async () => ({ ok: false, error_code: 401 }));
+
+    await expect(verifyZaloBotToken("12345678:abc-xyz_789", requester)).rejects.toMatchObject({
+      code: "PROVIDER_REJECTED",
+    });
+  });
+
+  it.each([403, 429, 500])("treats Zalo error code %s as retryable/unavailable", async (code) => {
+    const requester = vi.fn(async () => ({ ok: false, error_code: code }));
+
+    await expect(verifyZaloBotToken("12345678:abc-xyz_789", requester)).rejects.toMatchObject({
+      code: "PROVIDER_UNAVAILABLE",
+    });
   });
 });
 
 describe("Telegram Bot API adapter", () => {
-  it("calls getMe and normalizes Telegram-specific identity fields", async () => {
+  it("requests getMe and normalizes Telegram-specific identity fields", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
-    const fetcher = vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        result: {
-          id: 123456789,
-          is_bot: true,
-          first_name: "Calenote Demo",
-          username: "calenote_demo_bot",
-          can_join_groups: false,
-        },
-      }),
-    );
+    const requester = vi.fn(async () => ({
+      ok: true,
+      result: {
+        id: 123456789,
+        is_bot: true,
+        first_name: "Calenote Demo",
+        username: "calenote_demo_bot",
+        can_join_groups: false,
+      },
+    }));
 
-    const profile = await verifyTelegramBotToken(token, fetcher);
+    const profile = await verifyTelegramBotToken(token, requester);
 
-    expect(fetcher).toHaveBeenCalledWith(
-      `https://api.telegram.org/bot${token}/getMe`,
-      expect.objectContaining({
-        method: "POST",
-        redirect: "error",
-        cache: "no-store",
-      }),
-    );
+    expect(requester).toHaveBeenCalledWith({
+      provider: "telegram",
+      hostname: "api.telegram.org",
+      path: `/bot${token}/getMe`,
+      operation: "getMe",
+    });
     expect(profile).toEqual({
       provider: "telegram",
       providerBotId: "123456789",
@@ -93,27 +107,48 @@ describe("Telegram Bot API adapter", () => {
     });
   });
 
-  it("turns a provider rejection into a safe typed error", async () => {
+  it("turns documented authentication failures into a safe typed error", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
-    const fetcher = vi.fn(async () =>
-      jsonResponse({
-        ok: false,
-        error_code: 401,
-        description: `Unauthorized: token ${token} is invalid`,
-      }),
-    );
+    const requester = vi.fn(async () => ({
+      ok: false,
+      error_code: 401,
+      description: `Unauthorized: token ${token} is invalid`,
+    }));
 
-    await expect(verifyTelegramBotToken(token, fetcher)).rejects.toEqual(
+    await expect(verifyTelegramBotToken(token, requester)).rejects.toEqual(
       new ProviderVerificationError("PROVIDER_REJECTED"),
     );
   });
 
-  it("rejects unexpected provider payloads", async () => {
-    const token = "123456789:AAExample_secret-token_123456789";
-    const fetcher = vi.fn(async () => jsonResponse({ ok: true, result: { is_bot: true } }));
+  it("classifies Telegram error code 404 as a rejected credential", async () => {
+    const requester = vi.fn(async () => ({ ok: false, error_code: 404 }));
 
-    await expect(verifyTelegramBotToken(token, fetcher)).rejects.toMatchObject({
-      code: "INVALID_PROVIDER_RESPONSE",
-    });
+    await expect(
+      verifyTelegramBotToken("123456789:AAExample_secret-token_123456789", requester),
+    ).rejects.toMatchObject({ code: "PROVIDER_REJECTED" });
+  });
+
+  it.each([403, 429, 500])("treats Telegram error code %s as retryable/unavailable", async (code) => {
+    const requester = vi.fn(async () => ({ ok: false, error_code: code }));
+
+    await expect(
+      verifyTelegramBotToken("123456789:AAExample_secret-token_123456789", requester),
+    ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+  });
+
+  it("rejects an unexpected successful provider payload", async () => {
+    const requester = vi.fn(async () => ({ ok: true, result: { is_bot: true } }));
+
+    await expect(
+      verifyTelegramBotToken("123456789:AAExample_secret-token_123456789", requester),
+    ).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+  });
+
+  it("rejects a malformed 2xx body as an invalid provider response", async () => {
+    const requester = vi.fn(async () => "not-an-object");
+
+    await expect(
+      verifyTelegramBotToken("123456789:AAExample_secret-token_123456789", requester),
+    ).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
 });

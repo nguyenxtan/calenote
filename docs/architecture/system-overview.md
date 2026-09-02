@@ -67,13 +67,15 @@ parse/enqueue. Local có thể polling `getUpdates` bằng sandbox credential,
 nhưng polling và webhook không chạy đồng thời. Adapter egress chỉ gọi hostname
 HTTPS cố định, không nhận URL do người dùng nhập.
 
+`BotConnection` dùng state machine canonical định nghĩa tại
+[domain-model.md](./domain-model.md#luồng-trạng-thái-chuẩn):
+
 ```text
-DRAFT -> VALIDATING -> VALIDATED -> ACTIVATING -> ACTIVE_UNBOUND -> CHAT_BOUND
-                         |              |                 |
-                    INVALID        CONFLICTED         SUSPENDED
-                                                  -> ROTATING -> ACTIVE_UNBOUND
-                                                  -> REVOKING -> REVOKED
+DRAFT -> VALIDATING -> VERIFIED -> ACTIVATING -> ACTIVE_UNBOUND -> CHAT_BOUND
 ```
+
+Các nhánh `INVALID`, `CONFLICTED`, `SUSPENDED`, `ROTATING`, `REVOKING` và
+`REVOKED` tuân theo cùng contract đó; không dùng tên thay thế `VALIDATED`.
 
 `ACTIVE_UNBOUND` chỉ nghĩa delivery active, chưa có chat/user tin cậy.
 `/connect` dùng mã 128-bit, hash khi lưu, TTL 10 phút và one-use; direct chat
@@ -94,4 +96,3 @@ failure. Structured log/trace/audit phải redact token, authorization header,
 webhook secret/path, `/connect` code và nội dung chat. Một test `getMe` không
 là bằng chứng webhook, scheduler hoặc production readiness. Chi tiết security ở
 `docs/security/byob-credentials.md`.
-

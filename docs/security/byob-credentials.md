@@ -2,11 +2,19 @@
 
 ## Ranh giới v0.1
 
-Trong v0.1, `POST /api/v1/bot-connections/verify` chỉ nhận token qua HTTPS, gọi
+Trong v0.1, `POST /api/v1/bot-connections/verify` nhận token qua same-origin
+(HTTPS bắt buộc ở production; HTTP chỉ chấp nhận trên loopback local), gọi
 `getMe` qua adapter Zalo hoặc Telegram, rồi trả về `BotProfile` chuẩn hóa.
 Token không được lưu bền vững, trả về browser, ghi log, đưa vào analytics hay
 đưa vào URL. Vì vậy v0.1 **không** có webhook, polling, `/connect`, gửi tin,
 rotation hay revoke thực tế; “token hợp lệ” không đồng nghĩa bot đang hoạt động.
+
+Transport v0.1 không dùng global `fetch`: nó gọi Node HTTPS với hostname cố
+định, timeout và response byte cap. Automatic HTTP tracing bị suppress quanh
+request chứa token; span thủ công chỉ ghi provider, operation, hostname và mã
+HTTP, không ghi URL/path, exception thô hay token. `401` được xem là credential
+bị từ chối; `403` Zalo, `429`, `5xx`, timeout và lỗi mạng là provider tạm thời
+không sẵn sàng để tránh yêu cầu người dùng reset token sai nguyên nhân.
 
 Các phần dưới đây là thiết kế bắt buộc trước khi production lưu credential.
 
@@ -24,18 +32,19 @@ tenant khác. Người dùng vẫn phải thu hồi token tại provider khi tok
 
 ## Token lifecycle và state machine
 
+State machine canonical nằm tại
+[domain-model.md](../architecture/domain-model.md#luồng-trạng-thái-chuẩn):
+
 ```text
-DRAFT -> TOKEN_SUBMITTED -> VALIDATING -> VALIDATED -> ACTIVATING
-                                                    -> INVALID
-                                                    -> CONFLICTED
-ACTIVATING -> ACTIVE_UNBOUND -> CONNECT_CODE_ISSUED -> CHAT_BOUND
-             |                  (expire/used -> ACTIVE_UNBOUND)
-             -> SUSPENDED
-CHAT_BOUND / ACTIVE_UNBOUND -> ROTATING -> ACTIVE_UNBOUND | SUSPENDED
-* -> REVOKING -> REVOKED
+DRAFT -> VALIDATING -> VERIFIED -> ACTIVATING -> ACTIVE_UNBOUND -> CHAT_BOUND
 ```
 
+`TOKEN_SUBMITTED` là audit event tạm thời. `CONNECT_CODE_ISSUED` là lifecycle
+của thực thể `ConnectCode`; trong thời gian mã còn hiệu lực, connection vẫn là
+`ACTIVE_UNBOUND`. Hai tên này không được thêm vào enum `BotConnection.state`.
+
 - `VALIDATING` chỉ gọi `getMe` và ghi nhận `provider_bot_id` đã xác minh.
+- `VERIFIED` chỉ ghi nhận provider chấp nhận token; chưa có delivery mode.
 - `ACTIVATING` lấy khóa sở hữu nguyên tử, cấu hình **một** delivery mode
   (webhook production hoặc polling local), rồi mới nhận inbound.
 - `SUSPENDED` dừng inbound/outbound khi token/signature không còn hợp lệ.
@@ -104,4 +113,3 @@ version cũ. Không overwrite token tại chỗ. Revoke disable inbound/outbound
 trước, cleanup provider, loại ciphertext/wrapped-key theo retention và ghi
 audit. Recovery dùng tài khoản Calenote đã xác thực; không bao giờ hiển thị lại
 token hoặc chứng minh bot cho người không có quyền.
-

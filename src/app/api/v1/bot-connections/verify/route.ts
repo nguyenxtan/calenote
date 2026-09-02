@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { BotProfile, BotProvider } from "@/modules/connections/contracts";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { verifyBotToken } from "@/modules/connections/verify-bot-token";
 
@@ -29,7 +30,41 @@ function json(body: unknown, status: number): Response {
   });
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function readLimitedBody(request: Request): Promise<string | null> {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(body);
+}
+
+type BotTokenVerifier = (provider: BotProvider, token: string) => Promise<BotProfile>;
+
+async function handleVerify(
+  request: Request,
+  verifier: BotTokenVerifier,
+): Promise<Response> {
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     return json(
@@ -45,21 +80,21 @@ export async function POST(request: Request): Promise<Response> {
 
   let rawBody: string;
   try {
-    rawBody = await request.text();
+    const limitedBody = await readLimitedBody(request);
+    if (limitedBody === null) {
+      return json(
+        {
+          error: {
+            code: "REQUEST_TOO_LARGE",
+            message: "Yêu cầu vượt quá giới hạn cho phép.",
+          },
+        },
+        413,
+      );
+    }
+    rawBody = limitedBody;
   } catch {
     return json({ error: { code: "INVALID_REQUEST", message: messages.invalidRequest } }, 400);
-  }
-
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-    return json(
-      {
-        error: {
-          code: "REQUEST_TOO_LARGE",
-          message: "Yêu cầu vượt quá giới hạn cho phép.",
-        },
-      },
-      413,
-    );
   }
 
   let parsedBody: unknown;
@@ -75,7 +110,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const bot = await verifyBotToken(input.data.provider, input.data.token);
+    const bot = await verifier(input.data.provider, input.data.token);
     return json({ data: { bot }, meta: { tokenStored: false } }, 200);
   } catch (error) {
     if (error instanceof ProviderVerificationError) {
@@ -99,3 +134,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 }
+
+export function createVerifyRoute(
+  verifier: BotTokenVerifier = verifyBotToken,
+): (request: Request) => Promise<Response> {
+  return (request) => handleVerify(request, verifier);
+}
+
+export const POST = createVerifyRoute();

@@ -45,7 +45,8 @@ Nếu database không hỗ trợ partial unique index theo join, materialize `ac
 - `provider`: `ZALO | TELEGRAM`.
 - `scope`: `DIRECT | GROUP_BETA` (direct là mặc định; group Beta phải opt-in).
 - Token thô chỉ tồn tại trong request/runtime ngắn hạn; không trả về client, không log, không lưu localStorage hay URL.
-- `state` phân biệt `DRAFT`, `VALIDATING`, `VERIFIED`, `ACTIVE_UNBOUND`, `CHAT_BOUND`, `INVALID`, `REVOKED`; `VERIFIED` chỉ chứng minh token hợp lệ, không chứng minh webhook hoặc chat đã hoạt động.
+- `state` dùng enum canonical `DRAFT | VALIDATING | VERIFIED | ACTIVATING | ACTIVE_UNBOUND | CHAT_BOUND | INVALID | CONFLICTED | SUSPENDED | ROTATING | REVOKING | REVOKED`.
+- `VERIFIED` chỉ chứng minh token hợp lệ, không chứng minh webhook hoặc chat đã hoạt động. `TOKEN_SUBMITTED` và `CONNECT_CODE_ISSUED` là event/tài nguyên tạm, không phải trạng thái của `BotConnection`.
 - Fingerprint dùng để phát hiện một bot bị gắn vào nhiều workspace mà không cần so sánh plaintext.
 
 ### ChatIdentity
@@ -89,6 +90,18 @@ Mã `/connect` là thực thể tạm thời riêng (`ConnectCode`): chỉ lưu 
 - Không coi việc tạo rule là đã gửi thành công. Chỉ `DELIVERED` sau receipt từ provider.
 
 ## Luồng trạng thái chuẩn
+
+State machine canonical của `BotConnection` (mọi tài liệu tích hợp phải dùng đúng tên này):
+
+```text
+DRAFT -> VALIDATING -> VERIFIED -> ACTIVATING -> ACTIVE_UNBOUND -> CHAT_BOUND
+              |                         |              |
+          INVALID                  CONFLICTED      SUSPENDED
+ACTIVE_UNBOUND / CHAT_BOUND -> ROTATING -> ACTIVE_UNBOUND | SUSPENDED
+* (trừ REVOKED) -> REVOKING -> REVOKED
+```
+
+Việc phát hành/hết hạn/consume `ConnectCode` không đổi enum connection cho đến khi binding thành công; connection vẫn là `ACTIVE_UNBOUND`, sau đó mới thành `CHAT_BOUND`.
 
 ```text
 message -> CommandDraft(RECEIVED)

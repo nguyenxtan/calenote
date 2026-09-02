@@ -25,14 +25,18 @@ export function ProviderCard({ provider, selected, onSelect }: ProviderCardProps
   const copy = providerCopy[provider];
 
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      aria-label={`${copy.name}. ${copy.description}`}
+    <label
       className={`${styles.providerCard} ${selected ? styles.providerSelected : ""}`}
-      onClick={onSelect}
     >
+      <input
+        type="radio"
+        name="bot-provider"
+        value={provider}
+        checked={selected}
+        onChange={onSelect}
+        className={styles.choiceInput}
+        aria-label={`${copy.name}. ${copy.description}`}
+      />
       <span className={`${styles.providerLogo} ${styles[`${provider}Logo`]}`} aria-hidden="true">
         {provider === "zalo" ? "Z" : <Send size={22} fill="currentColor" />}
       </span>
@@ -46,6 +50,6 @@ export function ProviderCard({ provider, selected, onSelect }: ProviderCardProps
       <span className={styles.providerCheck} aria-hidden="true">
         {selected && <Check size={15} strokeWidth={3} />}
       </span>
-    </button>
+    </label>
   );
 }

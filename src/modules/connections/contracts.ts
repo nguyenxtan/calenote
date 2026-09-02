@@ -11,8 +11,15 @@ export interface BotProfile {
   canJoinGroups: boolean | null;
 }
 
-export type ProviderFetch = (input: string, init: RequestInit) => Promise<Response>;
+export interface ProviderRequest {
+  provider: BotProvider;
+  hostname: "bot-api.zaloplatforms.com" | "api.telegram.org";
+  path: string;
+  operation: "getMe";
+}
+
+export type ProviderRequester = (input: ProviderRequest) => Promise<unknown>;
 
 export interface BotProviderAdapter {
-  verifyToken(token: string, fetcher?: ProviderFetch): Promise<BotProfile>;
+  verifyToken(token: string, requester?: ProviderRequester): Promise<BotProfile>;
 }
