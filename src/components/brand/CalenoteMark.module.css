@@ -1,0 +1,47 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.inverse {
+  color: #fdfcf6;
+}
+
+.symbol {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  color: #fdfcf6;
+  border-radius: 12px;
+  background: var(--leaf);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 15%);
+}
+
+.symbol span {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--lime);
+}
+
+.word,
+.wordCompact {
+  font-weight: 760;
+  letter-spacing: -0.045em;
+}
+
+.word {
+  font-size: 23px;
+}
+
+.wordCompact {
+  font-size: 20px;
+}
