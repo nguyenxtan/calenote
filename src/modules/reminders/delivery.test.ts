@@ -81,13 +81,14 @@ async function createHarness(options: HarnessOptions = {}) {
   ).run(connectionId, options.privateChatId ?? "private-chat", now);
   db.sqlite.prepare(
     `INSERT INTO reminders (
-       id, workspace_id, chat_identity_id, title_ciphertext, title_iv,
+       id, public_id, workspace_id, chat_identity_id, title_ciphertext, title_iv,
        title_key_version, scheduled_at, timezone, status, claimed_at,
        cancelled_at, transition_marker, created_at, updated_at
-     ) VALUES (?, 'workspace-1', 'chat-identity-1', ?, ?, 1, ?,
+     ) VALUES (?, ?, 'workspace-1', 'chat-identity-1', ?, ?, 1, ?,
        'Asia/Ho_Chi_Minh', ?, ?, NULL, 'scheduler-owner', ?, ?)`,
   ).run(
     reminderId,
+    "B".repeat(21) + "A",
     options.corruptTitle ? new Uint8Array([1]) : new Uint8Array(encryptedTitle.ciphertext),
     options.corruptTitle ? new Uint8Array(12) : new Uint8Array(encryptedTitle.iv),
     now - 1,

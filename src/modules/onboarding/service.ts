@@ -61,6 +61,7 @@ export interface AccountGraph {
     tokenFingerprint: string;
     credentialVersion: 1;
     state: "VALIDATING";
+    transitionMarker: string;
     createdAt: number;
   };
   session: SessionRecord;
@@ -70,7 +71,12 @@ export interface AccountGraph {
 export interface SafeAuditEvent {
   id: string;
   actorUserId: string;
-  action: "ONBOARDING_CREATED" | "WEBHOOK_ACTIVATED" | "WEBHOOK_ACTIVATION_FAILED" | "CONNECT_CODE_ROTATED";
+  action:
+    | "ONBOARDING_CREATED"
+    | "ONBOARDING_RECOVERED"
+    | "WEBHOOK_ACTIVATED"
+    | "WEBHOOK_ACTIVATION_FAILED"
+    | "CONNECT_CODE_ROTATED";
   targetUserId: string;
   targetConnectionId: string;
   result: "SUCCESS" | "FAILURE";
@@ -81,6 +87,7 @@ export interface ActivationSuccess {
   connectionId: string;
   userId: string;
   registeredAt: number;
+  expectedMarker: string;
   code: ConnectCodeRecord;
   audit: SafeAuditEvent;
 }
@@ -90,6 +97,7 @@ export interface ActivationFailure {
   userId: string;
   state: "WEBHOOK_FAILED" | "SUSPENDED";
   failedAt: number;
+  expectedMarker: string;
   auditResult: "FAILURE";
   audit: SafeAuditEvent;
 }
@@ -99,6 +107,41 @@ export interface OwnedConnection {
   publicId: string;
   userId: string;
   state: ConnectionState;
+  updatedAt: number;
+  transitionMarker: string | null;
+}
+
+export interface RecoveryConnection extends OwnedConnection {
+  provider: BotProvider;
+  providerBotId: string;
+  displayName: string;
+  handle: string | null;
+  hasPrivateChat: boolean;
+  encryptedToken: ArrayBuffer;
+  encryptedTokenIv: ArrayBuffer;
+  credentialVersion: number;
+}
+
+export interface RecoveryAccessCommit {
+  connection: RecoveryConnection;
+  expectedMarker: string | null;
+  newMarker: string;
+  completedAt: number;
+  targetState: "ACTIVE_UNBOUND" | "ACTIVE_BOUND";
+  session: SessionRecord | null;
+  code: ConnectCodeRecord | null;
+  revokeExistingSessions: boolean;
+  audit: SafeAuditEvent;
+}
+
+export interface RecoveryFailureCommit {
+  connection: RecoveryConnection;
+  marker: string;
+  failedAt: number;
+  state: "WEBHOOK_FAILED" | "SUSPENDED";
+  session: SessionRecord | null;
+  revokeExistingSessions: boolean;
+  audit: SafeAuditEvent;
 }
 
 export interface ConnectCodeRotation {
@@ -114,6 +157,20 @@ export interface OnboardingStore {
   failActivation(input: ActivationFailure): Promise<void>;
   findOwnedConnection(userId: string, publicId: string): Promise<OwnedConnection | null>;
   rotateConnectCode(input: ConnectCodeRotation): Promise<void>;
+  findExactRecovery(input: {
+    email: string;
+    provider: BotProvider;
+    tokenFingerprint: string;
+    providerBotId: string;
+  }): Promise<RecoveryConnection | null>;
+  findOwnedRecovery(userId: string, publicId: string): Promise<RecoveryConnection | null>;
+  claimRecovery(input: {
+    connection: RecoveryConnection;
+    marker: string;
+    claimedAt: number;
+  }): Promise<boolean>;
+  commitRecoveredAccess(input: RecoveryAccessCommit): Promise<boolean>;
+  failRecoveredActivation(input: RecoveryFailureCommit): Promise<boolean>;
 }
 
 export interface OnboardingInput {
@@ -150,13 +207,9 @@ export interface OnboardingDependencies {
 export interface PublicOnboardedBot {
   publicId: string;
   provider: BotProvider;
-  providerBotId: string;
   displayName: string;
   handle: string | null;
-  accountType: string | null;
-  canJoinGroups: boolean | null;
-  state: "ACTIVE_UNBOUND" | "WEBHOOK_FAILED" | "SUSPENDED";
-  webhook: "READY" | "FAILED";
+  state: "ACTIVE_UNBOUND" | "ACTIVE_BOUND" | "WEBHOOK_FAILED" | "SUSPENDED";
 }
 
 export interface OnboardingResult {
@@ -219,6 +272,24 @@ export class WebhookActivationInternalError extends Error {
   }
 }
 
+export class BotTokenRejectedError extends SafeServiceError {
+  constructor() {
+    super("BOT_TOKEN_REJECTED", 422, "Provider không chấp nhận thông tin xác thực này.");
+    this.name = "BotTokenRejectedError";
+  }
+}
+
+export class WebhookActivationFailedError extends SafeServiceError {
+  constructor(readonly retryAfterSeconds: number | null = null) {
+    super(
+      "WEBHOOK_ACTIVATION_FAILED",
+      502,
+      "Chưa thể kích hoạt webhook. Vui lòng thử lại sau.",
+    );
+    this.name = "WebhookActivationFailedError";
+  }
+}
+
 function opaqueId(randomBytes: RandomBytes): string {
   return randomOpaqueId(randomBytes);
 }
@@ -261,13 +332,19 @@ function publicBot(
   return {
     publicId,
     provider: profile.provider,
-    providerBotId: profile.providerBotId,
     displayName: profile.displayName,
     handle: profile.handle,
-    accountType: profile.accountType,
-    canJoinGroups: profile.canJoinGroups,
     state,
-    webhook: state === "ACTIVE_UNBOUND" ? "READY" : "FAILED",
+  };
+}
+
+function publicRecoveredBot(connection: RecoveryConnection, state: PublicOnboardedBot["state"]): PublicOnboardedBot {
+  return {
+    publicId: connection.publicId,
+    provider: connection.provider,
+    displayName: connection.displayName,
+    handle: connection.handle,
+    state,
   };
 }
 
@@ -284,11 +361,24 @@ export async function onboard(
     throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
   }
 
+  const tokenFingerprint = await dependencies.keyring.fingerprintToken(input.token);
+  const proof = {
+    email: input.email,
+    provider: input.provider,
+    tokenFingerprint,
+    providerBotId: profile.providerBotId,
+  };
+  const existing = await dependencies.store.findExactRecovery(proof);
+  if (existing) {
+    return recoverOnboarding(existing, input.token, dependencies, now, randomBytes);
+  }
+
   const createdAt = now();
   const userId = opaqueId(randomBytes);
   const workspaceId = opaqueId(randomBytes);
   const connectionId = opaqueId(randomBytes);
   const publicId = opaqueId(randomBytes);
+  const transitionMarker = opaqueId(randomBytes);
   const credentialVersion = 1 as const;
   const encrypted = await dependencies.keyring.encryptCredential(
     connectionId,
@@ -296,7 +386,6 @@ export async function onboard(
     credentialVersion,
     input.token,
   );
-  const tokenFingerprint = await dependencies.keyring.fingerprintToken(input.token);
   const preparedSession = await prepareSession(userId, {
     keyring: dependencies.keyring,
     now: () => createdAt,
@@ -327,13 +416,21 @@ export async function onboard(
       tokenFingerprint,
       credentialVersion,
       state: "VALIDATING",
+      transitionMarker,
       createdAt,
     },
     session: preparedSession.record,
     audit: audit("ONBOARDING_CREATED", "SUCCESS", userId, connectionId, createdAt, randomBytes),
   };
 
-  await dependencies.store.commitAccountGraph(graph);
+  try {
+    await dependencies.store.commitAccountGraph(graph);
+  } catch (error) {
+    if (!(error instanceof OnboardingConflictError)) throw error;
+    const raced = await dependencies.store.findExactRecovery(proof);
+    if (!raced) throw error;
+    return recoverOnboarding(raced, input.token, dependencies, now, randomBytes);
+  }
 
   const secrets = await dependencies.keyring.webhookSecrets(publicId);
   const webhookUrl = `${canonicalAppOrigin(dependencies.appOrigin)}/webhooks/${input.provider}/${publicId}/${secrets.pathSecret}`;
@@ -353,6 +450,7 @@ export async function onboard(
       userId,
       state,
       failedAt,
+      expectedMarker: transitionMarker,
       auditResult: "FAILURE",
       audit: audit("WEBHOOK_ACTIVATION_FAILED", "FAILURE", userId, connectionId, failedAt, randomBytes),
     });
@@ -375,6 +473,7 @@ export async function onboard(
     connectionId,
     userId,
     registeredAt: activatedAt,
+    expectedMarker: transitionMarker,
     code: preparedCode.record,
     audit: audit("WEBHOOK_ACTIVATED", "SUCCESS", userId, connectionId, activatedAt, randomBytes),
   });
@@ -383,6 +482,165 @@ export async function onboard(
     connectCommand: `/connect ${preparedCode.code}`,
     connectCodeExpiresAt: preparedCode.expiresAt,
     sessionCookie: preparedSession.cookie,
+    activationCode: null,
+  };
+}
+
+const ACTIVATION_LEASE_MS = 5 * 60_000;
+
+async function prepareConnectCode(
+  userId: string,
+  connectionId: string,
+  at: number,
+  dependencies: OnboardingDependencies,
+  randomBytes: RandomBytes,
+): Promise<{ record: ConnectCodeRecord; command: string; expiresAt: number }> {
+  const prepared = await prepareOneTimeCode(
+    { kind: "connect", userId, connectionId },
+    { keyring: dependencies.keyring, now: () => at, randomBytes },
+  );
+  if (prepared.record.kind !== "connect") throw new TypeError("Prepared code kind mismatch");
+  return {
+    record: prepared.record,
+    command: `/connect ${prepared.code}`,
+    expiresAt: prepared.expiresAt,
+  };
+}
+
+async function prepareRecoverySession(
+  userId: string,
+  at: number,
+  dependencies: OnboardingDependencies,
+  randomBytes: RandomBytes,
+) {
+  return prepareSession(userId, {
+    keyring: dependencies.keyring,
+    now: () => at,
+    randomBytes,
+  });
+}
+
+async function recoverOnboarding(
+  connection: RecoveryConnection,
+  submittedToken: string,
+  dependencies: OnboardingDependencies,
+  now: Clock,
+  randomBytes: RandomBytes,
+): Promise<OnboardingResult> {
+  const recoveryAt = now();
+  if (connection.state === "VALIDATING" && connection.updatedAt >= recoveryAt - ACTIVATION_LEASE_MS) {
+    throw new OnboardingConflictError();
+  }
+
+  if (connection.state === "ACTIVE_UNBOUND" || connection.state === "ACTIVE_BOUND") {
+    const session = await prepareRecoverySession(
+      connection.userId,
+      recoveryAt,
+      dependencies,
+      randomBytes,
+    );
+    const connect = connection.state === "ACTIVE_UNBOUND"
+      ? await prepareConnectCode(connection.userId, connection.id, recoveryAt, dependencies, randomBytes)
+      : null;
+    const committed = await dependencies.store.commitRecoveredAccess({
+      connection,
+      expectedMarker: connection.transitionMarker,
+      newMarker: opaqueId(randomBytes),
+      completedAt: recoveryAt,
+      targetState: connection.state,
+      session: session.record,
+      code: connect?.record ?? null,
+      revokeExistingSessions: true,
+      audit: audit("ONBOARDING_RECOVERED", "SUCCESS", connection.userId, connection.id, recoveryAt, randomBytes),
+    });
+    if (!committed) throw new OnboardingConflictError();
+    return {
+      bot: publicRecoveredBot(connection, connection.state),
+      connectCommand: connect?.command ?? null,
+      connectCodeExpiresAt: connect?.expiresAt ?? null,
+      sessionCookie: session.cookie,
+      activationCode: null,
+    };
+  }
+
+  const ownedMarker = opaqueId(randomBytes);
+  const claimed = await dependencies.store.claimRecovery({
+    connection,
+    marker: ownedMarker,
+    claimedAt: recoveryAt,
+  });
+  if (!claimed) throw new OnboardingConflictError();
+
+  const claimedConnection: RecoveryConnection = {
+    ...connection,
+    state: "VALIDATING",
+    updatedAt: recoveryAt,
+    transitionMarker: ownedMarker,
+  };
+  const secrets = await dependencies.keyring.webhookSecrets(connection.publicId);
+  const webhookUrl = `${canonicalAppOrigin(dependencies.appOrigin)}/webhooks/${connection.provider}/${connection.publicId}/${secrets.pathSecret}`;
+  try {
+    await dependencies.registerWebhook(connection.provider, submittedToken, {
+      url: webhookUrl,
+      secretToken: secrets.headerSecret,
+    });
+  } catch (error) {
+    if (!(error instanceof ProviderOperationError)) throw new WebhookActivationInternalError();
+    const state = error.code === "REJECTED_CREDENTIAL" ? "SUSPENDED" : "WEBHOOK_FAILED";
+    const failedAt = now();
+    const session = await prepareRecoverySession(
+      connection.userId,
+      failedAt,
+      dependencies,
+      randomBytes,
+    );
+    const committed = await dependencies.store.failRecoveredActivation({
+      connection: claimedConnection,
+      marker: ownedMarker,
+      failedAt,
+      state,
+      session: session.record,
+      revokeExistingSessions: true,
+      audit: audit("WEBHOOK_ACTIVATION_FAILED", "FAILURE", connection.userId, connection.id, failedAt, randomBytes),
+    });
+    if (!committed) throw new WebhookActivationInternalError();
+    return {
+      bot: publicRecoveredBot(connection, state),
+      connectCommand: null,
+      connectCodeExpiresAt: null,
+      sessionCookie: session.cookie,
+      activationCode: "WEBHOOK_ACTIVATION_FAILED",
+    };
+  }
+
+  const completedAt = now();
+  const targetState = connection.hasPrivateChat ? "ACTIVE_BOUND" : "ACTIVE_UNBOUND";
+  const session = await prepareRecoverySession(
+    connection.userId,
+    completedAt,
+    dependencies,
+    randomBytes,
+  );
+  const connect = targetState === "ACTIVE_UNBOUND"
+    ? await prepareConnectCode(connection.userId, connection.id, completedAt, dependencies, randomBytes)
+    : null;
+  const committed = await dependencies.store.commitRecoveredAccess({
+    connection: claimedConnection,
+    expectedMarker: ownedMarker,
+    newMarker: opaqueId(randomBytes),
+    completedAt,
+    targetState,
+    session: session.record,
+    code: connect?.record ?? null,
+    revokeExistingSessions: true,
+    audit: audit("WEBHOOK_ACTIVATED", "SUCCESS", connection.userId, connection.id, completedAt, randomBytes),
+  });
+  if (!committed) throw new WebhookActivationInternalError();
+  return {
+    bot: publicRecoveredBot(connection, targetState),
+    connectCommand: connect?.command ?? null,
+    connectCodeExpiresAt: connect?.expiresAt ?? null,
+    sessionCookie: session.cookie,
     activationCode: null,
   };
 }
@@ -409,7 +667,7 @@ export async function rotateConnectCode(
     `rate-limit:connect-code:${input.userId}:${connection.id}`,
   );
   const limited = await consumeRateLimit(
-    { subjectDigest, scope: "connect-code", limit: 5, windowMs: 60_000 },
+    { subjectDigest, scope: "connect-code", limit: 3, windowMs: 10 * 60_000 },
     { store: dependencies.rateLimitStore, now: () => currentTime },
   );
   if (!limited.allowed) {
@@ -429,4 +687,147 @@ export async function rotateConnectCode(
     audit: audit("CONNECT_CODE_ROTATED", "SUCCESS", input.userId, connection.id, currentTime, randomBytes),
   });
   return { command: `/connect ${prepared.code}`, expiresAt: prepared.expiresAt };
+}
+
+export interface RetryWebhookDependencies {
+  store: OnboardingStore;
+  keyring: Pick<Keyring, "decryptCredential" | "digestCode" | "webhookSecrets">;
+  rateLimitStore: RateLimitStore;
+  registerWebhook: RegisterWebhook;
+  appOrigin: string;
+  now?: Clock;
+  randomBytes?: RandomBytes;
+}
+
+export interface RetryWebhookResult {
+  connection: PublicOnboardedBot;
+  connectCommand: string | null;
+  expiresAt: number | null;
+}
+
+function boundedRetryAfter(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  return Math.min(86_400, Math.max(1, Math.ceil(value)));
+}
+
+export async function retryWebhook(
+  input: { userId: string; publicId: string },
+  dependencies: RetryWebhookDependencies,
+): Promise<RetryWebhookResult> {
+  const connection = await dependencies.store.findOwnedRecovery(input.userId, input.publicId);
+  if (!connection) throw new ConnectionNotFoundError();
+  const now = dependencies.now ?? systemClock;
+  const currentTime = now();
+  if (
+    connection.state === "ACTIVE_BOUND"
+    || (connection.state === "VALIDATING"
+      && connection.updatedAt >= currentTime - ACTIVATION_LEASE_MS)
+  ) {
+    throw new ConnectionStateError();
+  }
+
+  const subjectDigest = await dependencies.keyring.digestCode(
+    `rate-limit:webhook-retry:${input.userId}:${connection.id}`,
+  );
+  const limited = await consumeRateLimit(
+    { subjectDigest, scope: "webhook-retry", limit: 3, windowMs: 10 * 60_000 },
+    { store: dependencies.rateLimitStore, now: () => currentTime },
+  );
+  if (!limited.allowed) {
+    throw new RateLimitExceededError(
+      Math.max(1, Math.ceil((limited.resetAt - currentTime) / 1_000)),
+    );
+  }
+
+  const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
+  if (connection.state === "ACTIVE_UNBOUND") {
+    const prepared = await prepareOneTimeCode(
+      { kind: "connect", userId: input.userId, connectionId: connection.id },
+      { keyring: dependencies.keyring, now: () => currentTime, randomBytes },
+    );
+    if (prepared.record.kind !== "connect") throw new TypeError("Prepared code kind mismatch");
+    await dependencies.store.rotateConnectCode({
+      connection,
+      code: prepared.record,
+      rotatedAt: currentTime,
+      audit: audit("CONNECT_CODE_ROTATED", "SUCCESS", input.userId, connection.id, currentTime, randomBytes),
+    });
+    return {
+      connection: publicRecoveredBot(connection, "ACTIVE_UNBOUND"),
+      connectCommand: `/connect ${prepared.code}`,
+      expiresAt: prepared.expiresAt,
+    };
+  }
+
+  const marker = opaqueId(randomBytes);
+  const claimed = await dependencies.store.claimRecovery({
+    connection,
+    marker,
+    claimedAt: currentTime,
+  });
+  if (!claimed) throw new ConnectionStateError();
+  const claimedConnection: RecoveryConnection = {
+    ...connection,
+    state: "VALIDATING",
+    transitionMarker: marker,
+    updatedAt: currentTime,
+  };
+  const token = await dependencies.keyring.decryptCredential(
+    connection.id,
+    connection.provider,
+    connection.credentialVersion,
+    { ciphertext: connection.encryptedToken, iv: connection.encryptedTokenIv },
+  );
+  const secrets = await dependencies.keyring.webhookSecrets(connection.publicId);
+  const webhookUrl = `${canonicalAppOrigin(dependencies.appOrigin)}/webhooks/${connection.provider}/${connection.publicId}/${secrets.pathSecret}`;
+  try {
+    await dependencies.registerWebhook(connection.provider, token, {
+      url: webhookUrl,
+      secretToken: secrets.headerSecret,
+    });
+  } catch (error) {
+    if (!(error instanceof ProviderOperationError)) throw error;
+    const state = error.code === "REJECTED_CREDENTIAL" ? "SUSPENDED" : "WEBHOOK_FAILED";
+    const failedAt = now();
+    const committed = await dependencies.store.failRecoveredActivation({
+      connection: claimedConnection,
+      marker,
+      failedAt,
+      state,
+      session: null,
+      revokeExistingSessions: false,
+      audit: audit("WEBHOOK_ACTIVATION_FAILED", "FAILURE", input.userId, connection.id, failedAt, randomBytes),
+    });
+    if (!committed) throw new WebhookActivationInternalError();
+    if (error.code === "REJECTED_CREDENTIAL") throw new BotTokenRejectedError();
+    throw new WebhookActivationFailedError(boundedRetryAfter(error.retryAfterSeconds));
+  }
+
+  const completedAt = now();
+  const targetState = connection.hasPrivateChat ? "ACTIVE_BOUND" : "ACTIVE_UNBOUND";
+  const connect = targetState === "ACTIVE_UNBOUND"
+    ? await prepareOneTimeCode(
+        { kind: "connect", userId: input.userId, connectionId: connection.id },
+        { keyring: dependencies.keyring, now: () => completedAt, randomBytes },
+      )
+    : null;
+  if (connect && connect.record.kind !== "connect") throw new TypeError("Prepared code kind mismatch");
+  const connectRecord = connect?.record.kind === "connect" ? connect.record : null;
+  const committed = await dependencies.store.commitRecoveredAccess({
+    connection: claimedConnection,
+    expectedMarker: marker,
+    newMarker: opaqueId(randomBytes),
+    completedAt,
+    targetState,
+    session: null,
+    code: connectRecord,
+    revokeExistingSessions: false,
+    audit: audit("WEBHOOK_ACTIVATED", "SUCCESS", input.userId, connection.id, completedAt, randomBytes),
+  });
+  if (!committed) throw new WebhookActivationInternalError();
+  return {
+    connection: publicRecoveredBot(connection, targetState),
+    connectCommand: connect ? `/connect ${connect.code}` : null,
+    expiresAt: connect?.expiresAt ?? null,
+  };
 }

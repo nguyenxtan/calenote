@@ -1,4 +1,11 @@
-import { requireSession, SessionAuthError } from "@/modules/auth/session";
+import { D1DashboardStore, type PublicConnection, type PublicSessionUser } from "@/modules/auth/dashboard-service";
+import {
+  D1LoginCodeStore,
+  InvalidLoginCodeError,
+  requestLoginCode,
+  verifyLoginCode,
+} from "@/modules/auth/login-service";
+import { requireSession, revokeSession, SessionAuthError } from "@/modules/auth/session";
 import type { BotProvider, WebhookRegistration } from "@/modules/connections/contracts";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { parseTelegramWebhook, setTelegramWebhook } from "@/modules/connections/providers/telegram";
@@ -13,31 +20,85 @@ import { jsonResponse, SameOriginError } from "@/modules/http/security";
 import {
   ConnectionNotFoundError,
   ConnectionStateError,
+  BotTokenRejectedError,
   OnboardingConflictError,
   OnboardingInputError,
   RateLimitExceededError,
   onboard,
+  retryWebhook as retryConnectionWebhook,
   rotateConnectCode,
   type OnboardingInput,
   type OnboardingResult,
+  type RetryWebhookResult,
+  WebhookActivationFailedError,
 } from "@/modules/onboarding/service";
 import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/service";
 import { createKeyring } from "@/modules/security/keyring";
 import { D1InboundDispatchStore } from "@/modules/reminders/scheduler";
-import { handleConnectCodeRotation, InvalidRequestError } from "./routes/connections";
+import {
+  cancelPublicReminder,
+  createManualReminder,
+  D1ReminderApiStore,
+  InvalidReminderError,
+  listPublicReminders,
+  ReminderChannelUnavailableError,
+  ReminderNotCancellableError,
+  ReminderNotFoundError,
+  type PublicReminder,
+} from "@/modules/reminders/api-service";
+import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
+import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
+import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
 import {
   handleWebhook,
   matchWebhookRoute,
   type WebhookRouteDependencies,
 } from "./routes/webhooks";
 
+const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
+
+class ServiceUnavailableError extends Error {
+  constructor() {
+    super("Calenote đang tạm thời không sẵn sàng.");
+    this.name = "ServiceUnavailableError";
+  }
+}
+
+function assertRuntimeBindingShapes(env: Env): void {
+  if (
+    env.APP_ORIGIN !== CANONICAL_APP_ORIGIN
+    || typeof env.DB !== "object" || env.DB === null
+    || typeof env.DB.prepare !== "function" || typeof env.DB.batch !== "function"
+    || typeof env.JOBS !== "object" || env.JOBS === null
+    || typeof env.JOBS.send !== "function"
+    || typeof env.ASSETS !== "object" || env.ASSETS === null
+    || typeof env.ASSETS.fetch !== "function"
+  ) {
+    throw new ServiceUnavailableError();
+  }
+}
+
 export interface WorkerOperations {
   digestRateLimitSubject(value: string): Promise<string>;
   consumeOnboardingRateLimit(subjectDigest: string): Promise<RateLimitResult>;
   onboard(input: OnboardingInput): Promise<OnboardingResult>;
+  requestLoginCode(input: { email: string; clientIp: string }): Promise<{ accepted: true }>;
+  verifyLoginCode(input: { email: string; code: string; clientIp: string }): Promise<{ cookie: string }>;
+  logout(request: Request): Promise<{ clearCookie: string }>;
   requireUser(request: Request): Promise<{ userId: string }>;
+  getSessionUser(userId: string): Promise<PublicSessionUser>;
+  listConnections(userId: string): Promise<PublicConnection[]>;
   rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
+  retryWebhook(input: { userId: string; publicId: string }): Promise<RetryWebhookResult>;
+  listReminders(userId: string): Promise<PublicReminder[]>;
+  createReminder(input: {
+    userId: string;
+    title: string;
+    scheduledAt: number;
+    timezone: "Asia/Ho_Chi_Minh";
+  }): Promise<PublicReminder>;
+  cancelReminder(input: { userId: string; publicId: string }): Promise<{ cancelled: true }>;
 }
 
 export interface RouterOptions {
@@ -55,10 +116,19 @@ async function registerWebhook(
 }
 
 async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
-  const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  let keyring: Awaited<ReturnType<typeof createKeyring>>;
+  try {
+    assertRuntimeBindingShapes(env);
+    keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  } catch {
+    throw new ServiceUnavailableError();
+  }
   const store = new D1OnboardingStore(env.DB);
   const rateLimitStore = new D1RateLimitStore(env.DB);
   const sessionStore = new D1SessionStore(env.DB);
+  const dashboardStore = new D1DashboardStore(env.DB);
+  const loginStore = new D1LoginCodeStore(env.DB);
+  const reminderStore = new D1ReminderApiStore(env.DB);
   return {
     digestRateLimitSubject: (value) => keyring.digestCode(value),
     consumeOnboardingRateLimit: (subjectDigest) =>
@@ -74,12 +144,82 @@ async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
         registerWebhook,
         appOrigin: env.APP_ORIGIN,
       }),
+    requestLoginCode: async ({ email, clientIp }) => {
+      await rateLimitStore.cleanupExpired(Date.now(), 100);
+      for (const [subject, limit] of [
+        [`rate-limit:login-request:ip:${clientIp}`, 10],
+        [`rate-limit:login-request:email:${email}`, 3],
+      ] as const) {
+        const subjectDigest = await keyring.digestCode(subject);
+        const rate = await consumeRateLimit(
+          { subjectDigest, scope: "login-request", limit, windowMs: 10 * 60_000 },
+          { store: rateLimitStore },
+        );
+        if (!rate.allowed) {
+          throw new RateLimitExceededError(
+            Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1_000)),
+          );
+        }
+      }
+      return requestLoginCode(email, {
+        store: loginStore,
+        keyring,
+        enqueue: (job) => env.JOBS.send(job),
+      });
+    },
+    verifyLoginCode: async ({ email, code, clientIp }) => {
+      await rateLimitStore.cleanupExpired(Date.now(), 100);
+      for (const [subject, limit] of [
+        [`rate-limit:login-verify:ip:${clientIp}`, 30],
+        [`rate-limit:login-verify:email:${email}`, 10],
+      ] as const) {
+        const subjectDigest = await keyring.digestCode(subject);
+        const rate = await consumeRateLimit(
+          { subjectDigest, scope: "login-verify", limit, windowMs: 10 * 60_000 },
+          { store: rateLimitStore },
+        );
+        if (!rate.allowed) {
+          throw new RateLimitExceededError(
+            Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1_000)),
+          );
+        }
+      }
+      return verifyLoginCode(email, code, { store: loginStore, keyring });
+    },
+    logout: async (request) => {
+      const result = await revokeSession(request, { store: sessionStore, keyring });
+      return { clearCookie: result.clearCookie };
+    },
     requireUser: async (request) => {
       const principal = await requireSession(request, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
+    getSessionUser: async (userId) => {
+      const user = await dashboardStore.getSessionUser(userId);
+      if (!user) throw new SessionAuthError();
+      return user;
+    },
+    listConnections: (userId) => dashboardStore.listConnections(userId),
     rotateConnectCode: (input) =>
       rotateConnectCode(input, { store, keyring, rateLimitStore }),
+    retryWebhook: (input) => retryConnectionWebhook(input, {
+      store,
+      keyring,
+      rateLimitStore,
+      registerWebhook,
+      appOrigin: env.APP_ORIGIN,
+    }),
+    listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
+    createReminder: (input) => createManualReminder(input, {
+      store: reminderStore,
+      keyring,
+      rateLimitStore,
+    }),
+    cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, {
+      store: reminderStore,
+      keyring,
+      rateLimitStore,
+    }),
   };
 }
 
@@ -110,6 +250,9 @@ function requestBodyMessage(code: RequestBodyError["code"]): string {
 }
 
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
+  if (error instanceof ServiceUnavailableError) {
+    return { code: "SERVICE_UNAVAILABLE", message: error.message, status: 503 };
+  }
   if (error instanceof RequestBodyError) {
     return { code: error.code, message: requestBodyMessage(error.code), status: error.status };
   }
@@ -119,6 +262,9 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   if (error instanceof SessionAuthError) {
     return { code: error.code, message: "Bạn cần đăng nhập để tiếp tục.", status: error.status };
   }
+  if (error instanceof InvalidLoginCodeError) {
+    return { code: error.code, message: error.message, status: error.status };
+  }
   if (error instanceof InvalidRequestError) {
     return { code: error.code, message: error.message, status: error.status };
   }
@@ -126,7 +272,24 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
     error instanceof OnboardingInputError ||
     error instanceof OnboardingConflictError ||
     error instanceof ConnectionNotFoundError ||
-    error instanceof ConnectionStateError
+    error instanceof ConnectionStateError ||
+    error instanceof BotTokenRejectedError
+  ) {
+    return { code: error.code, message: error.message, status: error.status };
+  }
+  if (error instanceof WebhookActivationFailedError) {
+    return {
+      code: error.code,
+      message: error.message,
+      status: error.status,
+      retryAfter: error.retryAfterSeconds ?? undefined,
+    };
+  }
+  if (
+    error instanceof InvalidReminderError ||
+    error instanceof ReminderChannelUnavailableError ||
+    error instanceof ReminderNotFoundError ||
+    error instanceof ReminderNotCancellableError
   ) {
     return { code: error.code, message: error.message, status: error.status };
   }
@@ -150,11 +313,11 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   return { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu.", status: 500 };
 }
 
-export function safeErrorResponse(error: unknown): Response {
+export function safeErrorResponse(error: unknown, authenticated = false): Response {
   const mapped = errorMessage(error);
-  const headers = mapped.retryAfter === undefined
-    ? undefined
-    : { "retry-after": String(mapped.retryAfter) };
+  const headers = new Headers();
+  if (mapped.retryAfter !== undefined) headers.set("retry-after", String(mapped.retryAfter));
+  if (authenticated) headers.set("vary", "Cookie");
   return jsonResponse(
     { error: { code: mapped.code, message: mapped.message } },
     { status: mapped.status, headers },
@@ -168,7 +331,21 @@ export function createRouter(options: RouterOptions = {}) {
     void ctx;
     const pathname = new URL(request.url).pathname;
     if (request.method === "GET" && pathname === "/api/health") {
-      return Response.json({ ok: true, service: "calenote" });
+      try {
+        assertRuntimeBindingShapes(env);
+        await createKeyring(env.CALENOTE_MASTER_KEY);
+        return jsonResponse({ ok: true, service: "calenote" });
+      } catch {
+        return jsonResponse(
+          {
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Calenote đang tạm thời không sẵn sàng.",
+            },
+          },
+          { status: 503 },
+        );
+      }
     }
 
     if (pathname.startsWith("/webhooks/")) {
@@ -183,8 +360,41 @@ export function createRouter(options: RouterOptions = {}) {
     }
 
     try {
+      if (request.method === "POST" && pathname === "/api/auth/request-code") {
+        if (env.APP_ORIGIN !== CANONICAL_APP_ORIGIN) throw new ServiceUnavailableError();
+        return await handleRequestLoginCode(request, env.APP_ORIGIN, () => operationsFactory(env));
+      }
+      if (request.method === "POST" && pathname === "/api/auth/verify-code") {
+        return await handleVerifyLoginCode(request, env.APP_ORIGIN, () => operationsFactory(env));
+      }
+      if (request.method === "POST" && pathname === "/api/auth/logout") {
+        return await handleLogout(request, env.APP_ORIGIN, () => operationsFactory(env));
+      }
       if (request.method === "POST" && pathname === "/api/onboarding") {
         return await handleOnboarding(request, env.APP_ORIGIN, () => operationsFactory(env));
+      }
+      if (request.method === "GET" && pathname === "/api/session") {
+        return await handleGetSession(request, () => operationsFactory(env));
+      }
+      if (request.method === "GET" && pathname === "/api/connections") {
+        return await handleListConnections(request, () => operationsFactory(env));
+      }
+      if (request.method === "GET" && pathname === "/api/reminders") {
+        return await handleListReminders(request, () => operationsFactory(env));
+      }
+      if (request.method === "POST" && pathname === "/api/reminders") {
+        return await handleCreateReminder(request, env.APP_ORIGIN, () => operationsFactory(env));
+      }
+      const reminderMatch = request.method === "DELETE"
+        ? /^\/api\/reminders\/([^/]+)$/u.exec(pathname)
+        : null;
+      if (reminderMatch) {
+        return await handleCancelReminder(
+          request,
+          env.APP_ORIGIN,
+          reminderMatch[1],
+          () => operationsFactory(env),
+        );
       }
       const connectMatch = request.method === "POST"
         ? /^\/api\/connections\/([A-Za-z0-9_-]{1,128})\/connect-code$/u.exec(pathname)
@@ -197,8 +407,31 @@ export function createRouter(options: RouterOptions = {}) {
           () => operationsFactory(env),
         );
       }
+      const retryMatch = request.method === "POST"
+        ? /^\/api\/connections\/([^/]+)\/webhook-retry$/u.exec(pathname)
+        : null;
+      if (retryMatch) {
+        return await handleWebhookRetry(
+          request,
+          env.APP_ORIGIN,
+          retryMatch[1],
+          () => operationsFactory(env),
+        );
+      }
     } catch (error) {
-      return safeErrorResponse(error);
+      const authenticated = pathname === "/api/auth/logout"
+        || pathname === "/api/session"
+        || pathname === "/api/connections"
+        || pathname.startsWith("/api/connections/")
+        || pathname === "/api/reminders"
+        || pathname.startsWith("/api/reminders/");
+      return safeErrorResponse(error, authenticated);
+    }
+    if (pathname.startsWith("/api/")) {
+      return jsonResponse(
+        { error: { code: "API_NOT_FOUND", message: "Không tìm thấy API." } },
+        { status: 404 },
+      );
     }
     return env.ASSETS.fetch(request);
   };

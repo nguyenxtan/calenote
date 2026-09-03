@@ -35,6 +35,26 @@ export class D1RateLimitStore implements RateLimitStore {
     if (!row) throw new Error("Rate-limit row was not persisted");
     return { allowed: d1Changes(result) === 1, resetAt: row.expires_at };
   }
+
+  async cleanupExpired(now: number, limit: number): Promise<number> {
+    if (!Number.isSafeInteger(now) || now < 0) throw new TypeError("cleanup time is invalid");
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+      throw new TypeError("cleanup limit is invalid");
+    }
+    const result = await this.database
+      .prepare(
+        `DELETE FROM rate_limits
+         WHERE rowid IN (
+           SELECT rowid FROM rate_limits
+           WHERE expires_at <= ?
+           ORDER BY expires_at, subject_digest, bucket
+           LIMIT ?
+         )`,
+      )
+      .bind(now, limit)
+      .run();
+    return d1Changes(result);
+  }
 }
 
 export function createD1RateLimitStore(database: D1Database): D1RateLimitStore {

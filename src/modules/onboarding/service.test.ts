@@ -16,6 +16,9 @@ import {
   type ConnectCodeRotation,
   type OwnedConnection,
   type OnboardingStore,
+  type RecoveryAccessCommit,
+  type RecoveryConnection,
+  type RecoveryFailureCommit,
 } from "./service";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -47,6 +50,7 @@ class MemoryOnboardingStore implements OnboardingStore {
   readonly rotations: ConnectCodeRotation[] = [];
   ownedConnection: OwnedConnection | null = null;
   graphError: Error | null = null;
+  recovery: RecoveryConnection | null = null;
 
   async commitAccountGraph(graph: AccountGraph): Promise<void> {
     this.events.push("persist");
@@ -72,6 +76,33 @@ class MemoryOnboardingStore implements OnboardingStore {
   async rotateConnectCode(input: ConnectCodeRotation): Promise<void> {
     this.events.push("rotate");
     this.rotations.push(structuredClone(input));
+  }
+
+  async findExactRecovery(): Promise<RecoveryConnection | null> {
+    this.events.push("find-recovery");
+    return this.recovery;
+  }
+
+  async findOwnedRecovery(): Promise<RecoveryConnection | null> {
+    this.events.push("find-owned-recovery");
+    return this.recovery;
+  }
+
+  async claimRecovery(): Promise<boolean> {
+    this.events.push("claim-recovery");
+    return true;
+  }
+
+  async commitRecoveredAccess(input: RecoveryAccessCommit): Promise<boolean> {
+    void input;
+    this.events.push("commit-recovery");
+    return true;
+  }
+
+  async failRecoveredActivation(input: RecoveryFailureCommit): Promise<boolean> {
+    void input;
+    this.events.push("fail-recovery");
+    return true;
   }
 }
 
@@ -111,7 +142,7 @@ describe("durable onboarding", () => {
 
     await onboard(input, deps);
 
-    expect(deps.store.events.slice(0, 3)).toEqual(["verify", "persist", "webhook"]);
+    expect(deps.store.events.slice(0, 4)).toEqual(["verify", "find-recovery", "persist", "webhook"]);
     expect(deps.verifyToken).toHaveBeenCalledWith("telegram", token);
   });
 
@@ -157,7 +188,7 @@ describe("durable onboarding", () => {
     expect(deps.store.failures).toHaveLength(1);
     expect(deps.store.failures[0]).toMatchObject({ state: "WEBHOOK_FAILED", auditResult: "FAILURE" });
     expect(deps.store.successes).toHaveLength(0);
-    expect(result.bot).toMatchObject({ state: "WEBHOOK_FAILED", webhook: "FAILED" });
+    expect(result.bot).toMatchObject({ state: "WEBHOOK_FAILED" });
     expect(result.connectCommand).toBeNull();
     expect(result.connectCodeExpiresAt).toBeNull();
     expect(result.activationCode).toBe("WEBHOOK_ACTIVATION_FAILED");
@@ -189,7 +220,7 @@ describe("durable onboarding", () => {
     expect(failure).not.toBe(registrationError);
     expect(deps.store.failures).toHaveLength(0);
     expect(deps.store.successes).toHaveLength(0);
-    expect(deps.store.events).toEqual(["verify", "persist"]);
+    expect(deps.store.events).toEqual(["verify", "find-recovery", "persist"]);
     expect(deps.store.graphs[0].connection.state).toBe("VALIDATING");
   });
 
@@ -207,13 +238,9 @@ describe("durable onboarding", () => {
     expect(result.bot).toEqual({
       publicId: graph.connection.publicId,
       provider: "telegram",
-      providerBotId: "987654321",
       displayName: "Thư ký Mây",
       handle: "@may_calendar_bot",
-      accountType: null,
-      canJoinGroups: true,
       state: "ACTIVE_UNBOUND",
-      webhook: "READY",
     });
     const serialized = JSON.stringify(result);
     for (const forbidden of [token, "encryptedToken", "encryptedTokenIv", "tokenFingerprint", "credentialVersion", graph.user.id, graph.connection.id]) {
@@ -258,6 +285,8 @@ describe("connect-code rotation", () => {
       publicId: "bot-public",
       userId: "user-internal",
       state: "ACTIVE_UNBOUND",
+      updatedAt: now - 1,
+      transitionMarker: "active-marker",
     };
     const consumed: Array<{ subjectDigest: string; scope: string }> = [];
     const result = await rotateConnectCode(
@@ -301,6 +330,8 @@ describe("connect-code rotation", () => {
       publicId: "bot-public",
       userId: "user-internal",
       state: "ACTIVE_BOUND",
+      updatedAt: now - 1,
+      transitionMarker: "bound-marker",
     };
     const consume = vi.fn();
 
@@ -321,6 +352,8 @@ describe("connect-code rotation", () => {
       publicId: "bot-public",
       userId: "user-internal",
       state: "ACTIVE_UNBOUND",
+      updatedAt: now - 1,
+      transitionMarker: "active-marker",
     };
 
     const failure = await rotateConnectCode(

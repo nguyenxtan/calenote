@@ -66,7 +66,7 @@ function graph(suffix = "1"): AccountGraph {
       providerBotId: `bot-${suffix}`, displayName: "Bot", handle: "@bot", accountType: null,
       canJoinGroups: true, encryptedToken: Uint8Array.from([1, 2, 3]).buffer,
       encryptedTokenIv: new Uint8Array(12).buffer, tokenFingerprint: `fingerprint-${suffix}`,
-      credentialVersion: 1, state: "VALIDATING", createdAt: 100,
+      credentialVersion: 1, state: "VALIDATING", transitionMarker: `marker-${suffix}`, createdAt: 100,
     },
     session: { id: `session-${suffix}`, userId: `user-${suffix}`, digest: `session-digest-${suffix}`, expiresAt: 1_000, revokedAt: null, createdAt: 100 },
     audit: {
@@ -78,7 +78,7 @@ function graph(suffix = "1"): AccountGraph {
 
 function activation(): ActivationSuccess {
   return {
-    connectionId: "connection-1", userId: "user-1", registeredAt: 200,
+    connectionId: "connection-1", userId: "user-1", registeredAt: 200, expectedMarker: "marker-1",
     code: { kind: "connect", id: "code-1", connectionId: "connection-1", userId: "user-1", digest: "code-digest", expiresAt: 800, consumedAt: null, createdAt: 200 },
     audit: {
       id: "audit-2", actorUserId: "user-1", action: "WEBHOOK_ACTIVATED", targetUserId: "user-1",
@@ -162,7 +162,14 @@ describe("D1 onboarding persistence", () => {
     expect(database.sqlite.prepare("SELECT COUNT(*) AS count FROM connect_codes").get()).toEqual({ count: 0 });
     expect(database.sqlite.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toEqual({ count: 1 });
 
-    const staleConnection = { id: "connection-1", publicId: "public-1", userId: "user-1", state: "ACTIVE_UNBOUND" as const };
+    const staleConnection = {
+      id: "connection-1",
+      publicId: "public-1",
+      userId: "user-1",
+      state: "ACTIVE_UNBOUND" as const,
+      updatedAt: 100,
+      transitionMarker: "marker-1",
+    };
     await expect(store.rotateConnectCode({
       connection: staleConnection,
       rotatedAt: 300,
@@ -200,6 +207,7 @@ describe("D1 onboarding persistence", () => {
     await first.store.activateConnection(activation());
     await expect(first.store.failActivation({
       connectionId: "connection-1", userId: "user-1", state: "WEBHOOK_FAILED", failedAt: 200,
+      expectedMarker: "marker-1",
       auditResult: "FAILURE",
       audit: {
         id: "audit-3", actorUserId: "user-1", action: "WEBHOOK_ACTIVATION_FAILED",
@@ -213,6 +221,7 @@ describe("D1 onboarding persistence", () => {
     await second.store.commitAccountGraph(graph());
     await second.store.failActivation({
       connectionId: "connection-1", userId: "user-1", state: "WEBHOOK_FAILED", failedAt: 200,
+      expectedMarker: "marker-1",
       auditResult: "FAILURE",
       audit: {
         id: "audit-2", actorUserId: "user-1", action: "WEBHOOK_ACTIVATION_FAILED",

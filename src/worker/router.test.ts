@@ -9,6 +9,7 @@ import type { WebhookRouteDependencies } from "./routes/webhooks";
 
 const token = "123456789:AAExample_secret-token_123456789";
 const sessionCookie = `__Host-calenote_session=${"A".repeat(43)}`;
+const connectionPublicId = "A".repeat(22);
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const success = {
   bot: {
@@ -34,11 +35,18 @@ function context(): ExecutionContext {
 
 function environment() {
   const assets = { fetch: vi.fn(async () => new Response("asset", { status: 404 })) };
+  const database = { prepare: vi.fn(), batch: vi.fn() };
+  const jobs = { send: vi.fn() };
   return {
     assets,
+    database,
+    jobs,
     env: {
       ASSETS: assets,
       APP_ORIGIN: "https://calenote.iconiclogs.com",
+      CALENOTE_MASTER_KEY: master,
+      DB: database,
+      JOBS: jobs,
     } as unknown as Env,
   };
 }
@@ -48,8 +56,21 @@ function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations
     digestRateLimitSubject: vi.fn(async () => "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g"),
     consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: true, resetAt: 1_700_000_060_000 })),
     onboard: vi.fn(async () => success),
+    requestLoginCode: vi.fn(async () => ({ accepted: true as const })),
+    verifyLoginCode: vi.fn(async () => ({ cookie: sessionCookie })),
+    logout: vi.fn(async () => ({ clearCookie: "__Host-calenote_session=; Max-Age=0" })),
     requireUser: vi.fn(async () => ({ userId: "user-internal" })),
+    getSessionUser: vi.fn(async () => ({
+      displayName: "Bích Tuyền",
+      email: "owner@example.com",
+      timezone: "Asia/Ho_Chi_Minh" as const,
+    })),
+    listConnections: vi.fn(async () => []),
     rotateConnectCode: vi.fn(async () => ({ command: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 })),
+    retryWebhook: vi.fn(),
+    listReminders: vi.fn(async () => []),
+    createReminder: vi.fn(),
+    cancelReminder: vi.fn(async () => ({ cancelled: true as const })),
     ...overrides,
   };
 }
@@ -129,17 +150,42 @@ describe("Worker router", () => {
   });
 
   it("keeps health and asset fallback behavior unchanged", async () => {
-    const { assets, env } = environment();
+    const { assets, database, env } = environment();
     const health = await routeRequest(new Request("https://calenote.iconiclogs.com/api/health"), env, context());
     const asset = await routeRequest(new Request("https://calenote.iconiclogs.com/docs"), env, context());
 
     expect(health.status).toBe(200);
     await expect(health.json()).resolves.toEqual({ ok: true, service: "calenote" });
+    expect(database.prepare).not.toHaveBeenCalled();
     expect(asset.status).toBe(404);
     expect(assets.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("does not expose the deleted public token verification route", async () => {
+  it.each([
+    ["wrong origin", { APP_ORIGIN: "https://example.com" }],
+    ["invalid key", { CALENOTE_MASTER_KEY: "invalid" }],
+    ["missing D1", { DB: undefined }],
+    ["missing Queue", { JOBS: undefined }],
+    ["missing assets", { ASSETS: undefined }],
+  ])("returns the same safe 503 readiness result for %s", async (_label, override) => {
+    const fixture = environment();
+    const response = await routeRequest(
+      new Request("https://calenote.iconiclogs.com/api/health"),
+      { ...fixture.env, ...override } as Env,
+      context(),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Calenote đang tạm thời không sẵn sàng.",
+      },
+    });
+    expect(fixture.database.prepare).not.toHaveBeenCalled();
+  });
+
+  it("does not expose the deleted public token verification route or touch assets", async () => {
     const { assets, env } = environment();
     const response = await routeRequest(
       new Request("https://calenote.iconiclogs.com/api/v1/bot-connections/verify", { method: "POST" }),
@@ -148,7 +194,7 @@ describe("Worker router", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(assets.fetch).toHaveBeenCalledTimes(1);
+    expect(assets.fetch).not.toHaveBeenCalled();
   });
 
   it("requires exact same-origin JSON and rate-limits a HMACed trusted IP/provider before onboarding", async () => {
@@ -205,6 +251,47 @@ describe("Worker router", () => {
     expect(ops.onboard).not.toHaveBeenCalled();
   });
 
+  it("times out a stalled onboarding body before operations or provider egress", async () => {
+    vi.useFakeTimers();
+    try {
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>({
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const ops = operations();
+      const operationsFactory = vi.fn(async () => ops);
+      const responsePromise = createRouter({ operations: operationsFactory })(
+        new Request("https://calenote.iconiclogs.com/api/onboarding", {
+          method: "POST",
+          headers: {
+            origin: "https://calenote.iconiclogs.com",
+            "content-type": "application/json",
+          },
+          body,
+          duplex: "half",
+        } as RequestInit),
+        environment().env,
+        context(),
+      );
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const response = await Promise.race([
+        responsePromise,
+        Promise.resolve(null),
+      ]);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response?.status).toBe(408);
+      expect(cancelled).toBe(true);
+      expect(operationsFactory).not.toHaveBeenCalled();
+      expect(ops.onboard).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("strictly validates and normalizes onboarding fields before the operation", async () => {
     const ops = operations();
     const { env } = environment();
@@ -248,6 +335,11 @@ describe("Worker router", () => {
           failActivation,
           findOwnedConnection: vi.fn(),
           rotateConnectCode: vi.fn(),
+          findExactRecovery: vi.fn(async () => null),
+          findOwnedRecovery: vi.fn(async () => null),
+          claimRecovery: vi.fn(),
+          commitRecoveredAccess: vi.fn(),
+          failRecoveredActivation: vi.fn(),
         },
         keyring,
         verifyToken: async () => ({
@@ -275,7 +367,7 @@ describe("Worker router", () => {
   it("requires a session and an exact empty JSON object to rotate a connect code", async () => {
     const ops = operations();
     const { env } = environment();
-    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const request = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
@@ -283,7 +375,7 @@ describe("Worker router", () => {
     const response = await createRouter({ operations: async () => ops })(request, env, context());
 
     expect(ops.requireUser).toHaveBeenCalledWith(request);
-    expect(ops.rotateConnectCode).toHaveBeenCalledWith({ userId: "user-internal", publicId: "bot-public" });
+    expect(ops.rotateConnectCode).toHaveBeenCalledWith({ userId: "user-internal", publicId: connectionPublicId });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ data: { connectCommand: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 } });
   });
@@ -291,7 +383,7 @@ describe("Worker router", () => {
   it("returns 401 before connection lookup and 429 with Retry-After safely", async () => {
     const { env } = environment();
     const unauthenticated = operations({ requireUser: vi.fn(async () => { throw new SessionAuthError(); }) });
-    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const request = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
@@ -301,7 +393,7 @@ describe("Worker router", () => {
     expect(unauthenticated.rotateConnectCode).not.toHaveBeenCalled();
 
     const limited = operations({ rotateConnectCode: vi.fn(async () => { throw new RateLimitExceededError(17); }) });
-    const limitedRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const limitedRequest = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
@@ -312,7 +404,7 @@ describe("Worker router", () => {
     expect((await limitedResponse.json() as { error: { code: string } }).error.code).toBe("RATE_LIMITED");
 
     const stale = operations({ rotateConnectCode: vi.fn(async () => { throw new ConnectionStateError(); }) });
-    const staleRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const staleRequest = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
@@ -331,7 +423,7 @@ describe("Worker router", () => {
     const ops = operations();
     const operationsFactory = vi.fn(async () => ops);
     const { env } = environment();
-    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const request = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
       body: "{}",
@@ -357,7 +449,7 @@ describe("Worker router", () => {
       cookie: sessionCookie,
     });
     for (const [name, value] of Object.entries(headers)) requestHeaders.set(name, value);
-    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const request = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: requestHeaders,
       body,
@@ -373,7 +465,7 @@ describe("Worker router", () => {
   it("rejects non-empty connect-code bodies and hides unknown failures", async () => {
     const { env } = environment();
     const ops = operations();
-    const invalid = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const invalid = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: JSON.stringify({ unexpected: true }),
@@ -386,7 +478,7 @@ describe("Worker router", () => {
     expect(ops.rotateConnectCode).not.toHaveBeenCalled();
 
     const failed = operations({ rotateConnectCode: vi.fn(async () => { throw new Error(`secret ${token}`); }) });
-    const failureRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+    const failureRequest = new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/connect-code`, {
       method: "POST",
       headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",

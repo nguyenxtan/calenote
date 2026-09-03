@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ConnectCodeRecord, LoginCodeRecord } from "@/modules/auth/codes";
+import type { ConnectCodeRecord } from "@/modules/auth/codes";
 import { consumeRateLimit } from "@/modules/rate-limit/service";
 import { D1OneTimeCodeStore } from "./code-store";
 import { D1RateLimitStore } from "./rate-limit-store";
@@ -86,19 +86,6 @@ function migratedDatabase(): SqliteD1Database {
   return database;
 }
 
-function loginRecord(id: string, digest: string, createdAt: number): LoginCodeRecord {
-  return {
-    kind: "login",
-    id,
-    userId: "user-1",
-    digest,
-    expiresAt: createdAt + 600_000,
-    attempts: 0,
-    consumedAt: null,
-    createdAt,
-  };
-}
-
 function connectRecord(createdAt: number): ConnectCodeRecord {
   return {
     kind: "connect",
@@ -117,32 +104,12 @@ afterEach(() => {
 });
 
 describe("D1 one-time code adapter", () => {
-  it("allows a login digest to recur after historical consumption", async () => {
+  it("rejects the obsolete digest-only login path in favor of encrypted D1 login storage", async () => {
     const database = migratedDatabase();
     const store = new D1OneTimeCodeStore(database as unknown as D1Database);
     const now = 1_700_000_000_000;
-
-    await store.issue(loginRecord("login-1", "same-digest", now), now);
-    await expect(store.consumeLogin("user-1", "same-digest", now + 1, 5)).resolves.toBe("accepted");
-    await expect(store.issue(loginRecord("login-2", "same-digest", now + 2), now + 2)).resolves.toBeUndefined();
-  });
-
-  it("targets the newest active login code when rotation shares a timestamp", async () => {
-    const database = migratedDatabase();
-    const store = new D1OneTimeCodeStore(database as unknown as D1Database);
-    const now = 1_700_000_000_000;
-
-    await store.issue(loginRecord("login-1", "digest-1", now), now);
-    await store.issue(loginRecord("login-2", "digest-2", now), now);
-    await expect(store.consumeLogin("user-1", "wrong-digest", now + 1, 5)).resolves.toBe("invalid");
-
-    const rows = database.sqlite.prepare(
-      "SELECT id, attempts, consumed_at FROM login_codes ORDER BY rowid",
-    ).all() as Array<{ id: string; attempts: number; consumed_at: number | null }>;
-    expect(rows).toEqual([
-      { id: "login-1", attempts: 0, consumed_at: now },
-      { id: "login-2", attempts: 1, consumed_at: null },
-    ]);
+    await expect(store.consumeLogin("user-1", "digest", now, 5))
+      .rejects.toThrow("Encrypted login codes must use D1LoginCodeStore");
   });
 
   it("binds connect consumption to one connection and allows one replay winner", async () => {
@@ -196,5 +163,24 @@ describe("D1 rate-limit adapter", () => {
       "SELECT bucket FROM rate_limits WHERE subject_digest = ? ORDER BY bucket",
     ).all(subjectDigest) as Array<{ bucket: string }>;
     expect(scopes).toEqual([{ bucket: "request" }, { bucket: "verify" }]);
+  });
+
+  it("deletes only a bounded batch of expired rows through the expiry path", async () => {
+    const database = migratedDatabase();
+    const store = new D1RateLimitStore(database as unknown as D1Database);
+    database.sqlite.exec(`
+      INSERT INTO rate_limits VALUES ('expired-a','request',1,99);
+      INSERT INTO rate_limits VALUES ('expired-b','request',1,100);
+      INSERT INTO rate_limits VALUES ('expired-c','request',1,100);
+      INSERT INTO rate_limits VALUES ('current','request',1,101);
+    `);
+
+    await expect(store.cleanupExpired(100, 2)).resolves.toBe(2);
+    expect(database.sqlite.prepare(
+      "SELECT subject_digest FROM rate_limits ORDER BY subject_digest",
+    ).all()).toEqual([
+      { subject_digest: "current" },
+      { subject_digest: "expired-c" },
+    ]);
   });
 });

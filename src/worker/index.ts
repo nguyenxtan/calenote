@@ -1,4 +1,12 @@
 import {
+  CRON_LOGIN_LIMIT,
+  deliverLoginCode,
+  D1LoginCodeStore,
+  redriveLoginCodes,
+  type DeliverLoginCodeResult,
+  type DeliverLoginCodeJob,
+} from "@/modules/auth/login-service";
+import {
   D1InboundProcessorStore,
   processInbound,
   type ProcessInboundResult,
@@ -19,18 +27,24 @@ import {
   type ReminderDispatchJob,
 } from "@/modules/reminders/scheduler";
 import { createKeyring } from "@/modules/security/keyring";
+import { base64UrlToBytes } from "@/modules/security/encoding";
 import { routeRequest } from "./router";
 
-const CANONICAL_ID = /^[A-Za-z0-9_-]{22}$/u;
+function isCanonicalOpaqueId(value: unknown): value is string {
+  if (typeof value !== "string" || value.length !== 22) return false;
+  return base64UrlToBytes(value)?.byteLength === 16;
+}
 
 export interface QueueOperations {
   processInbound(inboundId: string): Promise<ProcessInboundResult>;
   deliverReminder(reminderId: string): Promise<DeliverReminderResult>;
+  deliverLoginCode(loginCodeId: string): Promise<DeliverLoginCodeResult>;
 }
 
 export interface ScheduledOperations {
   claimDueReminders(now: number, limit: number): Promise<unknown>;
   redriveInboundOrphans(now: number, limit: number): Promise<unknown>;
+  redriveLoginCodes(now: number, limit: number): Promise<unknown>;
 }
 
 type RuntimeOperations = QueueOperations & ScheduledOperations;
@@ -44,18 +58,24 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
   return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
 
-export function parseQueueJob(value: unknown): ReminderDispatchJob | null {
+export function parseQueueJob(value: unknown): ReminderDispatchJob | DeliverLoginCodeJob | null {
   if (!isRecord(value) || typeof value.type !== "string") return null;
   if (value.type === "PROCESS_INBOUND") {
     if (!exactKeys(value, ["type", "inboundId"])) return null;
-    return typeof value.inboundId === "string" && CANONICAL_ID.test(value.inboundId)
+    return isCanonicalOpaqueId(value.inboundId)
       ? { type: "PROCESS_INBOUND", inboundId: value.inboundId }
       : null;
   }
   if (value.type === "DELIVER_REMINDER") {
     if (!exactKeys(value, ["type", "reminderId"])) return null;
-    return typeof value.reminderId === "string" && CANONICAL_ID.test(value.reminderId)
+    return isCanonicalOpaqueId(value.reminderId)
       ? { type: "DELIVER_REMINDER", reminderId: value.reminderId }
+      : null;
+  }
+  if (value.type === "DELIVER_LOGIN_CODE") {
+    if (!exactKeys(value, ["type", "loginCodeId"])) return null;
+    return isCanonicalOpaqueId(value.loginCodeId)
+      ? { type: "DELIVER_LOGIN_CODE", loginCodeId: value.loginCodeId }
       : null;
   }
   return null;
@@ -83,7 +103,9 @@ async function queueDisposition(
       };
     }
 
-    const result = await operations.deliverReminder(job.reminderId);
+    const result = job.type === "DELIVER_REMINDER"
+      ? await operations.deliverReminder(job.reminderId)
+      : await operations.deliverLoginCode(job.loginCodeId);
     return {
       retryAfterSeconds: result.status === "RETRYABLE" || result.status === "RETRY_AFTER"
         ? retrySeconds(result.retryAfterSeconds)
@@ -122,6 +144,7 @@ export async function handleQueueEvent(
     operations = {
       processInbound: unavailable,
       deliverReminder: unavailable,
+      deliverLoginCode: unavailable,
     };
   }
   await handleQueueBatch(batch, operations);
@@ -131,8 +154,11 @@ export async function runScheduledWork(
   controller: ScheduledController,
   operations: ScheduledOperations,
 ): Promise<void> {
-  await operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT);
-  await operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT);
+  await Promise.allSettled([
+    operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT),
+    operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
+    operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
+  ]);
 }
 
 async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
@@ -141,6 +167,7 @@ async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
+  const loginStore = new D1LoginCodeStore(env.DB);
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
@@ -150,12 +177,20 @@ async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
       store: deliveryStore,
       keyring,
     }),
+    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, {
+      store: loginStore,
+      keyring,
+    }),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, {
       store: reminderSchedulerStore,
       enqueue: (job) => env.JOBS.send(job),
     }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, {
       store: inboundDispatchStore,
+      enqueue: (job) => env.JOBS.send(job),
+    }),
+    redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, {
+      store: loginStore,
       enqueue: (job) => env.JOBS.send(job),
     }),
   };

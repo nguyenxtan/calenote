@@ -8,6 +8,9 @@ import {
   type ConnectCodeRotation,
   type OnboardingStore,
   type OwnedConnection,
+  type RecoveryAccessCommit,
+  type RecoveryConnection,
+  type RecoveryFailureCommit,
   type SafeAuditEvent,
 } from "@/modules/onboarding/service";
 import { d1Changes } from "@/modules/platform/types";
@@ -17,6 +20,21 @@ interface OwnedConnectionRow {
   public_id: string;
   user_id: string;
   state: OwnedConnection["state"];
+  updated_at: number;
+  transition_marker: string | null;
+}
+
+interface RecoveryConnectionRow extends OwnedConnectionRow {
+  provider: RecoveryConnection["provider"];
+  provider_bot_id: string;
+  display_name: string;
+  handle: string | null;
+  updated_at: number;
+  transition_marker: string | null;
+  has_private_chat: number;
+  encrypted_token: unknown;
+  encrypted_token_iv: unknown;
+  credential_version: number;
 }
 
 function uniqueConstraint(error: unknown): boolean {
@@ -25,6 +43,19 @@ function uniqueConstraint(error: unknown): boolean {
 
 function guardedConnectConstraint(error: unknown): boolean {
   return error instanceof Error && /NOT NULL constraint failed:\s*connect_codes\.connection_id\b/iu.test(error.message);
+}
+
+function guardedRecoveryConstraint(error: unknown): boolean {
+  return error instanceof Error
+    && /NOT NULL constraint failed:\s*(?:sessions\.user_id|connect_codes\.connection_id|audit_events\.id)\b/iu.test(error.message);
+}
+
+function persistedArrayBuffer(value: unknown): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) {
+    return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).buffer;
+  }
+  throw new TypeError("Malformed encrypted credential");
 }
 
 function requireChange(result: D1Result<unknown>, message: string): void {
@@ -143,8 +174,8 @@ export class D1OnboardingStore implements OnboardingStore {
             id, user_id, provider, public_id, provider_bot_id, display_name, handle,
             account_type, can_join_groups, encrypted_token, encrypted_token_iv,
             token_fingerprint, credential_version, state, webhook_registered_at,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+            created_at, updated_at, transition_marker
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
         )
         .bind(
           graph.connection.id,
@@ -163,6 +194,7 @@ export class D1OnboardingStore implements OnboardingStore {
           graph.connection.state,
           graph.connection.createdAt,
           graph.connection.createdAt,
+          graph.connection.transitionMarker,
         ),
       this.database
         .prepare(
@@ -196,9 +228,10 @@ export class D1OnboardingStore implements OnboardingStore {
         .prepare(
           `UPDATE bot_connections
            SET state = 'ACTIVE_UNBOUND', transition_marker = ?, webhook_registered_at = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'`,
+           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ?`,
         )
-        .bind(input.audit.id, input.registeredAt, input.registeredAt, input.connectionId, input.userId),
+        .bind(input.audit.id, input.registeredAt, input.registeredAt, input.connectionId, input.userId, input.expectedMarker),
       codeStatements[0],
       this.prepareGuardedConnectCode(input.code, input.audit.id),
       this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND", input.audit.id),
@@ -214,9 +247,11 @@ export class D1OnboardingStore implements OnboardingStore {
     const statements = [
       this.database
         .prepare(
-          "UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ? WHERE id = ? AND user_id = ? AND state = 'VALIDATING'",
+          `UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ?
+           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ?`,
         )
-        .bind(input.state, input.audit.id, input.failedAt, input.connectionId, input.userId),
+        .bind(input.state, input.audit.id, input.failedAt, input.connectionId, input.userId, input.expectedMarker),
       this.prepareGuardedAudit(input.audit, input.state, input.audit.id),
     ];
     const results = await this.database.batch(statements);
@@ -227,11 +262,21 @@ export class D1OnboardingStore implements OnboardingStore {
 
   async findOwnedConnection(userId: string, publicId: string): Promise<OwnedConnection | null> {
     const row = await this.database
-      .prepare("SELECT id, public_id, user_id, state FROM bot_connections WHERE user_id = ? AND public_id = ? LIMIT 1")
+      .prepare(
+        `SELECT id, public_id, user_id, state, updated_at, transition_marker
+         FROM bot_connections WHERE user_id = ? AND public_id = ? LIMIT 1`,
+      )
       .bind(userId, publicId)
       .first<OwnedConnectionRow>();
     return row
-      ? { id: row.id, publicId: row.public_id, userId: row.user_id, state: row.state }
+      ? {
+          id: row.id,
+          publicId: row.public_id,
+          userId: row.user_id,
+          state: row.state,
+          updatedAt: row.updated_at,
+          transitionMarker: row.transition_marker,
+        }
       : null;
   }
 
@@ -239,25 +284,330 @@ export class D1OnboardingStore implements OnboardingStore {
     if (input.connection.state !== "ACTIVE_UNBOUND") throw new ConnectionStateError();
     const codeStatements = this.codes.prepareIssue(input.code, input.rotatedAt);
     const statements = [
+      this.database
+        .prepare(
+          `UPDATE bot_connections
+           SET transition_marker = ?, updated_at = ?
+           WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
+             AND updated_at = ?
+             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))`,
+        )
+        .bind(
+          input.audit.id,
+          input.rotatedAt,
+          input.connection.id,
+          input.connection.userId,
+          input.connection.updatedAt,
+          input.connection.transitionMarker,
+          input.connection.transitionMarker,
+        ),
       codeStatements[0],
-      this.prepareGuardedConnectCode(input.code),
-      this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND"),
+      this.prepareGuardedConnectCode(input.code, input.audit.id),
+      this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND", input.audit.id),
     ];
     try {
       const results = await this.database.batch(statements);
       if (results.length !== statements.length) throw new Error("Connect-code rotation batch result was incomplete");
-      requireChange(results[1], "Connect-code rotation insert did not commit");
-      requireChange(results[2], "Connect-code rotation audit did not commit");
+      requireChange(results[0], "Connect-code rotation state fence did not commit");
+      requireChange(results[2], "Connect-code rotation insert did not commit");
+      requireChange(results[3], "Connect-code rotation audit did not commit");
     } catch (error) {
       if (guardedConnectConstraint(error)) {
-        let current: OwnedConnection | null;
-        try {
-          current = await this.findOwnedConnection(input.connection.userId, input.connection.publicId);
-        } catch {
-          throw error;
-        }
-        if (current && current.state !== "ACTIVE_UNBOUND") throw new ConnectionStateError();
+        throw new ConnectionStateError();
       }
+      throw error;
+    }
+  }
+
+  async findExactRecovery(input: {
+    email: string;
+    provider: RecoveryConnection["provider"];
+    tokenFingerprint: string;
+    providerBotId: string;
+  }): Promise<RecoveryConnection | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT c.id, c.public_id, c.user_id, c.provider, c.provider_bot_id,
+                c.display_name, c.handle, c.state, c.updated_at,
+                c.transition_marker, c.encrypted_token, c.encrypted_token_iv,
+                c.credential_version,
+                EXISTS(SELECT 1 FROM chat_identities ci WHERE ci.connection_id = c.id) AS has_private_chat
+         FROM users u
+         JOIN bot_connections c ON c.user_id = u.id
+         WHERE u.email = ? COLLATE NOCASE AND c.provider = ?
+           AND c.token_fingerprint = ? AND c.provider_bot_id = ?
+         LIMIT 1`,
+      )
+      .bind(input.email, input.provider, input.tokenFingerprint, input.providerBotId)
+      .first<RecoveryConnectionRow>();
+    return row ? this.recoveryConnection(row) : null;
+  }
+
+  async findOwnedRecovery(userId: string, publicId: string): Promise<RecoveryConnection | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT c.id, c.public_id, c.user_id, c.provider, c.provider_bot_id,
+                c.display_name, c.handle, c.state, c.updated_at,
+                c.transition_marker, c.encrypted_token, c.encrypted_token_iv,
+                c.credential_version,
+                EXISTS(SELECT 1 FROM chat_identities ci WHERE ci.connection_id = c.id) AS has_private_chat
+         FROM bot_connections c
+         WHERE c.user_id = ? AND c.public_id = ?
+         LIMIT 1`,
+      )
+      .bind(userId, publicId)
+      .first<RecoveryConnectionRow>();
+    return row ? this.recoveryConnection(row) : null;
+  }
+
+  private recoveryConnection(row: RecoveryConnectionRow): RecoveryConnection {
+    return {
+      id: row.id,
+      publicId: row.public_id,
+      userId: row.user_id,
+      provider: row.provider,
+      providerBotId: row.provider_bot_id,
+      displayName: row.display_name,
+      handle: row.handle,
+      state: row.state,
+      updatedAt: row.updated_at,
+      transitionMarker: row.transition_marker,
+      hasPrivateChat: row.has_private_chat === 1,
+      encryptedToken: persistedArrayBuffer(row.encrypted_token),
+      encryptedTokenIv: persistedArrayBuffer(row.encrypted_token_iv),
+      credentialVersion: row.credential_version,
+    };
+  }
+
+  async claimRecovery(input: {
+    connection: RecoveryConnection;
+    marker: string;
+    claimedAt: number;
+  }): Promise<boolean> {
+    const result = await this.database
+      .prepare(
+        `UPDATE bot_connections
+         SET state = 'VALIDATING', transition_marker = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND state = ? AND updated_at = ?
+           AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))
+           AND (
+             state IN ('WEBHOOK_FAILED', 'SUSPENDED')
+             OR (state = 'VALIDATING' AND updated_at < ?)
+           )
+         RETURNING id`,
+      )
+      .bind(
+        input.marker,
+        input.claimedAt,
+        input.connection.id,
+        input.connection.userId,
+        input.connection.state,
+        input.connection.updatedAt,
+        input.connection.transitionMarker,
+        input.connection.transitionMarker,
+        input.claimedAt - 300_000,
+      )
+      .run<{ id: string }>();
+    return d1Changes(result) === 1;
+  }
+
+  async commitRecoveredAccess(input: RecoveryAccessCommit): Promise<boolean> {
+    const statements: D1PreparedStatement[] = [
+      this.database
+        .prepare(
+          `UPDATE bot_connections
+           SET state = ?, transition_marker = ?, webhook_registered_at = COALESCE(webhook_registered_at, ?),
+               updated_at = ?
+           WHERE id = ? AND user_id = ? AND state = ? AND updated_at = ?
+             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))`,
+        )
+        .bind(
+          input.targetState,
+          input.newMarker,
+          input.completedAt,
+          input.completedAt,
+          input.connection.id,
+          input.connection.userId,
+          input.connection.state,
+          input.connection.updatedAt,
+          input.expectedMarker,
+          input.expectedMarker,
+        ),
+      this.database
+        .prepare(
+          `UPDATE connect_codes SET consumed_at = ?
+           WHERE connection_id = ? AND consumed_at IS NULL`,
+        )
+        .bind(input.completedAt, input.connection.id),
+    ];
+    if (input.revokeExistingSessions) {
+      statements.push(
+        this.database
+          .prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+          .bind(input.completedAt, input.connection.userId),
+      );
+    }
+    if (input.session) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at)
+             VALUES (?, COALESCE((
+               SELECT user_id FROM bot_connections
+               WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+             ), NULL), ?, ?, ?, ?)`,
+          )
+          .bind(
+            input.session.id,
+            input.connection.id,
+            input.connection.userId,
+            input.targetState,
+            input.newMarker,
+            input.session.digest,
+            input.session.expiresAt,
+            input.session.revokedAt,
+            input.session.createdAt,
+          ),
+      );
+    }
+    if (input.code) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO connect_codes (
+               id, connection_id, user_id, digest, expires_at, consumed_at, created_at
+             ) VALUES (?, COALESCE((
+               SELECT id FROM bot_connections
+               WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
+                 AND transition_marker = ?
+             ), NULL), ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            input.code.id,
+            input.connection.id,
+            input.connection.userId,
+            input.newMarker,
+            input.code.userId,
+            input.code.digest,
+            input.code.expiresAt,
+            input.code.consumedAt,
+            input.code.createdAt,
+          ),
+      );
+    }
+    statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
+           ) VALUES (COALESCE((
+             SELECT ? FROM bot_connections
+             WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+           ), NULL), ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          input.audit.id,
+          input.connection.id,
+          input.connection.userId,
+          input.targetState,
+          input.newMarker,
+          input.audit.actorUserId,
+          input.audit.action,
+          input.audit.targetUserId,
+          input.audit.targetConnectionId,
+          input.audit.result,
+          input.audit.createdAt,
+        ),
+    );
+    try {
+      await this.database.batch(statements);
+      return true;
+    } catch (error) {
+      if (guardedRecoveryConstraint(error)) return false;
+      throw error;
+    }
+  }
+
+  async failRecoveredActivation(input: RecoveryFailureCommit): Promise<boolean> {
+    const statements: D1PreparedStatement[] = [
+      this.database
+        .prepare(
+          `UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ?
+           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ? AND updated_at = ?`,
+        )
+        .bind(
+          input.state,
+          input.audit.id,
+          input.failedAt,
+          input.connection.id,
+          input.connection.userId,
+          input.marker,
+          input.connection.updatedAt,
+        ),
+      this.database
+        .prepare("UPDATE connect_codes SET consumed_at = ? WHERE connection_id = ? AND consumed_at IS NULL")
+        .bind(input.failedAt, input.connection.id),
+    ];
+    if (input.revokeExistingSessions) {
+      statements.push(
+        this.database
+          .prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+          .bind(input.failedAt, input.connection.userId),
+      );
+    }
+    if (input.session) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at)
+             VALUES (?, COALESCE((
+               SELECT user_id FROM bot_connections
+               WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+             ), NULL), ?, ?, ?, ?)`,
+          )
+          .bind(
+            input.session.id,
+            input.connection.id,
+            input.connection.userId,
+            input.state,
+            input.audit.id,
+            input.session.digest,
+            input.session.expiresAt,
+            input.session.revokedAt,
+            input.session.createdAt,
+          ),
+      );
+    }
+    statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
+           ) VALUES (COALESCE((
+             SELECT ? FROM bot_connections
+             WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+           ), NULL), ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          input.audit.id,
+          input.connection.id,
+          input.connection.userId,
+          input.state,
+          input.audit.id,
+          input.audit.actorUserId,
+          input.audit.action,
+          input.audit.targetUserId,
+          input.audit.targetConnectionId,
+          input.audit.result,
+          input.audit.createdAt,
+        ),
+    );
+    try {
+      await this.database.batch(statements);
+      return true;
+    } catch (error) {
+      if (guardedRecoveryConstraint(error)) return false;
       throw error;
     }
   }

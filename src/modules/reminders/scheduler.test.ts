@@ -6,6 +6,7 @@ import {
 
 const now = 1_800_000_000_000;
 const databases: SqliteD1Database[] = [];
+let reminderPublicSequence = 0;
 
 function database(): SqliteD1Database {
   const value = new SqliteD1Database();
@@ -53,12 +54,21 @@ function seedReminder(
 ): void {
   db.sqlite.prepare(
     `INSERT INTO reminders (
-       id, workspace_id, chat_identity_id, title_ciphertext, title_iv,
+       id, public_id, workspace_id, chat_identity_id, title_ciphertext, title_iv,
        title_key_version, scheduled_at, timezone, status, claimed_at,
        cancelled_at, transition_marker, created_at, updated_at
-     ) VALUES (?, 'workspace-1', 'chat-identity-1', X'01', zeroblob(12), 1,
+     ) VALUES (?, ?, 'workspace-1', 'chat-identity-1', X'01', zeroblob(12), 1,
        ?, 'Asia/Ho_Chi_Minh', ?, ?, NULL, ?, ?, ?)`,
-  ).run(id, scheduledAt, status, claimedAt, marker, now, now);
+  ).run(
+    id,
+    `${String(++reminderPublicSequence).padStart(21, "A")}A`,
+    scheduledAt,
+    status,
+    claimedAt,
+    marker,
+    now,
+    now,
+  );
 }
 
 async function schedulerModule() {

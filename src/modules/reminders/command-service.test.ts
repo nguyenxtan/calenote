@@ -330,14 +330,19 @@ describe("bound reminder commands", () => {
       "SELECT status, resolution_inbound_id FROM command_drafts",
     ).get()).toEqual({ status: "CONFIRMED", resolution_inbound_id: "confirm" });
     expect(harness.database.sqlite.prepare(
-      "SELECT workspace_id, chat_identity_id, source_draft_id, scheduled_at, timezone, status FROM reminders",
+      "SELECT id, public_id, workspace_id, chat_identity_id, source_draft_id, scheduled_at, timezone, status FROM reminders",
     ).get()).toMatchObject({
+      public_id: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/u),
       workspace_id: "workspace-1",
       chat_identity_id: "identity-1",
       scheduled_at: Date.UTC(2026, 8, 3, 1),
       timezone,
       status: "PENDING",
     });
+    const identifiers = harness.database.sqlite.prepare(
+      "SELECT id, public_id FROM reminders",
+    ).get() as { id: string; public_id: string };
+    expect(identifiers.public_id).not.toBe(identifiers.id);
     await expect(readEncryptedTitle(harness, "reminders", "reminder-title")).resolves.toBe("gửi báo cáo");
     const ciphertexts = harness.database.sqlite.prepare(
       `SELECT d.title_ciphertext AS draft_ciphertext, r.title_ciphertext AS reminder_ciphertext

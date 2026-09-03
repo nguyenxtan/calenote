@@ -27,9 +27,9 @@ export class D1OneTimeCodeStore implements OneTimeCodeStore {
       return [
         this.database
           .prepare(
-            "UPDATE connect_codes SET consumed_at = ? WHERE connection_id = ? AND consumed_at IS NULL AND expires_at > ?",
+            "UPDATE connect_codes SET consumed_at = ? WHERE connection_id = ? AND consumed_at IS NULL",
           )
-          .bind(now, record.connectionId, now),
+          .bind(now, record.connectionId),
         this.database
           .prepare(
             "INSERT INTO connect_codes (id, connection_id, user_id, digest, expires_at, consumed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -46,26 +46,7 @@ export class D1OneTimeCodeStore implements OneTimeCodeStore {
       ];
     }
 
-    return [
-      this.database
-        .prepare(
-          "UPDATE login_codes SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL AND expires_at > ?",
-        )
-        .bind(now, record.userId, now),
-      this.database
-        .prepare(
-          "INSERT INTO login_codes (id, user_id, digest, expires_at, attempts, consumed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(
-          record.id,
-          record.userId,
-          record.digest,
-          record.expiresAt,
-          record.attempts,
-          record.consumedAt,
-          record.createdAt,
-        ),
-    ];
+    throw new TypeError("Encrypted login codes must use D1LoginCodeStore");
   }
 
   async issue(record: OneTimeCodeRecord, now: number): Promise<void> {
@@ -103,55 +84,11 @@ export class D1OneTimeCodeStore implements OneTimeCodeStore {
     now: number,
     maxAttempts: number,
   ): Promise<CodeConsumeOutcome> {
-    const consumed = await this.database
-      .prepare(
-        `UPDATE login_codes
-         SET consumed_at = ?
-         WHERE id = (
-           SELECT id FROM login_codes
-           WHERE user_id = ? AND consumed_at IS NULL AND expires_at > ? AND attempts < ?
-           ORDER BY created_at DESC, rowid DESC
-           LIMIT 1
-         )
-           AND digest = ?
-         RETURNING consumed_at, expires_at, attempts`,
-      )
-      .bind(now, userId, now, maxAttempts, digest)
-      .run<CodeStateRow>();
-    if (d1Changes(consumed) === 1) {
-      if (consumed.results.length !== 1) throw new Error("Login consume result was unavailable");
-      return "accepted";
-    }
-
-    const failed = await this.database
-      .prepare(
-        `UPDATE login_codes
-         SET attempts = attempts + 1,
-             consumed_at = CASE WHEN attempts + 1 >= ? THEN ? ELSE consumed_at END
-         WHERE id = (
-           SELECT id FROM login_codes
-           WHERE user_id = ? AND consumed_at IS NULL AND expires_at > ? AND attempts < ?
-           ORDER BY created_at DESC, rowid DESC
-           LIMIT 1
-         )
-           AND digest <> ?
-         RETURNING consumed_at, expires_at, attempts`,
-      )
-      .bind(maxAttempts, now, userId, now, maxAttempts, digest)
-      .run<CodeStateRow>();
-
-    if (d1Changes(failed) === 1) {
-      if (failed.results.length !== 1) throw new Error("Login attempt result was unavailable");
-      return classify(failed.results[0], now, maxAttempts);
-    }
-
-    const row = await this.database
-      .prepare(
-        "SELECT consumed_at, expires_at, attempts FROM login_codes WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
-      )
-      .bind(userId)
-      .first<CodeStateRow>();
-    return classify(row, now, maxAttempts);
+    void userId;
+    void digest;
+    void now;
+    void maxAttempts;
+    throw new TypeError("Encrypted login codes must use D1LoginCodeStore");
   }
 }
 

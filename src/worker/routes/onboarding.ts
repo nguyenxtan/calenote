@@ -4,6 +4,7 @@ import { parseOnboardingInput, RateLimitExceededError } from "@/modules/onboardi
 import type { WorkerOperations } from "../router";
 
 const MAX_BODY_BYTES = 2_048;
+const BODY_TIMEOUT_MS = 5_000;
 
 export async function handleOnboarding(
   request: Request,
@@ -11,7 +12,9 @@ export async function handleOnboarding(
   createOperations: () => Promise<WorkerOperations>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
-  const input = parseOnboardingInput(await readBoundedJson(request, MAX_BODY_BYTES));
+  const input = parseOnboardingInput(
+    await readBoundedJson(request, MAX_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }),
+  );
   const operations = await createOperations();
   const subject = request.headers.get("CF-Connecting-IP") ?? "anonymous";
   const subjectDigest = await operations.digestRateLimitSubject(

@@ -12,7 +12,11 @@ function webBytes(value: Uint8Array): WebBytes {
   return Uint8Array.from(value) as WebBytes;
 }
 
-export type SensitiveContentPurpose = "inbound-message" | "draft-title" | "reminder-title";
+export type SensitiveContentPurpose =
+  | "inbound-message"
+  | "draft-title"
+  | "reminder-title"
+  | "login-code";
 
 export interface EncryptedValue {
   ciphertext: ArrayBuffer;

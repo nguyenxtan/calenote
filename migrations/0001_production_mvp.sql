@@ -81,11 +81,33 @@ CREATE TABLE chat_identities (
 CREATE TABLE login_codes (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  digest TEXT NOT NULL,
+  connection_id TEXT NOT NULL REFERENCES bot_connections(id) ON DELETE CASCADE,
+  code_ciphertext BLOB NOT NULL,
+  code_iv BLOB NOT NULL CHECK (length(code_iv) = 12),
+  code_key_version INTEGER NOT NULL CHECK (code_key_version > 0),
   expires_at INTEGER NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0 AND attempt_count <= 5),
   consumed_at INTEGER,
-  created_at INTEGER NOT NULL
+  verification_marker TEXT,
+  delivery_status TEXT NOT NULL CHECK (
+    delivery_status IN ('PENDING', 'SENDING', 'RETRYABLE', 'SENT', 'FAILED', 'UNCERTAIN', 'CANCELLED')
+  ),
+  delivery_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (
+    delivery_attempt_count >= 0 AND delivery_attempt_count <= 4
+  ),
+  send_started_at INTEGER,
+  retry_not_before INTEGER,
+  safe_error_code TEXT,
+  transition_marker TEXT,
+  dispatch_started_at INTEGER,
+  dispatch_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (
+    dispatch_attempt_count >= 0 AND dispatch_attempt_count <= 4
+  ),
+  dispatch_marker TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  CHECK (delivery_status <> 'SENDING' OR (send_started_at IS NOT NULL AND transition_marker IS NOT NULL)),
+  CHECK (delivery_status <> 'RETRYABLE' OR retry_not_before IS NOT NULL)
 ) STRICT;
 
 CREATE TABLE inbound_updates (
@@ -132,6 +154,7 @@ CREATE TABLE command_drafts (
 
 CREATE TABLE reminders (
   id TEXT PRIMARY KEY NOT NULL,
+  public_id TEXT NOT NULL UNIQUE,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   chat_identity_id TEXT NOT NULL REFERENCES chat_identities(id) ON DELETE RESTRICT,
   source_draft_id TEXT REFERENCES command_drafts(id) ON DELETE RESTRICT,
@@ -186,8 +209,18 @@ CREATE TABLE rate_limits (
 
 CREATE INDEX idx_sessions_digest ON sessions(digest);
 CREATE INDEX idx_connect_codes_active_digest ON connect_codes(digest) WHERE consumed_at IS NULL;
-CREATE INDEX idx_login_codes_active_user_digest ON login_codes(user_id, digest, created_at DESC) WHERE consumed_at IS NULL;
+CREATE UNIQUE INDEX idx_connect_codes_one_unconsumed
+  ON connect_codes(connection_id) WHERE consumed_at IS NULL;
+CREATE UNIQUE INDEX idx_login_codes_one_unconsumed
+  ON login_codes(user_id) WHERE consumed_at IS NULL;
 CREATE INDEX idx_login_codes_active_user_created ON login_codes(user_id, created_at DESC) WHERE consumed_at IS NULL;
+CREATE INDEX idx_login_codes_due_dispatch
+  ON login_codes(expires_at, created_at, id)
+  WHERE consumed_at IS NULL AND delivery_status IN ('PENDING', 'RETRYABLE');
+CREATE INDEX idx_login_codes_stale_sending
+  ON login_codes(send_started_at, id)
+  WHERE delivery_status = 'SENDING';
+CREATE INDEX idx_login_codes_expiry ON login_codes(expires_at, id);
 CREATE INDEX idx_inbound_pending_dispatch
   ON inbound_updates(dispatch_started_at, received_at, id) WHERE state = 'PENDING';
 CREATE INDEX idx_inbound_processing_dispatch
@@ -207,3 +240,4 @@ CREATE INDEX idx_deliveries_stale_sending
   ON reminder_deliveries(send_started_at, reminder_id) WHERE status = 'SENDING';
 CREATE UNIQUE INDEX idx_reminders_source_draft
   ON reminders(source_draft_id) WHERE source_draft_id IS NOT NULL;
+CREATE INDEX idx_rate_limits_expiry ON rate_limits(expires_at, subject_digest, bucket);

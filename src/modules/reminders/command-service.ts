@@ -77,6 +77,7 @@ export interface CreateDraftMutation extends CommandMutationBase {
 export interface ConfirmDraftMutation extends CommandMutationBase {
   draft: PendingDraft;
   reminderId: string;
+  reminderPublicId: string;
   encryptedTitle: EncryptedValue;
   titleKeyVersion: number;
 }
@@ -501,11 +502,11 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       this.database
         .prepare(
           `INSERT INTO reminders (
-             id, workspace_id, chat_identity_id, source_draft_id,
+             id, public_id, workspace_id, chat_identity_id, source_draft_id,
              title_ciphertext, title_iv, title_key_version, scheduled_at, timezone,
              status, claimed_at, cancelled_at, created_at, updated_at
            ) VALUES (
-             ?, COALESCE((
+             ?, ?, COALESCE((
                SELECT w.id
                FROM command_drafts d
                JOIN chat_identities ci ON ci.id = d.chat_identity_id
@@ -535,6 +536,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         )
         .bind(
           input.reminderId,
+          input.reminderPublicId,
           input.draft.id,
           input.message.id,
           input.message.claimMarker,
@@ -882,6 +884,7 @@ export async function processBoundChatMessage(
       throw new TypeError("Stored reminder title exceeds safe limit");
     }
     const reminderId = randomOpaqueId(randomBytes);
+    const reminderPublicId = randomOpaqueId(randomBytes);
     const encryptedTitle = await dependencies.keyring.encryptSensitive(
       "reminder-title",
       reminderId,
@@ -891,6 +894,7 @@ export async function processBoundChatMessage(
     const result = await dependencies.store.confirmDraft({
       ...mutationBase,
       reminderId,
+      reminderPublicId,
       encryptedTitle,
       titleKeyVersion: TITLE_KEY_VERSION,
     });
