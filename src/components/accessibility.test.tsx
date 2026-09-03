@@ -1,9 +1,37 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import axe from "axe-core";
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { LoginPanel } from "./auth/LoginPanel";
+import { DashboardShell } from "./dashboard/DashboardShell";
+import { PipelineGuide } from "./docs/PipelineGuide";
 import { OnboardingWizard } from "./onboarding/OnboardingWizard";
+
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace }),
+}));
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+const unauthenticated = () => json({ error: {
+  code: "UNAUTHENTICATED",
+  message: "Bạn cần đăng nhập để tiếp tục.",
+} }, 401);
+
+async function expectNoAxeViolations(container: HTMLElement): Promise<void> {
+  const result = await axe.run(container, {
+    rules: { "color-contrast": { enabled: false } },
+  });
+  expect(result.violations).toEqual([]);
+}
 
 function relativeLuminance(hex: string): number {
   const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
@@ -31,12 +59,40 @@ function compositeHex(foreground: string, background: string, alpha: number): st
 
 describe("accessibility guardrails", () => {
   it("has no automatically detectable onboarding violations", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => unauthenticated()));
     const { container } = render(<OnboardingWizard />);
-    const result = await axe.run(container, {
-      rules: { "color-contrast": { enabled: false } },
-    });
+    await screen.findByRole("heading", { name: "Tạo không gian Calenote của bạn" });
+    await expectNoAxeViolations(container);
+  });
 
-    expect(result.violations).toEqual([]);
+  it("has no automatically detectable login violations", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => unauthenticated()));
+    const { container } = render(<LoginPanel />);
+    await screen.findByRole("heading", { name: "Đăng nhập vào Calenote" });
+    await expectNoAxeViolations(container);
+  });
+
+  it("has no automatically detectable authenticated dashboard violations", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/session") return json({ data: { user: {
+        displayName: "Người dùng",
+        email: "owner@example.com",
+        timezone: "Asia/Ho_Chi_Minh",
+      } } });
+      if (path === "/api/connections") return json({ data: { connections: [] } });
+      if (path === "/api/reminders") return json({ data: { reminders: [] } });
+      throw new Error(`Unexpected request: ${path}`);
+    }));
+    const { container } = render(<DashboardShell />);
+    await screen.findByRole("heading", { name: "Chào, Người dùng" });
+    await screen.findByText("Bạn chưa có nhắc hẹn nào.");
+    await expectNoAxeViolations(container);
+  });
+
+  it("has no automatically detectable documentation violations", async () => {
+    const { container } = render(<PipelineGuide />);
+    await expectNoAxeViolations(container);
   });
 
   it("keeps the faint text token at WCAG AA contrast on every app surface", () => {

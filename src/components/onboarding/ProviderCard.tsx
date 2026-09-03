@@ -11,13 +11,13 @@ interface ProviderCardProps {
 const providerCopy = {
   zalo: {
     name: "Zalo Bot Platform",
-    description: "Tối ưu cho thói quen chat tại Việt Nam.",
-    badge: "Zalo-first",
+    description: "Kết nối bot riêng trong ứng dụng Zalo.",
+    badge: "Việt Nam",
   },
   telegram: {
-    name: "Telegram",
-    description: "Thiết lập nhanh qua BotFather.",
-    badge: "Ổn định",
+    name: "Telegram Bot API",
+    description: "Tạo bot riêng qua @BotFather.",
+    badge: "BotFather",
   },
 } as const;
 

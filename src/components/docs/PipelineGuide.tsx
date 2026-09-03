@@ -1,53 +1,67 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
   Bot,
+  CalendarCheck,
   Check,
   CheckCircle2,
-  Database,
   ExternalLink,
   KeyRound,
+  Link2,
   LockKeyhole,
   MessageCircle,
-  Radio,
   Send,
-  ServerCog,
   ShieldCheck,
+  Timer,
   Webhook,
 } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import styles from "./PipelineGuide.module.css";
 
-const productionSteps = [
+const SETUP_STEPS = [
   {
-    number: "01",
-    icon: <KeyRound size={19} />,
-    title: "Xác minh token",
-    body: "Server gọi getMe đến host provider cố định, chuẩn hóa danh tính bot và chặn token không an toàn.",
-    current: true,
+    icon: <Bot size={20} />,
+    title: "Tạo bot của riêng bạn",
+    body: "Tạo bot trực tiếp trên Zalo Bot Platform hoặc qua @BotFather của Telegram. Bạn vẫn là chủ của bot và token.",
   },
   {
-    number: "02",
-    icon: <LockKeyhole size={19} />,
-    title: "Lưu credential",
-    body: "Production mã hóa envelope qua KMS, giữ HMAC fingerprint để chống một bot thuộc hai workspace.",
-    current: false,
+    icon: <LockKeyhole size={20} />,
+    title: "Kết nối an toàn",
+    body: "Nhập token một lần trong trang kết nối Calenote. Token được kiểm tra ở máy chủ, mã hóa khi lưu và không xuất hiện trong đường dẫn.",
   },
   {
-    number: "03",
-    icon: <Webhook size={19} />,
-    title: "Bật đường nhận tin",
-    body: "Local dùng getUpdates. Production đăng ký HTTPS webhook và kiểm tra secret header trước khi xử lý.",
-    current: false,
+    icon: <Webhook size={20} />,
+    title: "Mở đường nhận tin",
+    body: "Calenote đăng ký webhook HTTPS cho bot và xác thực bí mật trên từng tin đến trước khi xử lý.",
   },
   {
-    number: "04",
+    icon: <Link2 size={20} />,
+    title: "Liên kết chat riêng",
+    body: "Gửi lệnh có mã dùng một lần trong cuộc chat riêng với đúng bot. Mã hết hạn sau 10 phút và chỉ dùng được một lần.",
+  },
+] as const;
+
+const REMINDER_STEPS = [
+  {
     icon: <MessageCircle size={19} />,
-    title: "Liên kết cuộc chat",
-    body: "Phát hành mã một lần, chỉ nhận từ direct chat rồi bind user/chat identity vào đúng workspace.",
-    current: false,
+    title: "Bạn nhắn",
+    body: "Viết lời nhắc bằng tiếng Việt tự nhiên trong cuộc chat riêng đã liên kết.",
+  },
+  {
+    icon: <CalendarCheck size={19} />,
+    title: "Calenote đọc lại",
+    body: "Bot gửi bản xem trước gồm nội dung và giờ Việt Nam để bạn kiểm tra.",
+  },
+  {
+    icon: <CheckCircle2 size={19} />,
+    title: "Bạn xác nhận",
+    body: "Bạn xác nhận trong chat bằng cách trả lời “có”, “ok”, “1” hoặc “xác nhận”. Chỉ sau khi xác nhận, lời nhắc mới được kích hoạt.",
+  },
+  {
+    icon: <Timer size={19} />,
+    title: "Bot nhắc bạn",
+    body: "Đến giờ, Calenote gửi quanh phút đã hẹn qua chính bot đã kết nối.",
   },
 ] as const;
 
@@ -55,127 +69,137 @@ export function PipelineGuide() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <CalenoteMark compact />
+        <Link href="/" aria-label="Calenote — Trang kết nối"><CalenoteMark compact /></Link>
         <nav aria-label="Điều hướng tài liệu">
-          <Link href="/dashboard">Dashboard mẫu</Link>
-          <Link href="/" className={styles.topCta}>Xác minh bot <ArrowRight size={14} /></Link>
+          <Link href="/dashboard">Tổng quan</Link>
+          <Link href="/" className={styles.topCta}>Kết nối bot <ArrowRight size={15} aria-hidden="true" /></Link>
         </nav>
       </header>
 
       <section className={styles.hero}>
-        <Link href="/" className={styles.backLink}><ArrowLeft size={14} /> Onboarding</Link>
         <div className={styles.heroGrid}>
           <div>
-            <p className={styles.eyebrow}>Connection blueprint · BYOB</p>
-            <h1>Từ một bot token đến một lời nhắc</h1>
+            <p className={styles.eyebrow}>Hướng dẫn bắt đầu</p>
+            <h1>Kết nối bot của bạn với Calenote</h1>
             <p className={styles.heroLead}>
-              Một đường đi rõ ràng cho Zalo và Telegram: người dùng sở hữu bot,
-              Calenote sở hữu quy trình bảo mật và lịch.
+              Dùng bot Zalo hoặc Telegram do chính bạn sở hữu để tạo, xác nhận và nhận
+              nhắc hẹn trong một cuộc chat riêng.
             </p>
-          </div>
-          <div className={styles.statusCard}>
-            <span className={styles.liveDot} />
-            <div>
-              <strong>Đang chạy trong v0.1</strong>
-              <span>Chỉ getMe + chuẩn hóa BotProfile</span>
+            <div className={styles.heroActions}>
+              <Link href="/">Bắt đầu kết nối <ArrowRight size={16} aria-hidden="true" /></Link>
+              <a href="#providers">Chọn nền tảng bot</a>
             </div>
-            <CheckCircle2 size={21} />
           </div>
+          <aside className={styles.promiseCard} aria-label="Điều Calenote hỗ trợ">
+            <ShieldCheck size={24} aria-hidden="true" />
+            <div>
+              <strong>Riêng tư từ lúc kết nối</strong>
+              <span>Chat riêng duy nhất · giờ Việt Nam · xác nhận trước khi lưu</span>
+            </div>
+          </aside>
         </div>
       </section>
 
-      <section className={styles.body}>
-        <header className={styles.sectionHeader}>
-          <p className={styles.eyebrow}>Pipeline chung</p>
-          <h2>Bốn chốt kiểm soát trước khi bot nghe lịch</h2>
-          <p>Mỗi trạng thái nói đúng một việc; VERIFIED không bao giờ được đồng nghĩa với CHAT_BOUND.</p>
-        </header>
-
-        <div className={styles.flow}>
-          {productionSteps.map((item) => (
-            <article className={item.current ? styles.flowCurrent : ""} key={item.number}>
-              <div className={styles.flowTop}>
-                <span>{item.icon}</span>
-                <small>{item.number}</small>
-              </div>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-              <div className={styles.flowState}>
-                {item.current ? <Check size={12} /> : <ServerCog size={12} />}
-                {item.current ? "Có trong repo" : "Production gate"}
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <section className={styles.providers} aria-labelledby="provider-heading">
+      <div className={styles.body}>
+        <section className={styles.setupSection} aria-label="Các bước kết nối an toàn">
           <header className={styles.sectionHeader}>
-            <p className={styles.eyebrow}>Hai provider, một domain contract</p>
-            <h2 id="provider-heading">Đường nối cụ thể</h2>
+            <p className={styles.eyebrow}>Bốn bước kết nối</p>
+            <h2>Từ token đến cuộc chat riêng</h2>
+            <p>Bạn chỉ cung cấp token ở bước kết nối; các lần trao đổi với nền tảng bot sau đó đều do máy chủ Calenote thực hiện.</p>
           </header>
+          <div className={styles.stepGrid}>
+            {SETUP_STEPS.map((step, index) => (
+              <article className={styles.stepCard} key={step.title}>
+                <header><span aria-hidden="true">{step.icon}</span><small>0{index + 1}</small></header>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+                {index === SETUP_STEPS.length - 1 && (
+                  <code className={styles.connectCommand}>/connect &lt;mã-một-lần&gt;</code>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
 
+        <section className={styles.providers} id="providers" aria-labelledby="providers-title">
+          <header className={styles.sectionHeader}>
+            <p className={styles.eyebrow}>Chọn nền tảng</p>
+            <h2 id="providers-title">Hai cách tạo bot của riêng bạn</h2>
+          </header>
           <div className={styles.providerGrid}>
             <ProviderPanel
               logo="Z"
               logoClass="zaloLogo"
-              title="Zalo Bot Platform mới"
-              subtitle="Ưu tiên cho người dùng Việt Nam"
-              warning="Không dùng Zalo OA OpenAPI."
-              create="Zalo app → Zalo Bot Manager → Bot Creator → copy token"
-              verify="POST bot<TOKEN>/getMe"
-              local="deleteWebhook → getUpdates"
-              production="setWebhook + X-Bot-Api-Secret-Token"
-              send="sendMessage · tối đa 2.000 ký tự"
-              href="https://docs.zaloplatforms.com/docs/BOT"
-              linkLabel="Tài liệu Zalo chính thức"
+              title="Zalo Bot Platform"
+              summary="Phù hợp khi bạn muốn dùng Zalo. Đây là Zalo Bot Platform, không phải Zalo OA OpenAPI."
+              steps={[
+                "Đăng nhập Zalo Bot Manager và mở Bot Creator.",
+                "Tạo bot, sau đó sao chép Bot Token mà Zalo cấp.",
+                "Chọn Zalo trên Calenote, dán token và hoàn tất kết nối.",
+              ]}
+              href="https://docs.zaloplatforms.com/docs/BOT/create_bot"
+              linkLabel="Cách tạo bot trên Zalo"
             />
             <ProviderPanel
               logo={<Send size={20} fill="currentColor" />}
               logoClass="telegramLogo"
               title="Telegram Bot API"
-              subtitle="Dễ tạo bot và thử nghiệm local"
-              warning="BotFather cấp token; Calenote không tạo bot thay người dùng."
-              create="Telegram → @BotFather → /newbot → copy HTTP API token"
-              verify="POST bot<TOKEN>/getMe"
-              local="deleteWebhook → getUpdates + offset"
-              production="setWebhook + X-Telegram-Bot-Api-Secret-Token"
-              send="sendMessage · tối đa 4.096 ký tự"
-              href="https://core.telegram.org/bots/api"
-              linkLabel="Tài liệu Telegram chính thức"
+              summary="Phù hợp khi bạn đang dùng Telegram và muốn tạo bot nhanh qua tài khoản chính thức @BotFather."
+              steps={[
+                "Mở cuộc chat với @BotFather trong Telegram.",
+                "Gửi /newbot, đặt tên và sao chép HTTP API token được cấp.",
+                "Chọn Telegram trên Calenote, dán token và hoàn tất kết nối.",
+              ]}
+              href="https://core.telegram.org/bots/features#creating-a-new-bot"
+              linkLabel="Cách tạo bot trên Telegram"
             />
           </div>
+          <p className={styles.tokenNote}>
+            <KeyRound size={17} aria-hidden="true" />
+            Không gửi token qua tin nhắn, email hoặc ảnh chụp. Nếu nghi ngờ token đã lộ, hãy tạo lại token trên nền tảng bot trước khi kết nối lại.
+          </p>
         </section>
 
-        <section className={styles.connectSection}>
-          <div className={styles.connectCopy}>
-            <p className={styles.eyebrow}>Identity binding</p>
-            <h2>Một câu lệnh để biết ai đang nói</h2>
-            <p>
-              Sau khi webhook hoạt động, Calenote phát hành mã 128-bit có hạn 10 phút.
-              Người dùng gửi mã trong direct chat; server consume nguyên tử và chỉ lưu hash.
-            </p>
-          </div>
-          <div className={styles.commandCard}>
-            <span><Bot size={18} /></span>
-            <code>/connect &lt;mã-một-lần&gt;</code>
-            <small>Direct chat only</small>
-          </div>
+        <section className={styles.pipelineSection} aria-label="Từ tin nhắn đến lời nhắc">
+          <header className={styles.sectionHeader}>
+            <p className={styles.eyebrow}>Một vòng nhắc hẹn</p>
+            <h2>Bạn luôn duyệt trước khi Calenote lưu</h2>
+            <p>Giờ và nội dung được đọc lại trong chat, giúp tránh kích hoạt một lời nhắc bị hiểu sai.</p>
+          </header>
+          <ol className={styles.pipelineList}>
+            {REMINDER_STEPS.map((step, index) => (
+              <li key={step.title}>
+                <span className={styles.pipelineIcon} aria-hidden="true">{step.icon}</span>
+                <div><small>Bước {index + 1}</small><h3>{step.title}</h3><p>{step.body}</p></div>
+                {index < REMINDER_STEPS.length - 1 && <ArrowRight className={styles.pipelineArrow} size={18} aria-hidden="true" />}
+              </li>
+            ))}
+          </ol>
+          <aside className={styles.deliveryNote}>
+            <Check size={18} aria-hidden="true" />
+            <p><strong>“Quanh phút đã hẹn” nghĩa là gì?</strong> Bộ lập lịch kiểm tra theo phút và chuyển tin qua hàng đợi gửi an toàn. Mạng hoặc nền tảng bot có thể làm tin đến chậm hơn một chút.</p>
+          </aside>
         </section>
 
-        <section className={styles.dataFlow} aria-label="Luồng tin nhắn production">
-          <FlowNode icon={<MessageCircle size={17} />} title="Tin nhắn" detail="Zalo / Telegram" />
-          <ArrowRight size={17} />
-          <FlowNode icon={<ShieldCheck size={17} />} title="Webhook ingress" detail="Verify + dedupe" />
-          <ArrowRight size={17} />
-          <FlowNode icon={<Database size={17} />} title="Command draft" detail="Parse + confirm" />
-          <ArrowRight size={17} />
-          <FlowNode icon={<Radio size={17} />} title="Scheduler" detail="Outbox + delivery" />
+        <section className={styles.roadmapSection} aria-label="Lộ trình sau MVP">
+          <div>
+            <p className={styles.eyebrow}>Lộ trình sau MVP</p>
+            <h2>Những ý tưởng chưa phải tính năng hiện tại</h2>
+            <p>Calenote hiện tập trung vào một người, một chat riêng và nhắc hẹn một lần.</p>
+          </div>
+          <ul>
+            <li>Cặp đôi</li>
+            <li>Nhóm</li>
+            <li>Thu chi</li>
+            <li>Nhắc lặp lại</li>
+            <li>Ứng dụng di động</li>
+          </ul>
         </section>
-      </section>
+      </div>
 
       <footer className={styles.footer}>
-        <div><CalenoteMark compact /><span>Architecture foundation · September 2026</span></div>
-        <Link href="/">Bắt đầu onboarding <ArrowRight size={14} /></Link>
+        <div><CalenoteMark compact /><span>Nhắc đúng điều quan trọng, qua bot của bạn.</span></div>
+        <Link href="/">Bắt đầu kết nối <ArrowRight size={15} aria-hidden="true" /></Link>
       </footer>
     </main>
   );
@@ -185,55 +209,31 @@ function ProviderPanel({
   logo,
   logoClass,
   title,
-  subtitle,
-  warning,
-  create,
-  verify,
-  local,
-  production,
-  send,
+  summary,
+  steps,
   href,
   linkLabel,
 }: {
   logo: ReactNode;
   logoClass: "zaloLogo" | "telegramLogo";
   title: string;
-  subtitle: string;
-  warning: string;
-  create: string;
-  verify: string;
-  local: string;
-  production: string;
-  send: string;
+  summary: string;
+  steps: readonly string[];
   href: string;
   linkLabel: string;
 }) {
   return (
     <article className={styles.providerPanel}>
       <header>
-        <span className={`${styles.providerLogo} ${styles[logoClass]}`}>{logo}</span>
-        <div><h3>{title}</h3><p>{subtitle}</p></div>
+        <span className={`${styles.providerLogo} ${styles[logoClass]}`} aria-hidden="true">{logo}</span>
+        <div><h3>{title}</h3><p>{summary}</p></div>
       </header>
-      <div className={styles.providerWarning}>{warning}</div>
-      <dl>
-        <div><dt>01 · Tạo bot</dt><dd>{create}</dd></div>
-        <div><dt>02 · Xác minh</dt><dd><code>{verify}</code></dd></div>
-        <div><dt>03 · Local</dt><dd><code>{local}</code></dd></div>
-        <div><dt>04 · Production</dt><dd>{production}</dd></div>
-        <div><dt>05 · Phản hồi</dt><dd>{send}</dd></div>
-      </dl>
+      <ol>
+        {steps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
       <a href={href} target="_blank" rel="noreferrer">
-        {linkLabel}<ExternalLink size={14} />
+        {linkLabel}<ExternalLink size={15} aria-hidden="true" />
       </a>
     </article>
-  );
-}
-
-function FlowNode({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
-  return (
-    <div className={styles.flowNode}>
-      <span>{icon}</span>
-      <div><strong>{title}</strong><small>{detail}</small></div>
-    </div>
   );
 }

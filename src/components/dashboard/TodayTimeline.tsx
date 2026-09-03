@@ -1,65 +1,108 @@
-import { Check, Clock3, MessageCircle, MoreHorizontal, Video } from "lucide-react";
+import { CalendarDays, RefreshCw, X } from "lucide-react";
+import type { PublicReminder, ReminderStatus } from "./DashboardShell";
 import styles from "./DashboardShell.module.css";
 
-const timeline = [
-  {
-    time: "08:00",
-    title: "Nhắc uống vitamin",
-    meta: "Đã hoàn tất qua Telegram",
-    tone: "green",
-    icon: <Check size={14} />,
-  },
-  {
-    time: "10:30",
-    title: "Gọi cho mẹ",
-    meta: "Nhắc trước 10 phút",
-    tone: "yellow",
-    icon: <MessageCircle size={14} />,
-  },
-  {
-    time: "14:00",
-    title: "Review Calenote foundation",
-    meta: "45 phút · Google Meet",
-    tone: "blue",
-    icon: <Video size={14} />,
-  },
-] as const;
+interface TodayTimelineProps {
+  reminders: PublicReminder[] | null;
+  loading: boolean;
+  error: string | null;
+  cancellingId: string | null;
+  onCancel: (reminder: PublicReminder) => void;
+  onRetry: () => void;
+}
 
-export function TodayTimeline() {
+const STATUS_COPY: Record<ReminderStatus, string> = {
+  PENDING: "Đang chờ",
+  CLAIMED: "Đang chuẩn bị gửi",
+  RETRYABLE: "Sẽ thử gửi lại",
+  SENT: "Đã gửi",
+  FAILED: "Gửi thất bại",
+  UNCERTAIN: "Chưa rõ đã gửi",
+  CANCELLED: "Đã hủy",
+};
+
+const CANCELLABLE = new Set<ReminderStatus>(["PENDING", "CLAIMED", "RETRYABLE"]);
+
+function formatVietnamDate(epoch: number): { date: string; time: string; iso: string } {
+  const date = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(epoch);
+  const time = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(epoch);
+  return { date, time, iso: new Date(epoch).toISOString() };
+}
+
+export function TodayTimeline({
+  reminders,
+  loading,
+  error,
+  cancellingId,
+  onCancel,
+  onRetry,
+}: TodayTimelineProps) {
   return (
-    <section className={styles.panel} aria-labelledby="today-title">
+    <section className={styles.panel} aria-labelledby="reminders-title">
       <header className={styles.panelHeader}>
-        <div>
-          <p>Lịch trình</p>
-          <h2 id="today-title">Hôm nay</h2>
-        </div>
-        <button type="button" className={styles.iconButton} aria-label="Tùy chọn lịch hôm nay">
-          <MoreHorizontal size={18} />
-        </button>
+        <span className={styles.panelIcon} aria-hidden="true"><CalendarDays size={18} /></span>
+        <div><p>Lịch cá nhân</p><h2 id="reminders-title">Nhắc hẹn</h2></div>
       </header>
 
-      <div className={styles.timeline}>
-        {timeline.map((item, index) => (
-          <article className={styles.timelineItem} key={`${item.time}-${item.title}`}>
-            <time>{item.time}</time>
-            <span className={`${styles.timelineRail} ${styles[item.tone]}`} aria-hidden="true">
-              <span>{item.icon}</span>
-              {index < timeline.length - 1 && <i />}
-            </span>
-            <div className={styles.timelineCopy}>
-              <strong>{item.title}</strong>
-              <span>{item.meta}</span>
-            </div>
-            <button type="button" aria-label={`Mở ${item.title}`}>
-              <Clock3 size={15} />
-            </button>
-          </article>
-        ))}
-      </div>
-
-      <button type="button" className={styles.outlineButton} disabled title="Có ở phase scheduler">
-        + Thêm từ giao diện
-      </button>
+      {loading && reminders === null && <p className={styles.loadingText}>Đang tải nhắc hẹn…</p>}
+      {error && (
+        <div className={styles.resourceError} role="alert">
+          <p>{error}</p>
+          <button type="button" onClick={onRetry}><RefreshCw size={16} aria-hidden="true" /> Tải lại nhắc hẹn</button>
+        </div>
+      )}
+      {!loading && !error && reminders?.length === 0 && (
+        <div className={styles.emptyState}>
+          <p>Bạn chưa có nhắc hẹn nào.</p>
+          <span>Dùng biểu mẫu phía trên để thêm nhắc đầu tiên.</span>
+        </div>
+      )}
+      {reminders && reminders.length > 0 && (
+        <div className={styles.reminderList}>
+          {reminders.map((reminder) => {
+            const formatted = formatVietnamDate(reminder.scheduledAt);
+            const cancelling = cancellingId === reminder.publicId;
+            return (
+              <article className={`${styles.reminderCard} ${styles[`status${reminder.status}`]}`} key={reminder.publicId}>
+                <div className={styles.reminderTime}>
+                  <time dateTime={formatted.iso}><strong>{formatted.time}</strong><span>{formatted.date}</span></time>
+                </div>
+                <div className={styles.reminderCopy}>
+                  <h3>{reminder.title}</h3>
+                  <span className={styles.statusBadge}>{STATUS_COPY[reminder.status]}</span>
+                  {reminder.status === "UNCERTAIN" && (
+                    <p className={styles.uncertainWarning}>Có thể bot đã gửi nhắc này. Không tạo lại ngay; hãy kiểm tra cuộc chat trước.</p>
+                  )}
+                </div>
+                {CANCELLABLE.has(reminder.status) && (
+                  <button
+                    type="button"
+                    className={styles.cancelButton}
+                    onClick={() => onCancel(reminder)}
+                    disabled={cancelling}
+                    aria-label={`${cancelling ? "Đang hủy" : "Hủy"} ${reminder.title}`}
+                  >
+                    <X size={15} aria-hidden="true" />
+                    {cancelling ? "Đang hủy…" : "Hủy"}
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {loading && reminders !== null && <p className={styles.refreshText}>Đang làm mới nhắc hẹn…</p>}
     </section>
   );
 }
