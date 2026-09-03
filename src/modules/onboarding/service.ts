@@ -212,6 +212,13 @@ export class RateLimitExceededError extends SafeServiceError {
   }
 }
 
+export class WebhookActivationInternalError extends Error {
+  constructor() {
+    super("Không thể hoàn tất kích hoạt webhook.");
+    this.name = "WebhookActivationInternalError";
+  }
+}
+
 function opaqueId(randomBytes: RandomBytes): string {
   return randomOpaqueId(randomBytes);
 }
@@ -336,7 +343,7 @@ export async function onboard(
       secretToken: secrets.headerSecret,
     });
   } catch (error) {
-    if (!(error instanceof ProviderOperationError)) throw error;
+    if (!(error instanceof ProviderOperationError)) throw new WebhookActivationInternalError();
     const state = error.code === "REJECTED_CREDENTIAL"
       ? "SUSPENDED"
       : "WEBHOOK_FAILED";

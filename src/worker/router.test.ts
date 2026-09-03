@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { ConnectionStateError, OnboardingConflictError, RateLimitExceededError } from "@/modules/onboarding/service";
 import { SessionAuthError } from "@/modules/auth/session";
+import { ProviderVerificationError } from "@/modules/connections/provider-error";
+import { createKeyring } from "@/modules/security/keyring";
+import { onboard } from "@/modules/onboarding/service";
 import { createRouter, routeRequest, type WorkerOperations } from "./router";
 
 const token = "123456789:AAExample_secret-token_123456789";
 const sessionCookie = `__Host-calenote_session=${"A".repeat(43)}`;
+const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const success = {
   bot: {
     publicId: "bot-public",
@@ -179,6 +183,43 @@ describe("Worker router", () => {
     expect(raw).not.toContain("owner@example.com");
   });
 
+  it("returns generic 500 when a verification-shaped error occurs after getMe and keeps VALIDATING", async () => {
+    const { env } = environment();
+    const keyring = await createKeyring(master);
+    const committed: Array<{ connection: { state: string } }> = [];
+    const failActivation = vi.fn();
+    const ops = operations({
+      onboard: (onboardingInput) => onboard(onboardingInput, {
+        store: {
+          commitAccountGraph: async (graph) => { committed.push(graph); },
+          activateConnection: vi.fn(),
+          failActivation,
+          findOwnedConnection: vi.fn(),
+          rotateConnectCode: vi.fn(),
+        },
+        keyring,
+        verifyToken: async () => ({
+          provider: "telegram", providerBotId: "provider-bot", displayName: "Bot",
+          handle: null, accountType: null, canJoinGroups: true,
+        }),
+        registerWebhook: async () => { throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE"); },
+        appOrigin: "https://calenote.iconiclogs.com",
+      }),
+    });
+
+    const response = await createRouter({ operations: async () => ops })(onboardingRequest(onboardingBody()), env, context());
+    const raw = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(JSON.parse(raw)).toEqual({
+      error: { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu." },
+    });
+    expect(committed[0].connection.state).toBe("VALIDATING");
+    expect(failActivation).not.toHaveBeenCalled();
+    expect(raw).not.toContain(token);
+    expect(raw).not.toContain("INVALID_PROVIDER_RESPONSE");
+  });
+
   it("requires a session and an exact empty JSON object to rotate a connect code", async () => {
     const ops = operations();
     const { env } = environment();
@@ -248,6 +289,33 @@ describe("Worker router", () => {
 
     expect(response.status).toBe(401);
     expect(operationsFactory).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: "invalid media", headers: { "content-type": "text/plain" }, body: "{}", status: 415 },
+    { label: "oversized body", headers: { "content-length": "2049" }, body: "{}", status: 413 },
+    { label: "invalid JSON", headers: {}, body: "{", status: 400 },
+    { label: "nonempty object", headers: {}, body: JSON.stringify({ unexpected: true }), status: 400 },
+  ])("rejects $label before operations construction or authenticated lookup", async ({ headers, body, status }) => {
+    const ops = operations();
+    const operationsFactory = vi.fn(async () => ops);
+    const requestHeaders = new Headers({
+      origin: "https://calenote.iconiclogs.com",
+      "content-type": "application/json",
+      cookie: sessionCookie,
+    });
+    for (const [name, value] of Object.entries(headers)) requestHeaders.set(name, value);
+    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: requestHeaders,
+      body,
+    });
+
+    const response = await createRouter({ operations: operationsFactory })(request, environment().env, context());
+
+    expect(response.status).toBe(status);
+    expect(operationsFactory).not.toHaveBeenCalled();
+    expect(ops.requireUser).not.toHaveBeenCalled();
   });
 
   it("rejects non-empty connect-code bodies and hides unknown failures", async () => {

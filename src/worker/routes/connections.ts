@@ -25,10 +25,10 @@ export async function handleConnectCodeRotation(
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   if (!parseSessionCookie(request)) throw new SessionAuthError();
-  const operations = await createOperations();
-  const principal = await operations.requireUser(request);
   const parsed = emptyObjectSchema.safeParse(await readBoundedJson(request, MAX_BODY_BYTES));
   if (!parsed.success) throw new InvalidRequestError();
+  const operations = await createOperations();
+  const principal = await operations.requireUser(request);
 
   const result = await operations.rotateConnectCode({ userId: principal.userId, publicId });
   return jsonResponse({ data: { connectCommand: result.command, expiresAt: result.expiresAt } });

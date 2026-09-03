@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { prepareOneTimeCode } from "@/modules/auth/codes";
 import type { BotProfile } from "@/modules/connections/contracts";
-import { ProviderOperationError } from "@/modules/connections/provider-error";
+import { ProviderOperationError, ProviderVerificationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
 import {
   ConnectionNotFoundError,
@@ -174,11 +174,19 @@ describe("durable onboarding", () => {
     expect(result.connectCommand).toBeNull();
   });
 
-  it("does not misclassify an internal activation defect as a provider failure", async () => {
+  it.each([
+    new TypeError("internal secret setup failed"),
+    new ProviderVerificationError("INVALID_PROVIDER_RESPONSE"),
+  ])("phase-wraps a non-operational registration error without recording provider failure", async (registrationError) => {
     const deps = await dependencies();
-    deps.registerWebhook.mockRejectedValueOnce(new TypeError("internal secret setup failed"));
+    deps.registerWebhook.mockRejectedValueOnce(registrationError);
 
-    await expect(onboard(input, deps)).rejects.toThrow("internal secret setup failed");
+    const failure = await onboard(input, deps).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      name: "WebhookActivationInternalError",
+      message: "Không thể hoàn tất kích hoạt webhook.",
+    });
+    expect(failure).not.toBe(registrationError);
     expect(deps.store.failures).toHaveLength(0);
     expect(deps.store.successes).toHaveLength(0);
     expect(deps.store.events).toEqual(["verify", "persist"]);
