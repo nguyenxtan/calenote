@@ -10,7 +10,10 @@ import {
   type ProcessInboundDependencies,
 } from "@/modules/inbound/processor";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
-import { processBoundChatMessage } from "./command-service";
+import {
+  processBoundChatMessage,
+  type ReminderCommandStore,
+} from "./command-service";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -301,10 +304,10 @@ describe("bound reminder commands", () => {
     await expect(harness.process("older")).resolves.toEqual({ status: "DRAFT_CREATED" });
     await expect(harness.process("newer")).resolves.toEqual({ status: "DRAFT_CREATED" });
     expect(harness.database.sqlite.prepare(
-      "SELECT source_inbound_id, status FROM command_drafts ORDER BY created_at, rowid",
+      "SELECT source_inbound_id, resolution_inbound_id, status FROM command_drafts ORDER BY created_at, rowid",
     ).all()).toEqual([
-      { source_inbound_id: "older", status: "CANCELLED" },
-      { source_inbound_id: "newer", status: "PENDING" },
+      { source_inbound_id: "older", resolution_inbound_id: "newer", status: "CANCELLED" },
+      { source_inbound_id: "newer", resolution_inbound_id: null, status: "PENDING" },
     ]);
 
     await expect(harness.process("help")).resolves.toEqual({ status: "REJECTED" });
@@ -377,6 +380,21 @@ describe("bound reminder commands", () => {
     expect(harness.database.sqlite.prepare("SELECT status FROM command_drafts").get()).toEqual({ status: "PENDING" });
   });
 
+  it.each([
+    "xác   nhận",
+    "xác\t nhận",
+    "xác\nnhận",
+  ])("rejects internally-normalized-looking control text %j and preserves the draft", async (control) => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "create", text: "mai 8h nhắc tôi uống thuốc" });
+    await harness.addInbound({ id: "not-exact", text: control, receivedAt: receivedAt + 1 });
+    await harness.process("create");
+
+    await expect(harness.process("not-exact")).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT status FROM command_drafts").get()).toEqual({ status: "PENDING" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
   it("expires at the exact minimum of ten minutes and the scheduled instant", async () => {
     const tenMinute = await createHarness();
     await tenMinute.addInbound({ id: "create", text: "mai 8h nhắc tôi uống thuốc" });
@@ -413,6 +431,100 @@ describe("bound reminder commands", () => {
 });
 
 describe("D1 reminder command concurrency and privacy", () => {
+  it.each([
+    { resolution: "confirm", text: "ok", processingDelay: 3 },
+    { resolution: "cancel", text: "hủy", processingDelay: 3 },
+    { resolution: "expiry", text: "ok", processingDelay: 10 * 60_000 },
+  ])("rejects an older-timestamp $resolution instead of resolving a newer draft", async ({ text, processingDelay }) => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "source", text: "mai 8h nhắc tôi đúng thứ tự", receivedAt });
+    await harness.addInbound({ id: "resolution", text, receivedAt: receivedAt - 1 });
+    await harness.process("source", processingAt);
+
+    await expect(harness.process("resolution", processingAt + processingDelay)).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT status, resolution_inbound_id FROM command_drafts").get()).toEqual({
+      status: "PENDING",
+      resolution_inbound_id: null,
+    });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it.each([
+    { resolution: "confirm", text: "ok", processingDelay: 3 },
+    { resolution: "cancel", text: "hủy", processingDelay: 3 },
+    { resolution: "expiry", text: "ok", processingDelay: 10 * 60_000 },
+  ])("rechecks strict source order inside the $resolution batch after pre-read", async ({ text, processingDelay }) => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "source", text: "mai 8h nhắc tôi chống race", receivedAt });
+    await harness.addInbound({ id: "resolution", text, receivedAt: receivedAt + 1 });
+    await harness.process("source", processingAt);
+    const message = await harness.claim("resolution", processingAt + processingDelay);
+    const racedStore: ReminderCommandStore = {
+      findBoundContext: (input) => harness.store.findBoundContext(input),
+      findPendingDraft: async (input, identityId) => {
+        const draft = await harness.store.findPendingDraft(input, identityId);
+        harness.database.sqlite.prepare(
+          "UPDATE inbound_updates SET received_at = ? WHERE id = 'source'",
+        ).run(receivedAt + 2);
+        return draft;
+      },
+      createDraft: (input) => harness.store.createDraft(input),
+      confirmDraft: (input) => harness.store.confirmDraft(input),
+      cancelDraft: (input) => harness.store.cancelDraft(input),
+      expireDraft: (input) => harness.store.expireDraft(input),
+      rejectMessage: (input, auditId, now) => harness.store.rejectMessage(input, auditId, now),
+    };
+
+    await expect(processBoundChatMessage(message, {
+      store: racedStore,
+      keyring: harness.keyring,
+      now: () => processingAt + processingDelay,
+      randomBytes: () => new Uint8Array(16).fill(97),
+      reply: async () => undefined,
+    })).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT status, resolution_inbound_id FROM command_drafts").get()).toEqual({
+      status: "PENDING",
+      resolution_inbound_id: null,
+    });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it.each([
+    { resolution: "confirm", text: "ok", processingDelay: 3 },
+    { resolution: "cancel", text: "hủy", processingDelay: 3 },
+    { resolution: "expiry", text: "ok", processingDelay: 10 * 60_000 },
+  ])("rejects an equal-time/lower-rowid $resolution instead of resolving a later-row draft", async ({ text, processingDelay }) => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "resolution", text, receivedAt });
+    await harness.addInbound({ id: "source", text: "mai 8h nhắc tôi đúng thứ tự", receivedAt });
+    await harness.process("source", processingAt);
+
+    await expect(harness.process("resolution", processingAt + processingDelay)).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT status, resolution_inbound_id FROM command_drafts").get()).toEqual({
+      status: "PENDING",
+      resolution_inbound_id: null,
+    });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it.each([
+    { newerStatus: "CONFIRMED", control: "ok", resolutionDelay: 3 },
+    { newerStatus: "CANCELLED", control: "hủy", resolutionDelay: 3 },
+    { newerStatus: "EXPIRED", control: "ok", resolutionDelay: 10 * 60_000 },
+  ])("does not let an older command follow newer $newerStatus draft history", async ({ newerStatus, control, resolutionDelay }) => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "older", text: "mai 8h nhắc tôi không hồi sinh", receivedAt });
+    await harness.addInbound({ id: "newer", text: "mai 9h nhắc tôi lịch sử mới", receivedAt: receivedAt + 2 });
+    await harness.addInbound({ id: "resolve-newer", text: control, receivedAt: receivedAt + 3 });
+    await harness.process("newer", processingAt);
+    await harness.process("resolve-newer", processingAt + resolutionDelay);
+    expect(harness.database.sqlite.prepare("SELECT status FROM command_drafts").get()).toEqual({ status: newerStatus });
+
+    await expect(harness.process("older", processingAt + resolutionDelay + 1)).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 1 });
+    expect(harness.database.sqlite.prepare("SELECT status FROM command_drafts").get()).toEqual({ status: newerStatus });
+  });
+
   it("lets one simultaneous confirmation win and gives the other no reminder", async () => {
     const harness = await createHarness();
     await harness.addInbound({ id: "create", text: "mai 8h nhắc tôi uống thuốc" });

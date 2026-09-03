@@ -89,7 +89,7 @@ export type MutationResult = "COMMITTED" | "CONFLICT" | "SUPERSEDED";
 
 export interface ReminderCommandStore {
   findBoundContext(message: BoundChatMessage): Promise<BoundChatContext | null>;
-  findPendingDraft(chatIdentityId: string): Promise<PendingDraft | null>;
+  findPendingDraft(message: BoundChatMessage, chatIdentityId: string): Promise<PendingDraft | null>;
   createDraft(input: CreateDraftMutation): Promise<MutationResult>;
   confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult>;
   cancelDraft(input: ResolveDraftMutation): Promise<MutationResult>;
@@ -142,6 +142,7 @@ interface ResolutionStateRow {
   status: string;
   resolution_inbound_id: string | null;
   has_reminder: number;
+  resolution_is_later: number;
 }
 
 function persistedArrayBuffer(value: unknown): ArrayBuffer {
@@ -178,8 +179,6 @@ function expectedMutationConflict(error: unknown): boolean {
 function normalizeWholeMessage(text: string): string {
   return text
     .normalize("NFC")
-    .replace(/\r\n?/gu, "\n")
-    .replace(/\s+/gu, " ")
     .trim()
     .toLocaleLowerCase("vi-VN");
 }
@@ -255,17 +254,37 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     };
   }
 
-  async findPendingDraft(chatIdentityId: string): Promise<PendingDraft | null> {
+  async findPendingDraft(
+    message: BoundChatMessage,
+    chatIdentityId: string,
+  ): Promise<PendingDraft | null> {
     const row = await this.database
       .prepare(
-        `SELECT id, chat_identity_id, source_inbound_id, title_ciphertext, title_iv,
-                title_key_version, scheduled_at, timezone, expires_at
-         FROM command_drafts
-         WHERE chat_identity_id = ? AND status = 'PENDING'
-         ORDER BY created_at DESC, rowid DESC
+        `SELECT draft.id, draft.chat_identity_id, draft.source_inbound_id,
+                draft.title_ciphertext, draft.title_iv, draft.title_key_version,
+                draft.scheduled_at, draft.timezone, draft.expires_at
+         FROM command_drafts draft
+         JOIN inbound_updates source ON source.id = draft.source_inbound_id
+         JOIN inbound_updates current ON current.id = ?
+         WHERE draft.chat_identity_id = ? AND draft.status = 'PENDING'
+           AND current.connection_id = ?
+           AND current.provider_user_id = ? AND current.private_chat_id = ?
+           AND current.state = 'PROCESSING' AND current.transition_marker = ?
+           AND (
+             source.received_at < current.received_at OR
+             (source.received_at = current.received_at AND source.rowid < current.rowid)
+           )
+         ORDER BY draft.created_at DESC, draft.rowid DESC
          LIMIT 1`,
       )
-      .bind(chatIdentityId)
+      .bind(
+        message.id,
+        chatIdentityId,
+        message.connectionId,
+        message.providerUserId,
+        message.privateChatId,
+        message.claimMarker,
+      )
       .first<DraftRow>();
     return row ? pendingDraft(row) : null;
   }
@@ -318,7 +337,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       this.database
         .prepare(
           `UPDATE command_drafts
-           SET status = 'CANCELLED', updated_at = ?
+           SET status = 'CANCELLED', resolution_inbound_id = ?, updated_at = ?
            WHERE status = 'PENDING'
              AND chat_identity_id = (${identitySql})
              AND EXISTS (
@@ -333,7 +352,13 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                  )
              )`,
         )
-        .bind(input.now, ...ownership, input.message.id, input.message.claimMarker),
+        .bind(
+          input.message.id,
+          input.now,
+          ...ownership,
+          input.message.id,
+          input.message.claimMarker,
+        ),
       this.database
         .prepare(
           `INSERT INTO command_drafts (
@@ -345,10 +370,10 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                ${identitySql}
                AND NOT EXISTS (
                  SELECT 1
-                 FROM command_drafts pending
-                 JOIN inbound_updates source ON source.id = pending.source_inbound_id
+                 FROM command_drafts history
+                 JOIN inbound_updates source ON source.id = history.source_inbound_id
                  JOIN inbound_updates current ON current.id = ?
-                 WHERE pending.chat_identity_id = ? AND pending.status = 'PENDING'
+                 WHERE history.chat_identity_id = ?
                    AND (
                      source.received_at > current.received_at OR
                      (source.received_at = current.received_at AND source.rowid >= current.rowid)
@@ -423,10 +448,10 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       const newer = await this.database
         .prepare(
           `SELECT 1
-           FROM command_drafts pending
-           JOIN inbound_updates source ON source.id = pending.source_inbound_id
+           FROM command_drafts history
+           JOIN inbound_updates source ON source.id = history.source_inbound_id
            JOIN inbound_updates current ON current.id = ?
-           WHERE pending.chat_identity_id = ? AND pending.status = 'PENDING'
+           WHERE history.chat_identity_id = ?
              AND (
                source.received_at > current.received_at OR
                (source.received_at = current.received_at AND source.rowid >= current.rowid)
@@ -449,13 +474,27 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
           `UPDATE command_drafts
            SET status = 'CONFIRMED', resolution_inbound_id = ?, updated_at = ?
            WHERE id = ? AND chat_identity_id = (${identitySql})
-             AND status = 'PENDING' AND expires_at > ? AND scheduled_at > ?`,
+             AND status = 'PENDING'
+             AND EXISTS (
+               SELECT 1
+               FROM inbound_updates source
+               JOIN inbound_updates current ON current.id = ?
+               WHERE source.id = command_drafts.source_inbound_id
+                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND (
+                   source.received_at < current.received_at OR
+                   (source.received_at = current.received_at AND source.rowid < current.rowid)
+                 )
+             )
+             AND expires_at > ? AND scheduled_at > ?`,
         )
         .bind(
           input.message.id,
           input.now,
           input.draft.id,
           ...ownership,
+          input.message.id,
+          input.message.claimMarker,
           input.now,
           input.now,
         ),
@@ -588,7 +627,19 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
           `UPDATE command_drafts
            SET status = ?, resolution_inbound_id = ?, updated_at = ?
            WHERE id = ? AND chat_identity_id = (${identitySql})
-             AND status = 'PENDING' ${timeGuard}`,
+             AND status = 'PENDING'
+             AND EXISTS (
+               SELECT 1
+               FROM inbound_updates source
+               JOIN inbound_updates current ON current.id = ?
+               WHERE source.id = command_drafts.source_inbound_id
+                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND (
+                   source.received_at < current.received_at OR
+                   (source.received_at = current.received_at AND source.rowid < current.rowid)
+                 )
+             )
+             ${timeGuard}`,
         )
         .bind(
           draftStatus,
@@ -596,6 +647,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
           input.now,
           input.draft.id,
           ...ownership,
+          input.message.id,
+          input.message.claimMarker,
           input.now,
           input.now,
         ),
@@ -661,10 +714,21 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       const draft = await this.database
         .prepare(
           `SELECT status, resolution_inbound_id,
-                  EXISTS(SELECT 1 FROM reminders WHERE source_draft_id = command_drafts.id) AS has_reminder
-           FROM command_drafts WHERE id = ? LIMIT 1`,
+                  EXISTS(SELECT 1 FROM reminders WHERE source_draft_id = draft.id) AS has_reminder,
+                  EXISTS(
+                    SELECT 1
+                    FROM inbound_updates source
+                    JOIN inbound_updates current ON current.id = ?
+                    WHERE source.id = draft.source_inbound_id
+                      AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                      AND (
+                        source.received_at < current.received_at OR
+                        (source.received_at = current.received_at AND source.rowid < current.rowid)
+                      )
+                  ) AS resolution_is_later
+           FROM command_drafts draft WHERE draft.id = ? LIMIT 1`,
         )
-        .bind(input.draft.id)
+        .bind(input.message.id, input.message.claimMarker, input.draft.id)
         .first<ResolutionStateRow>();
       const reusedInbound = await this.database
         .prepare(
@@ -678,6 +742,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         || draft.status !== "PENDING"
         || draft.resolution_inbound_id !== null
         || draft.has_reminder === 1
+        || draft.resolution_is_later !== 1
         || reusedInbound
         || !await this.findBoundContext(input.message)
       ) {
@@ -776,7 +841,7 @@ export async function processBoundChatMessage(
 
   const normalized = normalizeWholeMessage(message.text);
   if (CONFIRM_WORDS.has(normalized) || CANCEL_WORDS.has(normalized)) {
-    const draft = await dependencies.store.findPendingDraft(context.chatIdentityId);
+    const draft = await dependencies.store.findPendingDraft(message, context.chatIdentityId);
     if (!draft) {
       return rejectResolutionConflict(message, processingNow, dependencies, randomBytes);
     }
