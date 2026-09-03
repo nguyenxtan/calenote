@@ -9,41 +9,16 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { ProviderVerificationError } from "../provider-error";
 import {
-  createProviderRequestOptions,
   createSuppressedProviderContext,
-  executeHttpsProviderRequest,
+  executeProviderRequest,
   postSecretProviderJson,
 } from "../providers/secret-provider-transport";
 
 describe("secret-aware provider transport", () => {
-  it("attaches an absolute abort deadline to the full HTTPS request lifecycle", () => {
-    const signal = AbortSignal.abort();
-    const options = createProviderRequestOptions(
-      {
-        provider: "telegram",
-        hostname: "api.telegram.org",
-        path: "/botredacted/getMe",
-        operation: "getMe",
-      },
-      signal,
-    );
-
-    expect(options.signal).toBe(signal);
-    expect(options.timeout).toBe(8_000);
-  });
-
-  it("aborts a real HTTPS request when the absolute signal deadline fires", async () => {
-    await expect(
-      executeHttpsProviderRequest(
-        {
-          provider: "telegram",
-          hostname: "api.telegram.org",
-          path: "/botredacted/getMe",
-          operation: "getMe",
-        },
-        AbortSignal.timeout(1),
-      ),
-    ).rejects.toMatchObject({ code: "ABORT_ERR" });
+  it("uses Worker fetch with a fixed host, POST JSON, redirects disabled, and an absolute deadline", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path: "/botredacted/getMe", operation: "getMe" }, fetcher)).resolves.toEqual({ statusCode: 200, body: '{"ok":true}' });
+    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/botredacted/getMe", expect.objectContaining({ method: "POST", redirect: "error", body: "{}", signal: expect.any(AbortSignal) }));
   });
 
   it("suppresses automatic HTTP tracing and exports only secret-free span metadata", async () => {

@@ -13,3 +13,22 @@ export class ProviderVerificationError extends Error {
     this.code = code;
   }
 }
+
+export type ProviderOperationErrorCode =
+  | "REJECTED_CREDENTIAL"
+  | "QUOTA"
+  | "UNCERTAIN"
+  | "FAILED"
+  | "INVALID_RESPONSE";
+
+export class ProviderOperationError extends Error {
+  readonly code: ProviderOperationErrorCode;
+  readonly retryAfterSeconds: number | null;
+
+  constructor(code: ProviderOperationErrorCode, retryAfterSeconds: number | null = null) {
+    super(code);
+    this.name = "ProviderOperationError";
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}

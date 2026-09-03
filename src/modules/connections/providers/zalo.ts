@@ -1,7 +1,7 @@
-import type { BotProfile, ProviderRequester } from "../contracts";
+import type { BotProfile, InboundTextMessage, ProviderRequester, SendReceipt, WebhookRegistration } from "../contracts";
 import { ProviderVerificationError } from "../provider-error";
 import { isSafeProviderToken } from "../token-policy";
-import { isRecord, optionalBoolean, providerFailureFromPayload } from "./provider-http";
+import { isRecord, optionalBoolean, providerFailureFromPayload, providerOperationFailureFromPayload } from "./provider-http";
 import { postSecretProviderJson } from "./secret-provider-transport";
 
 const ZALO_BOT_API_HOSTNAME = "bot-api.zaloplatforms.com";
@@ -47,3 +47,8 @@ export async function verifyZaloBotToken(
     canJoinGroups: optionalBoolean(result.can_join_groups),
   };
 }
+
+function path(token: string, operation: "getMe" | "setWebhook" | "sendMessage"): string { if (!isSafeProviderToken("zalo", token)) throw new ProviderVerificationError("INVALID_TOKEN_FORMAT"); return `/bot${token}/${operation}`; }
+export async function setZaloWebhook(token: string, input: WebhookRegistration, requester: ProviderRequester = postSecretProviderJson): Promise<void> { const payload = await requester({ provider: "zalo", hostname: ZALO_BOT_API_HOSTNAME, path: path(token, "setWebhook"), operation: "setWebhook", body: { url: input.url, secret_token: input.secretToken } }); if (!isRecord(payload) || payload.ok !== true) throw providerOperationFailureFromPayload("zalo", isRecord(payload) ? payload : {}); }
+export async function sendZaloText(token: string, chatId: string, text: string, requester: ProviderRequester = postSecretProviderJson): Promise<SendReceipt> { if (!chatId || text.length < 1 || text.length > 2000) throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE"); const payload = await requester({ provider: "zalo", hostname: ZALO_BOT_API_HOSTNAME, path: path(token, "sendMessage"), operation: "sendMessage", body: { chat_id: chatId, text } }); if (!isRecord(payload) || payload.ok !== true) throw providerOperationFailureFromPayload("zalo", isRecord(payload) ? payload : {}); const result = isRecord(payload.result) ? payload.result : {}; return { providerMessageId: typeof result.message_id === "string" || typeof result.message_id === "number" ? String(result.message_id) : null }; }
+export function parseZaloWebhook(payload: unknown): InboundTextMessage | null { if (!isRecord(payload) || payload.ok !== true || !isRecord(payload.result) || payload.result.event_name !== "message.text.received" || !isRecord(payload.result.message)) return null; const m = payload.result.message; const from = isRecord(m.from) ? m.from : null; const chat = isRecord(m.chat) ? m.chat : null; if (!from || !chat || from.is_bot !== false || chat.chat_type !== "PRIVATE" || typeof m.text !== "string" || (typeof m.message_id !== "string" && typeof m.message_id !== "number") || (typeof from.id !== "string" && typeof from.id !== "number") || (typeof chat.id !== "string" && typeof chat.id !== "number") || typeof m.date !== "number") return null; return { provider: "zalo", providerMessageId: String(m.message_id), providerUserId: String(from.id), privateChatId: String(chat.id), displayName: typeof from.display_name === "string" ? from.display_name : null, text: m.text, receivedAt: m.date * 1000 }; }

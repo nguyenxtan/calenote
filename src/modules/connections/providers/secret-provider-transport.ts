@@ -1,4 +1,3 @@
-import { request as httpsRequest, type RequestOptions } from "node:https";
 import {
   context,
   SpanKind,
@@ -9,7 +8,7 @@ import {
 } from "@opentelemetry/api";
 import { suppressTracing } from "@opentelemetry/core";
 import type { BotProvider, ProviderRequest } from "../contracts";
-import { ProviderVerificationError } from "../provider-error";
+import { ProviderOperationError, ProviderVerificationError } from "../provider-error";
 import { providerFailureFromHttpStatus } from "./provider-http";
 
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -19,6 +18,12 @@ const allowedHostname: Record<BotProvider, ProviderRequest["hostname"]> = {
   zalo: "bot-api.zaloplatforms.com",
   telegram: "api.telegram.org",
 };
+
+function operationFailure(input: ProviderRequest, statusCode: number): Error {
+  if (input.operation === "getMe") return providerFailureFromHttpStatus(input.provider, statusCode);
+  const rejected = input.provider === "zalo" ? statusCode === 401 : statusCode === 401 || statusCode === 404;
+  return new ProviderOperationError(rejected ? "REJECTED_CREDENTIAL" : statusCode === 429 ? "QUOTA" : "FAILED");
+}
 
 export interface RawProviderResponse {
   statusCode: number;
@@ -33,65 +38,27 @@ export function createSuppressedProviderContext(): Context {
   return suppressTracing(context.active());
 }
 
-export function createProviderRequestOptions(
+export async function executeProviderRequest(
   input: ProviderRequest,
-  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-): RequestOptions {
-  return {
-    protocol: "https:",
-    hostname: input.hostname,
-    port: 443,
-    path: input.path,
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      "content-length": "2",
-    },
-    signal,
-    timeout: REQUEST_TIMEOUT_MS,
-  };
-}
-
-export async function executeHttpsProviderRequest(
-  input: ProviderRequest,
-  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  fetcher: typeof fetch = fetch,
 ): Promise<RawProviderResponse> {
-  return new Promise((resolve, reject) => {
-    const request = httpsRequest(
-      createProviderRequestOptions(input, signal),
-      (response) => {
-        const chunks: Buffer[] = [];
-        let byteLength = 0;
-
-        response.on("data", (chunk: Buffer | Uint8Array | string) => {
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          byteLength += buffer.byteLength;
-          if (byteLength > MAX_RESPONSE_BYTES) {
-            response.destroy(new Error("provider response exceeded limit"));
-            return;
-          }
-          chunks.push(buffer);
-        });
-        response.on("end", () => {
-          resolve({
-            statusCode: response.statusCode ?? 0,
-            body: Buffer.concat(chunks).toString("utf8"),
-          });
-        });
-        response.on("error", reject);
-      },
-    );
-
-    request.on("timeout", () => request.destroy(new Error("provider request timed out")));
-    request.on("error", reject);
-    request.end("{}");
+  if (input.hostname !== allowedHostname[input.provider]) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+  const response = await fetcher(`https://${input.hostname}${input.path}`, {
+    method: "POST", redirect: "error", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(input.body ?? {}),
   });
+  const reader = response.body?.getReader();
+  if (!reader) return { statusCode: response.status, body: "" };
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try { for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > MAX_RESPONSE_BYTES) throw new Error("response-limit"); chunks.push(part.value); } }
+  finally { reader.releaseLock(); }
+  const all = new Uint8Array(bytes); let offset = 0; for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.byteLength; }
+  return { statusCode: response.status, body: new TextDecoder().decode(all) };
 }
 
 export async function postSecretProviderJson(
   input: ProviderRequest,
-  executor: ProviderRequestExecutor = executeHttpsProviderRequest,
+  executor: ProviderRequestExecutor = executeProviderRequest,
   tracer: Tracer = trace.getTracer("calenote.provider-transport"),
 ): Promise<unknown> {
   if (input.hostname !== allowedHostname[input.provider]) {
@@ -117,12 +84,12 @@ export async function postSecretProviderJson(
         );
         span.setAttribute("http.response.status_code", response.statusCode);
 
-        if (Buffer.byteLength(response.body, "utf8") > MAX_RESPONSE_BYTES) {
+        if (new TextEncoder().encode(response.body).byteLength > MAX_RESPONSE_BYTES) {
           throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw providerFailureFromHttpStatus(input.provider, response.statusCode);
+          throw operationFailure(input, response.statusCode);
         }
 
         try {
@@ -137,7 +104,8 @@ export async function postSecretProviderJson(
           code: SpanStatusCode.ERROR,
           message: "Provider request failed",
         });
-        if (error instanceof ProviderVerificationError) throw error;
+        if (error instanceof ProviderVerificationError || error instanceof ProviderOperationError) throw error;
+        if (input.operation !== "getMe") throw new ProviderOperationError("UNCERTAIN");
         throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
       } finally {
         span.end();

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderVerificationError } from "../provider-error";
-import { verifyTelegramBotToken } from "../providers/telegram";
-import { verifyZaloBotToken } from "../providers/zalo";
+import { parseTelegramWebhook, sendTelegramText, setTelegramWebhook, verifyTelegramBotToken } from "../providers/telegram";
+import { parseZaloWebhook, sendZaloText, setZaloWebhook, verifyZaloBotToken } from "../providers/zalo";
 
 describe("Zalo Bot Platform adapter", () => {
   it("requests the official getMe operation and normalizes the bot profile", async () => {
@@ -150,5 +150,35 @@ describe("Telegram Bot API adapter", () => {
     await expect(
       verifyTelegramBotToken("123456789:AAExample_secret-token_123456789", requester),
     ).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+  });
+});
+
+describe("provider webhook and outbound adapters", () => {
+  it("forms Zalo webhook and send operations inside the adapter", async () => {
+    const token = "12345678:abc-xyz_789";
+    const requester = vi.fn(async () => ({ ok: true, result: { message_id: "receipt-1" } }));
+
+    await setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secretToken: "header_secret" }, requester);
+    await expect(sendZaloText(token, "chat-1", "Nhắc bạn họp", requester)).resolves.toEqual({ providerMessageId: "receipt-1" });
+    expect(requester).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      provider: "zalo", operation: "setWebhook", body: { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secret_token: "header_secret" },
+    }));
+    expect(requester).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      provider: "zalo", operation: "sendMessage", body: { chat_id: "chat-1", text: "Nhắc bạn họp" },
+    }));
+  });
+
+  it("accepts only private non-bot Zalo text events", () => {
+    expect(parseZaloWebhook({ ok: true, result: { event_name: "message.text.received", message: { from: { id: "u1", display_name: "Minh", is_bot: false }, chat: { id: "c1", chat_type: "PRIVATE" }, text: "Xin chào", message_id: "m1", date: 1 } } })).toEqual({ provider: "zalo", providerMessageId: "m1", providerUserId: "u1", privateChatId: "c1", displayName: "Minh", text: "Xin chào", receivedAt: 1000 });
+    expect(parseZaloWebhook({ ok: true, result: { event_name: "message.text.received", message: { from: { id: "u1", is_bot: true }, chat: { id: "c1", chat_type: "PRIVATE" }, text: "no", message_id: "m1", date: 1 } } })).toBeNull();
+  });
+
+  it("uses Telegram's constrained webhook payload and private text parser", async () => {
+    const token = "123456789:AAExample_secret-token_123456789";
+    const requester = vi.fn(async () => ({ ok: true, result: { message_id: 7 } }));
+    await setTelegramWebhook(token, { url: "https://calenote.iconiclogs.com/webhooks/telegram/a", secretToken: "base64url_secret" }, requester);
+    await expect(sendTelegramText(token, "chat-1", "Nhắc bạn họp", requester)).resolves.toEqual({ providerMessageId: "7" });
+    expect(requester).toHaveBeenNthCalledWith(1, expect.objectContaining({ operation: "setWebhook", body: { url: "https://calenote.iconiclogs.com/webhooks/telegram/a", secret_token: "base64url_secret", allowed_updates: ["message"] } }));
+    expect(parseTelegramWebhook({ update_id: 5, message: { message_id: 7, date: 1, text: "Xin chào", chat: { id: 3, type: "private" }, from: { id: 4, first_name: "Mai", is_bot: false } } })).toEqual({ provider: "telegram", providerMessageId: "7", providerUserId: "4", privateChatId: "3", displayName: "Mai", text: "Xin chào", receivedAt: 1000 });
   });
 });
