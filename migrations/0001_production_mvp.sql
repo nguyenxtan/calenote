@@ -102,9 +102,15 @@ CREATE TABLE inbound_updates (
   state TEXT NOT NULL CHECK (state IN ('PENDING', 'PROCESSING', 'PROCESSED', 'REJECTED', 'FAILED')),
   received_at INTEGER NOT NULL,
   processing_started_at INTEGER,
-  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0 AND attempt_count <= 4),
   processed_at INTEGER,
   transition_marker TEXT,
+  dispatch_started_at INTEGER,
+  dispatch_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (
+    dispatch_attempt_count >= 0 AND dispatch_attempt_count <= 4
+  ),
+  dispatch_marker TEXT,
+  safe_error_code TEXT,
   UNIQUE (provider, connection_id, private_chat_id, provider_message_id)
 ) STRICT;
 
@@ -137,6 +143,7 @@ CREATE TABLE reminders (
   status TEXT NOT NULL CHECK (status IN ('PENDING', 'CLAIMED', 'SENT', 'CANCELLED', 'FAILED', 'RETRYABLE', 'UNCERTAIN')),
   claimed_at INTEGER,
   cancelled_at INTEGER,
+  transition_marker TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 ) STRICT;
@@ -144,13 +151,18 @@ CREATE TABLE reminders (
 CREATE TABLE reminder_deliveries (
   id TEXT PRIMARY KEY NOT NULL,
   reminder_id TEXT NOT NULL UNIQUE REFERENCES reminders(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK (status IN ('PENDING', 'SENDING', 'SENT', 'RETRYABLE', 'FAILED', 'UNCERTAIN')),
-  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  status TEXT NOT NULL CHECK (status IN ('PENDING', 'SENDING', 'SENT', 'RETRYABLE', 'FAILED', 'UNCERTAIN', 'CANCELLED')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0 AND attempt_count <= 4),
   provider_receipt TEXT,
   safe_error_code TEXT,
   sent_at INTEGER,
+  send_started_at INTEGER,
+  retry_not_before INTEGER,
+  transition_marker TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  CHECK (status <> 'SENDING' OR (send_started_at IS NOT NULL AND transition_marker IS NOT NULL)),
+  CHECK (status <> 'RETRYABLE' OR retry_not_before IS NOT NULL)
 ) STRICT;
 
 CREATE TABLE audit_events (
@@ -176,11 +188,22 @@ CREATE INDEX idx_sessions_digest ON sessions(digest);
 CREATE INDEX idx_connect_codes_active_digest ON connect_codes(digest) WHERE consumed_at IS NULL;
 CREATE INDEX idx_login_codes_active_user_digest ON login_codes(user_id, digest, created_at DESC) WHERE consumed_at IS NULL;
 CREATE INDEX idx_login_codes_active_user_created ON login_codes(user_id, created_at DESC) WHERE consumed_at IS NULL;
-CREATE INDEX idx_inbound_updates_pending ON inbound_updates(received_at) WHERE state = 'PENDING';
+CREATE INDEX idx_inbound_pending_dispatch
+  ON inbound_updates(dispatch_started_at, received_at, id) WHERE state = 'PENDING';
+CREATE INDEX idx_inbound_processing_dispatch
+  ON inbound_updates(processing_started_at, dispatch_started_at, received_at, id)
+  WHERE state = 'PROCESSING';
 CREATE UNIQUE INDEX idx_command_drafts_one_pending
   ON command_drafts(chat_identity_id) WHERE status = 'PENDING';
 CREATE INDEX idx_command_drafts_chat_created
   ON command_drafts(chat_identity_id, created_at DESC);
-CREATE INDEX idx_reminders_due ON reminders(scheduled_at) WHERE status = 'PENDING';
+CREATE INDEX idx_reminders_due_pending
+  ON reminders(scheduled_at, id) WHERE status = 'PENDING';
+CREATE INDEX idx_reminders_stale_claimed
+  ON reminders(claimed_at, scheduled_at, id) WHERE status = 'CLAIMED';
+CREATE INDEX idx_deliveries_due_retryable
+  ON reminder_deliveries(retry_not_before, reminder_id) WHERE status = 'RETRYABLE';
+CREATE INDEX idx_deliveries_stale_sending
+  ON reminder_deliveries(send_started_at, reminder_id) WHERE status = 'SENDING';
 CREATE UNIQUE INDEX idx_reminders_source_draft
   ON reminders(source_draft_id) WHERE source_draft_id IS NOT NULL;

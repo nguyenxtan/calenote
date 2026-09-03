@@ -9,6 +9,11 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import type { Keyring } from "@/modules/security/keyring";
+import {
+  enqueueInboundWithReservation,
+  type InboundDispatchStore,
+  type ProcessInboundJob,
+} from "@/modules/reminders/scheduler";
 
 export const WEBHOOK_MAX_BODY_BYTES = 32 * 1_024;
 export const WEBHOOK_BODY_TIMEOUT_MS = 5_000;
@@ -38,6 +43,10 @@ export interface InboundRecord {
   processingStartedAt: number | null;
   attemptCount: number;
   processedAt: number | null;
+  dispatchStartedAt: number | null;
+  dispatchAttemptCount: number;
+  dispatchMarker: string | null;
+  safeErrorCode: string | null;
 }
 
 export interface InboundStore {
@@ -72,6 +81,10 @@ interface InboundRow {
   processing_started_at: number | null;
   attempt_count: number;
   processed_at: number | null;
+  dispatch_started_at: number | null;
+  dispatch_attempt_count: number;
+  dispatch_marker: string | null;
+  safe_error_code: string | null;
 }
 
 function persistedArrayBuffer(value: unknown): ArrayBuffer {
@@ -99,6 +112,10 @@ function inboundRecord(row: InboundRow): InboundRecord {
     processingStartedAt: row.processing_started_at,
     attemptCount: row.attempt_count,
     processedAt: row.processed_at,
+    dispatchStartedAt: row.dispatch_started_at,
+    dispatchAttemptCount: row.dispatch_attempt_count,
+    dispatchMarker: row.dispatch_marker,
+    safeErrorCode: row.safe_error_code,
   };
 }
 
@@ -129,7 +146,8 @@ export class D1InboundWebhookStore implements InboundStore {
         `SELECT id, connection_id, provider, provider_message_id, provider_user_id,
                 private_chat_id, display_name, message_ciphertext, message_iv,
                 message_key_version, state, received_at, processing_started_at,
-                attempt_count, processed_at
+                attempt_count, processed_at, dispatch_started_at,
+                dispatch_attempt_count, dispatch_marker, safe_error_code
          FROM inbound_updates
          WHERE provider = ? AND connection_id = ? AND private_chat_id = ?
            AND provider_message_id = ?
@@ -147,8 +165,9 @@ export class D1InboundWebhookStore implements InboundStore {
            id, connection_id, provider, provider_message_id, provider_user_id,
            private_chat_id, display_name, message_ciphertext, message_iv,
            message_key_version, state, received_at, processing_started_at,
-           attempt_count, processed_at, transition_marker
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+           attempt_count, processed_at, transition_marker, dispatch_started_at,
+           dispatch_attempt_count, dispatch_marker, safe_error_code
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -166,19 +185,19 @@ export class D1InboundWebhookStore implements InboundStore {
         record.processingStartedAt,
         record.attemptCount,
         record.processedAt,
+        record.dispatchStartedAt,
+        record.dispatchAttemptCount,
+        record.dispatchMarker,
+        record.safeErrorCode,
       )
       .run();
     return d1Changes(result) === 1;
   }
 }
 
-export interface ProcessInboundJob {
-  type: "PROCESS_INBOUND";
-  inboundId: string;
-}
-
 export interface AcceptWebhookDependencies {
   store: InboundStore;
+  dispatchStore: InboundDispatchStore;
   enqueue(job: ProcessInboundJob): Promise<void>;
   parseWebhook(payload: unknown): InboundTextMessage | null;
   keyring: Pick<Keyring, "encryptSensitive">;
@@ -195,23 +214,20 @@ function normalizeIdentifier(value: string): string {
   return value.normalize("NFC");
 }
 
-function shouldPublish(record: InboundRecord, now: number): boolean {
-  if (record.state === "PENDING") return true;
-  if (record.state !== "PROCESSING") return false;
-  if (record.processingStartedAt === null) return true;
-  return record.processingStartedAt <= now - INBOUND_PROCESSING_LEASE_MS;
-}
-
 async function publishOrUnavailable(
-  enqueue: AcceptWebhookDependencies["enqueue"],
   inboundId: string,
+  now: number,
+  dependencies: AcceptWebhookDependencies,
+  randomBytes: RandomBytes,
 ): Promise<Response> {
-  try {
-    await enqueue({ type: "PROCESS_INBOUND", inboundId });
-    return new Response(null, { status: 200 });
-  } catch {
-    return new Response(null, { status: 503 });
-  }
+  const result = await enqueueInboundWithReservation(inboundId, now, {
+    store: dependencies.dispatchStore,
+    enqueue: dependencies.enqueue,
+    randomBytes,
+  });
+  return new Response(null, {
+    status: result.status === "PUBLISH_FAILED" ? 503 : 200,
+  });
 }
 
 function bodyErrorResponse(error: RequestBodyError): Response {
@@ -252,13 +268,11 @@ export async function acceptWebhook(
     providerMessageId,
   );
   const receivedNow = now();
+  const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   if (duplicate) {
-    return shouldPublish(duplicate, receivedNow)
-      ? publishOrUnavailable(dependencies.enqueue, duplicate.id)
-      : new Response(null, { status: 200 });
+    return publishOrUnavailable(duplicate.id, receivedNow, dependencies, randomBytes);
   }
 
-  const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const inboundId = randomOpaqueId(randomBytes);
   const encrypted = await dependencies.keyring.encryptSensitive(
     "inbound-message",
@@ -282,10 +296,14 @@ export async function acceptWebhook(
     processingStartedAt: null,
     attemptCount: 0,
     processedAt: null,
+    dispatchStartedAt: null,
+    dispatchAttemptCount: 0,
+    dispatchMarker: null,
+    safeErrorCode: null,
   };
 
   if (await dependencies.store.insert(record)) {
-    return publishOrUnavailable(dependencies.enqueue, inboundId);
+    return publishOrUnavailable(inboundId, receivedNow, dependencies, randomBytes);
   }
 
   const raced = await dependencies.store.findDuplicate(
@@ -295,7 +313,5 @@ export async function acceptWebhook(
     providerMessageId,
   );
   if (!raced) throw new Error("Inbound dedupe result was unavailable");
-  return shouldPublish(raced, receivedNow)
-    ? publishOrUnavailable(dependencies.enqueue, raced.id)
-    : new Response(null, { status: 200 });
+  return publishOrUnavailable(raced.id, receivedNow, dependencies, randomBytes);
 }

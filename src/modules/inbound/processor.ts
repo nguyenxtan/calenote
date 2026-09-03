@@ -24,6 +24,7 @@ import {
   type ReminderCommandStore,
 } from "@/modules/reminders/command-service";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
+import { MAX_INBOUND_PROCESS_ATTEMPTS } from "@/modules/reminders/scheduler";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -57,6 +58,7 @@ interface ClaimedRow {
 interface StateRow {
   state: InboundState;
   processing_started_at: number | null;
+  attempt_count: number;
 }
 
 type ConnectionState = "VALIDATING" | "ACTIVE_UNBOUND" | "ACTIVE_BOUND" | "WEBHOOK_FAILED" | "SUSPENDED";
@@ -206,14 +208,21 @@ export class D1InboundProcessorStore extends D1ReminderCommandStore implements I
       .prepare(
         `UPDATE inbound_updates
          SET state = 'PROCESSING', processing_started_at = ?, attempt_count = attempt_count + 1,
-             transition_marker = ?
+             transition_marker = ?, dispatch_started_at = NULL, dispatch_marker = NULL
          WHERE id = ? AND (
            state = 'PENDING' OR
            (state = 'PROCESSING' AND (processing_started_at IS NULL OR processing_started_at <= ?))
          )
+           AND attempt_count < ?
          RETURNING id`,
       )
-      .bind(now, claimMarker, inboundId, now - INBOUND_PROCESSING_LEASE_MS)
+      .bind(
+        now,
+        claimMarker,
+        inboundId,
+        now - INBOUND_PROCESSING_LEASE_MS,
+        MAX_INBOUND_PROCESS_ATTEMPTS,
+      )
       .run<{ id: string }>();
 
     if (d1Changes(claimed) === 1) {
@@ -233,7 +242,7 @@ export class D1InboundProcessorStore extends D1ReminderCommandStore implements I
     }
 
     const current = await this.database
-      .prepare("SELECT state, processing_started_at FROM inbound_updates WHERE id = ? LIMIT 1")
+      .prepare("SELECT state, processing_started_at, attempt_count FROM inbound_updates WHERE id = ? LIMIT 1")
       .bind(inboundId)
       .first<StateRow>();
     if (!current) return { status: "MISSING" };
@@ -241,10 +250,47 @@ export class D1InboundProcessorStore extends D1ReminderCommandStore implements I
       return { status: "TERMINAL" };
     }
     if (current.state === "PROCESSING" && current.processing_started_at !== null) {
+      if (current.processing_started_at <= now - INBOUND_PROCESSING_LEASE_MS) {
+        if (current.attempt_count >= MAX_INBOUND_PROCESS_ATTEMPTS) {
+          const exhausted = await this.database
+            .prepare(
+              `UPDATE inbound_updates
+               SET state = 'FAILED', processed_at = ?,
+                   safe_error_code = 'INBOUND_PROCESSING_EXHAUSTED'
+               WHERE id = ? AND state = 'PROCESSING'
+                 AND processing_started_at = ? AND attempt_count = ?
+                 AND processing_started_at <= ?
+               RETURNING id`,
+            )
+            .bind(
+              now,
+              inboundId,
+              current.processing_started_at,
+              current.attempt_count,
+              now - INBOUND_PROCESSING_LEASE_MS,
+            )
+            .run<{ id: string }>();
+          if (d1Changes(exhausted) === 1) return { status: "TERMINAL" };
+        }
+        throw new Error("Inbound claim state changed unexpectedly");
+      }
       return {
         status: "RETRY_AFTER",
         retryAfterMs: Math.max(1, current.processing_started_at + INBOUND_PROCESSING_LEASE_MS - now),
       };
+    }
+    if (current.state === "PENDING" && current.attempt_count >= MAX_INBOUND_PROCESS_ATTEMPTS) {
+      const exhausted = await this.database
+        .prepare(
+          `UPDATE inbound_updates
+           SET state = 'FAILED', processed_at = ?,
+               safe_error_code = 'INBOUND_PROCESSING_EXHAUSTED'
+           WHERE id = ? AND state = 'PENDING' AND attempt_count = ?
+           RETURNING id`,
+        )
+        .bind(now, inboundId, current.attempt_count)
+        .run<{ id: string }>();
+      if (d1Changes(exhausted) === 1) return { status: "TERMINAL" };
     }
     throw new Error("Inbound claim state changed unexpectedly");
   }

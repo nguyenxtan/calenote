@@ -7,6 +7,12 @@ import { parseTelegramWebhook } from "@/modules/connections/providers/telegram";
 import { readBoundedJson } from "@/modules/http/body";
 import { createKeyring } from "@/modules/security/keyring";
 import {
+  INBOUND_DISPATCH_LEASE_MS,
+  type InboundDispatchReservation,
+  type InboundDispatchResult,
+  type InboundDispatchStore,
+} from "@/modules/reminders/scheduler";
+import {
   acceptWebhook,
   D1InboundWebhookStore,
   type InboundRecord,
@@ -37,7 +43,7 @@ function request(body: unknown = { update_id: 1 }, headers: HeadersInit = {}) {
   });
 }
 
-class MemoryStore implements InboundStore {
+class MemoryStore implements InboundStore, InboundDispatchStore {
   readonly rows: InboundRecord[] = [];
   readonly events: string[] = [];
 
@@ -66,15 +72,59 @@ class MemoryStore implements InboundStore {
     this.rows.push(record);
     return true;
   }
+
+  async selectOrphans(): Promise<string[]> {
+    return this.rows.map(({ id }) => id);
+  }
+
+  async reserve(inboundId: string, now: number, marker: string): Promise<InboundDispatchResult> {
+    const row = this.rows.find(({ id }) => id === inboundId);
+    if (!row) return { status: "MISSING" };
+    if (row.state !== "PENDING" && row.state !== "PROCESSING") return { status: "TERMINAL" };
+    const dispatchStartedAt = row.dispatchStartedAt;
+    if (
+      dispatchStartedAt !== null
+      && dispatchStartedAt > now - INBOUND_DISPATCH_LEASE_MS
+    ) {
+      return {
+        status: "LEASED",
+        retryAfterMs: dispatchStartedAt + INBOUND_DISPATCH_LEASE_MS - now,
+      };
+    }
+    const reservation: InboundDispatchReservation = {
+      inboundId,
+      marker,
+      previousStartedAt: row.dispatchStartedAt,
+      previousAttemptCount: row.dispatchAttemptCount,
+      previousMarker: row.dispatchMarker,
+    };
+    row.dispatchStartedAt = now;
+    row.dispatchAttemptCount += 1;
+    row.dispatchMarker = marker;
+    this.events.push("reserve");
+    return { status: "RESERVED", reservation };
+  }
+
+  async rollback(reservation: InboundDispatchReservation): Promise<boolean> {
+    const row = this.rows.find(({ id }) => id === reservation.inboundId);
+    if (!row || row.dispatchMarker !== reservation.marker) return false;
+    row.dispatchStartedAt = reservation.previousStartedAt;
+    row.dispatchAttemptCount = reservation.previousAttemptCount;
+    row.dispatchMarker = reservation.previousMarker;
+    this.events.push("rollback");
+    return true;
+  }
 }
 
 function dependencies(store = new MemoryStore()) {
+  let random = 0;
   const enqueue = vi.fn(async ({ inboundId }: { type: "PROCESS_INBOUND"; inboundId: string }) => {
     store.events.push(`enqueue:${inboundId}`);
   });
   const parseWebhook = vi.fn<(payload: unknown) => InboundTextMessage | null>(() => parsedMessage);
   return {
     store,
+    dispatchStore: store,
     enqueue,
     parseWebhook,
     keyring: {
@@ -89,7 +139,7 @@ function dependencies(store = new MemoryStore()) {
       })),
     },
     now: () => 1_700_000_010_000,
-    randomBytes: () => new Uint8Array(16).fill(1),
+    randomBytes: (length: number) => new Uint8Array(length).fill(++random),
     readJson: undefined as typeof readBoundedJson | undefined,
   };
 }
@@ -226,6 +276,10 @@ describe("authenticated webhook acceptance", () => {
       state: "PENDING",
       processingStartedAt: null,
       attemptCount: 0,
+      dispatchStartedAt: deps.now(),
+      dispatchAttemptCount: 1,
+      dispatchMarker: expect.any(String),
+      safeErrorCode: null,
     });
     expect(row).not.toHaveProperty("text");
     expect(new TextDecoder().decode(row.messageCiphertext)).toContain("Xin chào\nNgày mai\nnhắc tôi");
@@ -235,7 +289,7 @@ describe("authenticated webhook acceptance", () => {
       1,
       "Xin chào\nNgày mai\nnhắc tôi",
     );
-    expect(deps.store.events).toEqual(["insert", `enqueue:${row.id}`]);
+    expect(deps.store.events).toEqual(["insert", "reserve", `enqueue:${row.id}`]);
     expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id });
     expect(JSON.stringify(deps.enqueue.mock.calls)).not.toContain("Xin chào");
   });
@@ -243,7 +297,6 @@ describe("authenticated webhook acceptance", () => {
   it("deduplicates per provider, connection, private chat, and provider message ID", async () => {
     const deps = dependencies();
     await acceptWebhook(request(), connection, deps);
-    const firstId = deps.store.rows[0].id;
     deps.enqueue.mockClear();
 
     await acceptWebhook(request(), connection, deps);
@@ -252,20 +305,21 @@ describe("authenticated webhook acceptance", () => {
 
     expect(deps.store.rows).toHaveLength(2);
     expect(deps.keyring.encryptSensitive).toHaveBeenCalledTimes(2);
-    expect(deps.enqueue).toHaveBeenNthCalledWith(1, { type: "PROCESS_INBOUND", inboundId: firstId });
-    expect(deps.enqueue).toHaveBeenNthCalledWith(2, {
+    expect(deps.enqueue).toHaveBeenCalledTimes(1);
+    expect(deps.enqueue).toHaveBeenNthCalledWith(1, {
       type: "PROCESS_INBOUND",
       inboundId: deps.store.rows[1].id,
     });
   });
 
-  it("republishes duplicate pending and expired-processing rows but acknowledges terminal rows", async () => {
+  it("reserves duplicate pending and expired-processing rows only after dispatch lease expiry", async () => {
     const deps = dependencies();
     await acceptWebhook(request(), connection, deps);
     const row = deps.store.rows[0];
     deps.enqueue.mockClear();
 
     const pending = await acceptWebhook(request(), connection, deps);
+    row.dispatchStartedAt = deps.now() - INBOUND_DISPATCH_LEASE_MS - 1;
     row.state = "PROCESSING";
     row.processingStartedAt = deps.now() - 300_001;
     const expired = await acceptWebhook(request(), connection, deps);
@@ -273,7 +327,7 @@ describe("authenticated webhook acceptance", () => {
     const terminal = await acceptWebhook(request(), connection, deps);
 
     expect([pending.status, expired.status, terminal.status]).toEqual([200, 200, 200]);
-    expect(deps.enqueue).toHaveBeenCalledTimes(2);
+    expect(deps.enqueue).toHaveBeenCalledTimes(1);
     expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id });
   });
 
@@ -288,6 +342,11 @@ describe("authenticated webhook acceptance", () => {
     expect(await response.text()).toBe("");
     expect(deps.store.rows).toHaveLength(1);
     expect(deps.store.rows[0].state).toBe("PENDING");
+    expect(deps.store.rows[0]).toMatchObject({
+      dispatchStartedAt: null,
+      dispatchAttemptCount: 0,
+      dispatchMarker: null,
+    });
 
     const retry = await acceptWebhook(request(), connection, deps);
     expect(retry.status).toBe(200);
@@ -368,6 +427,8 @@ describe("D1 webhook persistence", () => {
         messageCiphertext: sealed.ciphertext, messageIv: sealed.iv, messageKeyVersion: 1,
         state: "PENDING", receivedAt: 2, processingStartedAt: null, attemptCount: 0,
         processedAt: null,
+        dispatchStartedAt: null, dispatchAttemptCount: 0, dispatchMarker: null,
+        safeErrorCode: null,
       };
       await expect(store.insert(record)).resolves.toBe(true);
       await expect(store.insert({ ...record, id: "inbound-real-duplicate" })).resolves.toBe(false);

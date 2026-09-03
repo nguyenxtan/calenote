@@ -178,6 +178,7 @@ describe("fresh inbound schema", () => {
     const columns = database.sqlite.prepare("PRAGMA table_info(inbound_updates)").all() as Array<{ name: string }>;
     expect(columns.map(({ name }) => name)).toEqual(expect.arrayContaining([
       "processing_started_at", "attempt_count", "transition_marker", "display_name",
+      "dispatch_started_at", "dispatch_attempt_count", "dispatch_marker", "safe_error_code",
     ]));
 
     await insertInbound(database.sqlite, keyring, {
@@ -235,6 +236,45 @@ describe("inbound claim lease", () => {
 
     await expect(claimInbound(inboundId, { store, keyring, now: () => now })).resolves.toEqual({ status: "TERMINAL" });
     await expect(claimInbound("missing", { store, keyring, now: () => now })).resolves.toEqual({ status: "MISSING" });
+  });
+
+  it("terminally fails an expired fourth owner but preserves a fresh fourth owner", async () => {
+    const expired = await setup({ text: "Nội dung" });
+    expired.database.sqlite.prepare(
+      `UPDATE inbound_updates
+       SET state = 'PROCESSING', processing_started_at = ?, attempt_count = 4,
+           transition_marker = 'fourth-owner'
+       WHERE id = ?`,
+    ).run(now - 300_001, expired.inboundId);
+
+    await expect(claimInbound(expired.inboundId, {
+      store: expired.store,
+      keyring: expired.keyring,
+      now: () => now,
+    })).resolves.toEqual({ status: "TERMINAL" });
+    expect(expired.database.sqlite.prepare(
+      "SELECT state, safe_error_code FROM inbound_updates WHERE id = ?",
+    ).get(expired.inboundId)).toEqual({
+      state: "FAILED",
+      safe_error_code: "INBOUND_PROCESSING_EXHAUSTED",
+    });
+
+    const fresh = await setup({ inboundId: "fresh-fourth-owner", text: "Nội dung" });
+    fresh.database.sqlite.prepare(
+      `UPDATE inbound_updates
+       SET state = 'PROCESSING', processing_started_at = ?, attempt_count = 4,
+           transition_marker = 'fourth-owner'
+       WHERE id = ?`,
+    ).run(now - 299_999, fresh.inboundId);
+
+    await expect(claimInbound(fresh.inboundId, {
+      store: fresh.store,
+      keyring: fresh.keyring,
+      now: () => now,
+    })).resolves.toEqual({ status: "RETRY_AFTER", retryAfterMs: 1 });
+    expect(fresh.database.sqlite.prepare(
+      "SELECT state, safe_error_code FROM inbound_updates WHERE id = ?",
+    ).get(fresh.inboundId)).toEqual({ state: "PROCESSING", safe_error_code: null });
   });
 });
 

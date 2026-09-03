@@ -23,6 +23,7 @@ import {
 } from "@/modules/onboarding/service";
 import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/service";
 import { createKeyring } from "@/modules/security/keyring";
+import { D1InboundDispatchStore } from "@/modules/reminders/scheduler";
 import { handleConnectCodeRotation, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
 import {
@@ -91,6 +92,7 @@ async function createWebhookOperations(env: Env): Promise<WebhookRouteDependenci
     constantTimeEqual: (left, right) => keyring.constantTimeEqual(left, right),
     accept: (request, connection) => acceptWebhook(request, connection, {
       store,
+      dispatchStore: new D1InboundDispatchStore(env.DB),
       keyring,
       parseWebhook: connection.provider === "zalo" ? parseZaloWebhook : parseTelegramWebhook,
       enqueue: async (job) => {
