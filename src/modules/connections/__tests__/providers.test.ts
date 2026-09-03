@@ -1,7 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
-import { ProviderVerificationError } from "../provider-error";
+import { ProviderOperationError, ProviderVerificationError } from "../provider-error";
 import { parseTelegramWebhook, sendTelegramText, setTelegramWebhook, verifyTelegramBotToken } from "../providers/telegram";
 import { parseZaloWebhook, sendZaloText, setZaloWebhook, verifyZaloBotToken } from "../providers/zalo";
+
+async function captureAdapterFailure(
+  operation: () => Promise<unknown>,
+): Promise<{ caught: unknown; serialized: string }> {
+  let caught: unknown;
+
+  try {
+    await operation();
+  } catch (error) {
+    caught = error;
+  }
+
+  const serialized = caught instanceof ProviderOperationError
+    ? JSON.stringify({
+        ...caught,
+        name: caught.name,
+        message: caught.message,
+      })
+    : JSON.stringify(caught);
+
+  return { caught, serialized };
+}
 
 describe("Zalo Bot Platform adapter", () => {
   it("requests the official getMe operation and normalizes the bot profile", async () => {
@@ -155,12 +177,109 @@ describe("Telegram Bot API adapter", () => {
 
 describe("provider webhook and outbound adapters", () => {
   it("rejects malformed successful webhook and send payloads instead of returning a null receipt", async () => {
-    const { ProviderOperationError } = await import("../provider-error");
     const token = "12345678:abc-xyz_789";
     await expect(setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/a", secretToken: "abcdefgh" }, async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
     await expect(sendZaloText(token, "chat", "text", async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
     await expect(setTelegramWebhook("123456789:AAExample_secret-token_123456789", { url: "https://calenote.iconiclogs.com/a", secretToken: "AAAAAAAA" }, async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
     await expect(sendTelegramText("123456789:AAExample_secret-token_123456789", "chat", "text", async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
+  });
+
+  it.each([
+    { provider: "zalo", errorCode: 401, expectedCode: "REJECTED_CREDENTIAL" },
+    { provider: "telegram", errorCode: 401, expectedCode: "REJECTED_CREDENTIAL" },
+    { provider: "telegram", errorCode: 404, expectedCode: "REJECTED_CREDENTIAL" },
+    { provider: "zalo", errorCode: 404, expectedCode: "FAILED" },
+    { provider: "zalo", errorCode: 500, expectedCode: "FAILED" },
+    { provider: "telegram", errorCode: 500, expectedCode: "FAILED" },
+  ] as const)(
+    "maps $provider ok:false error $errorCode to $expectedCode without leaking payload details",
+    async ({ provider, errorCode, expectedCode }) => {
+      const token = provider === "zalo"
+        ? "12345678:adapter-safe-zalo-token"
+        : "123456789:adapter-safe-telegram-token";
+      const rawDescription = `adapter-description-${provider}-${errorCode}`;
+      const bodyMarker = `adapter-body-marker-${provider}-${errorCode}`;
+      const requester = async () => ({
+        ok: false,
+        error_code: errorCode,
+        description: `${rawDescription}:${token}`,
+        marker: bodyMarker,
+      });
+      const failure = await captureAdapterFailure(() => (
+        provider === "zalo"
+          ? sendZaloText(token, "chat-1", "text", requester)
+          : sendTelegramText(token, "chat-1", "text", requester)
+      ));
+
+      expect(failure.caught).toEqual(new ProviderOperationError(expectedCode));
+      expect(failure.serialized).not.toContain(token);
+      expect(failure.serialized).not.toContain(rawDescription);
+      expect(failure.serialized).not.toContain(bodyMarker);
+    },
+  );
+
+  it.each([
+    { provider: "zalo", retryAfter: 23, expectedRetryAfter: 23 },
+    { provider: "telegram", retryAfter: 23, expectedRetryAfter: 23 },
+    { provider: "telegram", retryAfter: 0, expectedRetryAfter: null },
+    { provider: "telegram", retryAfter: 1.5, expectedRetryAfter: null },
+    { provider: "telegram", retryAfter: 86_401, expectedRetryAfter: null },
+  ] as const)(
+    "bounds $provider ok:false quota retry_after $retryAfter",
+    async ({ provider, retryAfter, expectedRetryAfter }) => {
+      const token = provider === "zalo"
+        ? "12345678:adapter-quota-zalo-token"
+        : "123456789:adapter-quota-telegram-token";
+      const rawDescription = `adapter-quota-description-${provider}-${retryAfter}`;
+      const bodyMarker = `adapter-quota-body-${provider}-${retryAfter}`;
+      const requester = async () => ({
+        ok: false,
+        error_code: 429,
+        description: `${rawDescription}:${token}`,
+        marker: bodyMarker,
+        parameters: { retry_after: retryAfter },
+      });
+      const failure = await captureAdapterFailure(() => (
+        provider === "zalo"
+          ? sendZaloText(token, "chat-1", "text", requester)
+          : sendTelegramText(token, "chat-1", "text", requester)
+      ));
+
+      expect(failure.caught).toEqual(
+        new ProviderOperationError("QUOTA", expectedRetryAfter),
+      );
+      expect(failure.serialized).not.toContain(token);
+      expect(failure.serialized).not.toContain(rawDescription);
+      expect(failure.serialized).not.toContain(bodyMarker);
+    },
+  );
+
+  it("maps a Zalo webhook verification rejection to failed without leaking payload details", async () => {
+    const token = "12345678:webhook-verification-token";
+    const rawDescription = "zalo-verification-description";
+    const bodyMarker = "zalo-verification-body-marker";
+    const failure = await captureAdapterFailure(() => setZaloWebhook(
+      token,
+      {
+        url: "https://calenote.iconiclogs.com/webhooks/zalo/a",
+        secretToken: "AAAAAAAA",
+      },
+      async () => ({
+        ok: true,
+        result: {
+          verification: {
+            ok: false,
+            description: `${rawDescription}:${token}`,
+            marker: bodyMarker,
+          },
+        },
+      }),
+    ));
+
+    expect(failure.caught).toEqual(new ProviderOperationError("FAILED"));
+    expect(failure.serialized).not.toContain(token);
+    expect(failure.serialized).not.toContain(rawDescription);
+    expect(failure.serialized).not.toContain(bodyMarker);
   });
 
   it.each(["abcdefghi", "abc=defg", "tiếngviệt"]) ("rejects non-canonical Zalo webhook secrets before request: %s", async (secretToken) => {

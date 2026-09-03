@@ -41,9 +41,30 @@ export function providerOperationFailureFromPayload(
   payload: Record<string, unknown>,
 ): ProviderOperationError {
   const code = typeof payload.error_code === "number" ? payload.error_code : 0;
-  const rejected = provider === "zalo" ? code === 401 : code === 401 || code === 404;
-  const retryAfter = isRecord(payload.parameters) && typeof payload.parameters.retry_after === "number"
-    && Number.isInteger(payload.parameters.retry_after) && payload.parameters.retry_after >= 1 && payload.parameters.retry_after <= 86_400
-    ? payload.parameters.retry_after : null;
-  return new ProviderOperationError(rejected ? "REJECTED_CREDENTIAL" : code === 429 ? "QUOTA" : "FAILED", retryAfter);
+  const rejected = provider === "zalo"
+    ? code === 401
+    : code === 401 || code === 404;
+  let retryAfter: number | null = null;
+
+  if (isRecord(payload.parameters)) {
+    const candidate = payload.parameters.retry_after;
+
+    if (typeof candidate === "number") {
+      if (Number.isInteger(candidate)) {
+        if (candidate >= 1 && candidate <= 86_400) {
+          retryAfter = candidate;
+        }
+      }
+    }
+  }
+
+  let operationCode: "REJECTED_CREDENTIAL" | "QUOTA" | "FAILED" = "FAILED";
+
+  if (rejected) {
+    operationCode = "REJECTED_CREDENTIAL";
+  } else if (code === 429) {
+    operationCode = "QUOTA";
+  }
+
+  return new ProviderOperationError(operationCode, retryAfter);
 }

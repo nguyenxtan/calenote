@@ -1,42 +1,121 @@
-const base64UrlPattern = /^[A-Za-z0-9_-]*$/u;
+function isBase64UrlCodeUnit(codeUnit: number): boolean {
+  const isDigit = codeUnit >= 48 && codeUnit <= 57;
+  const isUppercaseLetter = codeUnit >= 65 && codeUnit <= 90;
+  const isLowercaseLetter = codeUnit >= 97 && codeUnit <= 122;
+  const isHyphen = codeUnit === 45;
+  const isUnderscore = codeUnit === 95;
+
+  return isDigit || isUppercaseLetter || isLowercaseLetter || isHyphen || isUnderscore;
+}
+
+function hasOnlyBase64UrlCodeUnits(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (!isBase64UrlCodeUnit(value.charCodeAt(index))) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 function bytesToBinary(bytes: Uint8Array): string {
   let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
   return binary;
 }
 
 export function bytesToBase64Url(bytes: Uint8Array): string {
-  return btoa(bytesToBinary(bytes)).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+  return btoa(bytesToBinary(bytes))
+    .replace(/\+/gu, "-")
+    .replace(/\//gu, "_")
+    .replace(/=+$/u, "");
 }
 
 export function base64UrlToBytes(value: string): Uint8Array | null {
-  if (!base64UrlPattern.test(value) || value.length % 4 === 1) return null;
+  if (!hasOnlyBase64UrlCodeUnits(value)) {
+    return null;
+  }
+
+  if (value.length % 4 === 1) {
+    return null;
+  }
 
   try {
-    const padded = value.replace(/-/gu, "+").replace(/_/gu, "/") + "=".repeat((4 - (value.length % 4)) % 4);
+    const base64 = value
+      .replace(/-/gu, "+")
+      .replace(/_/gu, "/");
+    const paddingLength = (4 - (value.length % 4)) % 4;
+    const padded = base64 + "=".repeat(paddingLength);
     const binary = atob(padded);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return bytesToBase64Url(bytes) === value ? bytes : null;
+
+    if (bytesToBase64Url(bytes) !== value) {
+      return null;
+    }
+
+    return bytes;
   } catch {
     return null;
   }
 }
+
 export function isCanonicalBase64Url(value: string, minimumLength: number): boolean {
-  return value.length >= minimumLength && value.length <= 256 && base64UrlToBytes(value) !== null;
+  if (value.length < minimumLength) {
+    return false;
+  }
+
+  if (value.length > 256) {
+    return false;
+  }
+
+  return base64UrlToBytes(value) !== null;
 }
 
 export function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length < 1 || right.length < 1 || left.length > 256 || right.length > 256) return false;
+  if (left.length < 1) {
+    return false;
+  }
+
+  if (right.length < 1) {
+    return false;
+  }
+
+  if (left.length > 256) {
+    return false;
+  }
+
+  if (right.length > 256) {
+    return false;
+  }
+
   let difference = left.length ^ right.length;
   let invalid = 0;
 
   for (let index = 0; index < 256; index += 1) {
-    const a = left.charCodeAt(index) || 0; const b = right.charCodeAt(index) || 0;
-    difference |= a ^ b;
-    if (index < left.length && !((a >= 48 && a <= 57) || (a >= 65 && a <= 90) || (a >= 97 && a <= 122) || a === 45 || a === 95)) invalid |= 1;
-    if (index < right.length && !((b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b === 45 || b === 95)) invalid |= 1;
+    const leftCodeUnit = left.charCodeAt(index) || 0;
+    const rightCodeUnit = right.charCodeAt(index) || 0;
+    difference |= leftCodeUnit ^ rightCodeUnit;
+
+    if (index < left.length) {
+      if (!isBase64UrlCodeUnit(leftCodeUnit)) {
+        invalid |= 1;
+      }
+    }
+
+    if (index < right.length) {
+      if (!isBase64UrlCodeUnit(rightCodeUnit)) {
+        invalid |= 1;
+      }
+    }
   }
 
-  return difference === 0 && invalid === 0;
+  if (difference !== 0) {
+    return false;
+  }
+
+  return invalid === 0;
 }
