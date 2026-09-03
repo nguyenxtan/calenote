@@ -24,12 +24,12 @@ export function base64UrlToBytes(value: string): Uint8Array | null {
 }
 
 export function constantTimeEqual(left: string, right: string): boolean {
+  const accepted = base64UrlPattern.test(left) && base64UrlPattern.test(right) && left.length >= 1 && right.length >= 1 && left.length <= 256 && right.length <= 256;
   let difference = left.length ^ right.length;
-  const length = Math.max(left.length, right.length);
 
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < 256; index += 1) {
     difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
   }
 
-  return difference === 0;
+  return accepted && difference === 0;
 }

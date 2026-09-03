@@ -52,4 +52,12 @@ describe("Keyring", () => {
     expect(keys.constantTimeEqual(secrets.headerSecret, secrets.headerSecret)).toBe(true);
     expect(keys.constantTimeEqual(secrets.headerSecret, `${secrets.headerSecret}x`)).toBe(false);
   });
+
+  it.each([
+    ["same", "same", true], ["same", "sane", false], ["same", "x", false],
+    ["same", "x".repeat(257), false], ["same", "săm", false],
+  ])("compares bounded webhook values without throwing", async (left, right, expected) => {
+    const keys = await createKeyring(TEST_MASTER_KEY);
+    expect(keys.constantTimeEqual(left, right)).toBe(expected);
+  });
 });

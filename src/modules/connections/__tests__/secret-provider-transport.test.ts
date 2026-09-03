@@ -8,6 +8,7 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderVerificationError } from "../provider-error";
+import { ProviderOperationError } from "../provider-error";
 import {
   createSuppressedProviderContext,
   executeProviderRequest,
@@ -19,6 +20,24 @@ describe("secret-aware provider transport", () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path: "/botredacted/getMe", operation: "getMe" }, fetcher)).resolves.toEqual({ statusCode: 200, body: '{"ok":true}' });
     expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/botredacted/getMe", expect.objectContaining({ method: "POST", redirect: "error", body: "{}", signal: expect.any(AbortSignal) }));
+  });
+
+  it.each(["@attacker.example/x", "//attacker.example/x", "https://attacker.example/x", "relative"]) ("rejects hostile or relative path %s before fetch", async (path) => {
+    const fetcher = vi.fn();
+    await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path, operation: "getMe" }, fetcher)).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("cancels a streamed response that exceeds 64 KiB", async () => {
+    let cancelled = false;
+    const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(65 * 1024)); }, cancel() { cancelled = true; } });
+    await expect(executeProviderRequest({ provider: "zalo", hostname: "bot-api.zaloplatforms.com", path: "/botx/getMe", operation: "getMe" }, async () => new Response(body))).rejects.toThrow();
+    expect(cancelled).toBe(true);
+  });
+
+  it("returns a safe quota retry delay and operational invalid-response category", async () => {
+    await expect(postSecretProviderJson({ provider: "telegram", hostname: "api.telegram.org", path: "/botx/sendMessage", operation: "sendMessage" }, async () => ({ statusCode: 429, body: JSON.stringify({ parameters: { retry_after: 23 }, description: "secret" }) }))).rejects.toEqual(new ProviderOperationError("QUOTA", 23));
+    await expect(postSecretProviderJson({ provider: "telegram", hostname: "api.telegram.org", path: "/botx/sendMessage", operation: "sendMessage" }, async () => ({ statusCode: 200, body: "{" }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
   });
 
   it("suppresses automatic HTTP tracing and exports only secret-free span metadata", async () => {

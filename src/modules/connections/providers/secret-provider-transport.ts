@@ -25,6 +25,19 @@ function operationFailure(input: ProviderRequest, statusCode: number): Error {
   return new ProviderOperationError(rejected ? "REJECTED_CREDENTIAL" : statusCode === 429 ? "QUOTA" : "FAILED");
 }
 
+function safeOperationFailure(input: ProviderRequest, response: RawProviderResponse): Error {
+  const error = operationFailure(input, response.statusCode);
+  if (!(error instanceof ProviderOperationError) || error.code !== "QUOTA") return error;
+  try {
+    const payload: unknown = JSON.parse(response.body);
+    const retryAfter = typeof payload === "object" && payload !== null && "parameters" in payload
+      && typeof payload.parameters === "object" && payload.parameters !== null && "retry_after" in payload.parameters
+      && typeof payload.parameters.retry_after === "number" && Number.isInteger(payload.parameters.retry_after)
+      && payload.parameters.retry_after >= 1 && payload.parameters.retry_after <= 86_400 ? payload.parameters.retry_after : null;
+    return new ProviderOperationError("QUOTA", retryAfter);
+  } catch { return error; }
+}
+
 export interface RawProviderResponse {
   statusCode: number;
   body: string;
@@ -43,14 +56,18 @@ export async function executeProviderRequest(
   fetcher: typeof fetch = fetch,
 ): Promise<RawProviderResponse> {
   if (input.hostname !== allowedHostname[input.provider]) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
-  const response = await fetcher(`https://${input.hostname}${input.path}`, {
+  if (!input.path.startsWith("/")) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+  const base = new URL(`https://${input.hostname}`);
+  const url = new URL(input.path, base);
+  if (url.protocol !== "https:" || url.hostname !== input.hostname || url.port !== "" || url.origin !== base.origin) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+  const response = await fetcher(url.toString(), {
     method: "POST", redirect: "error", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(input.body ?? {}),
   });
   const reader = response.body?.getReader();
   if (!reader) return { statusCode: response.status, body: "" };
   const chunks: Uint8Array[] = []; let bytes = 0;
-  try { for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > MAX_RESPONSE_BYTES) throw new Error("response-limit"); chunks.push(part.value); } }
+  try { for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > MAX_RESPONSE_BYTES) { await reader.cancel(); throw new Error("response-limit"); } chunks.push(part.value); } }
   finally { reader.releaseLock(); }
   const all = new Uint8Array(bytes); let offset = 0; for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.byteLength; }
   return { statusCode: response.status, body: new TextDecoder().decode(all) };
@@ -89,7 +106,7 @@ export async function postSecretProviderJson(
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw operationFailure(input, response.statusCode);
+          throw safeOperationFailure(input, response);
         }
 
         try {
@@ -97,7 +114,9 @@ export async function postSecretProviderJson(
           span.setStatus({ code: SpanStatusCode.OK });
           return payload;
         } catch {
-          throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
+          throw input.operation === "getMe"
+            ? new ProviderVerificationError("INVALID_PROVIDER_RESPONSE")
+            : new ProviderOperationError("INVALID_RESPONSE");
         }
       } catch (error) {
         span.setStatus({
