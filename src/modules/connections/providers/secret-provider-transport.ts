@@ -103,7 +103,9 @@ export async function postSecretProviderJson(
         span.setAttribute("http.response.status_code", response.statusCode);
 
         if (new TextEncoder().encode(response.body).byteLength > MAX_RESPONSE_BYTES) {
-          throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+          throw input.operation === "getMe"
+            ? new ProviderVerificationError("PROVIDER_UNAVAILABLE")
+            : new ProviderOperationError("INVALID_RESPONSE");
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
