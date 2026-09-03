@@ -12,19 +12,22 @@ export function requireSameOrigin(request: Request, appOrigin: string): void {
   const origin = request.headers.get("origin");
   if (!origin || origin === "null" || origin.includes(",")) throw new SameOriginError();
 
-  let parsed: URL;
+  let parsedOrigin: string;
+  let parsedAppOrigin: string;
   try {
-    parsed = new URL(origin);
+    parsedOrigin = new URL(origin).origin;
+    parsedAppOrigin = new URL(appOrigin).origin;
   } catch {
     throw new SameOriginError();
   }
-  const isBareOrigin =
-    parsed.username === "" &&
-    parsed.password === "" &&
-    parsed.pathname === "/" &&
-    parsed.search === "" &&
-    parsed.hash === "";
-  if (!isBareOrigin || parsed.origin !== appOrigin) throw new SameOriginError();
+  if (
+    parsedOrigin === "null" ||
+    origin !== parsedOrigin ||
+    appOrigin !== parsedAppOrigin ||
+    parsedOrigin !== parsedAppOrigin
+  ) {
+    throw new SameOriginError();
+  }
 }
 
 const serializationFallback = JSON.stringify({

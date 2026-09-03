@@ -80,7 +80,7 @@ CREATE TABLE chat_identities (
 CREATE TABLE login_codes (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  digest TEXT NOT NULL UNIQUE,
+  digest TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   consumed_at INTEGER,
@@ -166,6 +166,7 @@ CREATE TABLE rate_limits (
 
 CREATE INDEX idx_sessions_digest ON sessions(digest);
 CREATE INDEX idx_connect_codes_active_digest ON connect_codes(digest) WHERE consumed_at IS NULL;
-CREATE INDEX idx_login_codes_active_digest ON login_codes(digest) WHERE consumed_at IS NULL;
+CREATE INDEX idx_login_codes_active_user_digest ON login_codes(user_id, digest, created_at DESC) WHERE consumed_at IS NULL;
+CREATE INDEX idx_login_codes_active_user_created ON login_codes(user_id, created_at DESC) WHERE consumed_at IS NULL;
 CREATE INDEX idx_inbound_updates_pending ON inbound_updates(received_at) WHERE state = 'PENDING';
 CREATE INDEX idx_reminders_due ON reminders(scheduled_at) WHERE status = 'PENDING';

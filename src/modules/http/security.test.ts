@@ -121,6 +121,9 @@ describe("browser request security", () => {
     { label: "missing", headers: {} },
     { label: "null", headers: { origin: "null" } },
     { label: "malformed", headers: { origin: "://" } },
+    { label: "slash-bearing", headers: { origin: "https://calenote.iconiclogs.com/" } },
+    { label: "dot-normalized", headers: { origin: "https://calenote.iconiclogs.com/." } },
+    { label: "parent-normalized", headers: { origin: "https://calenote.iconiclogs.com/a/.." } },
     { label: "path-bearing", headers: { origin: "https://calenote.iconiclogs.com/not-an-origin" } },
     { label: "multiple", headers: { origin: "https://calenote.iconiclogs.com, https://evil.example" } },
     { label: "mismatched", headers: { origin: "https://evil.example" } },
@@ -135,6 +138,20 @@ describe("browser request security", () => {
     });
 
     expect(() => requireSameOrigin(request, "https://calenote.iconiclogs.com")).toThrowError(
+      expect.objectContaining({ code: "ORIGIN_REJECTED", status: 403 } satisfies Partial<SameOriginError>),
+    );
+  });
+
+  it.each([
+    "https://calenote.iconiclogs.com/",
+    "https://calenote.iconiclogs.com/.",
+    "https://calenote.iconiclogs.com/a/..",
+  ])("rejects a non-canonical APP_ORIGIN value %s", (appOrigin) => {
+    const request = new Request("https://calenote.iconiclogs.com/api/example", {
+      headers: { origin: "https://calenote.iconiclogs.com" },
+    });
+
+    expect(() => requireSameOrigin(request, appOrigin)).toThrowError(
       expect.objectContaining({ code: "ORIGIN_REJECTED", status: 403 } satisfies Partial<SameOriginError>),
     );
   });

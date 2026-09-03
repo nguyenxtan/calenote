@@ -3,22 +3,45 @@ import { consumeRateLimit, type RateLimitStore } from "./service";
 
 describe("fixed-window rate limits", () => {
   it("passes only a pre-HMACed subject digest to the store and returns its reset", async () => {
-    const seen: string[] = [];
+    const seen: Array<{ subjectDigest: string; bucket: string }> = [];
     const store: RateLimitStore = {
       consume: async (input) => {
-        seen.push(input.subjectDigest);
-        return { allowed: true, resetAt: 1_700_000_060_000 };
+        seen.push({ subjectDigest: input.subjectDigest, bucket: input.bucket });
+        return { allowed: true, resetAt: 120_000 };
       },
     };
     const subjectDigest = "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g";
 
     await expect(
       consumeRateLimit(
-        { subjectDigest, bucket: "login-request", limit: 3, windowMs: 60_000 },
-        { store, now: () => 1_700_000_000_000 },
+        { subjectDigest, scope: "login-request", limit: 3, windowMs: 60_000 },
+        { store, now: () => 119_999 },
       ),
-    ).resolves.toEqual({ allowed: true, resetAt: 1_700_000_060_000 });
-    expect(seen).toEqual([subjectDigest]);
+    ).resolves.toEqual({ allowed: true, resetAt: 120_000 });
+    expect(seen).toEqual([{ subjectDigest, bucket: "login-request:1" }]);
+  });
+
+  it.each([
+    { now: 59_999, expectedBucket: "verify:0", expectedResetAt: 60_000 },
+    { now: 60_000, expectedBucket: "verify:1", expectedResetAt: 120_000 },
+  ])("aligns the storage bucket and reset at $now", async ({ now, expectedBucket, expectedResetAt }) => {
+    const subjectDigest = "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g";
+    const store: RateLimitStore = {
+      consume: async (input) => ({ allowed: true, resetAt: input.resetAt }),
+    };
+    let bucket = "";
+    store.consume = async (input) => {
+      bucket = input.bucket;
+      return { allowed: true, resetAt: input.resetAt };
+    };
+
+    await expect(
+      consumeRateLimit(
+        { subjectDigest, scope: "verify", limit: 2, windowMs: 60_000 },
+        { store, now: () => now },
+      ),
+    ).resolves.toEqual({ allowed: true, resetAt: expectedResetAt });
+    expect(bucket).toBe(expectedBucket);
   });
 
   it.each(["raw@example.com", "", "not a digest"])("rejects a raw or malformed subject %s", async (subjectDigest) => {
@@ -28,9 +51,22 @@ describe("fixed-window rate limits", () => {
 
     await expect(
       consumeRateLimit(
-        { subjectDigest, bucket: "login-request", limit: 3, windowMs: 60_000 },
+        { subjectDigest, scope: "login-request", limit: 3, windowMs: 60_000 },
         { store, now: () => 1_700_000_000_000 },
       ),
     ).rejects.toThrow("pre-HMACed");
+  });
+
+  it("rejects a canonical base64url value that is not exactly 32 bytes", async () => {
+    const store: RateLimitStore = {
+      consume: async () => ({ allowed: true, resetAt: 60_000 }),
+    };
+
+    await expect(
+      consumeRateLimit(
+        { subjectDigest: "A".repeat(44), scope: "verify", limit: 2, windowMs: 60_000 },
+        { store, now: () => 1 },
+      ),
+    ).rejects.toThrow("32-byte");
   });
 });

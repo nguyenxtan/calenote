@@ -90,6 +90,22 @@ describe("sessions", () => {
     });
   });
 
+  it.each([0, 31, 33])("rejects a random source returning %i bearer bytes", async (length) => {
+    let digested = false;
+    await expect(
+      prepareSession("user-1", {
+        keyring: {
+          digestSession: async () => {
+            digested = true;
+            return "not-reached";
+          },
+        },
+        randomBytes: () => new Uint8Array(length),
+      }),
+    ).rejects.toThrow("exactly 32 bytes");
+    expect(digested).toBe(false);
+  });
+
   it.each([
     {
       label: "expired",

@@ -26,9 +26,16 @@ class MemoryCodeStore implements OneTimeCodeStore {
     this.records.push({ ...record });
   }
 
-  async consumeConnect(digest: string, now: number): Promise<CodeConsumeOutcome> {
+  async consumeConnect(
+    connectionId: string,
+    digest: string,
+    now: number,
+  ): Promise<CodeConsumeOutcome> {
     const record = this.records.find(
-      (candidate): candidate is ConnectCodeRecord => candidate.kind === "connect" && candidate.digest === digest,
+      (candidate): candidate is ConnectCodeRecord =>
+        candidate.kind === "connect" &&
+        candidate.connectionId === connectionId &&
+        candidate.digest === digest,
     );
     if (!record) return "invalid";
     if (record.consumedAt !== null) return "consumed";
@@ -98,22 +105,65 @@ describe("one-time codes", () => {
 
     await expect(
       consumeOneTimeCodeDetailed(
-        { kind: "connect", code: first.code },
+        { kind: "connect", connectionId: "connection-1", code: first.code },
         { store, keyring, now: () => 1_700_000_000_200 },
       ),
     ).resolves.toBe("consumed");
     await expect(
       consumeOneTimeCode(
-        { kind: "connect", code: replacement.code },
+        { kind: "connect", connectionId: "connection-1", code: replacement.code },
         { store, keyring, now: () => 1_700_000_000_200 },
       ),
     ).resolves.toEqual({ status: "accepted" });
     await expect(
       consumeOneTimeCode(
-        { kind: "connect", code: replacement.code },
+        { kind: "connect", connectionId: "connection-1", code: replacement.code },
         { store, keyring, now: () => 1_700_000_000_201 },
       ),
     ).resolves.toEqual({ status: "invalid" });
+  });
+
+  it("does not consume a connect code through a different connection", async () => {
+    const store = new MemoryCodeStore();
+    const issued = await issueOneTimeCode(
+      { kind: "connect", userId: "user-1", connectionId: "connection-1" },
+      { store, keyring, now: () => 1_700_000_000_000, randomBytes: incrementingRandom() },
+    );
+
+    await expect(
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-2", code: issued.code },
+        { store, keyring, now: () => 1_700_000_000_100 },
+      ),
+    ).resolves.toEqual({ status: "invalid" });
+    await expect(
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-1", code: issued.code },
+        { store, keyring, now: () => 1_700_000_000_101 },
+      ),
+    ).resolves.toEqual({ status: "accepted" });
+  });
+
+  it("allows only one concurrent connect-code consumer", async () => {
+    const store = new MemoryCodeStore();
+    const issued = await issueOneTimeCode(
+      { kind: "connect", userId: "user-1", connectionId: "connection-1" },
+      { store, keyring, now: () => 1_700_000_000_000, randomBytes: incrementingRandom() },
+    );
+
+    const results = await Promise.all([
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-1", code: issued.code },
+        { store, keyring, now: () => 1_700_000_000_100 },
+      ),
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-1", code: issued.code },
+        { store, keyring, now: () => 1_700_000_000_100 },
+      ),
+    ]);
+
+    expect(results).toContainEqual({ status: "accepted" });
+    expect(results).toContainEqual({ status: "invalid" });
   });
 
   it("issues an exactly six-digit login code using rejection sampling", async () => {

@@ -38,7 +38,7 @@ export type OneTimeCodeRecord = ConnectCodeRecord | LoginCodeRecord;
 
 export interface OneTimeCodeStore {
   issue(record: OneTimeCodeRecord, now: number): Promise<void>;
-  consumeConnect(digest: string, now: number): Promise<CodeConsumeOutcome>;
+  consumeConnect(connectionId: string, digest: string, now: number): Promise<CodeConsumeOutcome>;
   consumeLogin(
     userId: string,
     digest: string,
@@ -52,7 +52,7 @@ export type IssueOneTimeCodeInput =
   | { kind: "login"; userId: string };
 
 export type ConsumeOneTimeCodeInput =
-  | { kind: "connect"; code: string }
+  | { kind: "connect"; connectionId: string; code: string }
   | { kind: "login"; userId: string; code: string };
 
 export interface OneTimeCodeDependencies {
@@ -129,7 +129,7 @@ export async function consumeOneTimeCodeDetailed(
   const digest = await dependencies.keyring.digestCode(input.code);
   const now = (dependencies.now ?? systemClock)();
   return input.kind === "connect"
-    ? dependencies.store.consumeConnect(digest, now)
+    ? dependencies.store.consumeConnect(input.connectionId, digest, now)
     : dependencies.store.consumeLogin(input.userId, digest, now, LOGIN_CODE_MAX_ATTEMPTS);
 }
 

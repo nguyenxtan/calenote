@@ -121,7 +121,11 @@ export async function prepareSession(
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const createdAt = now();
   const expiresAt = createdAt + SESSION_TTL_MS;
-  const bearer = bytesToBase64Url(randomBytes(SESSION_BEARER_BYTES));
+  const bearerBytes = randomBytes(SESSION_BEARER_BYTES);
+  if (bearerBytes.byteLength !== SESSION_BEARER_BYTES) {
+    throw new TypeError("Session random source must return exactly 32 bytes");
+  }
+  const bearer = bytesToBase64Url(bearerBytes);
   const digest = await dependencies.keyring.digestSession(bearer);
   const sessionId = randomOpaqueId(randomBytes);
   const record: SessionRecord = {
