@@ -51,9 +51,22 @@ function guardedRecoveryConstraint(error: unknown): boolean {
 }
 
 function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
+  if (
+    value instanceof ArrayBuffer
+    || (typeof value === "object"
+      && value !== null
+      && Object.prototype.toString.call(value) === "[object ArrayBuffer]")
+  ) {
+    return Uint8Array.from(new Uint8Array(value as ArrayBuffer)).buffer;
+  }
   if (ArrayBuffer.isView(value)) {
     return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).buffer;
+  }
+  if (
+    Array.isArray(value)
+    && value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+  ) {
+    return Uint8Array.from(value).buffer;
   }
   throw new TypeError("Malformed encrypted credential");
 }
@@ -443,6 +456,12 @@ export class D1OnboardingStore implements OnboardingStore {
     if (input.revokeExistingSessions) {
       statements.push(
         this.database
+          .prepare(
+            `UPDATE login_codes SET consumed_at = ?, updated_at = ?
+             WHERE user_id = ? AND consumed_at IS NULL`,
+          )
+          .bind(input.completedAt, input.completedAt, input.connection.userId),
+        this.database
           .prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
           .bind(input.completedAt, input.connection.userId),
       );
@@ -551,6 +570,12 @@ export class D1OnboardingStore implements OnboardingStore {
     ];
     if (input.revokeExistingSessions) {
       statements.push(
+        this.database
+          .prepare(
+            `UPDATE login_codes SET consumed_at = ?, updated_at = ?
+             WHERE user_id = ? AND consumed_at IS NULL`,
+          )
+          .bind(input.failedAt, input.failedAt, input.connection.userId),
         this.database
           .prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
           .bind(input.failedAt, input.connection.userId),

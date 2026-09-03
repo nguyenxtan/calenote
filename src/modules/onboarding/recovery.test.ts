@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  D1LoginCodeStore,
+  InvalidLoginCodeError,
+  requestLoginCode,
+  verifyLoginCode,
+  type LoginCodeStore,
+} from "@/modules/auth/login-service";
 import type { BotProfile } from "@/modules/connections/contracts";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
@@ -89,6 +96,35 @@ async function setup(
   };
 }
 
+function sequencedRandomBytes(initial: number): (length: number) => Uint8Array {
+  let value = initial;
+  return (length) => new Uint8Array(length).fill(++value);
+}
+
+async function issueLoginProof(fixture: Awaited<ReturnType<typeof setup>>): Promise<{
+  code: string;
+  id: string;
+  store: D1LoginCodeStore;
+}> {
+  const store = new D1LoginCodeStore(fixture.db as unknown as D1Database);
+  await requestLoginCode("owner@example.com", {
+    store,
+    keyring: fixture.keyring,
+    enqueue: async () => undefined,
+    now: () => NOW - 1,
+    randomBytes: sequencedRandomBytes(32),
+  });
+  const challenge = await store.findVerifiable("owner@example.com", NOW);
+  if (!challenge) throw new Error("Expected a real login challenge");
+  const code = await fixture.keyring.decryptSensitive(
+    "login-code",
+    challenge.id,
+    challenge.codeKeyVersion,
+    challenge.encryptedCode,
+  );
+  return { code, id: challenge.id, store };
+}
+
 const recoveryInput = {
   displayName: "Replacement ignored",
   email: " OWNER@example.com ",
@@ -139,6 +175,79 @@ describe("public exact-proof onboarding recovery on migrated D1", () => {
     expect(fixture.db.sqlite.prepare(
       "SELECT COUNT(*) AS count FROM sessions WHERE revoked_at IS NULL",
     ).get()).toEqual({ count: 1 });
+  });
+
+  it("consumes a pre-recovery SENDING login proof so it cannot mint a second session", async () => {
+    const fixture = await setup("ACTIVE_BOUND");
+    const login = await issueLoginProof(fixture);
+    fixture.db.sqlite.prepare(
+      `UPDATE login_codes
+       SET delivery_status = 'SENDING', delivery_attempt_count = 1,
+           send_started_at = ?, transition_marker = 'delivery-owner'
+       WHERE id = ?`,
+    ).run(NOW - 1, login.id);
+
+    await expect(onboard(recoveryInput, fixture.dependencies)).resolves.toMatchObject({
+      bot: { state: "ACTIVE_BOUND" },
+    });
+
+    await expect(verifyLoginCode("owner@example.com", login.code, {
+      store: login.store,
+      keyring: fixture.keyring,
+      now: () => NOW + 1,
+      randomBytes: sequencedRandomBytes(64),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
+    expect(fixture.db.sqlite.prepare(
+      "SELECT delivery_status, consumed_at, transition_marker FROM login_codes WHERE id = ?",
+    ).get(login.id)).toEqual({
+      delivery_status: "SENDING",
+      consumed_at: NOW,
+      transition_marker: "delivery-owner",
+    });
+    expect(fixture.db.sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM sessions WHERE user_id = 'user-1' AND revoked_at IS NULL",
+    ).get()).toEqual({ count: 1 });
+  });
+
+  it("lets public recovery defeat a verification paused after reading the old proof", async () => {
+    const fixture = await setup("ACTIVE_BOUND");
+    const login = await issueLoginProof(fixture);
+    let resumeVerification: (() => void) | undefined;
+    const verificationGate = new Promise<void>((resolve) => { resumeVerification = resolve; });
+    let verificationEntered: (() => void) | undefined;
+    const verificationPaused = new Promise<void>((resolve) => { verificationEntered = resolve; });
+    const delayedStore = new Proxy(login.store, {
+      get(target, property, receiver) {
+        if (property === "commitCorrectVerification") {
+          return async (...args: Parameters<LoginCodeStore["commitCorrectVerification"]>) => {
+            verificationEntered?.();
+            await verificationGate;
+            return target.commitCorrectVerification(...args);
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as LoginCodeStore;
+    const verification = verifyLoginCode("owner@example.com", login.code, {
+      store: delayedStore,
+      keyring: fixture.keyring,
+      now: () => NOW,
+      randomBytes: sequencedRandomBytes(64),
+    });
+    await verificationPaused;
+
+    const recovery = await onboard(recoveryInput, fixture.dependencies);
+    resumeVerification?.();
+
+    expect(recovery.bot.state).toBe("ACTIVE_BOUND");
+    await expect(verification).rejects.toBeInstanceOf(InvalidLoginCodeError);
+    expect(fixture.db.sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM sessions WHERE user_id = 'user-1' AND revoked_at IS NULL",
+    ).get()).toEqual({ count: 1 });
+    expect(fixture.db.sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM login_codes WHERE user_id = 'user-1' AND consumed_at IS NULL",
+    ).get()).toEqual({ count: 0 });
   });
 
   it("claims stale activation with a new marker and fences the old owner", async () => {
@@ -245,7 +354,11 @@ describe("public exact-proof onboarding recovery on migrated D1", () => {
   });
 
   it("persists a typed provider failure before returning replacement recovery access", async () => {
-    const fixture = await setup("WEBHOOK_FAILED");
+    const fixture = await setup("ACTIVE_BOUND");
+    const login = await issueLoginProof(fixture);
+    fixture.db.sqlite.prepare(
+      "UPDATE bot_connections SET state = 'WEBHOOK_FAILED' WHERE id = 'connection-1'",
+    ).run();
     fixture.registerWebhook.mockRejectedValueOnce(new ProviderOperationError("FAILED"));
 
     const result = await onboard(recoveryInput, fixture.dependencies);
@@ -262,6 +375,15 @@ describe("public exact-proof onboarding recovery on migrated D1", () => {
     expect(fixture.db.sqlite.prepare(
       "SELECT COUNT(*) AS count FROM sessions WHERE revoked_at IS NULL",
     ).get()).toEqual({ count: 1 });
+    expect(fixture.db.sqlite.prepare(
+      "SELECT consumed_at FROM login_codes WHERE id = ?",
+    ).get(login.id)).toEqual({ consumed_at: NOW });
+    await expect(verifyLoginCode("owner@example.com", login.code, {
+      store: login.store,
+      keyring: fixture.keyring,
+      now: () => NOW + 1,
+      randomBytes: sequencedRandomBytes(64),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
   });
 
   it("restores a suspended exact-proof connection to ACTIVE_BOUND when identity remains", async () => {

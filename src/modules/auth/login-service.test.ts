@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
+import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import {
   SqliteD1Database,
@@ -12,6 +13,7 @@ import {
   redriveLoginCodes,
   requestLoginCode,
   verifyLoginCode,
+  type LoginCodeStore,
 } from "./login-service";
 
 const MASTER_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -745,6 +747,108 @@ describe("migrated-D1 login delivery ownership", () => {
 });
 
 describe("migrated-D1 login verification", () => {
+  it("uses the same coarse crypto and conditional-write sequence for unknown and real-wrong proof", async () => {
+    const account = await setupBoundAccount();
+    await issue(account);
+    const login = row(account.db);
+
+    function observedDependencies() {
+      const events: string[] = [];
+      const failedIds: string[] = [];
+      const store = new Proxy(account.store, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, receiver) as unknown;
+          if (typeof value !== "function") return value;
+          return (...args: unknown[]) => {
+            if (property === "findVerifiable" || property === "commitWrongVerification") {
+              events.push(String(property));
+            }
+            if (property === "commitWrongVerification") {
+              failedIds.push((args[0] as { id: string }).id);
+            }
+            return Reflect.apply(value, target, args) as unknown;
+          };
+        },
+      }) as LoginCodeStore;
+      const keyring = new Proxy(account.keyring, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, receiver) as unknown;
+          if (typeof value !== "function") return value;
+          return (...args: unknown[]) => {
+            if (
+              property === "encryptSensitive"
+              || property === "digestSession"
+              || property === "decryptSensitive"
+              || property === "constantTimeEqual"
+            ) {
+              events.push(String(property));
+            }
+            return Reflect.apply(value, target, args) as unknown;
+          };
+        },
+      }) as Keyring;
+      return { events, failedIds, store, keyring };
+    }
+
+    const wrong = observedDependencies();
+    await expect(verifyLoginCode("owner@example.com", "999999", {
+      store: wrong.store,
+      keyring: wrong.keyring,
+      now: () => NOW + 1,
+      randomBytes: deterministicRandomBytes(),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
+
+    const unknown = observedDependencies();
+    await expect(verifyLoginCode("missing@example.com", "999999", {
+      store: unknown.store,
+      keyring: unknown.keyring,
+      now: () => NOW + 1,
+      randomBytes: deterministicRandomBytes(),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
+
+    const expectedSequence = [
+      "findVerifiable",
+      "encryptSensitive",
+      "digestSession",
+      "decryptSensitive",
+      "constantTimeEqual",
+      "commitWrongVerification",
+    ];
+    expect(wrong.events).toEqual(expectedSequence);
+    expect(unknown.events).toEqual(expectedSequence);
+    expect(wrong.failedIds).toEqual([login.id]);
+    expect(unknown.failedIds).toHaveLength(1);
+    expect(unknown.failedIds[0]).not.toBe(login.id);
+    expect(unknown.failedIds[0]).toHaveLength(22);
+    expect(base64UrlToBytes(unknown.failedIds[0])?.byteLength).toBe(16);
+    expect(account.db.sqlite.prepare(
+      "SELECT attempt_count FROM login_codes WHERE id = ?",
+    ).get(login.id)).toEqual({ attempt_count: 1 });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM sessions").get())
+      .toEqual({ count: 0 });
+  });
+
+  it("fails closed when corrupt stored ciphertext matches the generated dummy proof", async () => {
+    const account = await setupBoundAccount();
+    await issue(account);
+    const login = row(account.db);
+    account.db.sqlite.prepare(
+      "UPDATE login_codes SET code_ciphertext = X'00' WHERE id = ?",
+    ).run(login.id);
+
+    await expect(verifyLoginCode("owner@example.com", "333333", {
+      store: account.store,
+      keyring: account.keyring,
+      now: () => NOW + 1,
+      randomBytes: deterministicRandomBytes(),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
+    expect(account.db.sqlite.prepare(
+      "SELECT attempt_count, consumed_at FROM login_codes WHERE id = ?",
+    ).get(login.id)).toEqual({ attempt_count: 1, consumed_at: null });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM sessions").get())
+      .toEqual({ count: 0 });
+  });
+
   it.each(["PENDING", "UNCERTAIN"])("accepts exact proof from %s and issues one secure digest-only session", async (deliveryStatus) => {
     const account = await setupBoundAccount();
     await issue(account);

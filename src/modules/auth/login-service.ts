@@ -213,11 +213,24 @@ export interface LoginCodeStore {
 }
 
 function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
+  if (
+    value instanceof ArrayBuffer
+    || (typeof value === "object"
+      && value !== null
+      && Object.prototype.toString.call(value) === "[object ArrayBuffer]")
+  ) {
+    return Uint8Array.from(new Uint8Array(value as ArrayBuffer)).buffer;
+  }
   if (ArrayBuffer.isView(value)) {
     return Uint8Array.from(
       new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
     ).buffer;
+  }
+  if (
+    Array.isArray(value)
+    && value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+  ) {
+    return Uint8Array.from(value).buffer;
   }
   throw new TypeError("Malformed encrypted login value");
 }
@@ -1128,7 +1141,10 @@ export async function requestLoginCode(
 
 export interface VerifyLoginCodeDependencies {
   store: LoginCodeStore;
-  keyring: Pick<Keyring, "decryptSensitive" | "digestSession" | "constantTimeEqual">;
+  keyring: Pick<
+    Keyring,
+    "encryptSensitive" | "decryptSensitive" | "digestSession" | "constantTimeEqual"
+  >;
   now?: Clock;
   randomBytes?: RandomBytes;
 }
@@ -1142,26 +1158,43 @@ export async function verifyLoginCode(
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const verificationTime = now();
   const code = await dependencies.store.findVerifiable(email, verificationTime);
-  if (!code) throw new InvalidLoginCodeError();
-
-  let expected: string;
-  try {
-    expected = await dependencies.keyring.decryptSensitive(
+  const dummyUserId = randomOpaqueId(randomBytes);
+  const dummyId = randomOpaqueId(randomBytes);
+  const dummyCode = generateLoginCode(randomBytes);
+  const dummy: VerifiableLoginCode = {
+    id: dummyId,
+    userId: dummyUserId,
+    encryptedCode: await dependencies.keyring.encryptSensitive(
       "login-code",
-      code.id,
-      code.codeKeyVersion,
-      code.encryptedCode,
-    );
-  } catch {
-    throw new InvalidLoginCodeError();
-  }
-  const session = await prepareSession(code.userId, {
+      dummyId,
+      LOGIN_CODE_KEY_VERSION,
+      dummyCode,
+    ),
+    codeKeyVersion: LOGIN_CODE_KEY_VERSION,
+  };
+  const challenge = code ?? dummy;
+  const session = await prepareSession(challenge.userId, {
     keyring: dependencies.keyring,
     now: () => verificationTime,
     randomBytes,
   });
-  if (!dependencies.keyring.constantTimeEqual(expected, suppliedCode)) {
-    await dependencies.store.commitWrongVerification(code, verificationTime);
+
+  let expected: string;
+  let decrypted = true;
+  try {
+    expected = await dependencies.keyring.decryptSensitive(
+      "login-code",
+      challenge.id,
+      challenge.codeKeyVersion,
+      challenge.encryptedCode,
+    );
+  } catch {
+    decrypted = false;
+    expected = dummyCode;
+  }
+  const correct = dependencies.keyring.constantTimeEqual(expected, suppliedCode) && decrypted;
+  if (!code || !correct) {
+    await dependencies.store.commitWrongVerification(challenge, verificationTime);
     throw new InvalidLoginCodeError();
   }
 
