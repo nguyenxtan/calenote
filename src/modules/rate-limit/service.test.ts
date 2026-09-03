@@ -18,13 +18,13 @@ describe("fixed-window rate limits", () => {
         { store, now: () => 119_999 },
       ),
     ).resolves.toEqual({ allowed: true, resetAt: 120_000 });
-    expect(seen).toEqual([{ subjectDigest, bucket: "login-request:1" }]);
+    expect(seen).toEqual([{ subjectDigest, bucket: "login-request" }]);
   });
 
   it.each([
-    { now: 59_999, expectedBucket: "verify:0", expectedResetAt: 60_000 },
-    { now: 60_000, expectedBucket: "verify:1", expectedResetAt: 120_000 },
-  ])("aligns the storage bucket and reset at $now", async ({ now, expectedBucket, expectedResetAt }) => {
+    { now: 59_999, expectedResetAt: 60_000 },
+    { now: 60_000, expectedResetAt: 120_000 },
+  ])("keeps a stable storage bucket and aligns reset at $now", async ({ now, expectedResetAt }) => {
     const subjectDigest = "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g";
     const store: RateLimitStore = {
       consume: async (input) => ({ allowed: true, resetAt: input.resetAt }),
@@ -41,7 +41,29 @@ describe("fixed-window rate limits", () => {
         { store, now: () => now },
       ),
     ).resolves.toEqual({ allowed: true, resetAt: expectedResetAt });
-    expect(bucket).toBe(expectedBucket);
+    expect(bucket).toBe("verify");
+  });
+
+  it("keeps independent scopes on independent stable storage keys", async () => {
+    const subjectDigest = "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g";
+    const buckets: string[] = [];
+    const store: RateLimitStore = {
+      consume: async (input) => {
+        buckets.push(input.bucket);
+        return { allowed: true, resetAt: input.resetAt };
+      },
+    };
+
+    await consumeRateLimit(
+      { subjectDigest, scope: "login-request", limit: 2, windowMs: 60_000 },
+      { store, now: () => 59_999 },
+    );
+    await consumeRateLimit(
+      { subjectDigest, scope: "login-verify", limit: 2, windowMs: 60_000 },
+      { store, now: () => 60_000 },
+    );
+
+    expect(buckets).toEqual(["login-request", "login-verify"]);
   });
 
   it.each(["raw@example.com", "", "not a digest"])("rejects a raw or malformed subject %s", async (subjectDigest) => {

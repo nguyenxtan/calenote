@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ConnectCodeRecord, LoginCodeRecord } from "@/modules/auth/codes";
+import { consumeRateLimit } from "@/modules/rate-limit/service";
 import { D1OneTimeCodeStore } from "./code-store";
+import { D1RateLimitStore } from "./rate-limit-store";
 
 class SqliteStatement {
   private values: SQLInputValue[] = [];
@@ -158,5 +160,41 @@ describe("D1 one-time code adapter", () => {
     ]);
     expect(outcomes).toContain("accepted");
     expect(outcomes).toContain("consumed");
+  });
+});
+
+describe("D1 rate-limit adapter", () => {
+  it("reuses one row across aligned windows and keeps independent scopes separate", async () => {
+    const database = migratedDatabase();
+    const store = new D1RateLimitStore(database as unknown as D1Database);
+    const subjectDigest = "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g";
+    const input = { subjectDigest, scope: "verify", limit: 1, windowMs: 60_000 };
+    const at = (now: number) => consumeRateLimit(input, { store, now: () => now });
+
+    await expect(at(59_999)).resolves.toEqual({ allowed: true, resetAt: 60_000 });
+    await expect(at(59_999)).resolves.toEqual({ allowed: false, resetAt: 60_000 });
+    await expect(at(60_000)).resolves.toEqual({ allowed: true, resetAt: 120_000 });
+    for (let window = 2; window < 12; window += 1) {
+      await expect(at(window * 60_000)).resolves.toEqual({
+        allowed: true,
+        resetAt: (window + 1) * 60_000,
+      });
+    }
+
+    const stableRows = database.sqlite.prepare(
+      "SELECT bucket, count, expires_at FROM rate_limits WHERE subject_digest = ?",
+    ).all(subjectDigest) as Array<{ bucket: string; count: number; expires_at: number }>;
+    expect(stableRows).toEqual([{ bucket: "verify", count: 1, expires_at: 720_000 }]);
+
+    await expect(
+      consumeRateLimit(
+        { subjectDigest, scope: "request", limit: 1, windowMs: 60_000 },
+        { store, now: () => 660_000 },
+      ),
+    ).resolves.toEqual({ allowed: true, resetAt: 720_000 });
+    const scopes = database.sqlite.prepare(
+      "SELECT bucket FROM rate_limits WHERE subject_digest = ? ORDER BY bucket",
+    ).all(subjectDigest) as Array<{ bucket: string }>;
+    expect(scopes).toEqual([{ bucket: "request" }, { bucket: "verify" }]);
   });
 });

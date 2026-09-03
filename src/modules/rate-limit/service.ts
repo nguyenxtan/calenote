@@ -49,7 +49,7 @@ export async function consumeRateLimit(
   if (!Number.isSafeInteger(resetAt)) throw new TypeError("rate-limit reset is out of range");
   return dependencies.store.consume({
     subjectDigest: input.subjectDigest,
-    bucket: `${input.scope}:${window}`,
+    bucket: input.scope,
     limit: input.limit,
     now,
     resetAt,
