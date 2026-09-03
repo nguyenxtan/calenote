@@ -95,7 +95,7 @@ describe("OnboardingWizard", () => {
 
     expect(screen.getByRole("heading", { name: "Bot đã được xác minh" })).toBeInTheDocument();
     expect(screen.getByText("Webhook chưa bật")).toBeInTheDocument();
-    expect(screen.getByText("/connect ••••••••")).toBeInTheDocument();
+    expect(screen.getByText("/connect <mã-một-lần>")).toBeInTheDocument();
   });
 
   it("shows a safe recovery message when verification fails", async () => {

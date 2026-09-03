@@ -8,10 +8,11 @@ const MAX_BODY_BYTES = 2_048;
 export async function handleOnboarding(
   request: Request,
   appOrigin: string,
-  operations: WorkerOperations,
+  createOperations: () => Promise<WorkerOperations>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   const input = parseOnboardingInput(await readBoundedJson(request, MAX_BODY_BYTES));
+  const operations = await createOperations();
   const subject = request.headers.get("CF-Connecting-IP") ?? "anonymous";
   const subjectDigest = await operations.digestRateLimitSubject(
     `rate-limit:onboarding:${input.provider}:${subject}`,

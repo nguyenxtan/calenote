@@ -23,6 +23,10 @@ function uniqueConstraint(error: unknown): boolean {
   return error instanceof Error && /\bUNIQUE constraint failed\b/iu.test(error.message);
 }
 
+function guardedConnectConstraint(error: unknown): boolean {
+  return error instanceof Error && /NOT NULL constraint failed:\s*connect_codes\.connection_id\b/iu.test(error.message);
+}
+
 function requireChange(result: D1Result<unknown>, message: string): void {
   if (d1Changes(result) !== 1) throw new Error(message);
 }
@@ -54,23 +58,23 @@ export class D1OnboardingStore implements OnboardingStore {
 
   private prepareGuardedConnectCode(
     code: ActivationSuccess["code"],
-    registeredAt?: number,
+    transitionMarker?: string,
   ): D1PreparedStatement {
-    const timeGuard = registeredAt === undefined
+    const transitionGuard = transitionMarker === undefined
       ? ""
-      : " AND webhook_registered_at = ? AND updated_at = ?";
+      : " AND transition_marker = ?";
     const statement = this.database.prepare(
       `INSERT INTO connect_codes (
         id, connection_id, user_id, digest, expires_at, consumed_at, created_at
       ) VALUES (
         ?, COALESCE((
           SELECT id FROM bot_connections
-          WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'${timeGuard}
+          WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'${transitionGuard}
         ), NULL), ?, ?, ?, ?, ?
       )`,
     );
     const values: unknown[] = [code.id, code.connectionId, code.userId];
-    if (registeredAt !== undefined) values.push(registeredAt, registeredAt);
+    if (transitionMarker !== undefined) values.push(transitionMarker);
     values.push(code.userId, code.digest, code.expiresAt, code.consumedAt, code.createdAt);
     return statement.bind(...values);
   }
@@ -78,21 +82,21 @@ export class D1OnboardingStore implements OnboardingStore {
   private prepareGuardedAudit(
     event: SafeAuditEvent,
     state: "ACTIVE_UNBOUND" | "WEBHOOK_FAILED" | "SUSPENDED",
-    updatedAt?: number,
+    transitionMarker?: string,
   ): D1PreparedStatement {
-    const timeGuard = updatedAt === undefined ? "" : " AND updated_at = ?";
+    const transitionGuard = transitionMarker === undefined ? "" : " AND transition_marker = ?";
     const statement = this.database.prepare(
       `INSERT INTO audit_events (
         id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
       ) VALUES (
         COALESCE((
           SELECT ? FROM bot_connections
-          WHERE id = ? AND user_id = ? AND state = ?${timeGuard}
+          WHERE id = ? AND user_id = ? AND state = ?${transitionGuard}
         ), NULL), ?, ?, ?, ?, ?, ?
       )`,
     );
     const values: unknown[] = [event.id, event.targetConnectionId, event.targetUserId, state];
-    if (updatedAt !== undefined) values.push(updatedAt);
+    if (transitionMarker !== undefined) values.push(transitionMarker);
     values.push(
       event.actorUserId,
       event.action,
@@ -191,13 +195,13 @@ export class D1OnboardingStore implements OnboardingStore {
       this.database
         .prepare(
           `UPDATE bot_connections
-           SET state = 'ACTIVE_UNBOUND', webhook_registered_at = ?, updated_at = ?
+           SET state = 'ACTIVE_UNBOUND', transition_marker = ?, webhook_registered_at = ?, updated_at = ?
            WHERE id = ? AND user_id = ? AND state = 'VALIDATING'`,
         )
-        .bind(input.registeredAt, input.registeredAt, input.connectionId, input.userId),
+        .bind(input.audit.id, input.registeredAt, input.registeredAt, input.connectionId, input.userId),
       codeStatements[0],
-      this.prepareGuardedConnectCode(input.code, input.registeredAt),
-      this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND", input.registeredAt),
+      this.prepareGuardedConnectCode(input.code, input.audit.id),
+      this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND", input.audit.id),
     ];
     const results = await this.database.batch(statements);
     if (results.length !== statements.length) throw new Error("Activation batch result was incomplete");
@@ -210,10 +214,10 @@ export class D1OnboardingStore implements OnboardingStore {
     const statements = [
       this.database
         .prepare(
-          "UPDATE bot_connections SET state = ?, updated_at = ? WHERE id = ? AND user_id = ? AND state = 'VALIDATING'",
+          "UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ? WHERE id = ? AND user_id = ? AND state = 'VALIDATING'",
         )
-        .bind(input.state, input.failedAt, input.connectionId, input.userId),
-      this.prepareGuardedAudit(input.audit, input.state, input.failedAt),
+        .bind(input.state, input.audit.id, input.failedAt, input.connectionId, input.userId),
+      this.prepareGuardedAudit(input.audit, input.state, input.audit.id),
     ];
     const results = await this.database.batch(statements);
     if (results.length !== statements.length) throw new Error("Activation failure batch result was incomplete");
@@ -239,10 +243,23 @@ export class D1OnboardingStore implements OnboardingStore {
       this.prepareGuardedConnectCode(input.code),
       this.prepareGuardedAudit(input.audit, "ACTIVE_UNBOUND"),
     ];
-    const results = await this.database.batch(statements);
-    if (results.length !== statements.length) throw new Error("Connect-code rotation batch result was incomplete");
-    requireChange(results[1], "Connect-code rotation insert did not commit");
-    requireChange(results[2], "Connect-code rotation audit did not commit");
+    try {
+      const results = await this.database.batch(statements);
+      if (results.length !== statements.length) throw new Error("Connect-code rotation batch result was incomplete");
+      requireChange(results[1], "Connect-code rotation insert did not commit");
+      requireChange(results[2], "Connect-code rotation audit did not commit");
+    } catch (error) {
+      if (guardedConnectConstraint(error)) {
+        let current: OwnedConnection | null;
+        try {
+          current = await this.findOwnedConnection(input.connection.userId, input.connection.publicId);
+        } catch {
+          throw error;
+        }
+        if (current && current.state !== "ACTIVE_UNBOUND") throw new ConnectionStateError();
+      }
+      throw error;
+    }
   }
 }
 

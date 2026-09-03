@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { OnboardingConflictError, RateLimitExceededError } from "@/modules/onboarding/service";
+import { ConnectionStateError, OnboardingConflictError, RateLimitExceededError } from "@/modules/onboarding/service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { createRouter, routeRequest, type WorkerOperations } from "./router";
 
 const token = "123456789:AAExample_secret-token_123456789";
+const sessionCookie = `__Host-calenote_session=${"A".repeat(43)}`;
 const success = {
   bot: {
     publicId: "bot-public",
@@ -16,7 +17,7 @@ const success = {
     state: "ACTIVE_UNBOUND" as const,
     webhook: "READY" as const,
   },
-  connectCommand: "/connect ABCD2345",
+  connectCommand: "/connect ABCDEFGHJKLMNPQRSTUVWXYZ23",
   connectCodeExpiresAt: 1_700_000_600_000,
   sessionCookie: "__Host-calenote_session=bearer; HttpOnly; Secure; SameSite=Lax; Path=/",
   activationCode: null,
@@ -43,7 +44,7 @@ function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations
     consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: true, resetAt: 1_700_000_060_000 })),
     onboard: vi.fn(async () => success),
     requireUser: vi.fn(async () => ({ userId: "user-internal" })),
-    rotateConnectCode: vi.fn(async () => ({ command: "/connect WXYZ6789", expiresAt: 1_700_000_600_000 })),
+    rotateConnectCode: vi.fn(async () => ({ command: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 })),
     ...overrides,
   };
 }
@@ -136,12 +137,14 @@ describe("Worker router", () => {
     { label: "oversized body", headers: { "content-length": "2049" }, expected: 413 },
   ])("rejects $label before rate limiting or provider egress", async ({ headers, expected }) => {
     const ops = operations();
+    const operationsFactory = vi.fn(async () => ops);
     const { env } = environment();
     const request = onboardingRequest(onboardingBody(), headers as unknown as Record<string, string>);
     if (headers.origin === "") request.headers.delete("origin");
-    const response = await createRouter({ operations: async () => ops })(request, env, context());
+    const response = await createRouter({ operations: operationsFactory })(request, env, context());
 
     expect(response.status).toBe(expected);
+    expect(operationsFactory).not.toHaveBeenCalled();
     expect(ops.consumeOnboardingRateLimit).not.toHaveBeenCalled();
     expect(ops.onboard).not.toHaveBeenCalled();
   });
@@ -181,7 +184,7 @@ describe("Worker router", () => {
     const { env } = environment();
     const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
       method: "POST",
-      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
     });
     const response = await createRouter({ operations: async () => ops })(request, env, context());
@@ -189,7 +192,7 @@ describe("Worker router", () => {
     expect(ops.requireUser).toHaveBeenCalledWith(request);
     expect(ops.rotateConnectCode).toHaveBeenCalledWith({ userId: "user-internal", publicId: "bot-public" });
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ data: { connectCommand: "/connect WXYZ6789", expiresAt: 1_700_000_600_000 } });
+    await expect(response.json()).resolves.toEqual({ data: { connectCommand: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 } });
   });
 
   it("returns 401 before connection lookup and 429 with Retry-After safely", async () => {
@@ -197,7 +200,7 @@ describe("Worker router", () => {
     const unauthenticated = operations({ requireUser: vi.fn(async () => { throw new SessionAuthError(); }) });
     const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
       method: "POST",
-      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
     });
     const unauthorized = await createRouter({ operations: async () => unauthenticated })(request, env, context());
@@ -207,13 +210,44 @@ describe("Worker router", () => {
     const limited = operations({ rotateConnectCode: vi.fn(async () => { throw new RateLimitExceededError(17); }) });
     const limitedRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
       method: "POST",
-      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
     });
     const limitedResponse = await createRouter({ operations: async () => limited })(limitedRequest, env, context());
     expect(limitedResponse.status).toBe(429);
     expect(limitedResponse.headers.get("retry-after")).toBe("17");
     expect((await limitedResponse.json() as { error: { code: string } }).error.code).toBe("RATE_LIMITED");
+
+    const stale = operations({ rotateConnectCode: vi.fn(async () => { throw new ConnectionStateError(); }) });
+    const staleRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
+      body: "{}",
+    });
+    const staleResponse = await createRouter({ operations: async () => stale })(staleRequest, env, context());
+    expect(staleResponse.status).toBe(409);
+    await expect(staleResponse.json()).resolves.toEqual({
+      error: {
+        code: "CONNECTION_STATE_CONFLICT",
+        message: "Trạng thái kết nối hiện tại không cho phép thao tác này.",
+      },
+    });
+  });
+
+  it("rejects a missing session cookie before constructing crypto or database operations", async () => {
+    const ops = operations();
+    const operationsFactory = vi.fn(async () => ops);
+    const { env } = environment();
+    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: "{}",
+    });
+
+    const response = await createRouter({ operations: operationsFactory })(request, env, context());
+
+    expect(response.status).toBe(401);
+    expect(operationsFactory).not.toHaveBeenCalled();
   });
 
   it("rejects non-empty connect-code bodies and hides unknown failures", async () => {
@@ -221,17 +255,20 @@ describe("Worker router", () => {
     const ops = operations();
     const invalid = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
       method: "POST",
-      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: JSON.stringify({ unexpected: true }),
     });
     const invalidResponse = await createRouter({ operations: async () => ops })(invalid, env, context());
     expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toEqual({
+      error: { code: "INVALID_REQUEST", message: "Yêu cầu không hợp lệ." },
+    });
     expect(ops.rotateConnectCode).not.toHaveBeenCalled();
 
     const failed = operations({ rotateConnectCode: vi.fn(async () => { throw new Error(`secret ${token}`); }) });
     const failureRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
       method: "POST",
-      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
       body: "{}",
     });
     const failedResponse = await createRouter({ operations: async () => failed })(failureRequest, env, context());
@@ -239,5 +276,6 @@ describe("Worker router", () => {
     expect(failedResponse.status).toBe(500);
     expect(raw).not.toContain(token);
     expect(JSON.parse(raw).error.code).toBe("INTERNAL_ERROR");
+    expect(JSON.parse(raw).error.message).toBe("Không thể hoàn tất yêu cầu.");
   });
 });

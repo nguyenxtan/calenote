@@ -181,6 +181,8 @@ describe("durable onboarding", () => {
     await expect(onboard(input, deps)).rejects.toThrow("internal secret setup failed");
     expect(deps.store.failures).toHaveLength(0);
     expect(deps.store.successes).toHaveLength(0);
+    expect(deps.store.events).toEqual(["verify", "persist"]);
+    expect(deps.store.graphs[0].connection.state).toBe("VALIDATING");
   });
 
   it("derives the exact webhook URL and emits only public metadata", async () => {
@@ -220,7 +222,7 @@ describe("durable onboarding", () => {
     expect(result.sessionCookie).toContain("HttpOnly");
     expect(result.sessionCookie).toContain("Secure");
     expect(result.sessionCookie).toContain("SameSite=Lax");
-    expect(result.connectCommand).toMatch(/^\/connect [A-HJ-NP-Z2-9]{8}$/u);
+    expect(result.connectCommand).toMatch(/^\/connect [A-HJ-NP-Z2-9]{26}$/u);
     expect(result.connectCodeExpiresAt).toBe(now + 600_000);
     expect(deps.store.successes[0].code.digest).not.toBe(result.connectCommand?.slice(9));
     expect(JSON.stringify(deps.store.successes[0])).not.toContain(result.connectCommand?.slice(9));
@@ -268,7 +270,7 @@ describe("connect-code rotation", () => {
       subjectDigest: await deps.keyring.digestCode("rate-limit:connect-code:user-internal:connection-internal"),
       scope: "connect-code",
     }]);
-    expect(result.command).toMatch(/^\/connect [A-HJ-NP-Z2-9]{8}$/u);
+    expect(result.command).toMatch(/^\/connect [A-HJ-NP-Z2-9]{26}$/u);
     expect(result.expiresAt).toBe(now + 600_000);
     expect(JSON.stringify(deps.store.rotations[0])).not.toContain(result.command.slice(9));
   });
@@ -335,7 +337,7 @@ describe("prepared one-time codes", () => {
       { keyring: await createKeyring(master), now: () => now, randomBytes: incrementalRandom() },
     );
 
-    expect(prepared.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/u);
+    expect(prepared.code).toMatch(/^[A-HJ-NP-Z2-9]{26}$/u);
     expect(prepared.record).toMatchObject({ kind: "connect", expiresAt: now + 600_000 });
     expect(JSON.stringify(prepared.record)).not.toContain(prepared.code);
   });

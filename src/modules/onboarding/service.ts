@@ -179,35 +179,35 @@ class SafeServiceError extends Error {
 
 export class OnboardingInputError extends SafeServiceError {
   constructor() {
-    super("INVALID_ONBOARDING", 400, "Onboarding information is invalid.");
+    super("INVALID_ONBOARDING", 400, "Thông tin khởi tạo chưa hợp lệ.");
     this.name = "OnboardingInputError";
   }
 }
 
 export class OnboardingConflictError extends SafeServiceError {
   constructor() {
-    super("ONBOARDING_CONFLICT", 409, "This account or bot cannot be activated.");
+    super("ONBOARDING_CONFLICT", 409, "Không thể kích hoạt tài khoản hoặc bot này.");
     this.name = "OnboardingConflictError";
   }
 }
 
 export class ConnectionNotFoundError extends SafeServiceError {
   constructor() {
-    super("CONNECTION_NOT_FOUND", 404, "Connection not found.");
+    super("CONNECTION_NOT_FOUND", 404, "Không tìm thấy kết nối.");
     this.name = "ConnectionNotFoundError";
   }
 }
 
 export class ConnectionStateError extends SafeServiceError {
   constructor() {
-    super("CONNECTION_STATE_CONFLICT", 409, "Connection cannot issue a code in its current state.");
+    super("CONNECTION_STATE_CONFLICT", 409, "Trạng thái kết nối hiện tại không cho phép thao tác này.");
     this.name = "ConnectionStateError";
   }
 }
 
 export class RateLimitExceededError extends SafeServiceError {
   constructor(readonly retryAfterSeconds: number) {
-    super("RATE_LIMITED", 429, "Too many requests. Try again later.");
+    super("RATE_LIMITED", 429, "Bạn thao tác quá nhanh. Vui lòng thử lại sau.");
     this.name = "RateLimitExceededError";
   }
 }

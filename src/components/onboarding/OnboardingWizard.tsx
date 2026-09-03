@@ -500,7 +500,7 @@ export function OnboardingWizard() {
                 <PipelineItem icon={<UserRound size={17} />} label="Tài khoản Calenote" status="Đã nhập" done />
                 <PipelineItem icon={<Bot size={17} />} label="Xác minh bot" status="Hoàn tất" done />
                 <PipelineItem icon={<Webhook size={17} />} label="Đăng ký webhook" status="Production" />
-                <PipelineItem icon={<MessageCircle size={17} />} label="/connect ••••••••" status="Một lần" />
+                <PipelineItem icon={<MessageCircle size={17} />} label="/connect <mã-một-lần>" status="Một lần" />
               </div>
 
               <Link href="/dashboard" className={styles.primaryButton}>

@@ -81,8 +81,8 @@ export interface PreparedOneTimeCode extends OneTimeCodeIssuance {
 export type PublicCodeConsumeResult = { status: "accepted" } | { status: "invalid" };
 
 function generateConnectCode(randomBytes: RandomBytes): string {
-  const bytes = randomBytes(8);
-  if (bytes.byteLength !== 8) throw new TypeError("Random source returned the wrong byte length");
+  const bytes = randomBytes(26);
+  if (bytes.byteLength !== 26) throw new TypeError("Random source returned the wrong byte length");
   let code = "";
   for (const byte of bytes) code += CONNECT_ALPHABET[byte & 31];
   return code;
@@ -103,7 +103,7 @@ function generateLoginCode(randomBytes: RandomBytes): string {
 
 function isValidCode(input: ConsumeOneTimeCodeInput): boolean {
   return input.kind === "connect"
-    ? /^[A-HJ-NP-Z2-9]{8}$/u.test(input.code)
+    ? /^[A-HJ-NP-Z2-9]{26}$/u.test(input.code)
     : /^\d{6}$/u.test(input.code);
 }
 

@@ -22,7 +22,7 @@ import {
 } from "@/modules/onboarding/service";
 import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/service";
 import { createKeyring } from "@/modules/security/keyring";
-import { handleConnectCodeRotation } from "./routes/connections";
+import { handleConnectCodeRotation, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
 
 export interface WorkerOperations {
@@ -75,12 +75,25 @@ async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
   };
 }
 
+function requestBodyMessage(code: RequestBodyError["code"]): string {
+  if (code === "UNSUPPORTED_MEDIA_TYPE") return "Yêu cầu phải dùng Content-Type application/json.";
+  if (code === "INVALID_CONTENT_LENGTH") return "Độ dài yêu cầu không hợp lệ.";
+  if (code === "REQUEST_TOO_LARGE") return "Yêu cầu vượt quá giới hạn cho phép.";
+  return "Nội dung yêu cầu không hợp lệ.";
+}
+
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
-  if (error instanceof RequestBodyError || error instanceof SameOriginError) {
-    return { code: error.code, message: error.message, status: error.status };
+  if (error instanceof RequestBodyError) {
+    return { code: error.code, message: requestBodyMessage(error.code), status: error.status };
+  }
+  if (error instanceof SameOriginError) {
+    return { code: error.code, message: "Nguồn yêu cầu không được phép.", status: error.status };
   }
   if (error instanceof SessionAuthError) {
-    return { code: error.code, message: "Authentication required.", status: error.status };
+    return { code: error.code, message: "Bạn cần đăng nhập để tiếp tục.", status: error.status };
+  }
+  if (error instanceof InvalidRequestError) {
+    return { code: error.code, message: error.message, status: error.status };
   }
   if (
     error instanceof OnboardingInputError ||
@@ -100,14 +113,14 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   }
   if (error instanceof ProviderVerificationError) {
     if (error.code === "INVALID_TOKEN_FORMAT") {
-      return { code: "INVALID_ONBOARDING", message: "Onboarding information is invalid.", status: 400 };
+      return { code: "INVALID_ONBOARDING", message: "Thông tin khởi tạo chưa hợp lệ.", status: 400 };
     }
     if (error.code === "PROVIDER_REJECTED") {
-      return { code: "BOT_TOKEN_REJECTED", message: "The provider rejected this credential.", status: 422 };
+      return { code: "BOT_TOKEN_REJECTED", message: "Provider không chấp nhận thông tin xác thực này.", status: 422 };
     }
-    return { code: "PROVIDER_UNAVAILABLE", message: "The provider is temporarily unavailable.", status: 502 };
+    return { code: "PROVIDER_UNAVAILABLE", message: "Provider đang tạm thời không khả dụng.", status: 502 };
   }
-  return { code: "INTERNAL_ERROR", message: "The request could not be completed.", status: 500 };
+  return { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu.", status: 500 };
 }
 
 export function safeErrorResponse(error: unknown): Response {
@@ -132,7 +145,7 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (request.method === "POST" && pathname === "/api/onboarding") {
-        return await handleOnboarding(request, env.APP_ORIGIN, await operationsFactory(env));
+        return await handleOnboarding(request, env.APP_ORIGIN, () => operationsFactory(env));
       }
       const connectMatch = request.method === "POST"
         ? /^\/api\/connections\/([A-Za-z0-9_-]{1,128})\/connect-code$/u.exec(pathname)
@@ -142,7 +155,7 @@ export function createRouter(options: RouterOptions = {}) {
           request,
           env.APP_ORIGIN,
           connectMatch[1],
-          await operationsFactory(env),
+          () => operationsFactory(env),
         );
       }
     } catch (error) {

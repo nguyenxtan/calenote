@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AccountGraph, ActivationSuccess, ConnectCodeRotation } from "@/modules/onboarding/service";
-import { OnboardingConflictError } from "@/modules/onboarding/service";
+import { ConnectionStateError, OnboardingConflictError } from "@/modules/onboarding/service";
 import { D1OnboardingStore } from "./onboarding-store";
 
 class Statement {
@@ -28,6 +28,7 @@ class Database {
   readonly sqlite = new DatabaseSync(":memory:");
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new Statement(this.sqlite, sql) as unknown as D1PreparedStatement;
@@ -83,6 +84,15 @@ function activation(): ActivationSuccess {
       id: "audit-2", actorUserId: "user-1", action: "WEBHOOK_ACTIVATED", targetUserId: "user-1",
       targetConnectionId: "connection-1", result: "SUCCESS", createdAt: 200,
     },
+  };
+}
+
+function replacementActivation(): ActivationSuccess {
+  const input = activation();
+  return {
+    ...input,
+    code: { ...input.code, id: "code-2", digest: "replacement-digest" },
+    audit: { ...input.audit, id: "audit-3" },
   };
 }
 
@@ -161,8 +171,77 @@ describe("D1 onboarding persistence", () => {
         id: "audit-3", actorUserId: "user-1", action: "CONNECT_CODE_ROTATED", targetUserId: "user-1",
         targetConnectionId: "connection-1", result: "SUCCESS", createdAt: 300,
       },
-    })).rejects.toThrow();
+    })).rejects.toBeInstanceOf(ConnectionStateError);
     expect(database.sqlite.prepare("SELECT COUNT(*) AS count FROM connect_codes").get()).toEqual({ count: 0 });
     expect(database.sqlite.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toEqual({ count: 1 });
+  });
+
+  it("gives exactly one same-millisecond successful activation ownership of code and audit", async () => {
+    const { database, store } = setup();
+    await store.commitAccountGraph(graph());
+    await store.activateConnection(activation());
+
+    await expect(store.activateConnection(replacementActivation())).rejects.toThrow();
+    expect(database.sqlite.prepare("SELECT digest, consumed_at FROM connect_codes").all()).toEqual([
+      { digest: "code-digest", consumed_at: null },
+    ]);
+    expect(database.sqlite.prepare("SELECT id, action FROM audit_events ORDER BY rowid").all()).toEqual([
+      { id: "audit-1", action: "ONBOARDING_CREATED" },
+      { id: "audit-2", action: "WEBHOOK_ACTIVATED" },
+    ]);
+    expect(database.sqlite.prepare("SELECT transition_marker FROM bot_connections").get()).toEqual({
+      transition_marker: "audit-2",
+    });
+  });
+
+  it("rolls back same-millisecond success-versus-failure activation losers", async () => {
+    const first = setup();
+    await first.store.commitAccountGraph(graph());
+    await first.store.activateConnection(activation());
+    await expect(first.store.failActivation({
+      connectionId: "connection-1", userId: "user-1", state: "WEBHOOK_FAILED", failedAt: 200,
+      auditResult: "FAILURE",
+      audit: {
+        id: "audit-3", actorUserId: "user-1", action: "WEBHOOK_ACTIVATION_FAILED",
+        targetUserId: "user-1", targetConnectionId: "connection-1", result: "FAILURE", createdAt: 200,
+      },
+    })).rejects.toThrow();
+    expect(first.database.sqlite.prepare("SELECT state FROM bot_connections").get()).toEqual({ state: "ACTIVE_UNBOUND" });
+    expect(first.database.sqlite.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toEqual({ count: 2 });
+
+    const second = setup();
+    await second.store.commitAccountGraph(graph());
+    await second.store.failActivation({
+      connectionId: "connection-1", userId: "user-1", state: "WEBHOOK_FAILED", failedAt: 200,
+      auditResult: "FAILURE",
+      audit: {
+        id: "audit-2", actorUserId: "user-1", action: "WEBHOOK_ACTIVATION_FAILED",
+        targetUserId: "user-1", targetConnectionId: "connection-1", result: "FAILURE", createdAt: 200,
+      },
+    });
+    await expect(second.store.activateConnection(replacementActivation())).rejects.toThrow();
+    expect(second.database.sqlite.prepare("SELECT state FROM bot_connections").get()).toEqual({ state: "WEBHOOK_FAILED" });
+    expect(second.database.sqlite.prepare("SELECT COUNT(*) AS count FROM connect_codes").get()).toEqual({ count: 0 });
+    expect(second.database.sqlite.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toEqual({ count: 2 });
+  });
+
+  it("does not translate an arbitrary database outage into a state conflict", async () => {
+    const { database, store } = setup();
+    await store.commitAccountGraph(graph());
+    await store.activateConnection(activation());
+    const connection = await store.findOwnedConnection("user-1", "public-1");
+    database.batch = async () => { throw new Error("database unavailable"); };
+
+    const failure = await store.rotateConnectCode({
+      connection: connection!, rotatedAt: 300,
+      code: { kind: "connect", id: "code-2", connectionId: "connection-1", userId: "user-1", digest: "replacement-digest", expiresAt: 900, consumedAt: null, createdAt: 300 },
+      audit: {
+        id: "audit-3", actorUserId: "user-1", action: "CONNECT_CODE_ROTATED", targetUserId: "user-1",
+        targetConnectionId: "connection-1", result: "SUCCESS", createdAt: 300,
+      },
+    }).catch((error: unknown) => error);
+
+    expect(failure).toEqual(new Error("database unavailable"));
+    expect(failure).not.toBeInstanceOf(ConnectionStateError);
   });
 });

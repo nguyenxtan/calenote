@@ -79,16 +79,37 @@ function incrementingRandom(): (length: number) => Uint8Array {
 }
 
 describe("one-time codes", () => {
-  it("issues an unambiguous eight-character connect code and stores only its digest", async () => {
+  it("issues an unambiguous 130-bit connect code and stores only its digest", async () => {
     const store = new MemoryCodeStore();
     const issued = await issueOneTimeCode(
       { kind: "connect", userId: "user-1", connectionId: "connection-1" },
       { store, keyring, now: () => 1_700_000_000_000, randomBytes: incrementingRandom() },
     );
 
-    expect(issued.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/u);
+    expect(issued.code).toMatch(/^[A-HJ-NP-Z2-9]{26}$/u);
     expect(issued.expiresAt).toBe(1_700_000_600_000);
     expect(JSON.stringify(store.records)).not.toContain(issued.code);
+  });
+
+  it.each([8, 25, 27])("rejects a connect code with %i characters before store consumption", async (length) => {
+    const store = new MemoryCodeStore();
+    const issued = await issueOneTimeCode(
+      { kind: "connect", userId: "user-1", connectionId: "connection-1" },
+      { store, keyring, now: () => 1_700_000_000_000, randomBytes: incrementingRandom() },
+    );
+
+    await expect(
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-1", code: "A".repeat(length) },
+        { store, keyring, now: () => 1_700_000_000_100 },
+      ),
+    ).resolves.toEqual({ status: "invalid" });
+    await expect(
+      consumeOneTimeCode(
+        { kind: "connect", connectionId: "connection-1", code: issued.code },
+        { store, keyring, now: () => 1_700_000_000_101 },
+      ),
+    ).resolves.toEqual({ status: "accepted" });
   });
 
   it("rotates a prior active connect code and consumes the replacement once", async () => {
