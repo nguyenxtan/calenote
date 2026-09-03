@@ -13,7 +13,10 @@
   ],
   "observability": {
     "enabled": true,
-    "redact_query_string": true
+    "redact_query_string": true,
+    "logs": {
+      "invocation_logs": false
+    }
   },
   "vars": {
     "APP_ORIGIN": "https://calenote.iconiclogs.com"

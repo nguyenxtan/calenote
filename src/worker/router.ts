@@ -1,13 +1,14 @@
 import { requireSession, SessionAuthError } from "@/modules/auth/session";
 import type { BotProvider, WebhookRegistration } from "@/modules/connections/contracts";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
-import { setTelegramWebhook } from "@/modules/connections/providers/telegram";
-import { setZaloWebhook } from "@/modules/connections/providers/zalo";
+import { parseTelegramWebhook, setTelegramWebhook } from "@/modules/connections/providers/telegram";
+import { parseZaloWebhook, setZaloWebhook } from "@/modules/connections/providers/zalo";
 import { verifyBotToken } from "@/modules/connections/verify-bot-token";
 import { D1OnboardingStore } from "@/modules/db/onboarding-store";
 import { D1RateLimitStore } from "@/modules/db/rate-limit-store";
 import { D1SessionStore } from "@/modules/db/session-store";
 import { RequestBodyError } from "@/modules/http/body";
+import { acceptWebhook, D1InboundWebhookStore } from "@/modules/inbound/webhook";
 import { jsonResponse, SameOriginError } from "@/modules/http/security";
 import {
   ConnectionNotFoundError,
@@ -24,6 +25,11 @@ import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/ser
 import { createKeyring } from "@/modules/security/keyring";
 import { handleConnectCodeRotation, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
+import {
+  handleWebhook,
+  matchWebhookRoute,
+  type WebhookRouteDependencies,
+} from "./routes/webhooks";
 
 export interface WorkerOperations {
   digestRateLimitSubject(value: string): Promise<string>;
@@ -35,6 +41,7 @@ export interface WorkerOperations {
 
 export interface RouterOptions {
   operations?: (env: Env) => Promise<WorkerOperations>;
+  webhookOperations?: (env: Env) => Promise<WebhookRouteDependencies>;
 }
 
 async function registerWebhook(
@@ -72,6 +79,24 @@ async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
     },
     rotateConnectCode: (input) =>
       rotateConnectCode(input, { store, keyring, rateLimitStore }),
+  };
+}
+
+async function createWebhookOperations(env: Env): Promise<WebhookRouteDependencies> {
+  const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  const store = new D1InboundWebhookStore(env.DB);
+  return {
+    findConnection: (provider, publicId) => store.findConnection(provider, publicId),
+    webhookSecrets: (publicId) => keyring.webhookSecrets(publicId),
+    constantTimeEqual: (left, right) => keyring.constantTimeEqual(left, right),
+    accept: (request, connection) => acceptWebhook(request, connection, {
+      store,
+      keyring,
+      parseWebhook: connection.provider === "zalo" ? parseZaloWebhook : parseTelegramWebhook,
+      enqueue: async (job) => {
+        await env.JOBS.send(job);
+      },
+    }),
   };
 }
 
@@ -136,11 +161,23 @@ export function safeErrorResponse(error: unknown): Response {
 
 export function createRouter(options: RouterOptions = {}) {
   const operationsFactory = options.operations ?? createWorkerOperations;
+  const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
   return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     void ctx;
     const pathname = new URL(request.url).pathname;
     if (request.method === "GET" && pathname === "/api/health") {
       return Response.json({ ok: true, service: "calenote" });
+    }
+
+    if (pathname.startsWith("/webhooks/")) {
+      if (request.method !== "POST") return new Response(null, { status: 404 });
+      const route = matchWebhookRoute(pathname);
+      if (!route) return new Response(null, { status: 404 });
+      try {
+        return await handleWebhook(request, route, await webhookOperationsFactory(env));
+      } catch {
+        return new Response(null, { status: 500 });
+      }
     }
 
     try {

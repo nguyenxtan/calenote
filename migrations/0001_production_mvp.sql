@@ -73,6 +73,7 @@ CREATE TABLE chat_identities (
   private_chat_id TEXT NOT NULL,
   display_name TEXT,
   linked_at INTEGER NOT NULL,
+  UNIQUE (connection_id),
   UNIQUE (connection_id, provider_user_id),
   UNIQUE (connection_id, private_chat_id)
 ) STRICT;
@@ -94,13 +95,17 @@ CREATE TABLE inbound_updates (
   provider_message_id TEXT NOT NULL,
   provider_user_id TEXT NOT NULL,
   private_chat_id TEXT NOT NULL,
+  display_name TEXT,
   message_ciphertext BLOB NOT NULL,
   message_iv BLOB NOT NULL CHECK (length(message_iv) = 12),
   message_key_version INTEGER NOT NULL CHECK (message_key_version > 0),
   state TEXT NOT NULL CHECK (state IN ('PENDING', 'PROCESSING', 'PROCESSED', 'REJECTED', 'FAILED')),
   received_at INTEGER NOT NULL,
+  processing_started_at INTEGER,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   processed_at INTEGER,
-  UNIQUE (provider, connection_id, provider_message_id)
+  transition_marker TEXT,
+  UNIQUE (provider, connection_id, private_chat_id, provider_message_id)
 ) STRICT;
 
 CREATE TABLE command_drafts (

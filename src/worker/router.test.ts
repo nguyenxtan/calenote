@@ -5,6 +5,7 @@ import { ProviderVerificationError } from "@/modules/connections/provider-error"
 import { createKeyring } from "@/modules/security/keyring";
 import { onboard } from "@/modules/onboarding/service";
 import { createRouter, routeRequest, type WorkerOperations } from "./router";
+import type { WebhookRouteDependencies } from "./routes/webhooks";
 
 const token = "123456789:AAExample_secret-token_123456789";
 const sessionCookie = `__Host-calenote_session=${"A".repeat(43)}`;
@@ -53,6 +54,22 @@ function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations
   };
 }
 
+function webhookOperations(): WebhookRouteDependencies {
+  return {
+    findConnection: vi.fn(async () => ({
+      id: "connection-1",
+      provider: "telegram" as const,
+      publicId: "AAAAAAAAAAAAAAAAAAAAAA",
+    })),
+    webhookSecrets: vi.fn(async () => ({
+      pathSecret: `${"B".repeat(42)}A`,
+      headerSecret: `${"C".repeat(42)}A`,
+    })),
+    constantTimeEqual: (left, right) => left === right,
+    accept: vi.fn(async () => new Response(null, { status: 200 })),
+  };
+}
+
 function onboardingRequest(body: unknown, headers: HeadersInit = {}) {
   return new Request("https://calenote.iconiclogs.com/api/onboarding", {
     method: "POST",
@@ -76,6 +93,41 @@ function onboardingBody() {
 }
 
 describe("Worker router", () => {
+  it("routes only the strict authenticated webhook shape without touching assets", async () => {
+    const { assets, env } = environment();
+    const webhook = webhookOperations();
+    const response = await createRouter({ webhookOperations: async () => webhook })(
+      new Request(
+        `https://calenote.iconiclogs.com/webhooks/telegram/${"A".repeat(22)}/${"B".repeat(42)}A`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "X-Telegram-Bot-Api-Secret-Token": `${"C".repeat(42)}A`,
+          },
+          body: "{}",
+        },
+      ),
+      env,
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(webhook.accept).toHaveBeenCalledTimes(1);
+    expect(assets.fetch).not.toHaveBeenCalled();
+
+    const malformed = await createRouter({ webhookOperations: async () => webhook })(
+      new Request(`https://calenote.iconiclogs.com/webhooks/telegram/${"A".repeat(21)}/${"B".repeat(42)}A`, {
+        method: "POST",
+      }),
+      env,
+      context(),
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.text()).toBe("");
+    expect(assets.fetch).not.toHaveBeenCalled();
+  });
+
   it("keeps health and asset fallback behavior unchanged", async () => {
     const { assets, env } = environment();
     const health = await routeRequest(new Request("https://calenote.iconiclogs.com/api/health"), env, context());

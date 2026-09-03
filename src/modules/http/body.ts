@@ -3,6 +3,7 @@ export type RequestBodyErrorCode =
   | "INVALID_CONTENT_LENGTH"
   | "REQUEST_TOO_LARGE"
   | "INVALID_BODY"
+  | "BODY_TIMEOUT"
   | "INVALID_UTF8"
   | "INVALID_JSON"
   | "INVALID_JSON_OBJECT";
@@ -12,6 +13,7 @@ const messages: Record<RequestBodyErrorCode, string> = {
   INVALID_CONTENT_LENGTH: "Content-Length is invalid.",
   REQUEST_TOO_LARGE: "Request body exceeds the allowed size.",
   INVALID_BODY: "Unable to read request body.",
+  BODY_TIMEOUT: "Request body read timed out.",
   INVALID_UTF8: "Request body must be valid UTF-8.",
   INVALID_JSON: "Request body must be valid JSON.",
   INVALID_JSON_OBJECT: "Request body must be a JSON object.",
@@ -50,15 +52,29 @@ function readDeclaredLength(request: Request, maximumBytes: number): void {
   }
 }
 
-async function readAtMost(request: Request, maximumBytes: number): Promise<Uint8Array> {
+async function readAtMost(
+  request: Request,
+  maximumBytes: number,
+  timeoutMs?: number,
+): Promise<Uint8Array> {
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = timeoutMs === undefined
+    ? null
+    : new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new RequestBodyError("BODY_TIMEOUT", 408)),
+        timeoutMs,
+      );
+    });
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const read = reader.read();
+      const { done, value } = timeout ? await Promise.race([read, timeout]) : await read;
       if (done) break;
       length += value.byteLength;
       if (length > maximumBytes) {
@@ -68,8 +84,14 @@ async function readAtMost(request: Request, maximumBytes: number): Promise<Uint8
       chunks.push(value);
     }
   } catch (error) {
-    if (error instanceof RequestBodyError) throw error;
+    if (error instanceof RequestBodyError) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    }
     throw new RequestBodyError("INVALID_BODY", 400);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    reader.releaseLock();
   }
 
   const joined = new Uint8Array(length);
@@ -84,13 +106,20 @@ async function readAtMost(request: Request, maximumBytes: number): Promise<Uint8
 export async function readBoundedJson(
   request: Request,
   maximumBytes: number,
+  options: { timeoutMs?: number } = {},
 ): Promise<Record<string, unknown>> {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
     throw new TypeError("maximumBytes must be a positive integer");
   }
   assertJsonContentType(request);
   readDeclaredLength(request, maximumBytes);
-  const bytes = await readAtMost(request, maximumBytes);
+  if (
+    options.timeoutMs !== undefined &&
+    (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1)
+  ) {
+    throw new TypeError("timeoutMs must be a positive integer");
+  }
+  const bytes = await readAtMost(request, maximumBytes, options.timeoutMs);
 
   let text: string;
   try {
