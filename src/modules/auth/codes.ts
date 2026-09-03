@@ -62,9 +62,20 @@ export interface OneTimeCodeDependencies {
   randomBytes?: RandomBytes;
 }
 
+export interface OneTimeCodePreparationDependencies {
+  keyring: Pick<Keyring, "digestCode">;
+  now?: Clock;
+  randomBytes?: RandomBytes;
+}
+
 export interface OneTimeCodeIssuance {
   code: string;
   expiresAt: number;
+}
+
+export interface PreparedOneTimeCode extends OneTimeCodeIssuance {
+  record: OneTimeCodeRecord;
+  createdAt: number;
 }
 
 export type PublicCodeConsumeResult = { status: "accepted" } | { status: "invalid" };
@@ -96,10 +107,10 @@ function isValidCode(input: ConsumeOneTimeCodeInput): boolean {
     : /^\d{6}$/u.test(input.code);
 }
 
-export async function issueOneTimeCode(
+export async function prepareOneTimeCode(
   input: IssueOneTimeCodeInput,
-  dependencies: OneTimeCodeDependencies,
-): Promise<OneTimeCodeIssuance> {
+  dependencies: OneTimeCodePreparationDependencies,
+): Promise<PreparedOneTimeCode> {
   if (input.userId.length === 0 || (input.kind === "connect" && input.connectionId.length === 0)) {
     throw new TypeError("One-time code owner is required");
   }
@@ -117,8 +128,16 @@ export async function issueOneTimeCode(
     ? { ...base, kind: "connect", connectionId: input.connectionId }
     : { ...base, kind: "login", attempts: 0 };
 
-  await dependencies.store.issue(record, createdAt);
-  return { code, expiresAt };
+  return { code, expiresAt, record, createdAt };
+}
+
+export async function issueOneTimeCode(
+  input: IssueOneTimeCodeInput,
+  dependencies: OneTimeCodeDependencies,
+): Promise<OneTimeCodeIssuance> {
+  const prepared = await prepareOneTimeCode(input, dependencies);
+  await dependencies.store.issue(prepared.record, prepared.createdAt);
+  return { code: prepared.code, expiresAt: prepared.expiresAt };
 }
 
 export async function consumeOneTimeCodeDetailed(

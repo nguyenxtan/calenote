@@ -1,169 +1,243 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BotProfile } from "@/modules/connections/contracts";
-import { ProviderVerificationError } from "@/modules/connections/provider-error";
-import { createRouter, routeRequest } from "./router";
+import { OnboardingConflictError, RateLimitExceededError } from "@/modules/onboarding/service";
+import { SessionAuthError } from "@/modules/auth/session";
+import { createRouter, routeRequest, type WorkerOperations } from "./router";
 
-const telegramToken = "123456789:AAExample_secret-token_123456789";
-const telegramBot: BotProfile = {
-  provider: "telegram",
-  providerBotId: "987654321",
-  displayName: "Thư ký Mây",
-  handle: "@may_calendar_bot",
-  accountType: null,
-  canJoinGroups: true,
+const token = "123456789:AAExample_secret-token_123456789";
+const success = {
+  bot: {
+    publicId: "bot-public",
+    provider: "telegram" as const,
+    providerBotId: "987654321",
+    displayName: "Thư ký Mây",
+    handle: "@may_calendar_bot",
+    accountType: null,
+    canJoinGroups: true,
+    state: "ACTIVE_UNBOUND" as const,
+    webhook: "READY" as const,
+  },
+  connectCommand: "/connect ABCD2345",
+  connectCodeExpiresAt: 1_700_000_600_000,
+  sessionCookie: "__Host-calenote_session=bearer; HttpOnly; Secure; SameSite=Lax; Path=/",
+  activationCode: null,
 };
 
-function testContext(): ExecutionContext {
-  return {
-    waitUntil: vi.fn(),
-    passThroughOnException: vi.fn(),
-  } as unknown as ExecutionContext;
+function context(): ExecutionContext {
+  return { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
 }
 
-function testEnv() {
-  const assets = { fetch: vi.fn() };
+function environment() {
+  const assets = { fetch: vi.fn(async () => new Response("asset", { status: 404 })) };
   return {
     assets,
-    env: { ASSETS: assets } as unknown as Env,
+    env: {
+      ASSETS: assets,
+      APP_ORIGIN: "https://calenote.iconiclogs.com",
+    } as unknown as Env,
   };
 }
 
-function request(body: unknown, headers?: HeadersInit) {
-  return new Request("https://example.test/api/v1/bot-connections/verify", {
+function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations {
+  return {
+    digestRateLimitSubject: vi.fn(async () => "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g"),
+    consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: true, resetAt: 1_700_000_060_000 })),
+    onboard: vi.fn(async () => success),
+    requireUser: vi.fn(async () => ({ userId: "user-internal" })),
+    rotateConnectCode: vi.fn(async () => ({ command: "/connect WXYZ6789", expiresAt: 1_700_000_600_000 })),
+    ...overrides,
+  };
+}
+
+function onboardingRequest(body: unknown, headers: HeadersInit = {}) {
+  return new Request("https://calenote.iconiclogs.com/api/onboarding", {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: {
+      origin: "https://calenote.iconiclogs.com",
+      "content-type": "application/json",
+      ...headers,
+    },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
+function onboardingBody() {
+  return {
+    displayName: "Bích Tuyền",
+    email: "owner@example.com",
+    timezone: "Asia/Ho_Chi_Minh",
+    provider: "telegram",
+    token,
+  };
+}
+
 describe("Worker router", () => {
-  it("returns bounded JSON health without touching assets", async () => {
-    const { assets, env } = testEnv();
-    const response = await routeRequest(new Request("https://example.test/api/health"), env, testContext());
+  it("keeps health and asset fallback behavior unchanged", async () => {
+    const { assets, env } = environment();
+    const health = await routeRequest(new Request("https://calenote.iconiclogs.com/api/health"), env, context());
+    const asset = await routeRequest(new Request("https://calenote.iconiclogs.com/docs"), env, context());
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true, service: "calenote" });
-    expect(assets.fetch).not.toHaveBeenCalled();
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toEqual({ ok: true, service: "calenote" });
+    expect(asset.status).toBe(404);
+    expect(assets.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a normalized bot identity without retaining or echoing the token", async () => {
-    const verifier = vi.fn(async () => telegramBot);
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier })(request({ provider: "telegram", token: telegramToken }), env, testContext());
-    const raw = await response.text();
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(JSON.parse(raw)).toEqual({ data: { bot: telegramBot }, meta: { tokenStored: false } });
-    expect(raw).not.toContain(telegramToken);
-  });
-
-  it("rejects unsupported providers before verification", async () => {
-    const verifier = vi.fn();
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier })(request({ provider: "zalo-oa", token: telegramToken }), env, testContext());
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "INVALID_REQUEST", message: "Thông tin kết nối chưa đúng. Hãy kiểm tra lại kênh và token." },
-    });
-    expect(verifier).not.toHaveBeenCalled();
-  });
-
-  it("returns a safe error when the provider rejects a token", async () => {
-    const { env } = testEnv();
-    const response = await createRouter({
-      verifyBotToken: async () => { throw new ProviderVerificationError("PROVIDER_REJECTED"); },
-    })(request({ provider: "telegram", token: telegramToken }), env, testContext());
-    const raw = await response.text();
-
-    expect(response.status).toBe(422);
-    expect(JSON.parse(raw)).toEqual({
-      error: { code: "BOT_TOKEN_REJECTED", message: "Provider không chấp nhận token này. Hãy tạo hoặc sao chép lại token rồi thử lại." },
-    });
-    expect(raw).not.toContain(telegramToken);
-  });
-
-  it("asks for a retry when the provider is temporarily unavailable", async () => {
-    const { env } = testEnv();
-    const response = await createRouter({
-      verifyBotToken: async () => { throw new ProviderVerificationError("PROVIDER_UNAVAILABLE"); },
-    })(request({ provider: "telegram", token: telegramToken }), env, testContext());
-
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({
-      error: { code: "PROVIDER_UNAVAILABLE", message: "Chưa liên hệ được provider. Hãy đợi một chút rồi thử lại." },
-    });
-  });
-
-  it("rejects malformed JSON", async () => {
-    const verifier = vi.fn();
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier })(request("{not-json"), env, testContext());
-
-    expect(response.status).toBe(400);
-    expect((await response.json() as { error: { code: string } }).error.code).toBe("INVALID_REQUEST");
-    expect(verifier).not.toHaveBeenCalled();
-  });
-
-  it("rejects an oversized declared body before parsing it", async () => {
-    const verifier = vi.fn();
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier })(
-      request({ provider: "telegram", token: telegramToken }, { "content-length": "4096" }), env, testContext(),
+  it("does not expose the deleted public token verification route", async () => {
+    const { assets, env } = environment();
+    const response = await routeRequest(
+      new Request("https://calenote.iconiclogs.com/api/v1/bot-connections/verify", { method: "POST" }),
+      env,
+      context(),
     );
 
-    expect(response.status).toBe(413);
-    expect((await response.json() as { error: { code: string } }).error.code).toBe("REQUEST_TOO_LARGE");
-    expect(verifier).not.toHaveBeenCalled();
+    expect(response.status).toBe(404);
+    expect(assets.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels an undeclared oversized stream before reading the remaining body", async () => {
-    let pulls = 0;
-    let canceled = false;
-    const verifier = vi.fn();
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        pulls += 1;
-        if (pulls <= 2) return controller.enqueue(new Uint8Array(1_200).fill(65));
-        throw new Error("The route read beyond its byte limit");
+  it("requires exact same-origin JSON and rate-limits a HMACed trusted IP/provider before onboarding", async () => {
+    const ops = operations();
+    const { env } = environment();
+    const response = await createRouter({ operations: async () => ops })(
+      onboardingRequest(onboardingBody(), { "CF-Connecting-IP": "203.0.113.7" }),
+      env,
+      context(),
+    );
+
+    expect(ops.digestRateLimitSubject).toHaveBeenCalledWith("rate-limit:onboarding:telegram:203.0.113.7");
+    expect(ops.consumeOnboardingRateLimit).toHaveBeenCalledBefore(ops.onboard as ReturnType<typeof vi.fn>);
+    expect(response.status).toBe(201);
+    expect(response.headers.get("set-cookie")).toBe(success.sessionCookie);
+    const raw = await response.text();
+    expect(JSON.parse(raw)).toEqual({
+      data: {
+        bot: success.bot,
+        connectCommand: success.connectCommand,
+        connectCodeExpiresAt: success.connectCodeExpiresAt,
+        activationCode: null,
       },
-      cancel() { canceled = true; },
     });
-    const streamedRequest = new Request("https://example.test/api/v1/bot-connections/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      duplex: "half",
-    } as RequestInit & { duplex: "half" });
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier })(streamedRequest, env, testContext());
-
-    expect(response.status).toBe(413);
-    expect((await response.json() as { error: { code: string } }).error.code).toBe("REQUEST_TOO_LARGE");
-    expect(canceled).toBe(true);
-    expect(pulls).toBe(2);
-    expect(verifier).not.toHaveBeenCalled();
+    expect(raw).not.toContain(token);
+    expect(raw).not.toContain("sessionCookie");
   });
 
-  it("aborts a slow request body on an absolute deadline", async () => {
-    const verifier = vi.fn();
-    let closeTimer: ReturnType<typeof setTimeout> | undefined;
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) { closeTimer = setTimeout(() => controller.close(), 40); },
-      cancel() { clearTimeout(closeTimer); },
-    });
-    const slowRequest = new Request("https://example.test/api/v1/bot-connections/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      duplex: "half",
-    } as RequestInit & { duplex: "half" });
-    const { env } = testEnv();
-    const response = await createRouter({ verifyBotToken: verifier, requestBodyDeadlineMs: 5 })(slowRequest, env, testContext());
+  it("uses one anonymous rate-limit subject and ignores spoofable forwarding headers", async () => {
+    const ops = operations();
+    const { env } = environment();
+    await createRouter({ operations: async () => ops })(
+      onboardingRequest(onboardingBody(), { "x-forwarded-for": "198.51.100.4" }), env, context(),
+    );
 
-    expect(response.status).toBe(408);
-    expect((await response.json() as { error: { code: string } }).error.code).toBe("REQUEST_TIMEOUT");
-    expect(verifier).not.toHaveBeenCalled();
+    expect(ops.digestRateLimitSubject).toHaveBeenCalledWith("rate-limit:onboarding:telegram:anonymous");
+  });
+
+  it.each([
+    { label: "missing origin", headers: { origin: "" }, expected: 403 },
+    { label: "wrong media type", headers: { "content-type": "text/plain" }, expected: 415 },
+    { label: "oversized body", headers: { "content-length": "2049" }, expected: 413 },
+  ])("rejects $label before rate limiting or provider egress", async ({ headers, expected }) => {
+    const ops = operations();
+    const { env } = environment();
+    const request = onboardingRequest(onboardingBody(), headers as unknown as Record<string, string>);
+    if (headers.origin === "") request.headers.delete("origin");
+    const response = await createRouter({ operations: async () => ops })(request, env, context());
+
+    expect(response.status).toBe(expected);
+    expect(ops.consumeOnboardingRateLimit).not.toHaveBeenCalled();
+    expect(ops.onboard).not.toHaveBeenCalled();
+  });
+
+  it("strictly validates and normalizes onboarding fields before the operation", async () => {
+    const ops = operations();
+    const { env } = environment();
+    const response = await createRouter({ operations: async () => ops })(
+      onboardingRequest({ ...onboardingBody(), displayName: "  Tuyền  ", email: "  OWNER@Example.COM " }), env, context(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(ops.onboard).toHaveBeenCalledWith({ ...onboardingBody(), displayName: "Tuyền", email: "owner@example.com" });
+  });
+
+  it("returns stable safe rate and onboarding conflict errors", async () => {
+    const { env } = environment();
+    const limited = operations({
+      consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: false, resetAt: Date.now() + 9_500 })),
+    });
+    const limitedResponse = await createRouter({ operations: async () => limited })(onboardingRequest(onboardingBody()), env, context());
+    expect(limitedResponse.status).toBe(429);
+    expect(Number(limitedResponse.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    expect((await limitedResponse.json() as { error: { code: string } }).error.code).toBe("RATE_LIMITED");
+
+    const conflict = operations({ onboard: vi.fn(async () => { throw new OnboardingConflictError(); }) });
+    const conflictResponse = await createRouter({ operations: async () => conflict })(onboardingRequest(onboardingBody()), env, context());
+    const raw = await conflictResponse.text();
+    expect(conflictResponse.status).toBe(409);
+    expect(JSON.parse(raw).error.code).toBe("ONBOARDING_CONFLICT");
+    expect(raw).not.toContain(token);
+    expect(raw).not.toContain("owner@example.com");
+  });
+
+  it("requires a session and an exact empty JSON object to rotate a connect code", async () => {
+    const ops = operations();
+    const { env } = environment();
+    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: "{}",
+    });
+    const response = await createRouter({ operations: async () => ops })(request, env, context());
+
+    expect(ops.requireUser).toHaveBeenCalledWith(request);
+    expect(ops.rotateConnectCode).toHaveBeenCalledWith({ userId: "user-internal", publicId: "bot-public" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ data: { connectCommand: "/connect WXYZ6789", expiresAt: 1_700_000_600_000 } });
+  });
+
+  it("returns 401 before connection lookup and 429 with Retry-After safely", async () => {
+    const { env } = environment();
+    const unauthenticated = operations({ requireUser: vi.fn(async () => { throw new SessionAuthError(); }) });
+    const request = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: "{}",
+    });
+    const unauthorized = await createRouter({ operations: async () => unauthenticated })(request, env, context());
+    expect(unauthorized.status).toBe(401);
+    expect(unauthenticated.rotateConnectCode).not.toHaveBeenCalled();
+
+    const limited = operations({ rotateConnectCode: vi.fn(async () => { throw new RateLimitExceededError(17); }) });
+    const limitedRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: "{}",
+    });
+    const limitedResponse = await createRouter({ operations: async () => limited })(limitedRequest, env, context());
+    expect(limitedResponse.status).toBe(429);
+    expect(limitedResponse.headers.get("retry-after")).toBe("17");
+    expect((await limitedResponse.json() as { error: { code: string } }).error.code).toBe("RATE_LIMITED");
+  });
+
+  it("rejects non-empty connect-code bodies and hides unknown failures", async () => {
+    const { env } = environment();
+    const ops = operations();
+    const invalid = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: JSON.stringify({ unexpected: true }),
+    });
+    const invalidResponse = await createRouter({ operations: async () => ops })(invalid, env, context());
+    expect(invalidResponse.status).toBe(400);
+    expect(ops.rotateConnectCode).not.toHaveBeenCalled();
+
+    const failed = operations({ rotateConnectCode: vi.fn(async () => { throw new Error(`secret ${token}`); }) });
+    const failureRequest = new Request("https://calenote.iconiclogs.com/api/connections/bot-public/connect-code", {
+      method: "POST",
+      headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json" },
+      body: "{}",
+    });
+    const failedResponse = await createRouter({ operations: async () => failed })(failureRequest, env, context());
+    const raw = await failedResponse.text();
+    expect(failedResponse.status).toBe(500);
+    expect(raw).not.toContain(token);
+    expect(JSON.parse(raw).error.code).toBe("INTERNAL_ERROR");
   });
 });
