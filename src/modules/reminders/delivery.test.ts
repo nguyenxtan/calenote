@@ -186,10 +186,12 @@ describe("D1 reminder delivery ownership and finalization", () => {
       "SELECT status, provider_receipt, sent_at FROM reminder_deliveries",
     ).get()).toEqual({ status: "SENT", provider_receipt: "provider-receipt-1", sent_at: now });
     expect(harness.db.sqlite.prepare("SELECT status FROM reminders").get()).toEqual({ status: "SENT" });
-    expect(harness.db.sqlite.prepare("SELECT action, result FROM audit_events").get()).toEqual({
-      action: "REMINDER_SENT",
-      result: "SUCCESS",
-    });
+    expect(harness.db.sqlite.prepare(
+      "SELECT action, result FROM audit_events ORDER BY rowid",
+    ).all()).toEqual([
+      { action: "REMINDER_DELIVERY_STARTED", result: "SUCCESS" },
+      { action: "REMINDER_SENT", result: "SUCCESS" },
+    ]);
   });
 
   it("is idempotent for an already-sent reminder and keeps one unique delivery row", async () => {
@@ -237,10 +239,65 @@ describe("D1 reminder delivery ownership and finalization", () => {
     harness.setNow(now + 1);
     await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "NOOP" });
     expect(harness.sendText).toHaveBeenCalledTimes(1);
+    harness.setNow(now + 300_000);
+    await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "NOOP" });
+    expect(harness.sendText).toHaveBeenCalledTimes(1);
     harness.setNow(now + 300_001);
     await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "UNCERTAIN" });
     expect(harness.db.sqlite.prepare("SELECT status FROM reminder_deliveries").get()).toEqual({ status: "UNCERTAIN" });
     expect(harness.db.sqlite.prepare("SELECT status FROM reminders").get()).toEqual({ status: "UNCERTAIN" });
+    expect(harness.sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it("fences a direct RETRYABLE attempt as CLAIMED so a failed finalization can be reconciled", async () => {
+    const harness = await createHarness({ reminderStatus: "RETRYABLE", claimedAt: null });
+    seedDelivery(harness.db, {
+      status: "RETRYABLE",
+      attemptCount: 1,
+      retryNotBefore: now,
+    });
+    harness.db.sqlite.exec(
+      `CREATE TRIGGER force_retry_finalize_failure
+       BEFORE UPDATE OF status ON reminders
+       WHEN NEW.status = 'SENT'
+       BEGIN SELECT RAISE(ABORT, 'forced retry finalization failure'); END`,
+    );
+
+    await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "UNCERTAIN" });
+
+    const reminder = harness.db.sqlite.prepare(
+      "SELECT status, claimed_at, transition_marker FROM reminders WHERE id = ?",
+    ).get(reminderId) as { status: string; claimed_at: number | null; transition_marker: string | null };
+    const delivery = harness.db.sqlite.prepare(
+      "SELECT status, attempt_count, send_started_at, transition_marker FROM reminder_deliveries WHERE reminder_id = ?",
+    ).get(reminderId) as {
+      status: string;
+      attempt_count: number;
+      send_started_at: number | null;
+      transition_marker: string | null;
+    };
+    expect(reminder).toEqual({
+      status: "CLAIMED",
+      claimed_at: now,
+      transition_marker: delivery.transition_marker,
+    });
+    expect(delivery).toMatchObject({
+      status: "SENDING",
+      attempt_count: 2,
+      send_started_at: now,
+      transition_marker: expect.any(String),
+    });
+
+    harness.setNow(now + 300_000);
+    await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "NOOP" });
+    harness.setNow(now + 300_001);
+    await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "UNCERTAIN" });
+    expect(harness.db.sqlite.prepare(
+      "SELECT status FROM reminder_deliveries WHERE reminder_id = ?",
+    ).get(reminderId)).toEqual({ status: "UNCERTAIN" });
+    expect(harness.db.sqlite.prepare(
+      "SELECT status FROM reminders WHERE id = ?",
+    ).get(reminderId)).toEqual({ status: "UNCERTAIN" });
     expect(harness.sendText).toHaveBeenCalledTimes(1);
   });
 });
@@ -367,6 +424,39 @@ describe("provider outcome mapping", () => {
 });
 
 describe("safe local delivery boundaries", () => {
+  it("terminally rejects a cross-tenant reminder before ownership or provider egress", async () => {
+    const harness = await createHarness();
+    harness.db.sqlite.prepare(
+      "INSERT INTO users (id, email, display_name, timezone, created_at, updated_at) VALUES ('user-2', 'other@example.test', 'Other', 'Asia/Ho_Chi_Minh', ?, ?)",
+    ).run(now, now);
+    harness.db.sqlite.prepare(
+      "UPDATE bot_connections SET user_id = 'user-2' WHERE id = ?",
+    ).run(connectionId);
+
+    await expect(harness.deps.store.read(reminderId)).resolves.toBeNull();
+    await expect(harness.deps.store.acquire(
+      reminderId,
+      "cross-tenant-delivery",
+      "cross-tenant-owner",
+      now,
+    )).resolves.toEqual({ status: "MISSING" });
+    expect(harness.db.sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM reminder_deliveries",
+    ).get()).toEqual({ count: 0 });
+
+    await expect(harness.module.deliverReminder(reminderId, harness.deps)).resolves.toEqual({ status: "FAILED" });
+    expect(harness.db.sqlite.prepare(
+      "SELECT status FROM reminders WHERE id = ?",
+    ).get(reminderId)).toEqual({ status: "FAILED" });
+    expect(harness.db.sqlite.prepare(
+      "SELECT status, safe_error_code FROM reminder_deliveries WHERE reminder_id = ?",
+    ).get(reminderId)).toEqual({
+      status: "FAILED",
+      safe_error_code: "INVALID_REMINDER_TENANT",
+    });
+    expect(harness.sendText).not.toHaveBeenCalled();
+  });
+
   it("reconciles an expired SENDING lease to UNCERTAIN without another provider call", async () => {
     const harness = await createHarness({ claimedAt: now - 300_001 });
     seedDelivery(harness.db, {

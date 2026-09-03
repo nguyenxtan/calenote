@@ -6,6 +6,7 @@ import {
 } from "@/modules/platform/types";
 
 export const REMINDER_CLAIM_LEASE_MS = 5 * 60_000;
+export const DELIVERY_SEND_LEASE_MS = 5 * 60_000;
 export const INBOUND_DISPATCH_LEASE_MS = 5 * 60_000;
 export const MAX_DELIVERY_ATTEMPTS = 4;
 export const MAX_INBOUND_PROCESS_ATTEMPTS = 4;
@@ -84,7 +85,11 @@ export class D1ReminderSchedulerStore implements ReminderSchedulerStore {
              AND (d.reminder_id IS NULL OR d.status = 'PENDING'))
            OR
            (r.status = 'CLAIMED' AND r.claimed_at IS NOT NULL AND r.claimed_at <= ?
-             AND (d.reminder_id IS NULL OR d.status IN ('PENDING', 'RETRYABLE', 'SENDING')))
+             AND (
+               d.reminder_id IS NULL OR d.status IN ('PENDING', 'RETRYABLE')
+               OR (d.status = 'SENDING' AND d.send_started_at IS NOT NULL
+                 AND d.send_started_at < ?)
+             ))
            OR
            (r.status = 'RETRYABLE' AND d.status = 'RETRYABLE'
              AND d.retry_not_before IS NOT NULL AND d.retry_not_before <= ?
@@ -96,6 +101,7 @@ export class D1ReminderSchedulerStore implements ReminderSchedulerStore {
       .bind(
         now,
         now - REMINDER_CLAIM_LEASE_MS,
+        now - DELIVERY_SEND_LEASE_MS,
         now,
         MAX_DELIVERY_ATTEMPTS,
         limit,
@@ -123,12 +129,25 @@ export class D1ReminderSchedulerStore implements ReminderSchedulerStore {
       stateBindings.push(now);
     } else if (candidate.status === "CLAIMED") {
       stateEligibility = `status = 'CLAIMED' AND claimed_at IS NOT NULL AND claimed_at <= ?
-        AND NOT EXISTS (
-          SELECT 1 FROM reminder_deliveries d
-          WHERE d.reminder_id = reminders.id
-            AND d.status IN ('SENT', 'FAILED', 'UNCERTAIN', 'CANCELLED')
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM reminder_deliveries d
+            WHERE d.reminder_id = reminders.id
+          )
+          OR EXISTS (
+            SELECT 1 FROM reminder_deliveries d
+            WHERE d.reminder_id = reminders.id AND d.status IN ('PENDING', 'RETRYABLE')
+          )
+          OR EXISTS (
+            SELECT 1 FROM reminder_deliveries d
+            WHERE d.reminder_id = reminders.id AND d.status = 'SENDING'
+              AND d.send_started_at IS NOT NULL AND d.send_started_at < ?
+          )
         )`;
-      stateBindings.push(now - REMINDER_CLAIM_LEASE_MS);
+      stateBindings.push(
+        now - REMINDER_CLAIM_LEASE_MS,
+        now - DELIVERY_SEND_LEASE_MS,
+      );
     } else {
       stateEligibility = `status = 'RETRYABLE' AND EXISTS (
         SELECT 1 FROM reminder_deliveries d

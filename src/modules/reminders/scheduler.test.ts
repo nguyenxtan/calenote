@@ -66,6 +66,11 @@ async function schedulerModule() {
   return import(/* @vite-ignore */ modulePath).catch(() => null);
 }
 
+async function deliveryModule() {
+  const modulePath = "./delivery";
+  return import(/* @vite-ignore */ modulePath).catch(() => null);
+}
+
 describe("Task 7 migrated scheduling schema", () => {
   it("adds bounded dispatch, claim, and delivery lease fields with recovery indexes", () => {
     const db = database();
@@ -295,6 +300,140 @@ describe("D1 due reminder scheduler", () => {
     expect(db.sqlite.prepare("SELECT status FROM reminders WHERE id = ?").get(
       "reminder-terminal-000",
     )).toEqual({ status: "CLAIMED" });
+  });
+
+  it("keeps an exact-boundary SENDING lease and enqueues it only one millisecond after expiry", async () => {
+    const scheduler = await schedulerModule();
+    expect(scheduler).not.toBeNull();
+    if (!scheduler) return;
+    const db = database();
+    seedAccount(db);
+    seedReminder(
+      db,
+      "reminder-sending-equal",
+      now - 2,
+      "CLAIMED",
+      now - 300_001,
+      "fresh-send-owner",
+    );
+    seedReminder(
+      db,
+      "reminder-sending-stale",
+      now - 1,
+      "CLAIMED",
+      now - 300_001,
+      "stale-send-owner",
+    );
+    db.sqlite.prepare(
+      `INSERT INTO reminder_deliveries (
+         id, reminder_id, status, attempt_count, send_started_at,
+         transition_marker, created_at, updated_at
+       ) VALUES (?, ?, 'SENDING', 1, ?, ?, ?, ?)`,
+    ).run(
+      "delivery-sending-equal",
+      "reminder-sending-equal",
+      now - 300_000,
+      "fresh-send-owner",
+      now,
+      now,
+    );
+    db.sqlite.prepare(
+      `INSERT INTO reminder_deliveries (
+         id, reminder_id, status, attempt_count, send_started_at,
+         transition_marker, created_at, updated_at
+       ) VALUES (?, ?, 'SENDING', 1, ?, ?, ?, ?)`,
+    ).run(
+      "delivery-sending-stale",
+      "reminder-sending-stale",
+      now - 300_001,
+      "stale-send-owner",
+      now,
+      now,
+    );
+    const published: unknown[] = [];
+
+    const result = await scheduler.claimDueReminders(now, 5, {
+      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      enqueue: async (job: unknown) => { published.push(job); },
+      randomBytes: deterministicRandomBytes(),
+    });
+
+    expect(result).toEqual({ selected: 1, published: 1, publishFailed: 0 });
+    expect(published).toEqual([{
+      type: "DELIVER_REMINDER",
+      reminderId: "reminder-sending-stale",
+    }]);
+    expect(db.sqlite.prepare(
+      "SELECT claimed_at, transition_marker FROM reminders WHERE id = ?",
+    ).get("reminder-sending-equal")).toEqual({
+      claimed_at: now - 300_001,
+      transition_marker: "fresh-send-owner",
+    });
+  });
+
+  it("cannot roll back a reminder after delivery atomically replaces the scheduler marker", async () => {
+    const scheduler = await schedulerModule();
+    const deliveryApi = await deliveryModule();
+    expect(scheduler).not.toBeNull();
+    expect(deliveryApi).not.toBeNull();
+    if (!scheduler || !deliveryApi) return;
+    const db = database();
+    seedAccount(db);
+    seedReminder(db, "reminder-retry-race01", now - 1, "RETRYABLE");
+    db.sqlite.prepare(
+      `INSERT INTO reminder_deliveries (
+         id, reminder_id, status, attempt_count, retry_not_before,
+         transition_marker, created_at, updated_at
+       ) VALUES ('delivery-retry-race', ?, 'RETRYABLE', 1, ?, NULL, ?, ?)`,
+    ).run("reminder-retry-race01", now, now, now);
+    const deliveryStore = new deliveryApi.D1ReminderDeliveryStore(
+      db as unknown as D1Database,
+    );
+
+    const result = await scheduler.claimDueReminders(now, 5, {
+      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      enqueue: async () => {
+        await expect(deliveryStore.acquire(
+          "reminder-retry-race01",
+          "unused-new-delivery-id",
+          "delivery-send-owner",
+          now,
+        )).resolves.toMatchObject({ status: "OWNED" });
+        throw new Error("ambiguous Queue publication");
+      },
+      randomBytes: deterministicRandomBytes(),
+    });
+
+    expect(result).toEqual({ selected: 1, published: 0, publishFailed: 1 });
+    expect(db.sqlite.prepare(
+      "SELECT status, claimed_at, transition_marker FROM reminders WHERE id = ?",
+    ).get("reminder-retry-race01")).toEqual({
+      status: "CLAIMED",
+      claimed_at: now,
+      transition_marker: "delivery-send-owner",
+    });
+    expect(db.sqlite.prepare(
+      "SELECT status, attempt_count, send_started_at, transition_marker FROM reminder_deliveries WHERE reminder_id = ?",
+    ).get("reminder-retry-race01")).toEqual({
+      status: "SENDING",
+      attempt_count: 2,
+      send_started_at: now,
+      transition_marker: "delivery-send-owner",
+    });
+
+    const recoveryEnqueue = vi.fn(async () => undefined);
+    const recovery = {
+      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      enqueue: recoveryEnqueue,
+      randomBytes: deterministicRandomBytes(),
+    };
+    await scheduler.claimDueReminders(now + 300_000, 5, recovery);
+    expect(recoveryEnqueue).not.toHaveBeenCalled();
+    await scheduler.claimDueReminders(now + 300_001, 5, recovery);
+    expect(recoveryEnqueue).toHaveBeenCalledExactlyOnceWith({
+      type: "DELIVER_REMINDER",
+      reminderId: "reminder-retry-race01",
+    });
   });
 });
 

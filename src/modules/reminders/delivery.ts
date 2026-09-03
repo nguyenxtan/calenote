@@ -6,7 +6,6 @@ import { ProviderOperationError } from "@/modules/connections/provider-error";
 import { sendProviderText } from "@/modules/inbound/processor";
 import {
   cryptoRandomBytes,
-  d1Changes,
   randomOpaqueId,
   systemClock,
   type Clock,
@@ -16,10 +15,11 @@ import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { isSafeProviderToken } from "@/modules/connections/token-policy";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
 import {
+  DELIVERY_SEND_LEASE_MS,
   MAX_DELIVERY_ATTEMPTS,
 } from "./scheduler";
 
-export const DELIVERY_SEND_LEASE_MS = 5 * 60_000;
+export { DELIVERY_SEND_LEASE_MS } from "./scheduler";
 export const QUOTA_FALLBACK_DELAYS_SECONDS = [60, 300, 1_800] as const;
 const SAFE_PRE_PROVIDER_RETRY_SECONDS = 60;
 const PROVIDER_TEXT_CODE_UNITS = 2_000;
@@ -221,8 +221,10 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                 d.attempt_count, d.send_started_at, d.retry_not_before,
                 d.transition_marker AS delivery_marker
          FROM reminders r
+         JOIN workspaces w ON w.id = r.workspace_id
          JOIN chat_identities ci ON ci.id = r.chat_identity_id
          JOIN bot_connections c ON c.id = ci.connection_id
+           AND c.user_id = w.owner_user_id
          LEFT JOIN reminder_deliveries d ON d.reminder_id = r.id
          WHERE r.id = ?
          LIMIT 1`,
@@ -232,14 +234,103 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
     return row ? contextFromRow(row) : null;
   }
 
+  private async commitOwnership(
+    mutation: D1PreparedStatement,
+    reminderId: string,
+    marker: string,
+    now: number,
+  ): Promise<OwnedDelivery | null> {
+    try {
+      await this.database.batch([
+        mutation,
+        this.database
+          .prepare(
+            `UPDATE reminders
+             SET status = 'CLAIMED', claimed_at = ?, transition_marker = ?, updated_at = ?
+             WHERE id = ? AND status IN ('CLAIMED', 'RETRYABLE')
+               AND EXISTS (
+                 SELECT 1
+                 FROM reminder_deliveries d
+                 JOIN chat_identities ci ON ci.id = reminders.chat_identity_id
+                 JOIN bot_connections c ON c.id = ci.connection_id
+                 JOIN workspaces w ON w.id = reminders.workspace_id
+                   AND w.owner_user_id = c.user_id
+                 WHERE d.reminder_id = reminders.id AND d.status = 'SENDING'
+                   AND d.send_started_at = ? AND d.transition_marker = ?
+                   AND c.state = 'ACTIVE_BOUND'
+               )`,
+          )
+          .bind(now, marker, now, reminderId, now, marker),
+        this.database
+          .prepare(
+            `INSERT INTO audit_events (
+               id, actor_user_id, action, target_user_id, target_connection_id,
+               target_reminder_id, result, created_at
+             ) VALUES (
+               COALESCE((
+                 SELECT ? FROM reminders r
+                 JOIN workspaces w ON w.id = r.workspace_id
+                 JOIN chat_identities ci ON ci.id = r.chat_identity_id
+                 JOIN bot_connections c ON c.id = ci.connection_id
+                   AND c.user_id = w.owner_user_id
+                 JOIN reminder_deliveries d ON d.reminder_id = r.id
+                 WHERE r.id = ? AND r.status = 'CLAIMED' AND r.claimed_at = ?
+                   AND r.transition_marker = ? AND d.status = 'SENDING'
+                   AND d.send_started_at = ? AND d.transition_marker = ?
+                   AND c.state = 'ACTIVE_BOUND'
+               ), NULL),
+               (SELECT w.owner_user_id FROM reminders r JOIN workspaces w ON w.id = r.workspace_id WHERE r.id = ?),
+               'REMINDER_DELIVERY_STARTED',
+               (SELECT w.owner_user_id FROM reminders r JOIN workspaces w ON w.id = r.workspace_id WHERE r.id = ?),
+               (SELECT ci.connection_id FROM reminders r JOIN chat_identities ci ON ci.id = r.chat_identity_id WHERE r.id = ?),
+               ?, 'SUCCESS', ?
+             )`,
+          )
+          .bind(
+            marker,
+            reminderId,
+            now,
+            marker,
+            now,
+            marker,
+            reminderId,
+            reminderId,
+            reminderId,
+            reminderId,
+            now,
+          ),
+      ]);
+    } catch (error) {
+      if (expectedGuardConflict(error)) return null;
+      throw error;
+    }
+
+    const owned = await this.database
+      .prepare(
+        `SELECT id, attempt_count
+         FROM reminder_deliveries
+         WHERE reminder_id = ? AND status = 'SENDING'
+           AND send_started_at = ? AND transition_marker = ?
+         LIMIT 1`,
+      )
+      .bind(reminderId, now, marker)
+      .first<{ id: string; attempt_count: number }>();
+    if (!owned) throw new Error("Owned reminder delivery was unavailable");
+    return {
+      deliveryId: owned.id,
+      marker,
+      attemptCount: owned.attempt_count,
+    };
+  }
+
   async acquire(
     reminderId: string,
     deliveryId: string,
     marker: string,
     now: number,
   ): Promise<AcquireDeliveryResult> {
-    const inserted = await this.database
-      .prepare(
+    const inserted = await this.commitOwnership(
+      this.database.prepare(
         `INSERT OR IGNORE INTO reminder_deliveries (
            id, reminder_id, status, attempt_count, provider_receipt,
            safe_error_code, sent_at, send_started_at, retry_not_before,
@@ -247,26 +338,26 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
          )
          SELECT ?, r.id, 'SENDING', 1, NULL, NULL, NULL, ?, NULL, ?, ?, ?
          FROM reminders r
+         JOIN workspaces w ON w.id = r.workspace_id
          JOIN chat_identities ci ON ci.id = r.chat_identity_id
          JOIN bot_connections c ON c.id = ci.connection_id
+           AND c.user_id = w.owner_user_id
          WHERE r.id = ? AND r.status IN ('CLAIMED', 'RETRYABLE')
            AND c.state = 'ACTIVE_BOUND'
            AND NOT EXISTS (
              SELECT 1 FROM reminder_deliveries d WHERE d.reminder_id = r.id
            )
-         RETURNING id`,
+         `,
       )
-      .bind(deliveryId, now, marker, now, now, reminderId)
-      .run<{ id: string }>();
-    if (d1Changes(inserted) === 1) {
-      return {
-        status: "OWNED",
-        delivery: { deliveryId, marker, attemptCount: 1 },
-      };
-    }
+        .bind(deliveryId, now, marker, now, now, reminderId),
+      reminderId,
+      marker,
+      now,
+    );
+    if (inserted) return { status: "OWNED", delivery: inserted };
 
-    const updated = await this.database
-      .prepare(
+    const updated = await this.commitOwnership(
+      this.database.prepare(
         `UPDATE reminder_deliveries
          SET status = 'SENDING', attempt_count = attempt_count + 1,
              provider_receipt = NULL, safe_error_code = NULL, sent_at = NULL,
@@ -280,27 +371,21 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
            AND EXISTS (
              SELECT 1
              FROM reminders r
+             JOIN workspaces w ON w.id = r.workspace_id
              JOIN chat_identities ci ON ci.id = r.chat_identity_id
              JOIN bot_connections c ON c.id = ci.connection_id
+               AND c.user_id = w.owner_user_id
              WHERE r.id = reminder_deliveries.reminder_id
                AND r.status IN ('CLAIMED', 'RETRYABLE')
                AND c.state = 'ACTIVE_BOUND'
-           )
-         RETURNING id, attempt_count`,
+           )`,
       )
-      .bind(now, marker, now, reminderId, MAX_DELIVERY_ATTEMPTS, now)
-      .run<{ id: string; attempt_count: number }>();
-    if (d1Changes(updated) === 1) {
-      const row = updated.results[0];
-      return {
-        status: "OWNED",
-        delivery: {
-          deliveryId: row.id,
-          marker,
-          attemptCount: row.attempt_count,
-        },
-      };
-    }
+        .bind(now, marker, now, reminderId, MAX_DELIVERY_ATTEMPTS, now),
+      reminderId,
+      marker,
+      now,
+    );
+    if (updated) return { status: "OWNED", delivery: updated };
 
     const current = await this.read(reminderId);
     if (!current) return { status: "MISSING" };
@@ -350,13 +435,14 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
           `UPDATE reminders
            SET status = 'SENT', updated_at = ?
            WHERE id = ? AND status IN ('CLAIMED', 'RETRYABLE')
+             AND transition_marker = ?
              AND EXISTS (
                SELECT 1 FROM reminder_deliveries d
                WHERE d.reminder_id = reminders.id AND d.status = 'SENT'
                  AND d.transition_marker = ?
              )`,
         )
-        .bind(now, reminderId, marker),
+        .bind(now, reminderId, marker, marker),
       this.database
         .prepare(
           `INSERT INTO audit_events (
@@ -367,6 +453,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                SELECT ? FROM reminders r
                JOIN reminder_deliveries d ON d.reminder_id = r.id
                WHERE r.id = ? AND r.status = 'SENT' AND d.status = 'SENT'
+                 AND r.transition_marker = ?
                  AND d.transition_marker = ?
              ), NULL),
              (SELECT w.owner_user_id FROM reminders r JOIN workspaces w ON w.id = r.workspace_id WHERE r.id = ?),
@@ -379,6 +466,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
         .bind(
           auditId,
           reminderId,
+          marker,
           marker,
           reminderId,
           reminderId,
@@ -410,6 +498,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
           `UPDATE reminders
            SET status = ?, updated_at = ?
            WHERE id = ? AND status IN ('CLAIMED', 'RETRYABLE')
+             AND transition_marker = ?
              AND EXISTS (
                SELECT 1 FROM reminder_deliveries d
                WHERE d.reminder_id = reminders.id AND d.status = ?
@@ -420,6 +509,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
           input.status,
           input.now,
           input.reminderId,
+          input.marker,
           input.status,
           input.safeErrorCode,
           input.marker,
@@ -457,6 +547,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                JOIN chat_identities ci ON ci.id = r.chat_identity_id
                JOIN bot_connections c ON c.id = ci.connection_id
                WHERE r.id = ? AND r.status = ? AND d.status = ?
+                 AND r.transition_marker = ?
                  AND d.safe_error_code = ? AND d.transition_marker = ?
                  AND (? = 0 OR (c.id = ? AND c.state = 'SUSPENDED'))
              ), NULL),
@@ -472,6 +563,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
           input.reminderId,
           input.status,
           input.status,
+          input.marker,
           input.safeErrorCode,
           input.marker,
           input.suspendConnection ? 1 : 0,
@@ -512,13 +604,14 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
            SET status = 'RETRYABLE', claimed_at = NULL,
                transition_marker = NULL, updated_at = ?
            WHERE id = ? AND status IN ('CLAIMED', 'RETRYABLE')
+             AND transition_marker = ?
              AND EXISTS (
                SELECT 1 FROM reminder_deliveries d
                WHERE d.reminder_id = reminders.id AND d.status = 'RETRYABLE'
                  AND d.retry_not_before = ? AND d.transition_marker = ?
              )`,
         )
-        .bind(now, reminderId, retryNotBefore, marker),
+        .bind(now, reminderId, marker, retryNotBefore, marker),
       this.database
         .prepare(
           `INSERT INTO audit_events (
@@ -666,7 +759,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
              SET status = 'UNCERTAIN', safe_error_code = 'STALE_SENDING_LEASE',
                  retry_not_before = NULL, updated_at = ?
              WHERE reminder_id = ? AND status = 'SENDING'
-               AND send_started_at IS NOT NULL AND send_started_at <= ?`,
+               AND send_started_at IS NOT NULL AND send_started_at < ?`,
           )
           .bind(now, reminderId, cutoff),
         this.database
@@ -893,14 +986,22 @@ export async function deliverReminder(
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const startedAt = now();
   const context = await dependencies.store.read(reminderId);
-  if (!context) return { status: "MISSING" };
+  if (!context) {
+    return failBeforeProvider(
+      reminderId,
+      "INVALID_REMINDER_TENANT",
+      startedAt,
+      dependencies.store,
+      randomBytes,
+    );
+  }
   const terminal = terminalOutcome(context);
   if (terminal) return terminal;
 
   if (context.deliveryStatus === "SENDING") {
     if (
       context.sendStartedAt !== null
-      && context.sendStartedAt <= startedAt - DELIVERY_SEND_LEASE_MS
+      && context.sendStartedAt < startedAt - DELIVERY_SEND_LEASE_MS
     ) {
       const reconciled = await dependencies.store.reconcileStaleSending(
         reminderId,
