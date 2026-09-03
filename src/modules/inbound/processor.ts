@@ -17,6 +17,12 @@ import {
   type Clock,
   type RandomBytes,
 } from "@/modules/platform/types";
+import {
+  D1ReminderCommandStore,
+  processBoundChatMessage,
+  type ProcessBoundChatResult,
+  type ReminderCommandStore,
+} from "@/modules/reminders/command-service";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
@@ -99,7 +105,7 @@ export interface BindPrivateChatInput {
   now: number;
 }
 
-export interface InboundProcessorStore {
+export interface InboundProcessorStore extends ReminderCommandStore {
   claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult>;
   bindPrivateChat(input: BindPrivateChatInput): Promise<boolean>;
   reject(inboundId: string, claimMarker: string, now: number): Promise<boolean>;
@@ -122,7 +128,7 @@ type SendText = (
 
 export interface ProcessInboundDependencies {
   store: InboundProcessorStore;
-  keyring: Pick<Keyring, "decryptSensitive" | "digestCode" | "decryptCredential">;
+  keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
   now?: Clock;
   randomBytes?: RandomBytes;
@@ -144,8 +150,8 @@ export async function sendProviderText(
 export type ProcessInboundResult =
   | { status: "BOUND" }
   | { status: "REJECTED" }
-  | { status: "BOUND_MESSAGE"; message: ClaimedInboundMessage }
   | { status: "SUPERSEDED" }
+  | ProcessBoundChatResult
   | Exclude<ClaimInboundResult, { status: "CLAIMED" }>;
 
 function arrayBuffer(value: unknown): ArrayBuffer {
@@ -190,8 +196,10 @@ function mapClaimed(row: ClaimedRow): StoreClaimResult & { status: "CLAIMED" } {
   };
 }
 
-export class D1InboundProcessorStore implements InboundProcessorStore {
-  constructor(private readonly database: D1Database) {}
+export class D1InboundProcessorStore extends D1ReminderCommandStore implements InboundProcessorStore {
+  constructor(database: D1Database) {
+    super(database);
+  }
 
   async claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult> {
     const claimed = await this.database
@@ -467,7 +475,13 @@ export async function processInbound(
   }
 
   if (message.connectionState === "ACTIVE_BOUND") {
-    return { status: "BOUND_MESSAGE", message };
+    return processBoundChatMessage(message, {
+      store: dependencies.store,
+      keyring: dependencies.keyring,
+      now,
+      randomBytes,
+      reply: (text) => replyAfterTerminal(message, text, dependencies),
+    });
   }
 
   if (!await dependencies.store.reject(message.id, message.claimMarker, now())) {

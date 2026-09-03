@@ -19,7 +19,15 @@ class SqliteStatement {
   private values: SQLInputValue[] = [];
   constructor(private readonly database: DatabaseSync, private readonly sql: string) {}
   bind(...values: unknown[]): D1PreparedStatement {
-    this.values = values.map((value) => value instanceof ArrayBuffer ? new Uint8Array(value) : value) as SQLInputValue[];
+    this.values = values.map((value) => {
+      if (Object.prototype.toString.call(value) === "[object ArrayBuffer]") {
+        return new Uint8Array(value as ArrayBuffer);
+      }
+      if (ArrayBuffer.isView(value)) {
+        return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+      }
+      return value;
+    }) as SQLInputValue[];
     return this as unknown as D1PreparedStatement;
   }
   async run<T>(): Promise<D1Result<T>> {
@@ -87,6 +95,12 @@ async function setup(options: SetupOptions = {}) {
   database.sqlite.prepare(
     "INSERT INTO users (id, email, display_name, timezone, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
   ).run(userId, "owner@example.test", "Owner", "Asia/Ho_Chi_Minh", now, now);
+  database.sqlite.prepare(
+    "INSERT INTO workspaces (id, owner_user_id, kind, created_at, updated_at) VALUES (?, ?, 'PERSONAL', ?, ?)",
+  ).run("workspace-1", userId, now, now);
+  database.sqlite.prepare(
+    "INSERT INTO memberships (workspace_id, user_id, role, created_at) VALUES (?, ?, 'OWNER', ?)",
+  ).run("workspace-1", userId, now);
   database.sqlite.prepare(
     `INSERT INTO bot_connections (
       id, user_id, provider, public_id, provider_bot_id, display_name,
@@ -360,16 +374,23 @@ describe("non-connect processor handoff", () => {
     expect(sendText.mock.calls[0][3]).not.toContain("nhắc tôi họp ngày mai");
   });
 
-  it("returns bound messages to a Task 6 extension point without terminalizing or replying", async () => {
-    const { database, deps, sendText, inboundId } = await setup({ state: "ACTIVE_BOUND", text: "nhắc tôi họp ngày mai" });
+  it("routes an exactly bound message through reminder handling and terminalizes before replying", async () => {
+    const { database, deps, sendText, inboundId } = await setup({
+      state: "ACTIVE_BOUND",
+      text: "mai 8h nhắc tôi họp",
+    });
+    database.sqlite.prepare(
+      "INSERT INTO chat_identities (id, connection_id, provider_user_id, private_chat_id, display_name, linked_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("identity-1", "connection-1", "provider-user-1", "chat-1", "Sender", now);
 
     const result = await processInbound(inboundId, deps);
 
-    expect(result).toMatchObject({
-      status: "BOUND_MESSAGE",
-      message: { id: inboundId, text: "nhắc tôi họp ngày mai", privateChatId: "chat-1" },
+    expect(result).toEqual({ status: "DRAFT_CREATED" });
+    expect(database.sqlite.prepare("SELECT state FROM inbound_updates WHERE id = ?").get(inboundId)).toEqual({ state: "PROCESSED" });
+    expect(database.sqlite.prepare("SELECT source_inbound_id, status FROM command_drafts").get()).toEqual({
+      source_inbound_id: inboundId,
+      status: "PENDING",
     });
-    expect(database.sqlite.prepare("SELECT state FROM inbound_updates WHERE id = ?").get(inboundId)).toEqual({ state: "PROCESSING" });
-    expect(sendText).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledTimes(1);
   });
 });

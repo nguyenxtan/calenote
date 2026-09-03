@@ -111,6 +111,8 @@ CREATE TABLE inbound_updates (
 CREATE TABLE command_drafts (
   id TEXT PRIMARY KEY NOT NULL,
   chat_identity_id TEXT NOT NULL REFERENCES chat_identities(id) ON DELETE CASCADE,
+  source_inbound_id TEXT NOT NULL UNIQUE REFERENCES inbound_updates(id) ON DELETE RESTRICT,
+  resolution_inbound_id TEXT UNIQUE REFERENCES inbound_updates(id) ON DELETE RESTRICT,
   title_ciphertext BLOB NOT NULL,
   title_iv BLOB NOT NULL CHECK (length(title_iv) = 12),
   title_key_version INTEGER NOT NULL CHECK (title_key_version > 0),
@@ -126,6 +128,7 @@ CREATE TABLE reminders (
   id TEXT PRIMARY KEY NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   chat_identity_id TEXT NOT NULL REFERENCES chat_identities(id) ON DELETE RESTRICT,
+  source_draft_id TEXT REFERENCES command_drafts(id) ON DELETE RESTRICT,
   title_ciphertext BLOB NOT NULL,
   title_iv BLOB NOT NULL CHECK (length(title_iv) = 12),
   title_key_version INTEGER NOT NULL CHECK (title_key_version > 0),
@@ -174,4 +177,10 @@ CREATE INDEX idx_connect_codes_active_digest ON connect_codes(digest) WHERE cons
 CREATE INDEX idx_login_codes_active_user_digest ON login_codes(user_id, digest, created_at DESC) WHERE consumed_at IS NULL;
 CREATE INDEX idx_login_codes_active_user_created ON login_codes(user_id, created_at DESC) WHERE consumed_at IS NULL;
 CREATE INDEX idx_inbound_updates_pending ON inbound_updates(received_at) WHERE state = 'PENDING';
+CREATE UNIQUE INDEX idx_command_drafts_one_pending
+  ON command_drafts(chat_identity_id) WHERE status = 'PENDING';
+CREATE INDEX idx_command_drafts_chat_created
+  ON command_drafts(chat_identity_id, created_at DESC);
 CREATE INDEX idx_reminders_due ON reminders(scheduled_at) WHERE status = 'PENDING';
+CREATE UNIQUE INDEX idx_reminders_source_draft
+  ON reminders(source_draft_id) WHERE source_draft_id IS NOT NULL;
