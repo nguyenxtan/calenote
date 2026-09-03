@@ -22,14 +22,21 @@ export function base64UrlToBytes(value: string): Uint8Array | null {
     return null;
   }
 }
+export function isCanonicalBase64Url(value: string, minimumLength: number): boolean {
+  return value.length >= minimumLength && value.length <= 256 && base64UrlToBytes(value) !== null;
+}
 
 export function constantTimeEqual(left: string, right: string): boolean {
-  const accepted = base64UrlPattern.test(left) && base64UrlPattern.test(right) && left.length >= 1 && right.length >= 1 && left.length <= 256 && right.length <= 256;
+  if (left.length < 1 || right.length < 1 || left.length > 256 || right.length > 256) return false;
   let difference = left.length ^ right.length;
+  let invalid = 0;
 
   for (let index = 0; index < 256; index += 1) {
-    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+    const a = left.charCodeAt(index) || 0; const b = right.charCodeAt(index) || 0;
+    difference |= a ^ b;
+    if (index < left.length && !((a >= 48 && a <= 57) || (a >= 65 && a <= 90) || (a >= 97 && a <= 122) || a === 45 || a === 95)) invalid |= 1;
+    if (index < right.length && !((b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b === 45 || b === 95)) invalid |= 1;
   }
 
-  return accepted && difference === 0;
+  return difference === 0 && invalid === 0;
 }

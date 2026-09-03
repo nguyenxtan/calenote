@@ -154,14 +154,28 @@ describe("Telegram Bot API adapter", () => {
 });
 
 describe("provider webhook and outbound adapters", () => {
+  it("rejects malformed successful webhook and send payloads instead of returning a null receipt", async () => {
+    const { ProviderOperationError } = await import("../provider-error");
+    const token = "12345678:abc-xyz_789";
+    await expect(setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/a", secretToken: "abcdefgh" }, async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
+    await expect(sendZaloText(token, "chat", "text", async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
+    await expect(setTelegramWebhook("123456789:AAExample_secret-token_123456789", { url: "https://calenote.iconiclogs.com/a", secretToken: "AAAAAAAA" }, async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
+    await expect(sendTelegramText("123456789:AAExample_secret-token_123456789", "chat", "text", async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
+  });
+
+  it.each(["abcdefghi", "abc=defg", "tiếngviệt"]) ("rejects non-canonical Zalo webhook secrets before request: %s", async (secretToken) => {
+    const requester = vi.fn();
+    await expect(setZaloWebhook("12345678:abc-xyz_789", { url: "https://calenote.iconiclogs.com/a", secretToken }, requester)).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    expect(requester).not.toHaveBeenCalled();
+  });
   it("forms Zalo webhook and send operations inside the adapter", async () => {
     const token = "12345678:abc-xyz_789";
-    const requester = vi.fn(async () => ({ ok: true, result: { message_id: "receipt-1" } }));
+    const requester = vi.fn(async (request) => request.operation === "setWebhook" ? ({ ok: true, result: { verification: { ok: true } } }) : ({ ok: true, result: { message_id: "receipt-1" } }));
 
-    await setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secretToken: "header_secret" }, requester);
+    await setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secretToken: "AAAAAAAA" }, requester);
     await expect(sendZaloText(token, "chat-1", "Nhắc bạn họp", requester)).resolves.toEqual({ providerMessageId: "receipt-1" });
     expect(requester).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      provider: "zalo", operation: "setWebhook", body: { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secret_token: "header_secret" },
+      provider: "zalo", operation: "setWebhook", body: { url: "https://calenote.iconiclogs.com/webhooks/zalo/a", secret_token: "AAAAAAAA" },
     }));
     expect(requester).toHaveBeenNthCalledWith(2, expect.objectContaining({
       provider: "zalo", operation: "sendMessage", body: { chat_id: "chat-1", text: "Nhắc bạn họp" },
@@ -175,7 +189,7 @@ describe("provider webhook and outbound adapters", () => {
 
   it("uses Telegram's constrained webhook payload and private text parser", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
-    const requester = vi.fn(async () => ({ ok: true, result: { message_id: 7 } }));
+    const requester = vi.fn(async (request) => request.operation === "setWebhook" ? ({ ok: true, result: true }) : ({ ok: true, result: { message_id: 7 } }));
     await setTelegramWebhook(token, { url: "https://calenote.iconiclogs.com/webhooks/telegram/a", secretToken: "base64url_secret" }, requester);
     await expect(sendTelegramText(token, "chat-1", "Nhắc bạn họp", requester)).resolves.toEqual({ providerMessageId: "7" });
     expect(requester).toHaveBeenNthCalledWith(1, expect.objectContaining({ operation: "setWebhook", body: { url: "https://calenote.iconiclogs.com/webhooks/telegram/a", secret_token: "base64url_secret", allowed_updates: ["message"] } }));

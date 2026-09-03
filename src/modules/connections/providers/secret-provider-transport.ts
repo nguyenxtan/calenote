@@ -54,6 +54,7 @@ export function createSuppressedProviderContext(): Context {
 export async function executeProviderRequest(
   input: ProviderRequest,
   fetcher: typeof fetch = fetch,
+  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 ): Promise<RawProviderResponse> {
   if (input.hostname !== allowedHostname[input.provider]) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
   if (!input.path.startsWith("/")) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
@@ -61,7 +62,7 @@ export async function executeProviderRequest(
   const url = new URL(input.path, base);
   if (url.protocol !== "https:" || url.hostname !== input.hostname || url.port !== "" || url.origin !== base.origin) throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
   const response = await fetcher(url.toString(), {
-    method: "POST", redirect: "error", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    method: "POST", redirect: "error", signal,
     headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(input.body ?? {}),
   });
   const reader = response.body?.getReader();

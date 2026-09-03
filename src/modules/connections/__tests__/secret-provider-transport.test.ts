@@ -40,6 +40,14 @@ describe("secret-aware provider transport", () => {
     await expect(postSecretProviderJson({ provider: "telegram", hostname: "api.telegram.org", path: "/botx/sendMessage", operation: "sendMessage" }, async () => ({ statusCode: 200, body: "{" }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
   });
 
+  it("observes an injected absolute abort signal and classifies it as uncertain", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })));
+    const pending = postSecretProviderJson({ provider: "telegram", hostname: "api.telegram.org", path: "/botx/sendMessage", operation: "sendMessage" }, (input) => executeProviderRequest(input, fetcher as typeof fetch, controller.signal));
+    controller.abort();
+    await expect(pending).rejects.toEqual(new ProviderOperationError("UNCERTAIN"));
+  });
+
   it("suppresses automatic HTTP tracing and exports only secret-free span metadata", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
     const globalFetch = vi.fn();
