@@ -19,6 +19,12 @@ import {
 } from "@/modules/platform/types";
 import {
   processBoundChatMessage,
+  type BoundChatContext,
+  type BoundChatMessage,
+  type ConfirmDraftMutation,
+  type CreateDraftMutation,
+  type MutationResult,
+  type PendingDraft,
   type ProcessBoundChatResult,
   type ReminderCommandStore,
 } from "@/modules/reminders/command-service";
@@ -198,9 +204,42 @@ function mapClaimed(row: ClaimedRow): StoreClaimResult & { status: "CLAIMED" } {
   };
 }
 
-export class D1InboundProcessorStore extends D1ReminderCommandStore implements InboundProcessorStore {
-  constructor(database: D1Database) {
-    super(database);
+export class D1InboundProcessorStore implements InboundProcessorStore {
+  private readonly reminderCommands: ReminderCommandStore;
+
+  constructor(
+    private readonly database: D1Database,
+    reminderCommands: ReminderCommandStore = new D1ReminderCommandStore(database),
+  ) {
+    this.reminderCommands = reminderCommands;
+  }
+
+  findBoundContext(message: BoundChatMessage): Promise<BoundChatContext | null> {
+    return this.reminderCommands.findBoundContext(message);
+  }
+
+  findPendingDraft(message: BoundChatMessage, chatIdentityId: string): Promise<PendingDraft | null> {
+    return this.reminderCommands.findPendingDraft(message, chatIdentityId);
+  }
+
+  createDraft(input: CreateDraftMutation): Promise<MutationResult> {
+    return this.reminderCommands.createDraft(input);
+  }
+
+  confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult> {
+    return this.reminderCommands.confirmDraft(input);
+  }
+
+  cancelDraft(input: Parameters<ReminderCommandStore["cancelDraft"]>[0]): Promise<MutationResult> {
+    return this.reminderCommands.cancelDraft(input);
+  }
+
+  expireDraft(input: Parameters<ReminderCommandStore["expireDraft"]>[0]): Promise<MutationResult> {
+    return this.reminderCommands.expireDraft(input);
+  }
+
+  rejectMessage(...input: Parameters<ReminderCommandStore["rejectMessage"]>): Promise<boolean> {
+    return this.reminderCommands.rejectMessage(...input);
   }
 
   async claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult> {

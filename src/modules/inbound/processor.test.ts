@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
+import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import {
   D1InboundProcessorStore,
   claimInbound,
@@ -14,6 +15,14 @@ import {
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const code = "ABCDEFGHJKLMNPQRSTUVWXYZ23";
 const now = 1_700_000_000_000;
+
+describe("inbound persistence boundary", () => {
+  it("composes rather than inherits the reminder command repository", () => {
+    expect(Object.getPrototypeOf(D1InboundProcessorStore.prototype)).not.toBe(
+      D1ReminderCommandStore.prototype,
+    );
+  });
+});
 
 class SqliteStatement {
   private values: SQLInputValue[] = [];
