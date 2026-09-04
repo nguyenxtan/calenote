@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { D1ReminderDeliveryStore } from "./infrastructure/d1/delivery-store";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
 import {
@@ -102,7 +103,7 @@ async function createHarness(options: HarnessOptions = {}) {
   );
   let currentTime = now;
   const deps = {
-    store: new deliveryApi.D1ReminderDeliveryStore(db as unknown as D1Database),
+    store: new D1ReminderDeliveryStore(db as unknown as D1Database),
     keyring,
     sendText,
     now: () => currentTime,

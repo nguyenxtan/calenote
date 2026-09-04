@@ -13,10 +13,10 @@ import {
 } from "@/modules/inbound/processor";
 import {
   deliverReminder,
-  D1ReminderDeliveryStore,
   SAFE_QUEUE_RETRY_SECONDS,
   type DeliverReminderResult,
 } from "@/modules/reminders/delivery";
+import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
 import {
   claimDueReminders,
   CRON_INBOUND_LIMIT,

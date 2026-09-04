@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { D1ReminderSchedulerStore } from "./infrastructure/d1/scheduler-store";
+import { D1ReminderDeliveryStore } from "./infrastructure/d1/delivery-store";
 import {
   deterministicRandomBytes,
   SqliteD1Database,
@@ -397,7 +398,7 @@ describe("D1 due reminder scheduler", () => {
          transition_marker, created_at, updated_at
        ) VALUES ('delivery-retry-race', ?, 'RETRYABLE', 1, ?, NULL, ?, ?)`,
     ).run("reminder-retry-race01", now, now, now);
-    const deliveryStore = new deliveryApi.D1ReminderDeliveryStore(
+    const deliveryStore = new D1ReminderDeliveryStore(
       db as unknown as D1Database,
     );
 
