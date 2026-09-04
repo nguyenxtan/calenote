@@ -69,6 +69,12 @@ export class SqliteD1Database {
         "utf8",
       ),
     );
+    this.sqlite.exec(
+      readFileSync(
+        resolve(process.cwd(), "migrations/0003_source_action_foundation.sql"),
+        "utf8",
+      ),
+    );
   }
 
   prepare(sql: string): D1PreparedStatement {

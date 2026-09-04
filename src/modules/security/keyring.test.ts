@@ -46,6 +46,16 @@ describe("Keyring", () => {
     await expect(
       keys.decryptSensitive("reminder-title", "login-code-1", 1, login),
     ).rejects.toThrow();
+
+    const candidate = await keys.encryptSensitive(
+      "action-candidate-title",
+      "candidate-1",
+      1,
+      "Họp với khách hàng",
+    );
+    await expect(
+      keys.decryptSensitive("reminder-title", "candidate-1", 1, candidate),
+    ).rejects.toThrow();
   });
 
   it("derives base64url webhook secrets that compare in constant time", async () => {

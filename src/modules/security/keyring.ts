@@ -15,6 +15,7 @@ function webBytes(value: Uint8Array): WebBytes {
 export type SensitiveContentPurpose =
   | "inbound-message"
   | "draft-title"
+  | "action-candidate-title"
   | "reminder-title"
   | "login-code";
 

@@ -108,6 +108,7 @@ async function migratedRuntime(
   const db = await miniflare.getD1Database("DB") as unknown as D1Database;
   await applyMigration(db, "migrations/0001_production_mvp.sql");
   await applyMigration(db, "migrations/0002_onboarding_transition_marker.sql");
+  await applyMigration(db, "migrations/0003_source_action_foundation.sql");
 
   const keyring = await createKeyring(MASTER);
   const encrypted = await keyring.encryptCredential("connection-workerd", "telegram", 1, TOKEN);
