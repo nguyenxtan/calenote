@@ -19,6 +19,17 @@
 - Never log or return tokens, codes, raw chat text, cookies, encrypted columns, or webhook paths.
 - Run all verification sequentially. Keep the controller-owned production plan change out of feature commits unless intentionally committed as documentation.
 
+## Execution ruling
+
+The four original Reminder D1 classes contain independent guarded state
+machines and more than two thousand lines of SQL. Execute Task 2 as four
+separate commits in this order: API store, command store, scheduler store,
+then delivery store. For each sub-slice, first add the new import-boundary test,
+run it red, move only that class and its SQL helpers, update production/test
+imports, and run the exact focused suite named below before beginning the next
+store. This is a task-granularity correction, not a behavior or interface
+change.
+
 ---
 
 ### Task 1: Establish canonical current-state documentation and ADRs
