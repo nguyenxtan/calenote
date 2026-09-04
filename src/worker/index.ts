@@ -17,6 +17,7 @@ import {
   type DeliverReminderResult,
 } from "@/modules/reminders/delivery";
 import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
+import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import {
   claimDueReminders,
   CRON_INBOUND_LIMIT,
@@ -163,7 +164,10 @@ export async function runScheduledWork(
 
 async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
-  const inboundStore = new D1InboundProcessorStore(env.DB);
+  const inboundStore = new D1InboundProcessorStore(
+    env.DB,
+    new D1ReminderCommandStore(env.DB),
+  );
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
