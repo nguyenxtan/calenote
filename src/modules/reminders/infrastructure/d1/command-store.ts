@@ -1,0 +1,660 @@
+import type {
+  BoundChatContext,
+  BoundChatMessage,
+  ConfirmDraftMutation,
+  CreateDraftMutation,
+  MutationResult,
+  PendingDraft,
+  ReminderCommandStore,
+  ResolveDraftMutation,
+} from "../../command-service";
+
+interface ContextRow {
+  chat_identity_id: string;
+  user_id: string;
+  workspace_id: string;
+  timezone: string;
+  inbound_rowid: number;
+}
+interface DraftRow {
+  id: string;
+  chat_identity_id: string;
+  source_inbound_id: string;
+  title_ciphertext: unknown;
+  title_iv: unknown;
+  title_key_version: number;
+  scheduled_at: number;
+  timezone: string;
+  expires_at: number;
+}
+
+interface InboundOwnershipRow {
+  state: string;
+  transition_marker: string | null;
+}
+
+interface ResolutionStateRow {
+  status: string;
+  resolution_inbound_id: string | null;
+  has_reminder: number;
+  resolution_is_later: number;
+}
+
+function persistedArrayBuffer(value: unknown): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) {
+    return Uint8Array.from(
+      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
+    ).buffer;
+  }
+  throw new TypeError("Malformed encrypted reminder value");
+}
+
+function pendingDraft(row: DraftRow): PendingDraft {
+  return {
+    id: row.id,
+    chatIdentityId: row.chat_identity_id,
+    sourceInboundId: row.source_inbound_id,
+    encryptedTitle: {
+      ciphertext: persistedArrayBuffer(row.title_ciphertext),
+      iv: persistedArrayBuffer(row.title_iv),
+    },
+    titleKeyVersion: row.title_key_version,
+    scheduledAt: row.scheduled_at,
+    timezone: row.timezone,
+    expiresAt: row.expires_at,
+  };
+}
+
+function expectedMutationConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /(?:NOT NULL constraint failed:\s*(?:command_drafts\.chat_identity_id|reminders\.(?:workspace_id|chat_identity_id)|audit_events\.id)|UNIQUE constraint failed:\s*(?:command_drafts\.(?:chat_identity_id|source_inbound_id|resolution_inbound_id)|reminders\.source_draft_id))/iu.test(error.message);
+}
+
+export class D1ReminderCommandStore implements ReminderCommandStore {
+  constructor(protected readonly database: D1Database) {}
+
+  async findBoundContext(message: BoundChatMessage): Promise<BoundChatContext | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT ci.id AS chat_identity_id, c.user_id, w.id AS workspace_id,
+                u.timezone, i.rowid AS inbound_rowid
+         FROM inbound_updates i
+         JOIN bot_connections c
+           ON c.id = i.connection_id AND c.state = 'ACTIVE_BOUND'
+         JOIN chat_identities ci
+           ON ci.connection_id = c.id
+          AND ci.provider_user_id = i.provider_user_id
+          AND ci.private_chat_id = i.private_chat_id
+         JOIN users u ON u.id = c.user_id
+         JOIN workspaces w
+           ON w.owner_user_id = c.user_id AND w.kind = 'PERSONAL'
+         JOIN memberships m
+           ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
+         WHERE i.id = ? AND i.connection_id = ?
+           AND i.provider_user_id = ? AND i.private_chat_id = ?
+           AND i.state = 'PROCESSING' AND i.transition_marker = ?
+         LIMIT 1`,
+      )
+      .bind(
+        message.id,
+        message.connectionId,
+        message.providerUserId,
+        message.privateChatId,
+        message.claimMarker,
+      )
+      .first<ContextRow>();
+    if (!row) return null;
+    return {
+      chatIdentityId: row.chat_identity_id,
+      userId: row.user_id,
+      workspaceId: row.workspace_id,
+      timezone: row.timezone,
+      inboundRowId: row.inbound_rowid,
+    };
+  }
+
+  async findPendingDraft(
+    message: BoundChatMessage,
+    chatIdentityId: string,
+  ): Promise<PendingDraft | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT draft.id, draft.chat_identity_id, draft.source_inbound_id,
+                draft.title_ciphertext, draft.title_iv, draft.title_key_version,
+                draft.scheduled_at, draft.timezone, draft.expires_at
+         FROM command_drafts draft
+         JOIN inbound_updates source ON source.id = draft.source_inbound_id
+         JOIN inbound_updates current ON current.id = ?
+         WHERE draft.chat_identity_id = ? AND draft.status = 'PENDING'
+           AND current.connection_id = ?
+           AND current.provider_user_id = ? AND current.private_chat_id = ?
+           AND current.state = 'PROCESSING' AND current.transition_marker = ?
+           AND (
+             source.received_at < current.received_at OR
+             (source.received_at = current.received_at AND source.rowid < current.rowid)
+           )
+         ORDER BY draft.created_at DESC, draft.rowid DESC
+         LIMIT 1`,
+      )
+      .bind(
+        message.id,
+        chatIdentityId,
+        message.connectionId,
+        message.providerUserId,
+        message.privateChatId,
+        message.claimMarker,
+      )
+      .first<DraftRow>();
+    return row ? pendingDraft(row) : null;
+  }
+
+  private boundIdentityExpression(): string {
+    return `SELECT ci.id
+            FROM inbound_updates current
+            JOIN bot_connections c
+              ON c.id = current.connection_id AND c.state = 'ACTIVE_BOUND'
+            JOIN chat_identities ci
+              ON ci.connection_id = c.id
+             AND ci.provider_user_id = current.provider_user_id
+             AND ci.private_chat_id = current.private_chat_id
+            JOIN users u ON u.id = c.user_id
+            JOIN workspaces w
+              ON w.owner_user_id = c.user_id AND w.kind = 'PERSONAL'
+            JOIN memberships m
+              ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
+            WHERE current.id = ? AND current.connection_id = ?
+              AND current.provider_user_id = ? AND current.private_chat_id = ?
+              AND current.state = 'PROCESSING' AND current.transition_marker = ?`;
+  }
+
+  private ownershipBindings(message: BoundChatMessage): unknown[] {
+    return [
+      message.id,
+      message.connectionId,
+      message.providerUserId,
+      message.privateChatId,
+      message.claimMarker,
+    ];
+  }
+
+  private async inboundOwnership(message: BoundChatMessage): Promise<InboundOwnershipRow | null> {
+    return this.database
+      .prepare("SELECT state, transition_marker FROM inbound_updates WHERE id = ? LIMIT 1")
+      .bind(message.id)
+      .first<InboundOwnershipRow>();
+  }
+
+  private async stillOwned(message: BoundChatMessage): Promise<boolean> {
+    const row = await this.inboundOwnership(message);
+    return row?.state === "PROCESSING" && row.transition_marker === message.claimMarker;
+  }
+
+  async createDraft(input: CreateDraftMutation): Promise<MutationResult> {
+    const identitySql = this.boundIdentityExpression();
+    const ownership = this.ownershipBindings(input.message);
+    const statements = [
+      this.database
+        .prepare(
+          `UPDATE command_drafts
+           SET status = 'CANCELLED', resolution_inbound_id = ?, updated_at = ?
+           WHERE status = 'PENDING'
+             AND chat_identity_id = (${identitySql})
+             AND EXISTS (
+               SELECT 1
+               FROM inbound_updates current
+               JOIN inbound_updates source ON source.id = command_drafts.source_inbound_id
+               WHERE current.id = ? AND current.state = 'PROCESSING'
+                 AND current.transition_marker = ?
+                 AND (
+                   source.received_at < current.received_at OR
+                   (source.received_at = current.received_at AND source.rowid < current.rowid)
+                 )
+             )`,
+        )
+        .bind(
+          input.message.id,
+          input.now,
+          ...ownership,
+          input.message.id,
+          input.message.claimMarker,
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO command_drafts (
+             id, chat_identity_id, source_inbound_id, resolution_inbound_id,
+             title_ciphertext, title_iv, title_key_version, scheduled_at, timezone,
+             status, expires_at, created_at, updated_at
+           ) VALUES (
+             ?, COALESCE((
+               ${identitySql}
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM command_drafts history
+                 JOIN inbound_updates source ON source.id = history.source_inbound_id
+                 JOIN inbound_updates current ON current.id = ?
+                 WHERE history.chat_identity_id = ?
+                   AND (
+                     source.received_at > current.received_at OR
+                     (source.received_at = current.received_at AND source.rowid >= current.rowid)
+                   )
+               )
+             ), NULL), ?, NULL, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?
+           )`,
+        )
+        .bind(
+          input.draftId,
+          ...ownership,
+          input.message.id,
+          input.context.chatIdentityId,
+          input.message.id,
+          input.encryptedTitle.ciphertext,
+          input.encryptedTitle.iv,
+          input.titleKeyVersion,
+          input.scheduledAt,
+          input.timezone,
+          input.expiresAt,
+          input.now,
+          input.now,
+        ),
+      this.database
+        .prepare(
+          `UPDATE inbound_updates
+           SET state = 'PROCESSED', processed_at = ?
+           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?
+             AND EXISTS (
+               SELECT 1 FROM command_drafts
+               WHERE id = ? AND source_inbound_id = ? AND status = 'PENDING'
+             )`,
+        )
+        .bind(
+          input.now,
+          input.message.id,
+          input.message.claimMarker,
+          input.draftId,
+          input.message.id,
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
+           ) VALUES (
+             COALESCE((
+               SELECT ? FROM inbound_updates i
+               JOIN command_drafts d ON d.source_inbound_id = i.id
+               WHERE i.id = ? AND i.state = 'PROCESSED' AND i.transition_marker = ?
+                 AND d.id = ? AND d.status = 'PENDING'
+             ), NULL), ?, 'REMINDER_DRAFT_CREATED', ?, ?, 'SUCCESS', ?
+           )`,
+        )
+        .bind(
+          input.auditId,
+          input.message.id,
+          input.message.claimMarker,
+          input.draftId,
+          input.context.userId,
+          input.context.userId,
+          input.message.connectionId,
+          input.now,
+        ),
+    ];
+
+    try {
+      await this.database.batch(statements);
+      return "COMMITTED";
+    } catch (error) {
+      if (!expectedMutationConflict(error)) throw error;
+      if (!await this.stillOwned(input.message)) return "SUPERSEDED";
+      const newer = await this.database
+        .prepare(
+          `SELECT 1
+           FROM command_drafts history
+           JOIN inbound_updates source ON source.id = history.source_inbound_id
+           JOIN inbound_updates current ON current.id = ?
+           WHERE history.chat_identity_id = ?
+             AND (
+               source.received_at > current.received_at OR
+               (source.received_at = current.received_at AND source.rowid >= current.rowid)
+             )
+           LIMIT 1`,
+        )
+        .bind(input.message.id, input.context.chatIdentityId)
+        .first<{ 1: number }>();
+      if (newer) return "CONFLICT";
+      throw error;
+    }
+  }
+
+  async confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult> {
+    const identitySql = this.boundIdentityExpression();
+    const ownership = this.ownershipBindings(input.message);
+    const statements = [
+      this.database
+        .prepare(
+          `UPDATE command_drafts
+           SET status = 'CONFIRMED', resolution_inbound_id = ?, updated_at = ?
+           WHERE id = ? AND chat_identity_id = (${identitySql})
+             AND status = 'PENDING'
+             AND EXISTS (
+               SELECT 1
+               FROM inbound_updates source
+               JOIN inbound_updates current ON current.id = ?
+               WHERE source.id = command_drafts.source_inbound_id
+                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND (
+                   source.received_at < current.received_at OR
+                   (source.received_at = current.received_at AND source.rowid < current.rowid)
+                 )
+             )
+             AND expires_at > ? AND scheduled_at > ?`,
+        )
+        .bind(
+          input.message.id,
+          input.now,
+          input.draft.id,
+          ...ownership,
+          input.message.id,
+          input.message.claimMarker,
+          input.now,
+          input.now,
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO reminders (
+             id, public_id, workspace_id, chat_identity_id, source_draft_id,
+             title_ciphertext, title_iv, title_key_version, scheduled_at, timezone,
+             status, claimed_at, cancelled_at, created_at, updated_at
+           ) VALUES (
+             ?, ?, COALESCE((
+               SELECT w.id
+               FROM command_drafts d
+               JOIN chat_identities ci ON ci.id = d.chat_identity_id
+               JOIN bot_connections c
+                 ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
+               JOIN workspaces w
+                 ON w.owner_user_id = c.user_id AND w.kind = 'PERSONAL'
+               JOIN memberships m
+                 ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
+               JOIN inbound_updates i ON i.id = d.resolution_inbound_id
+               WHERE d.id = ? AND d.status = 'CONFIRMED'
+                 AND d.resolution_inbound_id = ?
+                 AND i.state = 'PROCESSING' AND i.transition_marker = ?
+                 AND ci.id = ? AND c.id = ?
+                 AND ci.provider_user_id = ? AND ci.private_chat_id = ?
+             ), NULL), COALESCE((
+               SELECT ci.id
+               FROM command_drafts d
+               JOIN chat_identities ci ON ci.id = d.chat_identity_id
+               JOIN inbound_updates i ON i.id = d.resolution_inbound_id
+               WHERE d.id = ? AND d.status = 'CONFIRMED'
+                 AND d.resolution_inbound_id = ?
+                 AND i.state = 'PROCESSING' AND i.transition_marker = ?
+                 AND ci.id = ?
+             ), NULL), ?, ?, ?, ?, ?, ?, 'PENDING', NULL, NULL, ?, ?
+           )`,
+        )
+        .bind(
+          input.reminderId,
+          input.reminderPublicId,
+          input.draft.id,
+          input.message.id,
+          input.message.claimMarker,
+          input.context.chatIdentityId,
+          input.message.connectionId,
+          input.message.providerUserId,
+          input.message.privateChatId,
+          input.draft.id,
+          input.message.id,
+          input.message.claimMarker,
+          input.context.chatIdentityId,
+          input.draft.id,
+          input.encryptedTitle.ciphertext,
+          input.encryptedTitle.iv,
+          input.titleKeyVersion,
+          input.draft.scheduledAt,
+          input.draft.timezone,
+          input.now,
+          input.now,
+        ),
+      this.database
+        .prepare(
+          `UPDATE inbound_updates
+           SET state = 'PROCESSED', processed_at = ?
+           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?
+             AND EXISTS (
+               SELECT 1 FROM reminders
+               WHERE id = ? AND source_draft_id = ? AND status = 'PENDING'
+             )`,
+        )
+        .bind(
+          input.now,
+          input.message.id,
+          input.message.claimMarker,
+          input.reminderId,
+          input.draft.id,
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id,
+             target_reminder_id, result, created_at
+           ) VALUES (
+             COALESCE((
+               SELECT ? FROM inbound_updates i
+               JOIN reminders r ON r.id = ? AND r.source_draft_id = ?
+               WHERE i.id = ? AND i.state = 'PROCESSED' AND i.transition_marker = ?
+             ), NULL), ?, 'REMINDER_CONFIRMED', ?, ?, ?, 'SUCCESS', ?
+           )`,
+        )
+        .bind(
+          input.auditId,
+          input.reminderId,
+          input.draft.id,
+          input.message.id,
+          input.message.claimMarker,
+          input.context.userId,
+          input.context.userId,
+          input.message.connectionId,
+          input.reminderId,
+          input.now,
+        ),
+    ];
+
+    return this.runResolutionBatch(input, statements);
+  }
+
+  async cancelDraft(input: ResolveDraftMutation): Promise<MutationResult> {
+    return this.resolveWithoutReminder(input, "CANCELLED", "REMINDER_CANCELLED", "PROCESSED");
+  }
+
+  async expireDraft(input: ResolveDraftMutation): Promise<MutationResult> {
+    return this.resolveWithoutReminder(input, "EXPIRED", "REMINDER_DRAFT_EXPIRED", "REJECTED");
+  }
+
+  private async resolveWithoutReminder(
+    input: ResolveDraftMutation,
+    draftStatus: "CANCELLED" | "EXPIRED",
+    action: string,
+    inboundState: "PROCESSED" | "REJECTED",
+  ): Promise<MutationResult> {
+    const identitySql = this.boundIdentityExpression();
+    const ownership = this.ownershipBindings(input.message);
+    const timeGuard = draftStatus === "EXPIRED"
+      ? "AND (expires_at <= ? OR scheduled_at <= ?)"
+      : "AND expires_at > ? AND scheduled_at > ?";
+    const statements = [
+      this.database
+        .prepare(
+          `UPDATE command_drafts
+           SET status = ?, resolution_inbound_id = ?, updated_at = ?
+           WHERE id = ? AND chat_identity_id = (${identitySql})
+             AND status = 'PENDING'
+             AND EXISTS (
+               SELECT 1
+               FROM inbound_updates source
+               JOIN inbound_updates current ON current.id = ?
+               WHERE source.id = command_drafts.source_inbound_id
+                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND (
+                   source.received_at < current.received_at OR
+                   (source.received_at = current.received_at AND source.rowid < current.rowid)
+                 )
+             )
+             ${timeGuard}`,
+        )
+        .bind(
+          draftStatus,
+          input.message.id,
+          input.now,
+          input.draft.id,
+          ...ownership,
+          input.message.id,
+          input.message.claimMarker,
+          input.now,
+          input.now,
+        ),
+      this.database
+        .prepare(
+          `UPDATE inbound_updates
+           SET state = ?, processed_at = ?
+           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?
+             AND EXISTS (
+               SELECT 1 FROM command_drafts
+               WHERE id = ? AND status = ? AND resolution_inbound_id = ?
+             )`,
+        )
+        .bind(
+          inboundState,
+          input.now,
+          input.message.id,
+          input.message.claimMarker,
+          input.draft.id,
+          draftStatus,
+          input.message.id,
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
+           ) VALUES (
+             COALESCE((
+               SELECT ? FROM inbound_updates i
+               JOIN command_drafts d ON d.resolution_inbound_id = i.id
+               WHERE i.id = ? AND i.state = ? AND i.transition_marker = ?
+                 AND d.id = ? AND d.status = ?
+             ), NULL), ?, ?, ?, ?, 'SUCCESS', ?
+           )`,
+        )
+        .bind(
+          input.auditId,
+          input.message.id,
+          inboundState,
+          input.message.claimMarker,
+          input.draft.id,
+          draftStatus,
+          input.context.userId,
+          action,
+          input.context.userId,
+          input.message.connectionId,
+          input.now,
+        ),
+    ];
+    return this.runResolutionBatch(input, statements);
+  }
+
+  private async runResolutionBatch(
+    input: ResolveDraftMutation,
+    statements: D1PreparedStatement[],
+  ): Promise<MutationResult> {
+    try {
+      await this.database.batch(statements);
+      return "COMMITTED";
+    } catch (error) {
+      if (!expectedMutationConflict(error)) throw error;
+      if (!await this.stillOwned(input.message)) return "SUPERSEDED";
+      const draft = await this.database
+        .prepare(
+          `SELECT status, resolution_inbound_id,
+                  EXISTS(SELECT 1 FROM reminders WHERE source_draft_id = draft.id) AS has_reminder,
+                  EXISTS(
+                    SELECT 1
+                    FROM inbound_updates source
+                    JOIN inbound_updates current ON current.id = ?
+                    WHERE source.id = draft.source_inbound_id
+                      AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                      AND (
+                        source.received_at < current.received_at OR
+                        (source.received_at = current.received_at AND source.rowid < current.rowid)
+                      )
+                  ) AS resolution_is_later
+           FROM command_drafts draft WHERE draft.id = ? LIMIT 1`,
+        )
+        .bind(input.message.id, input.message.claimMarker, input.draft.id)
+        .first<ResolutionStateRow>();
+      const reusedInbound = await this.database
+        .prepare(
+          `SELECT 1 FROM command_drafts
+           WHERE resolution_inbound_id = ? AND id <> ? LIMIT 1`,
+        )
+        .bind(input.message.id, input.draft.id)
+        .first<{ 1: number }>();
+      if (
+        !draft
+        || draft.status !== "PENDING"
+        || draft.resolution_inbound_id !== null
+        || draft.has_reminder === 1
+        || draft.resolution_is_later !== 1
+        || reusedInbound
+        || !await this.findBoundContext(input.message)
+      ) {
+        return "CONFLICT";
+      }
+      throw error;
+    }
+  }
+
+  async rejectMessage(message: BoundChatMessage, auditId: string, now: number): Promise<boolean> {
+    const statements = [
+      this.database
+        .prepare(
+          `UPDATE inbound_updates
+           SET state = 'REJECTED', processed_at = ?
+           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?`,
+        )
+        .bind(now, message.id, message.claimMarker),
+      this.database
+        .prepare(
+          `INSERT INTO audit_events (
+             id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
+           ) VALUES (
+             COALESCE((
+               SELECT ? FROM inbound_updates
+               WHERE id = ? AND state = 'REJECTED' AND transition_marker = ?
+             ), NULL),
+             (SELECT c.user_id FROM inbound_updates i JOIN bot_connections c ON c.id = i.connection_id WHERE i.id = ?),
+             'REMINDER_COMMAND_REJECTED',
+             (SELECT c.user_id FROM inbound_updates i JOIN bot_connections c ON c.id = i.connection_id WHERE i.id = ?),
+             (SELECT connection_id FROM inbound_updates WHERE id = ?),
+             'FAILURE', ?
+           )`,
+        )
+        .bind(
+          auditId,
+          message.id,
+          message.claimMarker,
+          message.id,
+          message.id,
+          message.id,
+          now,
+        ),
+    ];
+    try {
+      await this.database.batch(statements);
+      return true;
+    } catch (error) {
+      if (!expectedMutationConflict(error)) throw error;
+      if (!await this.stillOwned(message)) return false;
+      throw error;
+    }
+  }
+}

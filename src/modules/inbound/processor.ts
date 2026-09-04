@@ -18,11 +18,11 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import {
-  D1ReminderCommandStore,
   processBoundChatMessage,
   type ProcessBoundChatResult,
   type ReminderCommandStore,
 } from "@/modules/reminders/command-service";
+import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { MAX_INBOUND_PROCESS_ATTEMPTS } from "@/modules/reminders/scheduler";
 
