@@ -23,6 +23,7 @@ implementation plans are audit evidence; they do not override this page.
 | Vietnamese chat reminder proposal and confirmation | IMPLEMENTED, WIRED, TESTED | Queue processor parses supported Vietnamese forms, writes one confirmation draft, and accepts exact approval/cancel control words. |
 | Manual dashboard reminders | IMPLEMENTED, WIRED, TESTED | Dashboard sends same-origin authenticated API requests and converts Vietnam wall-clock input deterministically. |
 | Reminder scheduler and delivery | IMPLEMENTED, WIRED, TESTED | Cron claims due reminders; Queue delivery applies ownership leases, bounded retry, and `UNCERTAIN` on ambiguous provider egress. |
+| Reminder D1 adapters and Worker composition | IMPLEMENTED, WIRED, TESTED | API, command, scheduler, and delivery SQL live in feature-owned D1 adapters; the Worker composes concrete adapters at runtime. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
@@ -67,11 +68,9 @@ mocks and static page visual tests are useful, but are not production proof.
 
 ## Next bounded phases
 
-1. Reconcile persistence ownership and Worker composition while preserving
-   current tests.
-2. Export and integrate the approved Figma brand assets as the sole logo truth.
-3. Add SourceConnection, SourceItem, ActionCandidate, and ActionDecision with
+1. Export and integrate the approved Figma brand assets as the sole logo truth.
+2. Add SourceConnection, SourceItem, ActionCandidate, and ActionDecision with
    a human approval boundary.
-4. Add Gmail authorization only after the Source/Action model is stable.
-5. Keep optional intelligence provider-agnostic and disabled by default;
+3. Add Gmail authorization only after the Source/Action model is stable.
+4. Keep optional intelligence provider-agnostic and disabled by default;
    deterministic parsing remains the core path.
