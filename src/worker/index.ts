@@ -22,10 +22,10 @@ import {
   CRON_INBOUND_LIMIT,
   CRON_REMINDER_LIMIT,
   D1InboundDispatchStore,
-  D1ReminderSchedulerStore,
   redriveInboundOrphans,
   type ReminderDispatchJob,
 } from "@/modules/reminders/scheduler";
+import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
 import { createKeyring } from "@/modules/security/keyring";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { routeRequest } from "./router";

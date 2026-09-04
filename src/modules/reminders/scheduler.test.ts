@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { D1ReminderSchedulerStore } from "./infrastructure/d1/scheduler-store";
 import {
   deterministicRandomBytes,
   SqliteD1Database,
@@ -158,7 +159,7 @@ describe("D1 due reminder scheduler", () => {
     }
     const published: unknown[] = [];
     const deps = {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue: async (job: unknown) => { published.push(job); },
       randomBytes: deterministicRandomBytes(),
     };
@@ -184,7 +185,7 @@ describe("D1 due reminder scheduler", () => {
     seedReminder(db, "reminder-single-00001", now - 1);
     const enqueue = vi.fn(async () => undefined);
     const deps = {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue,
       randomBytes: deterministicRandomBytes(),
     };
@@ -218,7 +219,7 @@ describe("D1 due reminder scheduler", () => {
     });
 
     const result = await scheduler.claimDueReminders(now, 5, {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue,
       randomBytes: deterministicRandomBytes(),
     });
@@ -244,7 +245,7 @@ describe("D1 due reminder scheduler", () => {
     seedAccount(db);
     seedReminder(db, "reminder-first-rollback", now - 2);
     seedReminder(db, "reminder-second-after01", now - 1);
-    const realStore = new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database);
+    const realStore = new D1ReminderSchedulerStore(db as unknown as D1Database);
     const rollback = vi.fn(async () => { throw new Error("D1 rollback unavailable"); });
     const enqueue = vi.fn(async (job: { reminderId: string }) => {
       if (job.reminderId === "reminder-first-rollback") throw new Error("queue unavailable");
@@ -295,7 +296,7 @@ describe("D1 due reminder scheduler", () => {
     const published: Array<{ reminderId: string }> = [];
 
     await scheduler.claimDueReminders(now, 10, {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue: async (job: { reminderId: string }) => { published.push(job); },
       randomBytes: deterministicRandomBytes(),
     });
@@ -363,7 +364,7 @@ describe("D1 due reminder scheduler", () => {
     const published: unknown[] = [];
 
     const result = await scheduler.claimDueReminders(now, 5, {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue: async (job: unknown) => { published.push(job); },
       randomBytes: deterministicRandomBytes(),
     });
@@ -401,7 +402,7 @@ describe("D1 due reminder scheduler", () => {
     );
 
     const result = await scheduler.claimDueReminders(now, 5, {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue: async () => {
         await expect(deliveryStore.acquire(
           "reminder-retry-race01",
@@ -433,7 +434,7 @@ describe("D1 due reminder scheduler", () => {
 
     const recoveryEnqueue = vi.fn(async () => undefined);
     const recovery = {
-      store: new scheduler.D1ReminderSchedulerStore(db as unknown as D1Database),
+      store: new D1ReminderSchedulerStore(db as unknown as D1Database),
       enqueue: recoveryEnqueue,
       randomBytes: deterministicRandomBytes(),
     };
