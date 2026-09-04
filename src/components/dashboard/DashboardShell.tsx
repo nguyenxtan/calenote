@@ -366,10 +366,16 @@ export function DashboardShell() {
         onUnauthorized: clearPersonalAndRedirect,
       });
       const refreshed = await loadReminders(epoch);
-      if (refreshed && epochRef.current === epoch) {
+      if (epochRef.current === epoch) {
         setTitle("");
         setWallClock("");
-        setNotice("Nhắc hẹn đã được lưu.");
+        if (refreshed) {
+          setNotice("Nhắc hẹn đã được lưu.");
+        } else {
+          setActionError(
+            "Máy chủ đã ghi nhận nhắc hẹn, nhưng danh sách chưa tải lại. Không tạo lại; hãy tải lại danh sách trước khi thao tác tiếp.",
+          );
+        }
       }
     } catch (error) {
       if (isAbort(error) || epochRef.current !== epoch) return;
@@ -409,7 +415,15 @@ export function DashboardShell() {
         onUnauthorized: clearPersonalAndRedirect,
       });
       const refreshed = await loadReminders(epoch);
-      if (refreshed && epochRef.current === epoch) setNotice("Nhắc hẹn đã được hủy.");
+      if (epochRef.current === epoch) {
+        if (refreshed) {
+          setNotice("Nhắc hẹn đã được hủy.");
+        } else {
+          setActionError(
+            "Máy chủ đã ghi nhận việc hủy, nhưng danh sách chưa tải lại. Không hủy lại; hãy tải lại danh sách trước khi thao tác tiếp.",
+          );
+        }
+      }
     } catch (error) {
       if (isAbort(error) || epochRef.current !== epoch) return;
       if (error instanceof AmbiguousMutationError) {
@@ -454,7 +468,13 @@ export function DashboardShell() {
         onUnauthorized: clearPersonalAndRedirect,
       });
       const refreshed = await loadConnections(epoch);
-      if (!refreshed || epochRef.current !== epoch) return;
+      if (epochRef.current !== epoch) return;
+      if (!refreshed) {
+        setActionError(
+          "Máy chủ đã ghi nhận thao tác kết nối, nhưng trạng thái chưa tải lại. Không gửi lại yêu cầu; hãy tải lại kết nối trước khi thao tác tiếp.",
+        );
+        return;
+      }
       if (action === "connect") {
         if (
           !isRecord(data)

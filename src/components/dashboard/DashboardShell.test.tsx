@@ -167,6 +167,30 @@ describe("DashboardShell", () => {
     expect(screen.queryByText(/chưa kết nối thật|API v0.1|production gate/i)).not.toBeInTheDocument();
   });
 
+  it("does not silently re-enable a confirmed connection action when canonical refresh fails", async () => {
+    const user = userEvent.setup();
+    const unbound = connection("ACTIVE_UNBOUND", SECOND_CONNECTION_ID, "Bot chờ liên kết");
+    const fetcher = routeFetcher({
+      "GET /api/session": [async () => session()],
+      "GET /api/connections": [
+        async () => connections([unbound]),
+        async () => json({ error: { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu." } }, 500),
+      ],
+      "GET /api/reminders": [async () => reminders()],
+      [`POST /api/connections/${SECOND_CONNECTION_ID}/connect-code`]: [async () => json({
+        data: { connectCommand: "/connect FRESH-CODE", expiresAt: 1_900_000_000_000 },
+      })],
+    });
+    await renderAuthenticated(fetcher);
+    await screen.findByText("Bot chờ liên kết");
+
+    await user.click(screen.getByRole("button", { name: "Tạo mã kết nối cho Bot chờ liên kết" }));
+
+    const reconciliationWarning = await screen.findByText(/máy chủ đã ghi nhận thao tác kết nối/i);
+    expect(reconciliationWarning).toHaveTextContent(/không gửi lại/i);
+    expect(fetcher.mock.calls.filter(([path, init]) => path === `/api/connections/${SECOND_CONNECTION_ID}/connect-code` && init?.method === "POST")).toHaveLength(1);
+  });
+
   it("shows every reminder lifecycle and warns against recreating an uncertain delivery", async () => {
     const statuses = ["PENDING", "CLAIMED", "RETRYABLE", "SENT", "FAILED", "UNCERTAIN", "CANCELLED"] as const;
     const fetcher = routeFetcher({
@@ -215,6 +239,31 @@ describe("DashboardShell", () => {
         timezone: "Asia/Ho_Chi_Minh",
       }),
     }));
+  });
+
+  it("does not invite a duplicate create after the server confirms it but canonical refresh fails", async () => {
+    const user = userEvent.setup();
+    const fetcher = routeFetcher({
+      "GET /api/session": [async () => session()],
+      "GET /api/connections": [async () => connections([connection("ACTIVE_BOUND")])],
+      "GET /api/reminders": [
+        async () => reminders(),
+        async () => json({ error: { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu." } }, 500),
+      ],
+      "POST /api/reminders": [async () => json({ data: { reminder: reminder("PENDING") } }, 201)],
+    });
+    await renderAuthenticated(fetcher);
+    await screen.findByText("Bạn chưa có nhắc hẹn nào.");
+
+    await user.type(screen.getByLabelText("Nội dung nhắc"), "Đã được ghi nhận");
+    await user.type(screen.getByLabelText("Ngày giờ tại Việt Nam"), "2030-01-02T08:30");
+    await user.click(screen.getByRole("button", { name: "Tạo nhắc hẹn" }));
+
+    const reconciliationWarning = await screen.findByText(/máy chủ đã ghi nhận nhắc hẹn/i);
+    expect(reconciliationWarning).toHaveTextContent(/không tạo lại/i);
+    expect(screen.getByLabelText("Nội dung nhắc")).toHaveValue("");
+    expect(screen.getByLabelText("Ngày giờ tại Việt Nam")).toHaveValue("");
+    expect(fetcher.mock.calls.filter(([path, init]) => path === "/api/reminders" && init?.method === "POST")).toHaveLength(1);
   });
 
   it("locks duplicate create submissions while the first request is unsettled", async () => {
@@ -291,6 +340,25 @@ describe("DashboardShell", () => {
       method: "DELETE",
       body: "{}",
     }));
+  });
+
+  it("does not imply a second cancellation is needed after the server confirms it but refresh fails", async () => {
+    const user = userEvent.setup();
+    const fetcher = routeFetcher({
+      "GET /api/session": [async () => session()],
+      "GET /api/connections": [async () => connections([connection("ACTIVE_BOUND")])],
+      "GET /api/reminders": [
+        async () => reminders([reminder("PENDING")]),
+        async () => json({ error: { code: "INTERNAL_ERROR", message: "Không thể hoàn tất yêu cầu." } }, 500),
+      ],
+      [`DELETE /api/reminders/${REMINDER_ID}`]: [async () => json({ data: { cancelled: true } })],
+    });
+    await renderAuthenticated(fetcher);
+    await user.click(await screen.findByRole("button", { name: "Hủy Chuẩn bị cuộc hẹn" }));
+
+    const reconciliationWarning = await screen.findByText(/máy chủ đã ghi nhận việc hủy/i);
+    expect(reconciliationWarning).toHaveTextContent(/không hủy lại/i);
+    expect(fetcher.mock.calls.filter(([path, init]) => path === `/api/reminders/${REMINDER_ID}` && init?.method === "DELETE")).toHaveLength(1);
   });
 
   it("refreshes and reports the server state after a cancellation race", async () => {
