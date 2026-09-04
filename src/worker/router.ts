@@ -35,10 +35,10 @@ import {
 import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/service";
 import { createKeyring } from "@/modules/security/keyring";
 import { D1InboundDispatchStore } from "@/modules/reminders/scheduler";
+import { D1ReminderApiStore } from "@/modules/reminders/infrastructure/d1/api-store";
 import {
   cancelPublicReminder,
   createManualReminder,
-  D1ReminderApiStore,
   InvalidReminderError,
   listPublicReminders,
   ReminderChannelUnavailableError,

@@ -6,7 +6,6 @@ import {
   deterministicRandomBytes,
 } from "@/testing/sqlite-d1.test-support";
 import {
-  D1ReminderApiStore,
   InvalidReminderError,
   ReminderChannelUnavailableError,
   ReminderNotCancellableError,
@@ -15,6 +14,7 @@ import {
   createManualReminder,
   listPublicReminders,
 } from "./api-service";
+import { D1ReminderApiStore } from "./infrastructure/d1/api-store";
 
 const MASTER_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const NOW = 1_700_000_000_000;
