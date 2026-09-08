@@ -74,3 +74,14 @@ tokens, connect codes, encryption material, or raw credentials.
 Each behavior slice starts with a focused failing test. The final gate is
 `pnpm.cmd check` in this PowerShell environment (the `pnpm.ps1` shim is blocked
 by machine policy), plus `git diff --check`. No deployment is claimed.
+
+## Deployment governance
+
+Cloudflare delivery follows `docs/runbooks/cloudflare-deployment.md`: Git is
+the authoritative configuration source; GitHub Actions is the control plane;
+Wrangler owns Worker delivery; and Dashboard changes are emergency-only then
+reconciled into Git. Local, staging, and production use isolated Worker, D1,
+Queue, and credentials. Production delivery is serialized, explicitly
+authorized, records non-secret evidence, and promotes an uploaded immutable
+Worker version. Worker rollback selects a recorded known-good version and never
+rolls D1 back; D1 migrations remain immutable and forward-only.
