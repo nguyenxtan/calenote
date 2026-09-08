@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RemindersResponseSchema } from "@/contracts/api/reminders";
 import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
@@ -38,7 +39,7 @@ export async function handleListReminders(
   const operations = await createOperations();
   const principal = await operations.requireUser(request);
   const reminders = await operations.listReminders(principal.userId);
-  return jsonResponse({ data: { reminders } }, { headers: authenticatedHeaders() });
+  return jsonResponse(RemindersResponseSchema.parse({ data: { reminders } }), { headers: authenticatedHeaders() });
 }
 
 export async function handleCreateReminder(

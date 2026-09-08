@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, CalendarClock, LogOut, Plus, ShieldCheck } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
+import { ConnectionsResponseSchema, type PublicConnection } from "@/contracts/api/connections";
+import { RemindersResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
+import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import {
   AmbiguousMutationError,
   ApiResponseError,
@@ -16,43 +19,9 @@ import styles from "./DashboardShell.module.css";
 
 const VIETNAM_TIMEZONE = "Asia/Ho_Chi_Minh" as const;
 
-export type ConnectionState =
-  | "VALIDATING"
-  | "ACTIVE_UNBOUND"
-  | "ACTIVE_BOUND"
-  | "WEBHOOK_FAILED"
-  | "SUSPENDED";
-
-export interface PublicConnection {
-  publicId: string;
-  provider: "zalo" | "telegram";
-  displayName: string;
-  handle: string | null;
-  state: ConnectionState;
-}
-
-export type ReminderStatus =
-  | "PENDING"
-  | "CLAIMED"
-  | "RETRYABLE"
-  | "SENT"
-  | "FAILED"
-  | "UNCERTAIN"
-  | "CANCELLED";
-
-export interface PublicReminder {
-  publicId: string;
-  title: string;
-  scheduledAt: number;
-  timezone: typeof VIETNAM_TIMEZONE;
-  status: ReminderStatus;
-}
-
-interface SessionUser {
-  displayName: string;
-  email: string;
-  timezone: typeof VIETNAM_TIMEZONE;
-}
+export type { PublicConnection, PublicReminder };
+export type ConnectionState = PublicConnection["state"];
+export type ReminderStatus = PublicReminder["status"];
 
 type EntryState = "checking" | "ready" | "error" | "redirecting";
 
@@ -65,85 +34,15 @@ function isAbort(error: unknown): boolean {
 }
 
 function parseSession(data: unknown): SessionUser {
-  if (!isRecord(data) || !isRecord(data.user)) throw new Error("invalid session");
-  const { displayName, email, timezone } = data.user;
-  if (
-    typeof displayName !== "string"
-    || displayName.length < 1
-    || displayName.length > 80
-    || typeof email !== "string"
-    || email.length < 3
-    || email.length > 254
-    || timezone !== VIETNAM_TIMEZONE
-  ) throw new Error("invalid session");
-  return { displayName, email, timezone };
+  return SessionResponseSchema.parse({ data }).data.user;
 }
-
-const CONNECTION_STATES: readonly ConnectionState[] = [
-  "VALIDATING",
-  "ACTIVE_UNBOUND",
-  "ACTIVE_BOUND",
-  "WEBHOOK_FAILED",
-  "SUSPENDED",
-];
 
 function parseConnections(data: unknown): PublicConnection[] {
-  if (!isRecord(data) || !Array.isArray(data.connections)) throw new Error("invalid connections");
-  return data.connections.map((item) => {
-    if (!isRecord(item)) throw new Error("invalid connection");
-    const { publicId, provider, displayName, handle, state } = item;
-    if (
-      typeof publicId !== "string"
-      || publicId.length < 1
-      || publicId.length > 128
-      || (provider !== "zalo" && provider !== "telegram")
-      || typeof displayName !== "string"
-      || displayName.length < 1
-      || displayName.length > 160
-      || (handle !== null && (typeof handle !== "string" || handle.length > 160))
-      || typeof state !== "string"
-      || !CONNECTION_STATES.includes(state as ConnectionState)
-    ) throw new Error("invalid connection");
-    return { publicId, provider, displayName, handle, state: state as ConnectionState };
-  });
+  return ConnectionsResponseSchema.parse({ data }).data.connections;
 }
 
-const REMINDER_STATUSES: readonly ReminderStatus[] = [
-  "PENDING",
-  "CLAIMED",
-  "RETRYABLE",
-  "SENT",
-  "FAILED",
-  "UNCERTAIN",
-  "CANCELLED",
-];
-
 function parseReminders(data: unknown): PublicReminder[] {
-  if (!isRecord(data) || !Array.isArray(data.reminders)) throw new Error("invalid reminders");
-  return data.reminders.map((item) => {
-    if (!isRecord(item)) throw new Error("invalid reminder");
-    const { publicId, title, scheduledAt, timezone, status } = item;
-    if (
-      typeof publicId !== "string"
-      || publicId.length < 1
-      || publicId.length > 128
-      || typeof title !== "string"
-      || title.length < 1
-      || title.length > 500
-      || typeof scheduledAt !== "number"
-      || !Number.isSafeInteger(scheduledAt)
-      || timezone !== VIETNAM_TIMEZONE
-      || typeof status !== "string"
-      || !REMINDER_STATUSES.includes(status as ReminderStatus)
-    ) throw new Error("invalid reminder");
-    return {
-      publicId,
-      title,
-      scheduledAt,
-      timezone,
-      status: status as ReminderStatus,
-    };
-  });
+  return RemindersResponseSchema.parse({ data }).data.reminders;
 }
 
 export function vietnamWallClockToEpoch(value: string): number | null {

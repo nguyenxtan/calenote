@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SessionResponseSchema } from "@/contracts/api/session";
 import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
@@ -92,5 +93,5 @@ export async function handleGetSession(
   const operations = await createOperations();
   const principal = await operations.requireUser(request);
   const user = await operations.getSessionUser(principal.userId);
-  return jsonResponse({ data: { user } }, { headers: authenticatedHeaders() });
+  return jsonResponse(SessionResponseSchema.parse({ data: { user } }), { headers: authenticatedHeaders() });
 }

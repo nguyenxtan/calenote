@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ConnectionsResponseSchema } from "@/contracts/api/connections";
 import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
@@ -52,7 +53,7 @@ export async function handleListConnections(
   const principal = await operations.requireUser(request);
   const connections = await operations.listConnections(principal.userId);
   return jsonResponse(
-    { data: { connections } },
+    ConnectionsResponseSchema.parse({ data: { connections } }),
     { headers: { vary: "Cookie" } },
   );
 }
