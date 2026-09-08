@@ -162,7 +162,7 @@ export async function runScheduledWork(
   ]);
 }
 
-async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
+export async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const inboundStore = new D1InboundProcessorStore(
     env.DB,

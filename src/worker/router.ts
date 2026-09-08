@@ -58,7 +58,7 @@ import {
 
 const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
 
-class ServiceUnavailableError extends Error {
+export class ServiceUnavailableError extends Error {
   constructor() {
     super("Calenote đang tạm thời không sẵn sàng.");
     this.name = "ServiceUnavailableError";
@@ -115,7 +115,7 @@ async function registerWebhook(
   return setTelegramWebhook(token, registration);
 }
 
-async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
+export async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
   let keyring: Awaited<ReturnType<typeof createKeyring>>;
   try {
     assertRuntimeBindingShapes(env);
@@ -223,7 +223,7 @@ async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
   };
 }
 
-async function createWebhookOperations(env: Env): Promise<WebhookRouteDependencies> {
+export async function createWebhookOperations(env: Env): Promise<WebhookRouteDependencies> {
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const store = new D1InboundWebhookStore(env.DB);
   return {
