@@ -44,6 +44,8 @@ import type {
   RemindersOperations,
 } from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
+import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
+import type { IntelligenceGateway } from "@/modules/intelligence/contracts";
 
 export const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
 
@@ -235,6 +237,13 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
       enqueue: async (job) => { await env.JOBS.send(job); },
     }),
   };
+}
+
+// Intelligence is intentionally optional and disabled at this foundation stage.
+// Keeping the null port here makes later provider wiring explicit without making
+// routes or core reminder processing depend on a provider.
+export async function createIntelligenceGateway(): Promise<IntelligenceGateway> {
+  return createNullIntelligenceGateway();
 }
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;

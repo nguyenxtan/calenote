@@ -64,6 +64,10 @@ describe("Worker composition root", () => {
       webhookSecrets: expect.any(Function),
       accept: expect.any(Function),
     }));
+    await expect(root.createIntelligenceGateway()).resolves.toEqual(expect.objectContaining({
+      interpretReminder: expect.any(Function),
+      extractAction: expect.any(Function),
+    }));
   });
 
   it("rejects invalid runtime bindings before creating a route operation", async () => {
