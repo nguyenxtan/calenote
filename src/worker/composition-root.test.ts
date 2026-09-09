@@ -78,6 +78,19 @@ describe("Worker composition root", () => {
       .rejects.toMatchObject({ name: "ServiceUnavailableError" });
   });
 
+  it("selects the configured optional intelligence mode instead of forcing it off", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      createIntelligenceCapability?: (env: Env) => Promise<{ mode: "off" | "free" | "economy" }>;
+    };
+
+    expect(root.createIntelligenceCapability).toEqual(expect.any(Function));
+    await expect(root.createIntelligenceCapability!({
+      ...environment(),
+      AI_MODE: "free",
+      OPENROUTER_API_KEY: "test-only-key",
+    } as unknown as Env)).resolves.toMatchObject({ mode: "free" });
+  });
+
   it("keeps concrete Worker dependency construction inside the composition root", async () => {
     const routerSource = await readFile(resolve(process.cwd(), "src/worker/router.ts"), "utf8");
     const entrypointSource = await readFile(resolve(process.cwd(), "src/worker/index.ts"), "utf8");

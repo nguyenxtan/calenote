@@ -45,7 +45,7 @@ import type {
 } from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
 import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
-import type { IntelligenceGateway } from "@/modules/intelligence/contracts";
+import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { parseOpenRouterRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
 
@@ -241,12 +241,22 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
   };
 }
 
-// Intelligence is intentionally optional and disabled at this foundation stage.
-// Keeping the null port here makes later provider wiring explicit without making
-// routes or core reminder processing depend on a provider.
-export async function createIntelligenceGateway(env?: Env): Promise<IntelligenceGateway> {
+export interface IntelligenceCapability {
+  mode: IntelligenceMode;
+  gateway: IntelligenceGateway;
+}
+
+// Intelligence remains optional: invalid or missing configuration never prevents
+// Worker startup and resolves to the null port.
+export async function createIntelligenceCapability(env?: Env): Promise<IntelligenceCapability> {
   const policy = parseOpenRouterRuntimeConfig((env ?? {}) as Record<string, string | undefined>);
-  return policy.status === "READY" ? createOpenRouterGateway(policy.config) : createNullIntelligenceGateway();
+  return policy.status === "READY"
+    ? { mode: policy.config.mode, gateway: createOpenRouterGateway(policy.config) }
+    : { mode: "off", gateway: createNullIntelligenceGateway() };
+}
+
+export async function createIntelligenceGateway(env?: Env): Promise<IntelligenceGateway> {
+  return (await createIntelligenceCapability(env)).gateway;
 }
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
@@ -258,9 +268,9 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
-  const intelligence = await createIntelligenceGateway(env);
+  const intelligence = await createIntelligenceCapability(env);
   return {
-    processInbound: (inboundId) => processInbound(inboundId, { store: inboundStore, keyring, intelligence: { mode: "off", gateway: intelligence } }),
+    processInbound: (inboundId) => processInbound(inboundId, { store: inboundStore, keyring, intelligence }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
