@@ -274,10 +274,37 @@ describe("bound reminder commands", () => {
     await harness.addInbound({ id: "openrouter-confirm", text: "ok", receivedAt: receivedAt + 1 });
     await expect(harness.process("openrouter-confirm", processingAt + 2)).resolves.toEqual({ status: "CONFIRMED" });
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+    await harness.addInbound({ id: "openrouter-confirm-repeat", text: "ok", receivedAt: receivedAt + 2 });
+    await expect(harness.process("openrouter-confirm-repeat", processingAt + 3)).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
   });
-  it("blocks sensitive inbound text before the intelligence gateway", async () => {
+  it("keeps deterministic, malformed, and unavailable OpenRouter results non-authoritative", async () => {
     const harness = await createHarness();
-    const gateway: IntelligenceGateway = { interpretReminder: vi.fn().mockResolvedValue({ status: "PROPOSED", title: "must not persist", scheduledAt: processingAt + 60_000, timezone, confidence: 1 }), extractAction: vi.fn() };
+    const deterministicTransport = vi.fn();
+    const deterministicGateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, deterministicTransport);
+    await harness.addInbound({ id: "deterministic", text: "mai 8h nhắc tôi uống thuốc" });
+    await expect(harness.process("deterministic", processingAt, { mode: "free", gateway: deterministicGateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
+    expect(deterministicTransport).not.toHaveBeenCalled();
+
+    const malformedTransport = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }), { status: 200 }));
+    const malformedGateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, malformedTransport);
+    await harness.addInbound({ id: "malformed", text: "nhắc tôi một việc mơ hồ" });
+    await expect(harness.process("malformed", processingAt + 1, { mode: "free", gateway: malformedGateway })).resolves.toEqual({ status: "REJECTED" });
+    expect(malformedTransport).toHaveBeenCalledTimes(1);
+
+    const unavailableTransport = vi.fn().mockResolvedValue(new Response("unavailable", { status: 429 }));
+    const unavailableGateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, unavailableTransport);
+    await harness.addInbound({ id: "unavailable-adapter", text: "nhắc tôi một việc khác mơ hồ" });
+    await expect(harness.process("unavailable-adapter", processingAt + 2, { mode: "free", gateway: unavailableGateway })).resolves.toEqual({ status: "REJECTED" });
+    expect(unavailableTransport).toHaveBeenCalledTimes(1);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 1 });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it("blocks sensitive inbound text before the actual OpenRouter gateway", async () => {
+    const harness = await createHarness();
+    const transport = vi.fn();
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 32, maxOutputTokens: 128 }, transport);
     const intelligence = { mode: "free" as const, gateway, sensitiveValues: ["fixture-known-secret"] };
     await harness.addInbound({ id: "credential", text: "Authorization: Bearer fixture-value" });
     await harness.addInbound({ id: "known-secret", text: "nhắc tôi fixture-known-secret" });
@@ -285,7 +312,9 @@ describe("bound reminder commands", () => {
     await expect(harness.process("credential", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
     await expect(harness.process("known-secret", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
     await expect(harness.process("connect-privacy", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
-    expect(gateway.interpretReminder).not.toHaveBeenCalled();
+    await harness.addInbound({ id: "oversized", text: "x".repeat(33) });
+    await expect(harness.process("oversized", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
+    expect(transport).not.toHaveBeenCalled();
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 0 });
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
   });

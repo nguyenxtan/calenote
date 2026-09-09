@@ -25,6 +25,14 @@ describe("OpenRouter intelligence gateway", () => {
     await expect(gateway.interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("does not propagate raw provider error or completion content", async () => {
+    const providerSecret = "provider-body-must-not-escape";
+    const errorGateway = createOpenRouterGateway(config, async () => new Response(providerSecret, { status: 500 }));
+    const completionGateway = createOpenRouterGateway(config, async () => new Response(JSON.stringify({ choices: [{ message: { content: providerSecret } }] }), { status: 200 }));
+    const input = { text: "reminder input", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" as const };
+    await expect(errorGateway.interpretReminder(input)).resolves.toEqual({ status: "UNAVAILABLE" });
+    await expect(completionGateway.interpretReminder(input)).resolves.toEqual({ status: "UNAVAILABLE" });
+  });
   it.each(["{", JSON.stringify({}), JSON.stringify({ choices: [{}] })])("fails closed for malformed provider response", async (payload) => {
     const fetcher = vi.fn().mockResolvedValue(new Response(payload, { status: 200 }));
     await expect(createOpenRouterGateway(config, fetcher).interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });

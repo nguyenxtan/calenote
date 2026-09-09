@@ -5,6 +5,7 @@ import {
   deterministicRandomBytes,
 } from "@/testing/sqlite-d1.test-support";
 import { D1SourceActionStore } from "./infrastructure/d1/store";
+import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import {
   approveActionCandidate,
   createReminderActionCandidate,
@@ -110,6 +111,39 @@ async function setup() {
 }
 
 describe("source action decisions", () => {
+  it("admits an actual mocked OpenRouter extraction only as a pending candidate", async () => {
+    const account = await setup();
+    const transport = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Nguồn", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.5 }) } }] }), { status: 200 });
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, transport);
+    const result = await admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "free", gateway, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes });
+    expect(result).toMatchObject({ status: "PENDING", candidate: { status: "PENDING" } });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+    if (result.status !== "PENDING") throw new Error("Expected pending candidate");
+    await expect(admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "free", gateway, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes })).resolves.toEqual({ status: "REJECTED" });
+    await expect(approveActionCandidate({ userId: "user-one", candidateId: result.candidate.id }, { store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes })).resolves.toMatchObject({ status: "APPROVED" });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+  });
+  it("keeps actual malformed, unavailable, and cross-workspace OpenRouter extraction non-authoritative", async () => {
+    const account = await setup();
+    const malformed = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, async () => new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }), { status: 200 }));
+    const unavailable = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, async () => new Response("unavailable", { status: 503 }));
+    const valid = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Source", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.5 }) } }] }), { status: 200 }));
+    const dependencies = { mode: "free" as const, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes };
+    const input = { sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" as const };
+    await expect(admitIntelligenceActionProposal(input, { ...dependencies, gateway: malformed })).resolves.toEqual({ status: "REJECTED" });
+    await expect(admitIntelligenceActionProposal(input, { ...dependencies, gateway: unavailable })).resolves.toEqual({ status: "REJECTED" });
+    await expect(admitIntelligenceActionProposal({ ...input, workspaceId: "workspace-two" }, { ...dependencies, gateway: valid })).resolves.toEqual({ status: "REJECTED" });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM action_candidates").get()).toEqual({ count: 0 });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+  it("allows an actual OpenRouter candidate to be rejected without a reminder", async () => {
+    const account = await setup();
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Reject", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.5 }) } }] }), { status: 200 }));
+    const result = await admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "free", gateway, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes });
+    if (result.status !== "PENDING") throw new Error("Expected pending candidate");
+    await expect(rejectActionCandidate({ userId: "user-one", candidateId: result.candidate.id }, { store: account.store, now: () => NOW, randomBytes: account.randomBytes })).resolves.toEqual({ status: "REJECTED" });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
   it("keeps repeated, past, and unsupported extraction proposals non-authoritative", async () => {
     const account = await setup();
     const makeGateway = (proposal: unknown) => ({ interpretReminder: async () => ({}), extractAction: async () => proposal });
