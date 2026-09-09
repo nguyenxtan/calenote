@@ -18,4 +18,14 @@ describe("OpenRouter intelligence gateway", () => {
     await expect(gateway.interpretReminder({ text: "long", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it.each([401, 403, 429, 500, 503])("fails closed for HTTP %i without retry", async (status) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("ignored", { status }));
+    const gateway = createOpenRouterGateway(config, fetcher);
+    await expect(gateway.interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each(["{", JSON.stringify({}), JSON.stringify({ choices: [{}] })])("fails closed for malformed provider response", async (payload) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(payload, { status: 200 }));
+    await expect(createOpenRouterGateway(config, fetcher).interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+  });
 });
