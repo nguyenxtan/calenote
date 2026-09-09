@@ -46,6 +46,8 @@ import type {
 import type { WebhookRouteDependencies } from "./routes/webhooks";
 import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway } from "@/modules/intelligence/contracts";
+import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
+import { parseOpenRouterRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
 
 export const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
 
@@ -242,8 +244,9 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
 // Intelligence is intentionally optional and disabled at this foundation stage.
 // Keeping the null port here makes later provider wiring explicit without making
 // routes or core reminder processing depend on a provider.
-export async function createIntelligenceGateway(): Promise<IntelligenceGateway> {
-  return createNullIntelligenceGateway();
+export async function createIntelligenceGateway(env?: Env): Promise<IntelligenceGateway> {
+  const policy = parseOpenRouterRuntimeConfig((env ?? {}) as Record<string, string | undefined>);
+  return policy.status === "READY" ? createOpenRouterGateway(policy.config) : createNullIntelligenceGateway();
 }
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
@@ -255,7 +258,7 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
-  const intelligence = await createIntelligenceGateway();
+  const intelligence = await createIntelligenceGateway(env);
   return {
     processInbound: (inboundId) => processInbound(inboundId, { store: inboundStore, keyring, intelligence: { mode: "off", gateway: intelligence } }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
