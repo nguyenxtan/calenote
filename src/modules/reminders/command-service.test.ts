@@ -106,7 +106,7 @@ interface Harness {
   store: D1InboundProcessorStore;
   sendText: ReturnType<typeof vi.fn<NonNullable<ProcessInboundDependencies["sendText"]>>>;
   addInbound(input: InboundInput): Promise<void>;
-  process(id: string, now?: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway }): ReturnType<typeof processInbound>;
+  process(id: string, now?: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ReturnType<typeof processInbound>;
   claim(id: string, now?: number): Promise<ClaimedInboundMessage>;
 }
 
@@ -186,7 +186,7 @@ async function createHarness(): Promise<Harness> {
     );
   }
 
-  function dependencies(now: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway }): ProcessInboundDependencies {
+  function dependencies(now: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ProcessInboundDependencies {
     return {
       store,
       keyring,
@@ -262,6 +262,20 @@ describe("migrated reminder command schema", () => {
 });
 
 describe("bound reminder commands", () => {
+  it("blocks sensitive inbound text before the intelligence gateway", async () => {
+    const harness = await createHarness();
+    const gateway: IntelligenceGateway = { interpretReminder: vi.fn().mockResolvedValue({ status: "PROPOSED", title: "must not persist", scheduledAt: processingAt + 60_000, timezone, confidence: 1 }), extractAction: vi.fn() };
+    const intelligence = { mode: "free" as const, gateway, sensitiveValues: ["fixture-known-secret"] };
+    await harness.addInbound({ id: "credential", text: "Authorization: Bearer fixture-value" });
+    await harness.addInbound({ id: "known-secret", text: "nhắc tôi fixture-known-secret" });
+    await harness.addInbound({ id: "connect-privacy", text: "/connect ABCDEFGHJKLMNPQRSTUVWXYZ23" });
+    await expect(harness.process("credential", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
+    await expect(harness.process("known-secret", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
+    await expect(harness.process("connect-privacy", processingAt, intelligence)).resolves.toEqual({ status: "REJECTED" });
+    expect(gateway.interpretReminder).not.toHaveBeenCalled();
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 0 });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
   it("does not re-invoke unavailable intelligence after canonical inbound terminalization", async () => {
     const harness = await createHarness();
     await harness.addInbound({ id: "unavailable", text: "nhắc tôi họp mơ hồ" });
