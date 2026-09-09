@@ -9,6 +9,7 @@ import {
   approveActionCandidate,
   createReminderActionCandidate,
   rejectActionCandidate,
+  type SourceActionStore,
 } from "./service";
 
 const MASTER_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -265,5 +266,66 @@ describe("source action decisions", () => {
     expect(account.db.sqlite.prepare(
       "SELECT decision, created_reminder_id FROM action_decisions",
     ).all()).toEqual([{ decision: "REJECTED", created_reminder_id: null }]);
+  });
+
+  it.each([
+    { label: "approval", decide: (store: SourceActionStore, keyring: Keyring, candidateId: string) => approveActionCandidate(
+      { userId: "user-one", candidateId },
+      { store, keyring, now: () => NOW, randomBytes: deterministicRandomBytes() },
+    ) },
+    { label: "rejection", decide: (store: SourceActionStore, _keyring: Keyring, candidateId: string) => rejectActionCandidate(
+      { userId: "user-one", candidateId },
+      { store, now: () => NOW, randomBytes: deterministicRandomBytes() },
+    ) },
+  ])("returns ALREADY_DECIDED when concurrent $label loses the action decision uniqueness race", async ({ decide }) => {
+    const account = await setup();
+    const candidate = await createReminderActionCandidate(
+      {
+        sourceItemId: "source-item-one",
+        workspaceId: "workspace-one",
+        title: "Quyết định đồng thời",
+        scheduledAt: NOW + 60_000,
+        timezone: "Asia/Ho_Chi_Minh",
+      },
+      { store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes },
+    );
+    const staleCandidate = await account.store.findOwnedCandidate("user-one", candidate.id);
+    expect(staleCandidate).not.toBeNull();
+    const raceStore: SourceActionStore = {
+      createCandidate: account.store.createCandidate.bind(account.store),
+      listOwnedPendingCandidates: account.store.listOwnedPendingCandidates.bind(account.store),
+      findOwnedCandidate: async () => staleCandidate,
+      approveCandidate: async () => { throw new Error("UNIQUE constraint failed: action_decisions.action_candidate_id"); },
+      rejectCandidate: async () => { throw new Error("UNIQUE constraint failed: action_decisions.action_candidate_id"); },
+    };
+
+    await expect(decide(raceStore, account.keyring, candidate.id)).resolves.toEqual({ status: "ALREADY_DECIDED" });
+  });
+
+  it("does not hide a non-decision D1 uniqueness failure as an already decided action", async () => {
+    const account = await setup();
+    const candidate = await createReminderActionCandidate(
+      {
+        sourceItemId: "source-item-one",
+        workspaceId: "workspace-one",
+        title: "Không che lỗi khác",
+        scheduledAt: NOW + 60_000,
+        timezone: "Asia/Ho_Chi_Minh",
+      },
+      { store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes },
+    );
+    const staleCandidate = await account.store.findOwnedCandidate("user-one", candidate.id);
+    const store: SourceActionStore = {
+      createCandidate: account.store.createCandidate.bind(account.store),
+      listOwnedPendingCandidates: account.store.listOwnedPendingCandidates.bind(account.store),
+      findOwnedCandidate: async () => staleCandidate,
+      approveCandidate: async () => { throw new Error("UNIQUE constraint failed: reminders.public_id"); },
+      rejectCandidate: async () => { throw new Error("UNIQUE constraint failed: reminders.public_id"); },
+    };
+
+    await expect(rejectActionCandidate(
+      { userId: "user-one", candidateId: candidate.id },
+      { store, now: () => NOW, randomBytes: deterministicRandomBytes() },
+    )).rejects.toThrow("UNIQUE constraint failed: reminders.public_id");
   });
 });

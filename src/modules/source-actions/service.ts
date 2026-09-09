@@ -176,6 +176,11 @@ function validCandidateInput(input: {
     && input.timezone === "Asia/Ho_Chi_Minh";
 }
 
+function isActionDecisionUniquenessRace(error: unknown): boolean {
+  return error instanceof Error
+    && /\bUNIQUE constraint failed: action_decisions\.action_candidate_id\b/u.test(error.message);
+}
+
 export async function createReminderActionCandidate(
   input: {
     sourceItemId: string;
@@ -262,16 +267,22 @@ export async function approveActionCandidate(
     TITLE_KEY_VERSION,
     title,
   );
-  const approved = await dependencies.store.approveCandidate({
-    userId: input.userId,
-    candidateId: candidate.id,
-    decisionId: randomOpaqueId(randomBytes),
-    reminderId,
-    reminderPublicId,
-    encryptedTitle,
-    titleKeyVersion: TITLE_KEY_VERSION,
-    now: decidedAt,
-  });
+  let approved: boolean;
+  try {
+    approved = await dependencies.store.approveCandidate({
+      userId: input.userId,
+      candidateId: candidate.id,
+      decisionId: randomOpaqueId(randomBytes),
+      reminderId,
+      reminderPublicId,
+      encryptedTitle,
+      titleKeyVersion: TITLE_KEY_VERSION,
+      now: decidedAt,
+    });
+  } catch (error) {
+    if (isActionDecisionUniquenessRace(error)) return { status: "ALREADY_DECIDED" };
+    throw error;
+  }
   return approved
     ? { status: "APPROVED", reminderPublicId }
     : { status: "CHANNEL_UNAVAILABLE" };
@@ -290,11 +301,17 @@ export async function rejectActionCandidate(
   const candidate = await dependencies.store.findOwnedCandidate(input.userId, input.candidateId);
   if (!candidate) return { status: "NOT_FOUND" };
   if (candidate.status !== "PENDING") return { status: "ALREADY_DECIDED" };
-  const rejected = await dependencies.store.rejectCandidate({
-    userId: input.userId,
-    candidateId: candidate.id,
-    decisionId: randomOpaqueId(randomBytes),
-    now: now(),
-  });
+  let rejected: boolean;
+  try {
+    rejected = await dependencies.store.rejectCandidate({
+      userId: input.userId,
+      candidateId: candidate.id,
+      decisionId: randomOpaqueId(randomBytes),
+      now: now(),
+    });
+  } catch (error) {
+    if (isActionDecisionUniquenessRace(error)) return { status: "ALREADY_DECIDED" };
+    throw error;
+  }
   return rejected ? { status: "REJECTED" } : { status: "ALREADY_DECIDED" };
 }
