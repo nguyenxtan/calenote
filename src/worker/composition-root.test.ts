@@ -15,6 +15,8 @@ function environment(): Env {
 }
 
 describe("Worker composition root", () => {
+  // The complete composition path performs several Web Crypto keyring setups;
+  // under the parallel Worker suite it needs an explicit integration budget.
   it("constructs runtime, route capability, and webhook operation boundaries", async () => {
     const root = await import("./composition-root");
     const env = environment();
@@ -68,7 +70,7 @@ describe("Worker composition root", () => {
       interpretReminder: expect.any(Function),
       extractAction: expect.any(Function),
     }));
-  });
+  }, 10_000);
 
   it("rejects invalid runtime bindings before creating a route operation", async () => {
     const root = await import("./composition-root");
