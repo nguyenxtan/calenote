@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenRouterGateway } from "./gateway";
 
 const config = { mode: "free" as const, apiKey: "test-key", freeModel: "openrouter/free", timeoutMs: 1_000, maxInputChars: 500, maxOutputTokens: 120 };
 describe("OpenRouter intelligence gateway", () => {
+  afterEach(() => vi.useRealTimers());
   it("sends a strict, privacy-constrained FREE structured request", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ model: "free/model", choices: [{ message: { content: JSON.stringify({ status: "UNSUPPORTED", confidence: 0 }) } }] }), { status: 200 }));
     const gateway = createOpenRouterGateway(config, fetcher);
@@ -27,5 +28,15 @@ describe("OpenRouter intelligence gateway", () => {
   it.each(["{", JSON.stringify({}), JSON.stringify({ choices: [{}] })])("fails closed for malformed provider response", async (payload) => {
     const fetcher = vi.fn().mockResolvedValue(new Response(payload, { status: 200 }));
     await expect(createOpenRouterGateway(config, fetcher).interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+  });
+  it("aborts one pending transport request at the bounded timeout", async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const pending = createOpenRouterGateway({ ...config, timeoutMs: 100 }, fetcher).interpretReminder({ text: "nhắc tôi", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" });
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(pending).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
