@@ -68,6 +68,13 @@ describe("optional intelligence foundation", () => {
     })).resolves.toEqual({ status: "UNAVAILABLE", reason: "UNCONFIGURED" });
   });
 
+  it("fails closed when a gateway throws", async () => {
+    const optionalGateway = gateway();
+    optionalGateway.interpretReminder.mockRejectedValueOnce(new Error("unavailable"));
+    await expect(interpretReminderDeterministicallyFirst(input, { mode: "free", gateway: optionalGateway, deterministic: () => ({ status: "AMBIGUOUS" }) }))
+      .resolves.toEqual({ status: "UNAVAILABLE", reason: "UNCONFIGURED" });
+  });
+
   it.each([
     ["malformed structured output", { status: "PROPOSED", title: "x" }],
     ["unsupported proposal field", { status: "PROPOSED", title: "x", scheduledAt: now + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.8, recurrence: "daily" }],

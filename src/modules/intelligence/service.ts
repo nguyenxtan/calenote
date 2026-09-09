@@ -76,7 +76,10 @@ export async function interpretReminderDeterministicallyFirst(
     return { status: "UNAVAILABLE", reason: "SENSITIVE_INPUT" };
   }
 
-  const rawProposal = await dependencies.gateway.interpretReminder(parsedInput.data);
+  let rawProposal: unknown;
+  try { rawProposal = await dependencies.gateway.interpretReminder(parsedInput.data); } catch {
+    return { status: "UNAVAILABLE", reason: "UNCONFIGURED" };
+  }
   if (typeof rawProposal === "object" && rawProposal !== null
     && (rawProposal as { status?: unknown }).status === "UNAVAILABLE") {
     return { status: "UNAVAILABLE", reason: "UNCONFIGURED" };
