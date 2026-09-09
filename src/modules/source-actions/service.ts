@@ -6,6 +6,7 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
+import { ActionExtractionSchema, type IntelligenceGateway, type IntelligenceMode } from "@/modules/intelligence/contracts";
 
 export type SourceConnectionStatus = "ACTIVE" | "PAUSED" | "REVOKED";
 export type ActionCandidateStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -231,6 +232,25 @@ export async function createReminderActionCandidate(
     scheduledAt: input.scheduledAt,
     timezone: "Asia/Ho_Chi_Minh",
   };
+}
+
+/** Admits an untrusted extraction only as a pending candidate; it never decides or creates a reminder. */
+export async function admitIntelligenceActionProposal(
+  input: { sourceItemId: string; workspaceId: string; text: string; observedAt: number; timezone: "Asia/Ho_Chi_Minh" },
+  dependencies: { mode: IntelligenceMode; gateway: IntelligenceGateway; store: SourceActionStore; keyring: Pick<Keyring, "encryptSensitive">; now?: Clock; randomBytes?: RandomBytes },
+): Promise<{ status: "PENDING"; candidate: ActionCandidate } | { status: "UNAVAILABLE" | "REJECTED" }> {
+  if (dependencies.mode === "off") return { status: "UNAVAILABLE" };
+  let raw: unknown;
+  try { raw = await dependencies.gateway.extractAction({ text: input.text, observedAt: input.observedAt, timezone: input.timezone }); } catch { return { status: "UNAVAILABLE" }; }
+  const proposal = ActionExtractionSchema.safeParse(raw);
+  if (!proposal.success || proposal.data.status !== "PROPOSED") return { status: "REJECTED" };
+  try {
+    const candidate = await createReminderActionCandidate({
+      sourceItemId: input.sourceItemId, workspaceId: input.workspaceId, title: proposal.data.title,
+      scheduledAt: proposal.data.scheduledAt, timezone: proposal.data.timezone,
+    }, dependencies);
+    return { status: "PENDING", candidate };
+  } catch { return { status: "REJECTED" }; }
 }
 
 export async function approveActionCandidate(

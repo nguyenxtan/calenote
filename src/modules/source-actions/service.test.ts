@@ -8,6 +8,7 @@ import { D1SourceActionStore } from "./infrastructure/d1/store";
 import {
   approveActionCandidate,
   createReminderActionCandidate,
+  admitIntelligenceActionProposal,
   rejectActionCandidate,
   type SourceActionStore,
 } from "./service";
@@ -109,6 +110,20 @@ async function setup() {
 }
 
 describe("source action decisions", () => {
+  it("admits a valid extraction as one pending candidate without a reminder", async () => {
+    const account = await setup();
+    const gateway = { interpretReminder: async () => ({}), extractAction: async () => ({ status: "PROPOSED", title: "Họp nguồn", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.4 }) };
+    await expect(admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "free", gateway, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes })).resolves.toMatchObject({ status: "PENDING", candidate: { status: "PENDING" } });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it("rejects malformed, cross-workspace, and off extraction without calling or persisting", async () => {
+    const account = await setup();
+    const gateway = { interpretReminder: async () => ({}), extractAction: async () => ({ status: "PROPOSED", title: "x" }) };
+    await expect(admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-two", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "free", gateway, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes })).resolves.toEqual({ status: "REJECTED" });
+    await expect(admitIntelligenceActionProposal({ sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" }, { mode: "off", gateway, store: account.store, keyring: account.keyring })).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM action_candidates").get()).toEqual({ count: 0 });
+  });
   it("lists only owned pending candidates with decrypted public fields", async () => {
     const account = await setup();
     const sourceActions = await import("./service") as typeof import("./service") & {
