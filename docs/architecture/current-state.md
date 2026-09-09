@@ -74,13 +74,21 @@ Optional intelligence is disabled when `AI_MODE` is absent or `off`. Its
 configuration is intentionally optional: `AI_MODE=off|free|economy`,
 `OPENROUTER_API_KEY`, `OPENROUTER_FREE_MODEL`, `OPENROUTER_ECONOMY_MODEL`,
 `OPENROUTER_FALLBACK_MODELS`, `AI_TIMEOUT_MS`, `AI_MAX_INPUT_CHARS`, and
-`AI_MAX_OUTPUT_TOKENS`. `OPENROUTER_API_KEY` is a Worker secret and is never
+`AI_MAX_OUTPUT_TOKENS`, `AI_MAX_FALLBACK_ATTEMPTS`, and
+`AI_MAX_FALLBACK_PRICE`. `OPENROUTER_API_KEY` is a Worker secret and is never
 committed. Missing or invalid settings select the null gateway, so startup and
 `/api/health` remain available without OpenRouter.
 
-FREE defaults to `openrouter/free`, permits zero paid escalation, and sends
-`allow_fallbacks=false`, `data_collection=deny`, `zdr=true`, and
-`require_parameters=true`. The adapter requests a structured JSON schema and
+`AI_MODE=free` is FREE-PREFERRED: it defaults to `openrouter/free`, then may
+try only the ordered IDs in `OPENROUTER_FALLBACK_MODELS` after a retryable
+availability failure. Each fallback is explicit, deduplicated, bounded by
+`AI_MAX_FALLBACK_ATTEMPTS` (maximum three), and requires
+`AI_MAX_FALLBACK_PRICE` as an OpenRouter request-price ceiling. A configured
+fallback can incur cost; it is not a zero-cost guarantee. Authentication
+failures, malformed provider output, and privacy/domain rejection never
+fallback. `AI_MODE=economy` remains an explicit primary model plus bounded
+allowlisted fallbacks. Every request sends `allow_fallbacks=false`,
+`data_collection=deny`, `zdr=true`, and `require_parameters=true`; the adapter
 does not enable plugins, tools, or web search. It emits no logs; provider error
 bodies and malformed completion content are reduced to a safe `UNAVAILABLE`
 result rather than being propagated. Runtime evidence uses injected mocked

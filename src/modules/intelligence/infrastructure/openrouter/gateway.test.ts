@@ -47,4 +47,47 @@ describe("OpenRouter intelligence gateway", () => {
     await expect(pending).resolves.toEqual({ status: "UNAVAILABLE" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("keeps configured paid fallbacks idle when the free primary succeeds", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "UNSUPPORTED", confidence: 0 }) } }] }), { status: 200 }));
+    const gateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, fetcher);
+    await expect(gateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNSUPPORTED", confidence: 0 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1].body))).toMatchObject({ model: "openrouter/free" });
+  });
+  it.each([429, 503])("tries the first configured cheap fallback after free HTTP %i", async (status) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Fallback", scheduledAt: 1_700_000_060_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.5 }) } }] }), { status: 200 }));
+    const gateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one", "cheap/two"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, fetcher);
+    await expect(gateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toMatchObject({ status: "PROPOSED", title: "Fallback" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).model)).toEqual(["openrouter/free", "cheap/one"]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1].body))).toMatchObject({ provider: { max_price: { request: 0.01 }, allow_fallbacks: false } });
+  });
+  it("tries the first configured cheap fallback after a bounded transport failure", async () => {
+    const fetcher = vi.fn()
+      .mockRejectedValueOnce(new Error("transport unavailable"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "UNSUPPORTED", confidence: 0 }) } }] }), { status: 200 }));
+    const gateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, fetcher);
+    await expect(gateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNSUPPORTED", confidence: 0 });
+    expect(fetcher.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).model)).toEqual(["openrouter/free", "cheap/one"]);
+  });
+  it.each([401, 403])("does not retry a free request after HTTP %i", async (status) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("unauthorized", { status }));
+    const gateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, fetcher);
+    await expect(gateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry malformed structured output and bounds configured fallback attempts", async () => {
+    const malformed = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }), { status: 200 }));
+    const malformedGateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, malformed);
+    await expect(malformedGateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(malformed).toHaveBeenCalledTimes(1);
+
+    const unavailable = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));
+    const boundedGateway = createOpenRouterGateway({ ...config, fallbackModels: ["cheap/one", "cheap/two"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01 }, unavailable);
+    await expect(boundedGateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toEqual({ status: "UNAVAILABLE" });
+    expect(unavailable).toHaveBeenCalledTimes(2);
+    expect(unavailable.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).model)).toEqual(["openrouter/free", "cheap/one"]);
+  });
 });

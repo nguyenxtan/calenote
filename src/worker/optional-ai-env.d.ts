@@ -6,6 +6,8 @@ interface Env {
   OPENROUTER_FREE_MODEL?: string;
   OPENROUTER_ECONOMY_MODEL?: string;
   OPENROUTER_FALLBACK_MODELS?: string;
+  AI_MAX_FALLBACK_ATTEMPTS?: string;
+  AI_MAX_FALLBACK_PRICE?: string;
   AI_TIMEOUT_MS?: string;
   AI_MAX_INPUT_CHARS?: string;
   AI_MAX_OUTPUT_TOKENS?: string;

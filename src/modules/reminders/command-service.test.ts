@@ -278,6 +278,20 @@ describe("bound reminder commands", () => {
     await expect(harness.process("openrouter-confirm-repeat", processingAt + 3)).resolves.toEqual({ status: "REJECTED" });
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
   });
+  it("admits a cheap fallback proposal only through the existing confirmation authority", async () => {
+    const harness = await createHarness();
+    const transport = vi.fn()
+      .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Fallback", scheduledAt: processingAt + 60_000, timezone, confidence: 0.5 }) } }] }), { status: 200 }));
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", freeModel: "openrouter/free", fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01, timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, transport);
+    await harness.addInbound({ id: "fallback-assisted", text: "nhắc tôi một việc mơ hồ" });
+    await expect(harness.process("fallback-assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+    await harness.addInbound({ id: "fallback-confirm", text: "ok", receivedAt: receivedAt + 1 });
+    await expect(harness.process("fallback-confirm", processingAt + 2)).resolves.toEqual({ status: "CONFIRMED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+  });
   it("keeps deterministic, malformed, and unavailable OpenRouter results non-authoritative", async () => {
     const harness = await createHarness();
     const deterministicTransport = vi.fn();
