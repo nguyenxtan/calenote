@@ -31,6 +31,7 @@ import {
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { MAX_INBOUND_PROCESS_ATTEMPTS } from "@/modules/reminders/scheduler";
+import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -140,6 +141,7 @@ export interface ProcessInboundDependencies {
   sendText?: SendText;
   now?: Clock;
   randomBytes?: RandomBytes;
+  intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
 }
 
 export async function sendProviderText(
@@ -566,6 +568,7 @@ export async function processInbound(
       now,
       randomBytes,
       reply: (text) => replyAfterTerminal(message, text, dependencies),
+      intelligence: dependencies.intelligence,
     });
   }
 

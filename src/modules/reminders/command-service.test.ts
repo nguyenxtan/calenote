@@ -15,6 +15,7 @@ import {
   type ReminderCommandStore,
 } from "./command-service";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
+import type { IntelligenceGateway } from "@/modules/intelligence/contracts";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const timezone = "Asia/Ho_Chi_Minh";
@@ -105,7 +106,7 @@ interface Harness {
   store: D1InboundProcessorStore;
   sendText: ReturnType<typeof vi.fn<NonNullable<ProcessInboundDependencies["sendText"]>>>;
   addInbound(input: InboundInput): Promise<void>;
-  process(id: string, now?: number): ReturnType<typeof processInbound>;
+  process(id: string, now?: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway }): ReturnType<typeof processInbound>;
   claim(id: string, now?: number): Promise<ClaimedInboundMessage>;
 }
 
@@ -185,13 +186,14 @@ async function createHarness(): Promise<Harness> {
     );
   }
 
-  function dependencies(now: number): ProcessInboundDependencies {
+  function dependencies(now: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway }): ProcessInboundDependencies {
     return {
       store,
       keyring,
       sendText,
       now: () => now,
       randomBytes: (length) => new Uint8Array(length).fill(++randomByte),
+      intelligence,
     };
   }
 
@@ -201,7 +203,7 @@ async function createHarness(): Promise<Harness> {
     store,
     sendText,
     addInbound,
-    process: (id, now = processingAt) => processInbound(id, dependencies(now)),
+    process: (id, now = processingAt, intelligence) => processInbound(id, dependencies(now, intelligence)),
     claim: async (id, now = processingAt) => {
       const result = await claimInbound(id, {
         store,
@@ -260,6 +262,21 @@ describe("migrated reminder command schema", () => {
 });
 
 describe("bound reminder commands", () => {
+  it("admits one validated assisted proposal only through the existing command draft confirmation", async () => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "assisted", text: "nhắc tôi họp với đội" });
+    const gateway: IntelligenceGateway = {
+      interpretReminder: vi.fn().mockResolvedValue({ status: "PROPOSED", title: "Họp với đội", scheduledAt: processingAt + 60_000, timezone, confidence: 0.2 }),
+      extractAction: vi.fn(),
+    };
+    await expect(harness.process("assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
+    expect(gateway.interpretReminder).toHaveBeenCalledTimes(1);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 1 });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+    await harness.addInbound({ id: "confirm-assisted", text: "ok", receivedAt: receivedAt + 1 });
+    await expect(harness.process("confirm-assisted", processingAt + 2)).resolves.toEqual({ status: "CONFIRMED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+  });
   it("creates an encrypted pending draft and replays the same inbound without another draft or reply", async () => {
     const harness = await createHarness();
     await harness.addInbound({ id: "inbound-create", text: "mai 8h nhắc tui gọi cho mẹ" });

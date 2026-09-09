@@ -7,6 +7,11 @@ import {
 } from "@/modules/platform/types";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import {
+  interpretReminderDeterministicallyFirst,
+  type IntelligenceResolution,
+} from "@/modules/intelligence/service";
+import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
+import {
   MAX_REMINDER_TITLE_CODE_UNITS,
   parseVietnameseReminder,
   type ParsedReminderCandidate,
@@ -104,6 +109,7 @@ export interface ProcessBoundChatDependencies {
   reply(text: string): Promise<void>;
   now?: Clock;
   randomBytes?: RandomBytes;
+  intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
 }
 
 export type ProcessBoundChatResult =
@@ -256,7 +262,17 @@ export async function processBoundChatMessage(
   }
 
   const parsed = parseVietnameseReminder(message.text, message.receivedAt, context.timezone);
-  if (!parsed.ok || parsed.candidate.scheduledAt <= processingNow) {
+  let candidate: ParsedReminderCandidate | null = parsed.ok ? parsed.candidate : null;
+  if ((!candidate || candidate.scheduledAt <= processingNow) && dependencies.intelligence && context.timezone === "Asia/Ho_Chi_Minh") {
+    const resolution: IntelligenceResolution = await interpretReminderDeterministicallyFirst({
+      text: message.text, now: message.receivedAt, timezone: "Asia/Ho_Chi_Minh",
+    }, {
+      ...dependencies.intelligence,
+      deterministic: () => ({ status: "AMBIGUOUS" }),
+    });
+    candidate = resolution.status === "PROPOSED" ? resolution.proposal : null;
+  }
+  if (!candidate || candidate.scheduledAt <= processingNow) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
 
@@ -265,7 +281,7 @@ export async function processBoundChatMessage(
     "draft-title",
     draftId,
     TITLE_KEY_VERSION,
-    parsed.candidate.title,
+    candidate.title,
   );
   const result = await dependencies.store.createDraft({
     message,
@@ -273,9 +289,9 @@ export async function processBoundChatMessage(
     draftId,
     encryptedTitle,
     titleKeyVersion: TITLE_KEY_VERSION,
-    scheduledAt: parsed.candidate.scheduledAt,
-    timezone: parsed.candidate.timezone,
-    expiresAt: Math.min(processingNow + DRAFT_LIFETIME_MS, parsed.candidate.scheduledAt),
+    scheduledAt: candidate.scheduledAt,
+    timezone: candidate.timezone,
+    expiresAt: Math.min(processingNow + DRAFT_LIFETIME_MS, candidate.scheduledAt),
     now: processingNow,
     auditId: randomOpaqueId(randomBytes),
   });
@@ -283,6 +299,6 @@ export async function processBoundChatMessage(
   if (result === "CONFLICT") {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
-  await bestEffortReply(dependencies, draftReply(parsed.candidate));
+  await bestEffortReply(dependencies, draftReply(candidate));
   return { status: "DRAFT_CREATED" };
 }

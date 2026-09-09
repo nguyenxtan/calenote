@@ -26,7 +26,7 @@ implementation plans are audit evidence; they do not override this page.
 | Reminder D1 adapters and Worker composition | IMPLEMENTED, WIRED, TESTED | API, command, scheduler, and delivery SQL live in feature-owned D1 adapters; the Worker composes concrete adapters at runtime. |
 | Source/Action approval foundation | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/actions` lists only an owner's decrypted pending candidates. Same-origin approval or rejection uses the existing D1-fenced decision service; approval alone creates its authoritative reminder. |
 | Presentation preferences | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/preferences` reads stable defaults and applies same-origin, bounded, validated presentation updates only for the session owner. |
-| Optional intelligence foundation | IMPLEMENTED, TESTED | Provider-agnostic proposal contracts, deterministic-first escalation, strict validation, privacy screening, and an OFF/null composition capability exist locally. No provider transport is WIRED. |
+| Optional intelligence foundation | IMPLEMENTED, WIRED, TESTED | Provider-agnostic reminder proposals pass strict admission into the existing chat CommandDraft confirmation boundary. The production composition is OFF/null; no provider transport is WIRED. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
