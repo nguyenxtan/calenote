@@ -109,7 +109,7 @@ function webhookOperations(): WebhookRouteDependencies {
       headerSecret: `${"C".repeat(42)}A`,
     })),
     constantTimeEqual: (left, right) => left === right,
-    accept: vi.fn(async () => new Response(null, { status: 200 })),
+    accept: vi.fn(async () => ({ status: 200 as const })),
   };
 }
 

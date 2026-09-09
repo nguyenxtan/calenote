@@ -11,7 +11,7 @@ const pathSecret = `${"B".repeat(42)}A`;
 const headerSecret = `${"C".repeat(42)}A`;
 const connection = { id: "connection-1", provider: "telegram" as const, publicId };
 
-function request(provider: "zalo" | "telegram" = "telegram", headers: HeadersInit = {}) {
+function request(provider: "zalo" | "telegram" = "telegram", headers: HeadersInit = {}, body: unknown = {}) {
   const headerName = provider === "zalo"
     ? "X-Bot-Api-Secret-Token"
     : "X-Telegram-Bot-Api-Secret-Token";
@@ -22,7 +22,7 @@ function request(provider: "zalo" | "telegram" = "telegram", headers: HeadersIni
       [headerName]: headerSecret,
       ...headers,
     },
-    body: "{}",
+    body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
@@ -31,7 +31,7 @@ function dependencies(overrides: Partial<WebhookRouteDependencies> = {}): Webhoo
     findConnection: vi.fn(async () => connection),
     webhookSecrets: vi.fn(async () => ({ pathSecret, headerSecret })),
     constantTimeEqual,
-    accept: vi.fn(async () => new Response(null, { status: 200 })),
+    accept: vi.fn(async () => ({ status: 200 as const })),
     ...overrides,
   };
 }
@@ -102,7 +102,20 @@ describe("webhook route authentication", () => {
     expect(deps.accept).not.toHaveBeenCalled();
   });
 
-  it("delegates body parsing only after both independent secrets compare equal", async () => {
+  it.each([
+    { label: "non-JSON", request: () => request("telegram", { "content-type": "text/plain" }, "ignored"), status: 415 },
+    { label: "malformed JSON", request: () => request("telegram", {}, "{"), status: 400 },
+  ])("keeps $label ingress rejection in the webhook controller", async ({ request: webhookRequest, status }) => {
+    const deps = dependencies();
+    const response = await handleWebhook(webhookRequest(), {
+      provider: "telegram", publicId, pathSecret,
+    }, deps);
+
+    expect(response.status).toBe(status);
+    expect(deps.accept).not.toHaveBeenCalled();
+  });
+
+  it("passes a normalized provider message only after both independent secrets compare equal", async () => {
     const comparisons: Array<[string, string]> = [];
     const deps = dependencies({
       constantTimeEqual(left, right) {
@@ -110,7 +123,16 @@ describe("webhook route authentication", () => {
         return constantTimeEqual(left, right);
       },
     });
-    const webhookRequest = request();
+    const webhookRequest = request("telegram", {}, {
+      update_id: 41,
+      message: {
+        message_id: 7,
+        date: 1_700_000_000,
+        text: "Nhac toi",
+        chat: { id: 23, type: "private" },
+        from: { id: 12, first_name: "Tuyen", is_bot: false },
+      },
+    });
 
     const response = await handleWebhook(webhookRequest, {
       provider: "telegram", publicId, pathSecret,
@@ -121,6 +143,17 @@ describe("webhook route authentication", () => {
       [pathSecret, pathSecret],
       [headerSecret, headerSecret],
     ]);
-    expect(deps.accept).toHaveBeenCalledWith(webhookRequest, connection);
+    expect(deps.accept).toHaveBeenCalledWith({
+      connection,
+      message: {
+        provider: "telegram",
+        providerMessageId: "41",
+        providerUserId: "12",
+        privateChatId: "23",
+        displayName: "Tuyen",
+        text: "Nhac toi",
+        receivedAt: 1_700_000_000_000,
+      },
+    });
   });
 });

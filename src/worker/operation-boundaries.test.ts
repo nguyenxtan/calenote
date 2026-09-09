@@ -71,15 +71,22 @@ function webhookOperations(): WebhookRouteDependencies {
     findConnection: vi.fn(async () => ({ id: "connection-1", provider: "telegram" as const, publicId })),
     webhookSecrets: vi.fn(async () => ({ pathSecret: `${"B".repeat(42)}A`, headerSecret: `${"C".repeat(42)}A` })),
     constantTimeEqual: (left, right) => left === right,
-    accept: vi.fn(async () => new Response(null, { status: 204 })),
+    accept: vi.fn(async () => ({ status: 204 as const })),
   };
 }
 
 describe("Worker operation boundaries", () => {
-  it("keeps route-facing operation contracts free of runtime and web request types", async () => {
-    const source = await readFile(resolve(process.cwd(), "src/worker/routes/operations.ts"), "utf8");
+  it("keeps all route-facing operation contracts free of runtime and web request types", async () => {
+    const [operations, webhooks] = await Promise.all([
+      readFile(resolve(process.cwd(), "src/worker/routes/operations.ts"), "utf8"),
+      readFile(resolve(process.cwd(), "src/worker/routes/webhooks.ts"), "utf8"),
+    ]);
+    const webhookContract = webhooks.match(/export interface WebhookRouteDependencies \{[\s\S]*?\n\}/u)?.[0];
 
-    expect(source).not.toMatch(/\b(Request|Env|D1|[Kk]eyring)\b/u);
+    for (const source of [operations, webhookContract]) {
+      expect(source).toBeDefined();
+      expect(source).not.toMatch(/\b(Request|Env|D1|[Kk]eyring)\b/u);
+    }
   });
 
   it("dispatches an auth route with an auth-only capability fake", async () => {
@@ -132,7 +139,11 @@ describe("Worker operation boundaries", () => {
     const response = await createRouter({ webhookOperations: async () => webhook })(
       new Request(`${origin}/webhooks/telegram/${publicId}/${"B".repeat(42)}A`, {
         method: "POST",
-        headers: { "X-Telegram-Bot-Api-Secret-Token": `${"C".repeat(42)}A` },
+        headers: {
+          "content-type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": `${"C".repeat(42)}A`,
+        },
+        body: "{}",
       }),
       environment(),
       context(),

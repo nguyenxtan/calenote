@@ -1,7 +1,9 @@
-import type { BotProvider } from "@/modules/connections/contracts";
-import type { WebhookConnection } from "@/modules/inbound/webhook";
+import type { BotProvider, InboundTextMessage } from "@/modules/connections/contracts";
+import { parseTelegramWebhook } from "@/modules/connections/providers/telegram";
+import { parseZaloWebhook } from "@/modules/connections/providers/zalo";
+import { RequestBodyError, readBoundedJson } from "@/modules/http/body";
+import type { WebhookAcceptance, WebhookConnection } from "@/modules/inbound/webhook";
 import { base64UrlToBytes } from "@/modules/security/encoding";
-import type { WebhookSecrets } from "@/modules/security/keyring";
 
 export interface WebhookRouteMatch {
   provider: BotProvider;
@@ -9,11 +11,16 @@ export interface WebhookRouteMatch {
   pathSecret: string;
 }
 
+export interface WebhookRouteSecrets {
+  pathSecret: string;
+  headerSecret: string;
+}
+
 export interface WebhookRouteDependencies {
   findConnection(provider: BotProvider, publicId: string): Promise<WebhookConnection | null>;
-  webhookSecrets(publicId: string): Promise<WebhookSecrets>;
+  webhookSecrets(publicId: string): Promise<WebhookRouteSecrets>;
   constantTimeEqual(left: string, right: string): boolean;
-  accept(request: Request, connection: WebhookConnection): Promise<Response>;
+  accept(input: { connection: WebhookConnection; message: InboundTextMessage | null }): Promise<WebhookAcceptance>;
 }
 
 const routePattern = /^\/webhooks\/(zalo|telegram)\/([A-Za-z0-9_-]{22})\/([A-Za-z0-9_-]{43})$/u;
@@ -37,6 +44,10 @@ function headerName(provider: BotProvider): string {
     : "X-Telegram-Bot-Api-Secret-Token";
 }
 
+function bodyErrorResponse(error: RequestBodyError): Response {
+  return new Response(null, { status: error.status });
+}
+
 export async function handleWebhook(
   request: Request,
   route: WebhookRouteMatch,
@@ -55,5 +66,17 @@ export async function handleWebhook(
     return new Response(null, { status: 403 });
   }
 
-  return dependencies.accept(request, connection);
+  let payload: Record<string, unknown>;
+  try {
+    payload = await readBoundedJson(request, 32 * 1_024, { timeoutMs: 5_000 });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return bodyErrorResponse(error);
+    throw error;
+  }
+
+  const message = connection.provider === "zalo"
+    ? parseZaloWebhook(payload)
+    : parseTelegramWebhook(payload);
+  const outcome = await dependencies.accept({ connection, message });
+  return new Response(null, { status: outcome.status });
 }

@@ -199,11 +199,15 @@ export interface AcceptWebhookDependencies {
   store: InboundStore;
   dispatchStore: InboundDispatchStore;
   enqueue(job: ProcessInboundJob): Promise<void>;
-  parseWebhook(payload: unknown): InboundTextMessage | null;
+  parseWebhook?(payload: unknown): InboundTextMessage | null;
   keyring: Pick<Keyring, "encryptSensitive">;
   now?: Clock;
   randomBytes?: RandomBytes;
   readJson?: typeof readBoundedJson;
+}
+
+export interface WebhookAcceptance {
+  status: 200 | 204 | 503;
 }
 
 function normalizeLineEndings(value: string): string {
@@ -219,48 +223,34 @@ async function publishOrUnavailable(
   now: number,
   dependencies: AcceptWebhookDependencies,
   randomBytes: RandomBytes,
-): Promise<Response> {
+): Promise<WebhookAcceptance> {
   const result = await enqueueInboundWithReservation(inboundId, now, {
     store: dependencies.dispatchStore,
     enqueue: dependencies.enqueue,
     randomBytes,
   });
-  return new Response(null, {
-    status: result.status === "PUBLISH_FAILED" ? 503 : 200,
-  });
+  return { status: result.status === "PUBLISH_FAILED" ? 503 : 200 };
 }
 
 function bodyErrorResponse(error: RequestBodyError): Response {
   return new Response(null, { status: error.status });
 }
 
-export async function acceptWebhook(
-  request: Request,
+export async function acceptWebhookMessage(
+  message: InboundTextMessage | null,
   connection: WebhookConnection,
   dependencies: AcceptWebhookDependencies,
-): Promise<Response> {
+): Promise<WebhookAcceptance> {
+  if (!message || message.provider !== connection.provider) {
+    return { status: 204 };
+  }
+
   const now = dependencies.now ?? systemClock;
-  const readJson = dependencies.readJson ?? readBoundedJson;
-  let payload: Record<string, unknown>;
-  try {
-    payload = await readJson(request, WEBHOOK_MAX_BODY_BYTES, {
-      timeoutMs: WEBHOOK_BODY_TIMEOUT_MS,
-    });
-  } catch (error) {
-    if (error instanceof RequestBodyError) return bodyErrorResponse(error);
-    throw error;
-  }
-
-  const parsed = dependencies.parseWebhook(payload);
-  if (!parsed || parsed.provider !== connection.provider) {
-    return new Response(null, { status: 204 });
-  }
-
-  const providerMessageId = normalizeIdentifier(parsed.providerMessageId);
-  const providerUserId = normalizeIdentifier(parsed.providerUserId);
-  const privateChatId = normalizeIdentifier(parsed.privateChatId);
-  const displayName = parsed.displayName?.normalize("NFC") ?? null;
-  const text = normalizeLineEndings(parsed.text);
+  const providerMessageId = normalizeIdentifier(message.providerMessageId);
+  const providerUserId = normalizeIdentifier(message.providerUserId);
+  const privateChatId = normalizeIdentifier(message.privateChatId);
+  const displayName = message.displayName?.normalize("NFC") ?? null;
+  const text = normalizeLineEndings(message.text);
   const duplicate = await dependencies.store.findDuplicate(
     connection.provider,
     connection.id,
@@ -292,7 +282,7 @@ export async function acceptWebhook(
     messageIv: encrypted.iv,
     messageKeyVersion: 1,
     state: "PENDING",
-    receivedAt: parsed.receivedAt,
+    receivedAt: message.receivedAt,
     processingStartedAt: null,
     attemptCount: 0,
     processedAt: null,
@@ -314,4 +304,26 @@ export async function acceptWebhook(
   );
   if (!raced) throw new Error("Inbound dedupe result was unavailable");
   return publishOrUnavailable(raced.id, receivedNow, dependencies, randomBytes);
+}
+
+export async function acceptWebhook(
+  request: Request,
+  connection: WebhookConnection,
+  dependencies: AcceptWebhookDependencies,
+): Promise<Response> {
+  const readJson = dependencies.readJson ?? readBoundedJson;
+  let payload: Record<string, unknown>;
+  try {
+    payload = await readJson(request, WEBHOOK_MAX_BODY_BYTES, {
+      timeoutMs: WEBHOOK_BODY_TIMEOUT_MS,
+    });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return bodyErrorResponse(error);
+    throw error;
+  }
+
+  const parseWebhook = dependencies.parseWebhook;
+  if (!parseWebhook) throw new TypeError("Webhook parser is required for request acceptance");
+  const outcome = await acceptWebhookMessage(parseWebhook(payload), connection, dependencies);
+  return new Response(null, { status: outcome.status });
 }

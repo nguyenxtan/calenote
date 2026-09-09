@@ -8,14 +8,14 @@ import {
 } from "@/modules/auth/login-service";
 import { requireSession, revokeSession, SessionAuthError } from "@/modules/auth/session";
 import type { BotProvider, WebhookRegistration } from "@/modules/connections/contracts";
-import { parseTelegramWebhook, setTelegramWebhook } from "@/modules/connections/providers/telegram";
-import { parseZaloWebhook, setZaloWebhook } from "@/modules/connections/providers/zalo";
+import { setTelegramWebhook } from "@/modules/connections/providers/telegram";
+import { setZaloWebhook } from "@/modules/connections/providers/zalo";
 import { verifyBotToken } from "@/modules/connections/verify-bot-token";
 import { D1OnboardingStore } from "@/modules/db/onboarding-store";
 import { D1RateLimitStore } from "@/modules/db/rate-limit-store";
 import { D1SessionStore } from "@/modules/db/session-store";
 import { D1InboundProcessorStore, processInbound } from "@/modules/inbound/processor";
-import { acceptWebhook, D1InboundWebhookStore } from "@/modules/inbound/webhook";
+import { acceptWebhookMessage, D1InboundWebhookStore } from "@/modules/inbound/webhook";
 import { onboard, retryWebhook as retryConnectionWebhook, rotateConnectCode, RateLimitExceededError } from "@/modules/onboarding/service";
 import { consumeRateLimit } from "@/modules/rate-limit/service";
 import { deliverReminder } from "@/modules/reminders/delivery";
@@ -175,11 +175,10 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
     findConnection: (provider, publicId) => store.findConnection(provider, publicId),
     webhookSecrets: (publicId) => keyring.webhookSecrets(publicId),
     constantTimeEqual: (left, right) => keyring.constantTimeEqual(left, right),
-    accept: (request, connection) => acceptWebhook(request, connection, {
+    accept: ({ connection, message }) => acceptWebhookMessage(message, connection, {
       store,
       dispatchStore: new D1InboundDispatchStore(env.DB),
       keyring,
-      parseWebhook: connection.provider === "zalo" ? parseZaloWebhook : parseTelegramWebhook,
       enqueue: async (job) => { await env.JOBS.send(job); },
     }),
   };
