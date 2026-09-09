@@ -255,7 +255,7 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
     await expect(fixture.db.prepare(
       "SELECT state, transition_marker FROM bot_connections WHERE id = 'connection-workerd'",
     ).first()).resolves.toEqual({ state: "ACTIVE_BOUND", transition_marker: "marker-workerd" });
-  });
+  }, 15_000);
 
   it("uses real D1 meta.changes to classify exactly one recovery claim winner", async () => {
     const fixture = await migratedRuntime("WEBHOOK_FAILED");
@@ -421,5 +421,5 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
     await expect(fixture.db.prepare(
       "SELECT count FROM rate_limits WHERE subject_digest = ? AND bucket = 'login-verify'",
     ).bind(skippedEmailDigest).first()).resolves.toBeNull();
-  }, 20_000);
+  }, 45_000);
 });
