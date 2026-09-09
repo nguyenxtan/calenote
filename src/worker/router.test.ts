@@ -396,7 +396,7 @@ describe("Worker router", () => {
     });
     const response = await createRouter({ operations: async () => ops })(request, env, context());
 
-    expect(ops.requireUser).toHaveBeenCalledWith(request);
+    expect(ops.requireUser).toHaveBeenCalledWith({ bearer: "A".repeat(43) });
     expect(ops.rotateConnectCode).toHaveBeenCalledWith({ userId: "user-internal", publicId: connectionPublicId });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ data: { connectCommand: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 } });

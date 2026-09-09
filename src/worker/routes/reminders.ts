@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RemindersResponseSchema } from "@/contracts/api/reminders";
-import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
+import { parseSessionCredentials, SessionAuthError, type SessionCredentials } from "@/modules/auth/session";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
@@ -27,17 +27,19 @@ function requireCanonicalPublicId(value: string): void {
   if (value.length !== 22 || bytes?.byteLength !== 16) throw new InvalidRequestError();
 }
 
-function requireCanonicalSession(request: Request): void {
-  if (!parseSessionCookie(request)) throw new SessionAuthError();
+function requireCanonicalSession(request: Request): SessionCredentials {
+  const credentials = parseSessionCredentials(request.headers.get("cookie"));
+  if (!credentials) throw new SessionAuthError();
+  return credentials;
 }
 
 export async function handleListReminders(
   request: Request,
   createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "listReminders">>,
 ): Promise<Response> {
-  requireCanonicalSession(request);
+  const credentials = requireCanonicalSession(request);
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const reminders = await operations.listReminders(principal.userId);
   return jsonResponse(RemindersResponseSchema.parse({ data: { reminders } }), { headers: authenticatedHeaders() });
 }
@@ -48,13 +50,13 @@ export async function handleCreateReminder(
   createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "createReminder">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
-  requireCanonicalSession(request);
+  const credentials = requireCanonicalSession(request);
   const parsed = createSchema.safeParse(
     await readBoundedJson(request, CREATE_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }),
   );
   if (!parsed.success) throw new InvalidReminderError();
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const reminder = await operations.createReminder({
     userId: principal.userId,
     ...parsed.data,
@@ -72,14 +74,14 @@ export async function handleCancelReminder(
   createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "cancelReminder">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
-  requireCanonicalSession(request);
+  const credentials = requireCanonicalSession(request);
   requireCanonicalPublicId(publicId);
   const parsed = emptyObjectSchema.safeParse(
     await readBoundedJson(request, EMPTY_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }),
   );
   if (!parsed.success) throw new InvalidRequestError();
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const result = await operations.cancelReminder({ userId: principal.userId, publicId });
   return jsonResponse({ data: result }, { headers: authenticatedHeaders() });
 }

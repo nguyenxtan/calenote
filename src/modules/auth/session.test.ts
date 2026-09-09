@@ -3,6 +3,7 @@ import {
   SESSION_COOKIE_NAME,
   SessionAuthError,
   createSession,
+  parseSessionCredentials,
   prepareSession,
   requireSession,
   revokeSession,
@@ -37,10 +38,10 @@ function randomBytes(length: number): Uint8Array {
   return Uint8Array.from({ length }, (_, index) => (index * 17 + 3) % 256);
 }
 
-function requestWithCookie(cookie: string): Request {
-  return new Request("https://calenote.iconiclogs.com/api/session", {
-    headers: { cookie: cookie.split(";", 1)[0] },
-  });
+function requestWithCookie(cookie: string) {
+  const credentials = parseSessionCredentials(cookie.split(";", 1)[0]);
+  if (!credentials) throw new TypeError("expected valid session credentials");
+  return credentials;
 }
 
 describe("sessions", () => {
@@ -140,15 +141,11 @@ describe("sessions", () => {
     expect(store.records[0].revokedAt).toBe(expectedRevokedAt);
   });
 
-  it("rejects malformed bearer cookies before database authentication", async () => {
-    const store = new MemorySessionStore();
-    const request = new Request("https://calenote.iconiclogs.com/api/session", {
-      headers: { cookie: `${SESSION_COOKIE_NAME}=not-valid!` },
-    });
-
-    await expect(
-      requireSession(request, { store, keyring, now: () => 1_700_000_000_000 }),
-    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" } satisfies Partial<SessionAuthError>);
+  it("rejects malformed or duplicate bearer cookies before database authentication", () => {
+    expect(parseSessionCredentials(`${SESSION_COOKIE_NAME}=not-valid!`)).toBeNull();
+    expect(parseSessionCredentials(
+      `${SESSION_COOKIE_NAME}=${"A".repeat(43)}; ${SESSION_COOKIE_NAME}=${"B".repeat(43)}`,
+    )).toBeNull();
   });
 
   it("revokes idempotently and always returns a clearing cookie", async () => {

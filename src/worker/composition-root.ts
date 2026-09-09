@@ -106,12 +106,12 @@ export async function createAuthOperations(env: Env): Promise<AuthOperations> {
       }
       return verifyLoginCode(email, code, { store: loginStore, keyring });
     },
-    logout: async (request) => {
-      const result = await revokeSession(request, { store: sessionStore, keyring });
+    logout: async (credentials) => {
+      const result = await revokeSession(credentials, { store: sessionStore, keyring });
       return { clearCookie: result.clearCookie };
     },
-    requireUser: async (request) => {
-      const principal = await requireSession(request, { store: sessionStore, keyring });
+    requireUser: async (credentials) => {
+      const principal = await requireSession(credentials, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
     getSessionUser: async (userId) => {
@@ -129,8 +129,8 @@ export async function createConnectionsOperations(env: Env): Promise<Connections
   const sessionStore = new D1SessionStore(env.DB);
   const dashboardStore = new D1DashboardStore(env.DB);
   return {
-    requireUser: async (request) => {
-      const principal = await requireSession(request, { store: sessionStore, keyring });
+    requireUser: async (credentials) => {
+      const principal = await requireSession(credentials, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
     listConnections: (userId) => dashboardStore.listConnections(userId),
@@ -145,8 +145,8 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
   const sessionStore = new D1SessionStore(env.DB);
   const reminderStore = new D1ReminderApiStore(env.DB);
   return {
-    requireUser: async (request) => {
-      const principal = await requireSession(request, { store: sessionStore, keyring });
+    requireUser: async (credentials) => {
+      const principal = await requireSession(credentials, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
     listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),

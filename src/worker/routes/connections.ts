@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ConnectionsResponseSchema } from "@/contracts/api/connections";
-import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
+import { parseSessionCredentials, SessionAuthError, type SessionCredentials } from "@/modules/auth/session";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
@@ -9,6 +9,12 @@ import type { ConnectionsOperations } from "./operations";
 const MAX_BODY_BYTES = 2_048;
 const BODY_TIMEOUT_MS = 5_000;
 const emptyObjectSchema = z.object({}).strict();
+
+function sessionCredentials(request: Request): SessionCredentials {
+  const credentials = parseSessionCredentials(request.headers.get("cookie"));
+  if (!credentials) throw new SessionAuthError();
+  return credentials;
+}
 
 export class InvalidRequestError extends Error {
   readonly code = "INVALID_REQUEST";
@@ -27,7 +33,7 @@ export async function handleConnectCodeRotation(
   createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "rotateConnectCode">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
-  if (!parseSessionCookie(request)) throw new SessionAuthError();
+  const credentials = sessionCredentials(request);
   const publicIdBytes = base64UrlToBytes(publicId);
   if (publicId.length !== 22 || publicIdBytes?.byteLength !== 16) throw new InvalidRequestError();
   const parsed = emptyObjectSchema.safeParse(
@@ -35,7 +41,7 @@ export async function handleConnectCodeRotation(
   );
   if (!parsed.success) throw new InvalidRequestError();
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
 
   const result = await operations.rotateConnectCode({ userId: principal.userId, publicId });
   return jsonResponse(
@@ -48,9 +54,9 @@ export async function handleListConnections(
   request: Request,
   createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "listConnections">>,
 ): Promise<Response> {
-  if (!parseSessionCookie(request)) throw new SessionAuthError();
+  const credentials = sessionCredentials(request);
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const connections = await operations.listConnections(principal.userId);
   return jsonResponse(
     ConnectionsResponseSchema.parse({ data: { connections } }),
@@ -65,7 +71,7 @@ export async function handleWebhookRetry(
   createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "retryWebhook">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
-  if (!parseSessionCookie(request)) throw new SessionAuthError();
+  const credentials = sessionCredentials(request);
   const publicIdBytes = base64UrlToBytes(publicId);
   if (publicId.length !== 22 || publicIdBytes?.byteLength !== 16) throw new InvalidRequestError();
   const parsed = emptyObjectSchema.safeParse(
@@ -73,7 +79,7 @@ export async function handleWebhookRetry(
   );
   if (!parsed.success) throw new InvalidRequestError();
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const result = await operations.retryWebhook({ userId: principal.userId, publicId });
   return jsonResponse({ data: result }, { headers: { vary: "Cookie" } });
 }

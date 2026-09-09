@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createRouter } from "./router";
 import type {
   AuthOperations,
@@ -74,6 +76,12 @@ function webhookOperations(): WebhookRouteDependencies {
 }
 
 describe("Worker operation boundaries", () => {
+  it("keeps route-facing operation contracts free of runtime and web request types", async () => {
+    const source = await readFile(resolve(process.cwd(), "src/worker/routes/operations.ts"), "utf8");
+
+    expect(source).not.toMatch(/\b(Request|Env|D1|[Kk]eyring)\b/u);
+  });
+
   it("dispatches an auth route with an auth-only capability fake", async () => {
     const auth = authOperations();
     const authFactory = vi.fn(async () => auth);

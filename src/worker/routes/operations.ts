@@ -1,4 +1,5 @@
 import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
+import type { SessionCredentials } from "@/modules/auth/session";
 import type { OnboardingInput, OnboardingResult, RetryWebhookResult } from "@/modules/onboarding/service";
 import type { RateLimitResult } from "@/modules/rate-limit/service";
 import type { PublicReminder } from "@/modules/reminders/api-service";
@@ -6,20 +7,20 @@ import type { PublicReminder } from "@/modules/reminders/api-service";
 export interface AuthOperations {
   requestLoginCode(input: { email: string; clientIp: string }): Promise<{ accepted: true }>;
   verifyLoginCode(input: { email: string; code: string; clientIp: string }): Promise<{ cookie: string }>;
-  logout(request: Request): Promise<{ clearCookie: string }>;
-  requireUser(request: Request): Promise<{ userId: string }>;
+  logout(credentials: SessionCredentials | null): Promise<{ clearCookie: string }>;
+  requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   getSessionUser(userId: string): Promise<PublicSessionUser>;
 }
 
 export interface ConnectionsOperations {
-  requireUser(request: Request): Promise<{ userId: string }>;
+  requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listConnections(userId: string): Promise<PublicConnection[]>;
   rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
   retryWebhook(input: { userId: string; publicId: string }): Promise<RetryWebhookResult>;
 }
 
 export interface RemindersOperations {
-  requireUser(request: Request): Promise<{ userId: string }>;
+  requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listReminders(userId: string): Promise<PublicReminder[]>;
   createReminder(input: {
     userId: string;

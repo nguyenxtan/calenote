@@ -59,6 +59,10 @@ export interface SessionPrincipal {
   expiresAt: number;
 }
 
+export interface SessionCredentials {
+  bearer: string;
+}
+
 export class SessionAuthError extends Error {
   readonly code = "UNAUTHENTICATED";
   readonly status = 401;
@@ -93,8 +97,7 @@ export function clearSessionCookie(): string {
   ].join("; ");
 }
 
-export function parseSessionCookie(request: Request): string | null {
-  const header = request.headers.get("cookie");
+export function parseSessionCredentials(header: string | null): SessionCredentials | null {
   if (!header) return null;
 
   const values: string[] = [];
@@ -109,7 +112,7 @@ export function parseSessionCookie(request: Request): string | null {
 
   if (values.length !== 1) return null;
   const bytes = base64UrlToBytes(values[0]);
-  return bytes?.byteLength === SESSION_BEARER_BYTES ? values[0] : null;
+  return bytes?.byteLength === SESSION_BEARER_BYTES ? { bearer: values[0] } : null;
 }
 
 export async function prepareSession(
@@ -161,13 +164,10 @@ export async function createSession(
 }
 
 export async function requireSession(
-  request: Request,
+  credentials: SessionCredentials,
   dependencies: Pick<SessionDependencies, "store" | "keyring" | "now">,
 ): Promise<SessionPrincipal> {
-  const bearer = parseSessionCookie(request);
-  if (!bearer) throw new SessionAuthError();
-
-  const digest = await dependencies.keyring.digestSession(bearer);
+  const digest = await dependencies.keyring.digestSession(credentials.bearer);
   const record = await dependencies.store.findByDigest(digest);
   const now = (dependencies.now ?? systemClock)();
   if (!record || record.revokedAt !== null) throw new SessionAuthError();
@@ -180,13 +180,12 @@ export async function requireSession(
 }
 
 export async function revokeSession(
-  request: Request,
+  credentials: SessionCredentials | null,
   dependencies: Pick<SessionDependencies, "store" | "keyring" | "now">,
 ): Promise<{ revoked: boolean; clearCookie: string }> {
-  const bearer = parseSessionCookie(request);
-  if (!bearer) return { revoked: false, clearCookie: clearSessionCookie() };
+  if (!credentials) return { revoked: false, clearCookie: clearSessionCookie() };
 
-  const digest = await dependencies.keyring.digestSession(bearer);
+  const digest = await dependencies.keyring.digestSession(credentials.bearer);
   const revoked = await dependencies.store.revokeByDigest(
     digest,
     (dependencies.now ?? systemClock)(),

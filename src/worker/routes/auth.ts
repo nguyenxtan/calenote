@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SessionResponseSchema } from "@/contracts/api/session";
-import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
+import { parseSessionCredentials, SessionAuthError, type SessionCredentials } from "@/modules/auth/session";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
 import type { AuthOperations } from "./operations";
@@ -25,6 +25,12 @@ function authenticatedHeaders(headers: HeadersInit = {}): Headers {
   const result = new Headers(headers);
   result.set("vary", "Cookie");
   return result;
+}
+
+function sessionCredentials(request: Request): SessionCredentials {
+  const credentials = parseSessionCredentials(request.headers.get("cookie"));
+  if (!credentials) throw new SessionAuthError();
+  return credentials;
 }
 
 export async function handleRequestLoginCode(
@@ -78,7 +84,7 @@ export async function handleLogout(
   );
   if (!parsed.success) throw new InvalidRequestError();
   const operations = await createOperations();
-  const result = await operations.logout(request);
+  const result = await operations.logout(parseSessionCredentials(request.headers.get("cookie")));
   return jsonResponse(
     { data: { loggedOut: true } },
     { headers: authenticatedHeaders({ "set-cookie": result.clearCookie }) },
@@ -89,9 +95,9 @@ export async function handleGetSession(
   request: Request,
   createOperations: () => Promise<Pick<AuthOperations, "requireUser" | "getSessionUser">>,
 ): Promise<Response> {
-  if (!parseSessionCookie(request)) throw new SessionAuthError();
+  const credentials = sessionCredentials(request);
   const operations = await createOperations();
-  const principal = await operations.requireUser(request);
+  const principal = await operations.requireUser(credentials);
   const user = await operations.getSessionUser(principal.userId);
   return jsonResponse(SessionResponseSchema.parse({ data: { user } }), { headers: authenticatedHeaders() });
 }
