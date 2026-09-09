@@ -24,9 +24,10 @@ implementation plans are audit evidence; they do not override this page.
 | Manual dashboard reminders | IMPLEMENTED, WIRED, TESTED | Dashboard sends same-origin authenticated API requests and converts Vietnam wall-clock input deterministically. |
 | Reminder scheduler and delivery | IMPLEMENTED, WIRED, TESTED | Cron claims due reminders; Queue delivery applies ownership leases, bounded retry, and `UNCERTAIN` on ambiguous provider egress. |
 | Reminder D1 adapters and Worker composition | IMPLEMENTED, WIRED, TESTED | API, command, scheduler, and delivery SQL live in feature-owned D1 adapters; the Worker composes concrete adapters at runtime. |
-| Source/Action approval foundation | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/actions` lists only an owner's decrypted pending candidates. Same-origin approval or rejection uses the existing D1-fenced decision service; approval alone creates its authoritative reminder. Optional extraction admission is IMPLEMENTED/TESTED at application level only, not runtime-wired. |
+| Source/Action approval foundation | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/actions` lists only an owner's decrypted pending candidates. Same-origin approval or rejection uses the existing D1-fenced decision service; approval alone creates its authoritative reminder. OpenRouter extraction is IMPLEMENTED/TESTED at the application boundary with mocked transport only; source ingestion remains unwired. |
 | Presentation preferences | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/preferences` reads stable defaults and applies same-origin, bounded, validated presentation updates only for the session owner. |
-| Optional intelligence foundation | IMPLEMENTED, WIRED, TESTED | Provider-agnostic reminder proposals pass strict admission into the existing chat CommandDraft confirmation boundary. The production composition is OFF/null; no provider transport is WIRED. |
+| Optional intelligence foundation | IMPLEMENTED, WIRED, TESTED | Provider-agnostic reminder proposals pass strict admission into the existing chat CommandDraft confirmation boundary. The Worker composition selects an optional OFF/FREE/ECONOMY gateway; absent or invalid configuration remains OFF/null. |
+| OpenRouter adapter | IMPLEMENTED, WIRED, TESTED | Worker composition can select the adapter only from validated optional runtime configuration. Inbound and source application flows use the real adapter with injected mocked transport; no live provider request has been made. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
@@ -66,6 +67,25 @@ event.
 The Web UI is a first-class control plane, not a replacement for chat. It is
 allowed to manage complexity—connection health, reminders, account access—but
 daily create/confirm/notify flow is chat-first.
+
+## Optional OpenRouter runtime
+
+Optional intelligence is disabled when `AI_MODE` is absent or `off`. Its
+configuration is intentionally optional: `AI_MODE=off|free|economy`,
+`OPENROUTER_API_KEY`, `OPENROUTER_FREE_MODEL`, `OPENROUTER_ECONOMY_MODEL`,
+`OPENROUTER_FALLBACK_MODELS`, `AI_TIMEOUT_MS`, `AI_MAX_INPUT_CHARS`, and
+`AI_MAX_OUTPUT_TOKENS`. `OPENROUTER_API_KEY` is a Worker secret and is never
+committed. Missing or invalid settings select the null gateway, so startup and
+`/api/health` remain available without OpenRouter.
+
+FREE defaults to `openrouter/free`, permits zero paid escalation, and sends
+`allow_fallbacks=false`, `data_collection=deny`, `zdr=true`, and
+`require_parameters=true`. The adapter requests a structured JSON schema and
+does not enable plugins, tools, or web search. It emits no logs; provider error
+bodies and malformed completion content are reduced to a safe `UNAVAILABLE`
+result rather than being propagated. Runtime evidence uses injected mocked
+transport only: `LIVE_OPENROUTER_E2E` is NOT_PROVEN and `PRODUCTION_AI` is
+NOT_DEPLOYED.
 
 ## What is not proven
 
