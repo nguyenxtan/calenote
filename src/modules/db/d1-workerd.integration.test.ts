@@ -255,8 +255,10 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
     await expect(fixture.db.prepare(
       "SELECT state, transition_marker FROM bot_connections WHERE id = 'connection-workerd'",
     ).first()).resolves.toEqual({ state: "ACTIVE_BOUND", transition_marker: "marker-workerd" });
-  }, 15_000);
+  // Each case boots a real Miniflare/workerd D1 and applies three migrations.
+  }, 20_000);
 
+  // The same real workerd bootstrap needs an explicit full-suite integration budget.
   it("uses real D1 meta.changes to classify exactly one recovery claim winner", async () => {
     const fixture = await migratedRuntime("WEBHOOK_FAILED");
     const connection = await exactConnection(fixture);
@@ -279,7 +281,7 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
       marker: "loser-workerd",
       claimedAt: NOW,
     })).resolves.toBe(false);
-  });
+  }, 15_000);
 
   it("gives public recovery the sole live session when verification paused on its old proof", async () => {
     const fixture = await migratedRuntime();

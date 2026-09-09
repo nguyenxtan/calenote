@@ -31,6 +31,7 @@ function batch(messages: TestMessage[]): MessageBatch<unknown> {
 }
 
 describe("strict per-message Queue dispatcher", () => {
+  // Importing the full Worker graph can be delayed by parallel workerd suites.
   it("terminally acknowledges malformed or non-canonical jobs", async () => {
     const worker = await workerModule();
     expect(worker.handleQueueBatch).toBeTypeOf("function");
@@ -59,8 +60,9 @@ describe("strict per-message Queue dispatcher", () => {
     expect(operations.processInbound).not.toHaveBeenCalled();
     expect(operations.deliverReminder).not.toHaveBeenCalled();
     expect(operations.deliverLoginCode).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
+  // Keep the dispatcher assertions real while allowing full-suite module startup.
   it("processes a mixed batch sequentially with exactly one ack or retry per message", async () => {
     const worker = await workerModule();
     expect(worker.handleQueueBatch).toBeTypeOf("function");
@@ -107,8 +109,9 @@ describe("strict per-message Queue dispatcher", () => {
     for (const item of messages) {
       expect(item.ack.mock.calls.length + item.retry.mock.calls.length).toBe(1);
     }
-  });
+  }, 15_000);
 
+  // This test imports the same Worker graph and has no independent timer work.
   it("never attempts a second disposition when the platform callback throws", async () => {
     const worker = await workerModule();
     const acknowledged = message({ type: "DELIVER_REMINDER", reminderId });
@@ -138,7 +141,7 @@ describe("strict per-message Queue dispatcher", () => {
     })).rejects.toThrow("retry unavailable");
     expect(retried.retry).toHaveBeenCalledTimes(1);
     expect(retried.ack).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("still validates and disposes every message when runtime setup fails", async () => {
     const worker = await workerModule();
