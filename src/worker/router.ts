@@ -23,17 +23,27 @@ import {
   CANONICAL_APP_ORIGIN,
   createWebhookOperations,
   createAuthOperations,
+  createActionsOperations,
   createConnectionsOperations,
   createOnboardingOperations,
   createRemindersOperations,
   ServiceUnavailableError,
 } from "./composition-root";
+import {
+  ActionChannelUnavailableError,
+  ActionDecisionConflictError,
+  ActionNotFoundError,
+  handleApproveAction,
+  handleListActions,
+  handleRejectAction,
+} from "./routes/actions";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
 import type {
   AuthOperations,
+  ActionsOperations,
   ConnectionsOperations,
   OnboardingOperations,
   RemindersOperations,
@@ -46,6 +56,7 @@ import {
 
 export interface RouterOptions {
   authOperations?: (env: Env) => Promise<AuthOperations>;
+  actionsOperations?: (env: Env) => Promise<ActionsOperations>;
   connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
   remindersOperations?: (env: Env) => Promise<RemindersOperations>;
   onboardingOperations?: (env: Env) => Promise<OnboardingOperations>;
@@ -73,6 +84,13 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
     return { code: error.code, message: "Bạn cần đăng nhập để tiếp tục.", status: error.status };
   }
   if (error instanceof InvalidLoginCodeError) {
+    return { code: error.code, message: error.message, status: error.status };
+  }
+  if (
+    error instanceof ActionNotFoundError
+    || error instanceof ActionDecisionConflictError
+    || error instanceof ActionChannelUnavailableError
+  ) {
     return { code: error.code, message: error.message, status: error.status };
   }
   if (error instanceof InvalidRequestError) {
@@ -136,6 +154,7 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 
 export function createRouter(options: RouterOptions = {}) {
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
+  const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
@@ -194,6 +213,9 @@ export function createRouter(options: RouterOptions = {}) {
       if (request.method === "GET" && pathname === "/api/reminders") {
         return await handleListReminders(request, () => remindersOperationsFactory(env));
       }
+      if (request.method === "GET" && pathname === "/api/actions") {
+        return await handleListActions(request, () => actionsOperationsFactory(env));
+      }
       if (request.method === "POST" && pathname === "/api/reminders") {
         return await handleCreateReminder(request, env.APP_ORIGIN, () => remindersOperationsFactory(env));
       }
@@ -207,6 +229,15 @@ export function createRouter(options: RouterOptions = {}) {
           reminderMatch[1],
           () => remindersOperationsFactory(env),
         );
+      }
+      const actionDecisionMatch = request.method === "POST"
+        ? /^\/api\/actions\/([^/]+)\/(approve|reject)$/u.exec(pathname)
+        : null;
+      if (actionDecisionMatch) {
+        const [, candidateId, decision] = actionDecisionMatch;
+        return await (decision === "approve"
+          ? handleApproveAction(request, env.APP_ORIGIN, candidateId, () => actionsOperationsFactory(env))
+          : handleRejectAction(request, env.APP_ORIGIN, candidateId, () => actionsOperationsFactory(env)));
       }
       const connectMatch = request.method === "POST"
         ? /^\/api\/connections\/([A-Za-z0-9_-]{1,128})\/connect-code$/u.exec(pathname)
@@ -236,7 +267,9 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")
         || pathname === "/api/reminders"
-        || pathname.startsWith("/api/reminders/");
+        || pathname.startsWith("/api/reminders/")
+        || pathname === "/api/actions"
+        || pathname.startsWith("/api/actions/");
       return safeErrorResponse(error, authenticated);
     }
     if (pathname.startsWith("/api/")) {

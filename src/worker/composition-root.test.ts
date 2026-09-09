@@ -43,6 +43,12 @@ describe("Worker composition root", () => {
       createReminder: expect.any(Function),
       cancelReminder: expect.any(Function),
     }));
+    await expect(root.createActionsOperations(env)).resolves.toEqual(expect.objectContaining({
+      requireUser: expect.any(Function),
+      listPendingActions: expect.any(Function),
+      approveAction: expect.any(Function),
+      rejectAction: expect.any(Function),
+    }));
     await expect(root.createOnboardingOperations(env)).resolves.toEqual(expect.objectContaining({
       digestRateLimitSubject: expect.any(Function),
       consumeOnboardingRateLimit: expect.any(Function),
@@ -66,6 +72,7 @@ describe("Worker composition root", () => {
     const entrypointSource = await readFile(resolve(process.cwd(), "src/worker/index.ts"), "utf8");
     expect(routerSource).not.toContain("new D1OnboardingStore(");
     expect(routerSource).not.toContain("new D1ReminderApiStore(");
+    expect(routerSource).not.toContain("new D1SourceActionStore(");
     expect(routerSource).not.toContain("await createKeyring(");
     expect(entrypointSource).not.toContain("new D1InboundProcessorStore(");
     expect(entrypointSource).not.toContain("await createKeyring(");

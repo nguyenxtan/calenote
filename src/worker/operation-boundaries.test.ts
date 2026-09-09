@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { createRouter } from "./router";
 import type {
   AuthOperations,
+  ActionsOperations,
   ConnectionsOperations,
   RemindersOperations,
 } from "./routes/operations";
@@ -63,6 +64,15 @@ function remindersOperations(): RemindersOperations {
     listReminders: vi.fn(async () => []),
     createReminder: vi.fn(),
     cancelReminder: vi.fn(async () => ({ cancelled: true as const })),
+  };
+}
+
+function actionsOperations(): ActionsOperations {
+  return {
+    requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    listPendingActions: vi.fn(async () => []),
+    approveAction: vi.fn(async () => ({ status: "REJECTED" as const })),
+    rejectAction: vi.fn(async () => ({ status: "REJECTED" as const })),
   };
 }
 
@@ -134,6 +144,22 @@ describe("Worker operation boundaries", () => {
     expect(reminders.listReminders).toHaveBeenCalledWith("user-1");
   });
 
+  it("dispatches an action route with an injectable actions-only capability fake", async () => {
+    const actions = actionsOperations();
+    const unrelatedFactory = vi.fn();
+    const response = await createRouter({
+      actionsOperations: async () => actions,
+      authOperations: unrelatedFactory,
+      remindersOperations: unrelatedFactory,
+      connectionsOperations: unrelatedFactory,
+      onboardingOperations: unrelatedFactory,
+    })(new Request(`${origin}/api/actions`, { headers: { cookie } }), environment(), context());
+
+    expect(response.status).toBe(200);
+    expect(actions.listPendingActions).toHaveBeenCalledWith("user-1");
+    expect(unrelatedFactory).not.toHaveBeenCalled();
+  });
+
   it("injects webhook dependencies independently of browser API capabilities", async () => {
     const webhook = webhookOperations();
     const response = await createRouter({ webhookOperations: async () => webhook })(
@@ -162,14 +188,15 @@ describe("Worker operation boundaries", () => {
       JOBS: { send: vi.fn() },
     } as unknown as Env;
 
-    const [auth, connections, reminders, onboarding] = await Promise.all([
+    const [auth, actions, connections, reminders, onboarding] = await Promise.all([
       root.createAuthOperations(env),
+      root.createActionsOperations(env),
       root.createConnectionsOperations(env),
       root.createRemindersOperations(env),
       root.createOnboardingOperations(env),
     ]);
 
-    for (const capability of [auth, connections, reminders, onboarding]) {
+    for (const capability of [auth, actions, connections, reminders, onboarding]) {
       expect(capability).not.toHaveProperty("env");
       expect(capability).not.toHaveProperty("DB");
       expect(capability).not.toHaveProperty("keyring");

@@ -3,6 +3,7 @@ import type { SessionCredentials } from "@/modules/auth/session";
 import type { OnboardingInput, OnboardingResult, RetryWebhookResult } from "@/modules/onboarding/service";
 import type { RateLimitResult } from "@/modules/rate-limit/service";
 import type { PublicReminder } from "@/modules/reminders/api-service";
+import type { CandidateDecisionResult, PublicPendingActionCandidate } from "@/modules/source-actions/service";
 
 export interface AuthOperations {
   requestLoginCode(input: { email: string; clientIp: string }): Promise<{ accepted: true }>;
@@ -29,6 +30,13 @@ export interface RemindersOperations {
     timezone: "Asia/Ho_Chi_Minh";
   }): Promise<PublicReminder>;
   cancelReminder(input: { userId: string; publicId: string }): Promise<{ cancelled: true }>;
+}
+
+export interface ActionsOperations {
+  requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
+  listPendingActions(userId: string): Promise<PublicPendingActionCandidate[]>;
+  approveAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
+  rejectAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
 }
 
 export interface OnboardingOperations {

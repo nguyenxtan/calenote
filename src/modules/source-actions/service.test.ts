@@ -108,6 +108,37 @@ async function setup() {
 }
 
 describe("source action decisions", () => {
+  it("lists only owned pending candidates with decrypted public fields", async () => {
+    const account = await setup();
+    const sourceActions = await import("./service") as typeof import("./service") & {
+      listOwnedPendingActionCandidates?: (input: { userId: string }, dependencies: {
+        store: D1SourceActionStore;
+        keyring: Pick<Keyring, "decryptSensitive">;
+      }) => Promise<unknown>;
+    };
+    const first = await createReminderActionCandidate({
+      sourceItemId: "source-item-one", workspaceId: "workspace-one", title: "  Họp\r\n  khách hàng  ",
+      scheduledAt: NOW + 120_000, timezone: "Asia/Ho_Chi_Minh",
+    }, { store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes });
+    seedSourceItem(account.db, "two", "workspace-two");
+    await createReminderActionCandidate({
+      sourceItemId: "source-item-two", workspaceId: "workspace-two", title: "Bí mật tenant hai",
+      scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh",
+    }, { store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes });
+
+    expect(sourceActions.listOwnedPendingActionCandidates).toEqual(expect.any(Function));
+    await expect(sourceActions.listOwnedPendingActionCandidates!({ userId: "user-one" }, {
+      store: account.store,
+      keyring: account.keyring,
+    })).resolves.toEqual([{
+      id: first.id,
+      title: "Họp\nkhách hàng",
+      scheduledAt: NOW + 120_000,
+      timezone: "Asia/Ho_Chi_Minh",
+      status: "PENDING",
+    }]);
+  });
+
   it("deduplicates each source item inside its source connection", async () => {
     const account = await setup();
     expect(() => account.db.sqlite.prepare(

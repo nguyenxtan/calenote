@@ -24,6 +24,7 @@ implementation plans are audit evidence; they do not override this page.
 | Manual dashboard reminders | IMPLEMENTED, WIRED, TESTED | Dashboard sends same-origin authenticated API requests and converts Vietnam wall-clock input deterministically. |
 | Reminder scheduler and delivery | IMPLEMENTED, WIRED, TESTED | Cron claims due reminders; Queue delivery applies ownership leases, bounded retry, and `UNCERTAIN` on ambiguous provider egress. |
 | Reminder D1 adapters and Worker composition | IMPLEMENTED, WIRED, TESTED | API, command, scheduler, and delivery SQL live in feature-owned D1 adapters; the Worker composes concrete adapters at runtime. |
+| Source/Action approval foundation | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/actions` lists only an owner's decrypted pending candidates. Same-origin approval or rejection uses the existing D1-fenced decision service; approval alone creates its authoritative reminder. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
@@ -49,11 +50,12 @@ claim.
 D1 is canonical persistence. Bot credentials and login material are encrypted
 at rest. Queue payloads are identifiers, never chat text or credentials.
 
-Zalo and Telegram are interaction channels. The current product has no Gmail,
-Microsoft, forwarded-email, calendar, API, or external-source ingestion, so
-those source concepts are PLANNED. Source information will propose an action;
-only validated user approval will create an authoritative reminder, task, or
-event.
+Zalo and Telegram are interaction channels. The Source/Action foundation now
+persists encrypted candidate titles and exposes only authenticated owner-pending
+approval controls. It has no Gmail, Microsoft, forwarded-email, calendar API,
+or other external-source ingestion: all of those remain PLANNED. Optional AI
+also remains PLANNED. Source information will propose an action; only validated
+user approval will create an authoritative reminder, task, or event.
 
 The Web UI is a first-class control plane, not a replacement for chat. It is
 allowed to manage complexity—connection health, reminders, account access—but
@@ -69,8 +71,6 @@ mocks and static page visual tests are useful, but are not production proof.
 ## Next bounded phases
 
 1. Export and integrate the approved Figma brand assets as the sole logo truth.
-2. Add SourceConnection, SourceItem, ActionCandidate, and ActionDecision with
-   a human approval boundary.
-3. Add Gmail authorization only after the Source/Action model is stable.
-4. Keep optional intelligence provider-agnostic and disabled by default;
+2. Add Gmail authorization only after the Source/Action model is stable.
+3. Keep optional intelligence provider-agnostic and disabled by default;
    deterministic parsing remains the core path.

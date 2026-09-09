@@ -34,6 +34,22 @@ export class D1SourceActionStore implements SourceActionStore {
     return d1Changes(result) === 1;
   }
 
+  async listOwnedPendingCandidates(userId: string): Promise<ActionCandidateRow[]> {
+    const result = await this.database.prepare(
+      `SELECT candidate.id, candidate.workspace_id, candidate.status,
+              candidate.title_ciphertext, candidate.title_iv, candidate.title_key_version,
+              candidate.scheduled_at, candidate.timezone
+       FROM action_candidates candidate
+       JOIN workspaces workspace ON workspace.id = candidate.workspace_id
+       JOIN memberships membership
+         ON membership.workspace_id = workspace.id AND membership.user_id = workspace.owner_user_id
+       WHERE candidate.status = 'PENDING' AND workspace.kind = 'PERSONAL'
+         AND workspace.owner_user_id = ? AND membership.role = 'OWNER'
+       ORDER BY candidate.scheduled_at ASC, candidate.id ASC`,
+    ).bind(userId).all<ActionCandidateRow>();
+    return result.results;
+  }
+
   async findOwnedCandidate(userId: string, candidateId: string): Promise<ActionCandidateRow | null> {
     return this.database.prepare(
       `SELECT candidate.id, candidate.workspace_id, candidate.status,

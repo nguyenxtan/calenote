@@ -61,6 +61,14 @@ export interface ActionCandidateRow {
   timezone: "Asia/Ho_Chi_Minh";
 }
 
+export interface PublicPendingActionCandidate {
+  id: string;
+  title: string;
+  scheduledAt: number;
+  timezone: "Asia/Ho_Chi_Minh";
+  status: "PENDING";
+}
+
 export interface CreateActionCandidateRecord {
   id: string;
   sourceItemId: string;
@@ -74,6 +82,7 @@ export interface CreateActionCandidateRecord {
 
 export interface SourceActionStore {
   createCandidate(record: CreateActionCandidateRecord): Promise<boolean>;
+  listOwnedPendingCandidates(userId: string): Promise<ActionCandidateRow[]>;
   findOwnedCandidate(userId: string, candidateId: string): Promise<ActionCandidateRow | null>;
   approveCandidate(input: {
     userId: string;
@@ -91,6 +100,31 @@ export interface SourceActionStore {
     decisionId: string;
     now: number;
   }): Promise<boolean>;
+}
+
+export async function listOwnedPendingActionCandidates(
+  input: { userId: string },
+  dependencies: {
+    store: Pick<SourceActionStore, "listOwnedPendingCandidates">;
+    keyring: Pick<Keyring, "decryptSensitive">;
+  },
+): Promise<PublicPendingActionCandidate[]> {
+  const candidates = await dependencies.store.listOwnedPendingCandidates(input.userId);
+  return Promise.all(candidates.map(async (candidate) => ({
+    id: candidate.id,
+    title: await dependencies.keyring.decryptSensitive(
+      "action-candidate-title",
+      candidate.id,
+      candidate.title_key_version,
+      {
+        ciphertext: persistedArrayBuffer(candidate.title_ciphertext),
+        iv: persistedArrayBuffer(candidate.title_iv),
+      },
+    ),
+    scheduledAt: candidate.scheduled_at,
+    timezone: candidate.timezone,
+    status: "PENDING" as const,
+  })));
 }
 
 export type CandidateDecisionResult =

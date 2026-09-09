@@ -26,9 +26,16 @@ import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/
 import { cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring } from "@/modules/security/keyring";
+import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
+import {
+  approveActionCandidate,
+  listOwnedPendingActionCandidates,
+  rejectActionCandidate,
+} from "@/modules/source-actions/service";
 import type { QueueOperations, ScheduledOperations } from "./index";
 import type {
   AuthOperations,
+  ActionsOperations,
   ConnectionsOperations,
   OnboardingOperations,
   RemindersOperations,
@@ -152,6 +159,21 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
     listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
+  };
+}
+
+export async function createActionsOperations(env: Env): Promise<ActionsOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessionStore = new D1SessionStore(env.DB);
+  const store = new D1SourceActionStore(env.DB);
+  return {
+    requireUser: async (credentials) => {
+      const principal = await requireSession(credentials, { store: sessionStore, keyring });
+      return { userId: principal.userId };
+    },
+    listPendingActions: (userId) => listOwnedPendingActionCandidates({ userId }, { store, keyring }),
+    approveAction: (input) => approveActionCandidate(input, { store, keyring }),
+    rejectAction: (input) => rejectActionCandidate(input, { store }),
   };
 }
 
