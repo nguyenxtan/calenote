@@ -16,6 +16,7 @@ import {
 } from "./command-service";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
 import type { IntelligenceGateway } from "@/modules/intelligence/contracts";
+import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const timezone = "Asia/Ho_Chi_Minh";
@@ -262,6 +263,18 @@ describe("migrated reminder command schema", () => {
 });
 
 describe("bound reminder commands", () => {
+  it("admits a mocked OpenRouter proposal through the canonical draft confirmation flow", async () => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "openrouter-assisted", text: "nhắc tôi họp mơ hồ" });
+    const transport = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Họp", scheduledAt: processingAt + 60_000, timezone, confidence: 0.5 }) } }] }), { status: 200 }));
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, transport);
+    await expect(harness.process("openrouter-assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+    await harness.addInbound({ id: "openrouter-confirm", text: "ok", receivedAt: receivedAt + 1 });
+    await expect(harness.process("openrouter-confirm", processingAt + 2)).resolves.toEqual({ status: "CONFIRMED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+  });
   it("blocks sensitive inbound text before the intelligence gateway", async () => {
     const harness = await createHarness();
     const gateway: IntelligenceGateway = { interpretReminder: vi.fn().mockResolvedValue({ status: "PROPOSED", title: "must not persist", scheduledAt: processingAt + 60_000, timezone, confidence: 1 }), extractAction: vi.fn() };
