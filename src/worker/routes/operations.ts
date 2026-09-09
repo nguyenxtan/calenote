@@ -4,6 +4,7 @@ import type { OnboardingInput, OnboardingResult, RetryWebhookResult } from "@/mo
 import type { RateLimitResult } from "@/modules/rate-limit/service";
 import type { PublicReminder } from "@/modules/reminders/api-service";
 import type { CandidateDecisionResult, PublicPendingActionCandidate } from "@/modules/source-actions/service";
+import type { PublicPreferences, UpdatePreferences } from "@/contracts/api/preferences";
 
 export interface AuthOperations {
   requestLoginCode(input: { email: string; clientIp: string }): Promise<{ accepted: true }>;
@@ -37,6 +38,12 @@ export interface ActionsOperations {
   listPendingActions(userId: string): Promise<PublicPendingActionCandidate[]>;
   approveAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
   rejectAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
+}
+
+export interface PreferencesOperations {
+  requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
+  getPreferences(userId: string): Promise<PublicPreferences>;
+  savePreferences(input: { userId: string; preferences: UpdatePreferences }): Promise<PublicPreferences>;
 }
 
 export interface OnboardingOperations {

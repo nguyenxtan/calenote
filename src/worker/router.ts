@@ -1,5 +1,6 @@
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
+import { InvalidUserPreferencesError } from "@/modules/preferences/service";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { RequestBodyError } from "@/modules/http/body";
 import { jsonResponse, SameOriginError } from "@/modules/http/security";
@@ -26,6 +27,7 @@ import {
   createActionsOperations,
   createConnectionsOperations,
   createOnboardingOperations,
+  createPreferencesOperations,
   createRemindersOperations,
   ServiceUnavailableError,
 } from "./composition-root";
@@ -40,12 +42,14 @@ import {
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
+import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
 import type {
   AuthOperations,
   ActionsOperations,
   ConnectionsOperations,
   OnboardingOperations,
+  PreferencesOperations,
   RemindersOperations,
 } from "./routes/operations";
 import {
@@ -60,6 +64,7 @@ export interface RouterOptions {
   connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
   remindersOperations?: (env: Env) => Promise<RemindersOperations>;
   onboardingOperations?: (env: Env) => Promise<OnboardingOperations>;
+  preferencesOperations?: (env: Env) => Promise<PreferencesOperations>;
   webhookOperations?: (env: Env) => Promise<WebhookRouteDependencies>;
 }
 
@@ -85,6 +90,9 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   }
   if (error instanceof InvalidLoginCodeError) {
     return { code: error.code, message: error.message, status: error.status };
+  }
+  if (error instanceof InvalidUserPreferencesError) {
+    return { code: "INVALID_PREFERENCES", message: "Tùy chọn hiển thị chưa hợp lệ.", status: 400 };
   }
   if (
     error instanceof ActionNotFoundError
@@ -158,6 +166,7 @@ export function createRouter(options: RouterOptions = {}) {
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
+  const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
   return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     void ctx;
@@ -216,8 +225,14 @@ export function createRouter(options: RouterOptions = {}) {
       if (request.method === "GET" && pathname === "/api/actions") {
         return await handleListActions(request, () => actionsOperationsFactory(env));
       }
+      if (request.method === "GET" && pathname === "/api/preferences") {
+        return await handleGetPreferences(request, () => preferencesOperationsFactory(env));
+      }
       if (request.method === "POST" && pathname === "/api/reminders") {
         return await handleCreateReminder(request, env.APP_ORIGIN, () => remindersOperationsFactory(env));
+      }
+      if (request.method === "PATCH" && pathname === "/api/preferences") {
+        return await handleUpdatePreferences(request, env.APP_ORIGIN, () => preferencesOperationsFactory(env));
       }
       const reminderMatch = request.method === "DELETE"
         ? /^\/api\/reminders\/([^/]+)$/u.exec(pathname)
@@ -269,7 +284,8 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname === "/api/reminders"
         || pathname.startsWith("/api/reminders/")
         || pathname === "/api/actions"
-        || pathname.startsWith("/api/actions/");
+        || pathname.startsWith("/api/actions/")
+        || pathname === "/api/preferences";
       return safeErrorResponse(error, authenticated);
     }
     if (pathname.startsWith("/api/")) {

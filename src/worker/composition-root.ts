@@ -12,6 +12,7 @@ import { setTelegramWebhook } from "@/modules/connections/providers/telegram";
 import { setZaloWebhook } from "@/modules/connections/providers/zalo";
 import { verifyBotToken } from "@/modules/connections/verify-bot-token";
 import { D1OnboardingStore } from "@/modules/db/onboarding-store";
+import { D1UserPreferencesStore } from "@/modules/db/preferences-store";
 import { D1RateLimitStore } from "@/modules/db/rate-limit-store";
 import { D1SessionStore } from "@/modules/db/session-store";
 import { D1InboundProcessorStore, processInbound } from "@/modules/inbound/processor";
@@ -32,12 +33,14 @@ import {
   listOwnedPendingActionCandidates,
   rejectActionCandidate,
 } from "@/modules/source-actions/service";
+import { getUserPreferences, saveUserPreferences } from "@/modules/preferences/service";
 import type { QueueOperations, ScheduledOperations } from "./index";
 import type {
   AuthOperations,
   ActionsOperations,
   ConnectionsOperations,
   OnboardingOperations,
+  PreferencesOperations,
   RemindersOperations,
 } from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
@@ -174,6 +177,34 @@ export async function createActionsOperations(env: Env): Promise<ActionsOperatio
     listPendingActions: (userId) => listOwnedPendingActionCandidates({ userId }, { store, keyring }),
     approveAction: (input) => approveActionCandidate(input, { store, keyring }),
     rejectAction: (input) => rejectActionCandidate(input, { store }),
+  };
+}
+
+export async function createPreferencesOperations(env: Env): Promise<PreferencesOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessionStore = new D1SessionStore(env.DB);
+  const preferencesStore = new D1UserPreferencesStore(env.DB);
+  return {
+    requireUser: async (credentials) => {
+      const principal = await requireSession(credentials, { store: sessionStore, keyring });
+      return { userId: principal.userId };
+    },
+    getPreferences: async (userId) => {
+      const preferences = await getUserPreferences(userId, preferencesStore);
+      return {
+        addressStyle: preferences.addressStyle,
+        customDisplayName: preferences.customDisplayName,
+        tone: preferences.tone,
+      };
+    },
+    savePreferences: async ({ userId, preferences }) => {
+      const saved = await saveUserPreferences(userId, preferences, preferencesStore, Date.now());
+      return {
+        addressStyle: saved.addressStyle,
+        customDisplayName: saved.customDisplayName,
+        tone: saved.tone,
+      };
+    },
   };
 }
 

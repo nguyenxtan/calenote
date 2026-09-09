@@ -17,4 +17,5 @@ test("current-state records implemented Worker lanes and honest evidence boundar
 
   assert.match(document, /chưa.*deploy|not deployed/iu);
   assert.match(document, /chưa.*E2E|not.*E2E/iu);
+  assert.match(document, /Presentation preferences.*IMPLEMENTED, WIRED, TESTED/iu);
 });

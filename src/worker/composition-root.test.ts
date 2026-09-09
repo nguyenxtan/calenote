@@ -49,6 +49,11 @@ describe("Worker composition root", () => {
       approveAction: expect.any(Function),
       rejectAction: expect.any(Function),
     }));
+    await expect(root.createPreferencesOperations(env)).resolves.toEqual(expect.objectContaining({
+      requireUser: expect.any(Function),
+      getPreferences: expect.any(Function),
+      savePreferences: expect.any(Function),
+    }));
     await expect(root.createOnboardingOperations(env)).resolves.toEqual(expect.objectContaining({
       digestRateLimitSubject: expect.any(Function),
       consumeOnboardingRateLimit: expect.any(Function),
@@ -73,6 +78,7 @@ describe("Worker composition root", () => {
     expect(routerSource).not.toContain("new D1OnboardingStore(");
     expect(routerSource).not.toContain("new D1ReminderApiStore(");
     expect(routerSource).not.toContain("new D1SourceActionStore(");
+    expect(routerSource).not.toContain("new D1UserPreferencesStore(");
     expect(routerSource).not.toContain("await createKeyring(");
     expect(entrypointSource).not.toContain("new D1InboundProcessorStore(");
     expect(entrypointSource).not.toContain("await createKeyring(");

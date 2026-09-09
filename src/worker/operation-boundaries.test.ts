@@ -6,6 +6,7 @@ import type {
   AuthOperations,
   ActionsOperations,
   ConnectionsOperations,
+  PreferencesOperations,
   RemindersOperations,
 } from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
@@ -76,6 +77,19 @@ function actionsOperations(): ActionsOperations {
   };
 }
 
+function preferencesOperations(): PreferencesOperations {
+  return {
+    requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    getPreferences: vi.fn(async () => ({
+      addressStyle: "ban" as const, customDisplayName: null, tone: "friendly" as const,
+    })),
+    savePreferences: vi.fn(async ({ preferences }) => ({
+      addressStyle: preferences.addressStyle ?? "ban", customDisplayName: preferences.customDisplayName ?? null,
+      tone: preferences.tone ?? "friendly",
+    })),
+  };
+}
+
 function webhookOperations(): WebhookRouteDependencies {
   return {
     findConnection: vi.fn(async () => ({ id: "connection-1", provider: "telegram" as const, publicId })),
@@ -97,6 +111,12 @@ describe("Worker operation boundaries", () => {
       expect(source).toBeDefined();
       expect(source).not.toMatch(/\b(Request|Env|D1|[Kk]eyring)\b/u);
     }
+  });
+
+  it("keeps D1 construction out of the preferences controller", async () => {
+    const controller = await readFile(resolve(process.cwd(), "src/worker/routes/preferences.ts"), "utf8");
+
+    expect(controller).not.toMatch(/\bD1[A-Za-z]+\b/u);
   });
 
   it("dispatches an auth route with an auth-only capability fake", async () => {
@@ -160,6 +180,23 @@ describe("Worker operation boundaries", () => {
     expect(unrelatedFactory).not.toHaveBeenCalled();
   });
 
+  it("dispatches a preferences route with an injectable preferences-only capability fake", async () => {
+    const preferences = preferencesOperations();
+    const unrelatedFactory = vi.fn();
+    const response = await createRouter({
+      preferencesOperations: async () => preferences,
+      authOperations: unrelatedFactory,
+      actionsOperations: unrelatedFactory,
+      remindersOperations: unrelatedFactory,
+      connectionsOperations: unrelatedFactory,
+      onboardingOperations: unrelatedFactory,
+    })(new Request(`${origin}/api/preferences`, { headers: { cookie } }), environment(), context());
+
+    expect(response.status).toBe(200);
+    expect(preferences.getPreferences).toHaveBeenCalledWith("user-1");
+    expect(unrelatedFactory).not.toHaveBeenCalled();
+  });
+
   it("injects webhook dependencies independently of browser API capabilities", async () => {
     const webhook = webhookOperations();
     const response = await createRouter({ webhookOperations: async () => webhook })(
@@ -188,15 +225,16 @@ describe("Worker operation boundaries", () => {
       JOBS: { send: vi.fn() },
     } as unknown as Env;
 
-    const [auth, actions, connections, reminders, onboarding] = await Promise.all([
+    const [auth, actions, connections, preferences, reminders, onboarding] = await Promise.all([
       root.createAuthOperations(env),
       root.createActionsOperations(env),
       root.createConnectionsOperations(env),
+      root.createPreferencesOperations(env),
       root.createRemindersOperations(env),
       root.createOnboardingOperations(env),
     ]);
 
-    for (const capability of [auth, actions, connections, reminders, onboarding]) {
+    for (const capability of [auth, actions, connections, preferences, reminders, onboarding]) {
       expect(capability).not.toHaveProperty("env");
       expect(capability).not.toHaveProperty("DB");
       expect(capability).not.toHaveProperty("keyring");
