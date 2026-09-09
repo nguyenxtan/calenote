@@ -110,6 +110,19 @@ async function setup() {
 }
 
 describe("source action decisions", () => {
+  it("keeps repeated, past, and unsupported extraction proposals non-authoritative", async () => {
+    const account = await setup();
+    const makeGateway = (proposal: unknown) => ({ interpretReminder: async () => ({}), extractAction: async () => proposal });
+    const input = { sourceItemId: "source-item-one", workspaceId: "workspace-one", text: "source", observedAt: NOW, timezone: "Asia/Ho_Chi_Minh" as const };
+    const valid = makeGateway({ status: "PROPOSED", title: "Họp nguồn", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.4 });
+    const deps = { mode: "free" as const, store: account.store, keyring: account.keyring, now: () => NOW, randomBytes: account.randomBytes };
+    await expect(admitIntelligenceActionProposal(input, { ...deps, gateway: valid })).resolves.toMatchObject({ status: "PENDING" });
+    await expect(admitIntelligenceActionProposal(input, { ...deps, gateway: valid })).resolves.toEqual({ status: "REJECTED" });
+    await expect(admitIntelligenceActionProposal(input, { ...deps, gateway: makeGateway({ status: "PROPOSED", title: "past", scheduledAt: NOW - 1, timezone: "Asia/Ho_Chi_Minh", confidence: 0.4 }) })).resolves.toEqual({ status: "REJECTED" });
+    await expect(admitIntelligenceActionProposal(input, { ...deps, gateway: makeGateway({ status: "PROPOSED", title: "wrong zone", scheduledAt: NOW + 60_000, timezone: "UTC", confidence: 0.4 }) })).resolves.toEqual({ status: "REJECTED" });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM action_candidates").get()).toEqual({ count: 1 });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
   it("admits a valid extraction as one pending candidate without a reminder", async () => {
     const account = await setup();
     const gateway = { interpretReminder: async () => ({}), extractAction: async () => ({ status: "PROPOSED", title: "Họp nguồn", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 0.4 }) };

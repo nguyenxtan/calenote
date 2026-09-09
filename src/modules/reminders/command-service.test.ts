@@ -262,6 +262,26 @@ describe("migrated reminder command schema", () => {
 });
 
 describe("bound reminder commands", () => {
+  it("does not re-invoke unavailable intelligence after canonical inbound terminalization", async () => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "unavailable", text: "nhắc tôi họp mơ hồ" });
+    const gateway: IntelligenceGateway = { interpretReminder: vi.fn().mockRejectedValue(new Error("unavailable")), extractAction: vi.fn() };
+    await expect(harness.process("unavailable", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "REJECTED" });
+    await expect(harness.process("unavailable", processingAt + 1, { mode: "free", gateway })).resolves.toEqual({ status: "TERMINAL" });
+    expect(gateway.interpretReminder).toHaveBeenCalledTimes(1);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 0 });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
+  });
+
+  it("does not duplicate an assisted draft when the same inbound is processed twice", async () => {
+    const harness = await createHarness();
+    await harness.addInbound({ id: "repeat-assisted", text: "nhắc tôi họp mơ hồ" });
+    const gateway: IntelligenceGateway = { interpretReminder: vi.fn().mockResolvedValue({ status: "PROPOSED", title: "Họp", scheduledAt: processingAt + 60_000, timezone, confidence: 0.2 }), extractAction: vi.fn() };
+    await expect(harness.process("repeat-assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
+    await expect(harness.process("repeat-assisted", processingAt + 1, { mode: "free", gateway })).resolves.toEqual({ status: "TERMINAL" });
+    expect(gateway.interpretReminder).toHaveBeenCalledTimes(1);
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM command_drafts").get()).toEqual({ count: 1 });
+  });
   it("admits one validated assisted proposal only through the existing command draft confirmation", async () => {
     const harness = await createHarness();
     await harness.addInbound({ id: "assisted", text: "nhắc tôi họp với đội" });
