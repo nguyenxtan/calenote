@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 const masterKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -43,5 +45,15 @@ describe("Worker composition root", () => {
     const root = await import("./composition-root");
     await expect(root.createWorkerOperations({ ...environment(), DB: undefined } as unknown as Env))
       .rejects.toMatchObject({ name: "ServiceUnavailableError" });
+  });
+
+  it("keeps concrete Worker dependency construction inside the composition root", async () => {
+    const routerSource = await readFile(resolve(process.cwd(), "src/worker/router.ts"), "utf8");
+    const entrypointSource = await readFile(resolve(process.cwd(), "src/worker/index.ts"), "utf8");
+    expect(routerSource).not.toContain("new D1OnboardingStore(");
+    expect(routerSource).not.toContain("new D1ReminderApiStore(");
+    expect(routerSource).not.toContain("await createKeyring(");
+    expect(entrypointSource).not.toContain("new D1InboundProcessorStore(");
+    expect(entrypointSource).not.toContain("await createKeyring(");
   });
 });

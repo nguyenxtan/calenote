@@ -1,34 +1,20 @@
 import {
   CRON_LOGIN_LIMIT,
-  deliverLoginCode,
-  D1LoginCodeStore,
-  redriveLoginCodes,
   type DeliverLoginCodeResult,
   type DeliverLoginCodeJob,
 } from "@/modules/auth/login-service";
+import type { ProcessInboundResult } from "@/modules/inbound/processor";
 import {
-  D1InboundProcessorStore,
-  processInbound,
-  type ProcessInboundResult,
-} from "@/modules/inbound/processor";
-import {
-  deliverReminder,
   SAFE_QUEUE_RETRY_SECONDS,
   type DeliverReminderResult,
 } from "@/modules/reminders/delivery";
-import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
-import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import {
-  claimDueReminders,
   CRON_INBOUND_LIMIT,
   CRON_REMINDER_LIMIT,
-  D1InboundDispatchStore,
-  redriveInboundOrphans,
   type ReminderDispatchJob,
 } from "@/modules/reminders/scheduler";
-import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
-import { createKeyring } from "@/modules/security/keyring";
 import { base64UrlToBytes } from "@/modules/security/encoding";
+import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
 
 function isCanonicalOpaqueId(value: unknown): value is string {
@@ -47,8 +33,6 @@ export interface ScheduledOperations {
   redriveInboundOrphans(now: number, limit: number): Promise<unknown>;
   redriveLoginCodes(now: number, limit: number): Promise<unknown>;
 }
-
-type RuntimeOperations = QueueOperations & ScheduledOperations;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -160,44 +144,6 @@ export async function runScheduledWork(
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
   ]);
-}
-
-export async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
-  const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
-  const inboundStore = new D1InboundProcessorStore(
-    env.DB,
-    new D1ReminderCommandStore(env.DB),
-  );
-  const deliveryStore = new D1ReminderDeliveryStore(env.DB);
-  const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
-  const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
-  const loginStore = new D1LoginCodeStore(env.DB);
-  return {
-    processInbound: (inboundId) => processInbound(inboundId, {
-      store: inboundStore,
-      keyring,
-    }),
-    deliverReminder: (reminderId) => deliverReminder(reminderId, {
-      store: deliveryStore,
-      keyring,
-    }),
-    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, {
-      store: loginStore,
-      keyring,
-    }),
-    claimDueReminders: (now, limit) => claimDueReminders(now, limit, {
-      store: reminderSchedulerStore,
-      enqueue: (job) => env.JOBS.send(job),
-    }),
-    redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, {
-      store: inboundDispatchStore,
-      enqueue: (job) => env.JOBS.send(job),
-    }),
-    redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, {
-      store: loginStore,
-      enqueue: (job) => env.JOBS.send(job),
-    }),
-  };
 }
 
 export default {

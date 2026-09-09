@@ -1,21 +1,8 @@
-import { D1DashboardStore, type PublicConnection, type PublicSessionUser } from "@/modules/auth/dashboard-service";
-import {
-  D1LoginCodeStore,
-  InvalidLoginCodeError,
-  requestLoginCode,
-  verifyLoginCode,
-} from "@/modules/auth/login-service";
-import { requireSession, revokeSession, SessionAuthError } from "@/modules/auth/session";
-import type { BotProvider, WebhookRegistration } from "@/modules/connections/contracts";
+import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
+import { InvalidLoginCodeError } from "@/modules/auth/login-service";
+import { SessionAuthError } from "@/modules/auth/session";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
-import { parseTelegramWebhook, setTelegramWebhook } from "@/modules/connections/providers/telegram";
-import { parseZaloWebhook, setZaloWebhook } from "@/modules/connections/providers/zalo";
-import { verifyBotToken } from "@/modules/connections/verify-bot-token";
-import { D1OnboardingStore } from "@/modules/db/onboarding-store";
-import { D1RateLimitStore } from "@/modules/db/rate-limit-store";
-import { D1SessionStore } from "@/modules/db/session-store";
 import { RequestBodyError } from "@/modules/http/body";
-import { acceptWebhook, D1InboundWebhookStore } from "@/modules/inbound/webhook";
 import { jsonResponse, SameOriginError } from "@/modules/http/security";
 import {
   ConnectionNotFoundError,
@@ -24,28 +11,26 @@ import {
   OnboardingConflictError,
   OnboardingInputError,
   RateLimitExceededError,
-  onboard,
-  retryWebhook as retryConnectionWebhook,
-  rotateConnectCode,
   type OnboardingInput,
   type OnboardingResult,
   type RetryWebhookResult,
   WebhookActivationFailedError,
 } from "@/modules/onboarding/service";
-import { consumeRateLimit, type RateLimitResult } from "@/modules/rate-limit/service";
-import { createKeyring } from "@/modules/security/keyring";
-import { D1InboundDispatchStore } from "@/modules/reminders/scheduler";
-import { D1ReminderApiStore } from "@/modules/reminders/infrastructure/d1/api-store";
+import type { RateLimitResult } from "@/modules/rate-limit/service";
 import {
-  cancelPublicReminder,
-  createManualReminder,
   InvalidReminderError,
-  listPublicReminders,
   ReminderChannelUnavailableError,
   ReminderNotCancellableError,
   ReminderNotFoundError,
   type PublicReminder,
 } from "@/modules/reminders/api-service";
+import {
+  assertRuntimeReady,
+  CANONICAL_APP_ORIGIN,
+  createWebhookOperations,
+  createWorkerOperations,
+  ServiceUnavailableError,
+} from "./composition-root";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
@@ -55,29 +40,6 @@ import {
   matchWebhookRoute,
   type WebhookRouteDependencies,
 } from "./routes/webhooks";
-
-const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
-
-export class ServiceUnavailableError extends Error {
-  constructor() {
-    super("Calenote đang tạm thời không sẵn sàng.");
-    this.name = "ServiceUnavailableError";
-  }
-}
-
-function assertRuntimeBindingShapes(env: Env): void {
-  if (
-    env.APP_ORIGIN !== CANONICAL_APP_ORIGIN
-    || typeof env.DB !== "object" || env.DB === null
-    || typeof env.DB.prepare !== "function" || typeof env.DB.batch !== "function"
-    || typeof env.JOBS !== "object" || env.JOBS === null
-    || typeof env.JOBS.send !== "function"
-    || typeof env.ASSETS !== "object" || env.ASSETS === null
-    || typeof env.ASSETS.fetch !== "function"
-  ) {
-    throw new ServiceUnavailableError();
-  }
-}
 
 export interface WorkerOperations {
   digestRateLimitSubject(value: string): Promise<string>;
@@ -104,142 +66,6 @@ export interface WorkerOperations {
 export interface RouterOptions {
   operations?: (env: Env) => Promise<WorkerOperations>;
   webhookOperations?: (env: Env) => Promise<WebhookRouteDependencies>;
-}
-
-async function registerWebhook(
-  provider: BotProvider,
-  token: string,
-  registration: WebhookRegistration,
-): Promise<void> {
-  if (provider === "zalo") return setZaloWebhook(token, registration);
-  return setTelegramWebhook(token, registration);
-}
-
-export async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
-  let keyring: Awaited<ReturnType<typeof createKeyring>>;
-  try {
-    assertRuntimeBindingShapes(env);
-    keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
-  } catch {
-    throw new ServiceUnavailableError();
-  }
-  const store = new D1OnboardingStore(env.DB);
-  const rateLimitStore = new D1RateLimitStore(env.DB);
-  const sessionStore = new D1SessionStore(env.DB);
-  const dashboardStore = new D1DashboardStore(env.DB);
-  const loginStore = new D1LoginCodeStore(env.DB);
-  const reminderStore = new D1ReminderApiStore(env.DB);
-  return {
-    digestRateLimitSubject: (value) => keyring.digestCode(value),
-    consumeOnboardingRateLimit: (subjectDigest) =>
-      consumeRateLimit(
-        { subjectDigest, scope: "onboarding", limit: 5, windowMs: 60_000 },
-        { store: rateLimitStore },
-      ),
-    onboard: (input) =>
-      onboard(input, {
-        store,
-        keyring,
-        verifyToken: verifyBotToken,
-        registerWebhook,
-        appOrigin: env.APP_ORIGIN,
-      }),
-    requestLoginCode: async ({ email, clientIp }) => {
-      await rateLimitStore.cleanupExpired(Date.now(), 100);
-      for (const [subject, limit] of [
-        [`rate-limit:login-request:ip:${clientIp}`, 10],
-        [`rate-limit:login-request:email:${email}`, 3],
-      ] as const) {
-        const subjectDigest = await keyring.digestCode(subject);
-        const rate = await consumeRateLimit(
-          { subjectDigest, scope: "login-request", limit, windowMs: 10 * 60_000 },
-          { store: rateLimitStore },
-        );
-        if (!rate.allowed) {
-          throw new RateLimitExceededError(
-            Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1_000)),
-          );
-        }
-      }
-      return requestLoginCode(email, {
-        store: loginStore,
-        keyring,
-        enqueue: (job) => env.JOBS.send(job),
-      });
-    },
-    verifyLoginCode: async ({ email, code, clientIp }) => {
-      await rateLimitStore.cleanupExpired(Date.now(), 100);
-      for (const [subject, limit] of [
-        [`rate-limit:login-verify:ip:${clientIp}`, 30],
-        [`rate-limit:login-verify:email:${email}`, 10],
-      ] as const) {
-        const subjectDigest = await keyring.digestCode(subject);
-        const rate = await consumeRateLimit(
-          { subjectDigest, scope: "login-verify", limit, windowMs: 10 * 60_000 },
-          { store: rateLimitStore },
-        );
-        if (!rate.allowed) {
-          throw new RateLimitExceededError(
-            Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1_000)),
-          );
-        }
-      }
-      return verifyLoginCode(email, code, { store: loginStore, keyring });
-    },
-    logout: async (request) => {
-      const result = await revokeSession(request, { store: sessionStore, keyring });
-      return { clearCookie: result.clearCookie };
-    },
-    requireUser: async (request) => {
-      const principal = await requireSession(request, { store: sessionStore, keyring });
-      return { userId: principal.userId };
-    },
-    getSessionUser: async (userId) => {
-      const user = await dashboardStore.getSessionUser(userId);
-      if (!user) throw new SessionAuthError();
-      return user;
-    },
-    listConnections: (userId) => dashboardStore.listConnections(userId),
-    rotateConnectCode: (input) =>
-      rotateConnectCode(input, { store, keyring, rateLimitStore }),
-    retryWebhook: (input) => retryConnectionWebhook(input, {
-      store,
-      keyring,
-      rateLimitStore,
-      registerWebhook,
-      appOrigin: env.APP_ORIGIN,
-    }),
-    listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
-    createReminder: (input) => createManualReminder(input, {
-      store: reminderStore,
-      keyring,
-      rateLimitStore,
-    }),
-    cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, {
-      store: reminderStore,
-      keyring,
-      rateLimitStore,
-    }),
-  };
-}
-
-export async function createWebhookOperations(env: Env): Promise<WebhookRouteDependencies> {
-  const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
-  const store = new D1InboundWebhookStore(env.DB);
-  return {
-    findConnection: (provider, publicId) => store.findConnection(provider, publicId),
-    webhookSecrets: (publicId) => keyring.webhookSecrets(publicId),
-    constantTimeEqual: (left, right) => keyring.constantTimeEqual(left, right),
-    accept: (request, connection) => acceptWebhook(request, connection, {
-      store,
-      dispatchStore: new D1InboundDispatchStore(env.DB),
-      keyring,
-      parseWebhook: connection.provider === "zalo" ? parseZaloWebhook : parseTelegramWebhook,
-      enqueue: async (job) => {
-        await env.JOBS.send(job);
-      },
-    }),
-  };
 }
 
 function requestBodyMessage(code: RequestBodyError["code"]): string {
@@ -332,8 +158,7 @@ export function createRouter(options: RouterOptions = {}) {
     const pathname = new URL(request.url).pathname;
     if (request.method === "GET" && pathname === "/api/health") {
       try {
-        assertRuntimeBindingShapes(env);
-        await createKeyring(env.CALENOTE_MASTER_KEY);
+        await assertRuntimeReady(env);
         return jsonResponse({ ok: true, service: "calenote" });
       } catch {
         return jsonResponse(
