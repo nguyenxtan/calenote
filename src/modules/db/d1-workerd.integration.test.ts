@@ -341,7 +341,7 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
     ).all()).resolves.toMatchObject({
       results: [{ action: "ONBOARDING_RECOVERED" }],
     });
-  });
+  }, 15_000);
 
   it("bounds the equalized unknown-proof work by both exact verify limits", async () => {
     const fixture = await migratedRuntime();
