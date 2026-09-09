@@ -3,7 +3,7 @@ import { SessionResponseSchema } from "@/contracts/api/session";
 import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
-import type { WorkerOperations } from "../router";
+import type { AuthOperations } from "./operations";
 import { InvalidRequestError } from "./connections";
 
 const MAX_BODY_BYTES = 1_024;
@@ -30,7 +30,7 @@ function authenticatedHeaders(headers: HeadersInit = {}): Headers {
 export async function handleRequestLoginCode(
   request: Request,
   appOrigin: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<AuthOperations, "requestLoginCode">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   const parsed = requestCodeSchema.safeParse(
@@ -48,7 +48,7 @@ export async function handleRequestLoginCode(
 export async function handleVerifyLoginCode(
   request: Request,
   appOrigin: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<AuthOperations, "verifyLoginCode">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   const parsed = verifyCodeSchema.safeParse(
@@ -70,7 +70,7 @@ export async function handleVerifyLoginCode(
 export async function handleLogout(
   request: Request,
   appOrigin: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<AuthOperations, "logout">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   const parsed = emptyObjectSchema.safeParse(
@@ -87,7 +87,7 @@ export async function handleLogout(
 
 export async function handleGetSession(
   request: Request,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<AuthOperations, "requireUser" | "getSessionUser">>,
 ): Promise<Response> {
   if (!parseSessionCookie(request)) throw new SessionAuthError();
   const operations = await createOperations();

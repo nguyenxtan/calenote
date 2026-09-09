@@ -1,4 +1,3 @@
-import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
@@ -11,60 +10,45 @@ import {
   OnboardingConflictError,
   OnboardingInputError,
   RateLimitExceededError,
-  type OnboardingInput,
-  type OnboardingResult,
-  type RetryWebhookResult,
   WebhookActivationFailedError,
 } from "@/modules/onboarding/service";
-import type { RateLimitResult } from "@/modules/rate-limit/service";
 import {
   InvalidReminderError,
   ReminderChannelUnavailableError,
   ReminderNotCancellableError,
   ReminderNotFoundError,
-  type PublicReminder,
 } from "@/modules/reminders/api-service";
 import {
   assertRuntimeReady,
   CANONICAL_APP_ORIGIN,
   createWebhookOperations,
-  createWorkerOperations,
+  createAuthOperations,
+  createConnectionsOperations,
+  createOnboardingOperations,
+  createRemindersOperations,
   ServiceUnavailableError,
 } from "./composition-root";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
+import type {
+  AuthOperations,
+  ConnectionsOperations,
+  OnboardingOperations,
+  RemindersOperations,
+} from "./routes/operations";
 import {
   handleWebhook,
   matchWebhookRoute,
   type WebhookRouteDependencies,
 } from "./routes/webhooks";
 
-export interface WorkerOperations {
-  digestRateLimitSubject(value: string): Promise<string>;
-  consumeOnboardingRateLimit(subjectDigest: string): Promise<RateLimitResult>;
-  onboard(input: OnboardingInput): Promise<OnboardingResult>;
-  requestLoginCode(input: { email: string; clientIp: string }): Promise<{ accepted: true }>;
-  verifyLoginCode(input: { email: string; code: string; clientIp: string }): Promise<{ cookie: string }>;
-  logout(request: Request): Promise<{ clearCookie: string }>;
-  requireUser(request: Request): Promise<{ userId: string }>;
-  getSessionUser(userId: string): Promise<PublicSessionUser>;
-  listConnections(userId: string): Promise<PublicConnection[]>;
-  rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
-  retryWebhook(input: { userId: string; publicId: string }): Promise<RetryWebhookResult>;
-  listReminders(userId: string): Promise<PublicReminder[]>;
-  createReminder(input: {
-    userId: string;
-    title: string;
-    scheduledAt: number;
-    timezone: "Asia/Ho_Chi_Minh";
-  }): Promise<PublicReminder>;
-  cancelReminder(input: { userId: string; publicId: string }): Promise<{ cancelled: true }>;
-}
-
 export interface RouterOptions {
-  operations?: (env: Env) => Promise<WorkerOperations>;
+  authOperations?: (env: Env) => Promise<AuthOperations>;
+  connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
+  remindersOperations?: (env: Env) => Promise<RemindersOperations>;
+  onboardingOperations?: (env: Env) => Promise<OnboardingOperations>;
   webhookOperations?: (env: Env) => Promise<WebhookRouteDependencies>;
 }
 
@@ -151,7 +135,10 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
-  const operationsFactory = options.operations ?? createWorkerOperations;
+  const authOperationsFactory = options.authOperations ?? createAuthOperations;
+  const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
+  const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
+  const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
   return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     void ctx;
@@ -187,28 +174,28 @@ export function createRouter(options: RouterOptions = {}) {
     try {
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
         if (env.APP_ORIGIN !== CANONICAL_APP_ORIGIN) throw new ServiceUnavailableError();
-        return await handleRequestLoginCode(request, env.APP_ORIGIN, () => operationsFactory(env));
+        return await handleRequestLoginCode(request, env.APP_ORIGIN, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/auth/verify-code") {
-        return await handleVerifyLoginCode(request, env.APP_ORIGIN, () => operationsFactory(env));
+        return await handleVerifyLoginCode(request, env.APP_ORIGIN, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/auth/logout") {
-        return await handleLogout(request, env.APP_ORIGIN, () => operationsFactory(env));
+        return await handleLogout(request, env.APP_ORIGIN, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/onboarding") {
-        return await handleOnboarding(request, env.APP_ORIGIN, () => operationsFactory(env));
+        return await handleOnboarding(request, env.APP_ORIGIN, () => onboardingOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/session") {
-        return await handleGetSession(request, () => operationsFactory(env));
+        return await handleGetSession(request, () => authOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/connections") {
-        return await handleListConnections(request, () => operationsFactory(env));
+        return await handleListConnections(request, () => connectionsOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/reminders") {
-        return await handleListReminders(request, () => operationsFactory(env));
+        return await handleListReminders(request, () => remindersOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/reminders") {
-        return await handleCreateReminder(request, env.APP_ORIGIN, () => operationsFactory(env));
+        return await handleCreateReminder(request, env.APP_ORIGIN, () => remindersOperationsFactory(env));
       }
       const reminderMatch = request.method === "DELETE"
         ? /^\/api\/reminders\/([^/]+)$/u.exec(pathname)
@@ -218,7 +205,7 @@ export function createRouter(options: RouterOptions = {}) {
           request,
           env.APP_ORIGIN,
           reminderMatch[1],
-          () => operationsFactory(env),
+          () => remindersOperationsFactory(env),
         );
       }
       const connectMatch = request.method === "POST"
@@ -229,7 +216,7 @@ export function createRouter(options: RouterOptions = {}) {
           request,
           env.APP_ORIGIN,
           connectMatch[1],
-          () => operationsFactory(env),
+          () => connectionsOperationsFactory(env),
         );
       }
       const retryMatch = request.method === "POST"
@@ -240,7 +227,7 @@ export function createRouter(options: RouterOptions = {}) {
           request,
           env.APP_ORIGIN,
           retryMatch[1],
-          () => operationsFactory(env),
+          () => connectionsOperationsFactory(env),
         );
       }
     } catch (error) {

@@ -4,7 +4,7 @@ import { parseSessionCookie, SessionAuthError } from "@/modules/auth/session";
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
-import type { WorkerOperations } from "../router";
+import type { ConnectionsOperations } from "./operations";
 
 const MAX_BODY_BYTES = 2_048;
 const BODY_TIMEOUT_MS = 5_000;
@@ -24,7 +24,7 @@ export async function handleConnectCodeRotation(
   request: Request,
   appOrigin: string,
   publicId: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "rotateConnectCode">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   if (!parseSessionCookie(request)) throw new SessionAuthError();
@@ -46,7 +46,7 @@ export async function handleConnectCodeRotation(
 
 export async function handleListConnections(
   request: Request,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "listConnections">>,
 ): Promise<Response> {
   if (!parseSessionCookie(request)) throw new SessionAuthError();
   const operations = await createOperations();
@@ -62,7 +62,7 @@ export async function handleWebhookRetry(
   request: Request,
   appOrigin: string,
   publicId: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "retryWebhook">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   if (!parseSessionCookie(request)) throw new SessionAuthError();

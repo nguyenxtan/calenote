@@ -6,7 +6,13 @@ import {
   ReminderNotFoundError,
   type PublicReminder,
 } from "@/modules/reminders/api-service";
-import { createRouter, type WorkerOperations } from "../router";
+import { createRouter as createProductionRouter, type RouterOptions } from "../router";
+import type {
+  AuthOperations,
+  ConnectionsOperations,
+  OnboardingOperations,
+  RemindersOperations,
+} from "./operations";
 
 const ORIGIN = "https://calenote.iconiclogs.com";
 const MASTER_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -37,7 +43,23 @@ const reminder: PublicReminder = {
   status: "PENDING",
 };
 
-function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations {
+type RouteOperations = AuthOperations & ConnectionsOperations & RemindersOperations & OnboardingOperations;
+
+function routerOptions(factory: (env: Env) => Promise<RouteOperations>) {
+  return {
+    authOperations: factory,
+    connectionsOperations: factory,
+    remindersOperations: factory,
+    onboardingOperations: factory,
+  };
+}
+
+function createRouter(options: RouterOptions | { operations: (env: Env) => Promise<RouteOperations> } = {}) {
+  if ("operations" in options) return createProductionRouter(routerOptions(options.operations));
+  return createProductionRouter(options);
+}
+
+function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
   return {
     digestRateLimitSubject: vi.fn(async () => "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g"),
     consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: true, resetAt: 1_800_000_000_000 })),

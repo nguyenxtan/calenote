@@ -27,7 +27,12 @@ import { cancelPublicReminder, createManualReminder, listPublicReminders } from 
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring } from "@/modules/security/keyring";
 import type { QueueOperations, ScheduledOperations } from "./index";
-import type { WorkerOperations } from "./router";
+import type {
+  AuthOperations,
+  ConnectionsOperations,
+  OnboardingOperations,
+  RemindersOperations,
+} from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
 
 export const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
@@ -65,7 +70,7 @@ async function registerWebhook(provider: BotProvider, token: string, registratio
   return setTelegramWebhook(token, registration);
 }
 
-export async function createWorkerOperations(env: Env): Promise<WorkerOperations> {
+async function createRouteKeyring(env: Env): Promise<Awaited<ReturnType<typeof createKeyring>>> {
   let keyring: Awaited<ReturnType<typeof createKeyring>>;
   try {
     assertRuntimeBindingShapes(env);
@@ -73,18 +78,16 @@ export async function createWorkerOperations(env: Env): Promise<WorkerOperations
   } catch {
     throw new ServiceUnavailableError();
   }
-  const store = new D1OnboardingStore(env.DB);
+  return keyring;
+}
+
+export async function createAuthOperations(env: Env): Promise<AuthOperations> {
+  const keyring = await createRouteKeyring(env);
   const rateLimitStore = new D1RateLimitStore(env.DB);
   const sessionStore = new D1SessionStore(env.DB);
   const dashboardStore = new D1DashboardStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
-  const reminderStore = new D1ReminderApiStore(env.DB);
   return {
-    digestRateLimitSubject: (value) => keyring.digestCode(value),
-    consumeOnboardingRateLimit: (subjectDigest) => consumeRateLimit(
-      { subjectDigest, scope: "onboarding", limit: 5, windowMs: 60_000 }, { store: rateLimitStore },
-    ),
-    onboard: (input) => onboard(input, { store, keyring, verifyToken: verifyBotToken, registerWebhook, appOrigin: env.APP_ORIGIN }),
     requestLoginCode: async ({ email, clientIp }) => {
       await rateLimitStore.cleanupExpired(Date.now(), 100);
       for (const [subject, limit] of [[`rate-limit:login-request:ip:${clientIp}`, 10], [`rate-limit:login-request:email:${email}`, 3]] as const) {
@@ -116,12 +119,52 @@ export async function createWorkerOperations(env: Env): Promise<WorkerOperations
       if (!user) throw new SessionAuthError();
       return user;
     },
+  };
+}
+
+export async function createConnectionsOperations(env: Env): Promise<ConnectionsOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1OnboardingStore(env.DB);
+  const rateLimitStore = new D1RateLimitStore(env.DB);
+  const sessionStore = new D1SessionStore(env.DB);
+  const dashboardStore = new D1DashboardStore(env.DB);
+  return {
+    requireUser: async (request) => {
+      const principal = await requireSession(request, { store: sessionStore, keyring });
+      return { userId: principal.userId };
+    },
     listConnections: (userId) => dashboardStore.listConnections(userId),
     rotateConnectCode: (input) => rotateConnectCode(input, { store, keyring, rateLimitStore }),
     retryWebhook: (input) => retryConnectionWebhook(input, { store, keyring, rateLimitStore, registerWebhook, appOrigin: env.APP_ORIGIN }),
+  };
+}
+
+export async function createRemindersOperations(env: Env): Promise<RemindersOperations> {
+  const keyring = await createRouteKeyring(env);
+  const rateLimitStore = new D1RateLimitStore(env.DB);
+  const sessionStore = new D1SessionStore(env.DB);
+  const reminderStore = new D1ReminderApiStore(env.DB);
+  return {
+    requireUser: async (request) => {
+      const principal = await requireSession(request, { store: sessionStore, keyring });
+      return { userId: principal.userId };
+    },
     listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
+  };
+}
+
+export async function createOnboardingOperations(env: Env): Promise<OnboardingOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1OnboardingStore(env.DB);
+  const rateLimitStore = new D1RateLimitStore(env.DB);
+  return {
+    digestRateLimitSubject: (value) => keyring.digestCode(value),
+    consumeOnboardingRateLimit: (subjectDigest) => consumeRateLimit(
+      { subjectDigest, scope: "onboarding", limit: 5, windowMs: 60_000 }, { store: rateLimitStore },
+    ),
+    onboard: (input) => onboard(input, { store, keyring, verifyToken: verifyBotToken, registerWebhook, appOrigin: env.APP_ORIGIN }),
   };
 }
 

@@ -1,0 +1,159 @@
+import { describe, expect, it, vi } from "vitest";
+import { createRouter } from "./router";
+import type {
+  AuthOperations,
+  ConnectionsOperations,
+  RemindersOperations,
+} from "./routes/operations";
+import type { WebhookRouteDependencies } from "./routes/webhooks";
+
+const origin = "https://calenote.iconiclogs.com";
+const cookie = `__Host-calenote_session=${"A".repeat(43)}`;
+const publicId = "A".repeat(22);
+
+function context(): ExecutionContext {
+  return { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+}
+
+function environment(): Env {
+  return {
+    APP_ORIGIN: origin,
+    ASSETS: { fetch: vi.fn(async () => new Response("asset", { status: 404 })) },
+  } as unknown as Env;
+}
+
+function authOperations(): AuthOperations {
+  return {
+    requestLoginCode: vi.fn(async () => ({ accepted: true as const })),
+    verifyLoginCode: vi.fn(async () => ({ cookie })),
+    logout: vi.fn(async () => ({ clearCookie: "__Host-calenote_session=; Max-Age=0" })),
+    requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    getSessionUser: vi.fn(async () => ({
+      displayName: "Bich Tuyen",
+      email: "owner@example.com",
+      timezone: "Asia/Ho_Chi_Minh" as const,
+    })),
+  };
+}
+
+function connectionsOperations(): ConnectionsOperations {
+  return {
+    requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    listConnections: vi.fn(async () => []),
+    rotateConnectCode: vi.fn(async () => ({ command: "/connect ABC", expiresAt: 1_700_000_000_000 })),
+    retryWebhook: vi.fn(async () => ({
+      connection: {
+        publicId,
+        provider: "telegram" as const,
+        displayName: "May",
+        handle: null,
+        state: "ACTIVE_UNBOUND" as const,
+      },
+      connectCommand: "/connect ABC",
+      expiresAt: 1_700_000_000_000,
+    })),
+  };
+}
+
+function remindersOperations(): RemindersOperations {
+  return {
+    requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    listReminders: vi.fn(async () => []),
+    createReminder: vi.fn(),
+    cancelReminder: vi.fn(async () => ({ cancelled: true as const })),
+  };
+}
+
+function webhookOperations(): WebhookRouteDependencies {
+  return {
+    findConnection: vi.fn(async () => ({ id: "connection-1", provider: "telegram" as const, publicId })),
+    webhookSecrets: vi.fn(async () => ({ pathSecret: `${"B".repeat(42)}A`, headerSecret: `${"C".repeat(42)}A` })),
+    constantTimeEqual: (left, right) => left === right,
+    accept: vi.fn(async () => new Response(null, { status: 204 })),
+  };
+}
+
+describe("Worker operation boundaries", () => {
+  it("dispatches an auth route with an auth-only capability fake", async () => {
+    const auth = authOperations();
+    const authFactory = vi.fn(async () => auth);
+    const response = await createRouter({ authOperations: authFactory })(
+      new Request(`${origin}/api/auth/request-code`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json", "CF-Connecting-IP": "203.0.113.9" },
+        body: JSON.stringify({ email: "owner@example.com" }),
+      }),
+      environment(),
+      context(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(authFactory).toHaveBeenCalledTimes(1);
+    expect(auth.requestLoginCode).toHaveBeenCalledWith({ email: "owner@example.com", clientIp: "203.0.113.9" });
+  });
+
+  it("dispatches a connection route without constructing auth, reminder, or onboarding capabilities", async () => {
+    const connections = connectionsOperations();
+    const unrelatedFactory = vi.fn();
+    const response = await createRouter({
+      connectionsOperations: async () => connections,
+      authOperations: unrelatedFactory,
+      remindersOperations: unrelatedFactory,
+      onboardingOperations: unrelatedFactory,
+    })(new Request(`${origin}/api/connections`, { headers: { cookie } }), environment(), context());
+
+    expect(response.status).toBe(200);
+    expect(connections.listConnections).toHaveBeenCalledWith("user-1");
+    expect(unrelatedFactory).not.toHaveBeenCalled();
+  });
+
+  it("dispatches a reminder route with a reminder-only capability fake", async () => {
+    const reminders = remindersOperations();
+    const response = await createRouter({ remindersOperations: async () => reminders })(
+      new Request(`${origin}/api/reminders`, { headers: { cookie } }),
+      environment(),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(reminders.listReminders).toHaveBeenCalledWith("user-1");
+  });
+
+  it("injects webhook dependencies independently of browser API capabilities", async () => {
+    const webhook = webhookOperations();
+    const response = await createRouter({ webhookOperations: async () => webhook })(
+      new Request(`${origin}/webhooks/telegram/${publicId}/${"B".repeat(42)}A`, {
+        method: "POST",
+        headers: { "X-Telegram-Bot-Api-Secret-Token": `${"C".repeat(42)}A` },
+      }),
+      environment(),
+      context(),
+    );
+
+    expect(response.status).toBe(204);
+    expect(webhook.accept).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes each browser route capability from the composition root without runtime bindings", async () => {
+    const root = await import("./composition-root");
+    const env = {
+      ...environment(),
+      CALENOTE_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      DB: { prepare: vi.fn(), batch: vi.fn() },
+      JOBS: { send: vi.fn() },
+    } as unknown as Env;
+
+    const [auth, connections, reminders, onboarding] = await Promise.all([
+      root.createAuthOperations(env),
+      root.createConnectionsOperations(env),
+      root.createRemindersOperations(env),
+      root.createOnboardingOperations(env),
+    ]);
+
+    for (const capability of [auth, connections, reminders, onboarding]) {
+      expect(capability).not.toHaveProperty("env");
+      expect(capability).not.toHaveProperty("DB");
+      expect(capability).not.toHaveProperty("keyring");
+    }
+  });
+});

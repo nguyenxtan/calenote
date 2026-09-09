@@ -15,7 +15,7 @@ function environment(): Env {
 }
 
 describe("Worker composition root", () => {
-  it("constructs the existing runtime, route, and webhook operation boundaries", async () => {
+  it("constructs runtime, route capability, and webhook operation boundaries", async () => {
     const root = await import("./composition-root");
     const env = environment();
 
@@ -27,12 +27,26 @@ describe("Worker composition root", () => {
       redriveInboundOrphans: expect.any(Function),
       redriveLoginCodes: expect.any(Function),
     }));
-    await expect(root.createWorkerOperations(env)).resolves.toEqual(expect.objectContaining({
+    await expect(root.createAuthOperations(env)).resolves.toEqual(expect.objectContaining({
+      requireUser: expect.any(Function),
+      requestLoginCode: expect.any(Function),
+      verifyLoginCode: expect.any(Function),
+    }));
+    await expect(root.createConnectionsOperations(env)).resolves.toEqual(expect.objectContaining({
       requireUser: expect.any(Function),
       listConnections: expect.any(Function),
+      rotateConnectCode: expect.any(Function),
+    }));
+    await expect(root.createRemindersOperations(env)).resolves.toEqual(expect.objectContaining({
+      requireUser: expect.any(Function),
       listReminders: expect.any(Function),
       createReminder: expect.any(Function),
       cancelReminder: expect.any(Function),
+    }));
+    await expect(root.createOnboardingOperations(env)).resolves.toEqual(expect.objectContaining({
+      digestRateLimitSubject: expect.any(Function),
+      consumeOnboardingRateLimit: expect.any(Function),
+      onboard: expect.any(Function),
     }));
     await expect(root.createWebhookOperations(env)).resolves.toEqual(expect.objectContaining({
       findConnection: expect.any(Function),
@@ -43,7 +57,7 @@ describe("Worker composition root", () => {
 
   it("rejects invalid runtime bindings before creating a route operation", async () => {
     const root = await import("./composition-root");
-    await expect(root.createWorkerOperations({ ...environment(), DB: undefined } as unknown as Env))
+    await expect(root.createAuthOperations({ ...environment(), DB: undefined } as unknown as Env))
       .rejects.toMatchObject({ name: "ServiceUnavailableError" });
   });
 

@@ -1,7 +1,7 @@
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
 import { parseOnboardingInput, RateLimitExceededError } from "@/modules/onboarding/service";
-import type { WorkerOperations } from "../router";
+import type { OnboardingOperations } from "./operations";
 
 const MAX_BODY_BYTES = 2_048;
 const BODY_TIMEOUT_MS = 5_000;
@@ -9,7 +9,7 @@ const BODY_TIMEOUT_MS = 5_000;
 export async function handleOnboarding(
   request: Request,
   appOrigin: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<OnboardingOperations>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   const input = parseOnboardingInput(

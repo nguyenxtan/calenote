@@ -5,7 +5,7 @@ import { base64UrlToBytes } from "@/modules/security/encoding";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
 import { InvalidReminderError } from "@/modules/reminders/api-service";
-import type { WorkerOperations } from "../router";
+import type { RemindersOperations } from "./operations";
 import { InvalidRequestError } from "./connections";
 
 const CREATE_BODY_BYTES = 16 * 1_024;
@@ -33,7 +33,7 @@ function requireCanonicalSession(request: Request): void {
 
 export async function handleListReminders(
   request: Request,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "listReminders">>,
 ): Promise<Response> {
   requireCanonicalSession(request);
   const operations = await createOperations();
@@ -45,7 +45,7 @@ export async function handleListReminders(
 export async function handleCreateReminder(
   request: Request,
   appOrigin: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "createReminder">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   requireCanonicalSession(request);
@@ -69,7 +69,7 @@ export async function handleCancelReminder(
   request: Request,
   appOrigin: string,
   publicId: string,
-  createOperations: () => Promise<WorkerOperations>,
+  createOperations: () => Promise<Pick<RemindersOperations, "requireUser" | "cancelReminder">>,
 ): Promise<Response> {
   requireSameOrigin(request, appOrigin);
   requireCanonicalSession(request);

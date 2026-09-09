@@ -4,7 +4,13 @@ import { SessionAuthError } from "@/modules/auth/session";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
 import { onboard } from "@/modules/onboarding/service";
-import { createRouter, routeRequest, type WorkerOperations } from "./router";
+import { createRouter as createProductionRouter, routeRequest, type RouterOptions } from "./router";
+import type {
+  AuthOperations,
+  ConnectionsOperations,
+  OnboardingOperations,
+  RemindersOperations,
+} from "./routes/operations";
 import type { WebhookRouteDependencies } from "./routes/webhooks";
 
 const token = "123456789:AAExample_secret-token_123456789";
@@ -51,7 +57,23 @@ function environment() {
   };
 }
 
-function operations(overrides: Partial<WorkerOperations> = {}): WorkerOperations {
+type RouteOperations = AuthOperations & ConnectionsOperations & RemindersOperations & OnboardingOperations;
+
+function routerOptions(factory: (env: Env) => Promise<RouteOperations>) {
+  return {
+    authOperations: factory,
+    connectionsOperations: factory,
+    remindersOperations: factory,
+    onboardingOperations: factory,
+  };
+}
+
+function createRouter(options: RouterOptions | { operations: (env: Env) => Promise<RouteOperations> } = {}) {
+  if ("operations" in options) return createProductionRouter(routerOptions(options.operations));
+  return createProductionRouter(options);
+}
+
+function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
   return {
     digestRateLimitSubject: vi.fn(async () => "N8MKPqjdJlR9xUXwupHi_Z45pMG4W0IBZwgHR3SNo1g"),
     consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: true, resetAt: 1_700_000_060_000 })),
