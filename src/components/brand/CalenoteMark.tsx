@@ -1,4 +1,3 @@
-import { CalendarDays } from "lucide-react";
 import styles from "./CalenoteMark.module.css";
 
 interface CalenoteMarkProps {
@@ -7,13 +6,13 @@ interface CalenoteMarkProps {
 }
 
 export function CalenoteMark({ compact = false, inverse = false }: CalenoteMarkProps) {
+  const source = compact
+    ? inverse ? "/brand/calenote-mark-monochrome.svg" : "/brand/calenote-mark.svg"
+    : inverse ? "/brand/calenote-logo-on-dark.svg" : "/brand/calenote-logo-horizontal.svg";
+
   return (
-    <div className={`${styles.brand} ${inverse ? styles.inverse : ""}`}>
-      <span className={styles.symbol} aria-hidden="true">
-        <CalendarDays size={compact ? 18 : 21} strokeWidth={2.3} />
-        <span />
-      </span>
-      <span className={compact ? styles.wordCompact : styles.word}>calenote</span>
-    </div>
+    <span className={`${styles.brand} ${compact ? styles.compact : ""}`}>
+      <img alt="Calenote" src={source} />
+    </span>
   );
 }
