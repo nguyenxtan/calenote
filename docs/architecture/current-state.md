@@ -30,6 +30,7 @@ implementation plans are audit evidence; they do not override this page.
 | OpenRouter adapter | IMPLEMENTED, WIRED, TESTED | Worker composition can select the adapter only from validated optional runtime configuration. Inbound and source application flows use the real adapter with injected mocked transport; no live provider request has been made. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
+| V2 brand and Today control plane | IMPLEMENTED, WIRED, TESTED | Approved design-pack assets are the only V2 logo source. `/app/today` confirms a session before requesting personal data, uses existing authenticated reminder/action APIs, supports a bounded manual quick capture, and keeps independent resource failures local. Desktop rail and mobile navigation are responsive; the remaining V2 routes are deliberately safe placeholders. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
 | Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. |
 
@@ -68,6 +69,10 @@ The Web UI is a first-class control plane, not a replacement for chat. It is
 allowed to manage complexity—connection health, reminders, account access—but
 daily create/confirm/notify flow is chat-first.
 
+Phase 4A implements the canonical brand, token layer, authenticated AppShell,
+and `/app/today` only. It does not claim a full UI redesign, live visual E2E,
+or a change to the chat-first product boundary.
+
 ## Optional OpenRouter runtime
 
 Optional intelligence is disabled when `AI_MODE` is absent or `off`. Its
@@ -104,7 +109,7 @@ mocks and static page visual tests are useful, but are not production proof.
 
 ## Next bounded phases
 
-1. Export and integrate the approved Figma brand assets as the sole logo truth.
+1. Implement the remaining V2 control-plane screens from approved designs.
 2. Add Gmail authorization only after the Source/Action model is stable.
 3. Keep optional intelligence provider-agnostic and disabled by default;
    deterministic parsing remains the core path.
