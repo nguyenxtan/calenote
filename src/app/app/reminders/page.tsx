@@ -1,2 +1,4 @@
-import { PlaceholderPage } from "../PlaceholderPage";
-export default function RemindersPage() { return <PlaceholderPage title="Reminders chưa được triển khai" />; }
+import type { Metadata } from "next";
+import { CoreScreenExperience } from "@/features/core-screens/CoreScreenExperience";
+export const metadata: Metadata = { title: "Lời nhắc" };
+export default function RemindersPage() { return <CoreScreenExperience screen="reminders" />; }

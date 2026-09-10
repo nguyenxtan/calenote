@@ -28,15 +28,15 @@ function NavLink({ item, active }: { item: NavigationItem; active: boolean }) {
   </Link>;
 }
 
-export function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
+export function AppShell({ user, children, activePath = "/app/today" }: { user: SessionUser; children: ReactNode; activePath?: string }) {
   const initial = user.displayName.trim().slice(0, 1).toLocaleUpperCase("vi-VN") || "C";
   return <div className={styles.app}>
     <aside className={styles.rail} aria-label="Điều hướng Calenote">
       <Link className={styles.brand} href="/app/today" aria-label="Calenote Hôm nay"><CalenoteMark /></Link>
       <nav className={styles.navigation} aria-label="Điều hướng chính">
-        {primary.map((item) => <NavLink item={item} active={item.href === "/app/today"} key={item.href} />)}
+        {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
         <p className={styles.groupLabel}>Không gian</p>
-        {secondary.map((item) => <NavLink item={item} active={false} key={item.href} />)}
+        {secondary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
       </nav>
       <div className={styles.profile} aria-label={`Tài khoản ${user.displayName}`}>
         <span className={styles.avatar} aria-hidden="true">{initial}</span>
@@ -45,7 +45,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
     </aside>
     <div className={styles.main}>{children}</div>
     <nav className={styles.mobileNav} aria-label="Điều hướng chính trên điện thoại">
-      {primary.map((item) => <NavLink item={item} active={item.href === "/app/today"} key={item.href} />)}
+      {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
       <Link className={styles.link} href="/app/settings"><MoreHorizontal aria-hidden="true" size={19} /><span>Thêm</span></Link>
     </nav>
   </div>;
