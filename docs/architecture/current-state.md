@@ -30,7 +30,7 @@ implementation plans are audit evidence; they do not override this page.
 | OpenRouter adapter | IMPLEMENTED, WIRED, TESTED | Worker composition can select the adapter only from validated optional runtime configuration. Inbound and source application flows use the real adapter with injected mocked transport; no live provider request has been made. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
-| V2 brand and Today control plane | IMPLEMENTED, WIRED, TESTED | Approved design-pack assets are the only V2 logo source. `/app/today` confirms a session before requesting personal data, uses existing authenticated reminder/action APIs, supports a bounded manual quick capture, and keeps independent resource failures local. Desktop rail and mobile navigation are responsive; the remaining V2 routes are deliberately safe placeholders. |
+| V2 authenticated core screens | IMPLEMENTED, WIRED, TESTED | Approved design-pack assets are the only V2 logo source. `/app/today`, `/app/calendar`, `/app/inbox`, and `/app/reminders` confirm a session before requesting personal data and consume only shared authenticated reminder/action contracts. Calendar visualizes reminders; Inbox preserves ActionCandidate approval authority; Reminders exposes only cancellation. Connections, Activity, and Settings remain placeholders. Local fixture/headless-browser capture is test evidence only, not staging or production evidence. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
 | Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. |
 
@@ -69,9 +69,11 @@ The Web UI is a first-class control plane, not a replacement for chat. It is
 allowed to manage complexity—connection health, reminders, account access—but
 daily create/confirm/notify flow is chat-first.
 
-Phase 4A implements the canonical brand, token layer, authenticated AppShell,
-and `/app/today` only. It does not claim a full UI redesign, live visual E2E,
-or a change to the chat-first product boundary.
+Phase 4A/4B implement the canonical brand, token layer, authenticated AppShell,
+and the Today, Calendar, Inbox, and Reminders control surfaces only. Connections,
+Activity, Settings, and public/auth V2 redesign remain NOT_IMPLEMENTED. This does
+not claim a full UI redesign, live visual E2E, or a change to the chat-first
+product boundary.
 
 ## Optional OpenRouter runtime
 

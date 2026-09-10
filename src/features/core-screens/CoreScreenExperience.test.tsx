@@ -52,4 +52,16 @@ describe("CoreScreenExperience", () => {
     await interaction.click(screen.getByRole("button", { name: `Huỷ ${reminder.title}` }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/reminders/${reminder.publicId}/cancel`, expect.objectContaining({ method: "POST" })));
   });
+
+  it("opens an accessible mobile More menu for secondary routes", async () => {
+    installFetch();
+    const interaction = userEvent.setup();
+    render(<CoreScreenExperience screen="calendar" />);
+    await screen.findByRole("heading", { name: "Lịch" });
+    await interaction.click(screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true }));
+    expect(screen.getByRole("menu", { name: "Điều hướng thêm", hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
+    await interaction.keyboard("{Escape}");
+    expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+  });
 });
