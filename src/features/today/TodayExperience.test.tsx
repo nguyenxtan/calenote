@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +36,7 @@ describe("TodayExperience", () => {
     resolveSession(json({ data: { user } }));
 
     expect(await screen.findByRole("heading", { name: "Chào, Tân" })).toBeVisible();
-    expect(screen.getAllByRole("link", { name: "Today" })[0]).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByRole("link", { name: "Hôm nay" })[0]).toHaveAttribute("aria-current", "page");
     expect((await screen.findAllByText("Gọi khách hàng")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Calenote đề xuất")).toBeVisible();
   });
@@ -89,7 +89,14 @@ describe("TodayExperience", () => {
     const interaction = userEvent.setup();
     render(<TodayExperience />);
 
-    await interaction.click(await screen.findByRole("button", { name: "Tạo nhắc nhở" }));
+    expect(screen.queryByLabelText("Thời điểm nhắc")).not.toBeInTheDocument();
+    await interaction.click(await screen.findByRole("button", { name: "Chọn thời gian" }));
+    const manualTime = screen.getByLabelText("Thời điểm nhắc");
+    expect(manualTime).toHaveAttribute("type", "datetime-local");
+    fireEvent.change(manualTime, { target: { value: "2026-09-11T09:00" } });
+    expect(await screen.findByText(/09:00/)).toBeVisible();
+    expect(screen.queryByText("2026-09-11T09:00")).not.toBeInTheDocument();
+    await interaction.click(screen.getByRole("button", { name: "Tạo lời nhắc" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Hãy nhập nội dung và thời điểm nhắc hợp lệ.");
   });
 
