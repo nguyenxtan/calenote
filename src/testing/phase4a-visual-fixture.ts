@@ -2,7 +2,7 @@ import { ActionsResponseSchema } from "@/contracts/api/actions";
 import { RemindersResponseSchema } from "@/contracts/api/reminders";
 import { SessionResponseSchema } from "@/contracts/api/session";
 
-export type Phase4aVisualScenario = "populated" | "action-candidate" | "empty" | "partial-failure";
+export type Phase4aVisualScenario = "populated" | "action-candidate" | "empty" | "partial-failure" | "calendar-populated" | "calendar-empty" | "calendar-error" | "inbox-populated" | "inbox-empty" | "inbox-error" | "reminders-populated" | "reminders-empty" | "reminders-error";
 
 function todayAt(hour: number, minute: number, dayOffset = 0) {
   const fields = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "numeric", day: "numeric" }).formatToParts();
@@ -46,5 +46,11 @@ export function phase4aVisualFixture(scenario: Phase4aVisualScenario) {
       actions: emptyActions,
       actionsFailure: { status: 500, body: { error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } } },
     };
+    case "calendar-populated": case "reminders-populated": return { session, reminders, actions: emptyActions };
+    case "calendar-empty": case "reminders-empty": return { session, reminders: emptyReminders, actions: emptyActions };
+    case "calendar-error": case "reminders-error": return { session, reminders: emptyReminders, actions: emptyActions, remindersFailure: { status: 500, body: { error: { code: "INTERNAL_ERROR", message: "Chưa thể tải lời nhắc." } } } };
+    case "inbox-populated": return { session, reminders: emptyReminders, actions: action };
+    case "inbox-empty": return { session, reminders: emptyReminders, actions: emptyActions };
+    case "inbox-error": return { session, reminders: emptyReminders, actions: emptyActions, actionsFailure: { status: 500, body: { error: { code: "INTERNAL_ERROR", message: "Chưa thể tải đề xuất." } } } };
   }
 }

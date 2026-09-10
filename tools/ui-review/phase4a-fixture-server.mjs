@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure"]);
+const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error"]);
 const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
 const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
 
@@ -29,10 +29,10 @@ const outputRoot = path.resolve("out");
 
 function fixture(pathname) {
   if (pathname === "/api/session") return [200, session];
-  if (pathname === "/api/reminders") return [200, scenario === "empty" || scenario === "action-candidate" ? empty : reminders];
+  if (pathname === "/api/reminders") { if (["calendar-error", "reminders-error"].includes(scenario)) return [500, { error: { code: "INTERNAL_ERROR", message: "Chưa thể tải lời nhắc." } }]; return [200, ["empty", "action-candidate", "calendar-empty", "inbox-populated", "inbox-empty", "inbox-error", "reminders-empty"].includes(scenario) ? empty : reminders]; }
   if (pathname === "/api/actions") {
-    if (scenario === "partial-failure") return [500, { error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } }];
-    return [200, scenario === "action-candidate" ? candidate : emptyActions];
+    if (["partial-failure", "inbox-error"].includes(scenario)) return [500, { error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } }];
+    return [200, ["action-candidate", "inbox-populated"].includes(scenario) ? candidate : emptyActions];
   }
   return null;
 }

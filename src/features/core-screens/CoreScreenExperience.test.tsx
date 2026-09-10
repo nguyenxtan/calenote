@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { CoreScreenExperience } from "./CoreScreenExperience";
 
@@ -63,5 +64,13 @@ describe("CoreScreenExperience", () => {
     expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
     await interaction.keyboard("{Escape}");
     expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+  });
+
+  it.each(["calendar", "inbox", "reminders"] as const)("has no serious axe violations for %s", async (screenName) => {
+    installFetch();
+    const { container } = render(<CoreScreenExperience screen={screenName} />);
+    await screen.findByRole("heading", { level: 1 });
+    const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
   });
 });
