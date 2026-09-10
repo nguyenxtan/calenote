@@ -1,5 +1,4 @@
-import { createReadStream, existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
@@ -37,8 +36,8 @@ function localFile(pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname.endsWith("/") ? `${pathname}index.html` : pathname;
   const direct = path.resolve(outputRoot, `.${requested}`);
   const html = path.resolve(outputRoot, `.${requested}.html`);
-  const candidatePath = existsSync(direct) ? direct : html;
-  return candidatePath.startsWith(outputRoot) ? candidatePath : null;
+  const candidatePath = [direct, html].find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+  return candidatePath?.startsWith(outputRoot) ? candidatePath : null;
 }
 
 http.createServer(async (request, response) => {
@@ -51,7 +50,7 @@ http.createServer(async (request, response) => {
     return;
   }
   const file = localFile(url.pathname);
-  if (!file || !existsSync(file) || !(await stat(file)).isFile()) { response.writeHead(404); response.end(); return; }
+  if (!file) { response.writeHead(404); response.end(); return; }
   response.writeHead(200, { "content-type": contentTypes[path.extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
   createReadStream(file).pipe(response);
 }).listen(port, "127.0.0.1", () => console.log(`Phase 4A visual fixture (${scenario}) listening at http://127.0.0.1:${port}/app/today`));
