@@ -12,6 +12,8 @@ export function CalenoteMark({ compact = false, inverse = false }: CalenoteMarkP
 
   return (
     <span className={`${styles.brand} ${compact ? styles.compact : ""}`}>
+      {/* Exact approved SVG; static export has no image optimizer endpoint. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img alt="Calenote" src={source} />
     </span>
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Activity, Bell, CalendarDays, CircleUserRound, Inbox, Link2, MoreHorizontal, Settings2, Sun } from "lucide-react";
+import { Activity, Bell, CalendarDays, Inbox, Link2, MoreHorizontal, Settings2, Sun } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import type { SessionUser } from "@/contracts/api/session";
 import styles from "./AppShell.module.css";

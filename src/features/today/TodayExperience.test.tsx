@@ -57,7 +57,7 @@ describe("TodayExperience", () => {
   });
 
   it("approves a proposal only through its existing decision endpoint", async () => {
-    const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [reminder] } });
