@@ -18,6 +18,6 @@ test("current-state records implemented Worker lanes and honest evidence boundar
   assert.match(document, /chưa.*deploy|not deployed/iu);
   assert.match(document, /chưa.*E2E|not.*E2E/iu);
   assert.match(document, /Presentation preferences.*IMPLEMENTED, WIRED, TESTED/iu);
-  assert.match(document, /V2 brand and Today control plane.*IMPLEMENTED, WIRED, TESTED/iu);
-  assert.match(document, /Phase 4A[\s\S]*does not claim a full UI redesign/iu);
+  assert.match(document, /V2 authenticated core screens.*IMPLEMENTED, WIRED, TESTED/iu);
+  assert.match(document, /Phase 4A\/4B[\s\S]*does\s+not claim a full UI redesign/iu);
 });
