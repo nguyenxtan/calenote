@@ -32,7 +32,8 @@
   --surface-soft: var(--cn-surface-subtle);
   --ink: var(--cn-text);
   --ink-soft: var(--cn-text-2);
-  --ink-faint: var(--cn-text-3);
+  /* Legacy surfaces use this token; retain the AA-verified value. */
+  --ink-faint: #5f6963;
   --line: var(--cn-border);
   --line-strong: var(--cn-border-strong);
   --leaf: var(--cn-brand-500);
