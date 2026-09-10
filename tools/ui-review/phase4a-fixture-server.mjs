@@ -1,0 +1,57 @@
+import { createReadStream, existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
+import http from "node:http";
+import path from "node:path";
+
+const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure"]);
+const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
+const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
+
+if (process.env.CALENOTE_VISUAL_FIXTURE !== "1" || process.env.NODE_ENV === "production" || !scenarios.has(scenario)) {
+  throw new Error("This localhost-only visual fixture requires CALENOTE_VISUAL_FIXTURE=1, a non-production NODE_ENV, and a supported --scenario.");
+}
+
+const session = { data: { user: { displayName: "Mai", email: "mai.fixture@example.test", timezone: "Asia/Ho_Chi_Minh" } } };
+const reminders = { data: { reminders: [
+  { publicId: "populated-reminder-0001", title: "Gọi khách hàng ABC", scheduledAt: 1_800_025_200_000, timezone: "Asia/Ho_Chi_Minh", status: "PENDING" },
+  { publicId: "populated-reminder-0002", title: "Gửi báo giá", scheduledAt: 1_800_034_200_000, timezone: "Asia/Ho_Chi_Minh", status: "PENDING" },
+  { publicId: "populated-reminder-0003", title: "Uống thuốc", scheduledAt: 1_800_043_200_000, timezone: "Asia/Ho_Chi_Minh", status: "PENDING" },
+] } };
+const candidate = { data: { actions: [{ id: "fixtureactioncandidate", title: "Họp với team vận hành", scheduledAt: 1_800_079_200_000, timezone: "Asia/Ho_Chi_Minh", status: "PENDING" }] } };
+const empty = { data: { reminders: [] } };
+const emptyActions = { data: { actions: [] } };
+const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "application/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
+const outputRoot = path.resolve("out");
+
+function fixture(pathname) {
+  if (pathname === "/api/session") return [200, session];
+  if (pathname === "/api/reminders") return [200, scenario === "empty" || scenario === "action-candidate" ? empty : reminders];
+  if (pathname === "/api/actions") {
+    if (scenario === "partial-failure") return [500, { error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } }];
+    return [200, scenario === "action-candidate" ? candidate : emptyActions];
+  }
+  return null;
+}
+
+function localFile(pathname) {
+  const requested = pathname === "/" ? "/index.html" : pathname.endsWith("/") ? `${pathname}index.html` : pathname;
+  const direct = path.resolve(outputRoot, `.${requested}`);
+  const html = path.resolve(outputRoot, `.${requested}.html`);
+  const candidatePath = existsSync(direct) ? direct : html;
+  return candidatePath.startsWith(outputRoot) ? candidatePath : null;
+}
+
+http.createServer(async (request, response) => {
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const mocked = fixture(url.pathname);
+  if (mocked) {
+    const [status, body] = mocked;
+    response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
+    response.end(JSON.stringify(body));
+    return;
+  }
+  const file = localFile(url.pathname);
+  if (!file || !existsSync(file) || !(await stat(file)).isFile()) { response.writeHead(404); response.end(); return; }
+  response.writeHead(200, { "content-type": contentTypes[path.extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
+  createReadStream(file).pipe(response);
+}).listen(port, "127.0.0.1", () => console.log(`Phase 4A visual fixture (${scenario}) listening at http://127.0.0.1:${port}/app/today`));
