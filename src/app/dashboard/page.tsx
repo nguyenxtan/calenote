@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
-
-export const metadata: Metadata = {
-  title: "Tổng quan",
-};
+import { redirect } from "next/navigation";
 
 export default function DashboardPage() {
-  return <DashboardShell />;
+  redirect("/app/today");
 }

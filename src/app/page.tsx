@@ -1,5 +1,5 @@
-import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { PublicEntryExperience } from "@/features/public-entry/PublicEntryExperience";
 
 export default function HomePage() {
-  return <OnboardingWizard />;
+  return <PublicEntryExperience />;
 }
