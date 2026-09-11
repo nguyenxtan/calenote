@@ -223,7 +223,7 @@ export function OnboardingWizard() {
     void apiRequest("/api/session", { signal: controller.signal }).then(() => {
       if (controller.signal.aborted) return;
       setEntryState("redirecting");
-      replace("/dashboard");
+      replace("/app/today");
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
@@ -735,7 +735,7 @@ function ActivationPanel({
           Kiểm tra lại trạng thái
         </button>
         <div className={styles.resultLinks}>
-          <Link href="/dashboard" className={styles.textLink}>Mở trang tổng quan <ArrowRight size={15} /></Link>
+          <Link href="/app/today" className={styles.textLink}>Vào Calenote <ArrowRight size={15} /></Link>
           <Link href="/docs" className={styles.textLink}>Xem hướng dẫn kết nối</Link>
         </div>
       </section>
@@ -795,7 +795,7 @@ function ActivationPanel({
       )}
 
       {bot.state === "ACTIVE_BOUND" && (
-        <p className={styles.readyLead}>Bot đã nhận diện cuộc trò chuyện riêng. Bạn có thể tạo và quản lý lời nhắc trong dashboard.</p>
+        <p className={styles.readyLead}>Bot đã nhận diện cuộc trò chuyện riêng. Bạn có thể tạo và quản lý lời nhắc trong Calenote.</p>
       )}
 
       {bot.state === "WEBHOOK_FAILED" && (
@@ -816,7 +816,7 @@ function ActivationPanel({
       {notice ? <p className={styles.successMessage} role="status" aria-live="polite">{notice}</p> : null}
 
       <div className={styles.resultLinks}>
-        <Link href="/dashboard" className={styles.textLink}>Mở trang tổng quan <ArrowRight size={15} /></Link>
+        <Link href="/app/today" className={styles.textLink}>Vào Calenote <ArrowRight size={15} /></Link>
         <Link href="/docs" className={styles.textLink}>Xem hướng dẫn kết nối</Link>
       </div>
     </section>

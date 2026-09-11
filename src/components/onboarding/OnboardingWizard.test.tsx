@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { OnboardingWizard } from "./OnboardingWizard";
 
@@ -107,7 +108,7 @@ describe("OnboardingWizard", () => {
 
     render(<OnboardingWizard />);
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/today"));
     expect(screen.queryByLabelText("Tên bạn")).not.toBeInTheDocument();
     expect(screen.queryByText("Ngọc An")).not.toBeInTheDocument();
   });
@@ -124,6 +125,16 @@ describe("OnboardingWizard", () => {
     await waitFor(() => expect(heading).toHaveFocus());
     await userEvent.setup().click(screen.getByRole("button", { name: "Thử kiểm tra lại" }));
     expect(await screen.findByLabelText("Tên bạn")).toBeVisible();
+  });
+
+  it("has no serious or critical accessibility violations in the first-time account step", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated());
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = render(<OnboardingWizard />);
+
+    await screen.findByRole("heading", { name: "Tạo không gian Calenote của bạn" });
+    const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
   });
 
   it("submits one durable onboarding request, clears the token, and shows the real bot and connect command", async () => {
@@ -309,6 +320,7 @@ describe("OnboardingWizard", () => {
       state: "ACTIVE_BOUND",
     }] } }));
     expect(await screen.findByRole("heading", { name: "Cuộc chat riêng đã kết nối" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Vào Calenote" })).toHaveAttribute("href", "/app/today");
     expect(fetcher).toHaveBeenNthCalledWith(
       3,
       "/api/connections",
