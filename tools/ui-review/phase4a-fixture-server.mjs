@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error", "connections", "connections-attention", "activity", "activity-empty", "settings"]);
+const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error", "connections", "connections-attention", "activity", "activity-empty", "settings", "landing", "login-email", "login-otp", "onboarding-welcome", "onboarding-provider", "onboarding-connection", "onboarding-success"]);
 const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
 const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
 
@@ -27,8 +27,11 @@ const emptyActions = { data: { actions: [] } };
 const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "application/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 const outputRoot = path.resolve("out");
 
-function fixture(pathname) {
-  if (pathname === "/api/session") return [200, session];
+function fixture(pathname, method) {
+  if (pathname === "/api/session") return [scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? 401 : 200, scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? { error: { code: "UNAUTHENTICATED", message: "Đăng nhập là cần thiết." } } : session];
+  if (pathname === "/api/auth/request-code" && method === "POST") return [202, { data: { accepted: true } }];
+  if (pathname === "/api/auth/verify-code" && method === "POST") return [200, { data: { authenticated: true } }];
+  if (pathname === "/api/onboarding" && method === "POST") return [201, { data: { bot: { publicId: "fixture-telegram", provider: "telegram", displayName: "Telegram Mai", handle: "@mai", state: scenario === "onboarding-success" ? "ACTIVE_BOUND" : "ACTIVE_UNBOUND" }, connectCommand: scenario === "onboarding-success" ? null : "/connect FIXTURE-CODE", connectCodeExpiresAt: scenario === "onboarding-success" ? null : 1_900_000_000_000, activationCode: null } }];
   if (pathname === "/api/connections") return [200, { data: { connections: scenario === "connections-attention" ? [{ publicId: "fixture-telegram", provider: "telegram", displayName: "Telegram Mai", handle: "@mai", state: "WEBHOOK_FAILED" }] : [{ publicId: "fixture-telegram", provider: "telegram", displayName: "Telegram Mai", handle: "@mai", state: "ACTIVE_BOUND" }, { publicId: "fixture-zalo", provider: "zalo", displayName: "Zalo Mai", handle: null, state: "ACTIVE_UNBOUND" }] } }];
   if (pathname === "/api/activity") return scenario === "activity-empty" ? [200, { data: { activities: [] } }] : [200, { data: { activities: [{ action: "REMINDER_CREATED", createdAt: Date.now() - 3600000 }, { action: "CHAT_BOUND", createdAt: Date.now() - 7200000 }] } }];
   if (pathname === "/api/preferences") return [200, { data: { preferences: { addressStyle: "ban", customDisplayName: null, tone: "friendly" } } }];
@@ -50,7 +53,7 @@ function localFile(pathname) {
 
 http.createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
-  const mocked = fixture(url.pathname);
+  const mocked = fixture(url.pathname, request.method);
   if (mocked) {
     const [status, body] = mocked;
     response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });

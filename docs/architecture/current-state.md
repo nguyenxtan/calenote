@@ -29,7 +29,7 @@ implementation plans are audit evidence; they do not override this page.
 | Optional intelligence foundation | IMPLEMENTED, WIRED, TESTED | Provider-agnostic reminder proposals pass strict admission into the existing chat CommandDraft confirmation boundary. The Worker composition selects an optional OFF/FREE/ECONOMY gateway; absent or invalid configuration remains OFF/null. |
 | OpenRouter adapter | IMPLEMENTED, WIRED, TESTED | Worker composition can select the adapter only from validated optional runtime configuration. Inbound and source application flows use the real adapter with injected mocked transport; no live provider request has been made. |
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
-| Web control plane | IMPLEMENTED, WIRED, TESTED | Static `/`, `/login`, `/dashboard`, and `/docs` builds without personal-data flash before session confirmation. |
+| Public V2 experience | IMPLEMENTED, WIRED, TESTED | `/` is a static Landing V2 with no personal-data request; `/onboarding` retains the bounded, same-origin first-time bootstrap; `/login` retains the bot-delivered OTP flow; and `/dashboard` is a compatibility redirect to `/app/today`. Local fixture/headless-browser capture is local test evidence only. Google OAuth is NOT_IMPLEMENTED / DEFERRED. |
 | V2 authenticated app screens | IMPLEMENTED, WIRED, TESTED | `/app/today`, `/app/calendar`, `/app/inbox`, `/app/reminders`, `/app/connections`, `/app/activity`, and `/app/settings` confirm a session before requesting personal data. Connections exposes only Telegram/Zalo safe metadata; Settings uses read-only profile data and supported preferences. Activity is an authenticated read-only projection over existing audit persistence, scoped by `actor_user_id`, newest-first, bounded to 50 allowlisted events, and exposes only `action` plus `createdAt`—never raw audit payload. Local fixture/headless-browser capture is test evidence only, not staging or production evidence. |
 | Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
 | Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. |
@@ -69,11 +69,10 @@ The Web UI is a first-class control plane, not a replacement for chat. It is
 allowed to manage complexity—connection health, reminders, account access—but
 daily create/confirm/notify flow is chat-first.
 
-Phase 4A/4B implement the canonical brand, token layer, authenticated AppShell,
-and the Today, Calendar, Inbox, and Reminders control surfaces only. Connections,
-Activity, Settings, and public/auth V2 redesign remain NOT_IMPLEMENTED. This does
-not claim a full UI redesign, live visual E2E, or a change to the chat-first
-product boundary.
+The V2 web journey is canonical: `/` is Landing, `/onboarding` is first-time
+bootstrap, `/login` is returning-user OTP login, `/app/today` is authenticated
+home, and `/dashboard` is compatibility-only. The UI does not claim a full
+external visual E2E or a change to the chat-first product boundary.
 
 ## Optional OpenRouter runtime
 
@@ -111,7 +110,7 @@ mocks and static page visual tests are useful, but are not production proof.
 
 ## Next bounded phases
 
-1. Implement the remaining V2 control-plane screens from approved designs.
+1. Prepare controlled live OpenRouter validation and staging only after explicit authorization.
 2. Add Gmail authorization only after the Source/Action model is stable.
 3. Keep optional intelligence provider-agnostic and disabled by default;
    deterministic parsing remains the core path.
