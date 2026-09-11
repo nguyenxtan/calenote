@@ -56,7 +56,7 @@ export function LoginPanel() {
     void apiRequest("/api/session", { signal: controller.signal }).then(() => {
       if (controller.signal.aborted) return;
       setEntryState("redirecting");
-      replace("/dashboard");
+      replace("/app/today");
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
@@ -147,7 +147,7 @@ export function LoginPanel() {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      replace("/dashboard");
+      replace("/app/today");
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
@@ -207,7 +207,7 @@ export function LoginPanel() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link href="/" aria-label="Về trang thiết lập"><CalenoteMark /></Link>
+        <Link href="/" aria-label="Về trang chủ Calenote"><CalenoteMark /></Link>
         <Link href="/docs" className={styles.docsLink}>Hướng dẫn kết nối</Link>
       </header>
 
@@ -282,7 +282,7 @@ export function LoginPanel() {
               </form>
             </>
           )}
-          <p className={styles.newAccount}>Chưa có tài khoản? <Link href="/">Kết nối bot của bạn</Link></p>
+          <p className={styles.newAccount}>Chưa có tài khoản? <Link href="/onboarding">Kết nối bot của bạn</Link></p>
         </section>
       </div>
     </main>

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPanel } from "./LoginPanel";
 
@@ -57,7 +58,7 @@ describe("LoginPanel", () => {
 
     render(<LoginPanel />);
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/today"));
     expect(screen.queryByText("Ngọc An")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
   });
@@ -114,7 +115,7 @@ describe("LoginPanel", () => {
     await user.type(await screen.findByLabelText("Mã 6 số"), "012345");
     await user.click(screen.getByRole("button", { name: "Xác nhận đăng nhập" }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/today"));
     expect(fetcher).toHaveBeenNthCalledWith(3, "/api/auth/verify-code", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ email: "owner@example.com", code: "012345" }),
@@ -141,7 +142,7 @@ describe("LoginPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Mã đăng nhập không hợp lệ hoặc đã hết hạn.");
     await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     expect(code).toHaveValue("");
-    expect(replace).not.toHaveBeenCalledWith("/dashboard");
+    expect(replace).not.toHaveBeenCalledWith("/app/today");
   });
 
   it("does not auto-retry an ambiguous code request", async () => {
@@ -195,5 +196,15 @@ describe("LoginPanel", () => {
       expect(url).not.toContain("owner@example.com");
       expect(url).not.toContain("123456");
     }
+  });
+
+  it("has no serious or critical accessibility violations in the email step", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated());
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = render(<LoginPanel />);
+
+    await screen.findByRole("heading", { name: "Đăng nhập vào Calenote" });
+    const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
   });
 });
