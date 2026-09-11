@@ -1,5 +1,6 @@
 import type { BotProvider } from "@/modules/connections/contracts";
 import type { ConnectionState } from "@/modules/onboarding/service";
+import type { PublicActivity } from "@/contracts/api/activity";
 
 export interface PublicSessionUser {
   displayName: string;
@@ -61,5 +62,10 @@ export class D1DashboardStore {
       handle: row.handle,
       state: row.state,
     }));
+  }
+
+  async listActivity(userId: string): Promise<PublicActivity[]> {
+    const rows = await this.database.prepare(`SELECT action, created_at FROM audit_events WHERE actor_user_id = ? AND action IN ('REMINDER_CREATED','REMINDER_CANCELLED','CONNECT_CODE_ROTATED','CHAT_BOUND') ORDER BY created_at DESC LIMIT 50`).bind(userId).all<{action:PublicActivity["action"];created_at:number}>();
+    return rows.results.map((row) => ({ action: row.action, createdAt: row.created_at }));
   }
 }

@@ -29,6 +29,21 @@ function setup(): { db: SqliteD1Database; store: D1DashboardStore } {
 }
 
 describe("authenticated dashboard reads on migrated D1", () => {
+  it("projects only allowlisted actor-owned activity newest first and bounds it to fifty", async () => {
+    const { db, store } = setup();
+    const inserts: string[] = [];
+    for (let index = 0; index < 55; index += 1) inserts.push(`('secret-token-${index}','user-1','REMINDER_CREATED',NULL,NULL,NULL,'SUCCESS',${index})`);
+    inserts.push("('foreign-secret','user-2','REMINDER_CANCELLED',NULL,NULL,NULL,'SUCCESS',999)", "('internal-secret','user-1','LOGIN_CODE_DELIVERY_UNCERTAIN',NULL,NULL,NULL,'SUCCESS',1000)");
+    db.sqlite.exec(`INSERT INTO audit_events (id,actor_user_id,action,target_user_id,target_connection_id,target_reminder_id,result,created_at) VALUES ${inserts.join(",")}`);
+    const activity = await store.listActivity("user-1");
+    expect(activity).toHaveLength(50);
+    expect(activity[0]).toEqual({ action: "REMINDER_CREATED", createdAt: 54 });
+    expect(activity.at(-1)).toEqual({ action: "REMINDER_CREATED", createdAt: 5 });
+    expect(JSON.stringify(activity)).not.toContain("secret-token");
+    expect(JSON.stringify(activity)).not.toContain("foreign-secret");
+    expect(JSON.stringify(activity)).not.toContain("LOGIN_CODE");
+    expect(await store.listActivity("user-2")).toEqual([{ action: "REMINDER_CANCELLED", createdAt: 999 }]);
+  });
   it("returns only the session user's safe account and sorted connection fields", async () => {
     const { store } = setup();
 

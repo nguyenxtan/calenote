@@ -1,2 +1,2 @@
-import { PlaceholderPage } from "../PlaceholderPage";
-export default function SettingsPage() { return <PlaceholderPage title="Settings chưa được triển khai" />; }
+import { FinalScreenExperience } from "@/features/final-screens/FinalScreenExperience";
+export default function SettingsPage() { return <FinalScreenExperience screen="settings" />; }

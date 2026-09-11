@@ -211,6 +211,7 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
     },
   };
 }
+export async function createActivityOperations(env: Env): Promise<import("./routes/operations").ActivityOperations> { const keyring=await createRouteKeyring(env); const store=new D1SessionStore(env.DB); const dashboard=new D1DashboardStore(env.DB); return { requireUser:async(credentials)=>{const principal=await requireSession(credentials,{store,keyring});return {userId:principal.userId};}, listActivity:(userId)=>dashboard.listActivity(userId) }; }
 
 export async function createOnboardingOperations(env: Env): Promise<OnboardingOperations> {
   const keyring = await createRouteKeyring(env);

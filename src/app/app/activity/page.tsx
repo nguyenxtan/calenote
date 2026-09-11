@@ -1,2 +1,2 @@
-import { PlaceholderPage } from "../PlaceholderPage";
-export default function ActivityPage() { return <PlaceholderPage title="Activity chưa được triển khai" />; }
+import { FinalScreenExperience } from "@/features/final-screens/FinalScreenExperience";
+export default function ActivityPage() { return <FinalScreenExperience screen="activity" />; }

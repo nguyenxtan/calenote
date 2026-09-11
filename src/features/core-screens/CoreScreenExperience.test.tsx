@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoreScreenExperience } from "./CoreScreenExperience";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -11,6 +11,9 @@ const user = { displayName: "Mai", email: "mai@example.test", timezone: "Asia/Ho
 const reminder = { publicId: "R".repeat(22), title: "Gửi báo giá", scheduledAt: Date.UTC(2026, 8, 10, 7), timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
 const action = { id: "A".repeat(22), title: "Họp với team vận hành", scheduledAt: Date.UTC(2026, 8, 11, 2), timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-10T05:00:00.000Z").getTime()); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 function installFetch(extra: (path: string) => Response | undefined = () => undefined) {
   const fetcher = vi.fn(async (input: string | URL | Request) => {

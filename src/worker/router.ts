@@ -25,6 +25,7 @@ import {
   createWebhookOperations,
   createAuthOperations,
   createActionsOperations,
+  createActivityOperations,
   createConnectionsOperations,
   createOnboardingOperations,
   createPreferencesOperations,
@@ -43,6 +44,7 @@ import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLog
 import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
 import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
+import { handleListActivity } from "./routes/activity";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
 import type {
   AuthOperations,
@@ -51,6 +53,7 @@ import type {
   OnboardingOperations,
   PreferencesOperations,
   RemindersOperations,
+  ActivityOperations,
 } from "./routes/operations";
 import {
   handleWebhook,
@@ -65,6 +68,7 @@ export interface RouterOptions {
   remindersOperations?: (env: Env) => Promise<RemindersOperations>;
   onboardingOperations?: (env: Env) => Promise<OnboardingOperations>;
   preferencesOperations?: (env: Env) => Promise<PreferencesOperations>;
+  activityOperations?: (env: Env) => Promise<ActivityOperations>;
   webhookOperations?: (env: Env) => Promise<WebhookRouteDependencies>;
 }
 
@@ -167,6 +171,7 @@ export function createRouter(options: RouterOptions = {}) {
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
+  const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
   return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     void ctx;
@@ -228,6 +233,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (request.method === "GET" && pathname === "/api/preferences") {
         return await handleGetPreferences(request, () => preferencesOperationsFactory(env));
       }
+      if (request.method === "GET" && pathname === "/api/activity") return await handleListActivity(request, () => activityOperationsFactory(env));
       if (request.method === "POST" && pathname === "/api/reminders") {
         return await handleCreateReminder(request, env.APP_ORIGIN, () => remindersOperationsFactory(env));
       }
@@ -285,7 +291,8 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname.startsWith("/api/reminders/")
         || pathname === "/api/actions"
         || pathname.startsWith("/api/actions/")
-        || pathname === "/api/preferences";
+        || pathname === "/api/preferences"
+        || pathname === "/api/activity";
       return safeErrorResponse(error, authenticated);
     }
     if (pathname.startsWith("/api/")) {

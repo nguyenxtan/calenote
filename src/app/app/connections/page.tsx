@@ -1,2 +1,2 @@
-import { PlaceholderPage } from "../PlaceholderPage";
-export default function ConnectionsPage() { return <PlaceholderPage title="Connections chưa được triển khai" />; }
+import { FinalScreenExperience } from "@/features/final-screens/FinalScreenExperience";
+export default function ConnectionsPage() { return <FinalScreenExperience screen="connections" />; }
