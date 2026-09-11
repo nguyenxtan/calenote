@@ -44,6 +44,7 @@ describe("FinalScreenExperience connections", () => {
     expect(screen.getByText("Đã kết nối")).toBeVisible();
     expect(screen.getByText("Chưa kết nối")).toBeVisible();
     expect(screen.getByText("Cần kiểm tra")).toBeVisible();
+    expect(screen.getByText("Cần kiểm tra")).toHaveAttribute("data-state", "WEBHOOK_FAILED");
     expect(screen.getByText("Kết nối cần được xác minh lại.")).toBeVisible();
     expect(screen.getByRole("link", { name: "Kết nối" })).toHaveAttribute("aria-current", "page");
   });

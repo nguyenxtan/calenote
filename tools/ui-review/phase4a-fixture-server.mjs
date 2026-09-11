@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error"]);
+const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error", "connections", "connections-attention", "activity", "activity-empty", "settings"]);
 const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
 const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
 
@@ -29,6 +29,9 @@ const outputRoot = path.resolve("out");
 
 function fixture(pathname) {
   if (pathname === "/api/session") return [200, session];
+  if (pathname === "/api/connections") return [200, { data: { connections: scenario === "connections-attention" ? [{ publicId: "fixture-telegram", provider: "telegram", displayName: "Telegram Mai", handle: "@mai", state: "WEBHOOK_FAILED" }] : [{ publicId: "fixture-telegram", provider: "telegram", displayName: "Telegram Mai", handle: "@mai", state: "ACTIVE_BOUND" }, { publicId: "fixture-zalo", provider: "zalo", displayName: "Zalo Mai", handle: null, state: "ACTIVE_UNBOUND" }] } }];
+  if (pathname === "/api/activity") return scenario === "activity-empty" ? [200, { data: { activities: [] } }] : [200, { data: { activities: [{ action: "REMINDER_CREATED", createdAt: Date.now() - 3600000 }, { action: "CHAT_BOUND", createdAt: Date.now() - 7200000 }] } }];
+  if (pathname === "/api/preferences") return [200, { data: { preferences: { addressStyle: "ban", customDisplayName: null, tone: "friendly" } } }];
   if (pathname === "/api/reminders") { if (["calendar-error", "reminders-error"].includes(scenario)) return [500, { error: { code: "INTERNAL_ERROR", message: "Chưa thể tải lời nhắc." } }]; return [200, ["empty", "action-candidate", "calendar-empty", "inbox-populated", "inbox-empty", "inbox-error", "reminders-empty"].includes(scenario) ? empty : reminders]; }
   if (pathname === "/api/actions") {
     if (["partial-failure", "inbox-error"].includes(scenario)) return [500, { error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } }];
