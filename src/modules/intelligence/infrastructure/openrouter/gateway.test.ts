@@ -62,7 +62,7 @@ describe("OpenRouter intelligence gateway", () => {
     await expect(gateway.interpretReminder({ text: "reminder", now: 1_700_000_000_000, timezone: "Asia/Ho_Chi_Minh" })).resolves.toMatchObject({ status: "PROPOSED", title: "Fallback" });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).model)).toEqual(["openrouter/free", "cheap/one"]);
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1].body))).toMatchObject({ provider: { max_price: { request: 0.01 }, allow_fallbacks: false } });
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1].body))).toMatchObject({ provider: { max_price: { prompt: 0.01, completion: 0.01 }, allow_fallbacks: false } });
   });
   it("tries the first configured cheap fallback after a bounded transport failure", async () => {
     const fetcher = vi.fn()

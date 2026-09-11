@@ -6,7 +6,7 @@ const endpoint = "https://openrouter.ai/api/v1/chat/completions";
 const reminderSchema = { type: "object", additionalProperties: false };
 
 function requestBody(config: OpenRouterConfig, model: string, text: string, schema: object, operation: string): object {
-  return { model, messages: [{ role: "system", content: `Return only the supported Calenote ${operation} schema.` }, { role: "user", content: text }], max_tokens: config.maxOutputTokens, response_format: { type: "json_schema", json_schema: { name: operation, strict: true, schema } }, provider: { allow_fallbacks: false, data_collection: "deny", zdr: true, require_parameters: true, ...(config.maxFallbackPrice === undefined ? {} : { max_price: { request: config.maxFallbackPrice } }) } };
+  return { model, messages: [{ role: "system", content: `Return only the supported Calenote ${operation} schema.` }, { role: "user", content: text }], max_tokens: config.maxOutputTokens, response_format: { type: "json_schema", json_schema: { name: operation, strict: true, schema } }, provider: { allow_fallbacks: false, data_collection: "deny", zdr: true, require_parameters: true, ...(config.maxFallbackPrice === undefined ? {} : { max_price: { prompt: config.maxFallbackPrice, completion: config.maxFallbackPrice } }) } };
 }
 
 function isAvailabilityFailure(status: number): boolean { return status === 408 || status === 429 || status >= 500; }
