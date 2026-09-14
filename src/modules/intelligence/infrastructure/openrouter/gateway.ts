@@ -1,12 +1,24 @@
 import { ActionExtractionSchema, ReminderInterpretationSchema, type ActionExtractionInput, type IntelligenceGateway, type ReminderInterpretationInput } from "../../contracts";
 
-export interface OpenRouterConfig { mode: "free" | "economy"; apiKey: string; freeModel?: string; economyModel?: string; fallbackModels?: readonly string[]; maxFallbackAttempts?: number; maxFallbackPrice?: number; timeoutMs: number; maxInputChars: number; maxOutputTokens: number; }
+export interface OpenRouterConfig { mode: "free" | "privacy"; apiKey: string; freeModel?: string; privacyModel?: string; privacyProvider?: string; maxPrivacyPrice?: number; timeoutMs: number; maxInputChars: number; maxOutputTokens: number; }
 type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
 const endpoint = "https://openrouter.ai/api/v1/chat/completions";
-const reminderSchema = { type: "object", additionalProperties: false };
+const reminderSchema = {
+  type: "object",
+  properties: {
+    status: { type: "string", enum: ["PROPOSED", "NEEDS_CLARIFICATION", "UNSUPPORTED"] },
+    title: { type: "string" },
+    scheduledAt: { type: "integer" },
+    timezone: { type: "string", enum: ["Asia/Ho_Chi_Minh"] },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    clarificationQuestion: { type: "string" },
+  },
+  required: ["status", "confidence"],
+  additionalProperties: false,
+};
 
 function requestBody(config: OpenRouterConfig, model: string, text: string, schema: object, operation: string): object {
-  return { model, messages: [{ role: "system", content: `Return only the supported Calenote ${operation} schema.` }, { role: "user", content: text }], max_tokens: config.maxOutputTokens, response_format: { type: "json_schema", json_schema: { name: operation, strict: true, schema } }, provider: { allow_fallbacks: false, data_collection: "deny", zdr: true, require_parameters: true, ...(config.maxFallbackPrice === undefined ? {} : { max_price: { prompt: config.maxFallbackPrice, completion: config.maxFallbackPrice } }) } };
+  return { model, messages: [{ role: "system", content: `Return only the supported Calenote ${operation} schema.` }, { role: "user", content: text }], max_tokens: config.maxOutputTokens, response_format: { type: "json_schema", json_schema: { name: operation, strict: true, schema } }, provider: { allow_fallbacks: false, data_collection: "deny", zdr: true, require_parameters: true, ...(config.mode === "privacy" ? { only: [config.privacyProvider!], max_price: { prompt: config.maxPrivacyPrice!, completion: config.maxPrivacyPrice! } } : {}) } };
 }
 
 function isAvailabilityFailure(status: number): boolean { return status === 408 || status === 429 || status >= 500; }
@@ -25,9 +37,9 @@ async function requestModel(config: OpenRouterConfig, fetcher: Fetcher, model: s
 
 async function call(config: OpenRouterConfig, fetcher: Fetcher, text: string, schema: object, operation: string): Promise<unknown> {
   if (text.length > config.maxInputChars) return { status: "UNAVAILABLE" };
-  const primary = config.mode === "free" ? config.freeModel ?? "openrouter/free" : config.economyModel;
+  const primary = config.mode === "free" ? config.freeModel ?? "openrouter/free" : config.privacyModel;
   if (!primary) return { status: "UNAVAILABLE" };
-  const models = [primary, ...(config.fallbackModels ?? []).slice(0, Math.min(config.maxFallbackAttempts ?? 0, config.fallbackModels?.length ?? 0))];
+  const models = [primary];
   for (const model of models) {
     const result = await requestModel(config, fetcher, model, text, schema, operation);
     if (result.status === "SUCCESS") return result.raw;
@@ -37,6 +49,6 @@ async function call(config: OpenRouterConfig, fetcher: Fetcher, text: string, sc
 }
 
 export function createOpenRouterGateway(config: OpenRouterConfig, fetcher: Fetcher = fetch): IntelligenceGateway {
-  if (!Number.isInteger(config.timeoutMs) || config.timeoutMs < 100 || config.timeoutMs > 30_000 || config.maxInputChars < 1 || config.maxOutputTokens < 1 || (config.maxFallbackAttempts !== undefined && (!Number.isInteger(config.maxFallbackAttempts) || config.maxFallbackAttempts < 0 || config.maxFallbackAttempts > 3)) || (config.maxFallbackPrice !== undefined && (!Number.isFinite(config.maxFallbackPrice) || config.maxFallbackPrice <= 0))) throw new TypeError("Invalid OpenRouter configuration");
+  if (!Number.isInteger(config.timeoutMs) || config.timeoutMs < 100 || config.timeoutMs > 30_000 || config.maxInputChars < 1 || config.maxOutputTokens < 1 || (config.mode === "privacy" && (!config.privacyModel || !config.privacyProvider || !Number.isFinite(config.maxPrivacyPrice) || config.maxPrivacyPrice! <= 0))) throw new TypeError("Invalid OpenRouter configuration");
   return { interpretReminder: async (input: ReminderInterpretationInput) => { const raw = await call(config, fetcher, input.text, reminderSchema, "reminder_interpretation"); return ReminderInterpretationSchema.safeParse(raw).data ?? { status: "UNAVAILABLE" }; }, extractAction: async (input: ActionExtractionInput) => { const raw = await call(config, fetcher, input.text, reminderSchema, "action_extraction"); return ActionExtractionSchema.safeParse(raw).data ?? { status: "UNAVAILABLE" }; } };
 }

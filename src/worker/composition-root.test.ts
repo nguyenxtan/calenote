@@ -80,15 +80,18 @@ describe("Worker composition root", () => {
 
   it("selects the configured optional intelligence mode instead of forcing it off", async () => {
     const root = await import("./composition-root") as typeof import("./composition-root") & {
-      createIntelligenceCapability?: (env: Env) => Promise<{ mode: "off" | "free" | "economy" }>;
+      createIntelligenceCapability?: (env: Env) => Promise<{ mode: "off" | "free" | "privacy" }>;
     };
 
     expect(root.createIntelligenceCapability).toEqual(expect.any(Function));
     await expect(root.createIntelligenceCapability!({
       ...environment(),
-      AI_MODE: "free",
+      AI_MODE: "privacy",
       OPENROUTER_API_KEY: "test-only-key",
-    } as unknown as Env)).resolves.toMatchObject({ mode: "free" });
+      OPENROUTER_PRIVACY_MODEL: "google/gemini-3.5-flash-lite",
+      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/global/flex",
+      AI_MAX_PRIVACY_PRICE: "1.5",
+    } as unknown as Env)).resolves.toMatchObject({ mode: "privacy" });
   });
 
   it("keeps concrete Worker dependency construction inside the composition root", async () => {

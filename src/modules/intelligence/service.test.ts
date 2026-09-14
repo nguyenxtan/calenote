@@ -26,7 +26,7 @@ describe("optional intelligence foundation", () => {
     const optionalGateway = gateway();
 
     await expect(interpretReminderDeterministicallyFirst(input, {
-      mode: "economy",
+      mode: "privacy",
       gateway: optionalGateway,
       deterministic: () => ({ status: "CONFIDENT", proposal: {
         status: "PROPOSED", title: "Họp", scheduledAt: now + 60_000, timezone: "Asia/Ho_Chi_Minh", confidence: 1,
@@ -40,7 +40,7 @@ describe("optional intelligence foundation", () => {
     const optionalGateway = gateway();
 
     await expect(interpretReminderDeterministicallyFirst(input, {
-      mode: "free",
+      mode: "privacy",
       gateway: optionalGateway,
       deterministic: () => ({ status: "AMBIGUOUS" }),
     })).resolves.toMatchObject({ status: "PROPOSED", proposal: { title: "Họp với đội" } });
@@ -62,7 +62,7 @@ describe("optional intelligence foundation", () => {
 
   it("treats a null gateway as an optional unavailable capability", async () => {
     await expect(interpretReminderDeterministicallyFirst(input, {
-      mode: "free",
+      mode: "privacy",
       gateway: createNullIntelligenceGateway(),
       deterministic: () => ({ status: "AMBIGUOUS" }),
     })).resolves.toEqual({ status: "UNAVAILABLE", reason: "UNCONFIGURED" });
@@ -71,7 +71,7 @@ describe("optional intelligence foundation", () => {
   it("fails closed when a gateway throws", async () => {
     const optionalGateway = gateway();
     optionalGateway.interpretReminder.mockRejectedValueOnce(new Error("unavailable"));
-    await expect(interpretReminderDeterministicallyFirst(input, { mode: "free", gateway: optionalGateway, deterministic: () => ({ status: "AMBIGUOUS" }) }))
+    await expect(interpretReminderDeterministicallyFirst(input, { mode: "privacy", gateway: optionalGateway, deterministic: () => ({ status: "AMBIGUOUS" }) }))
       .resolves.toEqual({ status: "UNAVAILABLE", reason: "UNCONFIGURED" });
   });
 
@@ -83,7 +83,7 @@ describe("optional intelligence foundation", () => {
     const optionalGateway = gateway(result);
 
     await expect(interpretReminderDeterministicallyFirst(input, {
-      mode: "economy",
+      mode: "privacy",
       gateway: optionalGateway,
       deterministic: () => ({ status: "AMBIGUOUS" }),
     })).resolves.toEqual({ status: "UNAVAILABLE", reason: "INVALID_PROPOSAL" });
@@ -93,7 +93,7 @@ describe("optional intelligence foundation", () => {
     const optionalGateway = gateway();
 
     await expect(interpretReminderDeterministicallyFirst({ ...input, text: "Authorization: Bearer secret-value" }, {
-      mode: "economy",
+      mode: "privacy",
       gateway: optionalGateway,
       deterministic: () => ({ status: "AMBIGUOUS" }),
     })).resolves.toEqual({ status: "UNAVAILABLE", reason: "SENSITIVE_INPUT" });
@@ -105,7 +105,7 @@ describe("optional intelligence foundation", () => {
     const optionalGateway = gateway();
 
     await expect(interpretReminderDeterministicallyFirst({ ...input, text: "nhắc tôi token-should-never-leave-core" }, {
-      mode: "economy",
+      mode: "privacy",
       gateway: optionalGateway,
       deterministic: () => ({ status: "AMBIGUOUS" }),
       sensitiveValues: ["token-should-never-leave-core"],
@@ -116,7 +116,7 @@ describe("optional intelligence foundation", () => {
 
   it("does not select or fall back to a paid model in free mode", () => {
     expect(selectIntelligenceModel("free", [
-      { id: "paid", class: "ECONOMY" as const },
+      { id: "paid", class: "PRIVACY" as const },
     ])).toEqual({ status: "UNAVAILABLE", reason: "UNCONFIGURED" });
   });
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const IntelligenceModeSchema = z.enum(["off", "free", "economy"]);
+export const IntelligenceModeSchema = z.enum(["off", "free", "privacy"]);
 export type IntelligenceMode = z.infer<typeof IntelligenceModeSchema>;
 
 export const ReminderInterpretationInputSchema = z.object({
@@ -69,5 +69,5 @@ export interface IntelligenceGateway {
 
 export interface IntelligenceModel {
   id: string;
-  class: "FREE" | "ECONOMY";
+  class: "FREE" | "PRIVACY";
 }

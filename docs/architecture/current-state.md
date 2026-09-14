@@ -76,34 +76,30 @@ external visual E2E or a change to the chat-first product boundary.
 
 ## Optional OpenRouter runtime
 
-Optional intelligence is disabled when `AI_MODE` is absent or `off`. Its
-configuration is intentionally optional: `AI_MODE=off|free|economy`,
-`OPENROUTER_API_KEY`, `OPENROUTER_FREE_MODEL`, `OPENROUTER_ECONOMY_MODEL`,
-`OPENROUTER_FALLBACK_MODELS`, `AI_TIMEOUT_MS`, `AI_MAX_INPUT_CHARS`, and
-`AI_MAX_OUTPUT_TOKENS`, `AI_MAX_FALLBACK_ATTEMPTS`, and
-`AI_MAX_FALLBACK_PRICE`. `OPENROUTER_API_KEY` is a Worker secret and is never
+Optional intelligence is disabled when `AI_MODE` is absent or `off`.
+`AI_MODE=privacy` requires `OPENROUTER_API_KEY`, `OPENROUTER_PRIVACY_MODEL`,
+`OPENROUTER_PRIVACY_PROVIDER`, `AI_MAX_PRIVACY_PRICE`, and bounded timeout,
+input, and output settings. The API key is a Worker secret and is never
 committed. Missing or invalid settings select the null gateway, so startup and
 `/api/health` remain available without OpenRouter.
 
-`AI_MODE=free` is FREE-PREFERRED: it defaults to `openrouter/free`, then may
-try only the ordered IDs in `OPENROUTER_FALLBACK_MODELS` after a retryable
-availability failure. Each fallback is explicit, deduplicated, bounded by
-`AI_MAX_FALLBACK_ATTEMPTS` (maximum three), and requires
-`AI_MAX_FALLBACK_PRICE` as OpenRouter prompt and completion token-price
-ceilings (USD per million tokens). A configured
-fallback can incur cost; it is not a zero-cost guarantee. Authentication
-failures, malformed provider output, and privacy/domain rejection never
-fallback. `AI_MODE=economy` remains an explicit primary model plus bounded
-allowlisted fallbacks. Every request sends `allow_fallbacks=false`,
-`data_collection=deny`, `zdr=true`, and `require_parameters=true`; the adapter
-does not enable plugins, tools, or web search. It emits no logs; provider error
-bodies and malformed completion content are reduced to a safe `UNAVAILABLE`
-result rather than being propagated. Runtime evidence uses injected mocked
-transport only: `LIVE_OPENROUTER_E2E` is PARTIAL: two bounded synthetic free
-requests reached OpenRouter but received HTTP 404 under strict structured-output
-and privacy routing, so no model output was admitted. `PRODUCTION_AI` is
-NOT_DEPLOYED. Phase 5A revalidated the OpenRouter request contract and
-corrected the token-priced fallback ceiling; no remote deployment has occurred.
+The policy is **PRIVACY-FIRST / FREE-WHEN-ELIGIBLE**. User-derived intelligence
+uses a pinned privacy route only: `allow_fallbacks=false`,
+`data_collection=deny`, `zdr=true`, `require_parameters=true`, strict JSON
+Schema, and prompt/completion price ceilings. No generic paid fallback is
+configured. `AI_MODE=free` currently fails closed because `openrouter/free`
+has no endpoint eligible for mandatory ZDR; a future safe/redacted input
+boundary must independently prove free-route eligibility before it can be
+enabled. The adapter enables no plugins, tools, or web search and emits no
+provider logs; provider error bodies and malformed completion content reduce to
+safe `UNAVAILABLE`.
+
+`LIVE_OPENROUTER_E2E` is PARTIAL. Three bounded synthetic free requests proved
+the ZDR eligibility failure. Catalog evidence identified the explicit
+`google/gemini-3.5-flash-lite` / `google-vertex/global/flex` ZDR candidate, but
+two bounded live gateway attempts (5s and 15s) timed out before an HTTP
+envelope. No model output, usage, or cost is claimed. `PRODUCTION_AI` is
+NOT_DEPLOYED; no remote deployment occurred.
 
 ## What is not proven
 

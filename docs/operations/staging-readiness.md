@@ -34,9 +34,8 @@ No remote discovery was performed in Phase 5A, so no row is claimed to exist.
 | --- | --- | --- | --- | --- |
 | `CALENOTE_MASTER_KEY` | Encrypts credentials and derives keyring material. | Yes | Yes | Rotate through a reviewed keyring migration/compatibility procedure; never overwrite blindly. |
 | `OPENROUTER_API_KEY` | Enables optional AI transport. | Yes | Optional | Scoped to staging budget; rotate/revoke immediately on exposure. |
-| `AI_MODE` | Enables only free-preferred behavior. | Yes | Optional | Set to `free` only after approved AI validation; otherwise `off`. |
-| `OPENROUTER_FREE_MODEL` and AI bounds | Non-secret policy controls for primary/model limits. | Yes | Optional | Git-reviewed with cost review. |
-| `OPENROUTER_FALLBACK_MODELS` and `AI_MAX_FALLBACK_PRICE` | Explicit paid fallback allowlist and prompt/completion ceiling. | Yes | Optional | Absent unless exact models and current pricing are approved. |
+| `AI_MODE` | Enables privacy-first routing. | Yes | Optional | Set to `privacy` only after approved route validation; otherwise `off`. |
+| `OPENROUTER_PRIVACY_MODEL`, `OPENROUTER_PRIVACY_PROVIDER`, and `AI_MAX_PRIVACY_PRICE` | Pinned privacy route and prompt/completion ceiling. | Yes | Optional | Git-reviewed as one policy; all are required together. |
 | Zalo/Telegram test credentials | Test-bot operation. | Yes | Only for connection/delivery smoke | Use test bots only; rotate at provider on exposure. |
 
 Session digest and token-encryption material derive from `CALENOTE_MASTER_KEY`;
@@ -45,12 +44,13 @@ encrypted D1 data, not deployment bootstrap secrets.
 
 ## Staging AI policy
 
-The recommended initial policy is `AI_MODE=free`, `OPENROUTER_FREE_MODEL=openrouter/free`,
-strict JSON schema, `require_parameters=true`, `data_collection=deny`,
-`zdr=true`, no tools/plugins/web search, and bounded input/output/timeout
-values. A paid fallback remains disabled until a specific current model and
-prompt/completion price ceiling are reviewed and approved. `max_price.request`
-is not a substitute for token pricing.
+The recommended initial policy is `AI_MODE=privacy` with an exact, reviewed
+ZDR model/endpoint and `AI_MAX_PRIVACY_PRICE`; it requires strict JSON schema,
+`require_parameters=true`, `data_collection=deny`, `zdr=true`, no
+tools/plugins/web search, and bounded input/output/timeout values. The free
+router is disabled until a safe/redacted route has independently proven ZDR
+eligibility. Generic paid fallback is disabled. `max_price.request` is not a
+substitute for prompt/completion token pricing.
 
 ## D1 migration readiness
 
@@ -81,9 +81,9 @@ forward-only.
 7. Reminder smoke: create/list/cancel and one safe staging-channel delivery.
    Connection smoke: a staging Zalo/Telegram bot whose encrypted secret is not
    returned after persistence.
-8. AI smoke: deterministic reminder, ambiguous input, one controlled free
-   request, no paid fallback unless separately approved, and privacy-blocked
-   input with zero provider calls.
+8. AI smoke: deterministic reminder, one controlled pinned privacy-route
+   request, no free or paid fallback, and privacy-blocked input with zero
+   provider calls.
 9. Security smoke: cross-user ownership fencing, same-origin mutation checks,
    and no secret logging. Generic smoke tests never trigger real provider or
    AI side effects.

@@ -10,6 +10,17 @@
 
 **Spec:** User-approved Phase 5A directive, 2026-09-11.
 
+## 2026-09-14 privacy-first resolution
+
+This addendum supersedes the former free-preferred paid-fallback routing plan.
+The runtime now accepts only a fully specified `AI_MODE=privacy` route for
+user-derived content: exact model, exact endpoint, ZDR, data-collection deny,
+required parameters, strict schema, no automatic fallback, and an explicit
+prompt/completion ceiling. `openrouter/free` is disabled until a future
+safe/redacted boundary proves ZDR eligibility. Live request budget is exhausted
+at 5/5: three free ZDR rejections and two no-envelope candidate timeouts. Phase
+5A remains partial pending a newly authorized live budget.
+
 ## Global Constraints
 
 - Maximum five OpenRouter HTTP requests; synthetic data only.

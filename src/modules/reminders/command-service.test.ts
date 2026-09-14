@@ -107,7 +107,7 @@ interface Harness {
   store: D1InboundProcessorStore;
   sendText: ReturnType<typeof vi.fn<NonNullable<ProcessInboundDependencies["sendText"]>>>;
   addInbound(input: InboundInput): Promise<void>;
-  process(id: string, now?: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ReturnType<typeof processInbound>;
+  process(id: string, now?: number, intelligence?: { mode: "off" | "free" | "privacy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ReturnType<typeof processInbound>;
   claim(id: string, now?: number): Promise<ClaimedInboundMessage>;
 }
 
@@ -187,7 +187,7 @@ async function createHarness(): Promise<Harness> {
     );
   }
 
-  function dependencies(now: number, intelligence?: { mode: "off" | "free" | "economy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ProcessInboundDependencies {
+function dependencies(now: number, intelligence?: { mode: "off" | "free" | "privacy"; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] }): ProcessInboundDependencies {
     return {
       store,
       keyring,
@@ -278,19 +278,19 @@ describe("bound reminder commands", () => {
     await expect(harness.process("openrouter-confirm-repeat", processingAt + 3)).resolves.toEqual({ status: "REJECTED" });
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
   });
-  it("admits a cheap fallback proposal only through the existing confirmation authority", async () => {
+  it("fails closed rather than admitting an unapproved paid fallback proposal", async () => {
     const harness = await createHarness();
     const transport = vi.fn()
       .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: "PROPOSED", title: "Fallback", scheduledAt: processingAt + 60_000, timezone, confidence: 0.5 }) } }] }), { status: 200 }));
-    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", freeModel: "openrouter/free", fallbackModels: ["cheap/one"], maxFallbackAttempts: 1, maxFallbackPrice: 0.01, timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, transport);
+    const gateway = createOpenRouterGateway({ mode: "free", apiKey: "test", freeModel: "openrouter/free", timeoutMs: 1_000, maxInputChars: 1_800, maxOutputTokens: 128 }, transport);
     await harness.addInbound({ id: "fallback-assisted", text: "nhắc tôi một việc mơ hồ" });
-    await expect(harness.process("fallback-assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "DRAFT_CREATED" });
-    expect(transport).toHaveBeenCalledTimes(2);
+    await expect(harness.process("fallback-assisted", processingAt, { mode: "free", gateway })).resolves.toEqual({ status: "REJECTED" });
+    expect(transport).toHaveBeenCalledTimes(1);
     expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
     await harness.addInbound({ id: "fallback-confirm", text: "ok", receivedAt: receivedAt + 1 });
-    await expect(harness.process("fallback-confirm", processingAt + 2)).resolves.toEqual({ status: "CONFIRMED" });
-    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 1 });
+    await expect(harness.process("fallback-confirm", processingAt + 2)).resolves.toEqual({ status: "REJECTED" });
+    expect(harness.database.sqlite.prepare("SELECT COUNT(*) AS count FROM reminders").get()).toEqual({ count: 0 });
   });
   it("keeps deterministic, malformed, and unavailable OpenRouter results non-authoritative", async () => {
     const harness = await createHarness();

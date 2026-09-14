@@ -34,7 +34,7 @@ export function selectIntelligenceModel(
   models: readonly IntelligenceModel[],
 ): { status: "SELECTED"; model: IntelligenceModel } | { status: "UNAVAILABLE"; reason: "DISABLED" | "UNCONFIGURED" } {
   if (mode === "off") return { status: "UNAVAILABLE", reason: "DISABLED" };
-  const allowedClass = mode === "free" ? "FREE" : "ECONOMY";
+  const allowedClass = mode === "free" ? "FREE" : "PRIVACY";
   const model = models.find((candidate) => candidate.class === allowedClass);
   return model ? { status: "SELECTED", model } : { status: "UNAVAILABLE", reason: "UNCONFIGURED" };
 }
