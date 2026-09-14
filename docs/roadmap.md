@@ -1,5 +1,19 @@
 # Calenote roadmap
 
+## Trạng thái đã xác minh — 2026-09-14
+
+- Worker production `calenote` đã được triển khai tại
+  `https://calenote.iconiclogs.com` với D1, Queue, assets và cron bindings đã
+  review. Đây là bằng chứng DEPLOYED, không phải bằng chứng chat E2E.
+- Chẩn đoán tokenless xác nhận Worker production và control workers.dev đều
+  gọi được Zalo bằng GET HTTPS và hoàn tất TLS handshake được xác thực.
+- Chỉ đường POST Zalo dùng cho `getMe`/onboarding còn thất bại trước HTTP
+  response. Bước tiếp theo là review HTTP method/request-shape hoặc Zalo
+  provider-edge policy; chưa có proxy, relay, thay đổi TLS/DNS hay workaround
+  nào được áp dụng.
+- Telegram không nằm trong đợt chẩn đoán này. Kết nối bot, webhook, `/connect`
+  và delivery chat production vẫn chưa E2E_PROVEN.
+
 Roadmap này mô tả thứ tự phát triển, không phải danh sách capability hiện có. Tại thời điểm hiện tại, repo có khung onboarding/dashboard và xác minh token server-side; các mục còn lại là kế hoạch.
 
 ## Phase 0 — Foundation (hiện tại)

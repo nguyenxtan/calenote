@@ -31,8 +31,9 @@ implementation plans are audit evidence; they do not override this page.
 | Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
 | Public V2 experience | IMPLEMENTED, WIRED, TESTED | `/` is a static Landing V2 with no personal-data request; `/onboarding` retains the bounded, same-origin first-time bootstrap; `/login` retains the bot-delivered OTP flow; and `/dashboard` is a compatibility redirect to `/app/today`. Local fixture/headless-browser capture is local test evidence only. Google OAuth is NOT_IMPLEMENTED / DEFERRED. |
 | V2 authenticated app screens | IMPLEMENTED, WIRED, TESTED | `/app/today`, `/app/calendar`, `/app/inbox`, `/app/reminders`, `/app/connections`, `/app/activity`, and `/app/settings` confirm a session before requesting personal data. Connections exposes only Telegram/Zalo safe metadata; Settings uses read-only profile data and supported preferences. Activity is an authenticated read-only projection over existing audit persistence, scoped by `actor_user_id`, newest-first, bounded to 50 allowlisted events, and exposes only `action` plus `createdAt`—never raw audit payload. Local fixture/headless-browser capture is test evidence only, not staging or production evidence. |
-| Production origin and webhook | PLANNED | The reviewed source has not been DEPLOYED; no production webhook is configured. |
-| Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. |
+| Production origin | DEPLOYED | `calenote` is deployed at `https://calenote.iconiclogs.com` with the reviewed production D1, Queue, assets, cron, and secret bindings. Deployment does not by itself prove a provider journey. |
+| Zalo production transport | IMPLEMENTED, WIRED, TESTED, DEPLOYED | Controlled tokenless diagnostics proved the production Worker can make a simple Zalo HTTPS GET and an authorized TLS handshake. The real Zalo `getMe` POST path remains blocked before an HTTP response, so bot activation, webhook registration, and chat delivery are not E2E_PROVEN. |
+| Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. Telegram live behavior has not been investigated in this evidence set. |
 
 ## Worker runtime
 
@@ -48,6 +49,10 @@ The scheduled handler runs three independent bounded lanes via
 redrive login-code delivery. A Worker rollback does not roll back D1 or Queue
 state; deployment/runbook evidence is therefore required before a production
 claim.
+
+Historical one-time egress diagnostics were guarded by expired scheduled-time
+windows. They have no public debug route, make no further calls, and the
+temporary workers.dev control Worker used for comparison has been deleted.
 
 ## Data, channel, and Web boundaries
 
@@ -103,14 +108,21 @@ NOT_DEPLOYED; no remote deployment occurred.
 
 ## What is not proven
 
-The product is not DEPLOYED. It has not connected a real production Zalo bot,
-Telegram bot, custom domain, D1 database, Queue, or webhook. It has not sent a
-real reminder to a private chat, so chat E2E is not E2E_PROVEN. Local provider
-mocks and static page visual tests are useful, but are not production proof.
+The product is DEPLOYED, but that is not provider end-to-end evidence. A
+production Zalo token works in the independently controlled local probe, while
+the Worker-side Zalo `getMe` POST has failed before any upstream HTTP response.
+Simple Zalo GET and raw TLS handshake diagnostics succeed in both the deployed
+custom-domain Worker and a now-deleted isolated workers.dev control. The
+remaining proven boundary is therefore Zalo POST/request-shape or provider-edge
+policy; no workaround has been applied. Zalo bot activation, webhook
+registration, private `/connect`, inbound processing, reminder delivery, and
+all Telegram live behavior remain not E2E_PROVEN.
 
 ## Next bounded phases
 
-1. Prepare controlled live OpenRouter validation and staging only after explicit authorization.
-2. Add Gmail authorization only after the Source/Action model is stable.
-3. Keep optional intelligence provider-agnostic and disabled by default;
+1. Review the proven Zalo POST/request-shape or provider-edge policy boundary
+   before authorizing any provider workaround or product behavior change.
+2. Prepare controlled live OpenRouter validation and staging only after explicit authorization.
+3. Add Gmail authorization only after the Source/Action model is stable.
+4. Keep optional intelligence provider-agnostic and disabled by default;
    deterministic parsing remains the core path.

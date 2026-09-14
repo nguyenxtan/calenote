@@ -1,5 +1,20 @@
 # Calenote Cloudflare deployment model
 
+## Current production evidence
+
+The canonical Worker `calenote` is deployed at
+`https://calenote.iconiclogs.com` using immutable Worker versions. This proves
+the reviewed Worker, production D1/Queue bindings, assets, cron, and secret
+binding are live; it does not prove any provider workflow.
+
+On 2026-09-14, bounded tokenless diagnostics proved that both the deployed
+custom-domain Worker and an isolated, subsequently deleted workers.dev control
+could complete a simple Zalo HTTPS GET and an authorized TLS handshake. Earlier
+Zalo POST probes failed before an upstream HTTP response. Treat this as a
+Zalo POST/request-shape or provider-edge-policy review item, not a reason to
+change TLS, DNS, provider credentials, or egress controls without explicit
+authorization.
+
 ## Operating model
 
 Git-managed `wrangler.jsonc`, migrations, and GitHub Actions workflows are the

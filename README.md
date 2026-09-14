@@ -13,10 +13,11 @@ liên kết chat riêng bằng `/connect`, parser nhắc hẹn tiếng Việt c�
 nhận, Reminder/Delivery, Queue, Cron và dashboard quản lý lịch cá nhân. Web
 được xuất tĩnh và Worker phục vụ cả UI lẫn API cùng origin.
 
-Tất cả bằng chứng hiện tại là local code/test. Chưa DEPLOYED lên
-`https://calenote.iconiclogs.com`, chưa cấu hình webhook production, và chưa
-có bằng chứng E2E từ một cuộc chat riêng thật. Xem [current state](docs/architecture/current-state.md)
-để biết ranh giới bằng chứng chính xác.
+Worker production đã DEPLOYED tại `https://calenote.iconiclogs.com`. Tuy vậy,
+Zalo `getMe` POST từ Worker hiện vẫn bị chặn trước upstream HTTP response;
+webhook, một cuộc chat riêng thật, và delivery reminder chưa E2E_PROVEN. Xem
+[current state](docs/architecture/current-state.md) để biết ranh giới bằng
+chứng chính xác.
 
 ## Chạy local
 
