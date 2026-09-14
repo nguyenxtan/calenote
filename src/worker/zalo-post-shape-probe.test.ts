@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  ZALO_POST_SHAPE_PROBE_WINDOW_START_MS,
   runZaloPostRequestShapeProbes,
   type ZaloPostRequestShapeProbeEvent,
 } from "./zalo-post-shape-probe";
 
 describe("one-time Zalo POST RequestInit delta probes", () => {
+  it("keeps the retry window after tail observation is connected", () => {
+    expect(ZALO_POST_SHAPE_PROBE_WINDOW_START_MS).toBe(Date.parse("2026-09-14T07:50:00.000Z"));
+  });
+
   it("removes exactly one current-transport option per tokenless probe without reading response bodies", async () => {
     const events: ZaloPostRequestShapeProbeEvent[] = [];
     const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
