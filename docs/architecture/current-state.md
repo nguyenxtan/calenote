@@ -32,7 +32,7 @@ implementation plans are audit evidence; they do not override this page.
 | Public V2 experience | IMPLEMENTED, WIRED, TESTED | `/` is a static Landing V2 with no personal-data request; `/onboarding` retains the bounded, same-origin first-time bootstrap; `/login` retains the bot-delivered OTP flow; and `/dashboard` is a compatibility redirect to `/app/today`. Local fixture/headless-browser capture is local test evidence only. Google OAuth is NOT_IMPLEMENTED / DEFERRED. |
 | V2 authenticated app screens | IMPLEMENTED, WIRED, TESTED | `/app/today`, `/app/calendar`, `/app/inbox`, `/app/reminders`, `/app/connections`, `/app/activity`, and `/app/settings` confirm a session before requesting personal data. Connections exposes only Telegram/Zalo safe metadata; Settings uses read-only profile data and supported preferences. Activity is an authenticated read-only projection over existing audit persistence, scoped by `actor_user_id`, newest-first, bounded to 50 allowlisted events, and exposes only `action` plus `createdAt`—never raw audit payload. Local fixture/headless-browser capture is test evidence only, not staging or production evidence. |
 | Production origin | DEPLOYED | `calenote` is deployed at `https://calenote.iconiclogs.com` with the reviewed production D1, Queue, assets, cron, and secret bindings. Deployment does not by itself prove a provider journey. |
-| Zalo production transport | IMPLEMENTED, WIRED, TESTED, DEPLOYED | Controlled tokenless diagnostics proved the production Worker can make a simple Zalo HTTPS GET and an authorized TLS handshake. The real Zalo `getMe` POST path remains blocked before an HTTP response, so bot activation, webhook registration, and chat delivery are not E2E_PROVEN. |
+| Zalo production transport | IMPLEMENTED, WIRED, TESTED, DEPLOYED | Controlled tokenless diagnostics proved simple Zalo HTTPS GET and authorized TLS handshake. A generic JSON POST and Zalo invalid-token POST shapes B/C/D returned HTTP 200; only exact current request shape E (JSON body, `Accept`/`Content-Type`, `redirect: error`, and 8s signal) failed before a response. The proven category is `CALENOTE_REQUEST_INIT_COMBINATION`; no transport behavior has changed and bot activation, webhook registration, and chat delivery are not E2E_PROVEN. |
 | Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. Telegram live behavior has not been investigated in this evidence set. |
 
 ## Worker runtime
@@ -51,7 +51,7 @@ state; deployment/runbook evidence is therefore required before a production
 claim.
 
 Historical one-time egress diagnostics were guarded by expired scheduled-time
-windows. They have no public debug route, make no further calls, and the
+windows. They have no public debug route and make no further calls. The
 temporary workers.dev control Worker used for comparison has been deleted.
 
 ## Data, channel, and Web boundaries
@@ -112,16 +112,20 @@ The product is DEPLOYED, but that is not provider end-to-end evidence. A
 production Zalo token works in the independently controlled local probe, while
 the Worker-side Zalo `getMe` POST has failed before any upstream HTTP response.
 Simple Zalo GET and raw TLS handshake diagnostics succeed in both the deployed
-custom-domain Worker and a now-deleted isolated workers.dev control. The
-remaining proven boundary is therefore Zalo POST/request-shape or provider-edge
-policy; no workaround has been applied. Zalo bot activation, webhook
-registration, private `/connect`, inbound processing, reminder delivery, and
-all Telegram live behavior remain not E2E_PROVEN.
+custom-domain Worker and a now-deleted isolated workers.dev control. A bounded
+tokenless POST matrix then proved `CALENOTE_REQUEST_INIT_COMBINATION`: generic
+JSON POST and Zalo B/C/D request shapes returned HTTP 200, while only exact
+current request shape E failed before a response. This does not yet identify
+which member of the combined init is incompatible, and no workaround or product
+behavior change has been applied. Zalo bot activation, webhook registration,
+private `/connect`, inbound processing, reminder delivery, and all Telegram live
+behavior remain not E2E_PROVEN.
 
 ## Next bounded phases
 
-1. Review the proven Zalo POST/request-shape or provider-edge policy boundary
-   before authorizing any provider workaround or product behavior change.
+1. Review the proven `CALENOTE_REQUEST_INIT_COMBINATION` boundary; isolate its
+   members in a separately authorized non-secret experiment before changing
+   provider transport behavior.
 2. Prepare controlled live OpenRouter validation and staging only after explicit authorization.
 3. Add Gmail authorization only after the Source/Action model is stable.
 4. Keep optional intelligence provider-agnostic and disabled by default;

@@ -10,10 +10,12 @@ binding are live; it does not prove any provider workflow.
 On 2026-09-14, bounded tokenless diagnostics proved that both the deployed
 custom-domain Worker and an isolated, subsequently deleted workers.dev control
 could complete a simple Zalo HTTPS GET and an authorized TLS handshake. Earlier
-Zalo POST probes failed before an upstream HTTP response. Treat this as a
-Zalo POST/request-shape or provider-edge-policy review item, not a reason to
-change TLS, DNS, provider credentials, or egress controls without explicit
-authorization.
+The bounded tokenless POST matrix subsequently narrowed the remaining evidence
+to `CALENOTE_REQUEST_INIT_COMBINATION`: generic JSON POST and Zalo request
+shapes B/C/D received HTTP 200, while only exact current request shape E failed
+before a response. Treat this as a request-init member-isolation review item,
+not a reason to change TLS, DNS, provider credentials, or egress controls
+without explicit authorization.
 
 ## Operating model
 

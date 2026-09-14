@@ -7,10 +7,12 @@
   review. Đây là bằng chứng DEPLOYED, không phải bằng chứng chat E2E.
 - Chẩn đoán tokenless xác nhận Worker production và control workers.dev đều
   gọi được Zalo bằng GET HTTPS và hoàn tất TLS handshake được xác thực.
-- Chỉ đường POST Zalo dùng cho `getMe`/onboarding còn thất bại trước HTTP
-  response. Bước tiếp theo là review HTTP method/request-shape hoặc Zalo
-  provider-edge policy; chưa có proxy, relay, thay đổi TLS/DNS hay workaround
-  nào được áp dụng.
+- Matrix POST tokenless đã thu hẹp lỗi thành
+  `CALENOTE_REQUEST_INIT_COMBINATION`: generic JSON POST và Zalo shapes B/C/D
+  trả HTTP 200, còn chỉ exact shape E hiện tại (JSON body, `Accept`/
+  `Content-Type`, `redirect: error`, 8s signal) thất bại trước response. Cần
+  tách từng thành phần init bằng thử nghiệm được phê duyệt riêng; chưa có proxy,
+  relay, thay đổi TLS/DNS hay workaround nào được áp dụng.
 - Telegram không nằm trong đợt chẩn đoán này. Kết nối bot, webhook, `/connect`
   và delivery chat production vẫn chưa E2E_PROVEN.
 

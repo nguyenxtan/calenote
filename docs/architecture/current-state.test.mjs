@@ -17,7 +17,8 @@ test("current-state records implemented Worker lanes and honest evidence boundar
 
   assert.match(document, /Production origin.*DEPLOYED/iu);
   assert.match(document, /Zalo production transport.*not E2E_PROVEN/iu);
-  assert.match(document, /Telegram live behavior.*not E2E_PROVEN/iu);
+  assert.match(document, /CALENOTE_REQUEST_INIT_COMBINATION/iu);
+  assert.match(document, /Telegram live\s+behavior.*not E2E_PROVEN/iu);
   assert.match(document, /chưa.*E2E|not.*E2E/iu);
   assert.match(document, /Presentation preferences.*IMPLEMENTED, WIRED, TESTED/iu);
   assert.match(document, /V2 authenticated app screens.*IMPLEMENTED, WIRED, TESTED/iu);
