@@ -19,7 +19,8 @@
     }
   },
   "vars": {
-    "APP_ORIGIN": "https://calenote.iconiclogs.com"
+    "APP_ORIGIN": "https://calenote.iconiclogs.com",
+    "CALENOTE_RUNTIME_ENVIRONMENT": "production"
   },
   "secrets": {
     "required": ["CALENOTE_MASTER_KEY"]

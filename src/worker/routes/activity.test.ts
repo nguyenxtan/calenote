@@ -18,6 +18,7 @@ function context(): ExecutionContext {
 function environment(): Env {
   return {
     APP_ORIGIN: origin,
+    CALENOTE_RUNTIME_ENVIRONMENT: "production",
     ASSETS: { fetch: vi.fn(async () => new Response("asset")) },
   } as unknown as Env;
 }

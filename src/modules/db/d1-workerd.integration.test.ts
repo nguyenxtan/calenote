@@ -63,6 +63,7 @@ function executionContext(): ExecutionContext {
 function workerEnvironment(db: D1Database): Env {
   return {
     APP_ORIGIN: "https://calenote.iconiclogs.com",
+    CALENOTE_RUNTIME_ENVIRONMENT: "production",
     CALENOTE_MASTER_KEY: MASTER,
     DB: db,
     JOBS: { send: vi.fn(async () => undefined) },

@@ -21,7 +21,6 @@ import {
 } from "@/modules/reminders/api-service";
 import {
   assertRuntimeReady,
-  CANONICAL_APP_ORIGIN,
   createWebhookOperations,
   createAuthOperations,
   createActionsOperations,
@@ -32,6 +31,7 @@ import {
   createRemindersOperations,
   ServiceUnavailableError,
 } from "./composition-root";
+import { resolveRuntimeOriginPolicy } from "./origin-policy";
 import {
   ActionChannelUnavailableError,
   ActionDecisionConflictError,
@@ -176,9 +176,14 @@ export function createRouter(options: RouterOptions = {}) {
   return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     void ctx;
     const pathname = new URL(request.url).pathname;
+    const runtimeOrigin = pathname.startsWith("/api/")
+      ? resolveRuntimeOriginPolicy(env as unknown as Record<string, unknown>, request)
+      : null;
+    const appOrigin = runtimeOrigin?.appOrigin;
     if (request.method === "GET" && pathname === "/api/health") {
       try {
-        await assertRuntimeReady(env);
+        if (!appOrigin) throw new ServiceUnavailableError();
+        await assertRuntimeReady(env, appOrigin);
         return jsonResponse({ ok: true, service: "calenote" });
       } catch {
         return jsonResponse(
@@ -205,18 +210,18 @@ export function createRouter(options: RouterOptions = {}) {
     }
 
     try {
+      if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
-        if (env.APP_ORIGIN !== CANONICAL_APP_ORIGIN) throw new ServiceUnavailableError();
-        return await handleRequestLoginCode(request, env.APP_ORIGIN, () => authOperationsFactory(env));
+        return await handleRequestLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/auth/verify-code") {
-        return await handleVerifyLoginCode(request, env.APP_ORIGIN, () => authOperationsFactory(env));
+        return await handleVerifyLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/auth/logout") {
-        return await handleLogout(request, env.APP_ORIGIN, () => authOperationsFactory(env));
+        return await handleLogout(request, appOrigin!, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/onboarding") {
-        return await handleOnboarding(request, env.APP_ORIGIN, () => onboardingOperationsFactory(env));
+        return await handleOnboarding(request, appOrigin!, () => onboardingOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
@@ -235,10 +240,10 @@ export function createRouter(options: RouterOptions = {}) {
       }
       if (request.method === "GET" && pathname === "/api/activity") return await handleListActivity(request, () => activityOperationsFactory(env));
       if (request.method === "POST" && pathname === "/api/reminders") {
-        return await handleCreateReminder(request, env.APP_ORIGIN, () => remindersOperationsFactory(env));
+        return await handleCreateReminder(request, appOrigin!, () => remindersOperationsFactory(env));
       }
       if (request.method === "PATCH" && pathname === "/api/preferences") {
-        return await handleUpdatePreferences(request, env.APP_ORIGIN, () => preferencesOperationsFactory(env));
+        return await handleUpdatePreferences(request, appOrigin!, () => preferencesOperationsFactory(env));
       }
       const reminderMatch = request.method === "DELETE"
         ? /^\/api\/reminders\/([^/]+)$/u.exec(pathname)
@@ -246,7 +251,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (reminderMatch) {
         return await handleCancelReminder(
           request,
-          env.APP_ORIGIN,
+          appOrigin!,
           reminderMatch[1],
           () => remindersOperationsFactory(env),
         );
@@ -257,8 +262,8 @@ export function createRouter(options: RouterOptions = {}) {
       if (actionDecisionMatch) {
         const [, candidateId, decision] = actionDecisionMatch;
         return await (decision === "approve"
-          ? handleApproveAction(request, env.APP_ORIGIN, candidateId, () => actionsOperationsFactory(env))
-          : handleRejectAction(request, env.APP_ORIGIN, candidateId, () => actionsOperationsFactory(env)));
+          ? handleApproveAction(request, appOrigin!, candidateId, () => actionsOperationsFactory(env))
+          : handleRejectAction(request, appOrigin!, candidateId, () => actionsOperationsFactory(env)));
       }
       const connectMatch = request.method === "POST"
         ? /^\/api\/connections\/([A-Za-z0-9_-]{1,128})\/connect-code$/u.exec(pathname)
@@ -266,7 +271,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (connectMatch) {
         return await handleConnectCodeRotation(
           request,
-          env.APP_ORIGIN,
+          appOrigin!,
           connectMatch[1],
           () => connectionsOperationsFactory(env),
         );
@@ -277,7 +282,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (retryMatch) {
         return await handleWebhookRetry(
           request,
-          env.APP_ORIGIN,
+          appOrigin!,
           retryMatch[1],
           () => connectionsOperationsFactory(env),
         );

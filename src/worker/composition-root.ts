@@ -48,8 +48,9 @@ import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { parseOpenRouterRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { PRODUCTION_APP_ORIGIN } from "./origin-policy";
 
-export const CANONICAL_APP_ORIGIN = "https://calenote.iconiclogs.com";
+export const CANONICAL_APP_ORIGIN = PRODUCTION_APP_ORIGIN;
 
 export class ServiceUnavailableError extends Error {
   constructor() {
@@ -60,8 +61,7 @@ export class ServiceUnavailableError extends Error {
 
 function assertRuntimeBindingShapes(env: Env): void {
   if (
-    env.APP_ORIGIN !== CANONICAL_APP_ORIGIN
-    || typeof env.DB !== "object" || env.DB === null
+    typeof env.DB !== "object" || env.DB === null
     || typeof env.DB.prepare !== "function" || typeof env.DB.batch !== "function"
     || typeof env.JOBS !== "object" || env.JOBS === null
     || typeof env.JOBS.send !== "function"
@@ -70,9 +70,10 @@ function assertRuntimeBindingShapes(env: Env): void {
   ) throw new ServiceUnavailableError();
 }
 
-export async function assertRuntimeReady(env: Env): Promise<void> {
+export async function assertRuntimeReady(env: Env, appOrigin: string): Promise<void> {
   try {
     assertRuntimeBindingShapes(env);
+    if (env.APP_ORIGIN !== appOrigin) throw new ServiceUnavailableError();
     await createKeyring(env.CALENOTE_MASTER_KEY);
   } catch {
     throw new ServiceUnavailableError();

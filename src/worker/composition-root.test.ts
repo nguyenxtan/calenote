@@ -7,6 +7,7 @@ const masterKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 function environment(): Env {
   return {
     APP_ORIGIN: "https://calenote.iconiclogs.com",
+    CALENOTE_RUNTIME_ENVIRONMENT: "production",
     CALENOTE_MASTER_KEY: masterKey,
     ASSETS: { fetch: vi.fn() },
     DB: { prepare: vi.fn(), batch: vi.fn() },

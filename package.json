@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:worker": "wrangler dev",
+    "dev:local": "wrangler dev --local --local-protocol https --port 8787 --var APP_ORIGIN:https://localhost:8787 --var CALENOTE_RUNTIME_ENVIRONMENT:local",
     "build": "next build",
     "deploy": "wrangler deploy",
     "start": "next start",

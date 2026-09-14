@@ -30,6 +30,7 @@ function environment() {
     assets,
     env: {
       APP_ORIGIN: ORIGIN,
+      CALENOTE_RUNTIME_ENVIRONMENT: "production",
       ASSETS: assets,
     } as unknown as Env,
   };
@@ -170,6 +171,7 @@ describe("Task 8 exact browser API contract", () => {
     const assets = { fetch: vi.fn(async () => new Response("asset")) };
     const env = {
       APP_ORIGIN: ORIGIN,
+      CALENOTE_RUNTIME_ENVIRONMENT: "production",
       CALENOTE_MASTER_KEY: MASTER_KEY,
       DB: { prepare, batch: vi.fn() },
       JOBS: { send },

@@ -39,7 +39,7 @@ function context(): ExecutionContext {
   return { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
 }
 
-function environment() {
+function environment(overrides: Record<string, unknown> = {}) {
   const assets = { fetch: vi.fn(async () => new Response("asset", { status: 404 })) };
   const database = { prepare: vi.fn(), batch: vi.fn() };
   const jobs = { send: vi.fn() };
@@ -50,9 +50,11 @@ function environment() {
     env: {
       ASSETS: assets,
       APP_ORIGIN: "https://calenote.iconiclogs.com",
+      CALENOTE_RUNTIME_ENVIRONMENT: "production",
       CALENOTE_MASTER_KEY: master,
       DB: database,
       JOBS: jobs,
+      ...overrides,
     } as unknown as Env,
   };
 }
@@ -205,6 +207,34 @@ describe("Worker router", () => {
       },
     });
     expect(fixture.database.prepare).not.toHaveBeenCalled();
+  });
+
+  it("allows exact local HTTPS in explicit local mode and retains the origin guard", async () => {
+    const localOrigin = "https://localhost:8787";
+    const ops = operations();
+    const { env } = environment({ APP_ORIGIN: localOrigin, CALENOTE_RUNTIME_ENVIRONMENT: "local" });
+    const accepted = await createRouter({ operations: async () => ops })(
+      new Request(`${localOrigin}/api/onboarding`, {
+        method: "POST",
+        headers: { origin: localOrigin, "content-type": "application/json" },
+        body: JSON.stringify(onboardingBody()),
+      }),
+      env,
+      context(),
+    );
+    expect(accepted.status).toBe(201);
+    expect(accepted.headers.get("set-cookie")).toBe(success.sessionCookie);
+
+    const rejected = await createRouter({ operations: async () => ops })(
+      new Request(`${localOrigin}/api/onboarding`, {
+        method: "POST",
+        headers: { origin: "https://evil.example", "content-type": "application/json" },
+        body: JSON.stringify(onboardingBody()),
+      }),
+      env,
+      context(),
+    );
+    expect(rejected.status).toBe(403);
   });
 
   it("does not expose the deleted public token verification route or touch assets", async () => {
