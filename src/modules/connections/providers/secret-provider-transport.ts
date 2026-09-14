@@ -201,7 +201,7 @@ export async function executeProviderRequest(
 
   const response = await fetcher(url.toString(), {
     method: "POST",
-    redirect: "error",
+    redirect: input.provider === "zalo" ? "manual" : "error",
     signal,
     headers: {
       accept: "application/json",

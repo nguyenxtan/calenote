@@ -177,6 +177,19 @@ describe("secret-aware provider transport", () => {
     expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/botredacted/getMe", expect.objectContaining({ method: "POST", redirect: "error", body: "{}", signal: expect.any(AbortSignal) }));
   });
 
+  it("uses a non-following manual redirect policy for Zalo while retaining the absolute deadline", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await expect(executeProviderRequest({ provider: "zalo", hostname: "bot-api.zaloplatforms.com", path: "/botredacted/getMe", operation: "getMe" }, fetcher)).resolves.toEqual({ statusCode: 200, body: '{"ok":true}' });
+
+    expect(fetcher).toHaveBeenCalledWith("https://bot-api.zaloplatforms.com/botredacted/getMe", expect.objectContaining({
+      method: "POST",
+      redirect: "manual",
+      body: "{}",
+      signal: expect.any(AbortSignal),
+    }));
+  });
+
   it.each(["@attacker.example/x", "//attacker.example/x", "https://attacker.example/x", "relative"]) ("rejects hostile or relative path %s before fetch", async (path) => {
     const fetcher = vi.fn();
     await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path, operation: "getMe" }, fetcher)).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
