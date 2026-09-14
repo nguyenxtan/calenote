@@ -24,6 +24,19 @@ function installFetch(connections: Response) {
   return fetcher;
 }
 
+function installRecoveryFetch(initial: unknown, refresh: unknown, mutations: Record<string, Response>) {
+  let connectionReads = 0;
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+    if (path === "/api/session") return json({ data: { user } });
+    if (path === "/api/connections" && (init?.method === undefined || init.method === "GET")) return json({ data: { connections: connectionReads++ === 0 ? initial : refresh } });
+    if (init?.method === "POST" && mutations[path]) return mutations[path];
+    return json({ error: { code: "NOT_FOUND", message: "Không tìm thấy." } }, 404);
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+
 function installSettingsFetch() { const fetcher=vi.fn(async (input:string|URL|Request, init?:RequestInit)=>{const path=typeof input==="string"?input:input instanceof URL?input.pathname:new URL(input.url).pathname;if(path==="/api/session")return json({data:{user}});if(path==="/api/preferences"&&init?.method==="PATCH")return json({data:{preferences:{addressStyle:"ong_tui",customDisplayName:null,tone:"friendly"}}});if(path==="/api/preferences")return json({data:{preferences:{addressStyle:"ban",customDisplayName:null,tone:"concise"}}});return json({error:{code:"NOT_FOUND",message:"no"}},404);});vi.stubGlobal("fetch",fetcher);return fetcher; }
 
 describe("FinalScreenExperience connections", () => {
@@ -47,6 +60,74 @@ describe("FinalScreenExperience connections", () => {
     expect(screen.getByText("Cần kiểm tra")).toHaveAttribute("data-state", "WEBHOOK_FAILED");
     expect(screen.getByText("Kết nối cần được xác minh lại.")).toBeVisible();
     expect(screen.getByRole("link", { name: "Kết nối" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("retries a failed webhook once and reloads the canonical connection state", async () => {
+    const publicId = "F".repeat(22);
+    const fetcher = installRecoveryFetch(
+      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "WEBHOOK_FAILED" }],
+      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" }],
+      { [`/api/connections/${publicId}/webhook-retry`]: json({ data: {} }) },
+    );
+    const interaction = userEvent.setup();
+    render(<FinalScreenExperience screen="connections" />);
+
+    await interaction.click(await screen.findByRole("button", { name: "Mở lại đường nhận tin" }));
+    await screen.findByText("Đường nhận tin đã được mở lại. Hãy tạo mã kết nối mới.");
+    expect(screen.getByRole("button", { name: "Tạo mã kết nối" })).toBeVisible();
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/connections/${publicId}/webhook-retry`,
+      expect.objectContaining({ method: "POST", credentials: "same-origin", body: "{}" }),
+    );
+  });
+
+  it("shows and copies a rotated private-chat connect command for an unbound connection", async () => {
+    const publicId = "U".repeat(22);
+    const command = "/connect ABCDEFGHJKLMNPQRSTUVWXYZ23";
+    const fetcher = installRecoveryFetch(
+      [{ publicId, provider: "telegram", displayName: "Telegram", handle: null, state: "ACTIVE_UNBOUND" }],
+      [{ publicId, provider: "telegram", displayName: "Telegram", handle: null, state: "ACTIVE_UNBOUND" }],
+      { [`/api/connections/${publicId}/connect-code`]: json({ data: { connectCommand: command, expiresAt: Date.now() + 600_000 } }) },
+    );
+    const interaction = userEvent.setup();
+    render(<FinalScreenExperience screen="connections" />);
+
+    await interaction.click(await screen.findByRole("button", { name: "Tạo mã kết nối" }));
+    expect(await screen.findByText(command)).toBeVisible();
+    expect(screen.getByText("Chỉ gửi mã này trong cuộc trò chuyện riêng với đúng bot.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sao chép mã kết nối" })).toBeVisible();
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/connections/${publicId}/connect-code`,
+      expect.objectContaining({ method: "POST", credentials: "same-origin", body: "{}" }),
+    );
+  });
+
+  it("keeps bound connections healthy and suspended connections out of webhook retry", async () => {
+    installFetch(json({ data: { connections: [
+      { publicId: "B".repeat(22), provider: "telegram", displayName: "Bot đang hoạt động", handle: null, state: "ACTIVE_BOUND" },
+      { publicId: "S".repeat(22), provider: "zalo", displayName: "Cần xem lại", handle: null, state: "SUSPENDED" },
+    ] } }));
+    render(<FinalScreenExperience screen="connections" />);
+
+    expect(await screen.findByText("Đã kết nối")).toBeVisible();
+    expect(screen.getByText("Thông tin xác thực của bot cần được xem lại.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Mở lại đường nhận tin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tạo mã kết nối" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a failed webhook visible and reports the safe backend error when retry fails", async () => {
+    const publicId = "E".repeat(22);
+    installRecoveryFetch(
+      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "WEBHOOK_FAILED" }],
+      [],
+      { [`/api/connections/${publicId}/webhook-retry`]: json({ error: { code: "WEBHOOK_RETRY_FAILED", message: "Chưa thể mở lại đường nhận tin." } }, 502) },
+    );
+    const interaction = userEvent.setup();
+    render(<FinalScreenExperience screen="connections" />);
+
+    await interaction.click(await screen.findByRole("button", { name: "Mở lại đường nhận tin" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa thể mở lại đường nhận tin.");
+    expect(screen.getByRole("button", { name: "Mở lại đường nhận tin" })).toBeVisible();
   });
 
   it("renders a truthful supported-provider empty state", async () => {
