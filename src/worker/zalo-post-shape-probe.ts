@@ -2,7 +2,7 @@ import { classifySafeFetchFailure } from "./zalo-egress-final-probe";
 
 const ZALO_INVALID_GET_ME_URL = "https://bot-api.zaloplatforms.com/botINVALID/getMe";
 const POST_PROBE_TIMEOUT_MS = 8_000;
-export const ZALO_POST_SHAPE_PROBE_WINDOW_START_MS = Date.parse("2026-09-14T07:32:00.000Z");
+export const ZALO_POST_SHAPE_PROBE_WINDOW_START_MS = Date.parse("2026-09-14T07:42:00.000Z");
 const ZALO_POST_SHAPE_PROBE_WINDOW_END_MS = ZALO_POST_SHAPE_PROBE_WINDOW_START_MS + 60_000;
 
 type SafeExceptionName = "AbortError" | "Error" | "TimeoutError" | null;
@@ -61,6 +61,16 @@ const probes = [
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
       redirect: "error",
+      signal: AbortSignal.timeout(POST_PROBE_TIMEOUT_MS),
+    }),
+  },
+  {
+    probe_name: "POST_PROBE_K_REDIRECT_MANUAL",
+    createInit: () => ({
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+      redirect: "manual",
       signal: AbortSignal.timeout(POST_PROBE_TIMEOUT_MS),
     }),
   },

@@ -44,7 +44,14 @@ describe("one-time Zalo POST RequestInit delta probes", () => {
       redirect: "error",
       signal: expect.any(AbortSignal),
     });
-    expect(events).toHaveLength(5);
+    expect(fetcher).toHaveBeenNthCalledWith(6, url, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    });
+    expect(events).toHaveLength(6);
     for (const event of events) {
       expect(event).toMatchObject({
         response_received: true,
@@ -71,7 +78,7 @@ describe("one-time Zalo POST RequestInit delta probes", () => {
       (event) => events.push(event),
     );
 
-    expect(events).toHaveLength(5);
+    expect(events).toHaveLength(6);
     expect(events.every((event) => (
       event.safe_exception_name === "Error"
       && event.safe_failure_category === "NETWORK_CONNECTION_LOST"
@@ -81,12 +88,12 @@ describe("one-time Zalo POST RequestInit delta probes", () => {
     expect(serialized).not.toContain("/botINVALID/getMe");
   });
 
-  it("creates a fresh timeout only for the four delta variants that retain the signal", async () => {
+  it("creates a fresh timeout only for the five variants that retain the signal", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
 
     await runZaloPostRequestShapeProbes(async () => new Response(null, { status: 204 }), () => {});
 
-    expect(timeout).toHaveBeenCalledTimes(4);
+    expect(timeout).toHaveBeenCalledTimes(5);
     expect(timeout).toHaveBeenCalledWith(8_000);
   });
 });
