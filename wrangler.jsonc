@@ -29,7 +29,7 @@
     {
       "binding": "DB",
       "database_name": "calenote-production",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "c11403c7-1ce6-4254-8b83-f7066d93fb5f",
       "migrations_dir": "migrations"
     }
   ],
