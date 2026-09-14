@@ -113,6 +113,56 @@ export type ProviderRequestExecutor = (
   input: ProviderRequest,
 ) => Promise<RawProviderResponse>;
 
+export interface ProviderTransportDiagnosticEvent {
+  provider: BotProvider;
+  operation: ProviderRequest["operation"];
+  hostname: ProviderRequest["hostname"];
+  elapsed_ms: number;
+  upstream_http_status: number | null;
+  response_received: boolean;
+  response_parse_reached: boolean;
+  timeout: boolean;
+  abort: boolean;
+  safe_exception_name: "AbortError" | "Error" | "ProviderOperationError" | "ProviderResponseLimitError" | "ProviderVerificationError" | "TimeoutError" | null;
+  safe_failure_category: "ABORT" | "FETCH_EXCEPTION" | "RESPONSE_LIMIT" | "RESPONSE_PARSE_FAILURE" | "TIMEOUT" | "UPSTREAM_HTTP_FAILURE" | null;
+}
+
+export type ProviderTransportDiagnosticLogger = (event: ProviderTransportDiagnosticEvent) => void;
+
+function defaultProviderTransportDiagnosticLogger(event: ProviderTransportDiagnosticEvent): void {
+  if (event.provider === "zalo" && event.operation === "getMe") {
+    console.log(JSON.stringify(event));
+  }
+}
+
+function safeExceptionName(error: unknown): ProviderTransportDiagnosticEvent["safe_exception_name"] {
+  if (error instanceof ProviderResponseLimitError) return "ProviderResponseLimitError";
+  if (error instanceof ProviderVerificationError) return "ProviderVerificationError";
+  if (error instanceof ProviderOperationError) return "ProviderOperationError";
+  if (!(error instanceof Error)) return null;
+  if (error.name === "TimeoutError") return "TimeoutError";
+  if (error.name === "AbortError") return "AbortError";
+  return "Error";
+}
+
+function failureCategory(error: unknown): NonNullable<ProviderTransportDiagnosticEvent["safe_failure_category"]> {
+  if (error instanceof ProviderResponseLimitError) return "RESPONSE_LIMIT";
+  if (error instanceof Error && error.name === "TimeoutError") return "TIMEOUT";
+  if (error instanceof Error && error.name === "AbortError") return "ABORT";
+  return "FETCH_EXCEPTION";
+}
+
+function emitDiagnostic(
+  logger: ProviderTransportDiagnosticLogger,
+  event: ProviderTransportDiagnosticEvent,
+): void {
+  try {
+    logger(event);
+  } catch {
+    // Diagnostics never alter provider request behavior.
+  }
+}
+
 export function createSuppressedProviderContext(): Context {
   return suppressTracing(context.active());
 }
@@ -214,10 +264,20 @@ export async function postSecretProviderJson(
   input: ProviderRequest,
   executor: ProviderRequestExecutor = executeProviderRequest,
   tracer: Tracer = trace.getTracer("calenote.provider-transport"),
+  diagnosticLogger: ProviderTransportDiagnosticLogger = defaultProviderTransportDiagnosticLogger,
 ): Promise<unknown> {
   if (input.hostname !== allowedHostname[input.provider]) {
     throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
   }
+
+  const startedAt = performance.now();
+  let upstreamHttpStatus: number | null = null;
+  let responseReceived = false;
+  let responseParseReached = false;
+  let timeout = false;
+  let abort = false;
+  let exceptionName: ProviderTransportDiagnosticEvent["safe_exception_name"] = null;
+  let failure: ProviderTransportDiagnosticEvent["safe_failure_category"] = null;
 
   return tracer.startActiveSpan(
     `provider.${input.provider}.${input.operation}`,
@@ -236,22 +296,28 @@ export async function postSecretProviderJson(
           createSuppressedProviderContext(),
           () => executor(input),
         );
+        responseReceived = true;
+        upstreamHttpStatus = response.statusCode;
         span.setAttribute("http.response.status_code", response.statusCode);
 
         const responseBytes = new TextEncoder().encode(response.body).byteLength;
         if (responseBytes > MAX_RESPONSE_BYTES) {
+          failure = "RESPONSE_LIMIT";
           throw responseLimitFailure(input);
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
+          failure = "UPSTREAM_HTTP_FAILURE";
           throw safeOperationFailure(input, response);
         }
 
         try {
+          responseParseReached = true;
           const payload: unknown = JSON.parse(response.body);
           span.setStatus({ code: SpanStatusCode.OK });
           return payload;
         } catch {
+          failure = "RESPONSE_PARSE_FAILURE";
           if (input.operation === "getMe") {
             throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
           }
@@ -263,6 +329,12 @@ export async function postSecretProviderJson(
           code: SpanStatusCode.ERROR,
           message: "Provider request failed",
         });
+        exceptionName = safeExceptionName(error);
+        if (failure === null) {
+          failure = failureCategory(error);
+        }
+        timeout = failure === "TIMEOUT";
+        abort = failure === "ABORT";
         if (error instanceof ProviderResponseLimitError) {
           throw responseLimitFailure(input);
         }
@@ -281,6 +353,19 @@ export async function postSecretProviderJson(
 
         throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
       } finally {
+        emitDiagnostic(diagnosticLogger, {
+          provider: input.provider,
+          operation: input.operation,
+          hostname: input.hostname,
+          elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+          upstream_http_status: upstreamHttpStatus,
+          response_received: responseReceived,
+          response_parse_reached: responseParseReached,
+          timeout,
+          abort,
+          safe_exception_name: exceptionName,
+          safe_failure_category: failure,
+        });
         span.end();
       }
     },

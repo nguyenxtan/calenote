@@ -13,6 +13,8 @@ import {
   createSuppressedProviderContext,
   executeProviderRequest,
   postSecretProviderJson,
+  type ProviderTransportDiagnosticEvent,
+  type ProviderTransportDiagnosticLogger,
   type ProviderRequestExecutor,
 } from "../providers/secret-provider-transport";
 
@@ -64,6 +66,111 @@ async function captureTransportFailure(
 }
 
 describe("secret-aware provider transport", () => {
+  it("emits a Zalo getMe diagnostic with only safe transport metadata", async () => {
+    const token = "zalo-token-never-log";
+    const responseBodyMarker = "zalo-response-never-log";
+    const diagnostics: ProviderTransportDiagnosticEvent[] = [];
+    const logger: ProviderTransportDiagnosticLogger = (event) => diagnostics.push(event);
+
+    await expect(postSecretProviderJson(
+      {
+        provider: "zalo",
+        hostname: "bot-api.zaloplatforms.com",
+        path: `/bot${token}/getMe`,
+        operation: "getMe",
+      },
+      async () => ({
+        statusCode: 200,
+        body: JSON.stringify({ ok: true, result: { marker: responseBodyMarker } }),
+      }),
+      undefined,
+      logger,
+    )).resolves.toMatchObject({ ok: true });
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      provider: "zalo",
+      operation: "getMe",
+      hostname: "bot-api.zaloplatforms.com",
+      upstream_http_status: 200,
+      response_received: true,
+      response_parse_reached: true,
+      timeout: false,
+      abort: false,
+      safe_exception_name: null,
+      safe_failure_category: null,
+    });
+    expect(diagnostics[0].elapsed_ms).toEqual(expect.any(Number));
+    expect(Object.keys(diagnostics[0]).sort()).toEqual([
+      "abort", "elapsed_ms", "hostname", "operation", "provider", "response_parse_reached",
+      "response_received", "safe_exception_name", "safe_failure_category", "timeout",
+      "upstream_http_status",
+    ]);
+    expect(JSON.stringify(diagnostics)).not.toContain(token);
+    expect(JSON.stringify(diagnostics)).not.toContain(responseBodyMarker);
+  });
+
+  it.each([
+    ["timeout", new DOMException("token-and-path", "TimeoutError"), true, false, "TimeoutError", "TIMEOUT"],
+    ["abort", new DOMException("token-and-path", "AbortError"), false, true, "AbortError", "ABORT"],
+    ["fetch exception", new Error("token-and-path"), false, false, "Error", "FETCH_EXCEPTION"],
+  ] as const)("classifies a %s diagnostic without leaking exception contents", async (_label, failure, timeout, abort, exceptionName, category) => {
+    const token = "zalo-token-never-log";
+    const diagnostics: ProviderTransportDiagnosticEvent[] = [];
+
+    await expect(postSecretProviderJson(
+      {
+        provider: "zalo",
+        hostname: "bot-api.zaloplatforms.com",
+        path: `/bot${token}/getMe`,
+        operation: "getMe",
+      },
+      async () => { throw failure; },
+      undefined,
+      (event) => diagnostics.push(event),
+    )).rejects.toEqual(new ProviderVerificationError("PROVIDER_UNAVAILABLE"));
+
+    expect(diagnostics).toEqual([expect.objectContaining({
+      provider: "zalo",
+      operation: "getMe",
+      hostname: "bot-api.zaloplatforms.com",
+      upstream_http_status: null,
+      response_received: false,
+      response_parse_reached: false,
+      timeout,
+      abort,
+      safe_exception_name: exceptionName,
+      safe_failure_category: category,
+    })]);
+    expect(JSON.stringify(diagnostics)).not.toContain(token);
+    expect(JSON.stringify(diagnostics)).not.toContain("token-and-path");
+  });
+
+  it("observes HTTP status and parse failure without logging the provider response body", async () => {
+    const responseBodyMarker = "zalo-response-never-log";
+    const diagnostics: ProviderTransportDiagnosticEvent[] = [];
+
+    await expect(postSecretProviderJson(
+      {
+        provider: "zalo",
+        hostname: "bot-api.zaloplatforms.com",
+        path: "/botredacted/getMe",
+        operation: "getMe",
+      },
+      async () => ({ statusCode: 200, body: responseBodyMarker }),
+      undefined,
+      (event) => diagnostics.push(event),
+    )).rejects.toEqual(new ProviderVerificationError("INVALID_PROVIDER_RESPONSE"));
+
+    expect(diagnostics).toEqual([expect.objectContaining({
+      upstream_http_status: 200,
+      response_received: true,
+      response_parse_reached: true,
+      safe_failure_category: "RESPONSE_PARSE_FAILURE",
+    })]);
+    expect(JSON.stringify(diagnostics)).not.toContain(responseBodyMarker);
+  });
+
   it("uses Worker fetch with a fixed host, POST JSON, redirects disabled, and an absolute deadline", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path: "/botredacted/getMe", operation: "getMe" }, fetcher)).resolves.toEqual({ statusCode: 200, body: '{"ok":true}' });
