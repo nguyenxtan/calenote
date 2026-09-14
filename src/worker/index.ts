@@ -16,6 +16,7 @@ import {
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
+import { isZaloEgressProbeWindow, runZaloEgressIsolationProbes } from "./zalo-egress-probe";
 
 function isCanonicalOpaqueId(value: unknown): value is string {
   if (typeof value !== "string" || value.length !== 22) return false;
@@ -156,6 +157,12 @@ export default {
   },
   async scheduled(controller, env, ctx) {
     void ctx;
-    await runScheduledWork(controller, await createRuntimeOperations(env));
+    const operations = await createRuntimeOperations(env);
+    await Promise.all([
+      runScheduledWork(controller, operations),
+      ...(isZaloEgressProbeWindow(controller.scheduledTime)
+        ? [runZaloEgressIsolationProbes()]
+        : []),
+    ]);
   },
 } satisfies ExportedHandler<Env>;
