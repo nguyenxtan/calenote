@@ -20,3 +20,7 @@
 *.tsbuildinfo
 .DS_Store
 pnpm-debug.log*
+
+# local-only design input and generated review evidence
+/_design-input/
+/artifacts/
