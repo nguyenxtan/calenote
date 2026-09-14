@@ -1,6 +1,8 @@
 const PROBE_TIMEOUT_MS = 8_000;
 export const ZALO_EGRESS_PROBE_WINDOW_START_MS = Date.parse("2026-09-14T05:56:00.000Z");
 const ZALO_EGRESS_PROBE_WINDOW_END_MS = ZALO_EGRESS_PROBE_WINDOW_START_MS + 60_000;
+export const CALENOTE_EGRESS_ISOLATION_V2_WINDOW_START_MS = Date.parse("2026-09-14T06:16:00.000Z");
+const CALENOTE_EGRESS_ISOLATION_V2_WINDOW_END_MS = CALENOTE_EGRESS_ISOLATION_V2_WINDOW_START_MS + 60_000;
 
 const probes = [
   { probe_name: "PROBE_A", hostname: "example.com", method: "GET", url: "https://example.com/" },
@@ -25,6 +27,16 @@ export interface ZaloEgressProbeEvent {
 }
 
 export type ZaloEgressProbeLogger = (event: ZaloEgressProbeEvent) => void;
+
+export interface CalenoteEgressIsolationV2ProbeEvent {
+  probe_name: "PROBE_D" | "PROBE_E";
+  response_received: boolean;
+  http_status: number | null;
+  safe_exception_name: "AbortError" | "Error" | "TimeoutError" | null;
+  safe_error_classification: ZaloEgressProbeEvent["safe_error_classification"];
+}
+
+export type CalenoteEgressIsolationV2ProbeLogger = (event: CalenoteEgressIsolationV2ProbeEvent) => void;
 
 function safeExceptionName(error: unknown): ZaloEgressProbeEvent["safe_exception_name"] {
   const name = typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
@@ -54,7 +66,7 @@ function classifyFetchFailure(error: unknown): NonNullable<ZaloEgressProbeEvent[
   return "UNKNOWN_FETCH_FAILURE";
 }
 
-function emitSafely(logger: ZaloEgressProbeLogger, event: ZaloEgressProbeEvent): void {
+function emitSafely<T>(logger: (event: T) => void, event: T): void {
   try {
     logger(event);
   } catch {
@@ -62,13 +74,49 @@ function emitSafely(logger: ZaloEgressProbeLogger, event: ZaloEgressProbeEvent):
   }
 }
 
-function defaultLogger(event: ZaloEgressProbeEvent): void {
+function defaultLogger(event: ZaloEgressProbeEvent | CalenoteEgressIsolationV2ProbeEvent): void {
   console.log(JSON.stringify(event));
 }
 
 export function isZaloEgressProbeWindow(scheduledTime: number): boolean {
   return scheduledTime >= ZALO_EGRESS_PROBE_WINDOW_START_MS
     && scheduledTime < ZALO_EGRESS_PROBE_WINDOW_END_MS;
+}
+
+export function isCalenoteEgressIsolationV2Window(scheduledTime: number): boolean {
+  return scheduledTime >= CALENOTE_EGRESS_ISOLATION_V2_WINDOW_START_MS
+    && scheduledTime < CALENOTE_EGRESS_ISOLATION_V2_WINDOW_END_MS;
+}
+
+export async function runCalenoteEgressIsolationV2Probes(
+  fetcher: typeof fetch = fetch,
+  logger: CalenoteEgressIsolationV2ProbeLogger = defaultLogger,
+): Promise<void> {
+  const probes: ReadonlyArray<readonly [CalenoteEgressIsolationV2ProbeEvent["probe_name"], () => Promise<Response>]> = [
+    ["PROBE_D", () => fetcher("https://example.com/")],
+    ["PROBE_E", () => fetcher("https://example.com/", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })],
+  ];
+
+  for (const [probeName, run] of probes) {
+    let event: CalenoteEgressIsolationV2ProbeEvent = {
+      probe_name: probeName,
+      response_received: false,
+      http_status: null,
+      safe_exception_name: null,
+      safe_error_classification: null,
+    };
+    try {
+      const response = await run();
+      event = { ...event, response_received: true, http_status: response.status };
+    } catch (error) {
+      event = {
+        ...event,
+        safe_exception_name: safeExceptionName(error),
+        safe_error_classification: classifyFetchFailure(error),
+      };
+    }
+    emitSafely(logger, event);
+  }
 }
 
 export async function runZaloEgressIsolationProbes(

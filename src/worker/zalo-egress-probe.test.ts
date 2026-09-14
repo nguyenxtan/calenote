@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  runCalenoteEgressIsolationV2Probes,
   runZaloEgressIsolationProbes,
+  type CalenoteEgressIsolationV2ProbeEvent,
   type ZaloEgressProbeEvent,
 } from "./zalo-egress-probe";
 
@@ -63,5 +65,31 @@ describe("one-time Zalo egress isolation probes", () => {
       { timeout: false, abort: true, category: "UNKNOWN_FETCH_FAILURE" },
       { timeout: false, abort: true, category: "UNKNOWN_FETCH_FAILURE" },
     ]);
+  });
+
+  it("uses a bare fetch and a signal-only fetch while emitting no raw fetch failure", async () => {
+    const errorMarker = "raw-fetch-failure-never-log";
+    const events: CalenoteEgressIsolationV2ProbeEvent[] = [];
+    const fetcher = vi.fn(async () => { throw new Error(errorMarker); });
+
+    await runCalenoteEgressIsolationV2Probes(fetcher, (event) => events.push(event));
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, "https://example.com/");
+    expect(fetcher).toHaveBeenNthCalledWith(2, "https://example.com/", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(Object.keys(event).sort()).toEqual([
+        "http_status", "probe_name", "response_received", "safe_error_classification", "safe_exception_name",
+      ]);
+      expect(event).toMatchObject({
+        response_received: false,
+        http_status: null,
+        safe_exception_name: "Error",
+        safe_error_classification: "UNKNOWN_FETCH_FAILURE",
+      });
+    }
+    expect(JSON.stringify(events)).not.toContain(errorMarker);
   });
 });

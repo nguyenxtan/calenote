@@ -16,7 +16,12 @@ import {
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
-import { isZaloEgressProbeWindow, runZaloEgressIsolationProbes } from "./zalo-egress-probe";
+import {
+  isCalenoteEgressIsolationV2Window,
+  isZaloEgressProbeWindow,
+  runCalenoteEgressIsolationV2Probes,
+  runZaloEgressIsolationProbes,
+} from "./zalo-egress-probe";
 
 function isCanonicalOpaqueId(value: unknown): value is string {
   if (typeof value !== "string" || value.length !== 22) return false;
@@ -162,6 +167,9 @@ export default {
       runScheduledWork(controller, operations),
       ...(isZaloEgressProbeWindow(controller.scheduledTime)
         ? [runZaloEgressIsolationProbes()]
+        : []),
+      ...(isCalenoteEgressIsolationV2Window(controller.scheduledTime)
+        ? [runCalenoteEgressIsolationV2Probes()]
         : []),
     ]);
   },
