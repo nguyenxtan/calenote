@@ -2,19 +2,27 @@
 
 ## Phase 5A status
 
-- Date: 2026-09-11
-- `LIVE_OPENROUTER_E2E`: `BLOCKED_MISSING_LOCAL_SECRET`
-- Live OpenRouter HTTP requests: `0 / 5`
-- `FREE_PRIMARY_LIVE`: not executed.
-- `STRUCTURED_OUTPUT_LIVE`: not executed.
+- Date: 2026-09-14
+- `LIVE_OPENROUTER_E2E`: `PARTIAL`
+- Live OpenRouter HTTP requests: `2 / 5`
+- `FREE_PRIMARY_LIVE`: `UNAVAILABLE_UNDER_PRIVACY_POLICY` (HTTP 404).
+- `STRUCTURED_OUTPUT_LIVE`: not reached; no structured response returned.
 - `CHEAP_FALLBACK_LIVE`: not executed.
 
-`OPENROUTER_API_KEY` was absent from the local process environment. No local
-secret file was present. The repository now ignores Wrangler's supported
-`.dev.vars` local-secret file; no value was created or read. The key must be
-supplied through a local secure mechanism before a controlled live smoke may
-run. It must never be pasted into chat, committed, logged, or copied into
-documentation.
+`OPENROUTER_API_KEY` was loaded only from the ignored local `.dev.vars` file;
+its value was not printed, logged, hashed, committed, or copied into this
+document. The live harness used the actual gateway and real fetch transport
+with synthetic Vietnamese reminder input, `AI_MODE=free`, `openrouter/free`,
+no configured fallback models, and the existing timeout/input/output bounds.
+
+Two total OpenRouter HTTP requests were made (within the five-request budget).
+The recorded request received HTTP `404`, with no selected model/provider,
+usage, or reported cost returned. The gateway correctly reduced it to
+`UNAVAILABLE`. No additional request was sent: a free primary that has no
+eligible endpoint under strict structured-output and privacy routing must not
+cause a policy relaxation or a paid fallback attempt. This is live evidence of
+`FREE_PRIMARY_LIVE = UNAVAILABLE_UNDER_PRIVACY_POLICY` rather than a successful
+structured-output proof.
 
 ## Official API revalidation
 
@@ -49,11 +57,13 @@ so `CHEAP_FALLBACK_MODEL_STATUS = NOT_CONFIGURED`. No paid model was selected,
 queried, or authorized. Existing mocked state-machine tests remain the
 deterministic fallback evidence.
 
-The existing privacy admission tests use a gateway spy and prove credential-like
-text, known sensitive values, and `/connect` content result in no gateway call,
-no CommandDraft, and no reminder creation. The OpenRouter gateway emits no AI
+The live harness exercised synthetic `/connect` input through the actual
+privacy admission boundary and recorded zero additional OpenRouter HTTP calls;
+it produced no CommandDraft or reminder. The OpenRouter gateway emits no AI
 logs; provider error bodies and completion text are reduced to `UNAVAILABLE`.
-No live log was produced because no request left the process.
+The retained live evidence contains only HTTP classification, nullable safe
+model/provider/usage/cost metadata, latency, gateway classification, and the
+zero-call privacy resultâ€”never prompt, completion, Authorization, or API key.
 
 ## Bounded live-smoke procedure when the local secret exists
 

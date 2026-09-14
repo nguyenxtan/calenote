@@ -99,10 +99,11 @@ allowlisted fallbacks. Every request sends `allow_fallbacks=false`,
 does not enable plugins, tools, or web search. It emits no logs; provider error
 bodies and malformed completion content are reduced to a safe `UNAVAILABLE`
 result rather than being propagated. Runtime evidence uses injected mocked
-transport only: `LIVE_OPENROUTER_E2E` is BLOCKED_MISSING_LOCAL_SECRET and
-`PRODUCTION_AI` is NOT_DEPLOYED. Phase 5A revalidated the OpenRouter request
-contract and corrected the token-priced fallback ceiling; no live request or
-remote deployment has occurred.
+transport only: `LIVE_OPENROUTER_E2E` is PARTIAL: two bounded synthetic free
+requests reached OpenRouter but received HTTP 404 under strict structured-output
+and privacy routing, so no model output was admitted. `PRODUCTION_AI` is
+NOT_DEPLOYED. Phase 5A revalidated the OpenRouter request contract and
+corrected the token-priced fallback ceiling; no remote deployment has occurred.
 
 ## What is not proven
 
