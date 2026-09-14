@@ -9,7 +9,13 @@ import {
 import { requireSession, revokeSession, SessionAuthError } from "@/modules/auth/session";
 import type { BotProvider, WebhookRegistration } from "@/modules/connections/contracts";
 import { setTelegramWebhook } from "@/modules/connections/providers/telegram";
-import { setZaloWebhook } from "@/modules/connections/providers/zalo";
+import {
+  deleteZaloWebhook,
+  getZaloUpdates,
+  getZaloWebhookInfo,
+  setZaloWebhook,
+  testZaloWebhook,
+} from "@/modules/connections/providers/zalo";
 import { verifyBotToken } from "@/modules/connections/verify-bot-token";
 import { D1OnboardingStore } from "@/modules/db/onboarding-store";
 import { D1UserPreferencesStore } from "@/modules/db/preferences-store";
@@ -18,6 +24,7 @@ import { D1SessionStore } from "@/modules/db/session-store";
 import { D1InboundProcessorStore, processInbound } from "@/modules/inbound/processor";
 import { acceptWebhookMessage, D1InboundWebhookStore } from "@/modules/inbound/webhook";
 import { onboard, retryWebhook as retryConnectionWebhook, rotateConnectCode, RateLimitExceededError } from "@/modules/onboarding/service";
+import { runZaloPollDiagnostic } from "@/modules/onboarding/zalo-poll-diagnostic";
 import { consumeRateLimit } from "@/modules/rate-limit/service";
 import { deliverReminder } from "@/modules/reminders/delivery";
 import { D1ReminderApiStore } from "@/modules/reminders/infrastructure/d1/api-store";
@@ -151,6 +158,19 @@ export async function createConnectionsOperations(env: Env): Promise<Connections
     listConnections: (userId) => dashboardStore.listConnections(userId),
     rotateConnectCode: (input) => rotateConnectCode(input, { store, keyring, rateLimitStore }),
     retryWebhook: (input) => retryConnectionWebhook(input, { store, keyring, rateLimitStore, registerWebhook, appOrigin: env.APP_ORIGIN }),
+    runZaloPollDiagnostic: (input) => runZaloPollDiagnostic(input, {
+      store,
+      keyring,
+      rateLimitStore,
+      appOrigin: env.APP_ORIGIN,
+      provider: {
+        getWebhookInfo: getZaloWebhookInfo,
+        deleteWebhook: deleteZaloWebhook,
+        getUpdates: getZaloUpdates,
+        setWebhook: setZaloWebhook,
+        testWebhook: testZaloWebhook,
+      },
+    }),
   };
 }
 

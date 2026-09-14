@@ -12,6 +12,7 @@ import { ProviderOperationError, ProviderVerificationError } from "../provider-e
 import { providerFailureFromHttpStatus } from "./provider-http";
 
 const REQUEST_TIMEOUT_MS = 8_000;
+const MAX_REQUEST_TIMEOUT_MS = 25_000;
 const MAX_RESPONSE_BYTES = 64 * 1_024;
 
 class ProviderResponseLimitError extends Error {
@@ -170,7 +171,7 @@ export function createSuppressedProviderContext(): Context {
 export async function executeProviderRequest(
   input: ProviderRequest,
   fetcher: typeof fetch = fetch,
-  signal: AbortSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  signal?: AbortSignal,
 ): Promise<RawProviderResponse> {
   if (input.hostname !== allowedHostname[input.provider]) {
     throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
@@ -199,10 +200,14 @@ export async function executeProviderRequest(
     throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
   }
 
+  const timeoutMs = input.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > MAX_REQUEST_TIMEOUT_MS) {
+    throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+  }
   const response = await fetcher(url.toString(), {
     method: "POST",
     redirect: input.provider === "zalo" ? "manual" : "error",
-    signal,
+    signal: signal ?? AbortSignal.timeout(timeoutMs),
     headers: {
       accept: "application/json",
       "content-type": "application/json",

@@ -15,8 +15,9 @@ export interface ProviderRequest {
   provider: BotProvider;
   hostname: "bot-api.zaloplatforms.com" | "api.telegram.org";
   path: string;
-  operation: "getMe" | "setWebhook" | "sendMessage";
+  operation: "getMe" | "setWebhook" | "sendMessage" | "getWebhookInfo" | "deleteWebhook" | "getUpdates" | "testWebhook";
   body?: Record<string, unknown>;
+  timeoutMs?: number;
 }
 
 export type ProviderRequester = (input: ProviderRequest) => Promise<unknown>;

@@ -41,7 +41,14 @@ import {
   handleRejectAction,
 } from "./routes/actions";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
-import { handleConnectCodeRotation, handleListConnections, handleWebhookRetry, InvalidRequestError } from "./routes/connections";
+import {
+  handleConnectCodeRotation,
+  handleListConnections,
+  handleWebhookRetry,
+  handleZaloPollDiagnostic,
+  InvalidRequestError,
+} from "./routes/connections";
+import { ZaloPollDiagnosticError } from "@/modules/onboarding/zalo-poll-diagnostic";
 import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
@@ -121,6 +128,14 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
     return {
       code: error.code,
       message: error.message,
+      status: error.status,
+      retryAfter: error.retryAfterSeconds ?? undefined,
+    };
+  }
+  if (error instanceof ZaloPollDiagnosticError) {
+    return {
+      code: error.code,
+      message: "Không thể hoàn tất kiểm tra kết nối bot.",
       status: error.status,
       retryAfter: error.retryAfterSeconds ?? undefined,
     };
@@ -284,6 +299,17 @@ export function createRouter(options: RouterOptions = {}) {
           request,
           appOrigin!,
           retryMatch[1],
+          () => connectionsOperationsFactory(env),
+        );
+      }
+      const diagnosticMatch = request.method === "POST"
+        ? /^\/api\/connections\/([^/]+)\/zalo-poll-diagnostic$/u.exec(pathname)
+        : null;
+      if (diagnosticMatch) {
+        return await handleZaloPollDiagnostic(
+          request,
+          appOrigin!,
+          diagnosticMatch[1],
           () => connectionsOperationsFactory(env),
         );
       }

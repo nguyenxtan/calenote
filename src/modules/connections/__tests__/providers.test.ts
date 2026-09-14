@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderOperationError, ProviderVerificationError } from "../provider-error";
 import { parseTelegramWebhook, sendTelegramText, setTelegramWebhook, verifyTelegramBotToken } from "../providers/telegram";
-import { parseZaloWebhook, sendZaloText, setZaloWebhook, verifyZaloBotToken } from "../providers/zalo";
+import {
+  deleteZaloWebhook,
+  getZaloUpdates,
+  getZaloWebhookInfo,
+  parseZaloWebhook,
+  sendZaloText,
+  setZaloWebhook,
+  testZaloWebhook,
+  verifyZaloBotToken,
+} from "../providers/zalo";
 
 async function captureAdapterFailure(
   operation: () => Promise<unknown>,
@@ -26,6 +35,56 @@ async function captureAdapterFailure(
 }
 
 describe("Zalo Bot Platform adapter", () => {
+  it("maps polling diagnostics immediately to safe metadata without returning a raw update", async () => {
+    const token = "zalo-token-must-not-escape";
+    const messageText = "calenote-poll-test-must-not-escape";
+    const privateId = "private-chat-must-not-escape";
+    const userId = "provider-user-must-not-escape";
+    const requester = vi.fn(async () => ({
+      ok: true,
+      result: [{
+        event_name: "message.text.received",
+        message: {
+          text: messageText,
+          from: { id: userId },
+          chat: { id: privateId, chat_type: "PRIVATE" },
+        },
+      }],
+    }));
+
+    const result = await getZaloUpdates(token, { timeoutMs: 22_000 }, requester);
+
+    expect(result).toEqual({ updateReceived: true, eventName: "message.text.received", privateChat: true });
+    expect(requester).toHaveBeenCalledWith({
+      provider: "zalo",
+      hostname: "bot-api.zaloplatforms.com",
+      path: `/bot${token}/getUpdates`,
+      operation: "getUpdates",
+      body: { timeout: 22 },
+      timeoutMs: 25_000,
+    });
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [token, messageText, privateId, userId]) expect(serialized).not.toContain(forbidden);
+  });
+
+  it("keeps webhook comparison and test outcomes secret-free", async () => {
+    const token = "zalo-token-must-not-escape";
+    const expected = {
+      url: "https://calenote.iconiclogs.com/webhooks/zalo/AAAAAAAAAAAAAAAAAAAAAA/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
+      secretToken: "header-secret-must-not-escape",
+    };
+    const requester = vi.fn(async (request: { operation: string }) => {
+      if (request.operation === "getWebhookInfo") return { ok: true, result: { url: expected.url, updated_at: 1_800_000_000_000 } };
+      if (request.operation === "testWebhook") return { ok: true, result: { ok: true } };
+      return { ok: true, result: {} };
+    });
+
+    await expect(getZaloWebhookInfo(token, expected, requester)).resolves.toEqual({
+      configured: true, exactMatch: true, hostMatch: true, pathPrefixMatch: true,
+    });
+    await expect(deleteZaloWebhook(token, requester)).resolves.toBeUndefined();
+    await expect(testZaloWebhook(token, requester)).resolves.toEqual({ apiOk: true, resultOk: true });
+  });
   it("requests the official getMe operation and normalizes the bot profile", async () => {
     const token = "12345678:abc-xyz_789";
     const requester = vi.fn(async () => ({

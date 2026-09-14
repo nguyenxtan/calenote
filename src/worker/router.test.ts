@@ -92,6 +92,11 @@ function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
     listConnections: vi.fn(async () => []),
     rotateConnectCode: vi.fn(async () => ({ command: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 })),
     retryWebhook: vi.fn(),
+    runZaloPollDiagnostic: vi.fn(async () => ({
+      pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: false,
+      pollEventName: "NONE" as const, pollPrivateChat: false, webhookRestored: true,
+      restoredHostMatch: true, restoredPathPrefixMatch: true, restoreTestOk: true,
+    })),
     listReminders: vi.fn(async () => []),
     createReminder: vi.fn(),
     cancelReminder: vi.fn(async () => ({ cancelled: true as const })),
