@@ -11,7 +11,7 @@ export function parseOpenRouterRuntimeConfig(env: Partial<Record<"AI_MODE" | "OP
   // safe/redacted boundary must prove eligibility before this becomes READY.
   if (mode === "free") return { status: "UNAVAILABLE" };
   const number = (value: string | undefined, fallback: number, max: number) => { const parsed = value === undefined ? fallback : Number(value); return Number.isInteger(parsed) && parsed > 0 && parsed <= max ? parsed : null; };
-  const timeoutMs = number(env.AI_TIMEOUT_MS, 5_000, 30_000), maxInputChars = number(env.AI_MAX_INPUT_CHARS, 1_800, 10_000), maxOutputTokens = number(env.AI_MAX_OUTPUT_TOKENS, 256, 1_024);
+  const timeoutMs = number(env.AI_TIMEOUT_MS, 30_000, 30_000), maxInputChars = number(env.AI_MAX_INPUT_CHARS, 1_800, 10_000), maxOutputTokens = number(env.AI_MAX_OUTPUT_TOKENS, 256, 1_024);
   const primary = env.OPENROUTER_PRIVACY_MODEL;
   const privacyPrice = env.AI_MAX_PRIVACY_PRICE === undefined ? undefined : Number(env.AI_MAX_PRIVACY_PRICE);
   const validPrivacyPrice = privacyPrice !== undefined && Number.isFinite(privacyPrice) && privacyPrice > 0;

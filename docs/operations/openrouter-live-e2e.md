@@ -3,8 +3,9 @@
 ## Phase 5A status
 
 - Date: 2026-09-14
-- `LIVE_OPENROUTER_E2E`: `PARTIAL`
-- Live OpenRouter inference requests: `5 / 5`
+- `LIVE_OPENROUTER_E2E`: `PROVEN`
+- Live OpenRouter inference requests: `6` (`5` under the original budget,
+  then `1 / 2` under the separately authorized timeout-closure budget)
 - Raw prompts, completions, Authorization headers, and API keys: never retained.
 
 The first three synthetic requests used `AI_MODE=free` and `openrouter/free`.
@@ -21,10 +22,26 @@ Schema, `allow_fallbacks=false`, and a $1.50/M prompt/completion ceiling.
 
 Request four timed out at the existing 5-second runtime timeout before an HTTP
 response envelope. Request five repeated the identical policy and endpoint with
-the valid 15-second timeout configuration; it also timed out before an HTTP
-response envelope. No sixth request is authorized. Therefore no selected
-provider/model, usage, reported cost, structured output, or domain admission is
-claimed. Both attempts are recorded only as bounded transport timeouts.
+a 15-second gateway timeout and the same 15-second Vitest deadline; the test
+harness therefore ended before it could distinguish the gateway abort outcome
+from the harness deadline.
+
+Read-only ZDR endpoint metadata then showed `google-vertex/global/flex` at
+roughly 6.985 seconds p50 and 7.170 seconds p99 latency (at the time checked),
+making the former 5-second default too low. Privacy mode now defaults to the
+existing hard maximum of 30 seconds; `AI_TIMEOUT_MS` remains configurable only
+within that 30-second bound, and the gateway continues to abort its `fetch`
+through its `AbortController`.
+
+The first request under the separately authorized timeout-closure budget used
+the unchanged exact model, endpoint, ZDR policy, strict schema, and $1.50/M
+prompt/completion ceiling. It returned HTTP 200 in 7.667 seconds. Safe response
+metadata identified `google/gemini-3.5-flash-lite` and Google, included usage,
+and reported a cost of $0.00010145. The response passed the existing strict
+structured-output schema. The existing domain guard then rejected its semantic
+proposal rather than admitting a reminder, which is the required fail-closed
+outcome; no raw proposal was retained. A synthetic credential-like input made
+zero outbound HTTP calls. No second timeout-closure request was sent.
 
 ## Policy outcome
 
@@ -40,8 +57,8 @@ The gateway emits no provider logs and reduces failures or malformed output to
 `UNAVAILABLE`. The synthetic credential-like privacy admission test retains its
 zero-outbound-call evidence.
 
-## Next authorized live action
+## Outcome
 
-Do not send more OpenRouter requests under this Phase 5A budget. Review the
-provider timeout/availability evidence and explicitly authorize a fresh bounded
-live budget before further diagnosis or retrying the candidate.
+Phase 5A live transport, routing, strict-output validation, privacy admission,
+and semantic fail-closed behavior are proven. No deployment, Cloudflare
+mutation, remote migration, or production change occurred.
