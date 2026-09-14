@@ -234,6 +234,7 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
     findConnection: (provider, publicId) => store.findConnection(provider, publicId),
     webhookSecrets: (publicId) => keyring.webhookSecrets(publicId),
     constantTimeEqual: (left, right) => keyring.constantTimeEqual(left, right),
+    recordZaloWebhookDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     accept: ({ connection, message }) => acceptWebhookMessage(message, connection, {
       store,
       dispatchStore: new D1InboundDispatchStore(env.DB),

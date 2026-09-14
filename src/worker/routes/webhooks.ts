@@ -16,11 +16,24 @@ export interface WebhookRouteSecrets {
   headerSecret: string;
 }
 
+export interface ZaloWebhookAcceptanceDiagnostic {
+  provider: "zalo";
+  request_reached_worker: boolean;
+  route_matched: boolean;
+  connection_found: boolean;
+  path_secret_match: boolean;
+  secret_header_present: boolean;
+  secret_header_match: boolean;
+  body_parse_reached: boolean;
+  final_status: number;
+}
+
 export interface WebhookRouteDependencies {
   findConnection(provider: BotProvider, publicId: string): Promise<WebhookConnection | null>;
   webhookSecrets(publicId: string): Promise<WebhookRouteSecrets>;
   constantTimeEqual(left: string, right: string): boolean;
   accept(input: { connection: WebhookConnection; message: InboundTextMessage | null }): Promise<WebhookAcceptance>;
+  recordZaloWebhookDiagnostic?(diagnostic: ZaloWebhookAcceptanceDiagnostic): void;
 }
 
 const routePattern = /^\/webhooks\/(zalo|telegram)\/([A-Za-z0-9_-]{22})\/([A-Za-z0-9_-]{43})$/u;
@@ -44,39 +57,70 @@ function headerName(provider: BotProvider): string {
     : "X-Telegram-Bot-Api-Secret-Token";
 }
 
-function bodyErrorResponse(error: RequestBodyError): Response {
-  return new Response(null, { status: error.status });
-}
-
 export async function handleWebhook(
   request: Request,
   route: WebhookRouteMatch,
   dependencies: WebhookRouteDependencies,
 ): Promise<Response> {
-  const connection = await dependencies.findConnection(route.provider, route.publicId);
-  if (!connection) return new Response(null, { status: 404 });
+  const diagnostic = route.provider === "zalo"
+    ? {
+      provider: "zalo" as const,
+      request_reached_worker: true,
+      route_matched: true,
+      connection_found: false,
+      path_secret_match: false,
+      secret_header_present: false,
+      secret_header_match: false,
+      body_parse_reached: false,
+      final_status: 500,
+    }
+    : null;
+  const recordDiagnostic = (): void => {
+    if (!diagnostic) return;
+    try {
+      dependencies.recordZaloWebhookDiagnostic?.(diagnostic);
+    } catch {
+      // Diagnostics must never alter webhook authentication or status behavior.
+    }
+  };
+  const respond = (status: number): Response => {
+    if (diagnostic) {
+      diagnostic.final_status = status;
+      recordDiagnostic();
+    }
+    return new Response(null, { status });
+  };
 
-  const expected = await dependencies.webhookSecrets(connection.publicId);
-  if (!dependencies.constantTimeEqual(route.pathSecret, expected.pathSecret)) {
-    return new Response(null, { status: 404 });
-  }
-
-  const suppliedHeader = request.headers.get(headerName(route.provider)) || "A";
-  if (!dependencies.constantTimeEqual(suppliedHeader, expected.headerSecret)) {
-    return new Response(null, { status: 403 });
-  }
-
-  let payload: Record<string, unknown>;
   try {
-    payload = await readBoundedJson(request, 32 * 1_024, { timeoutMs: 5_000 });
+    const connection = await dependencies.findConnection(route.provider, route.publicId);
+    if (!connection) return respond(404);
+    if (diagnostic) diagnostic.connection_found = true;
+
+    const expected = await dependencies.webhookSecrets(connection.publicId);
+    if (!dependencies.constantTimeEqual(route.pathSecret, expected.pathSecret)) return respond(404);
+    if (diagnostic) diagnostic.path_secret_match = true;
+
+    const suppliedHeader = request.headers.get(headerName(route.provider));
+    if (diagnostic) diagnostic.secret_header_present = suppliedHeader !== null;
+    if (!dependencies.constantTimeEqual(suppliedHeader || "A", expected.headerSecret)) return respond(403);
+    if (diagnostic) diagnostic.secret_header_match = true;
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = await readBoundedJson(request, 32 * 1_024, { timeoutMs: 5_000 });
+      if (diagnostic) diagnostic.body_parse_reached = true;
+    } catch (error) {
+      if (error instanceof RequestBodyError) return respond(error.status);
+      throw error;
+    }
+
+    const message = connection.provider === "zalo"
+      ? parseZaloWebhook(payload)
+      : parseTelegramWebhook(payload);
+    const outcome = await dependencies.accept({ connection, message });
+    return respond(outcome.status);
   } catch (error) {
-    if (error instanceof RequestBodyError) return bodyErrorResponse(error);
+    recordDiagnostic();
     throw error;
   }
-
-  const message = connection.provider === "zalo"
-    ? parseZaloWebhook(payload)
-    : parseTelegramWebhook(payload);
-  const outcome = await dependencies.accept({ connection, message });
-  return new Response(null, { status: outcome.status });
 }

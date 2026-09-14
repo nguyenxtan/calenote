@@ -37,6 +37,52 @@ function dependencies(overrides: Partial<WebhookRouteDependencies> = {}): Webhoo
 }
 
 describe("webhook route authentication", () => {
+  it("records a Zalo-only, secret-free acceptance diagnostic for a rejected header", async () => {
+    const diagnostic = vi.fn();
+    const suppliedHeader = "header-secret-must-never-appear-in-diagnostics";
+    const payloadMarker = "body-must-never-appear-in-diagnostics";
+    const deps = dependencies({
+      findConnection: vi.fn(async () => ({ ...connection, provider: "zalo" as const })),
+      recordZaloWebhookDiagnostic: diagnostic,
+    });
+    const response = await handleWebhook(
+      request("zalo", { "X-Bot-Api-Secret-Token": suppliedHeader }, { marker: payloadMarker }),
+      { provider: "zalo", publicId, pathSecret },
+      deps,
+    );
+
+    expect(response.status).toBe(403);
+    expect(diagnostic).toHaveBeenCalledOnce();
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      request_reached_worker: true,
+      route_matched: true,
+      connection_found: true,
+      path_secret_match: true,
+      secret_header_present: true,
+      secret_header_match: false,
+      body_parse_reached: false,
+      final_status: 403,
+    });
+    const serialized = JSON.stringify(diagnostic.mock.calls[0][0]);
+    for (const forbidden of [publicId, pathSecret, headerSecret, suppliedHeader, payloadMarker, "https://"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("does not let a diagnostic sink alter Zalo webhook authentication", async () => {
+    const deps = dependencies({
+      findConnection: vi.fn(async () => ({ ...connection, provider: "zalo" as const })),
+      recordZaloWebhookDiagnostic: vi.fn(() => { throw new Error("diagnostic sink unavailable"); }),
+    });
+
+    await expect(handleWebhook(
+      request("zalo", { "X-Bot-Api-Secret-Token": "incorrect" }),
+      { provider: "zalo", publicId, pathSecret },
+      deps,
+    )).resolves.toMatchObject({ status: 403 });
+  });
+
   it("matches only the strict provider, 22-character public ID, and 43-character path secret", () => {
     expect(matchWebhookRoute(`/webhooks/telegram/${publicId}/${pathSecret}`)).toEqual({
       provider: "telegram",
