@@ -4,38 +4,61 @@ import {
   type ZaloPostRequestShapeProbeEvent,
 } from "./zalo-post-shape-probe";
 
-describe("one-time Zalo POST request-shape probes", () => {
-  it("uses the fixed generic and Zalo POST matrix without reading response bodies", async () => {
+describe("one-time Zalo POST RequestInit delta probes", () => {
+  it("removes exactly one current-transport option per tokenless probe without reading response bodies", async () => {
     const events: ZaloPostRequestShapeProbeEvent[] = [];
     const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
 
     await runZaloPostRequestShapeProbes(fetcher, (event) => events.push(event));
 
-    expect(fetcher).toHaveBeenNthCalledWith(1, "https://postman-echo.com/post", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: '{"probe":"calenote"}',
-    });
-    expect(fetcher).toHaveBeenNthCalledWith(2, "https://bot-api.zaloplatforms.com/botINVALID/getMe", { method: "POST" });
-    expect(fetcher).toHaveBeenNthCalledWith(3, "https://bot-api.zaloplatforms.com/botINVALID/getMe", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-    });
-    expect(fetcher).toHaveBeenNthCalledWith(4, "https://bot-api.zaloplatforms.com/botINVALID/getMe", {
-      method: "POST",
-      body: "{}",
-    });
-    expect(fetcher).toHaveBeenNthCalledWith(5, "https://bot-api.zaloplatforms.com/botINVALID/getMe", {
+    const url = "https://bot-api.zaloplatforms.com/botINVALID/getMe";
+    expect(fetcher).toHaveBeenNthCalledWith(1, url, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
       body: "{}",
+      redirect: "error",
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(2, url, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(3, url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(4, url, {
+      method: "POST",
+      headers: { accept: "application/json" },
+      body: "{}",
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(5, url, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
       redirect: "error",
       signal: expect.any(AbortSignal),
     });
     expect(events).toHaveLength(5);
     for (const event of events) {
-      expect(event).toMatchObject({ response_received: true, http_status: 204, safe_failure_category: null });
-      expect(Object.keys(event).sort()).toEqual(["http_status", "probe_name", "response_received", "safe_failure_category"]);
+      expect(event).toMatchObject({
+        response_received: true,
+        http_status: 204,
+        safe_exception_name: null,
+        safe_failure_category: null,
+      });
+      expect(Object.keys(event).sort()).toEqual([
+        "http_status",
+        "probe_name",
+        "response_received",
+        "safe_exception_name",
+        "safe_failure_category",
+      ]);
     }
   });
 
@@ -49,18 +72,21 @@ describe("one-time Zalo POST request-shape probes", () => {
     );
 
     expect(events).toHaveLength(5);
-    expect(events.every((event) => event.safe_failure_category === "NETWORK_CONNECTION_LOST")).toBe(true);
+    expect(events.every((event) => (
+      event.safe_exception_name === "Error"
+      && event.safe_failure_category === "NETWORK_CONNECTION_LOST"
+    ))).toBe(true);
     const serialized = JSON.stringify(events);
     expect(serialized).not.toContain(rawMarker);
     expect(serialized).not.toContain("/botINVALID/getMe");
   });
 
-  it("creates Probe E's timeout only when the scheduled matrix executes", async () => {
+  it("creates a fresh timeout only for the four delta variants that retain the signal", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
 
-    await runZaloPostRequestShapeProbes(async () => new Response(null, { status: 204 }));
+    await runZaloPostRequestShapeProbes(async () => new Response(null, { status: 204 }), () => {});
 
-    expect(timeout).toHaveBeenCalledOnce();
+    expect(timeout).toHaveBeenCalledTimes(4);
     expect(timeout).toHaveBeenCalledWith(8_000);
   });
 });
