@@ -17,6 +17,7 @@ import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
 import { isZaloEgressFinalProbeWindow, runZaloEgressFinalIsolationProbes } from "./zalo-egress-final-probe";
+import { isZaloPostShapeProbeWindow, runZaloPostRequestShapeProbes } from "./zalo-post-shape-probe";
 import {
   isCalenoteEgressIsolationV2Window,
   isZaloEgressProbeWindow,
@@ -174,6 +175,9 @@ export default {
         : []),
       ...(isZaloEgressFinalProbeWindow(controller.scheduledTime)
         ? [runZaloEgressFinalIsolationProbes()]
+        : []),
+      ...(isZaloPostShapeProbeWindow(controller.scheduledTime)
+        ? [runZaloPostRequestShapeProbes()]
         : []),
     ]);
   },
