@@ -116,7 +116,16 @@ function findReminderMarkers(text: string): TextSpan[] {
 
 function findReminderFillers(text: string): TextSpan[] {
   const fillers: TextSpan[] = [];
-  const pattern = /(^|\s)(nhớ)(?=\s|$)/giu;
+  const pattern = /(^|\s)(nhớ)(?=\s+nhắc(?:\s|$))/giu;
+  for (const match of text.matchAll(pattern)) {
+    fillers.push(capturedSpan(match, match[2]));
+  }
+  return fillers;
+}
+
+function findDateIntroductionFillers(text: string): TextSpan[] {
+  const fillers: TextSpan[] = [];
+  const pattern = /(^|\s)(vào)(?=\s+(?:hôm nay|ngày kia|mai|(?:ngày\s+)?\d{1,2}\/\d{1,2}))/giu;
   for (const match of text.matchAll(pattern)) {
     fillers.push(capturedSpan(match, match[2]));
   }
@@ -213,7 +222,8 @@ export function parseVietnameseReminder(
 
   const markers = findReminderMarkers(normalized);
   const fillers = findReminderFillers(normalized);
-  const title = extractTitle(normalized, [dates[0], time, ...markers, ...fillers]);
+  const dateFillers = findDateIntroductionFillers(normalized);
+  const title = extractTitle(normalized, [dates[0], time, ...markers, ...fillers, ...dateFillers]);
   if (title.length === 0) return { ok: false, code: "MISSING_TITLE" };
   if (title.length > MAX_REMINDER_TITLE_CODE_UNITS) {
     return { ok: false, code: "TITLE_TOO_LONG" };

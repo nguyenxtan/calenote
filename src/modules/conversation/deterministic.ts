@@ -29,14 +29,6 @@ function relativeLocalDate(text: string, receivedAt: number): string | undefined
   return days === undefined ? undefined : localDate(receivedAt + days * 24 * 60 * 60 * 1_000);
 }
 
-function contextTitle(text: string): string | undefined {
-  const title = normalize(text)
-    .replace(/(?:hôm nay|ngày kia|mai|\d{1,2}\/\d{1,2}(?:\/\d{4})?|sáng|trưa|chiều|tối|lúc|vào|nhớ|nhắc(?:\s+(?:tôi|tui|mình))?)/giu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-  return title || undefined;
-}
-
 function queryRange(text: string): ReminderQueryRangeKind {
   const normalized = text.toLocaleLowerCase("vi-VN");
   if (/\d{1,2}\/\d{1,2}(?:\/\d{4})?/u.test(normalized)) return "DATE";
@@ -57,6 +49,46 @@ function explicitQueryLocalDate(text: string, receivedAt: number): string | unde
   return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day
     ? `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
     : undefined;
+}
+
+function clarificationContext(text: string, receivedAt: number): { localDate?: string; localTime?: string; title?: string } {
+  const tokens = normalize(text).split(" ");
+  const remove = new Set<number>();
+  let date: string | undefined;
+  let localTime: string | undefined;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index].toLocaleLowerCase("vi-VN");
+    if (token === "sáng" || token === "trưa" || token === "chiều" || token === "tối") remove.add(index);
+    if (token === "hôm" && tokens[index + 1]?.toLocaleLowerCase("vi-VN") === "nay") {
+      date = localDate(receivedAt); remove.add(index); remove.add(index + 1);
+    } else if (token === "ngày" && tokens[index + 1]?.toLocaleLowerCase("vi-VN") === "kia") {
+      date = localDate(receivedAt + 2 * 86_400_000); remove.add(index); remove.add(index + 1);
+    } else if (token === "mai") {
+      date = localDate(receivedAt + 86_400_000); remove.add(index);
+    } else if (/^\d{1,2}\/\d{1,2}(?:\/\d{4})?$/u.test(token)) {
+      date = explicitQueryLocalDate(token, receivedAt); remove.add(index);
+    }
+    const clock = token.match(/^(\d{1,2})(?:h|:(\d{2}))$/u);
+    if (clock) {
+      let hour = Number(clock[1]);
+      const minute = clock[2] === undefined ? 0 : Number(clock[2]);
+      const next = tokens[index + 1]?.toLocaleLowerCase("vi-VN");
+      if ((next === "chiều" || next === "tối") && hour < 12) hour += 12;
+      localTime = hour <= 23 && minute <= 59 ? `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` : undefined;
+      remove.add(index);
+      if (next === "trưa" || next === "sáng" || next === "chiều" || next === "tối") remove.add(index + 1);
+    }
+  }
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index].toLocaleLowerCase("vi-VN");
+    const next = tokens[index + 1]?.toLocaleLowerCase("vi-VN");
+    if (token === "nhắc") { remove.add(index); if (next === "tôi" || next === "tui" || next === "mình") remove.add(index + 1); }
+    if (token === "nhớ" && next === "nhắc") remove.add(index);
+    if (token === "vào" && (remove.has(index + 1) || ["mai", "hôm", "ngày"].includes(next ?? ""))) remove.add(index);
+    if (token === "lúc" && remove.has(index + 1)) remove.add(index);
+  }
+  const title = tokens.filter((_, index) => !remove.has(index)).join(" ").trim();
+  return { localDate: date, localTime, title: title || undefined };
 }
 
 function replyForFailure(code: ReminderParseFailureCode): string {
@@ -80,22 +112,20 @@ function missingField(code: ReminderParseFailureCode): "date" | "time" | "title"
 export function interpretDeterministically(
   inbound: DeterministicConversationInput,
 ): DeterministicConversationResult {
-  const intent = routeConversationIntent(inbound.text);
+  const normalizedText = normalize(inbound.text);
+  const intent = routeConversationIntent(normalizedText);
   if (intent === "LIST_REMINDERS") {
-    const rangeKind = queryRange(inbound.text);
-    return { kind: "LIST_QUERY", intent, rangeKind, localDate: rangeKind === "TODAY" ? localDate(inbound.receivedAt) : rangeKind === "TOMORROW" ? relativeLocalDate("mai", inbound.receivedAt) : rangeKind === "DATE" ? explicitQueryLocalDate(inbound.text, inbound.receivedAt) : undefined };
+    const rangeKind = queryRange(normalizedText);
+    const date = rangeKind === "DATE" ? explicitQueryLocalDate(normalizedText, inbound.receivedAt) : undefined;
+    if (rangeKind === "DATE" && date === undefined) return { kind: "QUERY_REJECTED", intent, code: "INVALID_DATE", reply: "Ngày bạn cung cấp chưa hợp lệ, bạn kiểm tra lại nhé." };
+    return { kind: "LIST_QUERY", intent, rangeKind, localDate: rangeKind === "TODAY" ? localDate(inbound.receivedAt) : rangeKind === "TOMORROW" ? relativeLocalDate(normalizedText, inbound.receivedAt) : date };
   }
   if (intent === "CONFIRM_PENDING" || intent === "CANCEL_PENDING") return { kind: "PENDING_ACTION", intent };
   if (intent === "HELP") return { kind: "HELP", intent, reply: "Bạn có thể nói: mai 8h gọi mẹ." };
   if (intent !== "CREATE_REMINDER") return { kind: "HELP", intent: "HELP", reply: "Bạn có thể nói: mai 8h gọi mẹ." };
 
-  const normalized = normalize(inbound.text).toLocaleLowerCase("vi-VN");
-  if (/(?:thứ\s+.+tuần sau|\btầm\s+|\bbốn giờ\b|\bnăm giờ\b)/u.test(normalized)) {
-    return { kind: "AI_ELIGIBLE", intent: "UNKNOWN" };
-  }
-
   const parsed = parseVietnameseReminder(
-    inbound.text,
+    normalizedText,
     inbound.receivedAt,
     inbound.timezone ?? VIETNAM_TIMEZONE,
   );
@@ -106,6 +136,13 @@ export function interpretDeterministically(
     return { kind: "CREATE_CANDIDATE", intent: "CREATE_REMINDER", candidate: parsed.candidate };
   }
 
+  if (["PAST_TIME", "INVALID_TIME", "INVALID_DATE", "TOO_FAR", "TITLE_TOO_LONG"].includes(parsed.code)) {
+    return { kind: "REJECTED", intent: "CREATE_REMINDER", code: parsed.code as Extract<ReminderParseFailureCode, "PAST_TIME" | "INVALID_TIME" | "INVALID_DATE" | "TOO_FAR" | "TITLE_TOO_LONG">, reply: replyForFailure(parsed.code) };
+  }
+  if (/(?:thứ\s+\S+(?:\s+tuần\s+sau)?|tầm\s+\S+\s+giờ|(?:một|hai|ba|bốn|năm|sáu|bảy|tám|chín|mười)\s+giờ)/u.test(normalizedText.toLocaleLowerCase("vi-VN"))) {
+    return { kind: "AI_ELIGIBLE", intent: "UNKNOWN" };
+  }
+
   const missing = missingField(parsed.code);
   if (missing) {
     return {
@@ -113,12 +150,9 @@ export function interpretDeterministically(
       intent: "CREATE_REMINDER",
       target: "CREATE_REMINDER",
       missingFields: [missing],
-      context: { localDate: relativeLocalDate(inbound.text, inbound.receivedAt), title: contextTitle(inbound.text) },
+      context: clarificationContext(normalizedText, inbound.receivedAt),
       reply: missing === "time" ? "Bạn muốn nhắc vào mấy giờ?" : missing === "date" ? "Bạn muốn nhắc vào ngày nào?" : "Bạn muốn nhắc việc gì?",
     };
-  }
-  if (["PAST_TIME", "INVALID_TIME", "INVALID_DATE", "TOO_FAR", "TITLE_TOO_LONG"].includes(parsed.code)) {
-    return { kind: "REJECTED", intent: "CREATE_REMINDER", code: parsed.code as Extract<ReminderParseFailureCode, "PAST_TIME" | "INVALID_TIME" | "INVALID_DATE" | "TOO_FAR" | "TITLE_TOO_LONG">, reply: replyForFailure(parsed.code) };
   }
   return { kind: "HELP", intent: "HELP", reply: "Bạn có thể nói: mai 8h gọi mẹ." };
 }

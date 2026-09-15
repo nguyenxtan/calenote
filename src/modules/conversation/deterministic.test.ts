@@ -48,6 +48,29 @@ describe("interpretDeterministically", () => {
   });
 
   it.each([
+    ["mai tầm 25h gọi mẹ", "INVALID_TIME"],
+    [`mai tầm 8h ${"a".repeat(1_801)}`, "TITLE_TOO_LONG"],
+  ] as const)("keeps known %s failures local despite semantic language", (text, code) => {
+    expect(interpret(text)).toMatchObject({ kind: "REJECTED", code });
+  });
+
+  it.each([
+    ["mai lúc bốn giờ gửi báo cáo"],
+    ["mai sáu giờ gọi mẹ"],
+    ["thứ sáu 8h gửi báo cáo"],
+  ])("marks unsupported semantic values as AI eligible: %s", (text) => {
+    expect(interpret(text)).toEqual({ kind: "AI_ELIGIBLE", intent: "UNKNOWN" });
+  });
+
+  it.each([
+    ["mai gửi email", ["time"], { localDate: "2026-09-03", title: "gửi email" }],
+    ["8h nhắc tôi gọi mẹ", ["date"], { localTime: "08:00", title: "gọi mẹ" }],
+    ["10/09 nhắc tôi gọi mẹ", ["time"], { localDate: "2026-09-10", title: "gọi mẹ" }],
+  ] as const)("preserves recognized context for %s", (text, missingFields, context) => {
+    expect(interpret(text)).toMatchObject({ kind: "CLARIFICATION", missingFields, context });
+  });
+
+  it.each([
     ["lịch hôm nay", "TODAY"],
     ["mai có gì?", "TOMORROW"],
     ["nhắc gì sắp tới?", "UPCOMING"],
@@ -61,6 +84,17 @@ describe("interpretDeterministically", () => {
       intent: "LIST_REMINDERS",
       rangeKind: "DATE",
       localDate: "2026-09-10",
+    });
+  });
+
+  it("rejects an invalid explicit calendar query locally", () => {
+    expect(interpret("lịch 31/02")).toMatchObject({ kind: "QUERY_REJECTED", code: "INVALID_DATE" });
+  });
+
+  it("uses normalized query text consistently", () => {
+    expect(interpret("nhắc gì sắp tới?".normalize("NFD").replace(" ", "   "))).toMatchObject({
+      kind: "LIST_QUERY",
+      rangeKind: "UPCOMING",
     });
   });
 

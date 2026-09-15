@@ -25,7 +25,7 @@ export type DeterministicConversationResult =
     intent: "CREATE_REMINDER";
     target: "CREATE_REMINDER";
     missingFields: Array<"date" | "time" | "title">;
-    context: { localDate?: string; title?: string };
+    context: { localDate?: string; localTime?: string; title?: string };
     reply: string;
   }
   | {
@@ -35,5 +35,6 @@ export type DeterministicConversationResult =
     reply: string;
   }
   | { kind: "PENDING_ACTION"; intent: "CONFIRM_PENDING" | "CANCEL_PENDING" }
+  | { kind: "QUERY_REJECTED"; intent: "LIST_REMINDERS"; code: "INVALID_DATE"; reply: string }
   | { kind: "AI_ELIGIBLE"; intent: "UNKNOWN" }
   | { kind: "HELP"; intent: "HELP"; reply: string };

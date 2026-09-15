@@ -143,6 +143,15 @@ describe("parseVietnameseReminder", () => {
     });
   });
 
+  it.each([
+    ["mai 8h nhắc tôi ôn trí nhớ", "ôn trí nhớ"],
+    ["mai 8h nhắc tôi nhớ mật khẩu", "nhớ mật khẩu"],
+    ["vào mai lúc 8h nhắc tôi gọi mẹ", "gọi mẹ"],
+    ["mai vào 8h nhắc tôi gọi mẹ", "gọi mẹ"],
+  ])("keeps title words and consumes grammar-position fillers: %s", (text, title) => {
+    expect(parseVietnameseReminder(text, receivedAt, timezone)).toMatchObject({ ok: true, candidate: { title } });
+  });
+
   it("accepts the exact shared UTF-16 title bound and rejects one code unit more", () => {
     const exact = "a".repeat(MAX_REMINDER_TITLE_CODE_UNITS - 2) + "💊";
     expect(exact.length).toBe(MAX_REMINDER_TITLE_CODE_UNITS);
