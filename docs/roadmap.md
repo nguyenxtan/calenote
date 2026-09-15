@@ -1,71 +1,73 @@
 # Calenote roadmap
 
-## Trạng thái đã xác minh — 2026-09-14
+This roadmap is forward-looking. Canonical implemented and production-evidence
+claims live in [current-state.md](./architecture/current-state.md).
 
-- Worker production `calenote` đã được triển khai tại
-  `https://calenote.iconiclogs.com` với D1, Queue, assets và cron bindings đã
-  review. Đây là bằng chứng DEPLOYED, không phải bằng chứng chat E2E.
-- Chẩn đoán tokenless xác nhận Worker production và control workers.dev đều
-  gọi được Zalo bằng GET HTTPS và hoàn tất TLS handshake được xác thực.
-- Matrix POST tokenless đã thu hẹp lỗi thành
-  `CALENOTE_REQUEST_INIT_COMBINATION`: generic JSON POST và Zalo shapes B/C/D
-  trả HTTP 200, còn chỉ exact shape E hiện tại (JSON body, `Accept`/
-  `Content-Type`, `redirect: error`, 8s signal) thất bại trước response. Cần
-  tách từng thành phần init bằng thử nghiệm được phê duyệt riêng; chưa có proxy,
-  relay, thay đổi TLS/DNS hay workaround nào được áp dụng.
-- Telegram không nằm trong đợt chẩn đoán này. Kết nối bot, webhook, `/connect`
-  và delivery chat production vẫn chưa E2E_PROVEN.
+## Production status — 2026-09-15
 
-Roadmap này mô tả thứ tự phát triển, không phải danh sách capability hiện có. Tại thời điểm hiện tại, repo có khung onboarding/dashboard và xác minh token server-side; các mục còn lại là kế hoạch.
+- **PROVEN_IN_PRODUCTION:** `calenote.iconiclogs.com` runs the reviewed Worker
+  with D1, Queue, cron, assets, and secrets.
+- **PROVEN_IN_PRODUCTION:** Zalo `getWebhookInfo` matches the canonical host/path
+  prefix and `testWebhook` returns `webhook.ok`.
+- **OPEN_INCIDENT:** Real Zalo private `/connect` and plain-text messages have
+  not produced an observed Worker event or inbound D1 row. The first temporary
+  polling probe was inconclusive due to its now-corrected response-shape parser;
+  webhook restoration was proven successful.
+- **PLANNED:** Telegram production diagnosis is deferred until Zalo real-message
+  acceptance closes.
 
-## Phase 0 — Foundation (hiện tại)
+## Near-term operational backlog
 
-- Next.js modular monolith, contracts provider Zalo/Telegram.
-- BYOB onboarding và `getMe` token verification.
-- Token không trả lại client, không log/lưu trữ trong luồng hiện tại.
-- Domain boundary cho Workspace, Task, Event, ReminderRule, Delivery, CommandDraft và ChatIdentity.
-- Dashboard mẫu và test adapter/API/UI chính.
+### Close Zalo real-message acceptance
 
-Không gọi Phase 0 là webhook hoạt động, chat binding hoàn tất hay scheduler production.
+Run one explicitly authorized retest through the temporary owner-safe polling
+diagnostic, then classify only from safe evidence. A successful `testWebhook`
+is not acceptance: the path must prove real private message -> Worker -> D1
+inbound -> Queue -> `/connect` -> chat identity -> `ACTIVE_BOUND` -> outbound
+confirmation. See [Zalo production acceptance](./runbooks/zalo-production-acceptance.md).
 
-## Phase 1 — Account và connection persistence
+### Bot ownership / claim policy
 
-- Đăng nhập/session production và PostgreSQL schema.
-- Lưu BotConnection bằng envelope encryption/KMS.
-- Fingerprint chống gắn trùng bot; revoke/rotate token và audit event.
-- Enforce workspace membership và constraint một active pair/người ngay từ schema.
+**PLANNED product design.** Current behavior is a single-bot,
+single-Calenote-owner constraint. If another email supplies the same bot token:
 
-## Phase 2 — Chat binding và inbound pipeline
+- do not reveal the prior owner's email or other identity;
+- do not silently take over, duplicate, or reassign the connection;
+- define a recoverable, auditable claim/takeover policy before expanding this
+  behavior;
+- model future shared bots through workspace membership and roles, not duplicated
+  token ownership.
 
-- Webhook ingress có secret header validation; local dùng polling có kiểm soát.
-- Mã `/connect` một lần, hash + TTL, idempotent binding vào ChatIdentity.
-- Lưu inbound update theo provider update id để chống xử lý trùng.
-- Tách rõ `DIRECT` và `GROUP_BETA`; chỉ mở group khi có policy và kiểm thử phù hợp.
+### Telegram production diagnosis
 
-## Phase 3 — Command-to-calendar
+**PLANNED.** Start only after the Zalo acceptance incident is closed. Reuse the
+same evidence discipline: configuration verification is not real-message E2E,
+and no provider-specific conclusion is made without safe production evidence.
 
-- Parser tạo CommandDraft từ tin nhắn.
-- Màn hình/chat confirmation trước khi ghi Task hoặc Event khi confidence thấp.
-- CRUD Task/Event; timezone và quyền workspace được kiểm tra tại domain boundary.
+## Product roadmap
 
-## Phase 4 — Reminder execution
+### Optional intelligence
 
-- ReminderRule và occurrence calculation.
-- Transactional outbox, queue/scheduler và Delivery retry/idempotency.
-- Provider receipts, trạng thái delivered/failed và giao diện retry/cancel.
+Keep intelligence provider-agnostic, privacy-first, bounded, and
+non-authoritative. Deterministic parsing and explicit human confirmation remain
+the core path. Production AI activation requires separate authorization and
+evidence.
 
-## Phase 5 — Shared workspaces
+### External source signals
 
-- TEAM: invitation, role, quyền lịch chung và audit.
-- PAIR: invite/accept/unlink, enforcement một pair active/người và conflict UX.
-- Không mở rộng thành tính năng team/pair chỉ bằng cách đổi nhãn UI trước khi policy và persistence hoàn tất.
+Design the future bounded external-source contract before integrating Gmail,
+Microsoft, calendar APIs, forwarded email, or ICONIC Logistics Platform. Calenote
+may own follow-up/reminder attention, but external systems retain their business
+domain ownership. See [external-source boundary](./architecture/external-source-boundary.md).
 
-## Phase 6 — Mở rộng có kiểm chứng
+### Shared workspaces
 
-- Mobile client dùng chung API contract.
-- Cải thiện ngôn ngữ tự nhiên, recurring events và observability.
-- Đánh giá group Zalo sau beta bằng dữ liệu lỗi, quyền và privacy; không mặc định coi group là GA.
+Define invitation, membership, roles, audit, ownership transfer, and privacy
+policy before introducing shared-bot or team experiences.
 
-## Tiêu chí chuyển phase
+## Transition criteria
 
-Chỉ chuyển phase sau khi có migration/contract tương ứng, test hành vi ở boundary thật hoặc staging phù hợp, runbook rollback, và bằng chứng không làm lộ secret. Một UI placeholder, mock provider hoặc token hợp lệ không đủ để đánh dấu phase hoàn tất.
+Do not call a roadmap item complete from a UI placeholder, a mock, a valid token,
+or a green webhook verification alone. Completion requires the reviewed contract,
+appropriate automated coverage, safe operational evidence, and—where a provider
+journey is claimed—an observed end-to-end interaction.

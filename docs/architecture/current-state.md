@@ -1,132 +1,105 @@
 # Calenote current state
 
-This is the canonical current-state record. Historical Foundation documents and
-implementation plans are audit evidence; they do not override this page.
+This is the canonical record of the deployed Calenote architecture. Historical
+plans are audit evidence only; they do not override this document.
 
 ## Evidence vocabulary
 
 | Status | Meaning |
 | --- | --- |
 | IMPLEMENTED | Reviewed code exists in this repository. |
-| WIRED | The code is reached from a production Worker/Web composition path. |
-| TESTED | Local automated evidence currently covers the behavior. |
-| E2E_PROVEN | A real external end-to-end interaction has been observed. |
-| DEPLOYED | The reviewed version is running at the production origin. |
-| PLANNED | A documented future capability; no current-product claim. |
+| WIRED | The code is reached from a Worker or Web composition path. |
+| TESTED | Automated local coverage exists. |
+| PROVEN_IN_PRODUCTION | A bounded production observation proved the stated fact. |
+| DEPLOYED | A reviewed Worker version is serving the production origin. |
+| OPEN_INCIDENT | Evidence shows a real fault or unknown; it is not resolved. |
+| PLANNED | A future capability with no current-product claim. |
 
-## Current product capability map
+## Product capability map
 
 | Capability | Status | Evidence boundary |
 | --- | --- | --- |
-| User-owned Zalo/Telegram bot onboarding | IMPLEMENTED, WIRED, TESTED | Durable API validates a token, encrypts it, creates a session, and registers the webhook when the provider accepts it. |
-| Private-chat binding with one-use `/connect` | IMPLEMENTED, WIRED, TESTED | Webhook, D1 constraint, and queue tests cover bounded direct-chat binding. |
-| Vietnamese chat reminder proposal and confirmation | IMPLEMENTED, WIRED, TESTED | Queue processor parses supported Vietnamese forms, writes one confirmation draft, and accepts exact approval/cancel control words. |
-| Manual dashboard reminders | IMPLEMENTED, WIRED, TESTED | Dashboard sends same-origin authenticated API requests and converts Vietnam wall-clock input deterministically. |
-| Reminder scheduler and delivery | IMPLEMENTED, WIRED, TESTED | Cron claims due reminders; Queue delivery applies ownership leases, bounded retry, and `UNCERTAIN` on ambiguous provider egress. |
-| Reminder D1 adapters and Worker composition | IMPLEMENTED, WIRED, TESTED | API, command, scheduler, and delivery SQL live in feature-owned D1 adapters; the Worker composes concrete adapters at runtime. |
-| Source/Action approval foundation | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/actions` lists only an owner's decrypted pending candidates. Same-origin approval or rejection uses the existing D1-fenced decision service; approval alone creates its authoritative reminder. OpenRouter extraction is IMPLEMENTED/TESTED at the application boundary with mocked transport only; source ingestion remains unwired. |
-| Presentation preferences | IMPLEMENTED, WIRED, TESTED | Authenticated `/api/preferences` reads stable defaults and applies same-origin, bounded, validated presentation updates only for the session owner. |
-| Optional intelligence foundation | IMPLEMENTED, WIRED, TESTED | Provider-agnostic reminder proposals pass strict admission into the existing chat CommandDraft confirmation boundary. The Worker composition selects an optional OFF/FREE/ECONOMY gateway; absent or invalid configuration remains OFF/null. |
-| OpenRouter adapter | IMPLEMENTED, WIRED, TESTED | Worker composition can select the adapter only from validated optional runtime configuration. Inbound and source application flows use the real adapter with injected mocked transport; no live provider request has been made. |
-| Login code and browser session | IMPLEMENTED, WIRED, TESTED | Login code delivery, recovery, session revocation, and real D1/workerd tests are local evidence. |
-| Public V2 experience | IMPLEMENTED, WIRED, TESTED | `/` is a static Landing V2 with no personal-data request; `/onboarding` retains the bounded, same-origin first-time bootstrap; `/login` retains the bot-delivered OTP flow; and `/dashboard` is a compatibility redirect to `/app/today`. Local fixture/headless-browser capture is local test evidence only. Google OAuth is NOT_IMPLEMENTED / DEFERRED. |
-| V2 authenticated app screens | IMPLEMENTED, WIRED, TESTED | `/app/today`, `/app/calendar`, `/app/inbox`, `/app/reminders`, `/app/connections`, `/app/activity`, and `/app/settings` confirm a session before requesting personal data. Connections exposes only Telegram/Zalo safe metadata; Settings uses read-only profile data and supported preferences. Activity is an authenticated read-only projection over existing audit persistence, scoped by `actor_user_id`, newest-first, bounded to 50 allowlisted events, and exposes only `action` plus `createdAt`—never raw audit payload. Local fixture/headless-browser capture is test evidence only, not staging or production evidence. |
-| Production origin | DEPLOYED | `calenote` is deployed at `https://calenote.iconiclogs.com` with the reviewed production D1, Queue, assets, cron, and secret bindings. Deployment does not by itself prove a provider journey. |
-| Zalo production transport | IMPLEMENTED, WIRED, TESTED, DEPLOYED | Controlled tokenless diagnostics proved simple Zalo HTTPS GET and authorized TLS handshake. A generic JSON POST and Zalo invalid-token POST shapes B/C/D returned HTTP 200; only exact current request shape E (JSON body, `Accept`/`Content-Type`, `redirect: error`, and 8s signal) failed before a response. The proven category is `CALENOTE_REQUEST_INIT_COMBINATION`; no transport behavior has changed and bot activation, webhook registration, and chat delivery are not E2E_PROVEN. |
-| Chat E2E | PLANNED | A private `/connect`, confirmed near-future reminder, and received notification have not been E2E_PROVEN. Telegram live behavior has not been investigated in this evidence set. |
+| User-owned Zalo and Telegram onboarding | IMPLEMENTED, WIRED, TESTED | Server-side provider validation, authenticated session creation, encrypted credential persistence, and webhook registration compose in the Worker. |
+| Credential and sensitive-data protection | IMPLEMENTED, WIRED, TESTED | D1 stores encrypted credentials and inbound text; browser/API responses and structured diagnostics exclude tokens, webhook secrets, connect codes, raw message content, and private provider identifiers. |
+| Connection lifecycle and recovery | IMPLEMENTED, WIRED, TESTED | Owned connections expose safe metadata and support bounded webhook retry or `/connect` code rotation. `ACTIVE_UNBOUND`, `ACTIVE_BOUND`, `WEBHOOK_FAILED`, and `SUSPENDED` retain distinct recovery semantics. |
+| Private-chat `/connect` binding | IMPLEMENTED, WIRED, TESTED | One-use, expiring code is stored as a digest; an accepted private inbound message binds the connection with D1 fencing and queue dispatch. |
+| Webhook ingress and inbound processing | IMPLEMENTED, WIRED, TESTED | Same-provider path/header verification, bounded JSON read, encrypted inbound persistence, deduplication, and opaque `PROCESS_INBOUND` queue jobs are implemented. Real Zalo message receipt is separately an OPEN_INCIDENT. |
+| Reminder scheduling and delivery | IMPLEMENTED, WIRED, TESTED | D1 is canonical persistence. Cron claims due reminders; Queue delivery uses bounded retries, ownership leases, and safe failure states. |
+| Login/session delivery | IMPLEMENTED, WIRED, TESTED | Session, login-code, and `DELIVER_LOGIN_CODE` paths use the same encrypted and owner-fenced persistence boundaries. |
+| V2 Web control plane | IMPLEMENTED, WIRED, TESTED | Authenticated V2 screens manage safe connection status, reminders, preferences, and activity; chat remains the primary command/delivery channel. |
+| Production origin | DEPLOYED, PROVEN_IN_PRODUCTION | `calenote` serves `https://calenote.iconiclogs.com` with production D1, Queue, assets, cron trigger, and secrets. Deployment alone is not chat E2E evidence. |
+| Zalo webhook configuration and verification | PROVEN_IN_PRODUCTION | `getWebhookInfo` reports the canonical host/path prefix and `testWebhook` returned `webhook.ok`. This proves configured webhook reachability only, not real event dispatch. |
+| Zalo real inbound message path | OPEN_INCIDENT | One real private `/connect` and one plain private text produced no observed Worker event and no new inbound row. The first controlled polling result is inconclusive because its diagnostic parser expected an array rather than Zalo's documented object result; its webhook restoration was proven. |
+| Telegram production behavior | PLANNED | Telegram production diagnosis begins only after Zalo closure; it is not E2E-proven. |
 
-## Worker runtime
+## Worker runtime and persistence
 
-`src/worker/index.ts` is the runtime entrypoint. Its Queue dispatcher receives
-only opaque job IDs for three real application lanes:
+`src/worker/index.ts` is the runtime composition root. It composes the HTTP
+router/controllers, D1 stores, encrypted keyring, provider adapters, Queue
+producer/consumer, and scheduled handler. Queue payloads carry opaque IDs, not
+credentials or chat text. The active lanes are:
 
 - `PROCESS_INBOUND`
 - `DELIVER_REMINDER`
 - `DELIVER_LOGIN_CODE`
 
-The scheduled handler runs three independent bounded lanes via
-`Promise.allSettled`: claim due reminders, redrive orphaned inbound work, and
-redrive login-code delivery. A Worker rollback does not roll back D1 or Queue
-state; deployment/runbook evidence is therefore required before a production
-claim.
+The cron trigger runs bounded independent work: due-reminder claiming, orphaned
+inbound redrive, and login-code redrive. D1/SQLite is canonical persistence;
+the Worker does not use PostgreSQL, Neon, Hyperdrive, Terraform, or an external
+outbox database. Worker rollback never rolls back D1 state or migrations.
 
-Historical one-time egress diagnostics were guarded by expired scheduled-time
-windows. They have no public debug route and make no further calls. The
-temporary workers.dev control Worker used for comparison has been deleted.
+## Provider and Web boundaries
 
-## Data, channel, and Web boundaries
+Zalo and Telegram are BYOB interaction adapters. The browser never calls a
+provider directly and never receives decrypted credentials. Provider adapters
+use a fixed HTTPS hostname allowlist, bounded request/response handling, safe
+error mapping, and no sensitive logging.
 
-D1 is canonical persistence. Bot credentials and login material are encrypted
-at rest. Queue payloads are identifiers, never chat text or credentials.
+For Zalo, the normal activation path verifies `getMe`, persists encrypted
+credentials, derives a per-connection webhook URL and header secret internally,
+then calls `setWebhook`. Webhook ingress verifies the independent path and
+`X-Bot-Api-Secret-Token` before provider parsing/persistence. `ACTIVE_UNBOUND`
+means the webhook/connection is active but a private chat has not yet bound;
+`ACTIVE_BOUND` means the private chat identity was bound by the inbound flow.
 
-Zalo and Telegram are interaction channels. The Source/Action foundation now
-persists encrypted candidate titles and exposes only authenticated owner-pending
-approval controls. It has no Gmail, Microsoft, forwarded-email, calendar API,
-or other external-source ingestion: all of those remain PLANNED. Optional
-intelligence is provider-agnostic and disabled by default. Deterministic parsing
-remains the primary reminder path; an optional capability can only produce a
-validated, non-authoritative proposal or clarification. Provider adapters and
-live calls remain PLANNED. Source or intelligence output will propose an action;
-only validated user approval will create an authoritative reminder, task, or
-event.
+The temporary owner-only Zalo polling diagnostic is IMPLEMENTED and DEPLOYED for
+the open incident. It is not a product feature: it fences ownership, same
+origin, provider, state, concurrency, and a ten-minute rate limit; removes a
+webhook only after exact-match verification; restores it in `finally`, retries
+one restoration attempt, and returns safe metadata only. It does not alter a
+connection state or connect code. It remains in place until the incident is
+closed by an explicitly reviewed change.
 
-The Web UI is a first-class control plane, not a replacement for chat. It is
-allowed to manage complexity—connection health, reminders, account access—but
-daily create/confirm/notify flow is chat-first.
+## Intelligence and external sources
 
-The V2 web journey is canonical: `/` is Landing, `/onboarding` is first-time
-bootstrap, `/login` is returning-user OTP login, `/app/today` is authenticated
-home, and `/dashboard` is compatibility-only. The UI does not claim a full
-external visual E2E or a change to the chat-first product boundary.
+Optional OpenRouter intelligence is IMPLEMENTED, WIRED, TESTED, and disabled
+unless valid privacy-first configuration is present. It can emit a validated,
+non-authoritative proposal only; deterministic parsing and human confirmation
+remain authoritative. No production AI behavior is claimed here.
 
-## Optional OpenRouter runtime
-
-Optional intelligence is disabled when `AI_MODE` is absent or `off`.
-`AI_MODE=privacy` requires `OPENROUTER_API_KEY`, `OPENROUTER_PRIVACY_MODEL`,
-`OPENROUTER_PRIVACY_PROVIDER`, `AI_MAX_PRIVACY_PRICE`, and bounded timeout,
-input, and output settings. The API key is a Worker secret and is never
-committed. Missing or invalid settings select the null gateway, so startup and
-`/api/health` remain available without OpenRouter.
-
-The policy is **PRIVACY-FIRST / FREE-WHEN-ELIGIBLE**. User-derived intelligence
-uses a pinned privacy route only: `allow_fallbacks=false`,
-`data_collection=deny`, `zdr=true`, `require_parameters=true`, strict JSON
-Schema, and prompt/completion price ceilings. No generic paid fallback is
-configured. `AI_MODE=free` currently fails closed because `openrouter/free`
-has no endpoint eligible for mandatory ZDR; a future safe/redacted input
-boundary must independently prove free-route eligibility before it can be
-enabled. The adapter enables no plugins, tools, or web search and emits no
-provider logs; provider error bodies and malformed completion content reduce to
-safe `UNAVAILABLE`.
-
-`LIVE_OPENROUTER_E2E` is PARTIAL. Three bounded synthetic free requests proved
-the ZDR eligibility failure. Catalog evidence identified the explicit
-`google/gemini-3.5-flash-lite` / `google-vertex/global/flex` ZDR candidate, but
-two bounded live gateway attempts (5s and 15s) timed out before an HTTP
-envelope. No model output, usage, or cost is claimed. `PRODUCTION_AI` is
-NOT_DEPLOYED; no remote deployment occurred.
+Source/action persistence and approvals are implemented. Gmail, Microsoft,
+calendar APIs, forwarded email, and other source ingestion are PLANNED. A future
+bounded external-source boundary is described in
+[external-source-boundary.md](./external-source-boundary.md); it is not an
+implemented ICONIC Logistics Platform integration.
 
 ## What is not proven
 
-The product is DEPLOYED, but that is not provider end-to-end evidence. A
-production Zalo token works in the independently controlled local probe, while
-the Worker-side Zalo `getMe` POST has failed before any upstream HTTP response.
-Simple Zalo GET and raw TLS handshake diagnostics succeed in both the deployed
-custom-domain Worker and a now-deleted isolated workers.dev control. A bounded
-tokenless POST matrix then proved `CALENOTE_REQUEST_INIT_COMBINATION`: generic
-JSON POST and Zalo B/C/D request shapes returned HTTP 200, while only exact
-current request shape E failed before a response. This does not yet identify
-which member of the combined init is incompatible, and no workaround or product
-behavior change has been applied. Zalo bot activation, webhook registration,
-private `/connect`, inbound processing, reminder delivery, and all Telegram live
-behavior remain not E2E_PROVEN.
+`testWebhook` success is not an end-to-end message-delivery guarantee. The
+current Zalo evidence proves configuration/reachability but not that real
+private-chat events are dispatched to the Worker. The current parser correction
+makes the controlled polling diagnostic ready for a single authorized retest;
+it does not itself establish a provider root cause. Do not infer a Zalo
+provider-edge, Cloudflare, credential, or application-parser conclusion beyond
+the recorded evidence.
 
-## Next bounded phases
+## Next bounded work
 
-1. Review the proven `CALENOTE_REQUEST_INIT_COMBINATION` boundary; isolate its
-   members in a separately authorized non-secret experiment before changing
-   provider transport behavior.
-2. Prepare controlled live OpenRouter validation and staging only after explicit authorization.
-3. Add Gmail authorization only after the Source/Action model is stable.
-4. Keep optional intelligence provider-agnostic and disabled by default;
-   deterministic parsing remains the core path.
+1. Run one explicitly authorized Zalo polling retest and classify only from its
+   safe evidence; restore verification remains mandatory.
+2. Close the Zalo real-message acceptance path before Telegram production
+   diagnosis.
+3. Design bot ownership/takeover policy before allowing the same bot token to
+   be supplied by a second user.
+4. Keep optional intelligence and future external-source work independently
+   authorized and non-authoritative.

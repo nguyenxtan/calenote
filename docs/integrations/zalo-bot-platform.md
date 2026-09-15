@@ -1,77 +1,133 @@
-# Zalo Bot Platform — BYOB integration
+# Zalo Bot Platform integration
 
-**Trạng thái:** design contract cho các giai đoạn sau v0.1.  
-**v0.1 hiện thực:** chỉ xác minh Bot Token bằng `getMe`. Không lưu token, không đăng ký webhook, không nhận/gửi tin nhắn, không phát hành `/connect`.
+Calenote integrates with **Zalo Bot Platform** as a BYOB provider. It does not
+use Zalo OA OpenAPI. This page distinguishes implemented contracts from the
+unresolved production inbound incident.
 
-Calenote tích hợp **Zalo Bot Platform**, không dùng Zalo OA OpenAPI. Mỗi workspace dùng Bot Token của chính chủ (BYOB).
+## Status and safety
 
-Nguồn chính thức: [xác thực](https://docs.zaloplatforms.com/docs/BOT/authorize), [gọi API](https://docs.zaloplatforms.com/docs/BOT/call_api), [API reference](https://docs.zaloplatforms.com/docs/BOT/apis/getMe).
+- **IMPLEMENTED:** Zalo onboarding, encrypted credential persistence, webhook
+  registration, inbound parsing/persistence, `/connect`, reminder delivery, and
+  recovery APIs.
+- **PROVEN_IN_PRODUCTION:** `getMe`, `getWebhookInfo`, and `testWebhook` have
+  completed against the production connection under controlled evidence.
+- **OPEN_INCIDENT:** Real private messages have not been observed at the Worker;
+  do not call the inbound path accepted until the real-message checklist passes.
 
-## Tạo và xác minh bot
+The bot token appears in Zalo's provider request path. Calenote never logs,
+returns, stores in browser storage, places in an application URL, or exposes the
+token. The provider adapter uses the fixed HTTPS host
+`bot-api.zaloplatforms.com`; it never accepts a user-provided provider URL.
 
-1. Người dùng mở **Zalo Bot Manager / Bot Creator** bằng tài khoản Zalo của mình để tạo bot; đây không phải luồng Zalo OA OpenAPI. Sau khi tạo, Zalo gửi Bot Token cho tài khoản của họ. [Hướng dẫn tạo bot](https://docs.zaloplatforms.com/docs/BOT/create_bot)
-2. Server Calenote gọi `POST https://bot-api.zaloplatforms.com/bot<BOT_TOKEN>/getMe` với body rỗng. Không gọi provider từ browser.
-3. Chỉ khi response có `ok: true` và `result.id`, `result.account_name` hợp lệ, UI mới hiển thị “Token đã xác minh”. Ví dụ result còn có `account_type`, `can_join_groups`. [getMe](https://docs.zaloplatforms.com/docs/BOT/apis/getMe)
+## Implemented provider operations
 
-Bot Token được truyền trong đường dẫn API; Zalo tài liệu hóa dạng ví dụ `12345689:abc-xyz`, không xem đó là regex an toàn để suy diễn. Token không hết hạn trừ khi chủ bot reset. Không ghi token vào URL application, log, analytics hay client storage.
+All operations are server-side `POST` requests to
+`https://bot-api.zaloplatforms.com/bot<BOT_TOKEN>/<operation>`. Request and
+response bodies remain inside the adapter unless explicitly converted to the
+safe domain result below.
 
-Trong adapter v0.1, chỉ error code/HTTP `401` được phân loại là token bị từ
-chối. `403` của Zalo (internal error), `429` (quota), `5xx`, timeout và lỗi mạng
-được trả thành provider tạm thời không sẵn sàng; UI không yêu cầu reset token
-trong các trường hợp đó. [Bảng mã lỗi](https://docs.zaloplatforms.com/docs/BOT/error_code)
+| Operation | Implemented Calenote use | Safe outcome |
+| --- | --- | --- |
+| `getMe` | Validate submitted credential during onboarding/recovery. | Normalized bot profile only; token is never returned. |
+| `setWebhook` | Register a derived canonical URL and derived header secret after validation. | Activation succeeds only if the provider reports successful verification. |
+| `getWebhookInfo` | Verify configured webhook before a temporary polling diagnostic or incident read-back. | Configured/exact/host/path-prefix booleans only. |
+| `testWebhook` | Provider webhook reachability test. | `apiOk` and `resultOk` only. |
+| `deleteWebhook` | Temporary owner-only polling diagnostic after an exact-match pre-delete fence. | No provider body exposed. |
+| `getUpdates` | Temporary, bounded 22-second polling diagnostic only. | `updateReceived`, allowlisted event name, and private-chat boolean only. |
+| `sendMessage` | Send an outbound reminder/login/confirmation to a bound chat. | Provider message receipt ID is retained internally. |
 
-## Nhận tin nhắn: local và production
+Official API references: [getMe](https://docs.zaloplatforms.com/docs/BOT/apis/getMe),
+[setWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/setWebhook),
+[getWebhookInfo](https://docs.zaloplatforms.com/docs/BOT/apis/getWebhookInfo),
+[testWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/testWebhook),
+[deleteWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/deleteWebhook),
+[getUpdates](https://docs.zaloplatforms.com/docs/BOT/apis/getUpdates), and
+[sendMessage](https://docs.zaloplatforms.com/docs/BOT/apis/sendMessage).
 
-### Local development: polling
+## Webhook contract
 
-Dùng `POST /getUpdates` (body tùy chọn `{ "timeout": 30 }`) để phát triển tại máy local. Polling và webhook loại trừ lẫn nhau: phải `deleteWebhook` trước khi dùng polling. Chỉ dùng polling cho local/development/thử nghiệm; Zalo khuyến nghị webhook cho production. [getUpdates](https://docs.zaloplatforms.com/docs/BOT/apis/getUpdates)
+**IMPLEMENTED:** Calenote derives a per-connection HTTPS webhook URL and a
+separate secret header value internally. It checks the path secret and then
+compares `X-Bot-Api-Secret-Token` in constant time before reading the bounded
+JSON body. It never logs the URL, its path secret, or the header secret.
 
-### Production: webhook
-
-Gọi `POST https://bot-api.zaloplatforms.com/bot<BOT_TOKEN>/setWebhook`:
-
-```json
-{
-  "url": "https://api.example.com/webhooks/zalo/<connection-public-id>",
-  "secret_token": "secret-8-to-256-characters"
-}
-```
-
-- `url` bắt buộc là HTTPS công khai; localhost và private IP bị từ chối.
-- Xác thực **mọi** callback JSON POST bằng header chính xác `X-Bot-Api-Secret-Token`, so sánh constant-time với secret đã lưu.
-- Response thành công bao gồm `result.url`, `updated_at`, `verification`; URL vẫn được lưu nếu verification thất bại, vì vậy phải theo dõi kết quả verification và không tuyên bố active chỉ dựa vào HTTP thành công.
-- `POST /getWebhookInfo` hiện chỉ tài liệu hóa result `url`, `updated_at`; `POST /deleteWebhook` trả result `url: ""`, `updated_at`.
-
-Nguồn: [setWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/setWebhook), [webhook inbound](https://docs.zaloplatforms.com/docs/BOT/webhook), [getWebhookInfo](https://docs.zaloplatforms.com/docs/BOT/apis/getWebhookInfo), [deleteWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/deleteWebhook).
-
-## Inbound, `/connect`, và idempotency (planned)
-
-Webhook chuẩn có envelope `{ "ok": true, "result": { "event_name", "message" } }`. Với text message, lưu ít nhất `event_name`, `message.message_id`, `message.date`, `message.from.id`, `message.chat.id`, `message.chat.chat_type`, và `message.text`. Dùng `chat.id` để gửi trả lời. `chat_type` là `PRIVATE` hoặc `GROUP`.
-
-Luồng planned:
-
-1. Sau khi activation thành công, tạo mã `/connect <one-time-code>` ngẫu nhiên, TTL ngắn, chỉ dùng một lần; chỉ lưu hash mã.
-2. Chỉ chấp nhận mã từ direct chat (`chat_type: PRIVATE`), rồi bind `from.id` và `chat.id` vào workspace đúng của connection.
-3. Lưu inbound event theo một khóa idempotency tối thiểu gồm provider + bot connection + `message_id` (và `chat.id` để tránh giả định tính duy nhất toàn cục), trước khi tạo command hoặc gửi reply.
-4. Trả response 2xx nhanh sau khi đã ghi durable; xử lý nghiệp vụ/sending ở worker hoặc outbox, vì hợp đồng retry delivery của Zalo không được tài liệu hóa tại đây.
-
-### Cảnh báo Group Beta
-
-`GROUP` được tài liệu hóa là **Beta**, và hướng dẫn group ghi rõ tính năng còn thử nghiệm nội bộ/chưa ra mắt rộng rãi. Zalo nói bot sẽ nhận reply trực tiếp vào tin bot hoặc message @mention bot, nhưng schema chính thức **không** công bố trường phân biệt mention/reply, entity array, hay `reply_to_message_id`. Do đó v0.x mặc định direct chat; không xây correlation mention/reply group như một capability bảo đảm.
-
-Nguồn: [Webhook schema](https://docs.zaloplatforms.com/docs/BOT/webhook), [Group interaction — Beta](https://docs.zaloplatforms.com/docs/BOT/best-practices/build-bot-interaction-with-group).
-
-## Gửi tin nhắn và retry (planned)
-
-Gọi `POST https://bot-api.zaloplatforms.com/bot<BOT_TOKEN>/sendMessage`:
+The documented Zalo webhook envelope is an object, not an array:
 
 ```json
 {
-  "chat_id": "<inbound-message.chat.id>",
-  "text": "Nội dung phản hồi"
+  "ok": true,
+  "result": {
+    "event_name": "message.text.received",
+    "message": {
+      "message_id": "provider-message-id",
+      "date": 0,
+      "from": { "id": "provider-user-id", "is_bot": false },
+      "chat": { "id": "private-chat-id", "chat_type": "PRIVATE" },
+      "text": "message text"
+    }
+  }
 }
 ```
 
-`chat_id` và `text` bắt buộc; text dài 1–2.000 ký tự. `parse_mode` (`markdown` hoặc `html`) và `text_styles` là tùy chọn. Success result là `message_id` và `date`. Không có reply parameter nào được tài liệu hóa cho API này. [sendMessage](https://docs.zaloplatforms.com/docs/BOT/apis/sendMessage)
+The normal parser accepts only `message.text.received` private, non-bot
+messages with required identifiers/timestamp/text. It immediately encrypts
+accepted text and persists a deduplicated inbound record before an opaque queue
+job. Other event types do not establish chat identity or create a reminder.
+The canonical payload contract is documented by [Zalo Webhook](https://docs.zaloplatforms.com/docs/BOT/webhook).
 
-Ghi một outbound delivery record trước khi gửi và dùng idempotency key của Calenote; không retry mù quáng sau timeout vì provider có thể đã nhận request. Lưu provider receipt `message_id` khi thành công. 429 là `Quota exceeded`; tài liệu không công bố quota số học hay retry-after, nên backoff có jitter phải là cấu hình bảo thủ/quan sát được, không phải giả định hợp đồng provider. [Bảng mã lỗi](https://docs.zaloplatforms.com/docs/BOT/error_code)
+## `getUpdates` diagnostic contract
+
+Zalo documents `getUpdates` response message data as a JSON object similar to a
+Webhook payload. For Calenote's temporary diagnostic, a valid object result maps
+immediately to:
+
+```text
+updateReceived = true
+eventName = message.text.received | message.unsupported.received | NONE
+privateChat = result.message.chat.chat_type === "PRIVATE"
+```
+
+An empty/missing/non-object result maps to `updateReceived = false` and
+`eventName = NONE`. Raw provider update objects, message text, chat ID, user ID,
+token, webhook URL/path, and headers cannot leave the provider adapter. The
+diagnostic does not change connection state or rotate a connect code.
+
+Polling and webhook delivery are mutually exclusive at the provider. The
+temporary diagnostic therefore performs an exact-match `getWebhookInfo`
+pre-delete fence, deletes only Calenote's expected webhook, long-polls once,
+and restores the exact derived webhook in `finally`; it retries restoration once
+and verifies restoration. It is owner-only, same-origin, Zalo-only,
+`ACTIVE_UNBOUND`-only, rate-limited to one probe per connection per ten minutes,
+and not a regular product capability.
+
+## `/connect` lifecycle
+
+**IMPLEMENTED:** After a connection reaches `ACTIVE_UNBOUND`, Calenote creates
+an expiring one-use `/connect <code>` command. Only a digest is persisted.
+The user sends the command in a private chat with the correct bot. A valid
+inbound private message consumes the code atomically, fences ownership in D1,
+binds the provider user/chat identity, and transitions to `ACTIVE_BOUND`.
+
+- `ACTIVE_UNBOUND`: active connection, no trusted private chat yet; code can be
+  generated/rotated through the authenticated owner UI.
+- `ACTIVE_BOUND`: private chat is bound; reminders and login-code delivery can
+  select it. There is no reconnect action in the current UI.
+- `WEBHOOK_FAILED`: retry the webhook path without requesting the bot token
+  again.
+- `SUSPENDED`: credential requires review; it must not use the webhook-retry
+  flow as a substitute for credential replacement.
+
+## Production interpretation
+
+`testWebhook` returning success proves that Zalo's webhook verification reached
+an acceptable endpoint. It **does not prove** Zalo dispatches real private
+message events to the Worker, that Calenote accepts/parses them, that D1 receives
+an inbound row, or that `/connect` reaches `ACTIVE_BOUND`.
+
+The current production incident is OPEN: `getWebhookInfo` is canonical and
+`testWebhook` is `webhook.ok`, but a real `/connect` and a plain private text
+were not observed by the Worker and inbound count stayed zero. The first polling
+probe is inconclusive solely because its prior diagnostic parser expected an
+array. Webhook restoration was proven successful. See
+[zalo-production-acceptance.md](../runbooks/zalo-production-acceptance.md) for
+the required real-message evidence before acceptance.
