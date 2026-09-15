@@ -1,2 +1,6 @@
-import { FinalScreenExperience } from "@/features/final-screens/FinalScreenExperience";
-export default function ConnectionsPage() { return <FinalScreenExperience screen="connections" />; }
+import { Suspense } from "react";
+import { ConnectionsDiagnosticExperience } from "./ConnectionsDiagnosticExperience";
+
+export default function ConnectionsPage() {
+  return <Suspense fallback={null}><ConnectionsDiagnosticExperience /></Suspense>;
+}
