@@ -148,8 +148,7 @@ export async function getZaloUpdates(
     body: { timeout: 22 },
     timeoutMs: 25_000,
   }));
-  const updates = Array.isArray(payload.result) ? payload.result : null;
-  const update = updates?.find(isRecord);
+  const update = isRecord(payload.result) ? payload.result : null;
   if (!update) return { updateReceived: false, eventName: "NONE", privateChat: false };
   const eventName = update.event_name === "message.text.received"
     ? "message.text.received"
