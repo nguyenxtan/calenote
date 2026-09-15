@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Status:** approved design, pending implementation plan.
+**Status:** APPROVED DESIGN — READY FOR IMPLEMENTATION PLAN.
 
 This design delivers a provider-agnostic Vietnamese conversational reminder
 core. It builds on the proven Zalo ingress, encrypted D1 persistence, queue
@@ -38,8 +38,9 @@ and live-smoke budget require explicit approval.
 
 - No LLM tool use, agent loop, database write authority, scheduler authority,
   authorization authority, or provider-specific conversational behavior.
-- No D1 schema migration unless the idempotency audit proves an existing schema
-  invariant cannot express the required atomicity.
+- A D1 migration is allowed only when persistent conversational clarification
+  state or proven bind-idempotency requirements cannot be expressed safely by
+  the current schema.
 - No Telegram-specific production diagnostics, custom Cloudflare changes, or
   change to Zalo ingress, credential handling, encryption, queue topology, or
   webhook authorization.
@@ -102,19 +103,68 @@ Known parser failures map locally as follows:
 
 The generic help reply is only for unsupported or unclassifiable input.
 
+### Clarification continuation state
+
+A clarification is a persistent, provider-agnostic application boundary, not
+an in-memory prompt. It is scoped to the canonical bound private chat and user,
+has a bounded TTL, and permits one active relevant flow per chat. Sensitive
+title/context data is encrypted at rest through existing keyring patterns.
+
+For example, `chiều mai gọi mẹ` creates a create-reminder clarification with a
+resolved date and encrypted title but no time. A later `4h` is resolved against
+that active flow to produce 16:00 tomorrow without requiring the original
+sentence. Resolution is idempotent and terminalizes the context on success,
+cancellation, or expiry. It remains safe across Worker restart and Queue delay.
+The LLM may propose an interpretation but never writes or resolves a
+clarification record directly.
+
+### Time authorities
+
+There are two distinct time authorities:
+
+- `interpretationReferenceTime = inbound.receivedAt` anchors relative wording
+  such as `hôm nay`, `mai`, and `ngày kia` for deterministic and AI
+  interpretation.
+- `mutationValidityTime = processingNow` validates that a draft creation or
+  clarification resolution is still in the future when it becomes mutable.
+
+Thus, a message received at 11:59 for 12:00 today retains that semantic time
+when processed at 12:01, but is rejected locally as `PAST_TIME`. Queue delay
+never silently changes the date meaning and never creates a stale draft.
+
+### Deterministic failure versus AI-eligible ambiguity
+
+Known/actual failures remain local: `PAST_TIME`, `INVALID_TIME`, `INVALID_DATE`,
+`TOO_FAR`, and `TITLE_TOO_LONG`. A truly missing value remains local when no
+plausible signal exists; `mai gọi mẹ` has no clock signal and receives a
+missing-time clarification.
+
+AI is eligible only for unresolved semantics: the message contains a plausible
+date/time or intent signal that this compact grammar cannot confidently
+normalize, such as `thứ sáu tuần sau lúc bốn giờ gửi báo cáo` or `mai tầm tám
+giờ sáng nhớ bảo tui gọi mẹ`. Unsupported grammar must not be mislabeled as a
+missing user value merely to suppress the one allowed semantic interpretation.
+
 ## Query behavior
 
-The conversational query service reads the existing owned/confirmed reminders
+The conversational query service reads the existing owned, confirmed,
+non-cancelled reminders
 for the bound chat's user/workspace. It has no write capability and no parallel
 calendar table. All range construction uses `Asia/Ho_Chi_Minh`:
 
 - `TODAY`: local calendar-day interval.
 - `TOMORROW`: next local calendar-day interval.
-- `DATE`: one explicit local calendar-day interval.
+- `DATE`: one explicitly identified local calendar-day interval.
 - `UPCOMING`: a bounded future interval and bounded result count.
 
 Replies contain only local time and decrypted title, never internal identifiers.
 They distinguish an empty range from a concise ordered list.
+
+The model is not a database-range authority. It returns `TODAY`, `TOMORROW`,
+`UPCOMING`, or a bounded local calendar date; the backend constructs canonical
+`from`/`to` timestamps in `Asia/Ho_Chi_Minh`, scopes ownership, applies the
+status filter, and enforces a bounded result count before reading the canonical
+store.
 
 ## Intelligence contract and safety
 
@@ -152,6 +202,13 @@ bounds, timeout, and a prompt/completion price cap. `AI_MODE=off` uses the null
 gateway and has zero external AI calls. `AI_MODE=free` is rejected by policy
 until equivalent privacy evidence exists.
 
+Model confidence is advisory only. It is never an authorization, security, or
+mutation boundary. Backend authority remains schema validation, intent
+allowlist, temporal/title/range validation, ownership/session context, the
+mutation lifecycle, and user confirmation. User text is untrusted data; system
+instructions explicitly state that instructions embedded in it cannot override
+the semantic interpretation contract.
+
 Safe metrics are limited to requested/used, mode, model, provider, latency,
 result category, and provider-supplied usage/cost where available. They never
 contain user content, title, identifiers, credentials, headers, or secrets.
@@ -179,16 +236,38 @@ ownership fences. The required outcomes are:
 - Malformed `/connect CODE.` terminalizes with guidance without consuming a
   code or changing connection state.
 
+Successful first bind terminalizes inbound as `PROCESSED`, consumes the code,
+creates exactly one identity and `CHAT_BOUND` audit record, changes the
+connection to `ACTIVE_BOUND`, and attempts one success reply. A later same-chat
+retry terminalizes safely as idempotent success without changing ownership,
+creating an identity/audit event, or treating a concurrent winner as an
+infrastructure failure. A different private chat is rejected safely.
+
 Database transaction conditions, not user behavior or in-memory locks, are the
 authority for these guarantees.
 
 ## Connections state synchronization
 
-After a user creates/rotates a code in `/app/connections`, the V2 UI performs
-bounded, cancellable polling of canonical `GET /api/connections`. It displays a
-waiting state and transitions to a clear `ACTIVE_BOUND` success state without
-requiring refresh. The polling stops on success, unmount, timeout, or mutation
-error. It does not create a new backend endpoint or disclose credentials.
+After a user creates/rotates an active code in `/app/connections`, the V2 UI
+performs bounded, cancellable polling of canonical `GET /api/connections`. It
+stops on `ACTIVE_BOUND`, code expiry, bounded timeout, component unmount, or
+authentication loss. It does not create a new backend endpoint or disclose
+credentials.
+
+On `ACTIVE_BOUND`, it immediately updates canonical UI state, clears the
+command, stops polling, and shows `Đã kết nối thành công` plus `Bot đã sẵn sàng
+nhận lệnh và gửi lời nhắc.` On expiry it states `Mã kết nối đã hết hạn.` and
+offers `Tạo mã mới`. On timeout it states `Chưa nhận được xác nhận từ bot.` and
+offers `Kiểm tra lại` (one canonical refresh and, while still valid, another
+bounded watch) plus `Tạo mã mới`. No manual browser refresh is required.
+
+## User response preferences
+
+V1 reuses the existing preference boundary only for safe presentation wording
+where it does not change deterministic domain meaning. Time, title,
+confirmation, range, mutation, and validation semantics never vary by tone or
+address preference. Full free-form tone personalization is explicitly deferred;
+V1 prefers stable, concise Vietnamese replies.
 
 ## Temporary diagnostics
 
@@ -213,6 +292,30 @@ diagnostic removal. Canonical acceptance is `pnpm.cmd check` plus
 `git diff --check`.
 
 Production acceptance uses bounded, synthetic Vietnamese smoke tests only after
-an approved deploy. A live AI smoke test additionally requires explicit approval
-of the selected model/provider/cost/privacy evidence. The final documentation
-labels code implementation, automated proof, and production proof separately.
+an approved deploy. The three distinct AI states are:
+
+- `AI_FALLBACK_IMPLEMENTED`: the port, strict structured contract, validation,
+  fencing, metrics, and failure behavior pass automated tests.
+- `AI_FALLBACK_CONFIGURED`: an approved model/provider, price cap, privacy/ZDR
+  evidence, and production secret are configured.
+- `AI_FALLBACK_PROVEN_LIVE`: one explicitly approved bounded semantic smoke
+  test passes with that exact configuration.
+
+`AI_MODE=privacy` is the intended product mode; `AI_MODE=off` is its
+deterministic fail-safe; `AI_MODE=free` is unavailable by the current privacy
+policy. The documentation must never call the live fallback production-ready
+before all three states above are evidenced.
+
+### Required regression matrix
+
+- Clarification continuation, expiry, cancellation, and separate Worker/queue
+  invocation between turns.
+- AI-eligible unsupported semantic date/time versus genuinely missing value.
+- Queue-delay interpretation versus mutation-validity clock case.
+- Query status filtering and backend-owned range construction.
+- Prompt-injection-like user content cannot alter schema, authorization, or
+  mutation authority.
+- Same-chat duplicate `/connect` sequentially and concurrently, different-chat
+  rejection, and malformed-command then valid-command behavior.
+- UI code expiry, authentication loss, timeout/manual re-check, and
+  `ACTIVE_BOUND` transition.
