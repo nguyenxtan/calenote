@@ -98,3 +98,8 @@ immutable; remediation uses a reviewed forward-only migration.
 - Do not apply remote D1 migrations as part of a generic Worker promotion.
 - Do not deploy, create resources, rotate secrets, or bind a domain without
   explicit human authorization.
+- A promotion that touches the Zalo provider, webhook, inbound, encryption, or
+  queue path must also follow the provider-specific
+  [Zalo production acceptance](./zalo-production-acceptance.md) gate. Generic
+  HTTP smoke checks and `testWebhook` alone are insufficient evidence for real
+  Zalo message delivery.
