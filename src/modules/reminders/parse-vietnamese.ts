@@ -89,11 +89,16 @@ function findDateTokens(text: string): DateToken[] {
 
 function findTimeTokens(text: string): TimeToken[] {
   const tokens: TimeToken[] = [];
-  const pattern = /(^|\s)((?:lúc\s+)?(\d{1,2})(?:h|:(\d{2})))(?=\s|$)/giu;
+  const pattern = /(^|\s)((?:(?:lúc|vào)\s+)?(\d{1,2})(?:h|:(\d{2}))(?:\s+(trưa|sáng|chiều|tối))?)(?=\s|$)/giu;
   for (const match of text.matchAll(pattern)) {
+    const daypart = match[5]?.toLocaleLowerCase("vi-VN");
+    const rawHour = Number(match[3]);
+    const hour = daypart === "chiều" || daypart === "tối"
+      ? rawHour + (rawHour < 12 ? 12 : 0)
+      : rawHour;
     tokens.push({
       ...capturedSpan(match, match[2]),
-      hour: Number(match[3]),
+      hour,
       minute: match[4] === undefined ? 0 : Number(match[4]),
     });
   }
@@ -107,6 +112,15 @@ function findReminderMarkers(text: string): TextSpan[] {
     markers.push(capturedSpan(match, match[2]));
   }
   return markers;
+}
+
+function findReminderFillers(text: string): TextSpan[] {
+  const fillers: TextSpan[] = [];
+  const pattern = /(^|\s)(nhớ)(?=\s|$)/giu;
+  for (const match of text.matchAll(pattern)) {
+    fillers.push(capturedSpan(match, match[2]));
+  }
+  return fillers;
 }
 
 function validCalendarDate(year: number, month: number, day: number): boolean {
@@ -194,13 +208,12 @@ export function parseVietnameseReminder(
     return { ok: false, code: "INVALID_TIME" };
   }
 
-  const markers = findReminderMarkers(normalized);
-  if (markers.length !== 1) return { ok: false, code: "INVALID_COMMAND" };
-
   const date = resolveDate(dates[0], reference);
   if (!date) return { ok: false, code: "INVALID_DATE" };
 
-  const title = extractTitle(normalized, [dates[0], time, markers[0]]);
+  const markers = findReminderMarkers(normalized);
+  const fillers = findReminderFillers(normalized);
+  const title = extractTitle(normalized, [dates[0], time, ...markers, ...fillers]);
   if (title.length === 0) return { ok: false, code: "MISSING_TITLE" };
   if (title.length > MAX_REMINDER_TITLE_CODE_UNITS) {
     return { ok: false, code: "TITLE_TOO_LONG" };

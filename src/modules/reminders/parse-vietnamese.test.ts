@@ -95,7 +95,6 @@ describe("parseVietnameseReminder", () => {
     ["mai nhắc tôi gửi báo cáo", "MISSING_TIME"],
     ["8h nhắc tôi gửi báo cáo", "MISSING_DATE"],
     ["mai 8h nhắc tôi", "MISSING_TITLE"],
-    ["mai 8h gửi báo cáo", "INVALID_COMMAND"],
     ["hôm nay mai 15h nhắc tôi gửi báo cáo", "AMBIGUOUS_DATE"],
     ["mai 8h 9h nhắc tôi gửi báo cáo", "AMBIGUOUS_TIME"],
     ["mai 25h nhắc tôi gửi báo cáo", "INVALID_TIME"],
@@ -128,6 +127,19 @@ describe("parseVietnameseReminder", () => {
         scheduledAt: Date.UTC(2026, 8, 4, 1, 30),
         timezone,
       },
+    });
+  });
+
+  it.each([
+    ["mai 8h gọi mẹ", "gọi mẹ", Date.UTC(2026, 8, 3, 1)],
+    ["12h trưa mai đăng ký chữ ký số", "đăng ký chữ ký số", Date.UTC(2026, 8, 3, 5)],
+    ["mai 8h tối gọi mẹ", "gọi mẹ", Date.UTC(2026, 8, 3, 13)],
+    ["mai 3h chiều họp team", "họp team", Date.UTC(2026, 8, 3, 8)],
+    ["mai vào 8h nhớ nhắc tôi gọi mẹ", "gọi mẹ", Date.UTC(2026, 8, 3, 1)],
+  ])("parses optional markers, fillers, and explicit dayparts: %s", (text, title, scheduledAt) => {
+    expect(parseVietnameseReminder(text, receivedAt, timezone)).toEqual({
+      ok: true,
+      candidate: { title, scheduledAt, timezone },
     });
   });
 

@@ -1,0 +1,124 @@
+import {
+  parseVietnameseReminder,
+  VIETNAM_TIMEZONE,
+  type ReminderParseFailureCode,
+} from "../reminders/parse-vietnamese";
+import type {
+  DeterministicConversationInput,
+  DeterministicConversationResult,
+  ReminderQueryRangeKind,
+} from "./contracts";
+import { routeConversationIntent } from "./intent-router";
+
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1_000;
+
+function normalize(text: string): string {
+  return text.normalize("NFC").replace(/\s+/gu, " ").trim();
+}
+
+function localDate(timestamp: number): string | undefined {
+  if (!Number.isFinite(timestamp)) return undefined;
+  const local = new Date(timestamp + VIETNAM_OFFSET_MS);
+  if (Number.isNaN(local.getTime())) return undefined;
+  return `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}`;
+}
+
+function relativeLocalDate(text: string, receivedAt: number): string | undefined {
+  const normalized = text.toLocaleLowerCase("vi-VN");
+  const days = normalized.includes("ngày kia") ? 2 : normalized.includes("mai") ? 1 : normalized.includes("hôm nay") ? 0 : undefined;
+  return days === undefined ? undefined : localDate(receivedAt + days * 24 * 60 * 60 * 1_000);
+}
+
+function contextTitle(text: string): string | undefined {
+  const title = normalize(text)
+    .replace(/(?:hôm nay|ngày kia|mai|\d{1,2}\/\d{1,2}(?:\/\d{4})?|sáng|trưa|chiều|tối|lúc|vào|nhớ|nhắc(?:\s+(?:tôi|tui|mình))?)/giu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return title || undefined;
+}
+
+function queryRange(text: string): ReminderQueryRangeKind {
+  const normalized = text.toLocaleLowerCase("vi-VN");
+  if (/\d{1,2}\/\d{1,2}(?:\/\d{4})?/u.test(normalized)) return "DATE";
+  if (normalized.includes("sắp tới")) return "UPCOMING";
+  if (normalized.includes("mai")) return "TOMORROW";
+  return "TODAY";
+}
+
+function explicitQueryLocalDate(text: string, receivedAt: number): string | undefined {
+  const match = text.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/u);
+  if (!match) return undefined;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const reference = new Date(receivedAt + VIETNAM_OFFSET_MS);
+  let year = match[3] === undefined ? reference.getUTCFullYear() : Number(match[3]);
+  if (match[3] === undefined && (month < reference.getUTCMonth() + 1 || (month === reference.getUTCMonth() + 1 && day < reference.getUTCDate()))) year += 1;
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day
+    ? `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    : undefined;
+}
+
+function replyForFailure(code: ReminderParseFailureCode): string {
+  switch (code) {
+    case "PAST_TIME": return "Thời gian đó đã qua, bạn cho mình một giờ trong tương lai nhé.";
+    case "INVALID_TIME": return "Giờ bạn cung cấp chưa hợp lệ, bạn kiểm tra lại nhé.";
+    case "INVALID_DATE": return "Ngày bạn cung cấp chưa hợp lệ, bạn kiểm tra lại nhé.";
+    case "TOO_FAR": return "Ngày nhắc đang quá xa, bạn chọn một ngày gần hơn nhé.";
+    case "TITLE_TOO_LONG": return "Nội dung nhắc quá dài, bạn rút gọn lại nhé.";
+    default: return "Mình chưa hiểu lịch nhắc này.";
+  }
+}
+
+function missingField(code: ReminderParseFailureCode): "date" | "time" | "title" | undefined {
+  if (code === "MISSING_DATE" || code === "AMBIGUOUS_DATE") return "date";
+  if (code === "MISSING_TIME" || code === "AMBIGUOUS_TIME") return "time";
+  if (code === "MISSING_TITLE") return "title";
+  return undefined;
+}
+
+export function interpretDeterministically(
+  inbound: DeterministicConversationInput,
+): DeterministicConversationResult {
+  const intent = routeConversationIntent(inbound.text);
+  if (intent === "LIST_REMINDERS") {
+    const rangeKind = queryRange(inbound.text);
+    return { kind: "LIST_QUERY", intent, rangeKind, localDate: rangeKind === "TODAY" ? localDate(inbound.receivedAt) : rangeKind === "TOMORROW" ? relativeLocalDate("mai", inbound.receivedAt) : rangeKind === "DATE" ? explicitQueryLocalDate(inbound.text, inbound.receivedAt) : undefined };
+  }
+  if (intent === "CONFIRM_PENDING" || intent === "CANCEL_PENDING") return { kind: "PENDING_ACTION", intent };
+  if (intent === "HELP") return { kind: "HELP", intent, reply: "Bạn có thể nói: mai 8h gọi mẹ." };
+  if (intent !== "CREATE_REMINDER") return { kind: "HELP", intent: "HELP", reply: "Bạn có thể nói: mai 8h gọi mẹ." };
+
+  const normalized = normalize(inbound.text).toLocaleLowerCase("vi-VN");
+  if (/(?:thứ\s+.+tuần sau|\btầm\s+|\bbốn giờ\b|\bnăm giờ\b)/u.test(normalized)) {
+    return { kind: "AI_ELIGIBLE", intent: "UNKNOWN" };
+  }
+
+  const parsed = parseVietnameseReminder(
+    inbound.text,
+    inbound.receivedAt,
+    inbound.timezone ?? VIETNAM_TIMEZONE,
+  );
+  if (parsed.ok) {
+    if (parsed.candidate.scheduledAt <= inbound.processingNow) {
+      return { kind: "REJECTED", intent: "CREATE_REMINDER", code: "PAST_TIME", reply: replyForFailure("PAST_TIME") };
+    }
+    return { kind: "CREATE_CANDIDATE", intent: "CREATE_REMINDER", candidate: parsed.candidate };
+  }
+
+  const missing = missingField(parsed.code);
+  if (missing) {
+    return {
+      kind: "CLARIFICATION",
+      intent: "CREATE_REMINDER",
+      target: "CREATE_REMINDER",
+      missingFields: [missing],
+      context: { localDate: relativeLocalDate(inbound.text, inbound.receivedAt), title: contextTitle(inbound.text) },
+      reply: missing === "time" ? "Bạn muốn nhắc vào mấy giờ?" : missing === "date" ? "Bạn muốn nhắc vào ngày nào?" : "Bạn muốn nhắc việc gì?",
+    };
+  }
+  if (["PAST_TIME", "INVALID_TIME", "INVALID_DATE", "TOO_FAR", "TITLE_TOO_LONG"].includes(parsed.code)) {
+    return { kind: "REJECTED", intent: "CREATE_REMINDER", code: parsed.code as Extract<ReminderParseFailureCode, "PAST_TIME" | "INVALID_TIME" | "INVALID_DATE" | "TOO_FAR" | "TITLE_TOO_LONG">, reply: replyForFailure(parsed.code) };
+  }
+  return { kind: "HELP", intent: "HELP", reply: "Bạn có thể nói: mai 8h gọi mẹ." };
+}
