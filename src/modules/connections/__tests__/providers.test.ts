@@ -5,6 +5,7 @@ import {
   deleteZaloWebhook,
   getZaloUpdates,
   getZaloWebhookInfo,
+  diagnoseZaloWebhookPayload,
   parseZaloWebhook,
   sendZaloText,
   setZaloWebhook,
@@ -35,6 +36,99 @@ async function captureAdapterFailure(
 }
 
 describe("Zalo Bot Platform adapter", () => {
+  it("maps the documented text webhook through every safe parsing predicate without retaining payload data", () => {
+    const token = "zalo-token-must-not-escape";
+    const messageText = "message-content-must-not-escape";
+    const providerUserId = "provider-user-id-must-not-escape";
+    const chatId = "private-chat-id-must-not-escape";
+    const messageId = "message-id-must-not-escape";
+
+    const result = diagnoseZaloWebhookPayload({
+      ok: true,
+      result: {
+        event_name: "message.text.received",
+        message: {
+          from: { id: providerUserId, is_bot: false },
+          chat: { id: chatId, chat_type: "PRIVATE" },
+          text: messageText,
+          message_id: messageId,
+          date: 1_700_000_000_000,
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      payload_object: true, payload_ok_true: true, result_object: true,
+      event_name_present: true, event_is_text_received: true, message_object: true,
+      from_object: true, from_is_bot_present: true, from_is_bot_false: true,
+      chat_object: true, chat_type_present: true, chat_is_private: true,
+      text_present: true, text_is_string: true, message_id_present: true,
+      from_id_present: true, chat_id_present: true, date_present: true,
+      date_is_number: true, date_is_safe_integer: true, parser_accepted: true,
+    });
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [token, messageText, providerUserId, chatId, messageId, "https://", "/webhooks/"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("identifies a missing is_bot predicate without exposing the provider message", () => {
+    const result = diagnoseZaloWebhookPayload({
+      ok: true,
+      result: {
+        event_name: "message.text.received",
+        message: {
+          from: { id: "provider-user-must-not-escape" },
+          chat: { id: "private-chat-must-not-escape", chat_type: "PRIVATE" },
+          text: "message-content-must-not-escape",
+          message_id: "message-id-must-not-escape",
+          date: 1_700_000_000_000,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      from_object: true,
+      from_is_bot_present: false,
+      from_is_bot_false: false,
+      parser_accepted: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("must-not-escape");
+  });
+
+  it("identifies unsupported scalar types without changing parser acceptance", () => {
+    const result = diagnoseZaloWebhookPayload({
+      ok: true,
+      result: {
+        event_name: 7,
+        message: {
+          from: { id: { unexpected: "provider-user-must-not-escape" }, is_bot: "false" },
+          chat: { id: { unexpected: "private-chat-must-not-escape" }, chat_type: 9 },
+          text: { unexpected: "message-content-must-not-escape" },
+          message_id: { unexpected: "message-id-must-not-escape" },
+          date: "1700000000000",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      event_name_present: false,
+      event_is_text_received: false,
+      from_is_bot_present: false,
+      chat_type_present: false,
+      text_present: true,
+      text_is_string: false,
+      message_id_present: false,
+      from_id_present: false,
+      chat_id_present: false,
+      date_present: true,
+      date_is_number: false,
+      date_is_safe_integer: false,
+      parser_accepted: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("must-not-escape");
+  });
+
   it("maps the documented object-shaped text update immediately to safe metadata without returning a raw update", async () => {
     const token = "zalo-token-must-not-escape";
     const messageText = "calenote-poll-test-must-not-escape";

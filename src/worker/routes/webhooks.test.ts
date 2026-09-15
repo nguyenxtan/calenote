@@ -53,7 +53,7 @@ describe("webhook route authentication", () => {
 
     expect(response.status).toBe(403);
     expect(diagnostic).toHaveBeenCalledOnce();
-    expect(diagnostic).toHaveBeenCalledWith({
+    expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({
       provider: "zalo",
       request_reached_worker: true,
       route_matched: true,
@@ -63,9 +63,72 @@ describe("webhook route authentication", () => {
       secret_header_match: false,
       body_parse_reached: false,
       final_status: 403,
-    });
+      parser_accepted: false,
+    }));
     const serialized = JSON.stringify(diagnostic.mock.calls[0][0]);
     for (const forbidden of [publicId, pathSecret, headerSecret, suppliedHeader, payloadMarker, "https://"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("adds only safe Zalo parser predicates after accepting the documented text payload", async () => {
+    const diagnostic = vi.fn();
+    const messageText = "message-content-must-not-escape";
+    const providerUserId = "provider-user-id-must-not-escape";
+    const privateChatId = "private-chat-id-must-not-escape";
+    const providerMessageId = "provider-message-id-must-not-escape";
+    const deps = dependencies({
+      findConnection: vi.fn(async () => ({ ...connection, provider: "zalo" as const })),
+      recordZaloWebhookDiagnostic: diagnostic,
+    });
+
+    const response = await handleWebhook(
+      request("zalo", {}, {
+        ok: true,
+        result: {
+          event_name: "message.text.received",
+          message: {
+            from: { id: providerUserId, is_bot: false },
+            chat: { id: privateChatId, chat_type: "PRIVATE" },
+            text: messageText,
+            message_id: providerMessageId,
+            date: 1_700_000_000_000,
+          },
+        },
+      }),
+      { provider: "zalo", publicId, pathSecret },
+      deps,
+    );
+
+    expect(response.status).toBe(200);
+    const event = diagnostic.mock.calls[0][0];
+    expect(event).toMatchObject({
+      body_parse_reached: true,
+      payload_object: true,
+      payload_ok_true: true,
+      result_object: true,
+      event_name_present: true,
+      event_is_text_received: true,
+      message_object: true,
+      from_object: true,
+      from_is_bot_present: true,
+      from_is_bot_false: true,
+      chat_object: true,
+      chat_type_present: true,
+      chat_is_private: true,
+      text_present: true,
+      text_is_string: true,
+      message_id_present: true,
+      from_id_present: true,
+      chat_id_present: true,
+      date_present: true,
+      date_is_number: true,
+      date_is_safe_integer: true,
+      parser_accepted: true,
+      final_status: 200,
+    });
+    const serialized = JSON.stringify(event);
+    for (const forbidden of [messageText, providerUserId, privateChatId, providerMessageId, publicId, pathSecret, headerSecret, "https://"]) {
       expect(serialized).not.toContain(forbidden);
     }
   });

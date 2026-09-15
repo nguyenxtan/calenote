@@ -1,6 +1,10 @@
 import type { BotProvider, InboundTextMessage } from "@/modules/connections/contracts";
 import { parseTelegramWebhook } from "@/modules/connections/providers/telegram";
-import { parseZaloWebhook } from "@/modules/connections/providers/zalo";
+import {
+  diagnoseZaloWebhookPayload,
+  parseZaloWebhook,
+  type SafeZaloWebhookParserDiagnostic,
+} from "@/modules/connections/providers/zalo";
 import { RequestBodyError, readBoundedJson } from "@/modules/http/body";
 import type { WebhookAcceptance, WebhookConnection } from "@/modules/inbound/webhook";
 import { base64UrlToBytes } from "@/modules/security/encoding";
@@ -16,7 +20,7 @@ export interface WebhookRouteSecrets {
   headerSecret: string;
 }
 
-export interface ZaloWebhookAcceptanceDiagnostic {
+export interface ZaloWebhookAcceptanceDiagnostic extends SafeZaloWebhookParserDiagnostic {
   provider: "zalo";
   request_reached_worker: boolean;
   route_matched: boolean;
@@ -72,6 +76,27 @@ export async function handleWebhook(
       secret_header_present: false,
       secret_header_match: false,
       body_parse_reached: false,
+      payload_object: false,
+      payload_ok_true: false,
+      result_object: false,
+      event_name_present: false,
+      event_is_text_received: false,
+      message_object: false,
+      from_object: false,
+      from_is_bot_present: false,
+      from_is_bot_false: false,
+      chat_object: false,
+      chat_type_present: false,
+      chat_is_private: false,
+      text_present: false,
+      text_is_string: false,
+      message_id_present: false,
+      from_id_present: false,
+      chat_id_present: false,
+      date_present: false,
+      date_is_number: false,
+      date_is_safe_integer: false,
+      parser_accepted: false,
       final_status: 500,
     }
     : null;
@@ -117,6 +142,7 @@ export async function handleWebhook(
     const message = connection.provider === "zalo"
       ? parseZaloWebhook(payload)
       : parseTelegramWebhook(payload);
+    if (diagnostic) Object.assign(diagnostic, diagnoseZaloWebhookPayload(payload));
     const outcome = await dependencies.accept({ connection, message });
     return respond(outcome.status);
   } catch (error) {

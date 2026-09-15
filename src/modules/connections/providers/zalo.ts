@@ -92,6 +92,67 @@ export interface SafeZaloPollingUpdate {
   privateChat: boolean;
 }
 
+export interface SafeZaloWebhookParserDiagnostic {
+  payload_object: boolean;
+  payload_ok_true: boolean;
+  result_object: boolean;
+  event_name_present: boolean;
+  event_is_text_received: boolean;
+  message_object: boolean;
+  from_object: boolean;
+  from_is_bot_present: boolean;
+  from_is_bot_false: boolean;
+  chat_object: boolean;
+  chat_type_present: boolean;
+  chat_is_private: boolean;
+  text_present: boolean;
+  text_is_string: boolean;
+  message_id_present: boolean;
+  from_id_present: boolean;
+  chat_id_present: boolean;
+  date_present: boolean;
+  date_is_number: boolean;
+  date_is_safe_integer: boolean;
+  parser_accepted: boolean;
+}
+
+function supportedIdentifier(value: unknown): boolean {
+  return typeof value === "string" || typeof value === "number";
+}
+
+export function diagnoseZaloWebhookPayload(payload: unknown): SafeZaloWebhookParserDiagnostic {
+  const payloadObject = isRecord(payload);
+  const result = payloadObject && isRecord(payload.result) ? payload.result : null;
+  const message = result && isRecord(result.message) ? result.message : null;
+  const from = message && isRecord(message.from) ? message.from : null;
+  const chat = message && isRecord(message.chat) ? message.chat : null;
+  const date = message?.date;
+
+  return {
+    payload_object: payloadObject,
+    payload_ok_true: payloadObject && payload.ok === true,
+    result_object: result !== null,
+    event_name_present: result !== null && typeof result.event_name === "string",
+    event_is_text_received: result?.event_name === "message.text.received",
+    message_object: message !== null,
+    from_object: from !== null,
+    from_is_bot_present: typeof from?.is_bot === "boolean",
+    from_is_bot_false: from?.is_bot === false,
+    chat_object: chat !== null,
+    chat_type_present: typeof chat?.chat_type === "string",
+    chat_is_private: chat?.chat_type === "PRIVATE",
+    text_present: message !== null && Object.hasOwn(message, "text"),
+    text_is_string: typeof message?.text === "string",
+    message_id_present: supportedIdentifier(message?.message_id),
+    from_id_present: supportedIdentifier(from?.id),
+    chat_id_present: supportedIdentifier(chat?.id),
+    date_present: message !== null && Object.hasOwn(message, "date"),
+    date_is_number: typeof date === "number",
+    date_is_safe_integer: typeof date === "number" && Number.isSafeInteger(date),
+    parser_accepted: parseZaloWebhook(payload) !== null,
+  };
+}
+
 export async function getZaloWebhookInfo(
   token: string,
   expected: WebhookRegistration,
