@@ -472,6 +472,36 @@ describe("provider webhook and outbound adapters", () => {
     expect(parseZaloWebhook({ ok: true, result: { event_name: "message.text.received", message: { from: { id: "u1", is_bot: true }, chat: { id: "c1", chat_type: "PRIVATE" }, text: "no", message_id: "m1", date: 1 } } })).toBeNull();
   });
 
+  it("accepts a flat live Zalo private text webhook with the same normalized message", () => {
+    expect(parseZaloWebhook({
+      event_name: "message.text.received",
+      message: {
+        from: { id: "u-flat", display_name: "Minh", is_bot: false },
+        chat: { id: "c-flat", chat_type: "PRIVATE" },
+        text: "Xin chào từ Zalo",
+        message_id: "m-flat",
+        date: 1_700_000_000_000,
+      },
+    })).toEqual({
+      provider: "zalo",
+      providerMessageId: "m-flat",
+      providerUserId: "u-flat",
+      privateChatId: "c-flat",
+      displayName: "Minh",
+      text: "Xin chào từ Zalo",
+      receivedAt: 1_700_000_000_000,
+    });
+  });
+
+  it.each([
+    ["wrong event", { event_name: "message.unsupported.received", message: { from: { id: "u1", is_bot: false }, chat: { id: "c1", chat_type: "PRIVATE" }, text: "ignored", message_id: "m1", date: 1 } }],
+    ["bot-authored message", { event_name: "message.text.received", message: { from: { id: "u1", is_bot: true }, chat: { id: "c1", chat_type: "PRIVATE" }, text: "ignored", message_id: "m1", date: 1 } }],
+    ["non-private chat", { event_name: "message.text.received", message: { from: { id: "u1", is_bot: false }, chat: { id: "c1", chat_type: "GROUP" }, text: "ignored", message_id: "m1", date: 1 } }],
+    ["malformed message", { event_name: "message.text.received", message: null }],
+  ])("ignores a flat Zalo webhook with %s", (_case, payload) => {
+    expect(parseZaloWebhook(payload)).toBeNull();
+  });
+
   it("uses Telegram's constrained webhook payload and private text parser", async () => {
     const token = "123456789:AAExample_secret-token_123456789";
     const requester = vi.fn(async (request) => request.operation === "setWebhook" ? ({ ok: true, result: true }) : ({ ok: true, result: { message_id: 7 } }));

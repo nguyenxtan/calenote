@@ -120,10 +120,25 @@ function supportedIdentifier(value: unknown): boolean {
   return typeof value === "string" || typeof value === "number";
 }
 
+function normalizeZaloWebhookEvent(payload: unknown): Record<string, unknown> | null {
+  if (!isRecord(payload)) return null;
+
+  if (payload.ok === true && isRecord(payload.result)) {
+    return payload.result;
+  }
+
+  if (Object.hasOwn(payload, "event_name") && isRecord(payload.message)) {
+    return payload;
+  }
+
+  return null;
+}
+
 export function diagnoseZaloWebhookPayload(payload: unknown): SafeZaloWebhookParserDiagnostic {
   const payloadObject = isRecord(payload);
   const result = payloadObject && isRecord(payload.result) ? payload.result : null;
-  const message = result && isRecord(result.message) ? result.message : null;
+  const event = normalizeZaloWebhookEvent(payload);
+  const message = event && isRecord(event.message) ? event.message : null;
   const from = message && isRecord(message.from) ? message.from : null;
   const chat = message && isRecord(message.chat) ? message.chat : null;
   const date = message?.date;
@@ -132,8 +147,8 @@ export function diagnoseZaloWebhookPayload(payload: unknown): SafeZaloWebhookPar
     payload_object: payloadObject,
     payload_ok_true: payloadObject && payload.ok === true,
     result_object: result !== null,
-    event_name_present: result !== null && typeof result.event_name === "string",
-    event_is_text_received: result?.event_name === "message.text.received",
+    event_name_present: event !== null && typeof event.event_name === "string",
+    event_is_text_received: event?.event_name === "message.text.received",
     message_object: message !== null,
     from_object: from !== null,
     from_is_bot_present: typeof from?.is_bot === "boolean",
@@ -343,24 +358,14 @@ export async function sendZaloText(
 }
 
 export function parseZaloWebhook(payload: unknown): InboundTextMessage | null {
-  if (!isRecord(payload)) {
+  const event = normalizeZaloWebhookEvent(payload);
+  if (!event) return null;
+
+  if (event.event_name !== "message.text.received") {
     return null;
   }
 
-  if (payload.ok !== true) {
-    return null;
-  }
-
-  const result = payload.result;
-  if (!isRecord(result)) {
-    return null;
-  }
-
-  if (result.event_name !== "message.text.received") {
-    return null;
-  }
-
-  const message = result.message;
+  const message = event.message;
   if (!isRecord(message)) {
     return null;
   }
