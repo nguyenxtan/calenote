@@ -27,3 +27,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - After bootstrap, use immutable Worker versions: upload once, record the
   version ID, then promote or roll back that exact version. Worker rollback
   never rolls back D1 migrations; migrations are forward-only and immutable.
+
+## Branch and deployment policy
+
+- `master` is the production/deployment branch only. Develop on feature or
+  refactor branches and promote only a reviewed, validated, immutable `master`
+  SHA.
+- Creating or updating `master` never deploys automatically. A production
+  deployment still requires explicit human authorization for that exact SHA.
+- Do not merge development branches into legacy `main` merely to connect
+  history. Preserve old branches until a separately authorized cleanup.
