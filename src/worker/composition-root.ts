@@ -293,7 +293,12 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
   const loginStore = new D1LoginCodeStore(env.DB);
   const intelligence = await createIntelligenceCapability(env);
   return {
-    processInbound: (inboundId) => processInbound(inboundId, { store: inboundStore, keyring, intelligence }),
+    processInbound: (inboundId) => processInbound(inboundId, {
+      store: inboundStore,
+      keyring,
+      intelligence,
+      recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
+    }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),

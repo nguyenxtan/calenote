@@ -81,6 +81,7 @@ afterEach(() => {
 });
 
 interface SetupOptions {
+  provider?: "telegram" | "zalo";
   state?: "VALIDATING" | "ACTIVE_UNBOUND" | "ACTIVE_BOUND" | "WEBHOOK_FAILED" | "SUSPENDED";
   connectCode?: string;
   codeConnectionId?: string;
@@ -99,8 +100,9 @@ async function setup(options: SetupOptions = {}) {
   const connectionId = "connection-1";
   const userId = "user-1";
   const inboundId = options.inboundId ?? "inbound-1";
-  const provider = "telegram" as const;
-  const encryptedToken = await keyring.encryptCredential(connectionId, provider, 1, "123456789:AAExample_secret-token_123456789");
+  const provider = options.provider ?? "telegram";
+  const credential = provider === "zalo" ? "zalo-token-must-not-escape" : "123456789:AAExample_secret-token_123456789";
+  const encryptedToken = await keyring.encryptCredential(connectionId, provider, 1, credential);
   database.sqlite.prepare(
     "INSERT INTO users (id, email, display_name, timezone, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
   ).run(userId, "owner@example.test", "Owner", "Asia/Ho_Chi_Minh", now, now);
@@ -137,6 +139,7 @@ async function setup(options: SetupOptions = {}) {
   );
   await insertInbound(database.sqlite, keyring, {
     id: inboundId,
+    provider,
     text: options.text ?? `/connect ${connectCode}`,
     privateChatId: options.privateChatId ?? "chat-1",
     providerUserId: options.providerUserId ?? "provider-user-1",
@@ -159,7 +162,7 @@ async function setup(options: SetupOptions = {}) {
 async function insertInbound(
   database: DatabaseSync,
   keyring: Keyring,
-  input: { id: string; text: string; privateChatId: string; providerUserId: string; providerMessageId?: string },
+  input: { id: string; provider?: "telegram" | "zalo"; text: string; privateChatId: string; providerUserId: string; providerMessageId?: string },
 ) {
   const encrypted = await keyring.encryptSensitive("inbound-message", input.id, 1, input.text);
   database.prepare(
@@ -167,10 +170,11 @@ async function insertInbound(
       id, connection_id, provider, provider_message_id, provider_user_id, private_chat_id,
       display_name, message_ciphertext, message_iv, message_key_version, state,
       received_at, processing_started_at, attempt_count, processed_at, transition_marker
-    ) VALUES (?, ?, 'telegram', ?, ?, ?, ?, ?, ?, 1, 'PENDING', ?, NULL, 0, NULL, NULL)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'PENDING', ?, NULL, 0, NULL, NULL)`,
   ).run(
     input.id,
     "connection-1",
+    input.provider ?? "telegram",
     input.providerMessageId ?? input.id,
     input.providerUserId,
     input.privateChatId,
@@ -410,6 +414,32 @@ describe("atomic private-chat connection", () => {
     await expect(processInbound(inboundId, deps)).resolves.toEqual({ status: "TERMINAL" });
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(logged).not.toHaveBeenCalled();
+  });
+
+  it("records only a safe Zalo bind-transaction failure diagnostic", async () => {
+    const { deps, inboundId } = await setup({ provider: "zalo" });
+    const diagnostic = vi.fn();
+    vi.spyOn(deps.store, "bindPrivateChat").mockRejectedValueOnce(
+      new Error(`database failure with ${code} and private-chat-must-not-escape`),
+    );
+
+    await expect(processInbound(inboundId, { ...deps, recordDiagnostic: diagnostic })).rejects.toThrow("Unable to bind private chat");
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      operation: "bind_private_chat",
+      message_decrypt_reached: true,
+      connect_command_recognized: true,
+      code_digest_reached: true,
+      bind_transaction_reached: true,
+      bind_transaction_completed: false,
+      bind_succeeded: false,
+      confirmation_attempted: false,
+      confirmation_sent: false,
+      safe_failure_category: "BIND_TRANSACTION_FAILURE",
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(code);
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain("private-chat-must-not-escape");
   });
 });
 

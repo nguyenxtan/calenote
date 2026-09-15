@@ -139,9 +139,24 @@ export interface ProcessInboundDependencies {
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
+  recordDiagnostic?: (diagnostic: InboundProcessingDiagnostic) => void;
   now?: Clock;
   randomBytes?: RandomBytes;
   intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
+}
+
+export interface InboundProcessingDiagnostic {
+  provider: "zalo";
+  operation: "bind_private_chat";
+  message_decrypt_reached: boolean;
+  connect_command_recognized: boolean;
+  code_digest_reached: boolean;
+  bind_transaction_reached: boolean;
+  bind_transaction_completed: boolean;
+  bind_succeeded: boolean;
+  confirmation_attempted: boolean;
+  confirmation_sent: boolean;
+  safe_failure_category: "BIND_TRANSACTION_FAILURE" | null;
 }
 
 export async function sendProviderText(
@@ -495,7 +510,7 @@ async function replyAfterTerminal(
   message: ClaimedInboundMessage,
   text: string,
   dependencies: ProcessInboundDependencies,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const token = await dependencies.keyring.decryptCredential(
       message.connectionId,
@@ -509,9 +524,28 @@ async function replyAfterTerminal(
       message.privateChatId,
       text,
     );
+    return true;
   } catch {
     // Binding/help replies are best effort after the terminal database transition.
+    return false;
   }
+}
+
+function recordZaloBindDiagnostic(
+  message: ClaimedInboundMessage,
+  dependencies: ProcessInboundDependencies,
+  input: Pick<InboundProcessingDiagnostic, "bind_transaction_completed" | "bind_succeeded" | "confirmation_attempted" | "confirmation_sent" | "safe_failure_category">,
+): void {
+  if (message.provider !== "zalo") return;
+  dependencies.recordDiagnostic?.({
+    provider: "zalo",
+    operation: "bind_private_chat",
+    message_decrypt_reached: true,
+    connect_command_recognized: true,
+    code_digest_reached: true,
+    bind_transaction_reached: true,
+    ...input,
+  });
 }
 
 export async function processInbound(
@@ -537,21 +571,40 @@ export async function processInbound(
 
   if (commandCode !== null) {
     const digest = await dependencies.keyring.digestCode(commandCode);
-    const bound = await dependencies.store.bindPrivateChat({
-      inboundId: message.id,
-      connectionId: message.connectionId,
-      connectionUserId: message.connectionUserId,
-      providerUserId: message.providerUserId,
-      privateChatId: message.privateChatId,
-      displayName: message.displayName,
-      codeDigest: digest,
-      claimMarker: message.claimMarker,
-      chatIdentityId: randomOpaqueId(randomBytes),
-      auditId: randomOpaqueId(randomBytes),
-      now: now(),
-    });
+    let bound: boolean;
+    try {
+      bound = await dependencies.store.bindPrivateChat({
+        inboundId: message.id,
+        connectionId: message.connectionId,
+        connectionUserId: message.connectionUserId,
+        providerUserId: message.providerUserId,
+        privateChatId: message.privateChatId,
+        displayName: message.displayName,
+        codeDigest: digest,
+        claimMarker: message.claimMarker,
+        chatIdentityId: randomOpaqueId(randomBytes),
+        auditId: randomOpaqueId(randomBytes),
+        now: now(),
+      });
+    } catch {
+      recordZaloBindDiagnostic(message, dependencies, {
+        bind_transaction_completed: false,
+        bind_succeeded: false,
+        confirmation_attempted: false,
+        confirmation_sent: false,
+        safe_failure_category: "BIND_TRANSACTION_FAILURE",
+      });
+      throw new Error("Unable to bind private chat");
+    }
     if (bound) {
-      await replyAfterTerminal(message, BIND_SUCCESS_REPLY, dependencies);
+      const confirmationSent = await replyAfterTerminal(message, BIND_SUCCESS_REPLY, dependencies);
+      recordZaloBindDiagnostic(message, dependencies, {
+        bind_transaction_completed: true,
+        bind_succeeded: true,
+        confirmation_attempted: true,
+        confirmation_sent: confirmationSent,
+        safe_failure_category: null,
+      });
       return { status: "BOUND" };
     }
     if (!await dependencies.store.reject(message.id, message.claimMarker, now())) {
@@ -567,7 +620,9 @@ export async function processInbound(
       keyring: dependencies.keyring,
       now,
       randomBytes,
-      reply: (text) => replyAfterTerminal(message, text, dependencies),
+      reply: async (text) => {
+        await replyAfterTerminal(message, text, dependencies);
+      },
       intelligence: dependencies.intelligence,
     });
   }
