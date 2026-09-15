@@ -7,6 +7,7 @@ import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/co
 import {
   D1InboundProcessorStore,
   claimInbound,
+  InboundClaimFailure,
   processInbound,
   sendProviderText,
   type ProcessInboundDependencies,
@@ -288,6 +289,86 @@ describe("inbound claim lease", () => {
     expect(fresh.database.sqlite.prepare(
       "SELECT state, safe_error_code FROM inbound_updates WHERE id = ?",
     ).get(fresh.inboundId)).toEqual({ state: "PROCESSING", safe_error_code: null });
+  });
+});
+
+describe("Zalo early inbound diagnostics", () => {
+  it("records a safe successful claim, decrypt, and command-parse boundary", async () => {
+    const { deps, inboundId } = await setup({
+      provider: "zalo",
+      text: `/connect ${code}.`,
+    });
+    const diagnostic = vi.fn();
+
+    await expect(processInbound(inboundId, { ...deps, recordDiagnostic: diagnostic })).resolves.toEqual({
+      status: "REJECTED",
+    });
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      operation: "process_inbound",
+      claim_attempted: true,
+      claim_row_acquired: true,
+      claimed_row_mapped: true,
+      message_decrypt_attempted: true,
+      message_decrypt_succeeded: true,
+      command_parse_reached: true,
+      connect_command_recognized: false,
+      safe_failure_category: "NONE",
+    });
+  });
+
+  it("records a safe decrypt failure without leaking encrypted content", async () => {
+    const { deps, inboundId } = await setup({ provider: "zalo" });
+    const diagnostic = vi.fn();
+    vi.spyOn(deps.keyring, "decryptSensitive").mockRejectedValueOnce(
+      new Error(`decrypt failure with ${code} and ciphertext-must-not-escape`),
+    );
+
+    await expect(processInbound(inboundId, { ...deps, recordDiagnostic: diagnostic })).rejects.toThrow(
+      "Unable to claim inbound message",
+    );
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      operation: "process_inbound",
+      claim_attempted: true,
+      claim_row_acquired: true,
+      claimed_row_mapped: true,
+      message_decrypt_attempted: true,
+      message_decrypt_succeeded: false,
+      command_parse_reached: false,
+      connect_command_recognized: false,
+      safe_failure_category: "MESSAGE_DECRYPT_FAILURE",
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(code);
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain("ciphertext-must-not-escape");
+  });
+
+  it("distinguishes a malformed encrypted database value without exposing it", async () => {
+    const { deps, inboundId } = await setup({ provider: "zalo" });
+    const diagnostic = vi.fn();
+    vi.spyOn(deps.store, "claim").mockRejectedValueOnce(
+      new InboundClaimFailure("zalo", "ENCRYPTED_VALUE_MALFORMED"),
+    );
+
+    await expect(processInbound(inboundId, { ...deps, recordDiagnostic: diagnostic })).rejects.toThrow(
+      "Unable to claim inbound message",
+    );
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      operation: "process_inbound",
+      claim_attempted: true,
+      claim_row_acquired: true,
+      claimed_row_mapped: false,
+      message_decrypt_attempted: false,
+      message_decrypt_succeeded: false,
+      command_parse_reached: false,
+      connect_command_recognized: false,
+      safe_failure_category: "ENCRYPTED_VALUE_MALFORMED",
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain("encrypted-value-must-not-escape");
   });
 });
 

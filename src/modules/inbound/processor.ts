@@ -124,6 +124,7 @@ export interface InboundProcessorStore extends ReminderCommandStore {
 export interface ClaimInboundDependencies {
   store: Pick<InboundProcessorStore, "claim">;
   keyring: Pick<Keyring, "decryptSensitive">;
+  recordDiagnostic?: (diagnostic: InboundEarlyProcessingDiagnostic) => void;
   now?: Clock;
   randomBytes?: RandomBytes;
 }
@@ -139,7 +140,7 @@ export interface ProcessInboundDependencies {
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
-  recordDiagnostic?: (diagnostic: InboundProcessingDiagnostic) => void;
+  recordDiagnostic?: (diagnostic: InboundProcessingDiagnostic | InboundEarlyProcessingDiagnostic) => void;
   now?: Clock;
   randomBytes?: RandomBytes;
   intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
@@ -157,6 +158,28 @@ export interface InboundProcessingDiagnostic {
   confirmation_attempted: boolean;
   confirmation_sent: boolean;
   safe_failure_category: "BIND_TRANSACTION_FAILURE" | null;
+}
+
+export interface InboundEarlyProcessingDiagnostic {
+  provider: "zalo";
+  operation: "process_inbound";
+  claim_attempted: boolean;
+  claim_row_acquired: boolean;
+  claimed_row_mapped: boolean;
+  message_decrypt_attempted: boolean;
+  message_decrypt_succeeded: boolean;
+  command_parse_reached: boolean;
+  connect_command_recognized: boolean;
+  safe_failure_category: "CLAIM_ROW_UNAVAILABLE" | "ENCRYPTED_VALUE_MALFORMED" | "MESSAGE_DECRYPT_FAILURE" | "COMMAND_PARSE_NOT_REACHED" | "NONE";
+}
+
+export class InboundClaimFailure extends Error {
+  constructor(
+    readonly provider: BotProvider | null,
+    readonly safeFailureCategory: "CLAIM_ROW_UNAVAILABLE" | "ENCRYPTED_VALUE_MALFORMED",
+  ) {
+    super("Unable to materialize claimed inbound row");
+  }
 }
 
 export async function sendProviderText(
@@ -293,8 +316,12 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
         )
         .bind(inboundId, claimMarker)
         .first<ClaimedRow>();
-      if (!row) throw new Error("Claimed inbound row was unavailable");
-      return mapClaimed(row);
+      if (!row) throw new InboundClaimFailure(null, "CLAIM_ROW_UNAVAILABLE");
+      try {
+        return mapClaimed(row);
+      } catch {
+        throw new InboundClaimFailure(row.provider, "ENCRYPTED_VALUE_MALFORMED");
+      }
     }
 
     const current = await this.database
@@ -490,12 +517,27 @@ export async function claimInbound(
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const claim = await dependencies.store.claim(inboundId, now(), randomOpaqueId(randomBytes));
   if (claim.status !== "CLAIMED") return claim;
-  const text = await dependencies.keyring.decryptSensitive(
-    "inbound-message",
-    claim.row.id,
-    claim.row.messageKeyVersion,
-    claim.row.encryptedMessage,
-  );
+  let text: string;
+  try {
+    text = await dependencies.keyring.decryptSensitive(
+      "inbound-message",
+      claim.row.id,
+      claim.row.messageKeyVersion,
+      claim.row.encryptedMessage,
+    );
+  } catch {
+    recordZaloEarlyDiagnostic(claim.row.provider, dependencies.recordDiagnostic, {
+      claim_attempted: true,
+      claim_row_acquired: true,
+      claimed_row_mapped: true,
+      message_decrypt_attempted: true,
+      message_decrypt_succeeded: false,
+      command_parse_reached: false,
+      connect_command_recognized: false,
+      safe_failure_category: "MESSAGE_DECRYPT_FAILURE",
+    });
+    throw new Error("Unable to decrypt inbound message");
+  }
   const { encryptedMessage, messageKeyVersion, ...message } = claim.row;
   void encryptedMessage;
   void messageKeyVersion;
@@ -531,6 +573,15 @@ async function replyAfterTerminal(
   }
 }
 
+function recordZaloEarlyDiagnostic(
+  provider: BotProvider | null,
+  recordDiagnostic: ClaimInboundDependencies["recordDiagnostic"],
+  input: Omit<InboundEarlyProcessingDiagnostic, "provider" | "operation">,
+): void {
+  if (provider !== "zalo") return;
+  recordDiagnostic?.({ provider: "zalo", operation: "process_inbound", ...input });
+}
+
 function recordZaloBindDiagnostic(
   message: ClaimedInboundMessage,
   dependencies: ProcessInboundDependencies,
@@ -559,15 +610,38 @@ export async function processInbound(
     claim = await claimInbound(inboundId, {
       store: dependencies.store,
       keyring: dependencies.keyring,
+      recordDiagnostic: dependencies.recordDiagnostic,
       now,
       randomBytes,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof InboundClaimFailure) {
+      recordZaloEarlyDiagnostic(error.provider, dependencies.recordDiagnostic, {
+        claim_attempted: true,
+        claim_row_acquired: true,
+        claimed_row_mapped: false,
+        message_decrypt_attempted: false,
+        message_decrypt_succeeded: false,
+        command_parse_reached: false,
+        connect_command_recognized: false,
+        safe_failure_category: error.safeFailureCategory,
+      });
+    }
     throw new Error("Unable to claim inbound message");
   }
   if (claim.status !== "CLAIMED") return claim;
   const message = claim.message;
   const commandCode = parseConnectCommand(message.text);
+  recordZaloEarlyDiagnostic(message.provider, dependencies.recordDiagnostic, {
+    claim_attempted: true,
+    claim_row_acquired: true,
+    claimed_row_mapped: true,
+    message_decrypt_attempted: true,
+    message_decrypt_succeeded: true,
+    command_parse_reached: true,
+    connect_command_recognized: commandCode !== null,
+    safe_failure_category: "NONE",
+  });
 
   if (commandCode !== null) {
     const digest = await dependencies.keyring.digestCode(commandCode);
