@@ -8,6 +8,7 @@ import type {
   ReminderCommandStore,
   ResolveDraftMutation,
 } from "../../command-service";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 
 interface ContextRow {
   chat_identity_id: string;
@@ -40,24 +41,14 @@ interface ResolutionStateRow {
   resolution_is_later: number;
 }
 
-function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(
-      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
-    ).buffer;
-  }
-  throw new TypeError("Malformed encrypted reminder value");
-}
-
 function pendingDraft(row: DraftRow): PendingDraft {
   return {
     id: row.id,
     chatIdentityId: row.chat_identity_id,
     sourceInboundId: row.source_inbound_id,
     encryptedTitle: {
-      ciphertext: persistedArrayBuffer(row.title_ciphertext),
-      iv: persistedArrayBuffer(row.title_iv),
+      ciphertext: persistedD1Blob(row.title_ciphertext),
+      iv: persistedD1Blob(row.title_iv),
     },
     titleKeyVersion: row.title_key_version,
     scheduledAt: row.scheduled_at,

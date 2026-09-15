@@ -12,6 +12,7 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import { isSafeProviderToken } from "@/modules/connections/token-policy";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
 import {
@@ -158,24 +159,14 @@ export interface ReminderDeliveryStore {
   ): Promise<boolean>;
 }
 
-export function arrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(
-      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
-    ).buffer;
-  }
-  throw new TypeError("Malformed encrypted database value");
-}
-
 export function contextFromRow(row: DeliveryContextRow): ReminderDeliveryContext {
   return {
     reminderId: row.reminder_id,
     reminderStatus: row.reminder_status,
     scheduledAt: row.scheduled_at,
     encryptedTitle: {
-      ciphertext: arrayBuffer(row.title_ciphertext),
-      iv: arrayBuffer(row.title_iv),
+      ciphertext: persistedD1Blob(row.title_ciphertext),
+      iv: persistedD1Blob(row.title_iv),
     },
     titleKeyVersion: row.title_key_version,
     connectionId: row.connection_id,
@@ -183,8 +174,8 @@ export function contextFromRow(row: DeliveryContextRow): ReminderDeliveryContext
     provider: row.provider,
     connectionState: row.connection_state,
     encryptedToken: {
-      ciphertext: arrayBuffer(row.encrypted_token),
-      iv: arrayBuffer(row.encrypted_token_iv),
+      ciphertext: persistedD1Blob(row.encrypted_token),
+      iv: persistedD1Blob(row.encrypted_token_iv),
     },
     credentialVersion: row.credential_version,
     privateChatId: row.private_chat_id,

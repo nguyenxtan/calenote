@@ -1,4 +1,5 @@
 import { D1OneTimeCodeStore } from "@/modules/db/code-store";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import {
   ConnectionStateError,
   OnboardingConflictError,
@@ -48,27 +49,6 @@ function guardedConnectConstraint(error: unknown): boolean {
 function guardedRecoveryConstraint(error: unknown): boolean {
   return error instanceof Error
     && /NOT NULL constraint failed:\s*(?:sessions\.user_id|connect_codes\.connection_id|audit_events\.id)\b/iu.test(error.message);
-}
-
-function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (
-    value instanceof ArrayBuffer
-    || (typeof value === "object"
-      && value !== null
-      && Object.prototype.toString.call(value) === "[object ArrayBuffer]")
-  ) {
-    return Uint8Array.from(new Uint8Array(value as ArrayBuffer)).buffer;
-  }
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).buffer;
-  }
-  if (
-    Array.isArray(value)
-    && value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
-  ) {
-    return Uint8Array.from(value).buffer;
-  }
-  throw new TypeError("Malformed encrypted credential");
 }
 
 function requireChange(result: D1Result<unknown>, message: string): void {
@@ -386,8 +366,8 @@ export class D1OnboardingStore implements OnboardingStore {
       updatedAt: row.updated_at,
       transitionMarker: row.transition_marker,
       hasPrivateChat: row.has_private_chat === 1,
-      encryptedToken: persistedArrayBuffer(row.encrypted_token),
-      encryptedTokenIv: persistedArrayBuffer(row.encrypted_token_iv),
+      encryptedToken: persistedD1Blob(row.encrypted_token),
+      encryptedTokenIv: persistedD1Blob(row.encrypted_token_iv),
       credentialVersion: row.credential_version,
     };
   }

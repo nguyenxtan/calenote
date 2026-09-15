@@ -6,6 +6,7 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { RateLimitStore } from "@/modules/rate-limit/service";
 import { consumeRateLimit } from "@/modules/rate-limit/service";
 import { RateLimitExceededError } from "@/modules/onboarding/service";
@@ -78,16 +79,6 @@ export interface ReminderApiStore {
   }): Promise<boolean>;
 }
 
-function arrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(
-      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
-    ).buffer;
-  }
-  throw new TypeError("Malformed encrypted reminder value");
-}
-
 class ReminderApiError extends Error {
   constructor(
     readonly code: string,
@@ -145,8 +136,8 @@ export async function listPublicReminders(
       row.id,
       row.title_key_version,
       {
-        ciphertext: arrayBuffer(row.title_ciphertext),
-        iv: arrayBuffer(row.title_iv),
+        ciphertext: persistedD1Blob(row.title_ciphertext),
+        iv: persistedD1Blob(row.title_iv),
       },
     );
     reminders.push({

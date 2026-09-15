@@ -9,6 +9,7 @@ import {
   type RandomBytes,
 } from "@/modules/platform/types";
 import type { Keyring } from "@/modules/security/keyring";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import {
   enqueueInboundWithReservation,
   type InboundDispatchStore,
@@ -87,14 +88,6 @@ interface InboundRow {
   safe_error_code: string | null;
 }
 
-function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).buffer;
-  }
-  throw new TypeError("Malformed encrypted inbound value");
-}
-
 function inboundRecord(row: InboundRow): InboundRecord {
   return {
     id: row.id,
@@ -104,8 +97,8 @@ function inboundRecord(row: InboundRow): InboundRecord {
     providerUserId: row.provider_user_id,
     privateChatId: row.private_chat_id,
     displayName: row.display_name,
-    messageCiphertext: persistedArrayBuffer(row.message_ciphertext),
-    messageIv: persistedArrayBuffer(row.message_iv),
+    messageCiphertext: persistedD1Blob(row.message_ciphertext),
+    messageIv: persistedD1Blob(row.message_iv),
     messageKeyVersion: row.message_key_version,
     state: row.state,
     receivedAt: row.received_at,

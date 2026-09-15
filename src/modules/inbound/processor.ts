@@ -32,6 +32,7 @@ import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/co
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { MAX_INBOUND_PROCESS_ATTEMPTS } from "@/modules/reminders/scheduler";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -202,14 +203,6 @@ export type ProcessInboundResult =
   | ProcessBoundChatResult
   | Exclude<ClaimInboundResult, { status: "CLAIMED" }>;
 
-function arrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).buffer;
-  }
-  throw new TypeError("Malformed encrypted database value");
-}
-
 function bindConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return /(?:UNIQUE constraint failed:\s*chat_identities\.|NOT NULL constraint failed:\s*(?:chat_identities\.connection_id|audit_events\.id))/iu.test(error.message);
@@ -233,12 +226,12 @@ function mapClaimed(row: ClaimedRow): StoreClaimResult & { status: "CLAIMED" } {
       attemptCount: row.attempt_count,
       claimMarker: row.transition_marker,
       encryptedMessage: {
-        ciphertext: arrayBuffer(row.message_ciphertext),
-        iv: arrayBuffer(row.message_iv),
+        ciphertext: persistedD1Blob(row.message_ciphertext),
+        iv: persistedD1Blob(row.message_iv),
       },
       messageKeyVersion: row.message_key_version,
-      encryptedToken: arrayBuffer(row.encrypted_token),
-      encryptedTokenIv: arrayBuffer(row.encrypted_token_iv),
+      encryptedToken: persistedD1Blob(row.encrypted_token),
+      encryptedTokenIv: persistedD1Blob(row.encrypted_token_iv),
       credentialVersion: row.credential_version,
     },
   };

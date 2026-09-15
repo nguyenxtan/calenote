@@ -18,6 +18,7 @@ import {
   MAX_SCHEDULER_LIMIT,
 } from "@/modules/reminders/scheduler";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 
 export const LOGIN_CODE_TTL_MS = 10 * 60_000;
 export const MAX_LOGIN_CODE_ATTEMPTS = 5;
@@ -212,33 +213,10 @@ export interface LoginCodeStore {
   ): Promise<boolean>;
 }
 
-function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (
-    value instanceof ArrayBuffer
-    || (typeof value === "object"
-      && value !== null
-      && Object.prototype.toString.call(value) === "[object ArrayBuffer]")
-  ) {
-    return Uint8Array.from(new Uint8Array(value as ArrayBuffer)).buffer;
-  }
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(
-      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
-    ).buffer;
-  }
-  if (
-    Array.isArray(value)
-    && value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
-  ) {
-    return Uint8Array.from(value).buffer;
-  }
-  throw new TypeError("Malformed encrypted login value");
-}
-
 function encrypted(ciphertext: unknown, iv: unknown): EncryptedValue {
   return {
-    ciphertext: persistedArrayBuffer(ciphertext),
-    iv: persistedArrayBuffer(iv),
+    ciphertext: persistedD1Blob(ciphertext),
+    iv: persistedD1Blob(iv),
   };
 }
 

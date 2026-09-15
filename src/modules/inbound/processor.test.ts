@@ -27,7 +27,11 @@ describe("inbound persistence boundary", () => {
 
 class SqliteStatement {
   private values: SQLInputValue[] = [];
-  constructor(private readonly database: DatabaseSync, private readonly sql: string) {}
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly sql: string,
+    private readonly blobReadsAsArrays: () => boolean,
+  ) {}
   bind(...values: unknown[]): D1PreparedStatement {
     this.values = values.map((value) => {
       if (Object.prototype.toString.call(value) === "[object ArrayBuffer]") {
@@ -48,18 +52,25 @@ class SqliteStatement {
     return { success: true, results, meta: { changes } } as D1Result<T>;
   }
   async first<T>(): Promise<T | null> {
-    return (this.database.prepare(this.sql).get(...this.values) as T | undefined) ?? null;
+    const row = this.database.prepare(this.sql).get(...this.values) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    if (!this.blobReadsAsArrays()) return row as T;
+    return Object.fromEntries(Object.entries(row).map(([key, value]) => [
+      key,
+      ArrayBuffer.isView(value) ? Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) : value,
+    ])) as T;
   }
 }
 
 class SqliteD1Database {
   readonly sqlite = new DatabaseSync(":memory:");
+  blobReadsAsArrays = false;
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
-    return new SqliteStatement(this.sqlite, sql) as unknown as D1PreparedStatement;
+    return new SqliteStatement(this.sqlite, sql, () => this.blobReadsAsArrays) as unknown as D1PreparedStatement;
   }
   async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
     this.sqlite.exec("BEGIN");
@@ -92,10 +103,12 @@ interface SetupOptions {
   privateChatId?: string;
   providerUserId?: string;
   text?: string;
+  blobReadsAsArrays?: boolean;
 }
 
 async function setup(options: SetupOptions = {}) {
   const database = new SqliteD1Database();
+  database.blobReadsAsArrays = options.blobReadsAsArrays ?? false;
   databases.push(database.sqlite);
   const keyring = await createKeyring(master);
   const connectionId = "connection-1";
@@ -297,6 +310,32 @@ describe("Zalo early inbound diagnostics", () => {
     const { deps, inboundId } = await setup({
       provider: "zalo",
       text: `/connect ${code}.`,
+    });
+    const diagnostic = vi.fn();
+
+    await expect(processInbound(inboundId, { ...deps, recordDiagnostic: diagnostic })).resolves.toEqual({
+      status: "REJECTED",
+    });
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      provider: "zalo",
+      operation: "process_inbound",
+      claim_attempted: true,
+      claim_row_acquired: true,
+      claimed_row_mapped: true,
+      message_decrypt_attempted: true,
+      message_decrypt_succeeded: true,
+      command_parse_reached: true,
+      connect_command_recognized: false,
+      safe_failure_category: "NONE",
+    });
+  });
+
+  it("normalizes production-shaped D1 byte-array encrypted values before decrypting", async () => {
+    const { deps, inboundId } = await setup({
+      provider: "zalo",
+      text: "harmless-non-connect-message",
+      blobReadsAsArrays: true,
     });
     const diagnostic = vi.fn();
 

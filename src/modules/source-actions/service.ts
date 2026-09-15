@@ -7,6 +7,7 @@ import {
 } from "@/modules/platform/types";
 import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { ActionExtractionSchema, type IntelligenceGateway, type IntelligenceMode } from "@/modules/intelligence/contracts";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
 
 export type SourceConnectionStatus = "ACTIVE" | "PAUSED" | "REVOKED";
 export type ActionCandidateStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -118,8 +119,8 @@ export async function listOwnedPendingActionCandidates(
       candidate.id,
       candidate.title_key_version,
       {
-        ciphertext: persistedArrayBuffer(candidate.title_ciphertext),
-        iv: persistedArrayBuffer(candidate.title_iv),
+        ciphertext: persistedD1Blob(candidate.title_ciphertext),
+        iv: persistedD1Blob(candidate.title_iv),
       },
     ),
     scheduledAt: candidate.scheduled_at,
@@ -138,16 +139,6 @@ export type CandidateDecisionResult =
 const TITLE_KEY_VERSION = 1;
 const MAX_TITLE_CODE_UNITS = 1_800;
 const MAX_SCHEDULE_AHEAD_MS = 366 * 24 * 60 * 60_000;
-
-function persistedArrayBuffer(value: unknown): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) {
-    return Uint8Array.from(
-      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
-    ).buffer;
-  }
-  throw new TypeError("Malformed encrypted action candidate title");
-}
 
 function normalizeTitle(value: string): string {
   return value
@@ -277,8 +268,8 @@ export async function approveActionCandidate(
     candidate.id,
     candidate.title_key_version,
     {
-      ciphertext: persistedArrayBuffer(candidate.title_ciphertext),
-      iv: persistedArrayBuffer(candidate.title_iv),
+      ciphertext: persistedD1Blob(candidate.title_ciphertext),
+      iv: persistedD1Blob(candidate.title_iv),
     },
   );
   const encryptedTitle = await dependencies.keyring.encryptSensitive(
