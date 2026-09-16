@@ -15,8 +15,8 @@ const runner = createLiveSemanticBenchmarkRunner({
   fixturePath: resolve(directory, "../../src/modules/semantic/benchmark/semantic-v1.json"),
   stateDirectory: resolve(directory, "../../benchmark-state/semantic-v1"), runId: args[runIdIndex + 1], transport,
   candidates: [
-    { candidateId: "gpt-oss-120b", model: "openai/gpt-oss-120b", provider: "crusoe/bf16", promptPriceMicrounitsPerMillionTokens: 50_000, completionPriceMicrounitsPerMillionTokens: 250_000 },
-    { candidateId: "nemotron-3.5-lightning", model: "nvidia/nemotron-3.5-lightning", provider: "phala", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
+    { candidateId: "qwen3-30b-a3b-instruct-2507", model: "qwen/qwen3-30b-a3b-instruct-2507", provider: "siliconflow/fp8", reasoning: "OMIT", promptPriceMicrounitsPerMillionTokens: 90_000, completionPriceMicrounitsPerMillionTokens: 300_000 },
+    { candidateId: "nemotron-3.5-lightning", model: "nvidia/nemotron-3.5-lightning", provider: "phala", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
   ],
   onProgress: (line) => console.log(line),
 });

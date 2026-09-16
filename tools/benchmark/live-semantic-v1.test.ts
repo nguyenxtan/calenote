@@ -15,8 +15,8 @@ import {
 const fixturePath = resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json");
 const runFile = promisify(execFile);
 const candidates: LiveBenchmarkCandidate[] = [
-  { candidateId: "gpt-oss", model: "openai/gpt-oss-120b", provider: "crusoe/bf16", promptPriceMicrounitsPerMillionTokens: 50_000, completionPriceMicrounitsPerMillionTokens: 250_000 },
-  { candidateId: "nemotron", model: "nvidia/nemotron-3.5-lightning", provider: "phala", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
+  { candidateId: "qwen", model: "qwen/qwen3-30b-a3b-instruct-2507", provider: "siliconflow/fp8", promptPriceMicrounitsPerMillionTokens: 90_000, completionPriceMicrounitsPerMillionTokens: 300_000, reasoning: "OMIT" },
+  { candidateId: "nemotron", model: "nvidia/nemotron-3.5-lightning", provider: "phala", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
 ];
 
 const response = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.000001, prompt_tokens: 1, completion_tokens: 1 } });
@@ -43,6 +43,15 @@ afterEach(async () => {
 });
 
 describe("live semantic V1 benchmark runner", () => {
+  it("rejects the retired gpt-oss candidate and accepts the exact Qwen SiliconFlow replacement", async () => {
+    const directory = await stateDirectory();
+    expect(() => runner(directory, fakeTransport(), { candidates: [
+      { candidateId: "gpt-oss", model: "openai/gpt-oss-120b", provider: "crusoe/bf16", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 50_000, completionPriceMicrounitsPerMillionTokens: 250_000 } as unknown as LiveBenchmarkCandidate,
+      candidates[1],
+    ] })).toThrow("exactly the two approved");
+    await expect(runner(directory, fakeTransport()).preflight({ apiKeyPresent: false })).resolves.toMatchObject({ candidateModels: ["qwen/qwen3-30b-a3b-instruct-2507", "nvidia/nemotron-3.5-lightning"] });
+  });
+
   it("preflight verifies the pinned 216-case fixture without dispatching", async () => {
     const transport = fakeTransport();
     const report = await runner(await stateDirectory(), transport).preflight({ apiKeyPresent: false });
@@ -69,9 +78,12 @@ describe("live semantic V1 benchmark runner", () => {
     expect(observedStates).toEqual(["DISPATCHED"]);
   });
 
-  it("disables and excludes reasoning on every live request", async () => {
+  it("omits reasoning for the non-thinking Qwen endpoint", async () => {
     const transport: LiveBenchmarkTransport = vi.fn(async (request) => {
-      expect(request.reasoning).toEqual({ effort: "none", exclude: true });
+      expect(request.model).toBe("qwen/qwen3-30b-a3b-instruct-2507");
+      expect("reasoning" in request).toBe(false);
+      expect(request.response_format.json_schema.strict).toBe(true);
+      expect(request.provider).toMatchObject({ only: ["siliconflow/fp8"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true });
       return { status: 200, body: response };
     });
     await runner(await stateDirectory(), transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
@@ -82,8 +94,8 @@ describe("live semantic V1 benchmark runner", () => {
     const transport = fakeTransport();
     const first = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
     const second = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(first.metricsByCandidate["gpt-oss"].scoredCases).toBe(1);
-    expect(second.metricsByCandidate["gpt-oss"].scoredCases).toBe(1);
+    expect(first.metricsByCandidate.qwen.scoredCases).toBe(1);
+    expect(second.metricsByCandidate.qwen.scoredCases).toBe(1);
     expect(transport).toHaveBeenCalledTimes(1);
   });
 
@@ -103,7 +115,7 @@ describe("live semantic V1 benchmark runner", () => {
     await runner(directory, fakeTransport(), { maxHttpRequests: 1 }).preflight({ apiKeyPresent: true });
     const path = join(directory, "safe-run-001.json");
     const ledger = JSON.parse(await readFile(path, "utf8"));
-    ledger.attempts.push({ candidateId: "gpt-oss", caseId: "synthetic-relative-001", ordinal: 1, state: "RESERVED", reservedAt: new Date().toISOString(), reservedCostMicrounits: 1 });
+    ledger.attempts.push({ candidateId: "qwen", caseId: "synthetic-relative-001", ordinal: 1, state: "RESERVED", reservedAt: new Date().toISOString(), reservedCostMicrounits: 1 });
     await writeFile(path, JSON.stringify(ledger));
     const transport = fakeTransport();
     const resumed = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
@@ -201,7 +213,7 @@ describe("live semantic V1 benchmark runner", () => {
     const progress: string[] = [];
     const transport = fakeTransport();
     await runner(await stateDirectory(), transport, { maxHttpRequests: 1, onProgress: (line: string) => progress.push(line) }).run({ apiKeyPresent: true });
-    expect(progress.join("\n")).toContain("openai/gpt-oss-120b");
+    expect(progress.join("\n")).toContain("qwen/qwen3-30b-a3b-instruct-2507");
     expect(progress.join("\n")).not.toMatch(/authorization|api[_ -]?key|not-json|choices/iu);
   });
 
@@ -209,14 +221,14 @@ describe("live semantic V1 benchmark runner", () => {
     const source = await readFile(new URL("./run-semantic-v1-live.mjs", import.meta.url), "utf8");
     expect(source).toContain("process.env.OPENROUTER_API_KEY");
     expect(source).not.toMatch(/find-generic-password|security\s+find|keychain/iu);
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--run-id", "test-preflight-safe"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--run-id", "test-preflight-qwen-safe"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
     expect(output.stdout).toContain('"networkRequests":0');
     expect(output.stdout).toContain('"apiKey":"ABSENT"');
     expect(output.stderr).toBe("");
   });
 
   it("accepts package-script argument forwarding for the network-free preflight", async () => {
-    const output = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--run-id", "test-preflight-pnpm"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    const output = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--run-id", "test-preflight-qwen-pnpm"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
     expect(output.stdout).toContain('"networkRequests":0');
   });
 });
