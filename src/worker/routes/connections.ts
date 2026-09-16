@@ -83,23 +83,3 @@ export async function handleWebhookRetry(
   const result = await operations.retryWebhook({ userId: principal.userId, publicId });
   return jsonResponse({ data: result }, { headers: { vary: "Cookie" } });
 }
-
-export async function handleZaloPollDiagnostic(
-  request: Request,
-  appOrigin: string,
-  publicId: string,
-  createOperations: () => Promise<Pick<ConnectionsOperations, "requireUser" | "runZaloPollDiagnostic">>,
-): Promise<Response> {
-  requireSameOrigin(request, appOrigin);
-  const credentials = sessionCredentials(request);
-  const publicIdBytes = base64UrlToBytes(publicId);
-  if (publicId.length !== 22 || publicIdBytes?.byteLength !== 16) throw new InvalidRequestError();
-  const parsed = emptyObjectSchema.safeParse(
-    await readBoundedJson(request, MAX_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }),
-  );
-  if (!parsed.success) throw new InvalidRequestError();
-  const operations = await createOperations();
-  const principal = await operations.requireUser(credentials);
-  const result = await operations.runZaloPollDiagnostic({ userId: principal.userId, publicId });
-  return jsonResponse({ data: result }, { headers: { vary: "Cookie" } });
-}

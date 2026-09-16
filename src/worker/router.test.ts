@@ -92,11 +92,6 @@ function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
     listConnections: vi.fn(async () => []),
     rotateConnectCode: vi.fn(async () => ({ command: "/connect GHJKLMNPQRSTUVWXYZ23456789", expiresAt: 1_700_000_600_000 })),
     retryWebhook: vi.fn(),
-    runZaloPollDiagnostic: vi.fn(async () => ({
-      pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: false,
-      pollEventName: "NONE" as const, pollPrivateChat: false, webhookRestored: true,
-      restoredHostMatch: true, restoredPathPrefixMatch: true, restoreTestOk: true,
-    })),
     listReminders: vi.fn(async () => []),
     createReminder: vi.fn(),
     cancelReminder: vi.fn(async () => ({ cancelled: true as const })),
@@ -251,6 +246,27 @@ describe("Worker router", () => {
     );
 
     expect(response.status).toBe(404);
+    expect(assets.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns the normal API not-found response for the retired owner poll diagnostic route", async () => {
+    const { assets, env } = environment();
+    const ops = operations();
+    const response = await createRouter({ operations: async () => ops })(
+      new Request(`https://calenote.iconiclogs.com/api/connections/${connectionPublicId}/zalo-poll-diagnostic`, {
+        method: "POST",
+        headers: { origin: "https://calenote.iconiclogs.com", "content-type": "application/json", cookie: sessionCookie },
+        body: "{}",
+      }),
+      env,
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "API_NOT_FOUND", message: "Không tìm thấy API." },
+    });
+    expect(ops.requireUser).not.toHaveBeenCalled();
     expect(assets.fetch).not.toHaveBeenCalled();
   });
 

@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ProviderOperationError, ProviderVerificationError } from "../provider-error";
 import { parseTelegramWebhook, sendTelegramText, setTelegramWebhook, verifyTelegramBotToken } from "../providers/telegram";
 import {
-  deleteZaloWebhook,
-  getZaloUpdates,
   getZaloWebhookInfo,
   diagnoseZaloWebhookPayload,
   parseZaloWebhook,
@@ -129,51 +127,6 @@ describe("Zalo Bot Platform adapter", () => {
     expect(JSON.stringify(result)).not.toContain("must-not-escape");
   });
 
-  it("maps the documented object-shaped text update immediately to safe metadata without returning a raw update", async () => {
-    const token = "zalo-token-must-not-escape";
-    const messageText = "calenote-poll-test-must-not-escape";
-    const privateId = "private-chat-must-not-escape";
-    const userId = "provider-user-must-not-escape";
-    const requester = vi.fn(async () => ({
-      ok: true,
-      result: {
-        event_name: "message.text.received",
-        message: {
-          text: messageText,
-          from: { id: userId },
-          chat: { id: privateId, chat_type: "PRIVATE" },
-        },
-      },
-    }));
-
-    const result = await getZaloUpdates(token, { timeoutMs: 22_000 }, requester);
-
-    expect(result).toEqual({ updateReceived: true, eventName: "message.text.received", privateChat: true });
-    expect(requester).toHaveBeenCalledWith({
-      provider: "zalo",
-      hostname: "bot-api.zaloplatforms.com",
-      path: `/bot${token}/getUpdates`,
-      operation: "getUpdates",
-      body: { timeout: 22 },
-      timeoutMs: 25_000,
-    });
-    const serialized = JSON.stringify(result);
-    for (const forbidden of [token, messageText, privateId, userId]) expect(serialized).not.toContain(forbidden);
-  });
-
-  it("maps documented unsupported and unknown object events without exposing message data", async () => {
-    const requester = vi.fn()
-      .mockResolvedValueOnce({ ok: true, result: { event_name: "message.unsupported.received", message: { chat: { id: "private-id", chat_type: "PRIVATE" }, text: "must-not-escape" } } })
-      .mockResolvedValueOnce({ ok: true, result: { event_name: "message.image.received", message: { chat: { id: "group-id", chat_type: "GROUP" }, text: "must-not-escape" } } });
-
-    await expect(getZaloUpdates("zalo-token-must-not-escape", { timeoutMs: 22_000 }, requester)).resolves.toEqual({ updateReceived: true, eventName: "message.unsupported.received", privateChat: true });
-    await expect(getZaloUpdates("zalo-token-must-not-escape", { timeoutMs: 22_000 }, requester)).resolves.toEqual({ updateReceived: true, eventName: "NONE", privateChat: false });
-  });
-
-  it.each([{ ok: true }, { ok: true, result: null }, { ok: true, result: [] }])("treats an empty or missing documented polling result as no update", async (payload) => {
-    await expect(getZaloUpdates("zalo-token-must-not-escape", { timeoutMs: 22_000 }, async () => payload)).resolves.toEqual({ updateReceived: false, eventName: "NONE", privateChat: false });
-  });
-
   it("keeps webhook comparison and test outcomes secret-free", async () => {
     const token = "zalo-token-must-not-escape";
     const expected = {
@@ -189,7 +142,6 @@ describe("Zalo Bot Platform adapter", () => {
     await expect(getZaloWebhookInfo(token, expected, requester)).resolves.toEqual({
       configured: true, exactMatch: true, hostMatch: true, pathPrefixMatch: true,
     });
-    await expect(deleteZaloWebhook(token, requester)).resolves.toBeUndefined();
     await expect(testZaloWebhook(token, requester)).resolves.toEqual({ apiOk: true, resultOk: true });
   });
   it("requests the official getMe operation and normalizes the bot profile", async () => {

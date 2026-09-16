@@ -96,11 +96,6 @@ function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
       connectCommand: "/connect ABCDEFGHJKLMNPQRSTUVWXYZ23",
       expiresAt: 1_800_000_000_000,
     })),
-    runZaloPollDiagnostic: vi.fn(async () => ({
-      pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: false,
-      pollEventName: "NONE" as const, pollPrivateChat: false, webhookRestored: true,
-      restoredHostMatch: true, restoredPathPrefixMatch: true, restoreTestOk: true,
-    })),
     listReminders: vi.fn(async () => [reminder]),
     createReminder: vi.fn(async () => reminder),
     cancelReminder: vi.fn(async () => ({ cancelled: true as const })),

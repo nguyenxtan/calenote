@@ -141,13 +141,11 @@ identifiers, encrypted values, or secret-bearing webhook paths.
 | A real private `/connect` produced no observed Worker event. | OPEN_INCIDENT |
 | A real plain private text produced no observed Worker event. | OPEN_INCIDENT |
 | Owner-scoped inbound count remained zero. | OPEN_INCIDENT |
-| The first controlled polling result was inconclusive because its diagnostic parser expected `result` to be an array. | OPEN_INCIDENT |
-| The polling diagnostic restored the webhook successfully. | PROVEN_IN_PRODUCTION |
+| The prior polling investigation was inconclusive and its webhook restoration was observed. | RETIRED_INCIDENT_DIAGNOSTIC |
 
-The corrected diagnostic parser now expects the documented object-shaped
-`getUpdates` result. This does not establish a provider root cause and does not
-close the incident. A second live probe requires explicit authorization and may
-run only once within the existing per-connection rate window.
+The retired polling diagnostic does not establish a provider root cause and
+cannot be rerun. Preserve this history without restoring a provider mutation
+path or user-facing control.
 
 ## Incident decision points
 
@@ -157,8 +155,8 @@ run only once within the existing per-connection rate window.
   parsing, provider-payload recognition, and inbound persistence in that order.
 - `testWebhook` success but no real message: retain the OPEN_INCIDENT and do not
   declare webhook E2E healthy.
-- Polling diagnostic restore cannot be verified: stop immediately. Do not retry
-  or mutate the provider again until restoration is reviewed.
+- Historical polling evidence: do not recreate the retired probe or mutate
+  provider webhook configuration for diagnosis.
 
 ## Deployment evidence
 

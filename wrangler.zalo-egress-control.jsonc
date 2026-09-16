@@ -1,8 +1,0 @@
-{
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "calenote-zalo-egress-diagnostic",
-  "main": "src/worker/zalo-egress-control.ts",
-  "compatibility_date": "2026-09-03",
-  "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true
-}

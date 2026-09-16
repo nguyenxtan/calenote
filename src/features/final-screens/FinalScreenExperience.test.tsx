@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinalScreenExperience } from "./FinalScreenExperience";
-import { ConnectionsDiagnosticExperience } from "@/app/app/connections/ConnectionsDiagnosticExperience";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }), useSearchParams: () => new URLSearchParams(window.location.search) }));
@@ -50,7 +49,7 @@ describe("FinalScreenExperience connections", () => {
       { publicId: "F".repeat(22), provider: "telegram", displayName: "Telegram dự phòng", handle: null, state: "WEBHOOK_FAILED" },
     ] } }));
 
-    render(<ConnectionsDiagnosticExperience />);
+    render(<FinalScreenExperience screen="connections" />);
 
     expect(await screen.findByRole("heading", { name: "Kết nối" })).toBeVisible();
     expect(screen.getAllByRole("heading", { name: "Telegram" })).toHaveLength(2);
@@ -165,7 +164,8 @@ describe("FinalScreenExperience connections", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/connections", expect.objectContaining({ credentials: "same-origin" })));
   });
 
-  it("keeps the temporary Zalo polling control hidden without the diagnostic query guard", async () => {
+  it("does not expose a polling control when a retired diagnostic URL is opened", async () => {
+    window.history.pushState({}, "", "/app/connections?diagnostic=zalo-poll");
     installFetch(json({ data: { connections: [
       { publicId: "Z".repeat(22), provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" },
     ] } }));
@@ -173,108 +173,9 @@ describe("FinalScreenExperience connections", () => {
     render(<FinalScreenExperience screen="connections" />);
 
     await screen.findByRole("heading", { name: "Kết nối" });
-    expect(screen.queryByText("Kiểm tra nhận tin Zalo — tạm thời")).not.toBeInTheDocument();
-  });
-
-  it("enables the temporary polling control only for the exact diagnostic query value", async () => {
-    window.history.pushState({}, "", "/app/connections?diagnostic=zalo-poll");
-    installFetch(json({ data: { connections: [
-      { publicId: "Z".repeat(22), provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" },
-    ] } }));
-
-    render(<ConnectionsDiagnosticExperience />);
-
-    expect(await screen.findByRole("button", { name: "Chạy kiểm tra một lần" })).toBeVisible();
-    window.history.pushState({}, "", "/");
-  });
-
-  it("shows the temporary polling control only for a guarded Zalo ACTIVE_UNBOUND connection", async () => {
-    installFetch(json({ data: { connections: [
-      { publicId: "Z".repeat(22), provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" },
-      { publicId: "T".repeat(22), provider: "telegram", displayName: "Telegram", handle: null, state: "ACTIVE_UNBOUND" },
-    ] } }));
-
-    render(<FinalScreenExperience screen="connections" diagnosticZaloPoll />);
-
-    expect(await screen.findByText("Kiểm tra nhận tin Zalo — tạm thời")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Chạy kiểm tra một lần" })).toBeVisible();
-    expect(screen.getAllByRole("region", { name: "Kiểm tra nhận tin Zalo tạm thời" })).toHaveLength(1);
-  });
-
-  it("keeps the temporary polling control absent for Telegram and non-unbound Zalo connections", async () => {
-    installFetch(json({ data: { connections: [
-      { publicId: "T".repeat(22), provider: "telegram", displayName: "Telegram", handle: null, state: "ACTIVE_UNBOUND" },
-      { publicId: "S".repeat(22), provider: "zalo", displayName: "Zalo", handle: null, state: "SUSPENDED" },
-    ] } }));
-
-    render(<FinalScreenExperience screen="connections" diagnosticZaloPoll />);
-
-    await screen.findByRole("heading", { name: "Kết nối" });
-    expect(screen.queryByRole("region", { name: "Kiểm tra nhận tin Zalo tạm thời" })).not.toBeInTheDocument();
-  });
-
-  it("uses the same-origin API request once after explicit confirmation and renders only safe polling result fields", async () => {
-    const publicId = "Z".repeat(22);
-    const fetcher = installRecoveryFetch(
-      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" }],
-      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" }],
-      { [`/api/connections/${publicId}/zalo-poll-diagnostic`]: json({ data: {
-        pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: true,
-        pollEventName: "message.text.received", pollPrivateChat: true,
-        webhookRestored: true, restoredHostMatch: true,
-        restoredPathPrefixMatch: true, restoreTestOk: true,
-      } }) },
-    );
-    const interaction = userEvent.setup();
-    render(<FinalScreenExperience screen="connections" diagnosticZaloPoll />);
-
-    await interaction.click(await screen.findByRole("button", { name: "Chạy kiểm tra một lần" }));
-    expect(screen.getByRole("alertdialog")).toBeVisible();
-    await interaction.click(screen.getByRole("button", { name: "Xác nhận chạy kiểm tra" }));
-
-    await screen.findByText("POLL_UPDATE_RECEIVED");
-    expect(screen.getByText("message.text.received")).toBeVisible();
-    expect(fetcher).toHaveBeenCalledWith(
-      `/api/connections/${publicId}/zalo-poll-diagnostic`,
-      expect.objectContaining({ method: "POST", credentials: "same-origin", body: "{}" }),
-    );
-    expect(screen.queryByText(/token|webhook URL|chat ID|provider user ID/i)).not.toBeInTheDocument();
-  });
-
-  it("blocks duplicate polling clicks while pending", async () => {
-    const publicId = "Z".repeat(22);
-    let resolveProbe: ((response: Response) => void) | undefined;
-    const fetcher = installRecoveryFetch(
-      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" }],
-      [],
-      { [`/api/connections/${publicId}/zalo-poll-diagnostic`]: new Promise<Response>((resolve) => { resolveProbe = resolve; }) as never },
-    );
-    const interaction = userEvent.setup();
-    render(<FinalScreenExperience screen="connections" diagnosticZaloPoll />);
-
-    await interaction.click(await screen.findByRole("button", { name: "Chạy kiểm tra một lần" }));
-    await interaction.click(screen.getByRole("button", { name: "Xác nhận chạy kiểm tra" }));
-    expect(screen.getByText("Đang mở cửa sổ kiểm tra.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Đang chạy kiểm tra…" })).toBeDisabled();
-    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
-    resolveProbe?.(json({ data: { pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: false, pollEventName: "NONE", pollPrivateChat: false, webhookRestored: true, restoredHostMatch: true, restoredPathPrefixMatch: true, restoreTestOk: true } }));
-  });
-
-  it("locks the temporary control after a RESTORE_FAILED response", async () => {
-    const publicId = "Z".repeat(22);
-    installRecoveryFetch(
-      [{ publicId, provider: "zalo", displayName: "Zalo", handle: null, state: "ACTIVE_UNBOUND" }],
-      [],
-      { [`/api/connections/${publicId}/zalo-poll-diagnostic`]: json({ error: { code: "RESTORE_FAILED", message: "ignored" } }, 502) },
-    );
-    const interaction = userEvent.setup();
-    render(<FinalScreenExperience screen="connections" diagnosticZaloPoll />);
-
-    await interaction.click(await screen.findByRole("button", { name: "Chạy kiểm tra một lần" }));
-    await interaction.click(screen.getByRole("button", { name: "Xác nhận chạy kiểm tra" }));
-
-    expect(await screen.findByText("Webhook chưa thể được khôi phục. Không chạy lại kiểm tra này.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Chạy kiểm tra một lần" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Kiểm tra nhận tin Zalo tạm thời" })).not.toBeInTheDocument();
+    window.history.pushState({}, "", "/");
   });
 
   it("has no serious or critical accessibility violations with populated connections", async () => {

@@ -94,11 +94,9 @@ connection, `getWebhookInfo` confirms the Calenote host/path prefix and
 **OPEN_INCIDENT:** A real private `/connect` message and a real plain private
 text message were not observed by the Worker and produced no inbound D1 row.
 `testWebhook` proves webhook reachability/verification only; it does not prove
-provider real-message dispatch. The first temporary controlled polling result
-was inconclusive because its diagnostic parser expected an array response, while
-the documented Zalo `getUpdates` result is an object. Webhook restoration from
-that probe was proven successful. The corrected parser is deployed, but no
-second probe result is claimed here.
+provider real-message dispatch. Historical polling evidence was inconclusive and
+is retained only as incident history; its temporary diagnostic surface is
+retired and cannot be activated in production.
 
 The browser-integrity exception below is narrowly scoped to Zalo webhook POSTs;
 it is not a general Cloudflare security change:

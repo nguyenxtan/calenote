@@ -7,7 +7,7 @@ const currentStatePath = new URL("./current-state.md", import.meta.url);
 test("current-state records deployed Worker lanes and the open Zalo evidence boundary", async () => {
   const document = await readFile(currentStatePath, "utf8");
 
-  for (const status of ["IMPLEMENTED", "WIRED", "TESTED", "PROVEN_IN_PRODUCTION", "DEPLOYED", "OPEN_INCIDENT", "PLANNED"]) {
+  for (const status of ["IMPLEMENTED", "WIRED", "TESTED", "PROVEN_IN_PRODUCTION", "DEPLOYED", "OPEN_INCIDENT", "PLANNED", "RETIRED_INCIDENT_DIAGNOSTIC"]) {
     assert.match(document, new RegExp(`\\b${status}\\b`, "u"));
   }
 
@@ -20,6 +20,7 @@ test("current-state records deployed Worker lanes and the open Zalo evidence bou
   assert.match(document, /Zalo webhook configuration and verification.*PROVEN_IN_PRODUCTION/iu);
   assert.match(document, /testWebhook.*not an end-to-end message-delivery guarantee/iu);
   assert.match(document, /Zalo real inbound message path.*OPEN_INCIDENT/iu);
-  assert.match(document, /first controlled polling result is inconclusive/iu);
+  assert.match(document, /RETIRED_INCIDENT_DIAGNOSTIC/iu);
+  assert.match(document, /no production route or Worker configuration can activate those probes/iu);
   assert.match(document, /Telegram production behavior.*PLANNED/iu);
 });

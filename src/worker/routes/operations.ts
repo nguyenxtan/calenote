@@ -1,7 +1,6 @@
 import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
 import type { SessionCredentials } from "@/modules/auth/session";
 import type { OnboardingInput, OnboardingResult, RetryWebhookResult } from "@/modules/onboarding/service";
-import type { ZaloPollDiagnosticResult } from "@/modules/onboarding/zalo-poll-diagnostic";
 import type { RateLimitResult } from "@/modules/rate-limit/service";
 import type { PublicReminder } from "@/modules/reminders/api-service";
 import type { CandidateDecisionResult, PublicPendingActionCandidate } from "@/modules/source-actions/service";
@@ -21,7 +20,6 @@ export interface ConnectionsOperations {
   listConnections(userId: string): Promise<PublicConnection[]>;
   rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
   retryWebhook(input: { userId: string; publicId: string }): Promise<RetryWebhookResult>;
-  runZaloPollDiagnostic(input: { userId: string; publicId: string }): Promise<ZaloPollDiagnosticResult>;
 }
 
 export interface RemindersOperations {

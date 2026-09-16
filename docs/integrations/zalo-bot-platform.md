@@ -30,18 +30,14 @@ safe domain result below.
 | --- | --- | --- |
 | `getMe` | Validate submitted credential during onboarding/recovery. | Normalized bot profile only; token is never returned. |
 | `setWebhook` | Register a derived canonical URL and derived header secret after validation. | Activation succeeds only if the provider reports successful verification. |
-| `getWebhookInfo` | Verify configured webhook before a temporary polling diagnostic or incident read-back. | Configured/exact/host/path-prefix booleans only. |
+| `getWebhookInfo` | Verify configured webhook during an explicitly authorized production read-back. | Configured/exact/host/path-prefix booleans only. |
 | `testWebhook` | Provider webhook reachability test. | `apiOk` and `resultOk` only. |
-| `deleteWebhook` | Temporary owner-only polling diagnostic after an exact-match pre-delete fence. | No provider body exposed. |
-| `getUpdates` | Temporary, bounded 22-second polling diagnostic only. | `updateReceived`, allowlisted event name, and private-chat boolean only. |
 | `sendMessage` | Send an outbound reminder/login/confirmation to a bound chat. | Provider message receipt ID is retained internally. |
 
 Official API references: [getMe](https://docs.zaloplatforms.com/docs/BOT/apis/getMe),
 [setWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/setWebhook),
 [getWebhookInfo](https://docs.zaloplatforms.com/docs/BOT/apis/getWebhookInfo),
 [testWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/testWebhook),
-[deleteWebhook](https://docs.zaloplatforms.com/docs/BOT/apis/deleteWebhook),
-[getUpdates](https://docs.zaloplatforms.com/docs/BOT/apis/getUpdates), and
 [sendMessage](https://docs.zaloplatforms.com/docs/BOT/apis/sendMessage).
 
 ## Webhook contract
@@ -75,30 +71,12 @@ accepted text and persists a deduplicated inbound record before an opaque queue
 job. Other event types do not establish chat identity or create a reminder.
 The canonical payload contract is documented by [Zalo Webhook](https://docs.zaloplatforms.com/docs/BOT/webhook).
 
-## `getUpdates` diagnostic contract
+## Retired incident diagnostic
 
-Zalo documents `getUpdates` response message data as a JSON object similar to a
-Webhook payload. For Calenote's temporary diagnostic, a valid object result maps
-immediately to:
-
-```text
-updateReceived = true
-eventName = message.text.received | message.unsupported.received | NONE
-privateChat = result.message.chat.chat_type === "PRIVATE"
-```
-
-An empty/missing/non-object result maps to `updateReceived = false` and
-`eventName = NONE`. Raw provider update objects, message text, chat ID, user ID,
-token, webhook URL/path, and headers cannot leave the provider adapter. The
-diagnostic does not change connection state or rotate a connect code.
-
-Polling and webhook delivery are mutually exclusive at the provider. The
-temporary diagnostic therefore performs an exact-match `getWebhookInfo`
-pre-delete fence, deletes only Calenote's expected webhook, long-polls once,
-and restores the exact derived webhook in `finally`; it retries restoration once
-and verifies restoration. It is owner-only, same-origin, Zalo-only,
-`ACTIVE_UNBOUND`-only, rate-limited to one probe per connection per ten minutes,
-and not a regular product capability.
+The prior owner-only polling diagnostic, including `deleteWebhook` and
+`getUpdates`, was retired during the trusted-machine master cutover. It was an
+incident investigation mechanism, not a product capability, and no longer
+exists in the application, Worker schedule, or deployable configuration.
 
 ## `/connect` lifecycle
 
@@ -126,8 +104,7 @@ an inbound row, or that `/connect` reaches `ACTIVE_BOUND`.
 
 The current production incident is OPEN: `getWebhookInfo` is canonical and
 `testWebhook` is `webhook.ok`, but a real `/connect` and a plain private text
-were not observed by the Worker and inbound count stayed zero. The first polling
-probe is inconclusive solely because its prior diagnostic parser expected an
-array. Webhook restoration was proven successful. See
+were not observed by the Worker and inbound count stayed zero. Historical
+polling evidence does not establish a root cause. See
 [zalo-production-acceptance.md](../runbooks/zalo-production-acceptance.md) for
 the required real-message evidence before acceptance.

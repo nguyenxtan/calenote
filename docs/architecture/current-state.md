@@ -29,7 +29,7 @@ plans are audit evidence only; they do not override this document.
 | V2 Web control plane | IMPLEMENTED, WIRED, TESTED | Authenticated V2 screens manage safe connection status, reminders, preferences, and activity; chat remains the primary command/delivery channel. |
 | Production origin | DEPLOYED, PROVEN_IN_PRODUCTION | `calenote` serves `https://calenote.iconiclogs.com` with production D1, Queue, assets, cron trigger, and secrets. Deployment alone is not chat E2E evidence. |
 | Zalo webhook configuration and verification | PROVEN_IN_PRODUCTION | `getWebhookInfo` reports the canonical host/path prefix and `testWebhook` returned `webhook.ok`. This proves configured webhook reachability only, not real event dispatch. |
-| Zalo real inbound message path | OPEN_INCIDENT | One real private `/connect` and one plain private text produced no observed Worker event and no new inbound row. The first controlled polling result is inconclusive because its diagnostic parser expected an array rather than Zalo's documented object result; its webhook restoration was proven. |
+| Zalo real inbound message path | OPEN_INCIDENT | One real private `/connect` and one plain private text produced no observed Worker event and no new inbound row. Historical polling evidence is not an operational feature or acceptance path. |
 | Telegram production behavior | PLANNED | Telegram production diagnosis begins only after Zalo closure; it is not E2E-proven. |
 
 ## Worker runtime and persistence
@@ -62,13 +62,27 @@ then calls `setWebhook`. Webhook ingress verifies the independent path and
 means the webhook/connection is active but a private chat has not yet bound;
 `ACTIVE_BOUND` means the private chat identity was bound by the inbound flow.
 
-The temporary owner-only Zalo polling diagnostic is IMPLEMENTED and DEPLOYED for
-the open incident. It is not a product feature: it fences ownership, same
-origin, provider, state, concurrency, and a ten-minute rate limit; removes a
-webhook only after exact-match verification; restores it in `finally`, retries
-one restoration attempt, and returns safe metadata only. It does not alter a
-connection state or connect code. It remains in place until the incident is
-closed by an explicitly reviewed change.
+### PROVEN_PRODUCTION_BEHAVIOR
+
+Zalo transport uses redirect fencing, accepts both wrapped and flat webhook
+payloads only after path/header authentication, persists inbound data encrypted,
+and dispatches opaque Queue jobs. Shared D1 BLOB normalization remains required
+before decrypting persisted values. These are production boundaries, not
+diagnostic controls.
+
+### DURABLE_OBSERVABILITY
+
+Webhook and inbound processing emit only structured, secret-free outcome
+categories. They contain no message content, provider identifiers, tokens,
+encrypted values, or webhook paths; they cannot mutate provider configuration
+or change webhook behavior.
+
+### RETIRED_INCIDENT_DIAGNOSTIC
+
+The owner-facing polling route/UI, temporary webhook delete-and-restore flow,
+scheduled egress probes, and diagnostic-only Worker were retired during the
+trusted-machine master cutover. Historical evidence may be retained in archived
+plans, but no production route or Worker configuration can activate those probes.
 
 ## Intelligence and external sources
 
@@ -87,19 +101,15 @@ implemented ICONIC Logistics Platform integration.
 
 `testWebhook` success is not an end-to-end message-delivery guarantee. The
 current Zalo evidence proves configuration/reachability but not that real
-private-chat events are dispatched to the Worker. The current parser correction
-makes the controlled polling diagnostic ready for a single authorized retest;
-it does not itself establish a provider root cause. Do not infer a Zalo
+private-chat events are dispatched to the Worker. Do not infer a Zalo
 provider-edge, Cloudflare, credential, or application-parser conclusion beyond
 the recorded evidence.
 
 ## Next bounded work
 
-1. Run one explicitly authorized Zalo polling retest and classify only from its
-   safe evidence; restore verification remains mandatory.
-2. Close the Zalo real-message acceptance path before Telegram production
+1. Close the Zalo real-message acceptance path before Telegram production
    diagnosis.
-3. Design bot ownership/takeover policy before allowing the same bot token to
+2. Design bot ownership/takeover policy before allowing the same bot token to
    be supplied by a second user.
-4. Keep optional intelligence and future external-source work independently
+3. Keep optional intelligence and future external-source work independently
    authorized and non-authoritative.

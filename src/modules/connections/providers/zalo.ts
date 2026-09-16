@@ -62,7 +62,7 @@ export async function verifyZaloBotToken(
 
 function path(
   token: string,
-  operation: "getMe" | "setWebhook" | "sendMessage" | "getWebhookInfo" | "deleteWebhook" | "getUpdates" | "testWebhook",
+  operation: "getMe" | "setWebhook" | "sendMessage" | "getWebhookInfo" | "testWebhook",
 ): string {
   if (!isSafeProviderToken("zalo", token)) {
     throw new ProviderVerificationError("INVALID_TOKEN_FORMAT");
@@ -84,12 +84,6 @@ export interface SafeZaloWebhookInfo {
   exactMatch: boolean;
   hostMatch: boolean;
   pathPrefixMatch: boolean;
-}
-
-export interface SafeZaloPollingUpdate {
-  updateReceived: boolean;
-  eventName: "message.text.received" | "message.unsupported.received" | "NONE";
-  privateChat: boolean;
 }
 
 export interface SafeZaloWebhookParserDiagnostic {
@@ -196,44 +190,6 @@ export async function getZaloWebhookInfo(
   } catch {
     return { configured: false, exactMatch: false, hostMatch: false, pathPrefixMatch: false };
   }
-}
-
-export async function deleteZaloWebhook(
-  token: string,
-  requester: ProviderRequester = postSecretProviderJson,
-): Promise<void> {
-  operationPayload(await requester({
-    provider: "zalo",
-    hostname: ZALO_BOT_API_HOSTNAME,
-    path: path(token, "deleteWebhook"),
-    operation: "deleteWebhook",
-  }));
-}
-
-export async function getZaloUpdates(
-  token: string,
-  input: { timeoutMs: number },
-  requester: ProviderRequester = postSecretProviderJson,
-): Promise<SafeZaloPollingUpdate> {
-  if (input.timeoutMs !== 22_000) throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
-  const payload = operationPayload(await requester({
-    provider: "zalo",
-    hostname: ZALO_BOT_API_HOSTNAME,
-    path: path(token, "getUpdates"),
-    operation: "getUpdates",
-    body: { timeout: 22 },
-    timeoutMs: 25_000,
-  }));
-  const update = isRecord(payload.result) ? payload.result : null;
-  if (!update) return { updateReceived: false, eventName: "NONE", privateChat: false };
-  const eventName = update.event_name === "message.text.received"
-    ? "message.text.received"
-    : update.event_name === "message.unsupported.received"
-      ? "message.unsupported.received"
-      : "NONE";
-  const message = isRecord(update.message) ? update.message : null;
-  const chat = message && isRecord(message.chat) ? message.chat : null;
-  return { updateReceived: true, eventName, privateChat: chat?.chat_type === "PRIVATE" };
 }
 
 export async function testZaloWebhook(

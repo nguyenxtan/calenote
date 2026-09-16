@@ -57,11 +57,6 @@ function connectionsOperations(): ConnectionsOperations {
       connectCommand: "/connect ABC",
       expiresAt: 1_700_000_000_000,
     })),
-    runZaloPollDiagnostic: vi.fn(async () => ({
-      pollProbeStarted: true, webhookRemoved: true, pollUpdateReceived: false,
-      pollEventName: "NONE" as const, pollPrivateChat: false, webhookRestored: true,
-      restoredHostMatch: true, restoredPathPrefixMatch: true, restoreTestOk: true,
-    })),
   };
 }
 

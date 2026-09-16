@@ -16,14 +16,6 @@ import {
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
-import { isZaloEgressFinalProbeWindow, runZaloEgressFinalIsolationProbes } from "./zalo-egress-final-probe";
-import { isZaloPostShapeProbeWindow, runZaloPostRequestShapeProbes } from "./zalo-post-shape-probe";
-import {
-  isCalenoteEgressIsolationV2Window,
-  isZaloEgressProbeWindow,
-  runCalenoteEgressIsolationV2Probes,
-  runZaloEgressIsolationProbes,
-} from "./zalo-egress-probe";
 
 function isCanonicalOpaqueId(value: unknown): value is string {
   if (typeof value !== "string" || value.length !== 22) return false;
@@ -165,20 +157,6 @@ export default {
   async scheduled(controller, env, ctx) {
     void ctx;
     const operations = await createRuntimeOperations(env);
-    await Promise.all([
-      runScheduledWork(controller, operations),
-      ...(isZaloEgressProbeWindow(controller.scheduledTime)
-        ? [runZaloEgressIsolationProbes()]
-        : []),
-      ...(isCalenoteEgressIsolationV2Window(controller.scheduledTime)
-        ? [runCalenoteEgressIsolationV2Probes()]
-        : []),
-      ...(isZaloEgressFinalProbeWindow(controller.scheduledTime)
-        ? [runZaloEgressFinalIsolationProbes()]
-        : []),
-      ...(isZaloPostShapeProbeWindow(controller.scheduledTime)
-        ? [runZaloPostRequestShapeProbes()]
-        : []),
-    ]);
+    await runScheduledWork(controller, operations);
   },
 } satisfies ExportedHandler<Env>;

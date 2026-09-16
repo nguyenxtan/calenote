@@ -8,6 +8,15 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderRequest } from "../contracts";
+
+const retiredZaloPollingRequest: ProviderRequest = {
+  provider: "zalo",
+  hostname: "bot-api.zaloplatforms.com",
+  path: "/retired",
+  // @ts-expect-error Retired polling must not remain a provider capability.
+  operation: "getUpdates",
+};
+void retiredZaloPollingRequest;
 import { ProviderOperationError, ProviderVerificationError } from "../provider-error";
 import {
   createSuppressedProviderContext,
