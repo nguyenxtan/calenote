@@ -69,6 +69,14 @@ describe("live semantic V1 benchmark runner", () => {
     expect(observedStates).toEqual(["DISPATCHED"]);
   });
 
+  it("disables and excludes reasoning on every live request", async () => {
+    const transport: LiveBenchmarkTransport = vi.fn(async (request) => {
+      expect(request.reasoning).toEqual({ effort: "none", exclude: true });
+      return { status: 200, body: response };
+    });
+    await runner(await stateDirectory(), transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+  });
+
   it("persists a schema-valid completed observation and reuses it without a second call", async () => {
     const directory = await stateDirectory();
     const transport = fakeTransport();
@@ -125,15 +133,12 @@ describe("live semantic V1 benchmark runner", () => {
     expect(costCapped.status).toBe("INCOMPLETE_COST_CAP");
   });
 
-  it("stops before request 451 after exactly 450 durable dispatches", async () => {
-    const threeApprovedConfigurations = [
-      candidates[0], candidates[1], { ...candidates[0], candidateId: "gpt-oss-repeat" },
-    ];
+  it("stops before the next durable dispatch when the exact two-model run reaches its cap", async () => {
     const transport = fakeTransport();
-    const run = await runner(await stateDirectory(), transport, { candidates: threeApprovedConfigurations, maxHttpRequests: 450 }).run({ apiKeyPresent: true });
+    const run = await runner(await stateDirectory(), transport, { maxHttpRequests: 431 }).run({ apiKeyPresent: true });
     expect(run.status).toBe("INCOMPLETE_REQUEST_CAP");
-    expect(run.requestCount).toBe(450);
-    expect(transport).toHaveBeenCalledTimes(450);
+    expect(run.requestCount).toBe(431);
+    expect(transport).toHaveBeenCalledTimes(431);
   }, 15_000);
 
   it("retains the conservative reservation for unknown usage and never automatically retries failures", async () => {
@@ -144,6 +149,14 @@ describe("live semantic V1 benchmark runner", () => {
     expect(ledger.attempts[0]).toMatchObject({ state: "FAILED", finalizedCostMicrounits: ledger.attempts[0].reservedCostMicrounits, errorCategory: "INVALID_JSON" });
     await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
     expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains a reported overage rather than under-accounting it", async () => {
+    const directory = await stateDirectory();
+    const overage = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.9, prompt_tokens: 1, completion_tokens: 1 } });
+    await runner(directory, fakeTransport(overage), { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const ledger = JSON.parse(await readFile(join(directory, "safe-run-001.json"), "utf8"));
+    expect(ledger.attempts[0].finalizedCostMicrounits).toBe(900_000);
   });
 
   it("fails closed on corrupt or incompatible local ledger without resetting it", async () => {
@@ -158,7 +171,7 @@ describe("live semantic V1 benchmark runner", () => {
     const directory = await stateDirectory();
     await runner(directory, fakeTransport()).preflight({ apiKeyPresent: true });
     const transport = fakeTransport();
-    await expect(runner(directory, transport, { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 50_001 }] }).preflight({ apiKeyPresent: true }))
+    await expect(runner(directory, transport, { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 50_001 }, candidates[1]] }).preflight({ apiKeyPresent: true }))
       .rejects.toThrow("ledger");
     expect(transport).not.toHaveBeenCalled();
   });
@@ -172,11 +185,11 @@ describe("live semantic V1 benchmark runner", () => {
     expect(ledger).not.toMatch(/authorization|header|message|prompt|response/iu);
   });
 
-  it("emits only allowlisted safe progress and accepts either approved model with the same scoring", async () => {
+  it("emits only allowlisted safe progress while retaining the exact approved candidate set", async () => {
     const progress: string[] = [];
     const transport = fakeTransport();
-    await runner(await stateDirectory(), transport, { candidates: [candidates[1]], maxHttpRequests: 1, onProgress: (line: string) => progress.push(line) }).run({ apiKeyPresent: true });
-    expect(progress.join("\n")).toContain("nvidia/nemotron-3.5-lightning");
+    await runner(await stateDirectory(), transport, { maxHttpRequests: 1, onProgress: (line: string) => progress.push(line) }).run({ apiKeyPresent: true });
+    expect(progress.join("\n")).toContain("openai/gpt-oss-120b");
     expect(progress.join("\n")).not.toMatch(/authorization|api[_ -]?key|not-json|choices/iu);
   });
 
