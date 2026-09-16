@@ -291,7 +291,7 @@ export async function processBoundChatMessage(
   }
 
   const normalized = normalizeWholeMessage(message.text);
-  if (dependencies.semantic && (HELP_WORDS.has(normalized) || /^\/connect(?:\s|$)/u.test(normalized))) {
+  if (dependencies.semantic && (HELP_WORDS.has(normalized) || normalized.startsWith("/connect"))) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
   if (CONFIRM_WORDS.has(normalized) || CANCEL_WORDS.has(normalized)) {

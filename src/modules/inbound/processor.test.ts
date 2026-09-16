@@ -36,6 +36,19 @@ describe("provider processing feedback", () => {
       "chat-1",
     )).resolves.toBeUndefined();
   });
+
+  it.each([
+    { label: "an unbound chat", state: "ACTIVE_UNBOUND" as const },
+    { label: "a bound connection without the matching identity", state: "ACTIVE_BOUND" as const },
+  ])("does not compose typing feedback for $label", async ({ state }) => {
+    const { deps, inboundId } = await setup({ provider: "zalo", state, text: "semantic-looking input" });
+    const feedback = vi.fn(async () => undefined);
+    deps.sendProcessingFeedback = feedback;
+
+    await processInbound(inboundId, deps);
+
+    expect(feedback).not.toHaveBeenCalled();
+  });
 });
 
 class SqliteStatement {

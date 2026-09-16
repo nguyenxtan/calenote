@@ -131,7 +131,7 @@ describe("semantic inbound lifecycle", () => {
       .bind(token.ciphertext, token.iv).run();
     const spy = vi.fn(async () => undefined);
     h.deps.sendProcessingFeedback = spy;
-    for (const [id, text] of [["connect-no-typing", "/connect wrong"], ["confirm-no-typing", "có"],
+    for (const [id, text] of [["connect-no-typing", "/connect wrong"], ["connect-concatenated-no-typing", "/connectABC"], ["confirm-no-typing", "có"],
       ["cancel-no-typing", "hủy"], ["help-no-typing", "/help"]]) {
       await h.add(id, text);
       await h.db.prepare("UPDATE inbound_updates SET provider='zalo' WHERE id=?").bind(id).run();
