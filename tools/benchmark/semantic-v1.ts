@@ -79,6 +79,9 @@ export type SemanticBenchmarkMetrics = {
   titleEligibleCases: number;
   titleCorrectCases: number;
   titleCorrectRate: Rate;
+  listRangeEligibleCases: number;
+  listRangeCorrectCases: number;
+  listRangeCorrectRate: Rate;
   clarificationEligibleCases: number;
   clarificationCorrectCases: number;
   clarificationCorrectRate: Rate;
@@ -190,6 +193,7 @@ export function calculateSemanticBenchmarkMetrics(
   let localDateCorrectCases = 0;
   let localTimeCorrectCases = 0;
   let titleCorrectCases = 0;
+  let listRangeCorrectCases = 0;
   let clarificationCorrectCases = 0;
   let estimatedCostMicrounits = 0;
   let estimatedCostMeasuredCases = 0;
@@ -216,6 +220,11 @@ export function calculateSemanticBenchmarkMetrics(
     if (equalRelevantFields(benchmarkCase.expected, actual.data, "localDate")) localDateCorrectCases += 1;
     if (equalRelevantFields(benchmarkCase.expected, actual.data, "localTime")) localTimeCorrectCases += 1;
     if (equalRelevantFields(benchmarkCase.expected, actual.data, "title")) titleCorrectCases += 1;
+    if (benchmarkCase.expected.intent === "LIST_REMINDERS" && actual.data.intent === "LIST_REMINDERS"
+      && benchmarkCase.expected.rangeKind === actual.data.rangeKind
+      && benchmarkCase.expected.localDate === actual.data.localDate) {
+      listRangeCorrectCases += 1;
+    }
     if (benchmarkCase.expected.intent === "NEEDS_CLARIFICATION" && actual.data.intent === "NEEDS_CLARIFICATION"
       && benchmarkCase.expected.targetIntent === actual.data.targetIntent
       && sameFields(benchmarkCase.expected.missingFields, actual.data.missingFields)) {
@@ -224,6 +233,7 @@ export function calculateSemanticBenchmarkMetrics(
   }
 
   const createCases = fixture.cases.filter((item) => item.expected.intent === "CREATE_REMINDER").length;
+  const listCases = fixture.cases.filter((item) => item.expected.intent === "LIST_REMINDERS").length;
   const clarificationCases = fixture.cases.filter((item) => item.expected.intent === "NEEDS_CLARIFICATION").length;
   const unmeasured = observations.length === 0;
   return {
@@ -236,6 +246,8 @@ export function calculateSemanticBenchmarkMetrics(
     localTimeCorrectRate: unmeasured ? null : scoreRate(localTimeCorrectCases, createCases),
     titleEligibleCases: createCases, titleCorrectCases,
     titleCorrectRate: unmeasured ? null : scoreRate(titleCorrectCases, createCases),
+    listRangeEligibleCases: listCases, listRangeCorrectCases,
+    listRangeCorrectRate: unmeasured ? null : scoreRate(listRangeCorrectCases, listCases),
     clarificationEligibleCases: clarificationCases, clarificationCorrectCases,
     clarificationCorrectRate: unmeasured ? null : scoreRate(clarificationCorrectCases, clarificationCases),
     p95LatencyMs: percentile95(latencies),
@@ -286,6 +298,7 @@ export function renderOfflineBenchmarkEvidence(run: OfflineBenchmarkRun): string
     + `| Date-correct rate | ${percentage(metrics.localDateCorrectRate)} |\n`
     + `| Time-correct rate | ${percentage(metrics.localTimeCorrectRate)} |\n`
     + `| Title-correct rate | ${percentage(metrics.titleCorrectRate)} |\n`
+    + `| LIST range/date-correct rate | ${percentage(metrics.listRangeCorrectRate)} |\n`
     + `| Clarification-correct rate | ${percentage(metrics.clarificationCorrectRate)} |\n`
     + `| P95 latency | ${metrics.p95LatencyMs === null ? "not measured" : `${metrics.p95LatencyMs} ms`} |\n`
     + `| Estimated cost | ${metrics.estimatedCostMicrounits === null ? "not measured" : `${metrics.estimatedCostMicrounits} microunits`} |\n\n`

@@ -108,6 +108,47 @@ describe("semantic V1 offline benchmark scaffold", () => {
     expect(metrics.clarificationCorrectRate).toBe(0);
   });
 
+  it.each([
+    {
+      mismatch: "range kind",
+      expected: { intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null } as const,
+      actual: { intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null } as const,
+    },
+    {
+      mismatch: "explicit local date",
+      expected: { intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-20" } as const,
+      actual: { intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-21" } as const,
+    },
+  ])("reduces exact LIST range/date accuracy for a wrong $mismatch despite a valid intent", ({ expected, actual }) => {
+    const fixture: SyntheticSemanticFixture = {
+      version: "semantic-v1-synthetic",
+      cases: [
+        {
+          id: "synthetic-list-correct", category: "test", message: "synthetic only",
+          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
+          expected: { intent: "LIST_REMINDERS", rangeKind: "UPCOMING", localDate: null }, businessValidation: "ACCEPT",
+        },
+        {
+          id: "synthetic-list-incorrect", category: "test", message: "synthetic only",
+          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
+          expected, businessValidation: "ACCEPT",
+        },
+      ],
+    };
+
+    const metrics = calculateSemanticBenchmarkMetrics(fixture, [
+      {
+        caseId: "synthetic-list-correct", latencyMs: 10, estimatedCostMicrounits: null,
+        interpretation: { intent: "LIST_REMINDERS", rangeKind: "UPCOMING", localDate: null },
+      },
+      { caseId: "synthetic-list-incorrect", latencyMs: 10, estimatedCostMicrounits: null, interpretation: actual },
+    ]);
+
+    expect(metrics.schemaValidRate).toBe(1);
+    expect(metrics.intentCorrectRate).toBe(1);
+    expect(metrics).toMatchObject({ listRangeEligibleCases: 2, listRangeCorrectCases: 1, listRangeCorrectRate: 0.5 });
+  });
+
   it("runs the normal dry-run without calling an injected transport or global fetch", async () => {
     const transport: CandidateBenchmarkTransport = { interpret: vi.fn(async () => {
       throw new Error("the offline runner must not dispatch candidates");
@@ -122,6 +163,7 @@ describe("semantic V1 offline benchmark scaffold", () => {
       totalCases: 216, scoredCases: 0, missingCases: 216, estimatedCostMicrounits: null,
       schemaValidRate: null, intentCorrectRate: null, localDateCorrectRate: null,
       localTimeCorrectRate: null, titleCorrectRate: null, clarificationCorrectRate: null,
+      listRangeEligibleCases: 48, listRangeCorrectCases: 0, listRangeCorrectRate: null,
     });
     expect(transport.interpret).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
@@ -135,6 +177,7 @@ describe("semantic V1 offline benchmark scaffold", () => {
     expect(evidence).toContain("OFFLINE_DRY_RUN");
     expect(evidence).toContain("216");
     expect(evidence).toContain("No candidate was executed");
+    expect(evidence).toContain("| LIST range/date-correct rate | not measured |");
     for (const item of fixture.cases) {
       expect(evidence).not.toContain(item.message);
       expect(evidence).not.toContain(JSON.stringify(item.expected));

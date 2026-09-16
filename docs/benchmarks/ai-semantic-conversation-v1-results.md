@@ -34,6 +34,7 @@ does not select a model or configure a route.
 | Fixture content digest | Reviewed SHA-256 | `7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c` |
 | Schema-valid metric | Aggregate result and review-approved threshold | `NOT_MEASURED / NOT_APPROVED` |
 | Intent/date/time/title/clarification metrics | Aggregate results and review-approved thresholds | `NOT_MEASURED / NOT_APPROVED` |
+| LIST range/date-correct metric | Exact `rangeKind` and `localDate` match across all expected LIST cases; aggregate result and review-approved threshold | `NOT_MEASURED / NOT_APPROVED` |
 | P95 latency / estimated cost | Aggregate result and review-approved ceilings | `NOT_MEASURED / NOT_APPROVED` |
 
 ## Selection gate
@@ -47,7 +48,11 @@ configured:
    evidence is recorded and independently reviewed.
 4. Current limits and price caps are recorded.
 5. All review-approved accuracy, latency, cost, and strict-schema thresholds
-   pass.
+   pass, including the separate LIST range/date-correct threshold. Its numerator
+   requires both `rangeKind` and `localDate` (including `null`) to match exactly;
+   its denominator is all 48 expected LIST cases, so missing, invalid, or
+   wrong-intent observations cannot inflate accuracy. A dry-run remains
+   `NOT_MEASURED` and cannot satisfy this gate.
 6. Result evidence contains aggregate metrics only: no fixture messages,
    expected semantic objects, candidate interpretations, credentials, or
    authorization values.
