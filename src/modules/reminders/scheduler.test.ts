@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { D1ReminderSchedulerStore } from "./infrastructure/d1/scheduler-store";
 import { D1ReminderDeliveryStore } from "./infrastructure/d1/delivery-store";

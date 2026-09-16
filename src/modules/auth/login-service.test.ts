@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
 import { base64UrlToBytes } from "@/modules/security/encoding";

@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { D1OnboardingStore } from "@/modules/db/onboarding-store";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
