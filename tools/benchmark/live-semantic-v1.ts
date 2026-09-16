@@ -105,6 +105,10 @@ function validateCandidate(candidate: LiveBenchmarkCandidate): void {
     || !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._:-]+)*$/u.test(candidate.provider)) throw new TypeError("Invalid approved benchmark candidate");
   assertSafeInteger(candidate.promptPriceMicrounitsPerMillionTokens, "candidate prompt price");
   assertSafeInteger(candidate.completionPriceMicrounitsPerMillionTokens, "candidate completion price");
+  if ((candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.promptPriceMicrounitsPerMillionTokens !== 90_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 300_000))
+    || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.promptPriceMicrounitsPerMillionTokens !== 80_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 200_000))) {
+    throw new TypeError("Candidate pricing does not match the pinned price");
+  }
 }
 function approvedCandidateSet(candidates: LiveBenchmarkCandidate[]): boolean {
   return candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2

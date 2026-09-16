@@ -52,6 +52,13 @@ describe("live semantic V1 benchmark runner", () => {
     await expect(runner(directory, fakeTransport()).preflight({ apiKeyPresent: false })).resolves.toMatchObject({ candidateModels: ["qwen/qwen3-30b-a3b-instruct-2507", "nvidia/nemotron-3.5-lightning"] });
   });
 
+  it("rejects altered endpoint prices even when model, provider, and capability are otherwise approved", async () => {
+    const qwenDirectory = await stateDirectory();
+    const nemotronDirectory = await stateDirectory();
+    expect(() => runner(qwenDirectory, fakeTransport(), { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 1 }, candidates[1]] })).toThrow("pinned price");
+    expect(() => runner(nemotronDirectory, fakeTransport(), { candidates: [candidates[0], { ...candidates[1], completionPriceMicrounitsPerMillionTokens: 1 }] })).toThrow("pinned price");
+  });
+
   it("preflight verifies the pinned 216-case fixture without dispatching", async () => {
     const transport = fakeTransport();
     const report = await runner(await stateDirectory(), transport).preflight({ apiKeyPresent: false });
@@ -195,8 +202,8 @@ describe("live semantic V1 benchmark runner", () => {
     const directory = await stateDirectory();
     await runner(directory, fakeTransport()).preflight({ apiKeyPresent: true });
     const transport = fakeTransport();
-    await expect(runner(directory, transport, { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 50_001 }, candidates[1]] }).preflight({ apiKeyPresent: true }))
-      .rejects.toThrow("ledger");
+    expect(() => runner(directory, transport, { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 90_001 }, candidates[1]] }))
+      .toThrow("pinned price");
     expect(transport).not.toHaveBeenCalled();
   });
 
