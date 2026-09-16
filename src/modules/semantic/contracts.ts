@@ -23,12 +23,17 @@ const ListRemindersSchema = z.object({
   localDate: LocalDateSchema.nullable(),
 }).strict();
 
+const ClarificationMissingFieldsSchema = z.array(z.enum(["date", "time", "title", "range"]))
+  .min(1)
+  .max(MAX_CLARIFICATION_MISSING_FIELDS)
+  .refine((fields) => new Set(fields).size === fields.length, {
+    message: "Clarification fields must be unique",
+  });
+
 const NeedsClarificationSchema = z.object({
   intent: z.literal("NEEDS_CLARIFICATION"),
   targetIntent: z.enum(["CREATE_REMINDER", "LIST_REMINDERS"]),
-  missingFields: z.array(z.enum(["date", "time", "title", "range"]))
-    .min(1)
-    .max(MAX_CLARIFICATION_MISSING_FIELDS),
+  missingFields: ClarificationMissingFieldsSchema,
   question: z.string().min(1).max(MAX_CLARIFICATION_QUESTION_CODE_UNITS),
 }).strict();
 

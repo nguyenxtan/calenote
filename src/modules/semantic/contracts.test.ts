@@ -38,6 +38,7 @@ describe("SemanticInterpretationSchema", () => {
     ["malformed local time", { ...validCreate, localTime: "9 giờ 30" }],
     ["unbounded clarification question", { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "a".repeat(501) }],
     ["unbounded clarification fields", { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["date", "time", "title", "range", "date"], question: "Bạn muốn bổ sung gì?" }],
+    ["duplicate clarification fields", { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time", "time"], question: "Bạn muốn nhắc vào lúc nào?" }],
     ["model prose instead of an object", "Tôi sẽ nhắc bạn vào lúc 9 giờ."],
   ])("rejects %s", (_label, payload) => {
     expect(SemanticInterpretationSchema.safeParse(payload).success).toBe(false);
@@ -75,6 +76,34 @@ describe("semantic-v1 synthetic benchmark", () => {
       expect(item.expected).not.toBeNull();
       expect(["ACCEPT", "REJECT"]).toContain(item.businessValidation);
       expect(SemanticInterpretationSchema.safeParse(item.expected).success).toBe(true);
+    }
+  });
+
+  it("keeps Vietnamese time, range, and clarification ground truth internally consistent", async () => {
+    const fixture = JSON.parse(await readFile(resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json"), "utf8")) as {
+      cases: Array<{
+        id: string;
+        message: string;
+        expected: Record<string, unknown>;
+        businessValidation: "ACCEPT" | "REJECT";
+      }>;
+    };
+    const byId = new Map(fixture.cases.map((item) => [item.id, item]));
+
+    expect(byId.get("synthetic-daypart-055")).toMatchObject({
+      message: "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 055",
+      expected: { intent: "CREATE_REMINDER", localTime: "14:00" },
+    });
+    expect(byId.get("synthetic-multi-turn-continuation-199")).toMatchObject({
+      message: "4 giờ chiều 08:00 nhắc tôi việc nối tiếp 199",
+      expected: { intent: "NEEDS_CLARIFICATION", missingFields: ["time"] },
+      businessValidation: "ACCEPT",
+    });
+    for (const item of fixture.cases.filter((item) => item.message.startsWith("xem lich ngay mai"))) {
+      expect(item.expected).toMatchObject({ intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null });
+    }
+    for (const item of fixture.cases.filter((item) => item.expected.intent === "NEEDS_CLARIFICATION")) {
+      expect(item.businessValidation).toBe("ACCEPT");
     }
   });
 });

@@ -826,7 +826,7 @@
     {
       "id": "synthetic-daypart-055",
       "category": "daypart",
-      "message": "buổi chiều 08:00 nhắc tôi việc tổng hợp 055",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 055",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -834,7 +834,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 055",
         "localDate": "2026-09-17",
-        "localTime": "08:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -843,7 +843,7 @@
     {
       "id": "synthetic-daypart-056",
       "category": "daypart",
-      "message": "buổi chiều 09:00 nhắc tôi việc tổng hợp 056",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 056",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -851,7 +851,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 056",
         "localDate": "2026-09-17",
-        "localTime": "09:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -860,7 +860,7 @@
     {
       "id": "synthetic-daypart-057",
       "category": "daypart",
-      "message": "buổi chiều 10:00 nhắc tôi việc tổng hợp 057",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 057",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -868,7 +868,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 057",
         "localDate": "2026-09-17",
-        "localTime": "10:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -877,7 +877,7 @@
     {
       "id": "synthetic-daypart-058",
       "category": "daypart",
-      "message": "buổi chiều 11:00 nhắc tôi việc tổng hợp 058",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 058",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -885,7 +885,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 058",
         "localDate": "2026-09-17",
-        "localTime": "11:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -894,7 +894,7 @@
     {
       "id": "synthetic-daypart-059",
       "category": "daypart",
-      "message": "buổi chiều 12:00 nhắc tôi việc tổng hợp 059",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 059",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -902,7 +902,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 059",
         "localDate": "2026-09-17",
-        "localTime": "12:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -911,7 +911,7 @@
     {
       "id": "synthetic-daypart-060",
       "category": "daypart",
-      "message": "buổi chiều 13:00 nhắc tôi việc tổng hợp 060",
+      "message": "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 060",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
@@ -919,7 +919,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc tổng hợp 060",
         "localDate": "2026-09-17",
-        "localTime": "13:00",
+        "localTime": "14:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -2366,7 +2366,7 @@
         ],
         "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
-      "businessValidation": "REJECT"
+      "businessValidation": "ACCEPT"
     },
     {
       "id": "synthetic-missing-or-ambiguous-156",
@@ -2383,7 +2383,7 @@
         ],
         "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
-      "businessValidation": "REJECT"
+      "businessValidation": "ACCEPT"
     },
     {
       "id": "synthetic-missing-or-ambiguous-157",
@@ -2400,7 +2400,7 @@
         ],
         "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
-      "businessValidation": "REJECT"
+      "businessValidation": "ACCEPT"
     },
     {
       "id": "synthetic-missing-or-ambiguous-158",
@@ -2417,7 +2417,7 @@
         ],
         "question": "Bạn muốn xem lịch trong khoảng nào?"
       },
-      "businessValidation": "REJECT"
+      "businessValidation": "ACCEPT"
     },
     {
       "id": "synthetic-missing-or-ambiguous-159",
@@ -2852,7 +2852,7 @@
       "priorContext": null,
       "expected": {
         "intent": "LIST_REMINDERS",
-        "rangeKind": "NEXT_7_DAYS",
+        "rangeKind": "TOMORROW",
         "localDate": null
       },
       "businessValidation": "ACCEPT"
@@ -2866,7 +2866,7 @@
       "priorContext": null,
       "expected": {
         "intent": "LIST_REMINDERS",
-        "rangeKind": "UPCOMING",
+        "rangeKind": "TOMORROW",
         "localDate": null
       },
       "businessValidation": "ACCEPT"
@@ -2880,7 +2880,7 @@
       "priorContext": null,
       "expected": {
         "intent": "LIST_REMINDERS",
-        "rangeKind": "TODAY",
+        "rangeKind": "TOMORROW",
         "localDate": null
       },
       "businessValidation": "ACCEPT"
@@ -3029,19 +3029,19 @@
         }
       },
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc nối tiếp 199",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn nhắc lúc 4 giờ chiều hay 08:00?"
       },
       "businessValidation": "ACCEPT"
     },
     {
       "id": "synthetic-multi-turn-continuation-200",
       "category": "multi-turn-continuation",
-      "message": "4 giờ chiều 09:00 nhắc tôi việc nối tiếp 200",
+      "message": "lúc 4 giờ chiều nhắc tôi việc nối tiếp 200",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": {
@@ -3055,7 +3055,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc nối tiếp 200",
         "localDate": "2026-09-17",
-        "localTime": "09:00",
+        "localTime": "16:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -3064,7 +3064,7 @@
     {
       "id": "synthetic-multi-turn-continuation-201",
       "category": "multi-turn-continuation",
-      "message": "4 giờ chiều 10:00 nhắc tôi việc nối tiếp 201",
+      "message": "lúc 4 giờ chiều nhắc tôi việc nối tiếp 201",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": {
@@ -3078,7 +3078,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc nối tiếp 201",
         "localDate": "2026-09-17",
-        "localTime": "10:00",
+        "localTime": "16:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -3087,7 +3087,7 @@
     {
       "id": "synthetic-multi-turn-continuation-202",
       "category": "multi-turn-continuation",
-      "message": "4 giờ chiều 11:00 nhắc tôi việc nối tiếp 202",
+      "message": "lúc 4 giờ chiều nhắc tôi việc nối tiếp 202",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": {
@@ -3101,7 +3101,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc nối tiếp 202",
         "localDate": "2026-09-17",
-        "localTime": "11:00",
+        "localTime": "16:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -3110,7 +3110,7 @@
     {
       "id": "synthetic-multi-turn-continuation-203",
       "category": "multi-turn-continuation",
-      "message": "4 giờ chiều 12:00 nhắc tôi việc nối tiếp 203",
+      "message": "lúc 4 giờ chiều nhắc tôi việc nối tiếp 203",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": {
@@ -3124,7 +3124,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc nối tiếp 203",
         "localDate": "2026-09-17",
-        "localTime": "12:00",
+        "localTime": "16:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
@@ -3133,7 +3133,7 @@
     {
       "id": "synthetic-multi-turn-continuation-204",
       "category": "multi-turn-continuation",
-      "message": "4 giờ chiều 13:00 nhắc tôi việc nối tiếp 204",
+      "message": "lúc 4 giờ chiều nhắc tôi việc nối tiếp 204",
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": {
@@ -3147,7 +3147,7 @@
         "intent": "CREATE_REMINDER",
         "title": "việc nối tiếp 204",
         "localDate": "2026-09-17",
-        "localTime": "13:00",
+        "localTime": "16:00",
         "timezone": "Asia/Ho_Chi_Minh",
         "needsClarification": false
       },
