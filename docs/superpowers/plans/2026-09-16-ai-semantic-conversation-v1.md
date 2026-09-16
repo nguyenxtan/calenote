@@ -4,7 +4,7 @@
 
 **Goal:** Build a provider-neutral, AI-semantic reminder interpreter that preserves deterministic safety and user-confirmed canonical mutations.
 
-**Architecture:** Controls and state guards resolve locally; remaining semantic input is interpreted by one free and at most one cheap paid model through a strict JSON Schema contract. Zod and business validation turn an accepted semantic object into a bounded query, encrypted clarification, or existing draft/confirmation lifecycle.
+**Architecture:** Controls and state guards resolve locally; remaining semantic input is interpreted by exactly one free primary and, only after an eligible infrastructure/contract failure, at most one cheap paid fallback through a strict JSON Schema contract. An application-owned atomic reservation precedes every paid call. Zod and business validation turn an accepted semantic object into a bounded query, encrypted clarification, or existing draft/confirmation lifecycle.
 
 **Tech Stack:** TypeScript, Zod, Cloudflare Workers, D1, Queues, Vitest, OpenRouter structured outputs.
 
@@ -12,7 +12,10 @@
 
 ## Global Constraints
 
-- `AI_MODE` is `off | semantic`; maximum calls per inbound is exactly two.
+- `AI_MODE` is `off | semantic`; `FREE_PRIMARY -> CHEAP_PAID_FALLBACK -> STOP` and `AI_MAX_CALLS_PER_MESSAGE=2` are hard limits.
+- Paid fallback is allowed only after `FREE_UNAVAILABLE`, `FREE_TIMEOUT`, `FREE_RATE_LIMITED`, `FREE_PROVIDER_FAILURE`, `FREE_INVALID_JSON`, `FREE_SCHEMA_INVALID`, or `FREE_REQUIRED_FEATURE_UNSUPPORTED`.
+- A schema-valid `CREATE_REMINDER`, `LIST_REMINDERS`, `NEEDS_CLARIFICATION`, `HELP`, or `UNSUPPORTED` never escalates to paid AI; backend validation returns its local result.
+- `SemanticBudgetStore.reservePaidCall(...)` must atomically reserve owner daily, owner monthly, and global daily hard budget before a paid call; no reservation means no paid call.
 - No model gets D1, provider credentials, internal IDs, tools, authorization, scheduling, or mutation authority.
 - Preserve Zalo ingress/authentication/encryption/BLOB/Queue/bound-chat and existing draft confirmation behavior.
 - Model selection requires current official capability/privacy/price evidence and the synthetic benchmark; no model is configured by this plan.
@@ -27,10 +30,12 @@
 | `src/modules/semantic/service.ts` | Guard-first orchestration, two-tier bounded routing, Zod/business validation. |
 | `src/modules/semantic/validation.ts` | Local date/time, title, range, horizon, and clarification validation. |
 | `src/modules/semantic/infrastructure/d1/context-store.ts` | Encrypted bounded context lifecycle and idempotency. |
+| `src/modules/semantic/budget-store.ts` | `reservePaidCall`, `finalizeUsage`, and `releaseOrExpireReservation` application contract. |
+| `src/modules/semantic/infrastructure/d1/budget-store.ts` | Atomic D1 reservation, finalization, release, expiry recovery, and safe metadata only. |
 | `src/modules/semantic/benchmark/*.json` | 200+ synthetic inputs and expected strict objects. |
 | `src/modules/intelligence/infrastructure/openrouter/*` | Semantic-only request, strict provider preferences, price/cost controls. |
 | `src/modules/reminders/command-service.ts` | Consume validated semantic create/query/clarification outcomes while retaining draft confirmation authority. |
-| `migrations/0005_semantic_context.sql` | Reviewed future additive context persistence; do not apply during docs phase. |
+| `migrations/0005_semantic_context_and_budget.sql` | Reviewed future additive semantic-context and budget persistence; do not apply during docs phase. |
 
 ### Task 1: Freeze the contract and synthetic benchmark
 
@@ -51,22 +56,31 @@
 - [ ] Assert a model epoch, ownership, SQL, provider, or identifier field cannot enter the contract or validator.
 - [ ] Run focused tests and commit `feat(semantic): validate local semantic values in backend`.
 
-### Task 3: Add encrypted semantic context persistence
+### Task 3: Add encrypted semantic context and atomic budget persistence
 
-**Files:** Create reviewed `migrations/0005_semantic_context.sql`, `src/modules/semantic/infrastructure/d1/context-store.ts`, and tests.
+**Files:** Create reviewed `migrations/0005_semantic_context_and_budget.sql`, `src/modules/semantic/infrastructure/d1/context-store.ts`, `src/modules/semantic/budget-store.ts`, `src/modules/semantic/infrastructure/d1/budget-store.ts`, and focused D1 tests.
 
 - [ ] Write failing D1 tests for one pending context per bound chat, encrypted user-derived slots, source/resolution idempotency, TTL expiry, cancellation, and restart-safe reread.
-- [ ] Implement the additive table/store only after migration review; do not copy recovery migration wholesale.
-- [ ] Verify migration idempotence and forward-only remediation behavior in disposable integration storage.
-- [ ] Commit `feat(semantic): persist bounded encrypted clarification context`.
+- [ ] Write failing D1 tests for an atomic `reservePaidCall(...)` across owner daily count, owner monthly cost, and global daily cost; assert two concurrent paid-fallback attempts cannot exceed hard budget.
+- [ ] Define the store contract: `reservePaidCall(...)` returns an opaque reservation or `BUDGET_EXHAUSTED`; `finalizeUsage(...)` and `releaseOrExpireReservation(...)` are reservation-idempotent state transitions.
+- [ ] Implement additive `semantic_budget_windows` and `semantic_budget_reservations` with integer microunit amounts, source-inbound uniqueness, bounded TTL, non-negative checks, and no user text or semantic payload. Do not modify or repurpose `rate_limits`.
+- [ ] Use one transactional D1 batch of guarded multi-window increments and reservation insertion. A reservation is returned only when every hard-limit guard succeeded; otherwise return a safe local category and do not call a paid provider.
+- [ ] Test a crashed/expired reservation becomes recoverable exactly once, a failed provider release is safe, known usage finalizes without double accounting, and unknown usage conservatively keeps the reserved maximum.
+- [ ] Verify migration idempotence, forward-only remediation, and actual D1 concurrency behavior in disposable integration storage; stop if a single atomic multi-window reservation cannot be proved.
+- [ ] Commit `feat(semantic): persist bounded encrypted context and paid budget reservations`.
 
 ### Task 4: Implement bounded model routing
 
 **Files:** Modify `src/modules/intelligence/*`; create `src/modules/semantic/service.ts` and tests.
 
-- [ ] Test `off` makes zero calls; `semantic` tries eligible free once; unavailable/provider/invalid-schema free outcome permits one paid fallback; no third call is possible.
+- [ ] Test `off` makes zero calls and `semantic` calls `FREE_PRIMARY` once before any fallback.
+- [ ] Test free timeout -> one paid fallback and free schema failure -> one paid fallback; each eligible free infrastructure/contract failure has no second paid retry.
+- [ ] Test free `NEEDS_CLARIFICATION` -> zero paid fallback and free `UNSUPPORTED` -> zero paid fallback.
+- [ ] Test backend `PAST_TIME` after valid free result -> zero paid fallback and a schema-valid create/list/help outcome never escalates because of application preference.
+- [ ] Test paid budget exhausted -> no paid call and a safe local response; test concurrent paid-fallback attempts cannot exceed hard budget; test crashed/expired reservation becomes recoverable.
+- [ ] Test maximum calls per inbound is never greater than 2, including retried inbound delivery and every free failure category.
 - [ ] Build strict non-streaming JSON-schema requests with required parameter support, data-collection denial, optional ZDR, bounded input/output, timeout, and explicit configured model/provider only.
-- [ ] Enforce per-user/day, per-user/month, global/day, and price-cap checks before the paid call; return safe local help/clarification when blocked.
+- [ ] Call `SemanticBudgetStore.reservePaidCall(...)` before the paid request, finalize known provider usage/cost, and release or expire safely without persisting provider/model content.
 - [ ] Record only safe request/tier/model/provider/latency/result/schema/fallback/usage-cost metadata.
 - [ ] Run focused tests and commit `feat(semantic): add bounded free-to-paid interpretation routing`.
 
@@ -99,7 +113,9 @@
 ## Plan self-review
 
 The tasks cover strict union/schema, semantic versus deterministic authority,
-two-call free/paid policy, backend time/query/mutation validation, encrypted
-multiturn state, benchmark, cost/privacy gates, safe observability, migration
-review, and regression verification. They deliberately exclude provider waiting
-UX, Telegram, duplicate-connect work, and `ACTIVE_BOUND` UI synchronization.
+the exact two-call free-primary/paid-fallback matrix, backend time/query/mutation
+validation, encrypted multiturn state, atomic persisted cost reservations,
+benchmark, cost/privacy gates, safe observability, migration review, and
+regression verification. They deliberately exclude free-secondary routing,
+provider waiting UX, Telegram, duplicate-connect work, `ACTIVE_BOUND` UI
+synchronization, and multi-device session implementation.

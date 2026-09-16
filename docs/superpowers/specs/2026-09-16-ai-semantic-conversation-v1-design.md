@@ -73,10 +73,29 @@ identifiers, or ownership predicates.
 ## Routing, privacy, and cost policy
 
 `AI_MODE` is `off | semantic`. `off` makes zero AI calls and returns local
-help/clarification for unresolvable semantic input. `semantic` permits at most
-two calls per inbound: one eligible free primary, then one eligible cheap paid
-fallback only after unavailable/provider failure/invalid structured result.
-There is no agent loop, hidden retry chain, tool use, or premium implicit route.
+help/clarification for unresolvable semantic input. V1 routing is exactly
+`FREE_PRIMARY -> CHEAP_PAID_FALLBACK -> STOP`; `AI_MAX_CALLS_PER_MESSAGE=2` is
+a hard ceiling: at most two calls per inbound. There is one free attempt and at
+most one paid attempt. There is no free-secondary chain, agent loop, hidden
+retry chain, tool use, or premium implicit route.
+
+Paid fallback is an infrastructure/contract recovery only. It is eligible only
+when the free primary cannot produce a usable structured semantic result with
+one of these safe categories: `FREE_UNAVAILABLE`, `FREE_TIMEOUT`,
+`FREE_RATE_LIMITED`, `FREE_PROVIDER_FAILURE`, `FREE_INVALID_JSON`,
+`FREE_SCHEMA_INVALID`, or `FREE_REQUIRED_FEATURE_UNSUPPORTED`. Each eligible
+free failure can cause one paid attempt at most. A paid attempt cannot retry or
+escalate further.
+
+A schema-valid `CREATE_REMINDER`, `LIST_REMINDERS`, `NEEDS_CLARIFICATION`,
+`HELP`, or `UNSUPPORTED` is a successful semantic outcome and never permits
+paid fallback merely because the application dislikes its meaning. In
+particular, `NEEDS_CLARIFICATION is a successful semantic outcome`; it stays
+local to the normal clarification flow. Past-time business validation after a
+schema-valid free result must not trigger paid fallback: if free returns a
+valid `CREATE_REMINDER` for 12:00 today and `processingNow` is 12:05, the
+backend returns its local `PAST_TIME` behavior. Business validation, including
+time, ownership, title, range, and lifecycle rules, remains backend-owned.
 
 No production model is selected in this checkpoint. A model can be configured
 only after a current documented review proves its availability, Vietnamese
@@ -97,11 +116,59 @@ the selected model/provider capability page. Documentation is evidence, not a
 permanent eligibility grant: availability, pricing, provider behavior, and
 privacy fields must be refreshed immediately before enabling any route.
 
-Planned configuration names are `AI_FREE_PRIMARY_MODEL`, optional
-`AI_FREE_SECONDARY_MODEL`, `AI_PAID_FALLBACK_MODEL`,
-`AI_PAID_FALLBACK_ENABLED`, `AI_MAX_CALLS_PER_MESSAGE=2`, input/output limits,
-per-user daily paid-fallback and monthly-cost limits, global daily budget, and
-prompt/completion price caps. Enforcement is application-owned and fail-closed.
+Planned configuration names are `AI_FREE_PRIMARY_MODEL`,
+`AI_PAID_FALLBACK_MODEL`, `AI_PAID_FALLBACK_ENABLED`,
+`AI_MAX_CALLS_PER_MESSAGE=2`, input/output limits, per-user daily paid-fallback
+and monthly-cost limits, global daily budget, and prompt/completion price caps.
+A free-secondary configuration is deliberately absent from V1. Enforcement is
+application-owned and fail-closed.
+
+## Atomic paid-call budget boundary
+
+`SemanticBudgetStore` is the sole authority to reserve, finalize, release, and
+recover a paid-call budget. Before any paid provider request, the router calls
+`reservePaidCall(...)` with an owner/user identity, source-inbound idempotency
+key, UTC daily/monthly window keys, the configured maximum cost in integer
+microunits, and a bounded reservation TTL. It returns either an opaque
+reservation id or a safe local `BUDGET_EXHAUSTED` category. Only an acquired
+reservation allows the one paid call.
+
+The future implementation must atomically reserve capacity against all three
+hard limits: the owner/user daily paid-fallback limit, the owner/user monthly
+AI-cost limit, and the global daily AI budget. It must use pre-seeded D1 budget
+window rows and a single transactional D1 batch of conditional increments plus
+the reservation insert. The request is authorized only if every conditional
+increment succeeds in that transaction; otherwise no paid provider request is
+made. The implementation test suite must prove the deployed D1 semantics used
+by this store, including simultaneous contenders. If those semantics cannot
+provide a single atomic multi-window reservation, implementation must stop and
+adopt one application-owned serialization boundary before enabling paid calls;
+it must not weaken a hard limit.
+
+Minimal additive persistence is a `semantic_budget_windows` table for
+`USER_DAILY`, `USER_MONTHLY`, and `GLOBAL_DAILY` window counters (reserved and
+finalized microunits), plus a `semantic_budget_reservations` table with opaque
+reservation id, owner/user scope reference, source-inbound idempotency key,
+window keys, reserved maximum cost, state, expiry, and optional finalized
+provider usage/cost. These records contain no user text or semantic payload.
+They are not a billing subsystem: they exist only to enforce configured hard
+limits and safely observe bounded usage.
+
+`finalizeUsage(...)` is idempotent and transitions only the reservation it owns
+from `RESERVED` to `FINALIZED`, converting its reserved maximum to provider
+usage/cost when safely available; unknown provider usage conservatively
+finalizes the reserved maximum. `releaseOrExpireReservation(...)` is idempotent
+and transitions only a still-reserved, expired, or safely failed reservation to
+`RELEASED`/`EXPIRED`, removing its reserved amount exactly once. Conditional
+state transitions, non-negative checks, source-inbound uniqueness, and
+reservation-id idempotency prevent negative and double accounting. A bounded
+reaper and before-reserve expiry sweep recover Worker-crash reservations without
+storing content or contacting the provider.
+
+The existing `rate_limits` table cannot safely implement this boundary: it has
+only `(subject_digest, bucket, count, expires_at)`, no monetary amount,
+reservation identity/state/TTL, global-plus-user atomicity, or finalization.
+It remains the ordinary rate-limit mechanism and is not reused for AI budgets.
 
 Safe observations are request flag, tier, configured model/provider, latency,
 result category, schema validity, fallback use, and safely supplied token/cost
@@ -147,10 +214,20 @@ as a review-approved score threshold.
 precedes a draft or a query. A future additive forward-only `0005` must create a
 provider-agnostic semantic-context table keyed by bound chat, source inbound,
 and optional resolution inbound; it needs encrypted context, intent/slot state,
-TTL, terminal lifecycle, and one-pending-context uniqueness. It must not alter
-existing encrypted values, command drafts, reminders, webhook state, or Queue
-configuration. Its design and idempotence/rollback-forward tests require their
-own review before application.
+TTL, terminal lifecycle, and one-pending-context uniqueness. The same reviewed
+additive migration may also add the minimal semantic-budget tables defined
+above; it must not modify `rate_limits`. It must not alter existing encrypted
+values, command drafts, reminders, webhook state, or Queue configuration. Its
+design and idempotence/rollback-forward tests require their own review before
+application.
+
+## Deferred multi-device auth note
+
+This semantic slice does not implement session management. The authentication
+roadmap must preserve concurrent user sessions across multiple devices: multiple
+active sessions per user, current-device identification, revoke-one-device,
+logout-all-other-devices, and no forced logout of an existing device merely
+because another device logs in.
 
 ## Supersession and non-goals
 
