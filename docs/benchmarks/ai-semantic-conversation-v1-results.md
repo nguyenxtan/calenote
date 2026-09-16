@@ -1,62 +1,68 @@
 # AI Semantic Conversation V1 — Benchmark and Selection Evidence
 
-## Current result
+## 2026-09-16 live synthetic selection run
 
-Status: `NOT_RUN` — this checkpoint creates offline preparation only. No
-candidate, provider route, credential, or production data has been used.
+Status: `COMPLETE — NO_MODEL_SELECTED`. This evidence is limited to the frozen
+synthetic fixture and safe aggregates. It does not configure a production
+model, route, credential, or feature flag.
 
-The reproducible dry-run command is:
+| Field | Value |
+| --- | --- |
+| Run ID | `semantic-v1-model-selection-20260916-02` |
+| Fixture | `semantic-v1-synthetic` / 216 cases |
+| Fixture content digest | `7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c` |
+| Requests | 432 serial requests; no retries |
+| Hard request cap | 450 |
+| Projected / retained cost | $0.478008 / $0.478008 |
+| Hard cost cap | $0.500000 |
+| Source data | Canonical synthetic fixture only; no production or user conversations |
 
-```sh
-pnpm benchmark:semantic-v1:offline
-```
+### Revalidated exact endpoint contract
 
-It loads only `src/modules/semantic/benchmark/semantic-v1.json`, verifies the
-frozen synthetic fixture, and prints aggregate metrics with no candidate
-execution. The current fixture version is `semantic-v1-synthetic` with 216
-synthetic Vietnamese cases.
+Current OpenRouter endpoint metadata was checked immediately before preflight.
+Both calls used the frozen Semantic V1 instruction, strict response schema,
+reference time, timezone, context, token bounds, timeout, scoring contract,
+and privacy routing: exact `provider.only`, no fallback,
+`require_parameters=true`, `data_collection="deny"`, and `zdr=true`.
 
-## Candidate evidence template
+| Candidate | Exact endpoint | Reasoning request field | Endpoint price per 1M tokens | Structured output / response format / ZDR |
+| --- | --- | --- | --- | --- |
+| `qwen/qwen3-30b-a3b-instruct-2507` | `siliconflow/fp8` | Omitted | input $0.09; output $0.30 | verified / verified / eligible |
+| `nvidia/nemotron-3.5-lightning` | `phala` | disabled and excluded | input $0.08; output $0.20 | verified / verified / eligible |
 
-Complete one record per proposed candidate immediately before any enablement.
-Evidence belongs to the later separately authorized benchmark run; this file
-does not select a model or configure a route.
+### Safe aggregate results
 
-| Field | Required evidence | Current value |
-| --- | --- | --- |
-| Candidate ID | Stable review label | `UNSELECTED` |
-| Model / provider | Explicit pinned model and provider endpoint | `UNSELECTED` |
-| Capability evidence date | Current official structured-output capability evidence | `NOT_RECORDED` |
-| Privacy evidence date | Current official data-collection and ZDR evidence | `NOT_RECORDED` |
-| Limits | Verified input, output, timeout, and rate limits | `NOT_RECORDED` |
-| Prices | Current input/output caps and units | `NOT_RECORDED` |
-| Fixture | Version and exact case count | `semantic-v1-synthetic / 216` |
-| Fixture content digest | Reviewed SHA-256 | `7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c` |
-| Schema-valid metric | Aggregate result and review-approved threshold | `NOT_MEASURED / NOT_APPROVED` |
-| Intent/date/time/title/clarification metrics | Aggregate results and review-approved thresholds | `NOT_MEASURED / NOT_APPROVED` |
-| LIST range/date-correct metric | Exact `rangeKind` and `localDate` match across all expected LIST cases; aggregate result and review-approved threshold | `NOT_MEASURED / NOT_APPROVED` |
-| P95 latency / estimated cost | Aggregate result and review-approved ceilings | `NOT_MEASURED / NOT_APPROVED` |
+Percentages use all 216 fixture cases unless a metric has its documented
+eligible denominator. A missing case therefore reduces reliability rather than
+being excluded from a quality gate.
 
-## Selection gate
+| Candidate | Scored / missing | Schema validity | Intent | Date | Time | Title | LIST range | Clarification | P95 | Measured successful-request cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Qwen 3 30B A3B Instruct 2507 | 216 / 0 | 100.00% | 61.11% | 14.08% | 100.00% | 47.89% | 8.33% | 0.00% | 11,623 ms | $0.260928 |
+| Nemotron 3.5 Lightning | 17 / 199 | 7.87% | 6.02% | 0.00% | 9.86% | 2.82% | 4.17% | 0.00% | 10,522 ms | $0.017085 |
 
-Every one of these gates must pass before a free or paid semantic route is
-configured:
+### Safe provider-failure summary
 
-1. Explicit spend authorization covers the exact candidate run.
-2. Only the frozen synthetic fixture is supplied.
-3. Current official capability, provider, privacy/data-collection, and ZDR
-   evidence is recorded and independently reviewed.
-4. Current limits and price caps are recorded.
-5. All review-approved accuracy, latency, cost, and strict-schema thresholds
-   pass, including the separate LIST range/date-correct threshold. Its numerator
-   requires both `rangeKind` and `localDate` (including `null`) to match exactly;
-   its denominator is all 48 expected LIST cases, so missing, invalid, or
-   wrong-intent observations cannot inflate accuracy. A dry-run remains
-   `NOT_MEASURED` and cannot satisfy this gate.
-6. Result evidence contains aggregate metrics only: no fixture messages,
-   expected semantic objects, candidate interpretations, credentials, or
-   authorization values.
+Qwen completed all 216 cases without a provider-failure category. Nemotron had
+198 `RATE_LIMITED` failures across the synthetic categories `today`,
+`tomorrow`, `explicit-date`, `daypart`, `colloquialism`, `filler`,
+`reordered-syntax`, `implicit-request`, `missing-or-ambiguous`, `past-time`,
+`typo`, and `multi-turn-continuation`, plus one `TIMEOUT` in
+`missing-or-ambiguous` (`synthetic-missing-or-ambiguous-157`). The durable
+ledger contains only synthetic case IDs and safe error categories; it contains
+no raw prompt, response, credential, or hidden reasoning in this evidence.
 
-Until then, the semantic capability remains `off`. A future authorization may
-select an approved paid-only mode only after the same gates pass; this evidence
-template does not authorize that configuration.
+### Selection decision
+
+`MODEL_SELECTED = NONE`.
+
+Qwen satisfies the schema-validity gate (100.00%), but exhibits systematic
+business-critical semantic failures: date (14.08%), LIST range (8.33%), and
+clarification (0.00%) accuracy are below acceptable selection quality.
+Nemotron fails the required 99% schema-validity gate because 199 of 216 cases
+ended in endpoint rate limiting or timeout. Privacy eligibility alone does not
+override these quality and availability failures.
+
+No migration, deployment, production OpenRouter configuration, or model
+enablement follows from this result. The required next decision is
+`CANDIDATE_RECONSIDERATION`.
