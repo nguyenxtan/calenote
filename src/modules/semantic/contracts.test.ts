@@ -1,0 +1,80 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { SemanticInterpretationJsonSchema, SemanticInterpretationSchema } from "./contracts";
+
+const validCreate = {
+  intent: "CREATE_REMINDER",
+  title: "Gọi đội thiết kế",
+  localDate: "2026-09-17",
+  localTime: "09:30",
+  timezone: "Asia/Ho_Chi_Minh",
+  needsClarification: false,
+};
+
+function objectArms(schema: unknown): Array<Record<string, unknown>> {
+  if (typeof schema !== "object" || schema === null) return [];
+  const value = schema as Record<string, unknown>;
+  const branches = ["oneOf", "anyOf"].flatMap((key) => Array.isArray(value[key]) ? value[key] : []);
+  return branches.filter((arm): arm is Record<string, unknown> => (
+    typeof arm === "object" && arm !== null && arm.type === "object"
+  ));
+}
+
+describe("SemanticInterpretationSchema", () => {
+  it("accepts all documented union arms", () => {
+    expect(SemanticInterpretationSchema.parse(validCreate)).toEqual(validCreate);
+    expect(SemanticInterpretationSchema.parse({ intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-22" })).toEqual({ intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-22" });
+    expect(SemanticInterpretationSchema.parse({ intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Bạn muốn nhắc vào lúc nào?" })).toEqual({ intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Bạn muốn nhắc vào lúc nào?" });
+    expect(SemanticInterpretationSchema.parse({ intent: "HELP" })).toEqual({ intent: "HELP" });
+    expect(SemanticInterpretationSchema.parse({ intent: "UNSUPPORTED" })).toEqual({ intent: "UNSUPPORTED" });
+  });
+
+  it.each([
+    ["extra properties", { ...validCreate, ownerId: "model-must-not-set-this" }],
+    ["unknown intent", { intent: "DELETE_REMINDER" }],
+    ["non-Vietnam timezone", { ...validCreate, timezone: "UTC" }],
+    ["malformed local date", { ...validCreate, localDate: "17/09/2026" }],
+    ["malformed local time", { ...validCreate, localTime: "9 giờ 30" }],
+    ["unbounded clarification question", { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "a".repeat(501) }],
+    ["unbounded clarification fields", { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["date", "time", "title", "range", "date"], question: "Bạn muốn bổ sung gì?" }],
+    ["model prose instead of an object", "Tôi sẽ nhắc bạn vào lúc 9 giờ."],
+  ])("rejects %s", (_label, payload) => {
+    expect(SemanticInterpretationSchema.safeParse(payload).success).toBe(false);
+  });
+
+  it("generates closed JSON Schema arms from the Zod contract", () => {
+    const arms = objectArms(SemanticInterpretationJsonSchema);
+    expect(arms).toHaveLength(5);
+    for (const arm of arms) {
+      expect(arm.additionalProperties).toBe(false);
+    }
+  });
+});
+
+describe("semantic-v1 synthetic benchmark", () => {
+  it("contains at least 200 synthetic Vietnamese cases with fixed expectations", async () => {
+    const fixture = JSON.parse(await readFile(resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json"), "utf8")) as { version: string; cases: Array<Record<string, unknown>> };
+    expect(fixture.version).toBe("semantic-v1-synthetic");
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(200);
+    expect(new Set(fixture.cases.map((item) => item.category)).size).toBeGreaterThanOrEqual(12);
+    expect(new Set(fixture.cases.map((item) => (item.expected as { intent: string }).intent))).toEqual(new Set([
+      "CREATE_REMINDER",
+      "LIST_REMINDERS",
+      "NEEDS_CLARIFICATION",
+      "HELP",
+      "UNSUPPORTED",
+    ]));
+    for (const item of fixture.cases) {
+      expect(typeof item.id).toBe("string");
+      expect(typeof item.message).toBe("string");
+      expect(typeof item.interpretationReferenceTime).toBe("string");
+      expect(item.timezone).toBe("Asia/Ho_Chi_Minh");
+      expect(item).toHaveProperty("priorContext");
+      expect(typeof item.expected).toBe("object");
+      expect(item.expected).not.toBeNull();
+      expect(["ACCEPT", "REJECT"]).toContain(item.businessValidation);
+      expect(SemanticInterpretationSchema.safeParse(item.expected).success).toBe(true);
+    }
+  });
+});

@@ -1,0 +1,3401 @@
+{
+  "version": "semantic-v1-synthetic",
+  "cases": [
+    {
+      "id": "synthetic-today-001",
+      "category": "today",
+      "message": "hôm nay 08:00 nhắc tôi việc tổng hợp 001",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 001",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-002",
+      "category": "today",
+      "message": "hôm nay 09:00 nhắc tôi việc tổng hợp 002",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 002",
+        "localDate": "2026-09-16",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-003",
+      "category": "today",
+      "message": "hôm nay 10:00 nhắc tôi việc tổng hợp 003",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 003",
+        "localDate": "2026-09-16",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-004",
+      "category": "today",
+      "message": "hôm nay 11:00 nhắc tôi việc tổng hợp 004",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 004",
+        "localDate": "2026-09-16",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-005",
+      "category": "today",
+      "message": "hôm nay 12:00 nhắc tôi việc tổng hợp 005",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 005",
+        "localDate": "2026-09-16",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-006",
+      "category": "today",
+      "message": "hôm nay 13:00 nhắc tôi việc tổng hợp 006",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 006",
+        "localDate": "2026-09-16",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-007",
+      "category": "today",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-008",
+      "category": "today",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-009",
+      "category": "today",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-010",
+      "category": "today",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-011",
+      "category": "today",
+      "message": "nhắc tôi lúc 9 giờ việc 011",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-012",
+      "category": "today",
+      "message": "hôm nay lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-013",
+      "category": "today",
+      "message": "hôm nay nhắc tôi việc 013",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-014",
+      "category": "today",
+      "message": "hôm nay xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-015",
+      "category": "today",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-016",
+      "category": "today",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-today-017",
+      "category": "today",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-today-018",
+      "category": "today",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-tomorrow-019",
+      "category": "tomorrow",
+      "message": "ngày mai 08:00 nhắc tôi việc tổng hợp 019",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 019",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-020",
+      "category": "tomorrow",
+      "message": "ngày mai 09:00 nhắc tôi việc tổng hợp 020",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 020",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-021",
+      "category": "tomorrow",
+      "message": "ngày mai 10:00 nhắc tôi việc tổng hợp 021",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 021",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-022",
+      "category": "tomorrow",
+      "message": "ngày mai 11:00 nhắc tôi việc tổng hợp 022",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 022",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-023",
+      "category": "tomorrow",
+      "message": "ngày mai 12:00 nhắc tôi việc tổng hợp 023",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 023",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-024",
+      "category": "tomorrow",
+      "message": "ngày mai 13:00 nhắc tôi việc tổng hợp 024",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 024",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-025",
+      "category": "tomorrow",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-026",
+      "category": "tomorrow",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-027",
+      "category": "tomorrow",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-028",
+      "category": "tomorrow",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-029",
+      "category": "tomorrow",
+      "message": "nhắc tôi lúc 9 giờ việc 029",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-030",
+      "category": "tomorrow",
+      "message": "ngày mai lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-031",
+      "category": "tomorrow",
+      "message": "ngày mai nhắc tôi việc 031",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-032",
+      "category": "tomorrow",
+      "message": "ngày mai xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-033",
+      "category": "tomorrow",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-034",
+      "category": "tomorrow",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-tomorrow-035",
+      "category": "tomorrow",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-tomorrow-036",
+      "category": "tomorrow",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-explicit-date-037",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 08:00 nhắc tôi việc tổng hợp 037",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 037",
+        "localDate": "2026-09-22",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-038",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 09:00 nhắc tôi việc tổng hợp 038",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 038",
+        "localDate": "2026-09-22",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-039",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 10:00 nhắc tôi việc tổng hợp 039",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 039",
+        "localDate": "2026-09-22",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-040",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 11:00 nhắc tôi việc tổng hợp 040",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 040",
+        "localDate": "2026-09-22",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-041",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 12:00 nhắc tôi việc tổng hợp 041",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 041",
+        "localDate": "2026-09-22",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-042",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 13:00 nhắc tôi việc tổng hợp 042",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 042",
+        "localDate": "2026-09-22",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-043",
+      "category": "explicit-date",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-044",
+      "category": "explicit-date",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-045",
+      "category": "explicit-date",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-046",
+      "category": "explicit-date",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-047",
+      "category": "explicit-date",
+      "message": "nhắc tôi lúc 9 giờ việc 047",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-048",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-049",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 nhắc tôi việc 049",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-050",
+      "category": "explicit-date",
+      "message": "ngày 22 tháng 9 xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-051",
+      "category": "explicit-date",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-052",
+      "category": "explicit-date",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-explicit-date-053",
+      "category": "explicit-date",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-explicit-date-054",
+      "category": "explicit-date",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-daypart-055",
+      "category": "daypart",
+      "message": "buổi chiều 08:00 nhắc tôi việc tổng hợp 055",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 055",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-056",
+      "category": "daypart",
+      "message": "buổi chiều 09:00 nhắc tôi việc tổng hợp 056",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 056",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-057",
+      "category": "daypart",
+      "message": "buổi chiều 10:00 nhắc tôi việc tổng hợp 057",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 057",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-058",
+      "category": "daypart",
+      "message": "buổi chiều 11:00 nhắc tôi việc tổng hợp 058",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 058",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-059",
+      "category": "daypart",
+      "message": "buổi chiều 12:00 nhắc tôi việc tổng hợp 059",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 059",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-060",
+      "category": "daypart",
+      "message": "buổi chiều 13:00 nhắc tôi việc tổng hợp 060",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 060",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-061",
+      "category": "daypart",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-062",
+      "category": "daypart",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-063",
+      "category": "daypart",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-064",
+      "category": "daypart",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-065",
+      "category": "daypart",
+      "message": "nhắc tôi lúc 9 giờ việc 065",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-066",
+      "category": "daypart",
+      "message": "buổi chiều lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-067",
+      "category": "daypart",
+      "message": "buổi chiều nhắc tôi việc 067",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-068",
+      "category": "daypart",
+      "message": "buổi chiều xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-069",
+      "category": "daypart",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-070",
+      "category": "daypart",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-daypart-071",
+      "category": "daypart",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-daypart-072",
+      "category": "daypart",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-colloquialism-073",
+      "category": "colloquialism",
+      "message": "lát nữa 08:00 nhắc tôi việc tổng hợp 073",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 073",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-074",
+      "category": "colloquialism",
+      "message": "lát nữa 09:00 nhắc tôi việc tổng hợp 074",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 074",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-075",
+      "category": "colloquialism",
+      "message": "lát nữa 10:00 nhắc tôi việc tổng hợp 075",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 075",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-076",
+      "category": "colloquialism",
+      "message": "lát nữa 11:00 nhắc tôi việc tổng hợp 076",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 076",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-077",
+      "category": "colloquialism",
+      "message": "lát nữa 12:00 nhắc tôi việc tổng hợp 077",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 077",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-078",
+      "category": "colloquialism",
+      "message": "lát nữa 13:00 nhắc tôi việc tổng hợp 078",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 078",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-079",
+      "category": "colloquialism",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-080",
+      "category": "colloquialism",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-081",
+      "category": "colloquialism",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-082",
+      "category": "colloquialism",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-083",
+      "category": "colloquialism",
+      "message": "nhắc tôi lúc 9 giờ việc 083",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-084",
+      "category": "colloquialism",
+      "message": "lát nữa lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-085",
+      "category": "colloquialism",
+      "message": "lát nữa nhắc tôi việc 085",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-086",
+      "category": "colloquialism",
+      "message": "lát nữa xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-087",
+      "category": "colloquialism",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-088",
+      "category": "colloquialism",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-colloquialism-089",
+      "category": "colloquialism",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-colloquialism-090",
+      "category": "colloquialism",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-filler-091",
+      "category": "filler",
+      "message": "ờ thì 08:00 nhắc tôi việc tổng hợp 091",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 091",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-092",
+      "category": "filler",
+      "message": "ờ thì 09:00 nhắc tôi việc tổng hợp 092",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 092",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-093",
+      "category": "filler",
+      "message": "ờ thì 10:00 nhắc tôi việc tổng hợp 093",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 093",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-094",
+      "category": "filler",
+      "message": "ờ thì 11:00 nhắc tôi việc tổng hợp 094",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 094",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-095",
+      "category": "filler",
+      "message": "ờ thì 12:00 nhắc tôi việc tổng hợp 095",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 095",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-096",
+      "category": "filler",
+      "message": "ờ thì 13:00 nhắc tôi việc tổng hợp 096",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 096",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-097",
+      "category": "filler",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-098",
+      "category": "filler",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-099",
+      "category": "filler",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-100",
+      "category": "filler",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-101",
+      "category": "filler",
+      "message": "nhắc tôi lúc 9 giờ việc 101",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-102",
+      "category": "filler",
+      "message": "ờ thì lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-103",
+      "category": "filler",
+      "message": "ờ thì nhắc tôi việc 103",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-104",
+      "category": "filler",
+      "message": "ờ thì xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-105",
+      "category": "filler",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-106",
+      "category": "filler",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-filler-107",
+      "category": "filler",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-filler-108",
+      "category": "filler",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-109",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 109, việc này 08:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 109",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-110",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 110, việc này 09:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 110",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-111",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 111, việc này 10:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 111",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-112",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 112, việc này 11:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 112",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-113",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 113, việc này 12:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 113",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-114",
+      "category": "reordered-syntax",
+      "message": "việc tổng hợp 114, việc này 13:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 114",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-115",
+      "category": "reordered-syntax",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-116",
+      "category": "reordered-syntax",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-117",
+      "category": "reordered-syntax",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-118",
+      "category": "reordered-syntax",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-119",
+      "category": "reordered-syntax",
+      "message": "nhắc tôi lúc 9 giờ việc 119",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-120",
+      "category": "reordered-syntax",
+      "message": "việc này lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-121",
+      "category": "reordered-syntax",
+      "message": "việc này nhắc tôi việc 121",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-122",
+      "category": "reordered-syntax",
+      "message": "việc này xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-123",
+      "category": "reordered-syntax",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-124",
+      "category": "reordered-syntax",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-125",
+      "category": "reordered-syntax",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-reordered-syntax-126",
+      "category": "reordered-syntax",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-implicit-request-127",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 127 vào 08:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 127",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-128",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 128 vào 09:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 128",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-129",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 129 vào 10:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 129",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-130",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 130 vào 11:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 130",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-131",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 131 vào 12:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 131",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-132",
+      "category": "implicit-request",
+      "message": "nhớ giúp việc tổng hợp 132 vào 13:00",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 132",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-133",
+      "category": "implicit-request",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-134",
+      "category": "implicit-request",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-135",
+      "category": "implicit-request",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-136",
+      "category": "implicit-request",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-137",
+      "category": "implicit-request",
+      "message": "nhắc tôi lúc 9 giờ việc 137",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-138",
+      "category": "implicit-request",
+      "message": "nhớ giúp lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-139",
+      "category": "implicit-request",
+      "message": "nhớ giúp nhắc tôi việc 139",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-140",
+      "category": "implicit-request",
+      "message": "nhớ giúp xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-141",
+      "category": "implicit-request",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-142",
+      "category": "implicit-request",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-implicit-request-143",
+      "category": "implicit-request",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-implicit-request-144",
+      "category": "implicit-request",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-145",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 08:00 nhắc tôi việc tổng hợp 145",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 145",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-146",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 09:00 nhắc tôi việc tổng hợp 146",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 146",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-147",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 10:00 nhắc tôi việc tổng hợp 147",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 147",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-148",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 11:00 nhắc tôi việc tổng hợp 148",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 148",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-149",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 12:00 nhắc tôi việc tổng hợp 149",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 149",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-150",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh 13:00 nhắc tôi việc tổng hợp 150",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 150",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-151",
+      "category": "missing-or-ambiguous",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-152",
+      "category": "missing-or-ambiguous",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-153",
+      "category": "missing-or-ambiguous",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-154",
+      "category": "missing-or-ambiguous",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-155",
+      "category": "missing-or-ambiguous",
+      "message": "nhắc tôi lúc 9 giờ việc 155",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-156",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-157",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh nhắc tôi việc 157",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-158",
+      "category": "missing-or-ambiguous",
+      "message": "khi rảnh xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-159",
+      "category": "missing-or-ambiguous",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-160",
+      "category": "missing-or-ambiguous",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-161",
+      "category": "missing-or-ambiguous",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-missing-or-ambiguous-162",
+      "category": "missing-or-ambiguous",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-163",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 163",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 163",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-164",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 164",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 164",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-165",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 165",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 165",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-166",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 166",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 166",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-167",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 167",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 167",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-168",
+      "category": "past-time",
+      "message": "sáng nay 08:00 nhắc tôi việc tổng hợp 168",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 168",
+        "localDate": "2026-09-16",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-169",
+      "category": "past-time",
+      "message": "tuần này xem các việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "THIS_WEEK",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-170",
+      "category": "past-time",
+      "message": "7 ngày tới có lịch gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-171",
+      "category": "past-time",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-172",
+      "category": "past-time",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-173",
+      "category": "past-time",
+      "message": "nhắc tôi lúc 9 giờ việc 173",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-174",
+      "category": "past-time",
+      "message": "sáng nay lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-175",
+      "category": "past-time",
+      "message": "sáng nay nhắc tôi việc 175",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-176",
+      "category": "past-time",
+      "message": "sáng nay xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-177",
+      "category": "past-time",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-178",
+      "category": "past-time",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-past-time-179",
+      "category": "past-time",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-past-time-180",
+      "category": "past-time",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-typo-181",
+      "category": "typo",
+      "message": "ngay mai 08:00 nhắc tôi việc tổng hợp 181",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 181",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-182",
+      "category": "typo",
+      "message": "ngay mai 09:00 nhắc tôi việc tổng hợp 182",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 182",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-183",
+      "category": "typo",
+      "message": "ngay mai 10:00 nhắc tôi việc tổng hợp 183",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 183",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-184",
+      "category": "typo",
+      "message": "ngay mai 11:00 nhắc tôi việc tổng hợp 184",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 184",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-185",
+      "category": "typo",
+      "message": "ngay mai 12:00 nhắc tôi việc tổng hợp 185",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 185",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-186",
+      "category": "typo",
+      "message": "ngay mai 13:00 nhắc tôi việc tổng hợp 186",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc tổng hợp 186",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-187",
+      "category": "typo",
+      "message": "xem lich ngay mai 187",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "NEXT_7_DAYS",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-188",
+      "category": "typo",
+      "message": "xem lich ngay mai 188",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-189",
+      "category": "typo",
+      "message": "xem lich ngay mai 189",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-190",
+      "category": "typo",
+      "message": "xem lich ngay mai 190",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-191",
+      "category": "typo",
+      "message": "nhắc tôi lúc 9 giờ việc 191",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-192",
+      "category": "typo",
+      "message": "ngay mai lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-193",
+      "category": "typo",
+      "message": "ngay mai nhắc tôi việc 193",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-194",
+      "category": "typo",
+      "message": "ngay mai xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-195",
+      "category": "typo",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-196",
+      "category": "typo",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-typo-197",
+      "category": "typo",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-typo-198",
+      "category": "typo",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": null,
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-199",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 08:00 nhắc tôi việc nối tiếp 199",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 199",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 199",
+        "localDate": "2026-09-17",
+        "localTime": "08:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-200",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 09:00 nhắc tôi việc nối tiếp 200",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 200",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 200",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-201",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 10:00 nhắc tôi việc nối tiếp 201",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 201",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 201",
+        "localDate": "2026-09-17",
+        "localTime": "10:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-202",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 11:00 nhắc tôi việc nối tiếp 202",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 202",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 202",
+        "localDate": "2026-09-17",
+        "localTime": "11:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-203",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 12:00 nhắc tôi việc nối tiếp 203",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 203",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 203",
+        "localDate": "2026-09-17",
+        "localTime": "12:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-204",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều 13:00 nhắc tôi việc nối tiếp 204",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 204",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 204",
+        "localDate": "2026-09-17",
+        "localTime": "13:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-205",
+      "category": "multi-turn-continuation",
+      "message": "xem các nhắc việc sắp tới",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 205",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "UPCOMING",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-206",
+      "category": "multi-turn-continuation",
+      "message": "hôm nay tôi có gì",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 206",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TODAY",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-207",
+      "category": "multi-turn-continuation",
+      "message": "mai có lịch nào",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 207",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "TOMORROW",
+        "localDate": null
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-208",
+      "category": "multi-turn-continuation",
+      "message": "liệt kê lịch ngày 22 tháng 9",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 208",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "LIST_REMINDERS",
+        "rangeKind": "DATE",
+        "localDate": "2026-09-22"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-209",
+      "category": "multi-turn-continuation",
+      "message": "nhắc tôi lúc 9 giờ việc 209",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 209",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "date"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-210",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều lúc 9 giờ",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 210",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "title"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-211",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều nhắc tôi việc 211",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 211",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": [
+          "time"
+        ],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-212",
+      "category": "multi-turn-continuation",
+      "message": "4 giờ chiều xem lịch",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 212",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "LIST_REMINDERS",
+        "missingFields": [
+          "range"
+        ],
+        "question": "Bạn muốn xem lịch trong khoảng nào?"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-213",
+      "category": "multi-turn-continuation",
+      "message": "hướng dẫn tôi cách tạo nhắc việc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 213",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-214",
+      "category": "multi-turn-continuation",
+      "message": "trợ giúp lịch nhắc",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 214",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "HELP"
+      },
+      "businessValidation": "ACCEPT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-215",
+      "category": "multi-turn-continuation",
+      "message": "viết một câu đố về mây",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 215",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    },
+    {
+      "id": "synthetic-multi-turn-continuation-216",
+      "category": "multi-turn-continuation",
+      "message": "đặt món ăn giúp tôi",
+      "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "priorContext": {
+        "intent": "CREATE_REMINDER",
+        "resolvedSlots": {
+          "title": "việc nối tiếp 216",
+          "localDate": "2026-09-17"
+        }
+      },
+      "expected": {
+        "intent": "UNSUPPORTED"
+      },
+      "businessValidation": "REJECT"
+    }
+  ]
+}
