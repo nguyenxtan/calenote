@@ -1,5 +1,6 @@
 import type { Keyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import { newerConversationOutcomeSql } from "./conversation-order";
 import {
   SemanticContextSlotsSchema,
   type CreateSemanticContextInput,
@@ -17,7 +18,8 @@ const ownedInbound = `SELECT i.id FROM inbound_updates i
     AND ci.provider_user_id = i.provider_user_id AND ci.private_chat_id = i.private_chat_id
   JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
   WHERE i.id = ? AND i.state = 'PROCESSING' AND i.transition_marker = ?
-    AND ci.id = ? AND c.user_id = ?`;
+    AND ci.id = ? AND c.user_id = ?
+    AND NOT ${newerConversationOutcomeSql("i")}`;
 
 export class D1SemanticContextStore implements SemanticContextStore {
   constructor(private readonly database: D1Database, private readonly keyring: Keyring) {}

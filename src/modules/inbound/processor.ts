@@ -38,6 +38,7 @@ import { createSemanticService, type SemanticServiceDependencies } from "@/modul
 import type { SemanticContextStore } from "@/modules/semantic/context-store";
 import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
 import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
+import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -315,10 +316,13 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
            JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
            WHERE c.id=inbound_updates.connection_id AND c.state='ACTIVE_BOUND'
              AND ci.provider_user_id=inbound_updates.provider_user_id AND ci.private_chat_id=inbound_updates.private_chat_id
-             AND c.user_id=? AND ci.id=? AND w.id=?)`,
+             AND c.user_id=? AND ci.id=? AND w.id=?)
+         AND NOT ${newerConversationOutcomeSql("inbound_updates")}`,
     ).bind(now, message.id, message.connectionId, message.providerUserId, message.privateChatId,
       message.claimMarker, context.userId, context.chatIdentityId, context.workspaceId).run();
-    return d1Changes(result) === 1;
+    if (d1Changes(result) === 1) return true;
+    await rejectSupersededSemanticInbound(this.database, message, now);
+    return false;
   }
 
   listSemanticReminders(input: SemanticReminderQuery): Promise<QueriedReminder[]> {

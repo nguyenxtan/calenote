@@ -70,6 +70,92 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
 }
 
 describe("semantic inbound lifecycle", () => {
+  it.each(["later time", "same time", "before newer terminalization"] as const)(
+    "supersedes an older in-flight create after a newer clarification commits (%s)", async (ordering) => {
+      const h = await harness();
+      let started!: () => void;
+      let resume!: () => void;
+      const waiting = new Promise<void>((resolve) => { started = resolve; });
+      const released = new Promise<void>((resolve) => { resume = resolve; });
+      let persisted!: () => void;
+      let completeNewer!: () => void;
+      const contextPersisted = new Promise<void>((resolve) => { persisted = resolve; });
+      const completionReleased = new Promise<void>((resolve) => { completeNewer = resolve; });
+      const complete = h.store.completeSemanticMessage.bind(h.store);
+      h.store.completeSemanticMessage = async (...args) => {
+        if (ordering === "before newer terminalization" && args[0].id === "newer-clarification") {
+          persisted(); await completionReleased;
+        }
+        return complete(...args);
+      };
+      h.semantic.gateway = { prepare(_tier, input) {
+        return { status: "READY", model: "synthetic", provider: "synthetic", maximumCostMicrounits: 1,
+          async dispatch() {
+            if (input.text === "older request") { started(); await released; return create; }
+            return clarify;
+          } };
+      } };
+      await h.add("older-create", "older request");
+      const older = h.process("older-create");
+      await waiting;
+      await h.add("newer-clarification", "newer request", { receivedAt: ordering === "same time" ? NOW : NOW + 1 });
+      const newer = h.process("newer-clarification");
+      if (ordering === "before newer terminalization") {
+        await contextPersisted;
+        expect(await h.db.prepare("SELECT state FROM inbound_updates WHERE id='newer-clarification'").first())
+          .toEqual({ state: "PROCESSING" });
+      } else {
+        expect(await newer).toEqual({ status: "CLARIFICATION_REQUESTED" });
+      }
+      const contextBefore = await h.db.prepare("SELECT * FROM semantic_contexts").all();
+      const repliesBefore = [...h.replies];
+      resume();
+      expect(await older).toEqual({ status: "SUPERSEDED" });
+      expect(await h.process("older-create")).toEqual({ status: "TERMINAL" });
+      expect(await h.count("command_drafts")).toBe(0);
+      expect(h.replies).toEqual(repliesBefore);
+      expect((await h.db.prepare("SELECT * FROM semantic_contexts").all()).results).toEqual(contextBefore.results);
+      completeNewer();
+      expect(await newer).toEqual({ status: "CLARIFICATION_REQUESTED" });
+      await h.add("confirmation", "ok", { receivedAt: NOW + 2 });
+      expect(await h.process("confirmation")).toEqual({ status: "REJECTED" });
+      expect(await h.count("reminders")).toBe(0);
+    },
+  );
+
+  it.each(["clarification", "query", "help"] as const)(
+    "supersedes an older in-flight %s after a newer create commits", async (outcome) => {
+      const h = await harness();
+      let started!: () => void;
+      let resume!: () => void;
+      const waiting = new Promise<void>((resolve) => { started = resolve; });
+      const released = new Promise<void>((resolve) => { resume = resolve; });
+      h.semantic.gateway = { prepare(_tier, input) {
+        return { status: "READY", model: "synthetic", provider: "synthetic", maximumCostMicrounits: 1,
+          async dispatch(): Promise<SemanticAttemptResult> {
+            if (input.text !== "older request") return create;
+            started(); await released;
+            if (outcome === "clarification") return clarify;
+            return { status: "SUCCESS", usage: { costMicrounits: 0 }, interpretation: outcome === "query"
+              ? { intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null } : { intent: "HELP" } };
+          } };
+      } };
+      await h.add("older", "older request");
+      const older = h.process("older");
+      await waiting;
+      await h.add("newer", "newer request", { receivedAt: NOW + 1 });
+      expect(await h.process("newer")).toEqual({ status: "DRAFT_CREATED" });
+      const draftBefore = await h.db.prepare("SELECT * FROM command_drafts").all();
+      const repliesBefore = [...h.replies];
+      resume();
+      expect(await older).toEqual({ status: "SUPERSEDED" });
+      expect(await h.process("older")).toEqual({ status: "TERMINAL" });
+      expect(await h.count("semantic_contexts")).toBe(0);
+      expect(h.replies).toEqual(repliesBefore);
+      expect((await h.db.prepare("SELECT * FROM command_drafts").all()).results).toEqual(draftBefore.results);
+    },
+  );
+
   it("creates exactly one encrypted draft and only deterministic confirmation creates one reminder", async () => {
     const h = await harness();
     await h.add("create", "nhớ giùm tui cái việc đó sáng mai");
@@ -290,7 +376,7 @@ describe("semantic inbound lifecycle", () => {
     await h.add("question", "nhắc tôi việc chưa rõ", { receivedAt: NOW + 1 });
     expect(await h.process("question")).toEqual({ status: "CLARIFICATION_REQUESTED" });
     await h.add("older", "8 giờ sáng mai", { receivedAt: NOW });
-    expect(await h.process("older")).toEqual({ status: "REJECTED" });
+    expect(await h.process("older")).toEqual({ status: "SUPERSEDED" });
     expect(await h.db.prepare("SELECT status FROM semantic_contexts").first()).toEqual({ status: "PENDING" });
     expect(await h.count("command_drafts")).toBe(0);
   });

@@ -93,11 +93,15 @@ describe("encrypted semantic context on disposable workerd D1", () => {
     expect(await db.prepare("SELECT count(*) AS count FROM semantic_contexts").first()).toEqual({ count: 0 });
   });
 
-  it("cannot reuse a resolution inbound for a different context even if it is later than both sources", async () => {
+  it("rejects delayed context admission and cannot reuse a resolution for a preexisting context", async () => {
     await store().createPending(pending());
     const resolution = { id: "context-one", ownerId: "one", chatIdentityId: "chat-one", resolutionInboundId: "one-3", claimMarker: "claim", status: "RESOLVED" as const, now: NOW + 3 };
     expect(await store().resolve(resolution)).toBe(true);
-    expect(await store().createPending({ ...pending(), id: "next", sourceInboundId: "one-2" })).toBe("CREATED");
+    expect(await store().createPending({ ...pending(), id: "next", sourceInboundId: "one-2" })).toBe("CONFLICT");
+    expect(await store().createPending({ ...pending(), id: "next", sourceInboundId: "one-4" })).toBe("CREATED");
+    // Model a preexisting out-of-order row to isolate the resolution uniqueness fence;
+    // the new admission guard correctly prevents creating this state through the store.
+    await db.prepare("UPDATE semantic_contexts SET source_inbound_id='one-2' WHERE id='next'").run();
     expect(await store().resolve({ ...resolution, id: "next" })).toBe(false);
     expect(await read()).toMatchObject({ id: "next" });
   });

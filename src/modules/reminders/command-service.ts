@@ -72,6 +72,7 @@ interface CommandMutationBase {
   context: BoundChatContext;
   now: number;
   auditId: string;
+  enforceConversationOrder?: boolean;
 }
 
 export interface CreateDraftMutation extends CommandMutationBase {
@@ -104,7 +105,7 @@ export interface ReminderCommandStore {
   confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult>;
   cancelDraft(input: ResolveDraftMutation): Promise<MutationResult>;
   expireDraft(input: ResolveDraftMutation): Promise<MutationResult>;
-  rejectMessage(message: BoundChatMessage, auditId: string, now: number): Promise<boolean>;
+  rejectMessage(message: BoundChatMessage, auditId: string, now: number, enforceConversationOrder?: boolean): Promise<boolean>;
 }
 
 export interface ProcessBoundChatDependencies {
@@ -180,6 +181,7 @@ async function rejectWithReply(
     message,
     randomOpaqueId(randomBytes),
     now,
+    dependencies.semantic !== undefined,
   );
   if (!rejected) return { status: "SUPERSEDED" };
   await bestEffortReply(dependencies, reply);
@@ -316,6 +318,7 @@ export async function processBoundChatMessage(
       draft,
       now: processingNow,
       auditId: randomOpaqueId(randomBytes),
+      enforceConversationOrder: dependencies.semantic !== undefined,
     };
     if (draft.expiresAt <= processingNow || draft.scheduledAt <= processingNow) {
       const result = await dependencies.store.expireDraft(mutationBase);
@@ -415,6 +418,7 @@ export async function processBoundChatMessage(
     expiresAt: Math.min(mutationNow + DRAFT_LIFETIME_MS, candidate.scheduledAt),
     now: mutationNow,
     auditId: randomOpaqueId(randomBytes),
+    enforceConversationOrder: dependencies.semantic !== undefined,
   });
   if (result === "SUPERSEDED") return { status: "SUPERSEDED" };
   if (result === "CONFLICT") {

@@ -1,4 +1,5 @@
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import { newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { SEMANTIC_QUERY_LIMIT, type QueriedReminder, type SemanticReminderQuery } from "../../semantic-query";
 
 export class D1SemanticReminderQueryStore {
@@ -18,6 +19,7 @@ export class D1SemanticReminderQueryStore {
        JOIN reminders r ON r.workspace_id=w.id AND r.chat_identity_id=ci.id
        WHERE i.id=? AND i.connection_id=? AND i.provider_user_id=? AND i.private_chat_id=?
          AND i.state='PROCESSING' AND i.transition_marker=?
+         AND NOT ${newerConversationOutcomeSql("i")}
          AND c.user_id=? AND ci.id=? AND w.id=?
          AND r.scheduled_at>=? AND r.scheduled_at<?
          AND r.status IN ('PENDING','CLAIMED','RETRYABLE')
