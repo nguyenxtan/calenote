@@ -24,3 +24,6 @@ pnpm-debug.log*
 # local-only design input and generated review evidence
 /_design-input/
 /artifacts/
+
+# durable, local-only evidence for explicitly authorized live synthetic benchmarks
+/benchmark-state/
