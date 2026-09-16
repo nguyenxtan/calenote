@@ -18,7 +18,11 @@ const fixturePath = resolve(process.cwd(), "src/modules/semantic/benchmark/seman
 const runFile = promisify(execFile);
 
 describe("semantic V1 offline benchmark scaffold", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.doUnmock("node:fs/promises");
+    vi.resetModules();
+  });
 
   it("loads the frozen 216-case synthetic fixture reproducibly", async () => {
     const fixture = await loadSyntheticSemanticFixture(fixturePath);
@@ -48,6 +52,20 @@ describe("semantic V1 offline benchmark scaffold", () => {
 
     expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, { ...fixture, cases }))
       .toThrow("identity");
+  });
+
+  it("rejects altered canonical fixture bytes at the private reviewed-digest gate", async () => {
+    const source = await readFile(fixturePath, "utf8");
+    const alteredSource = `${source}\n`;
+    vi.resetModules();
+    vi.doMock("node:fs/promises", async (importOriginal) => ({
+      ...await importOriginal<typeof import("node:fs/promises")>(),
+      readFile: vi.fn(async () => alteredSource),
+    }));
+    const runner = await import("./semantic-v1");
+
+    await expect(runner.runOfflineSemanticBenchmark({ fixturePath }))
+      .rejects.toThrow("content does not match the reviewed digest");
   });
 
   it("calculates aggregate schema, semantic, latency, and estimated-cost metrics without retaining outputs", () => {
