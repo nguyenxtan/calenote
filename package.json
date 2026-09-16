@@ -13,6 +13,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "benchmark:semantic-v1:offline": "node --experimental-strip-types --import ./tools/benchmark/register-typescript-loader.mjs tools/benchmark/run-semantic-v1-offline.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "check": "pnpm test && node --test docs/architecture/current-state.test.mjs && pnpm typecheck && pnpm lint && pnpm build && pnpm exec wrangler types --check && pnpm exec wrangler deploy --dry-run"
