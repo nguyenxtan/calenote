@@ -17,6 +17,7 @@ import {
 export const LIVE_BENCHMARK_VERSION = "live-semantic-v1-1";
 export const DEFAULT_MAX_HTTP_REQUESTS = 450;
 export const DEFAULT_MAX_COST_MICROUNITS = 500_000;
+const MAX_LIVE_RESPONSE_BYTES = 1_000_000;
 
 export type LiveBenchmarkCandidate = {
   candidateId: string;
@@ -31,7 +32,7 @@ export type LiveSemanticJsonRequest = {
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny"; zdr: true; max_price: { prompt: number; completion: number } };
   reasoning: { effort: "none"; exclude: true };
 };
-export type LiveBenchmarkTransport = (request: LiveSemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{ status: number; body: string }>;
+export type LiveBenchmarkTransport = (request: LiveSemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{ status: number; body: string; oversized?: boolean }>;
 type AttemptState = "RESERVED" | "DISPATCHED" | "COMPLETED" | "FAILED" | "UNKNOWN_DISPATCHED" | "RELEASED";
 type LedgerAttempt = {
   candidateId: string; caseId: string; ordinal: number; state: AttemptState;
@@ -107,7 +108,8 @@ function approvedCandidateSet(candidates: LiveBenchmarkCandidate[]): boolean {
     && candidates.some((candidate) => candidate.model === "openai/gpt-oss-120b")
     && candidates.some((candidate) => candidate.model === "nvidia/nemotron-3.5-lightning");
 }
-function decodeLiveResponse(response: { status: number; body: string }): { status: "SUCCESS"; interpretation: unknown; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } | { status: "FAILURE"; category: string; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } {
+function decodeLiveResponse(response: { status: number; body: string; oversized?: boolean }): { status: "SUCCESS"; interpretation: unknown; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } | { status: "FAILURE"; category: string; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } {
+  if (response.oversized || new TextEncoder().encode(response.body).byteLength > MAX_LIVE_RESPONSE_BYTES) return { status: "FAILURE", category: "SCHEMA_INVALID" };
   if (response.status === 408) return { status: "FAILURE", category: "TIMEOUT" };
   if (response.status === 429) return { status: "FAILURE", category: "RATE_LIMITED" };
   if (response.status === 404) return { status: "FAILURE", category: "UNAVAILABLE" };
@@ -294,6 +296,11 @@ export function createOpenRouterTransport(apiKey: string): LiveBenchmarkTranspor
   return async (request: LiveSemanticJsonRequest, options: { signal: AbortSignal }) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", signal: options.signal,
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify(request) });
-    return { status: response.status, body: await response.text() };
+    if (Number(response.headers.get("content-length")) > MAX_LIVE_RESPONSE_BYTES) return { status: response.status, body: "", oversized: true };
+    if (!response.body) return { status: response.status, body: "" };
+    const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let length = 0;
+    try { for (;;) { const next = await reader.read(); if (next.done) break; length += next.value.byteLength; if (length > MAX_LIVE_RESPONSE_BYTES) { await reader.cancel(); return { status: response.status, body: "", oversized: true }; } chunks.push(next.value); } }
+    finally { reader.releaseLock(); }
+    return { status: response.status, body: new TextDecoder().decode(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))) };
   };
 }

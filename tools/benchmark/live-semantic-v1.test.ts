@@ -159,6 +159,18 @@ describe("live semantic V1 benchmark runner", () => {
     expect(ledger.attempts[0].finalizedCostMicrounits).toBe(900_000);
   });
 
+  it("terminalizes an oversized provider body without retaining or retrying it", async () => {
+    const directory = await stateDirectory();
+    const oversized = "x".repeat(1_000_001);
+    const transport = fakeTransport(oversized);
+    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const ledger = await readFile(join(directory, "safe-run-001.json"), "utf8");
+    expect(ledger).toContain("SCHEMA_INVALID");
+    expect(ledger).not.toContain(oversized);
+    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed on corrupt or incompatible local ledger without resetting it", async () => {
     const directory = await stateDirectory();
     await (await import("node:fs/promises")).writeFile(join(directory, "safe-run-001.json"), "{partial");
