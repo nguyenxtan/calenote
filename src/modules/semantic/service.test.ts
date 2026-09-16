@@ -1,0 +1,220 @@
+// @vitest-environment node
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSemanticService } from "./service";
+import { createSemanticGateway } from "../intelligence/infrastructure/openrouter/semantic-gateway";
+import type { PaidCallReservation, SemanticBudgetStore } from "./budget-store";
+
+const NOW = Date.UTC(2026, 8, 16, 5, 5);
+const input = {
+  ownerId: "owner-private", sourceInboundId: "inbound-private", text: "nhắc mình uống thuốc",
+  interpretationReferenceTime: NOW - 600_000, processingNow: NOW, timezone: "Asia/Ho_Chi_Minh" as const,
+};
+const limits = {
+  maxInputChars: 1_800, maxInputTokens: 12_000, maxOutputTokens: 256,
+  maxResponseBytes: 20_000, timeoutMs: 500,
+};
+const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
+  promptPriceMicrounitsPerMillionTokens: 500_000, completionPriceMicrounitsPerMillionTokens: 500_000 };
+const response = (payload: unknown, usage?: unknown) => ({ status: 200,
+  body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: "stop" }], usage }),
+});
+const help = response({ intent: "HELP" });
+
+function harness(options: { responses?: Array<ReturnType<typeof response> | Error>; mode?: "off" | "semantic";
+  reserve?: "deny" | "throw"; mark?: "deny" | "throw"; finalizeThrows?: boolean; claim?: "deny" | "throw" } = {}) {
+  const events: string[] = [];
+  const seen = new Set<string>();
+  const transport = vi.fn(async () => {
+    events.push("dispatch");
+    const next = options.responses?.shift() ?? help;
+    if (next instanceof Error) throw next;
+    return next;
+  });
+  const budget: SemanticBudgetStore = {
+    reservePaidCall: vi.fn(async (): Promise<PaidCallReservation> => {
+      events.push("reserve");
+      if (options.reserve === "throw") throw new Error("sensitive DB failure");
+      return options.reserve === "deny" ? { status: "BUDGET_EXHAUSTED" } : {
+        status: "RESERVED", reservationId: "reservation-private", reservedMaximumMicrounits: 6_128,
+      };
+    }),
+    markDispatched: vi.fn(async () => {
+      events.push("mark");
+      if (options.mark === "throw") throw new Error("ambiguous mark");
+      return options.mark !== "deny";
+    }),
+    finalizeUsage: vi.fn(async () => {
+      events.push("finalize");
+      if (options.finalizeThrows) throw new Error("sensitive settlement failure");
+      return true;
+    }),
+    releaseOrExpireReservation: vi.fn(async () => true),
+    reapExpiredReservations: vi.fn(async () => 0),
+  };
+  const claimInbound = vi.fn(async (scope: { ownerId: string; sourceInboundId: string }) => {
+    if (options.claim === "throw") throw new Error("sensitive claim failure");
+    if (options.claim === "deny" || seen.has(scope.sourceInboundId)) return false;
+    seen.add(scope.sourceInboundId);
+    return true;
+  });
+  const observations: unknown[] = [];
+  const gateway = createSemanticGateway({ ...limits,
+    freePrimary: { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 }, paidFallback: route }, transport);
+  const makeService = () => createSemanticService({ mode: options.mode ?? "semantic", paidFallbackEnabled: true, gateway, budgetStore: budget,
+    attemptStore: { claimInbound }, now: () => NOW, observe: (event) => observations.push(event) });
+  return { service: makeService(), makeService, gateway, transport, budget, events, claimInbound, observations };
+}
+
+describe("bounded semantic routing", () => {
+  afterEach(() => vi.useRealTimers());
+  it("off returns local help without any claim, reservation or model request", async () => {
+    const h = harness({ mode: "off" });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_DISABLED" });
+    expect(h.transport).not.toHaveBeenCalled();
+    expect(h.claimInbound).not.toHaveBeenCalled();
+    expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ intent: "HELP" }, { kind: "SAFE_HELP", code: "HELP" }],
+    [{ intent: "UNSUPPORTED" }, { kind: "SAFE_HELP", code: "UNSUPPORTED" }],
+    [{ intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Lúc nào?" },
+      { kind: "CLARIFICATION", clarification: { targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Lúc nào?" } }],
+    [{ intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null }, { kind: "QUERY", rangeKind: "TODAY", localDate: null }],
+    [{ intent: "CREATE_REMINDER", title: "Việc", localDate: "2026-09-16", localTime: "12:00", timezone: "Asia/Ho_Chi_Minh", needsClarification: false },
+      { kind: "SAFE_CLARIFICATION", code: "PAST_TIME" }],
+    [{ intent: "CREATE_REMINDER", title: "Việc", localDate: "2026-09-16", localTime: "13:00", timezone: "Asia/Ho_Chi_Minh", needsClarification: false },
+      { kind: "CREATE", candidate: { title: "Việc", scheduledAt: Date.UTC(2026, 8, 16, 6), timezone: "Asia/Ho_Chi_Minh" } }],
+    [{ intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: "2026-09-16" }, { kind: "SAFE_CLARIFICATION", code: "INVALID_RANGE" }],
+  ])("never escalates a schema-valid result or downstream business rejection: %j", async (payload, expected) => {
+    const h = harness({ responses: [response(payload)] });
+    expect(await h.service.interpret(input)).toEqual(expected);
+    expect(h.transport).toHaveBeenCalledTimes(1);
+    expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, "", "FREE_UNAVAILABLE"], [408, "", "FREE_TIMEOUT"], [429, "", "FREE_RATE_LIMITED"],
+    [503, "", "FREE_PROVIDER_FAILURE"], [200, "not JSON", "FREE_INVALID_JSON"],
+    [200, response({ intent: "HELP", unauthorized: true }).body, "FREE_SCHEMA_INVALID"],
+    [400, JSON.stringify({ error: { code: "unsupported_parameters" } }), "FREE_REQUIRED_FEATURE_UNSUPPORTED"],
+  ])("allows one paid recovery for %s and never retries a paid failure", async (status, body, category) => {
+    const h = harness({ responses: [{ status, body }, { status: 503, body: "sensitive upstream body" }] });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.events).toEqual(["dispatch", "reserve", "mark", "dispatch", "finalize"]);
+    expect(h.transport).toHaveBeenCalledTimes(2);
+    expect(h.observations).toContainEqual(expect.objectContaining({ tier: "FREE_PRIMARY", resultCategory: category }));
+    expect(await h.makeService().interpret(input)).toEqual({ kind: "SAFE_HELP", code: "ALREADY_ATTEMPTED" });
+    expect(h.transport).toHaveBeenCalledTimes(2);
+    expect(h.budget.releaseOrExpireReservation).not.toHaveBeenCalled();
+  });
+
+  it.each(["deny", "throw"] as const)("does not dispatch after a %s claim", async (claim) => {
+    const h = harness({ claim });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "ALREADY_ATTEMPTED" });
+    expect(h.transport).not.toHaveBeenCalled();
+  });
+
+  it("lets one concurrent delivery consume the attempt claim across service instances", async () => {
+    const h = harness({ responses: [{ status: 503, body: "" }, help] });
+    const results = await Promise.all(Array.from({ length: 12 }, () => h.makeService().interpret(input)));
+    expect(results.filter((result) => result.kind === "SAFE_HELP" && result.code === "HELP")).toHaveLength(1);
+    expect(h.transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["deny", "throw"] as const)("stops locally on %s budget acquisition", async (reserve) => {
+    const h = harness({ reserve, responses: [{ status: 503, body: "" }] });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "BUDGET_EXHAUSTED" });
+    expect(h.transport).toHaveBeenCalledTimes(1);
+    expect(h.budget.markDispatched).not.toHaveBeenCalled();
+  });
+
+  it.each(["deny", "throw"] as const)("requires a positive dispatch fence after reserve (%s)", async (mark) => {
+    const h = harness({ mark, responses: [{ status: 503, body: "" }] });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.transport).toHaveBeenCalledTimes(1);
+    expect(h.budget.releaseOrExpireReservation).not.toHaveBeenCalled();
+  });
+
+  it("finalizes known safe provider cost and never exposes semantic content in observations", async () => {
+    const h = harness({ responses: [{ status: 503, body: "" }, response({ intent: "HELP" },
+      { prompt_tokens: 100, completion_tokens: 20, cost: 0.00005, secret: "provider-sensitive" })] });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
+    expect(h.budget.finalizeUsage).toHaveBeenCalledWith({ ownerId: input.ownerId, reservationId: "reservation-private", actualCostMicrounits: 50, now: NOW });
+    const safe = JSON.stringify(h.observations);
+    for (const privateValue of [input.text, input.ownerId, input.sourceInboundId, "reservation-private", "provider-sensitive"]) {
+      expect(safe).not.toContain(privateValue);
+    }
+    expect(h.observations).toContainEqual(expect.objectContaining({ tier: "CHEAP_PAID_FALLBACK", schemaValid: true, costMicrounits: 50 }));
+  });
+
+  it("charges unknown maximum after ambiguous dispatch failure even when settlement fails", async () => {
+    const h = harness({ finalizeThrows: true, responses: [{ status: 503, body: "" }, new Error("secret provider message")] });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.budget.finalizeUsage).toHaveBeenCalledWith(expect.objectContaining({ actualCostMicrounits: null }));
+    expect(h.budget.releaseOrExpireReservation).not.toHaveBeenCalled();
+    expect(h.transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([0, 6_127, NaN, Infinity])("never dispatches with an insufficient or invalid reservation ceiling %s", async (maximum) => {
+    const h = harness({ responses: [{ status: 503, body: "" }] });
+    vi.mocked(h.budget.reservePaidCall).mockResolvedValue({ status: "RESERVED", reservationId: "reservation-private", reservedMaximumMicrounits: maximum });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.transport).toHaveBeenCalledTimes(1);
+    expect(h.budget.markDispatched).not.toHaveBeenCalled();
+    expect(h.budget.releaseOrExpireReservation).toHaveBeenCalledWith(expect.objectContaining({ reason: "SAFE_FAILURE" }));
+  });
+
+  it("requires explicit paid enablement and keeps observations best-effort", async () => {
+    const h = harness({ responses: [{ status: 503, body: "" }] });
+    const service = createSemanticService({ mode: "semantic", gateway: h.gateway, budgetStore: h.budget,
+      attemptStore: { claimInbound: h.claimInbound }, now: () => NOW, observe: () => { throw new Error("observation unavailable"); } });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
+    expect(h.transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips an unconfigured free route and uses only an explicitly enabled paid route", async () => {
+    const h = harness();
+    const gateway = createSemanticGateway({ ...limits, paidFallback: route }, h.transport);
+    const service = createSemanticService({ mode: "semantic", paidFallbackEnabled: true, gateway, budgetStore: h.budget,
+      attemptStore: { claimInbound: h.claimInbound }, now: () => NOW });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
+    expect(h.events).toEqual(["reserve", "mark", "dispatch", "finalize"]);
+  });
+
+  it("makes one paid fallback after a real free timeout and conservatively finalizes a paid timeout", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const transport = vi.fn(() => new Promise<never>(() => {}));
+    const gateway = createSemanticGateway({ ...limits,
+      freePrimary: { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 }, paidFallback: route }, transport);
+    const service = createSemanticService({ mode: "semantic", paidFallbackEnabled: true, gateway, budgetStore: h.budget,
+      attemptStore: { claimInbound: h.claimInbound }, now: () => NOW });
+    const pending = service.interpret(input);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(transport).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await pending).toEqual({ kind: "SAFE_HELP", code: "AI_UNAVAILABLE" });
+    expect(h.budget.finalizeUsage).toHaveBeenCalledWith(expect.objectContaining({ actualCostMicrounits: null }));
+    expect(h.budget.releaseOrExpireReservation).not.toHaveBeenCalled();
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("validates against the current processing clock after model latency without escalating past time", async () => {
+    const h = harness();
+    let clock = NOW;
+    const transport = vi.fn(async () => {
+      clock = Date.UTC(2026, 8, 16, 6, 5);
+      return response({ intent: "CREATE_REMINDER", title: "Việc", localDate: "2026-09-16", localTime: "13:00",
+        timezone: "Asia/Ho_Chi_Minh", needsClarification: false });
+    });
+    const gateway = createSemanticGateway({ ...limits,
+      freePrimary: { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 }, paidFallback: route }, transport);
+    const service = createSemanticService({ mode: "semantic", paidFallbackEnabled: true, gateway, budgetStore: h.budget,
+      attemptStore: { claimInbound: h.claimInbound }, now: () => clock });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_CLARIFICATION", code: "PAST_TIME" });
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
+  });
+});

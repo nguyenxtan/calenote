@@ -11,6 +11,9 @@ import {
   type IntelligenceResolution,
 } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
+import type { createSemanticService } from "@/modules/semantic/service";
+import type { SemanticContextStore, SemanticContextSlots } from "@/modules/semantic/context-store";
+import { semanticQueryRange, type QueriedReminder, type SemanticReminderQuery } from "./semantic-query";
 import {
   MAX_REMINDER_TITLE_CODE_UNITS,
   parseVietnameseReminder,
@@ -19,6 +22,7 @@ import {
 
 const CONFIRM_WORDS = new Set(["có", "ok", "1", "xác nhận"]);
 const CANCEL_WORDS = new Set(["hủy", "huỷ", "không", "2"]);
+const HELP_WORDS = new Set(["help", "/help", "trợ giúp", "hướng dẫn"]);
 const DRAFT_LIFETIME_MS = 10 * 60 * 1_000;
 const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 const MAX_PROVIDER_REPLY_LENGTH = 2_000;
@@ -68,6 +72,7 @@ interface CommandMutationBase {
   context: BoundChatContext;
   now: number;
   auditId: string;
+  enforceConversationOrder?: boolean;
 }
 
 export interface CreateDraftMutation extends CommandMutationBase {
@@ -100,7 +105,7 @@ export interface ReminderCommandStore {
   confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult>;
   cancelDraft(input: ResolveDraftMutation): Promise<MutationResult>;
   expireDraft(input: ResolveDraftMutation): Promise<MutationResult>;
-  rejectMessage(message: BoundChatMessage, auditId: string, now: number): Promise<boolean>;
+  rejectMessage(message: BoundChatMessage, auditId: string, now: number, enforceConversationOrder?: boolean): Promise<boolean>;
 }
 
 export interface ProcessBoundChatDependencies {
@@ -110,10 +115,20 @@ export interface ProcessBoundChatDependencies {
   now?: Clock;
   randomBytes?: RandomBytes;
   intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
+  semantic?: BoundChatSemanticDependencies;
+}
+
+export interface BoundChatSemanticDependencies {
+  service: ReturnType<typeof createSemanticService>;
+  contextStore: SemanticContextStore;
+  complete(message: BoundChatMessage, context: BoundChatContext, now: number): Promise<boolean>;
+  list(input: SemanticReminderQuery): Promise<QueriedReminder[]>;
 }
 
 export type ProcessBoundChatResult =
   | { status: "DRAFT_CREATED" }
+  | { status: "CLARIFICATION_REQUESTED" }
+  | { status: "REMINDERS_LISTED" }
   | { status: "CONFIRMED" }
   | { status: "CANCELLED" }
   | { status: "EXPIRED" }
@@ -166,6 +181,7 @@ async function rejectWithReply(
     message,
     randomOpaqueId(randomBytes),
     now,
+    dependencies.semantic !== undefined,
   );
   if (!rejected) return { status: "SUPERSEDED" };
   await bestEffortReply(dependencies, reply);
@@ -179,6 +195,78 @@ async function rejectResolutionConflict(
   randomBytes: RandomBytes,
 ): Promise<ProcessBoundChatResult> {
   return rejectWithReply(message, NO_PENDING_REPLY, now, dependencies, randomBytes);
+}
+
+async function semanticCommand(
+  message: BoundChatMessage,
+  context: BoundChatContext,
+  dependencies: ProcessBoundChatDependencies,
+  semantic: BoundChatSemanticDependencies,
+  now: Clock,
+  randomBytes: RandomBytes,
+): Promise<ParsedReminderCandidate | ProcessBoundChatResult> {
+  const scope = { ownerId: context.userId, chatIdentityId: context.chatIdentityId, now: now() };
+  if (context.timezone !== "Asia/Ho_Chi_Minh") {
+    return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
+  }
+  const pending = await semantic.contextStore.findPending(scope);
+  const result = await semantic.service.interpret({
+    text: message.text, interpretationReferenceTime: message.receivedAt,
+    processingNow: now(), timezone: "Asia/Ho_Chi_Minh",
+    ownerId: context.userId, sourceInboundId: message.id,
+    ...(pending ? { previousContext: pending.slots } : {}),
+  });
+  if (result.kind === "SAFE_HELP" || result.kind === "SAFE_CLARIFICATION") {
+    const reply = result.kind === "SAFE_CLARIFICATION" && result.code === "PAST_TIME"
+      ? "Thời điểm nhắc đã qua. Hãy gửi lại ngày và giờ trong tương lai."
+      : HELP_REPLY;
+    return rejectWithReply(message, reply, now(), dependencies, randomBytes);
+  }
+
+  // Resolve under the current inbound claim before applying the accepted outcome.
+  // A stale/older continuation cannot create a draft or expose a query result.
+  if (pending && !await semantic.contextStore.resolve({ ...scope, now: now(), id: pending.id,
+    resolutionInboundId: message.id, claimMarker: message.claimMarker, status: "RESOLVED" })) {
+    return rejectResolutionConflict(message, now(), dependencies, randomBytes);
+  }
+  if (result.kind === "CREATE") return result.candidate;
+  if (result.kind === "QUERY") {
+    const range = semanticQueryRange(result, message.receivedAt);
+    if (!range) return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
+    const reminders = await semantic.list({ message, context, range });
+    const lines: string[] = [];
+    for (const reminder of reminders) {
+      const title = await dependencies.keyring.decryptSensitive(
+        "reminder-title", reminder.id, reminder.titleKeyVersion, reminder.encryptedTitle,
+      );
+      const local = new Date(reminder.scheduledAt + 7 * 3_600_000).toISOString();
+      const briefTitle = title.replace(/[\r\n]+/gu, " ").slice(0, 240);
+      lines.push(`${local.slice(8, 10)}/${local.slice(5, 7)} ${local.slice(11, 16)} — ${briefTitle}`);
+    }
+    if (!await semantic.complete(message, context, now())) return { status: "SUPERSEDED" };
+    await bestEffortReply(dependencies, lines.length
+      ? `Lời nhắc trong khoảng bạn hỏi (tối đa 5):\n${lines.join("\n")}`
+      : "Không có lời nhắc sắp tới trong khoảng bạn hỏi.");
+    return { status: "REMINDERS_LISTED" };
+  }
+
+  const { targetIntent, missingFields } = result.clarification;
+  // The approved clarification contract has no newly extracted slot values.
+  // Retain only prior typed slots, never infer slots from or persist a transcript.
+  const slots: SemanticContextSlots = targetIntent === "CREATE_REMINDER"
+    ? { targetIntent, title: null, localDate: null, localTime: null,
+      ...(pending?.slots.targetIntent === targetIntent ? pending.slots : {}), missingFields }
+    : { targetIntent, rangeKind: null, localDate: null,
+      ...(pending?.slots.targetIntent === targetIntent ? pending.slots : {}), missingFields };
+  const createdAt = now();
+  const saved = await semantic.contextStore.createPending({ ...scope, now: createdAt,
+    id: randomOpaqueId(randomBytes), sourceInboundId: message.id, claimMarker: message.claimMarker,
+    slots, expiresAt: createdAt + DRAFT_LIFETIME_MS,
+  });
+  if (saved === "CONFLICT") return rejectResolutionConflict(message, now(), dependencies, randomBytes);
+  if (!await semantic.complete(message, context, now())) return { status: "SUPERSEDED" };
+  await bestEffortReply(dependencies, result.clarification.question);
+  return { status: "CLARIFICATION_REQUESTED" };
 }
 
 export async function processBoundChatMessage(
@@ -197,9 +285,31 @@ export async function processBoundChatMessage(
   }
 
   const normalized = normalizeWholeMessage(message.text);
+  if (dependencies.semantic && (HELP_WORDS.has(normalized) || /^\/connect(?:\s|$)/u.test(normalized))) {
+    return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
+  }
   if (CONFIRM_WORDS.has(normalized) || CANCEL_WORDS.has(normalized)) {
+    let cancelledContext = false;
+    if (dependencies.semantic && CANCEL_WORDS.has(normalized)) {
+      try {
+        const scope = { ownerId: context.userId, chatIdentityId: context.chatIdentityId, now: processingNow };
+        const pending = await dependencies.semantic.contextStore.findPending(scope);
+        if (pending) {
+          cancelledContext = await dependencies.semantic.contextStore.resolve({ ...scope, id: pending.id,
+            resolutionInboundId: message.id, claimMarker: message.claimMarker, status: "CANCELLED" });
+          if (!cancelledContext) return rejectResolutionConflict(message, processingNow, dependencies, randomBytes);
+        }
+      } catch {
+        return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
+      }
+    }
     const draft = await dependencies.store.findPendingDraft(message, context.chatIdentityId);
     if (!draft) {
+      if (cancelledContext && dependencies.semantic) {
+        if (!await dependencies.semantic.complete(message, context, processingNow)) return { status: "SUPERSEDED" };
+        await bestEffortReply(dependencies, CANCELLED_REPLY);
+        return { status: "CANCELLED" };
+      }
       return rejectResolutionConflict(message, processingNow, dependencies, randomBytes);
     }
     const mutationBase: ResolveDraftMutation = {
@@ -208,6 +318,7 @@ export async function processBoundChatMessage(
       draft,
       now: processingNow,
       auditId: randomOpaqueId(randomBytes),
+      enforceConversationOrder: dependencies.semantic !== undefined,
     };
     if (draft.expiresAt <= processingNow || draft.scheduledAt <= processingNow) {
       const result = await dependencies.store.expireDraft(mutationBase);
@@ -261,9 +372,21 @@ export async function processBoundChatMessage(
     return { status: "CONFIRMED" };
   }
 
-  const parsed = parseVietnameseReminder(message.text, message.receivedAt, context.timezone);
-  let candidate: ParsedReminderCandidate | null = parsed.ok ? parsed.candidate : null;
-  if ((!candidate || candidate.scheduledAt <= processingNow) && dependencies.intelligence && context.timezone === "Asia/Ho_Chi_Minh") {
+  let candidate: ParsedReminderCandidate | null;
+  if (dependencies.semantic) {
+    try {
+      const resolved = await semanticCommand(message, context, dependencies, dependencies.semantic, now, randomBytes);
+      if ("status" in resolved) return resolved;
+      candidate = resolved;
+    } catch {
+      return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
+    }
+  } else {
+    // Compatibility path until a separately reviewed runtime cutover supplies semantic.
+    const parsed = parseVietnameseReminder(message.text, message.receivedAt, context.timezone);
+    candidate = parsed.ok ? parsed.candidate : null;
+  }
+  if (!dependencies.semantic && (!candidate || candidate.scheduledAt <= processingNow) && dependencies.intelligence && context.timezone === "Asia/Ho_Chi_Minh") {
     const resolution: IntelligenceResolution = await interpretReminderDeterministicallyFirst({
       text: message.text, now: message.receivedAt, timezone: "Asia/Ho_Chi_Minh",
     }, {
@@ -272,7 +395,8 @@ export async function processBoundChatMessage(
     });
     candidate = resolution.status === "PROPOSED" ? resolution.proposal : null;
   }
-  if (!candidate || candidate.scheduledAt <= processingNow) {
+  const mutationNow = dependencies.semantic ? now() : processingNow;
+  if (!candidate || candidate.scheduledAt <= mutationNow) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
 
@@ -291,9 +415,10 @@ export async function processBoundChatMessage(
     titleKeyVersion: TITLE_KEY_VERSION,
     scheduledAt: candidate.scheduledAt,
     timezone: candidate.timezone,
-    expiresAt: Math.min(processingNow + DRAFT_LIFETIME_MS, candidate.scheduledAt),
-    now: processingNow,
+    expiresAt: Math.min(mutationNow + DRAFT_LIFETIME_MS, candidate.scheduledAt),
+    now: mutationNow,
     auditId: randomOpaqueId(randomBytes),
+    enforceConversationOrder: dependencies.semantic !== undefined,
   });
   if (result === "SUPERSEDED") return { status: "SUPERSEDED" };
   if (result === "CONFLICT") {

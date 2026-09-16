@@ -48,6 +48,30 @@ production evidence.
 
 ## Product roadmap
 
+### Conversation UX and reminder lifecycle
+
+**NEXT — bounded UX slice:** add a Zalo `sendChatAction("typing")` processing
+indicator. Keep it separate from Semantic Conversation V1; it must not change
+semantic routing, reminder mutation, provider configuration, or production
+acceptance evidence without its own reviewed scope.
+
+**FUTURE product design — not implemented:** define these contracts before
+adding behavior, schema changes, provider calls, or delivery guarantees:
+
+- `SMART_DEADLINE` reminder cadence, including deadline completion and overdue
+  semantics;
+- recurring yearly events, Vietnamese lunar-calendar (`LUNAR_VN`) handling,
+  and the lifecycle distinction between a recurrence occurrence and its series;
+- notification-delivery preferences and App/Web canonical notification history;
+- Zalo and Telegram external-delivery adapters, plus delivery fallback policy;
+- future iOS/mobile push delivery;
+- concurrent multi-device sessions: multiple active sessions per user,
+  current-device identification, revoke-one-device, logout-all-other-devices,
+  and no forced logout of an existing device when another device logs in.
+
+These are backlog/design items only. They are not part of PR #1 and require
+separately approved product, persistence, privacy, and operational designs.
+
 ### Optional intelligence
 
 Keep intelligence provider-agnostic, privacy-first, bounded, and

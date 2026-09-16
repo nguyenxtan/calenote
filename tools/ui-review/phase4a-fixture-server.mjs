@@ -5,6 +5,8 @@ import path from "node:path";
 const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error", "connections", "connections-attention", "activity", "activity-empty", "settings", "landing", "login-email", "login-otp", "onboarding-welcome", "onboarding-provider", "onboarding-connection", "onboarding-success"]);
 const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
 const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
+const outputRootArgument = process.argv.indexOf("--output-root");
+const outputRoot = path.resolve(outputRootArgument === -1 ? "out" : process.argv[outputRootArgument + 1]);
 
 if (process.env.CALENOTE_VISUAL_FIXTURE !== "1" || process.env.NODE_ENV === "production" || !scenarios.has(scenario)) {
   throw new Error("This localhost-only visual fixture requires CALENOTE_VISUAL_FIXTURE=1, a non-production NODE_ENV, and a supported --scenario.");
@@ -25,8 +27,6 @@ const candidate = { data: { actions: [{ id: "fixtureactioncandidate", title: "H�
 const empty = { data: { reminders: [] } };
 const emptyActions = { data: { actions: [] } };
 const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "application/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
-const outputRoot = path.resolve("out");
-
 function fixture(pathname, method) {
   if (pathname === "/api/session") return [scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? 401 : 200, scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? { error: { code: "UNAUTHENTICATED", message: "Đăng nhập là cần thiết." } } : session];
   if (pathname === "/api/auth/request-code" && method === "POST") return [202, { data: { accepted: true } }];

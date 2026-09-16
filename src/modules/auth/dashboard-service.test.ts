@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it } from "vitest";
 import { SqliteD1Database } from "@/testing/sqlite-d1.test-support";
 import { D1DashboardStore } from "./dashboard-service";
