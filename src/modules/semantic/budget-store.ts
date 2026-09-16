@@ -29,17 +29,25 @@ export interface FinalizeUsageInput {
   now: number;
 }
 
+export interface MarkPaidCallDispatchedInput {
+  ownerId: string;
+  reservationId: string;
+  now: number;
+}
+
 export interface ReleaseReservationInput {
   ownerId: string;
   reservationId: string;
-  /** SAFE_FAILURE requires evidence that no billable request occurred. */
+  /** Only undispatched reservations can be refunded, including SAFE_FAILURE. */
   reason: "SAFE_FAILURE" | "EXPIRED";
   now: number;
 }
 
 export interface SemanticBudgetStore {
-  /** Only a fresh RESERVED result permits one paid request. Replays never authorize. */
+  /** Acquires capacity. A successful markDispatched is also required before a paid request. */
   reservePaidCall(input: ReservePaidCallInput): Promise<PaidCallReservation>;
+  /** One-shot durable dispatch fence. A replay/false/error must never send a paid request. */
+  markDispatched(input: MarkPaidCallDispatchedInput): Promise<boolean>;
   finalizeUsage(input: FinalizeUsageInput): Promise<boolean>;
   releaseOrExpireReservation(input: ReleaseReservationInput): Promise<boolean>;
   reapExpiredReservations(now: number, limit?: number): Promise<number>;

@@ -187,4 +187,103 @@ describe("atomic paid budgets on disposable workerd D1", () => {
     }
     expect(await store().releaseOrExpireReservation({ ownerId: "one", reservationId: reservation.reservationId, reason: "SAFE_FAILURE", now: NOW + 60_001 })).toBe(false);
   });
+
+  it("grants only one durable dispatch claim and denies foreign owners, replays, and expired reservations", async () => {
+    const reservation = await store().reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    const dispatch = { ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 };
+    expect(await store().markDispatched({ ...dispatch, ownerId: "two" })).toBe(false);
+    const contenders = await Promise.all(Array.from({ length: 8 }, () => store().markDispatched(dispatch)));
+    expect(contenders.filter(Boolean)).toHaveLength(1);
+    expect(await store().markDispatched(dispatch)).toBe(false);
+    const second = await store().reservePaidCall(request(1));
+    if (second.status !== "RESERVED") throw new Error("Expected reservation");
+    expect(await store().markDispatched({ ...dispatch, reservationId: second.reservationId, now: NOW + 60_000 })).toBe(false);
+  });
+
+  it.each([
+    { ownerDailyFallbackLimit: 1 },
+    { ownerMonthlyCostMicrounits: 100 },
+    { globalDailyCostMicrounits: 100 },
+  ])("retains a possibly billed call after dispatch/crash/restart/expiry at hard limit %j", async (override) => {
+    const reservation = await store(override).reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    expect(await store(override).markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 })).toBe(true);
+    await runtime.dispose();
+    ({ db, runtime } = await semanticRuntime(directory));
+    expect(await store(override).reservePaidCall(request(1, "one", NOW + 60_000))).toEqual({ status: "BUDGET_EXHAUSTED" });
+    for (const window of (await windows()).results) {
+      expect(window).toMatchObject({ reserved_calls: 0, reserved_microunits: 0, finalized_calls: 1, finalized_microunits: 100 });
+    }
+    expect(await db.prepare("SELECT state, finalized_microunits FROM semantic_budget_reservations WHERE id = ?").bind(reservation.reservationId).first())
+      .toEqual({ state: "FINALIZED", finalized_microunits: 100 });
+    expect(await store().releaseOrExpireReservation({ ownerId: "one", reservationId: reservation.reservationId, reason: "SAFE_FAILURE", now: NOW + 60_001 })).toBe(false);
+    expect(await store().markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 60_001 })).toBe(false);
+  });
+
+  it("settles late known usage once after conservative expiry, retaining the paid-call count", async () => {
+    const budget = store({ ownerDailyFallbackLimit: 1 });
+    const reservation = await budget.reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    expect(await budget.markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 })).toBe(true);
+    expect(await budget.releaseOrExpireReservation({ ownerId: "one", reservationId: reservation.reservationId, reason: "SAFE_FAILURE", now: NOW + 2 })).toBe(false);
+    expect(await budget.reapExpiredReservations(NOW + 60_000)).toBe(1);
+    const usage = { ownerId: "one", reservationId: reservation.reservationId, actualCostMicrounits: 20, now: NOW + 60_001 };
+    expect(await budget.finalizeUsage({ ...usage, ownerId: "two" })).toBe(false);
+    const settled = await Promise.all(Array.from({ length: 8 }, () => budget.finalizeUsage(usage)));
+    expect(settled.filter(Boolean)).toHaveLength(1);
+    expect(await budget.finalizeUsage({ ...usage, actualCostMicrounits: 10 })).toBe(false);
+    for (const window of (await windows()).results) expect(window).toMatchObject({ reserved_calls: 0, reserved_microunits: 0, finalized_calls: 1, finalized_microunits: 20 });
+    expect(await budget.reservePaidCall(request(1, "one", NOW + 60_002))).toEqual({ status: "BUDGET_EXHAUSTED" });
+  });
+
+  it("conservatively finalizes unknown dispatched usage and permits one later known settlement", async () => {
+    const reservation = await store().reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    expect(await store().markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 })).toBe(true);
+    const usage = { ownerId: "one", reservationId: reservation.reservationId, actualCostMicrounits: null, now: NOW + 2 };
+    expect(await store().finalizeUsage(usage)).toBe(true);
+    expect(await store().finalizeUsage(usage)).toBe(false);
+    for (const window of (await windows()).results) expect(window.finalized_microunits).toBe(100);
+    expect(await store().finalizeUsage({ ...usage, actualCostMicrounits: 30 })).toBe(true);
+    expect(await store().finalizeUsage({ ...usage, actualCostMicrounits: 0 })).toBe(false);
+    for (const window of (await windows()).results) expect(window).toMatchObject({ finalized_calls: 1, finalized_microunits: 30 });
+  });
+
+  it("keeps known usage exact when settlement races the dispatched expiry reaper", async () => {
+    const reservation = await store().reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    expect(await store().markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 })).toBe(true);
+    await Promise.all([
+      store().reapExpiredReservations(NOW + 60_000),
+      store().finalizeUsage({ ownerId: "one", reservationId: reservation.reservationId, actualCostMicrounits: 20, now: NOW + 60_000 }),
+    ]);
+    for (const window of (await windows()).results) expect(window).toMatchObject({ reserved_calls: 0, reserved_microunits: 0, finalized_calls: 1, finalized_microunits: 20 });
+  });
+
+  it("serializes safe release against dispatch so a refunded reservation cannot dispatch", async () => {
+    const reservation = await store().reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    const scope = { ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 };
+    const [dispatched, released] = await Promise.all([
+      store().markDispatched(scope),
+      store().releaseOrExpireReservation({ ...scope, reason: "SAFE_FAILURE" }),
+    ]);
+    expect(Number(dispatched) + Number(released)).toBe(1);
+    for (const window of (await windows()).results) expect(window.reserved_microunits).toBe(dispatched ? 100 : 0);
+    expect(await store().markDispatched(scope)).toBe(false);
+  });
+
+  it("migrates legacy reservation uncertainty conservatively and keeps dispatch evidence on migration replay", async () => {
+    const reservation = await store().reservePaidCall(request(0));
+    if (reservation.status !== "RESERVED") throw new Error("Expected reservation");
+    // Disposable fixture only: simulate an already-applied 0005 database before 0006.
+    await db.prepare("DROP TABLE semantic_budget_dispatches").run();
+    await applySemanticMigration(db);
+    await applySemanticMigration(db);
+    expect(await store().markDispatched({ ownerId: "one", reservationId: reservation.reservationId, now: NOW + 1 })).toBe(false);
+    expect(await db.prepare("SELECT count(*) AS count FROM semantic_budget_dispatches").first()).toEqual({ count: 1 });
+    expect(await store().reapExpiredReservations(NOW + 60_000)).toBe(1);
+    for (const window of (await windows()).results) expect(window).toMatchObject({ reserved_calls: 0, reserved_microunits: 0, finalized_calls: 1, finalized_microunits: 100 });
+  });
 });

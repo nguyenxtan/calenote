@@ -5,9 +5,11 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 export const NOW = Date.UTC(2026, 8, 16, 8);
 
 export async function applySemanticMigration(db: D1Database): Promise<void> {
-  const sql = readFileSync(resolve(process.cwd(), "migrations/0005_semantic_context_and_budget.sql"), "utf8");
-  for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
-    await db.prepare(statement).run();
+  for (const file of ["0005_semantic_context_and_budget.sql", "0006_semantic_budget_dispatch_fence.sql"]) {
+    const sql = readFileSync(resolve(process.cwd(), "migrations", file), "utf8");
+    for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
+      await db.prepare(statement).run();
+    }
   }
 }
 

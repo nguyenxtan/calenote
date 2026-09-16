@@ -1,4 +1,4 @@
-import type { FinalizeUsageInput, PaidCallReservation, ReleaseReservationInput, ReservePaidCallInput, SemanticBudgetLimits, SemanticBudgetStore } from "../../budget-store";
+import type { FinalizeUsageInput, MarkPaidCallDispatchedInput, PaidCallReservation, ReleaseReservationInput, ReservePaidCallInput, SemanticBudgetLimits, SemanticBudgetStore } from "../../budget-store";
 
 export class D1SemanticBudgetStore implements SemanticBudgetStore {
   private readonly limits: Readonly<SemanticBudgetLimits>;
@@ -82,6 +82,23 @@ export class D1SemanticBudgetStore implements SemanticBudgetStore {
     return this.settle(input.ownerId, input.reservationId, input.now, "FINALIZED", amount);
   }
 
+  async markDispatched(input: MarkPaidCallDispatchedInput): Promise<boolean> {
+    if (!validNow(input.now)) return false;
+    try {
+      const result = await this.database.prepare(
+        `INSERT INTO semantic_budget_dispatches (reservation_id, dispatched_at)
+         SELECT id, ? FROM semantic_budget_reservations
+         WHERE id = ? AND owner_id = ? AND state = 'RESERVED' AND expires_at > ?
+         ON CONFLICT (reservation_id) DO NOTHING`,
+      ).bind(input.now, input.reservationId, input.ownerId, input.now).run();
+      return result.meta.changes === 1;
+    } catch {
+      // An ambiguous commit is not permission to send. The persisted fence, if
+      // present, conservatively retains this call's maximum charge after expiry.
+      return false;
+    }
+  }
+
   async releaseOrExpireReservation(input: ReleaseReservationInput): Promise<boolean> {
     return this.settle(input.ownerId, input.reservationId, input.now,
       input.reason === "EXPIRED" ? "EXPIRED" : "RELEASED", null);
@@ -90,32 +107,55 @@ export class D1SemanticBudgetStore implements SemanticBudgetStore {
   private async settle(ownerId: string, id: string, now: number,
     state: "FINALIZED" | "RELEASED" | "EXPIRED", actual: number | null): Promise<boolean> {
     if (!validNow(now)) return false;
-    const selector = `SELECT * FROM semantic_budget_reservations
-      WHERE id = ? AND owner_id = ? AND state = 'RESERVED'
-        AND (? <> 'EXPIRED' OR expires_at <= ?)`;
-    const finalized = state === "FINALIZED" ? 1 : 0;
-    const cost = "CASE WHEN ? IS NULL OR ? > reserved_maximum_microunits THEN reserved_maximum_microunits ELSE ? END";
+    const dispatched = `EXISTS (SELECT 1 FROM semantic_budget_dispatches d WHERE d.reservation_id = r.id)`;
+    // Unknown dispatch outcomes are billed at the maximum. Only a later known
+    // cost can reconcile that amount once. The already-finalized call count stays.
+    const selector = `SELECT r.*, (r.state = 'RESERVED') AS was_reserved,
+        (? = 'FINALIZED' OR (? = 'EXPIRED' AND ${dispatched})) AS should_finalize,
+        CASE WHEN ? IS NULL OR ? > r.reserved_maximum_microunits
+          THEN r.reserved_maximum_microunits ELSE ? END AS settlement_cost
+      FROM semantic_budget_reservations r WHERE r.id = ? AND r.owner_id = ? AND (
+        (r.state = 'RESERVED' AND (? <> 'EXPIRED' OR r.expires_at <= ?)
+          AND (? <> 'RELEASED' OR NOT ${dispatched}))
+        OR (r.state = 'FINALIZED' AND ? = 'FINALIZED'
+          AND ? IS NOT NULL AND ? <= r.finalized_microunits
+          AND EXISTS (SELECT 1 FROM semantic_budget_dispatches d
+            WHERE d.reservation_id = r.id AND d.usage_known = 0)))`;
+    const selectionBindings = [state, state, actual, actual, actual, id, ownerId,
+      state, now, state, state, actual, actual];
     const result = await this.database.batch([
       this.database.prepare(
-        `WITH reservation AS (${selector})
+        `WITH reservation AS MATERIALIZED (${selector})
          UPDATE semantic_budget_windows
-         SET reserved_calls = reserved_calls - 1,
-             reserved_microunits = reserved_microunits - (SELECT reserved_maximum_microunits FROM reservation),
-             finalized_calls = finalized_calls + ?,
-             finalized_microunits = finalized_microunits + ? * (SELECT ${cost} FROM reservation)
+         SET reserved_calls = reserved_calls - (SELECT was_reserved FROM reservation),
+             reserved_microunits = reserved_microunits
+               - (SELECT was_reserved * reserved_maximum_microunits FROM reservation),
+             finalized_calls = finalized_calls + (SELECT was_reserved * should_finalize FROM reservation),
+             finalized_microunits = finalized_microunits + (SELECT CASE WHEN was_reserved = 1
+               THEN should_finalize * settlement_cost ELSE settlement_cost - finalized_microunits END FROM reservation)
          WHERE EXISTS (SELECT 1 FROM reservation r WHERE
            (kind = 'USER_DAILY' AND scope_id = r.owner_id AND window_key = r.daily_window_key)
            OR (kind = 'USER_MONTHLY' AND scope_id = r.owner_id AND window_key = r.monthly_window_key)
            OR (kind = 'GLOBAL_DAILY' AND scope_id = 'global' AND window_key = r.daily_window_key))`,
-      ).bind(id, ownerId, state, now, finalized, finalized, actual, actual, actual),
+      ).bind(...selectionBindings),
       this.database.prepare(
-        `UPDATE semantic_budget_reservations
-         SET state = CASE WHEN changes() = 3 THEN ? ELSE NULL END,
-             finalized_microunits = CASE WHEN ? = 'FINALIZED' THEN ${cost} ELSE NULL END,
+        `WITH reservation AS MATERIALIZED (${selector})
+         UPDATE semantic_budget_reservations
+         SET state = CASE WHEN changes() = 3 THEN
+               CASE WHEN (SELECT should_finalize FROM reservation) = 1 THEN 'FINALIZED' ELSE ? END
+               ELSE NULL END,
+             finalized_microunits = (SELECT CASE WHEN should_finalize = 1 THEN settlement_cost ELSE NULL END FROM reservation),
              updated_at = ?
-         WHERE id = ? AND owner_id = ? AND state = 'RESERVED'
-           AND (? <> 'EXPIRED' OR expires_at <= ?)`,
-      ).bind(state, state, actual, actual, actual, now, id, ownerId, state, now),
+         WHERE id IN (SELECT id FROM reservation)`,
+      ).bind(...selectionBindings, state, now),
+      this.database.prepare(
+        `UPDATE semantic_budget_dispatches SET usage_known = 1
+         WHERE reservation_id = ? AND usage_known = 0 AND changes() = 1
+           AND ? = 'FINALIZED' AND ? IS NOT NULL
+           AND EXISTS (SELECT 1 FROM semantic_budget_reservations r
+             WHERE r.id = reservation_id AND r.owner_id = ? AND r.state = 'FINALIZED'
+               AND ? <= r.reserved_maximum_microunits)`,
+      ).bind(id, state, actual, ownerId, actual),
     ]);
     return result[1].meta.changes === 1;
   }
