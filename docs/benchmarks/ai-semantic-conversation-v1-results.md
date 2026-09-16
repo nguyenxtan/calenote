@@ -31,6 +31,7 @@ does not select a model or configure a route.
 | Limits | Verified input, output, timeout, and rate limits | `NOT_RECORDED` |
 | Prices | Current input/output caps and units | `NOT_RECORDED` |
 | Fixture | Version and exact case count | `semantic-v1-synthetic / 216` |
+| Fixture content digest | Reviewed SHA-256 | `7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c` |
 | Schema-valid metric | Aggregate result and review-approved threshold | `NOT_MEASURED / NOT_APPROVED` |
 | Intent/date/time/title/clarification metrics | Aggregate results and review-approved thresholds | `NOT_MEASURED / NOT_APPROVED` |
 | P95 latency / estimated cost | Aggregate result and review-approved ceilings | `NOT_MEASURED / NOT_APPROVED` |

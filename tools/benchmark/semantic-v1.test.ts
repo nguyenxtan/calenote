@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  assertCanonicalSyntheticFixtureIdentity,
   calculateSemanticBenchmarkMetrics,
   loadSyntheticSemanticFixture,
   renderOfflineBenchmarkEvidence,
@@ -25,6 +26,28 @@ describe("semantic V1 offline benchmark scaffold", () => {
     expect(fixture.version).toBe("semantic-v1-synthetic");
     expect(fixture.cases).toHaveLength(216);
     expect(fixture.cases.every((item) => item.id.startsWith("synthetic-"))).toBe(true);
+  });
+
+  it("rejects a noncanonical fixture path at the offline runner boundary", async () => {
+    await expect(runOfflineSemanticBenchmark({ fixturePath: resolve(process.cwd(), "fixtures/semantic-v1.json") }))
+      .rejects.toThrow("canonical fixture path");
+  });
+
+  it("rejects a canonical-path fixture with a count below the frozen 216 cases", async () => {
+    const fixture = await loadSyntheticSemanticFixture(fixturePath);
+
+    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, {
+      ...fixture,
+      cases: fixture.cases.slice(0, -1),
+    })).toThrow("exactly 216");
+  });
+
+  it("rejects a canonical-path fixture whose synthetic identity differs", async () => {
+    const fixture = await loadSyntheticSemanticFixture(fixturePath);
+    const cases = fixture.cases.map((item, index) => index === 0 ? { ...item, id: "synthetic-tampered-001" } : item);
+
+    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, { ...fixture, cases }))
+      .toThrow("identity");
   });
 
   it("calculates aggregate schema, semantic, latency, and estimated-cost metrics without retaining outputs", () => {

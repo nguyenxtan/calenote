@@ -1,5 +1,15 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SemanticInterpretationSchema, type SemanticInterpretation } from "../../src/modules/semantic/contracts";
+
+export const CANONICAL_SYNTHETIC_FIXTURE_PATH = resolve(fileURLToPath(
+  new URL("../../src/modules/semantic/benchmark/semantic-v1.json", import.meta.url),
+));
+export const CANONICAL_SYNTHETIC_FIXTURE_CASE_COUNT = 216;
+export const CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256 = "b715de4ac817b1e6e8641a6d6f3c4c80a0d1fc63a5cb60f50fe63e389ecd0a90";
+export const CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 = "7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c";
 
 export type SyntheticSemanticFixtureCase = {
   id: string;
@@ -120,6 +130,36 @@ export async function loadSyntheticSemanticFixture(path: string): Promise<Synthe
   return { version: raw.version, cases };
 }
 
+/** Guards the only fixture that the ordinary offline runner is allowed to use. */
+export function assertCanonicalSyntheticFixtureIdentity(path: string, fixture: SyntheticSemanticFixture): void {
+  if (resolve(path) !== CANONICAL_SYNTHETIC_FIXTURE_PATH) {
+    throw new TypeError("Offline runner requires the canonical fixture path");
+  }
+  const ids = fixture.cases.map((item) => item.id);
+  if (fixture.cases.length !== CANONICAL_SYNTHETIC_FIXTURE_CASE_COUNT || new Set(ids).size !== ids.length
+    || !ids.every((id) => id.startsWith("synthetic-"))) {
+    throw new TypeError("Canonical synthetic fixture requires exactly 216 unique synthetic IDs");
+  }
+  const identity = createHash("sha256").update(JSON.stringify(ids)).digest("hex");
+  if (identity !== CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256) {
+    throw new TypeError("Canonical synthetic fixture identity does not match the reviewed fixture");
+  }
+}
+
+async function loadCanonicalSyntheticFixture(path: string): Promise<SyntheticSemanticFixture> {
+  if (resolve(path) !== CANONICAL_SYNTHETIC_FIXTURE_PATH) {
+    throw new TypeError("Offline runner requires the canonical fixture path");
+  }
+  const source = await readFile(CANONICAL_SYNTHETIC_FIXTURE_PATH, "utf8");
+  const contentDigest = createHash("sha256").update(source).digest("hex");
+  if (contentDigest !== CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256) {
+    throw new TypeError("Canonical synthetic fixture content does not match the reviewed digest");
+  }
+  const fixture = await loadSyntheticSemanticFixture(CANONICAL_SYNTHETIC_FIXTURE_PATH);
+  assertCanonicalSyntheticFixtureIdentity(path, fixture);
+  return fixture;
+}
+
 function sameFields(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((field, index) => field === right[index]);
 }
@@ -214,7 +254,7 @@ export async function runOfflineSemanticBenchmark(input: {
   candidate?: CandidateBenchmarkConfiguration;
   transport?: CandidateBenchmarkTransport;
 }): Promise<OfflineBenchmarkRun> {
-  const fixture = await loadSyntheticSemanticFixture(input.fixturePath);
+  const fixture = await loadCanonicalSyntheticFixture(input.fixturePath);
   return {
     execution: { mode: "OFFLINE_DRY_RUN", candidateTransportInvoked: false },
     fixture: { version: fixture.version, caseCount: fixture.cases.length },
