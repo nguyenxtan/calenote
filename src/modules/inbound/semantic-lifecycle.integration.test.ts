@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SemanticGateway, SemanticInput, SemanticTier, SemanticAttemptResult } from "@/modules/intelligence/semantic-gateway";
 import { createKeyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
@@ -9,7 +9,15 @@ import { NOW, seedSemanticRuntime, semanticRuntime } from "@/modules/semantic/in
 import { claimInbound, D1InboundProcessorStore, processInbound, type ProcessInboundDependencies } from "./processor";
 
 const runtimes: Array<Awaited<ReturnType<typeof semanticRuntime>>["runtime"]> = [];
-afterEach(async () => { await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose())); });
+const raceCleanups: Array<() => Promise<void>> = [];
+let fixture: { db: D1Database; keyring: Awaited<ReturnType<typeof createKeyring>> };
+afterEach(async () => {
+  try {
+    await Promise.all(raceCleanups.splice(0).map((cleanup) => cleanup()));
+  } finally {
+    await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
+  }
+});
 const create: SemanticAttemptResult = { status: "SUCCESS", usage: { costMicrounits: 0 }, interpretation: {
   intent: "CREATE_REMINDER", title: "Bí mật hoa lan tím", localDate: "2026-09-17", localTime: "08:00",
   timezone: "Asia/Ho_Chi_Minh", needsClarification: false,
@@ -18,7 +26,25 @@ const clarify: SemanticAttemptResult = { status: "SUCCESS", usage: { costMicroun
   intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Bạn muốn được nhắc lúc mấy giờ?",
 } };
 
-async function harness(outcomes: SemanticAttemptResult[] = [create]) {
+async function runRace(
+  release: () => void, operations: Promise<unknown>[], assertions: () => Promise<void>,
+): Promise<void> {
+  const cleanup = async () => { release(); await Promise.allSettled(operations); };
+  // afterEach also releases gates if Vitest times out the still-running body.
+  raceCleanups.push(cleanup);
+  try {
+    await assertions();
+  } finally {
+    await cleanup();
+    const index = raceCleanups.indexOf(cleanup);
+    if (index !== -1) raceCleanups.splice(index, 1);
+  }
+}
+
+// Cold workerd startup, six migrations and seed writes are fixture setup, not
+// the race's assertion deadline. Match the other local D1 suites' bounded hook;
+// individual test bodies retain Vitest's default 5-second timeout.
+beforeEach(async () => {
   const { runtime, db } = await semanticRuntime();
   runtimes.push(runtime);
   await seedSemanticRuntime(db);
@@ -34,6 +60,11 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
         .bind(token.ciphertext, token.iv, `connection-${owner}`),
     ]);
   }
+  fixture = { db, keyring };
+}, 20_000);
+
+async function harness(outcomes: SemanticAttemptResult[] = [create]) {
+  const { db, keyring } = fixture;
   const calls: Array<{ tier: SemanticTier; input: SemanticInput }> = [];
   const gateway: SemanticGateway = { prepare(tier, input) {
     return { status: "READY", model: "synthetic", provider: "synthetic", maximumCostMicrounits: 1,
@@ -70,6 +101,37 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
 }
 
 describe("semantic inbound lifecycle", () => {
+  it("drains a paused inbound after an assertion failure before disposing its runtime", async () => {
+    const h = await harness();
+    let started!: () => void;
+    let unblock!: () => void;
+    let released = false;
+    const waiting = new Promise<void>((resolve) => { started = resolve; });
+    const blocked = new Promise<void>((resolve) => { unblock = resolve; });
+    const release = () => { released = true; unblock(); };
+    h.semantic.gateway = { prepare() {
+      return { status: "READY", model: "synthetic", provider: "synthetic", maximumCostMicrounits: 1,
+        async dispatch() { started(); await blocked; return create; } };
+    } };
+    const operations: Promise<unknown>[] = [];
+    try {
+      await expect(runRace(release, operations, async () => {
+        await h.add("interrupted", "synthetic request");
+        operations.push(h.process("interrupted"));
+        await waiting;
+        throw new Error("synthetic assertion failure");
+      })).rejects.toThrow("synthetic assertion failure");
+      expect(released).toBe(true);
+      expect(await h.db.prepare("SELECT state FROM inbound_updates WHERE id='interrupted'").first())
+        .toEqual({ state: "PROCESSED" });
+      expect(await h.count("command_drafts")).toBe(1);
+    } finally {
+      // A broken runRace must not strand this regression's own paused operation.
+      release();
+      await Promise.allSettled(operations);
+    }
+  });
+
   it.each(["later time", "same time", "before newer terminalization"] as const)(
     "supersedes an older in-flight create after a newer clarification commits (%s)", async (ordering) => {
       const h = await harness();
@@ -95,31 +157,36 @@ describe("semantic inbound lifecycle", () => {
             return clarify;
           } };
       } };
-      await h.add("older-create", "older request");
-      const older = h.process("older-create");
-      await waiting;
-      await h.add("newer-clarification", "newer request", { receivedAt: ordering === "same time" ? NOW : NOW + 1 });
-      const newer = h.process("newer-clarification");
-      if (ordering === "before newer terminalization") {
-        await contextPersisted;
-        expect(await h.db.prepare("SELECT state FROM inbound_updates WHERE id='newer-clarification'").first())
-          .toEqual({ state: "PROCESSING" });
-      } else {
+      const operations: Promise<unknown>[] = [];
+      await runRace(() => { resume(); completeNewer(); }, operations, async () => {
+        await h.add("older-create", "older request");
+        const older = h.process("older-create");
+        operations.push(older);
+        await waiting;
+        await h.add("newer-clarification", "newer request", { receivedAt: ordering === "same time" ? NOW : NOW + 1 });
+        const newer = h.process("newer-clarification");
+        operations.push(newer);
+        if (ordering === "before newer terminalization") {
+          await contextPersisted;
+          expect(await h.db.prepare("SELECT state FROM inbound_updates WHERE id='newer-clarification'").first())
+            .toEqual({ state: "PROCESSING" });
+        } else {
+          expect(await newer).toEqual({ status: "CLARIFICATION_REQUESTED" });
+        }
+        const contextBefore = await h.db.prepare("SELECT * FROM semantic_contexts").all();
+        const repliesBefore = [...h.replies];
+        resume();
+        expect(await older).toEqual({ status: "SUPERSEDED" });
+        expect(await h.process("older-create")).toEqual({ status: "TERMINAL" });
+        expect(await h.count("command_drafts")).toBe(0);
+        expect(h.replies).toEqual(repliesBefore);
+        expect((await h.db.prepare("SELECT * FROM semantic_contexts").all()).results).toEqual(contextBefore.results);
+        completeNewer();
         expect(await newer).toEqual({ status: "CLARIFICATION_REQUESTED" });
-      }
-      const contextBefore = await h.db.prepare("SELECT * FROM semantic_contexts").all();
-      const repliesBefore = [...h.replies];
-      resume();
-      expect(await older).toEqual({ status: "SUPERSEDED" });
-      expect(await h.process("older-create")).toEqual({ status: "TERMINAL" });
-      expect(await h.count("command_drafts")).toBe(0);
-      expect(h.replies).toEqual(repliesBefore);
-      expect((await h.db.prepare("SELECT * FROM semantic_contexts").all()).results).toEqual(contextBefore.results);
-      completeNewer();
-      expect(await newer).toEqual({ status: "CLARIFICATION_REQUESTED" });
-      await h.add("confirmation", "ok", { receivedAt: NOW + 2 });
-      expect(await h.process("confirmation")).toEqual({ status: "REJECTED" });
-      expect(await h.count("reminders")).toBe(0);
+        await h.add("confirmation", "ok", { receivedAt: NOW + 2 });
+        expect(await h.process("confirmation")).toEqual({ status: "REJECTED" });
+        expect(await h.count("reminders")).toBe(0);
+      });
     },
   );
 
@@ -140,19 +207,23 @@ describe("semantic inbound lifecycle", () => {
               ? { intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null } : { intent: "HELP" } };
           } };
       } };
-      await h.add("older", "older request");
-      const older = h.process("older");
-      await waiting;
-      await h.add("newer", "newer request", { receivedAt: NOW + 1 });
-      expect(await h.process("newer")).toEqual({ status: "DRAFT_CREATED" });
-      const draftBefore = await h.db.prepare("SELECT * FROM command_drafts").all();
-      const repliesBefore = [...h.replies];
-      resume();
-      expect(await older).toEqual({ status: "SUPERSEDED" });
-      expect(await h.process("older")).toEqual({ status: "TERMINAL" });
-      expect(await h.count("semantic_contexts")).toBe(0);
-      expect(h.replies).toEqual(repliesBefore);
-      expect((await h.db.prepare("SELECT * FROM command_drafts").all()).results).toEqual(draftBefore.results);
+      const operations: Promise<unknown>[] = [];
+      await runRace(resume, operations, async () => {
+        await h.add("older", "older request");
+        const older = h.process("older");
+        operations.push(older);
+        await waiting;
+        await h.add("newer", "newer request", { receivedAt: NOW + 1 });
+        expect(await h.process("newer")).toEqual({ status: "DRAFT_CREATED" });
+        const draftBefore = await h.db.prepare("SELECT * FROM command_drafts").all();
+        const repliesBefore = [...h.replies];
+        resume();
+        expect(await older).toEqual({ status: "SUPERSEDED" });
+        expect(await h.process("older")).toEqual({ status: "TERMINAL" });
+        expect(await h.count("semantic_contexts")).toBe(0);
+        expect(h.replies).toEqual(repliesBefore);
+        expect((await h.db.prepare("SELECT * FROM command_drafts").all()).results).toEqual(draftBefore.results);
+      });
     },
   );
 
