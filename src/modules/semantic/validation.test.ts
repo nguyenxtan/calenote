@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as validationModule from "./validation";
 import {
   MAX_SEMANTIC_SCHEDULE_AHEAD_MS,
   validateSemanticPayload,
@@ -19,6 +20,11 @@ function createReminder(overrides: Record<string, unknown> = {}): Record<string,
 }
 
 describe("validateSemanticPayload", () => {
+  it("exposes only the schema-parsing validation entry point", () => {
+    expect(validationModule).not.toHaveProperty("validateSemanticInterpretation");
+    expect(validationModule).toHaveProperty("validateSemanticPayload");
+  });
+
   it("converts a valid Vietnam-local create into an application-owned UTC timestamp", () => {
     expect(validateSemanticPayload(createReminder(), processingNow)).toEqual({
       kind: "CREATE",
@@ -120,10 +126,12 @@ describe("validateSemanticPayload", () => {
     });
   });
 
-  it.each(["modelEpoch", "scheduledAt", "ownerId", "sql", "provider", "identifier"])("rejects a payload carrying %s before it reaches validation", (forbiddenField) => {
-    expect(validateSemanticPayload(createReminder({ [forbiddenField]: "untrusted" }), processingNow)).toEqual({
+  it.each(["modelEpoch", "scheduledAt", "ownerId", "sql", "provider", "identifier"])("rejects a payload carrying %s at the exported validation entry point", (forbiddenField) => {
+    const result = validateSemanticPayload(createReminder({ [forbiddenField]: "untrusted" }), processingNow);
+    expect(result).toEqual({
       kind: "SAFE_HELP",
       code: "INVALID_SEMANTIC_INTERPRETATION",
     });
+    expect(["CREATE", "QUERY"]).not.toContain(result.kind);
   });
 });

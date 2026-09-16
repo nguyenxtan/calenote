@@ -133,7 +133,7 @@ function validateQuery(
   };
 }
 
-export function validateSemanticInterpretation(
+function validateSemanticInterpretation(
   interpretation: SemanticInterpretation,
   processingNow: number,
 ): SemanticValidationResult {
