@@ -11,6 +11,7 @@ import {
   claimInbound,
   InboundClaimFailure,
   processInbound,
+  sendProviderProcessingFeedback,
   sendProviderText,
   type ProcessInboundDependencies,
 } from "./processor";
@@ -24,6 +25,29 @@ describe("inbound persistence boundary", () => {
     expect(Object.getPrototypeOf(D1InboundProcessorStore.prototype)).not.toBe(
       D1ReminderCommandStore.prototype,
     );
+  });
+});
+
+describe("provider processing feedback", () => {
+  it("leaves Telegram unchanged without attempting Zalo's action", async () => {
+    await expect(sendProviderProcessingFeedback(
+      "telegram",
+      "123456789:AAExample_secret-token_123456789",
+      "chat-1",
+    )).resolves.toBeUndefined();
+  });
+
+  it.each([
+    { label: "an unbound chat", state: "ACTIVE_UNBOUND" as const },
+    { label: "a bound connection without the matching identity", state: "ACTIVE_BOUND" as const },
+  ])("does not compose typing feedback for $label", async ({ state }) => {
+    const { deps, inboundId } = await setup({ provider: "zalo", state, text: "semantic-looking input" });
+    const feedback = vi.fn(async () => undefined);
+    deps.sendProcessingFeedback = feedback;
+
+    await processInbound(inboundId, deps);
+
+    expect(feedback).not.toHaveBeenCalled();
   });
 });
 

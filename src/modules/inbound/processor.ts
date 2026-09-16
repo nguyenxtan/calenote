@@ -4,7 +4,7 @@ import type {
   SendReceipt,
 } from "@/modules/connections/contracts";
 import { sendTelegramText } from "@/modules/connections/providers/telegram";
-import { sendZaloText } from "@/modules/connections/providers/zalo";
+import { sendZaloText, sendZaloTyping } from "@/modules/connections/providers/zalo";
 import {
   INBOUND_PROCESSING_LEASE_MS,
   type InboundState,
@@ -146,10 +146,17 @@ type SendText = (
   text: string,
 ) => Promise<SendReceipt>;
 
+type SendProcessingFeedback = (
+  provider: BotProvider,
+  token: string,
+  privateChatId: string,
+) => Promise<void>;
+
 export interface ProcessInboundDependencies {
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
+  sendProcessingFeedback?: SendProcessingFeedback;
   recordDiagnostic?: (diagnostic: InboundProcessingDiagnostic | InboundEarlyProcessingDiagnostic) => void;
   now?: Clock;
   randomBytes?: RandomBytes;
@@ -204,6 +211,16 @@ export async function sendProviderText(
     return sendZaloText(token, privateChatId, text, requester);
   }
   return sendTelegramText(token, privateChatId, text, requester);
+}
+
+export async function sendProviderProcessingFeedback(
+  provider: BotProvider,
+  token: string,
+  privateChatId: string,
+): Promise<void> {
+  if (provider === "zalo") {
+    await sendZaloTyping(token, privateChatId);
+  }
 }
 
 export type ProcessInboundResult =
@@ -753,6 +770,23 @@ export async function processInbound(
       reply: async (text) => {
         await replyAfterTerminal(message, text, dependencies);
       },
+      processingFeedback: message.provider === "zalo" ? async () => {
+        try {
+          const token = await dependencies.keyring.decryptCredential(
+            message.connectionId,
+            message.provider,
+            message.credentialVersion,
+            { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
+          );
+          await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
+            message.provider,
+            token,
+            message.privateChatId,
+          );
+        } catch {
+          // Typing is bounded, no-retry UX feedback rather than a business outcome.
+        }
+      } : undefined,
       intelligence: dependencies.intelligence,
       semantic,
     });
