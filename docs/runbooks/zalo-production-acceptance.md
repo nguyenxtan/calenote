@@ -5,7 +5,8 @@
 - **IMPLEMENTED:** the Worker/provider/D1/Queue flow documented below exists.
 - **PROVEN_IN_PRODUCTION:** record each completed step with commit, Worker
   version ID, target, timestamp, and only safe metadata.
-- **OPEN_INCIDENT:** the current Zalo real-message path is not accepted.
+- **HISTORICAL_INCIDENT:** prior missing-Worker-event evidence is retained as
+  history and does not override later proven production evidence.
 - **PLANNED:** no step below is satisfied by a future design or a local mock.
 
 ## Safety rules
@@ -40,8 +41,10 @@ recorded successfully in order:
 12. Trigger the existing safe outbound confirmation path and verify a provider
     receipt without exposing its message content or identifiers.
 
-Failure at any real-message step leaves the integration unaccepted. Do not use a
-green `testWebhook` result as a substitute for steps 5–12.
+The production evidence recorded for this branch completed the real-message
+path, including the flat payload, encrypted persistence, D1 BLOB normalization,
+Queue/inbound processing, and bound-chat reminder create/confirm/outbound reply.
+Do not use a green `testWebhook` result as a substitute for those observations.
 
 ## Production deployment guardrail
 
@@ -132,15 +135,17 @@ bind fails
 Never log or infer from raw provider payloads, message content, tokens,
 identifiers, encrypted values, or secret-bearing webhook paths.
 
-## Current open incident evidence
+## Current production state and historical incident
 
 | Fact | Classification |
 | --- | --- |
 | `getWebhookInfo` reported the canonical Calenote host and webhook path prefix. | PROVEN_IN_PRODUCTION |
 | `testWebhook` reported `webhook.ok`. | PROVEN_IN_PRODUCTION |
-| A real private `/connect` produced no observed Worker event. | OPEN_INCIDENT |
-| A real plain private text produced no observed Worker event. | OPEN_INCIDENT |
-| Owner-scoped inbound count remained zero. | OPEN_INCIDENT |
+| Real private webhook request reached the Worker and passed path/header authentication. | PROVEN_IN_PRODUCTION |
+| Flat `message.text.received` webhook payload was accepted. | PROVEN_IN_PRODUCTION |
+| Encrypted inbound D1 persistence, byte-array normalization, and Queue/inbound processing completed. | PROVEN_IN_PRODUCTION |
+| Bound-chat reminder draft, confirmation, persistence, and outbound Zalo reply completed. | PROVEN_IN_PRODUCTION |
+| Earlier private `/connect` and plain-text observations had no Worker event. | HISTORICAL_INCIDENT |
 | The prior polling investigation was inconclusive and its webhook restoration was observed. | RETIRED_INCIDENT_DIAGNOSTIC |
 
 The retired polling diagnostic does not establish a provider root cause and
@@ -153,8 +158,8 @@ path or user-facing control.
   altering handler authentication.
 - Worker event observed: inspect route match, path/header authentication, body
   parsing, provider-payload recognition, and inbound persistence in that order.
-- `testWebhook` success but no real message: retain the OPEN_INCIDENT and do not
-  declare webhook E2E healthy.
+- `testWebhook` success without a separately observed real message is not E2E
+  evidence; do not downgrade the recorded production flow without new evidence.
 - Historical polling evidence: do not recreate the retired probe or mutate
   provider webhook configuration for diagnosis.
 

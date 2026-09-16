@@ -48,8 +48,11 @@ testWebhook success + no real message event
   -> do not treat webhook E2E as healthy
 ```
 
-The current Zalo real-message path is an **OPEN_INCIDENT**. `testWebhook`
-success proves verification/reachability only; it does not prove provider event
-dispatch, Worker receipt, D1 inbound persistence, Queue processing, or private
-chat binding. Do not change WAF, Bot Fight Mode, Access, rate limiting, or
-webhook authentication from a hypothesis alone.
+**CURRENT_PRODUCTION_STATE — PROVEN_IN_PRODUCTION:** A real Zalo private
+webhook reached the Worker; path/header authentication, flat payload parsing,
+encrypted D1 persistence/BLOB normalization, Queue/inbound processing, and
+bound-chat reminder create/confirm/outbound reply were observed. `testWebhook`
+still proves reachability only; the observed end-to-end flow is separate
+evidence. The earlier missing-event investigation is a **HISTORICAL_INCIDENT**,
+and its polling diagnostic remains retired. Do not change WAF, Bot Fight Mode,
+Access, rate limiting, or webhook authentication from a hypothesis alone.

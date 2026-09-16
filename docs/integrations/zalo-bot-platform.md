@@ -1,18 +1,20 @@
 # Zalo Bot Platform integration
 
 Calenote integrates with **Zalo Bot Platform** as a BYOB provider. It does not
-use Zalo OA OpenAPI. This page distinguishes implemented contracts from the
-unresolved production inbound incident.
+use Zalo OA OpenAPI. This page distinguishes current production evidence from
+historical incident evidence.
 
 ## Status and safety
 
 - **IMPLEMENTED:** Zalo onboarding, encrypted credential persistence, webhook
   registration, inbound parsing/persistence, `/connect`, reminder delivery, and
   recovery APIs.
-- **PROVEN_IN_PRODUCTION:** `getMe`, `getWebhookInfo`, and `testWebhook` have
-  completed against the production connection under controlled evidence.
-- **OPEN_INCIDENT:** Real private messages have not been observed at the Worker;
-  do not call the inbound path accepted until the real-message checklist passes.
+- **PROVEN_IN_PRODUCTION:** `getMe`, `getWebhookInfo`, `testWebhook`, real
+  private webhook ingestion, flat payload parsing, encrypted D1 persistence,
+  Queue/inbound processing, and the bound-chat reminder create/confirm flow
+  have completed under controlled production evidence.
+- **HISTORICAL_INCIDENT:** Earlier missing-Worker-event observations and the
+  inconclusive polling investigation are retained for forensic context only.
 
 The bot token appears in Zalo's provider request path. Calenote never logs,
 returns, stores in browser storage, places in an application URL, or exposes the
@@ -102,9 +104,9 @@ an acceptable endpoint. It **does not prove** Zalo dispatches real private
 message events to the Worker, that Calenote accepts/parses them, that D1 receives
 an inbound row, or that `/connect` reaches `ACTIVE_BOUND`.
 
-The current production incident is OPEN: `getWebhookInfo` is canonical and
-`testWebhook` is `webhook.ok`, but a real `/connect` and a plain private text
-were not observed by the Worker and inbound count stayed zero. Historical
-polling evidence does not establish a root cause. See
-[zalo-production-acceptance.md](../runbooks/zalo-production-acceptance.md) for
-the required real-message evidence before acceptance.
+The current production state is PROVEN_IN_PRODUCTION: a real private Zalo
+webhook reached the Worker, passed path/header authentication, used the flat
+payload shape, persisted encrypted inbound data, traversed Queue/inbound
+processing, and completed the bound-chat reminder create/confirm/outbound reply
+flow. `testWebhook` remains reachability evidence, not a substitute for this
+separate observed flow. The older missing-event incident is historical only.

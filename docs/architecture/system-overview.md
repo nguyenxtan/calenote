@@ -84,18 +84,22 @@ validated, non-authoritative proposal. It is disabled without valid
 privacy-first configuration; human confirmation and deterministic logic remain
 authoritative.
 
-## Production evidence and open Zalo incident
+## Current production evidence and historical Zalo incident
 
 **PROVEN_IN_PRODUCTION:** `calenote.iconiclogs.com` is served by the reviewed
 Worker with D1, Queue, cron, assets, and required secrets. For the active Zalo
 connection, `getWebhookInfo` confirms the Calenote host/path prefix and
 `testWebhook` returns `webhook.ok`.
 
-**OPEN_INCIDENT:** A real private `/connect` message and a real plain private
-text message were not observed by the Worker and produced no inbound D1 row.
-`testWebhook` proves webhook reachability/verification only; it does not prove
-provider real-message dispatch. Historical polling evidence was inconclusive and
-is retained only as incident history; its temporary diagnostic surface is
+**CURRENT_PRODUCTION_STATE — PROVEN_IN_PRODUCTION:** A real Zalo private
+webhook request reached the Worker; path/header authentication passed; the flat
+`message.text.received` payload was accepted; encrypted inbound persistence,
+D1 BLOB byte-array normalization, Queue/inbound processing, bound-chat reminder
+draft/confirmation/persistence, and outbound Zalo reply all completed.
+
+**HISTORICAL_INCIDENT:** Earlier private `/connect` and plain-text observations
+did not reach the Worker, and the polling investigation was inconclusive. Those
+facts remain forensic history only. The polling/delete-and-restore diagnostic is
 retired and cannot be activated in production.
 
 The browser-integrity exception below is narrowly scoped to Zalo webhook POSTs;

@@ -23,14 +23,14 @@ plans are audit evidence only; they do not override this document.
 | Credential and sensitive-data protection | IMPLEMENTED, WIRED, TESTED | D1 stores encrypted credentials and inbound text; browser/API responses and structured diagnostics exclude tokens, webhook secrets, connect codes, raw message content, and private provider identifiers. |
 | Connection lifecycle and recovery | IMPLEMENTED, WIRED, TESTED | Owned connections expose safe metadata and support bounded webhook retry or `/connect` code rotation. `ACTIVE_UNBOUND`, `ACTIVE_BOUND`, `WEBHOOK_FAILED`, and `SUSPENDED` retain distinct recovery semantics. |
 | Private-chat `/connect` binding | IMPLEMENTED, WIRED, TESTED | One-use, expiring code is stored as a digest; an accepted private inbound message binds the connection with D1 fencing and queue dispatch. |
-| Webhook ingress and inbound processing | IMPLEMENTED, WIRED, TESTED | Same-provider path/header verification, bounded JSON read, encrypted inbound persistence, deduplication, and opaque `PROCESS_INBOUND` queue jobs are implemented. Real Zalo message receipt is separately an OPEN_INCIDENT. |
+| Webhook ingress and inbound processing | IMPLEMENTED, WIRED, TESTED, PROVEN_IN_PRODUCTION | Zalo real private webhook ingestion passed path/header authentication; the flat production payload persisted encrypted inbound data and enqueued/processed an opaque `PROCESS_INBOUND` job. |
 | Reminder scheduling and delivery | IMPLEMENTED, WIRED, TESTED | D1 is canonical persistence. Cron claims due reminders; Queue delivery uses bounded retries, ownership leases, and safe failure states. |
 | Login/session delivery | IMPLEMENTED, WIRED, TESTED | Session, login-code, and `DELIVER_LOGIN_CODE` paths use the same encrypted and owner-fenced persistence boundaries. |
 | V2 Web control plane | IMPLEMENTED, WIRED, TESTED | Authenticated V2 screens manage safe connection status, reminders, preferences, and activity; chat remains the primary command/delivery channel. |
 | Production origin | DEPLOYED, PROVEN_IN_PRODUCTION | `calenote` serves `https://calenote.iconiclogs.com` with production D1, Queue, assets, cron trigger, and secrets. Deployment alone is not chat E2E evidence. |
-| Zalo webhook configuration and verification | PROVEN_IN_PRODUCTION | `getWebhookInfo` reports the canonical host/path prefix and `testWebhook` returned `webhook.ok`. This proves configured webhook reachability only, not real event dispatch. |
-| Zalo real inbound message path | OPEN_INCIDENT | One real private `/connect` and one plain private text produced no observed Worker event and no new inbound row. Historical polling evidence is not an operational feature or acceptance path. |
-| Telegram production behavior | PLANNED | Telegram production diagnosis begins only after Zalo closure; it is not E2E-proven. |
+| Zalo webhook configuration and reachability | PROVEN_IN_PRODUCTION | `getWebhookInfo` reports the canonical host/path prefix and `testWebhook` returned `webhook.ok`. |
+| Zalo real inbound message path | PROVEN_IN_PRODUCTION | A real private webhook reached the Worker; path/header authentication, flat payload parsing, encrypted D1 persistence, Queue/inbound processing, and bound-chat reminder create/confirm delivery were observed. |
+| Telegram production behavior | PLANNED | `TELEGRAM_PRODUCTION_BEHAVIOR = PLANNED`; it is not E2E-proven. |
 
 ## Worker runtime and persistence
 
@@ -64,11 +64,30 @@ means the webhook/connection is active but a private chat has not yet bound;
 
 ### PROVEN_PRODUCTION_BEHAVIOR
 
-Zalo transport uses redirect fencing, accepts both wrapped and flat webhook
-payloads only after path/header authentication, persists inbound data encrypted,
-and dispatches opaque Queue jobs. Shared D1 BLOB normalization remains required
-before decrypting persisted values. These are production boundaries, not
-diagnostic controls.
+ZALO_REAL_INBOUND_PATH = PROVEN_IN_PRODUCTION
+
+ZALO_WEBHOOK_CONFIGURATION_AND_REACHABILITY = PROVEN_IN_PRODUCTION
+
+`testWebhook` is not an end-to-end message-delivery guarantee; the separately
+observed private webhook and downstream processing flow provide that evidence.
+
+WRAPPED_WEBHOOK_PARSING = TESTED
+
+FLAT_REAL_WEBHOOK_PARSING = PROVEN_IN_PRODUCTION
+
+ENCRYPTED_D1_INBOUND_PERSISTENCE = PROVEN_IN_PRODUCTION
+
+D1_PERSISTED_BLOB_NORMALIZATION = PROVEN_IN_PRODUCTION
+
+QUEUE_AND_INBOUND_PROCESSING = PROVEN_IN_PRODUCTION
+
+BOUND_PRIVATE_CHAT_REMINDER_FLOW = PROVEN_IN_PRODUCTION
+
+Zalo transport uses redirect fencing. Real private webhook ingress passed path
+and header authentication, accepted the flat payload shape, persisted encrypted
+inbound data, normalized persisted D1 BLOB byte arrays before decryption,
+processed the opaque Queue job, and completed bound-chat reminder draft,
+confirmation, persistence, and outbound Zalo reply.
 
 ### DURABLE_OBSERVABILITY
 
@@ -84,6 +103,13 @@ scheduled egress probes, and diagnostic-only Worker were retired during the
 trusted-machine master cutover. Historical evidence may be retained in archived
 plans, but no production route or Worker configuration can activate those probes.
 
+### HISTORICAL_INCIDENT
+
+Earlier production observations showed no Worker event for a real private
+`/connect` or plain text and recorded an inconclusive polling investigation.
+Those observations are preserved as forensic history only; later production
+evidence supersedes them for the current Zalo inbound status.
+
 ## Intelligence and external sources
 
 Optional OpenRouter intelligence is IMPLEMENTED, WIRED, TESTED, and disabled
@@ -97,19 +123,21 @@ bounded external-source boundary is described in
 [external-source-boundary.md](./external-source-boundary.md); it is not an
 implemented ICONIC Logistics Platform integration.
 
-## What is not proven
+## Current limits
 
-`testWebhook` success is not an end-to-end message-delivery guarantee. The
-current Zalo evidence proves configuration/reachability but not that real
-private-chat events are dispatched to the Worker. Do not infer a Zalo
-provider-edge, Cloudflare, credential, or application-parser conclusion beyond
-the recorded evidence.
+TELEGRAM_PRODUCTION_BEHAVIOR = PLANNED
+
+CONVERSATIONAL_CORE_V1 = NOT_IMPLEMENTED_ON_MASTER
+
+LLM_SEMANTIC_FALLBACK = NOT_PRODUCTION_ENABLED
+
+Duplicate `/connect` hardening beyond the currently proven binding behavior and
+automatic `ACTIVE_BOUND` UI synchronization remain future work unless a later
+review records separate production evidence.
 
 ## Next bounded work
 
-1. Close the Zalo real-message acceptance path before Telegram production
-   diagnosis.
-2. Design bot ownership/takeover policy before allowing the same bot token to
+1. Design bot ownership/takeover policy before allowing the same bot token to
    be supplied by a second user.
-3. Keep optional intelligence and future external-source work independently
+2. Keep optional intelligence and future external-source work independently
    authorized and non-authoritative.

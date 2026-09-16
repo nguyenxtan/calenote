@@ -9,22 +9,24 @@ claims live in [current-state.md](./architecture/current-state.md).
   with D1, Queue, cron, assets, and secrets.
 - **PROVEN_IN_PRODUCTION:** Zalo `getWebhookInfo` matches the canonical host/path
   prefix and `testWebhook` returns `webhook.ok`.
-- **OPEN_INCIDENT:** Real Zalo private `/connect` and plain-text messages have
-  not produced an observed Worker event or inbound D1 row. The first temporary
-  polling probe was inconclusive due to its now-corrected response-shape parser;
-  webhook restoration was proven successful.
-- **PLANNED:** Telegram production diagnosis is deferred until Zalo real-message
-  acceptance closes.
+- **PROVEN_IN_PRODUCTION:** A real Zalo private webhook reached the Worker,
+  passed path/header authentication, used the flat payload shape, persisted an
+  encrypted D1 inbound row, completed D1 BLOB normalization and Queue/inbound
+  processing, and completed bound-chat reminder create/confirm/outbound reply.
+- **HISTORICAL_INCIDENT:** Earlier missing-Worker-event observations and the
+  inconclusive polling investigation are forensic history only; the diagnostic
+  remains retired.
+- **PLANNED:** Telegram production diagnosis remains separate and not E2E-proven.
 
 ## Near-term operational backlog
 
-### Close Zalo real-message acceptance
+### Preserve Zalo production acceptance evidence
 
-Run one explicitly authorized retest through the temporary owner-safe polling
-diagnostic, then classify only from safe evidence. A successful `testWebhook`
-is not acceptance: the path must prove real private message -> Worker -> D1
-inbound -> Queue -> `/connect` -> chat identity -> `ACTIVE_BOUND` -> outbound
-confirmation. See [Zalo production acceptance](./runbooks/zalo-production-acceptance.md).
+The real-message acceptance chain is proven in production. Preserve its
+redirect fencing, path/header authentication, flat payload support, encrypted
+D1 persistence/BLOB normalization, Queue processing, and reminder confirmation
+boundaries. Do not revive the retired polling diagnostic; `testWebhook` alone
+remains reachability evidence rather than E2E evidence.
 
 ### Bot ownership / claim policy
 
@@ -40,9 +42,9 @@ single-Calenote-owner constraint. If another email supplies the same bot token:
 
 ### Telegram production diagnosis
 
-**PLANNED.** Start only after the Zalo acceptance incident is closed. Reuse the
-same evidence discipline: configuration verification is not real-message E2E,
-and no provider-specific conclusion is made without safe production evidence.
+**PLANNED.** Reuse the same evidence discipline: configuration verification is
+not real-message E2E, and no provider-specific conclusion is made without safe
+production evidence.
 
 ## Product roadmap
 
