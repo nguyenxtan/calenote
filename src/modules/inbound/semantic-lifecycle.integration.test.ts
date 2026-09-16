@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SemanticGateway, SemanticInput, SemanticTier, SemanticAttemptResult } from "@/modules/intelligence/semantic-gateway";
 import { createKeyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
@@ -101,6 +101,46 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
 }
 
 describe("semantic inbound lifecycle", () => {
+  it("invokes Zalo processing feedback once before semantic interpretation and ignores its failure", async () => {
+    const h = await harness();
+    const token = await h.keyring.encryptCredential("connection-one", "zalo", 1, "typing-token");
+    await h.db.prepare("UPDATE bot_connections SET provider='zalo',encrypted_token=?,encrypted_token_iv=? WHERE id='connection-one'")
+      .bind(token.ciphertext, token.iv).run();
+    const order: string[] = [];
+    h.deps.sendProcessingFeedback = async () => {
+      order.push("typing");
+      throw new Error("synthetic typing failure");
+    };
+    h.semantic.gateway = { prepare() {
+      return { status: "READY", model: "synthetic", provider: "synthetic", maximumCostMicrounits: 1,
+        async dispatch() { order.push("semantic"); return create; } };
+    } };
+
+    await h.add("typing", "nhớ một việc sáng mai");
+    await h.db.prepare("UPDATE inbound_updates SET provider='zalo' WHERE id='typing'").run();
+    expect(await h.process("typing")).toEqual({ status: "DRAFT_CREATED" });
+    expect(order).toEqual(["typing", "semantic"]);
+    expect(h.replies).toHaveLength(1);
+    expect(await h.count("command_drafts")).toBe(1);
+  });
+
+  it("does not invoke processing feedback for deterministic controls", async () => {
+    const h = await harness();
+    const token = await h.keyring.encryptCredential("connection-one", "zalo", 1, "typing-token");
+    await h.db.prepare("UPDATE bot_connections SET provider='zalo',encrypted_token=?,encrypted_token_iv=? WHERE id='connection-one'")
+      .bind(token.ciphertext, token.iv).run();
+    const spy = vi.fn(async () => undefined);
+    h.deps.sendProcessingFeedback = spy;
+    for (const [id, text] of [["connect-no-typing", "/connect wrong"], ["confirm-no-typing", "có"],
+      ["cancel-no-typing", "hủy"], ["help-no-typing", "/help"]]) {
+      await h.add(id, text);
+      await h.db.prepare("UPDATE inbound_updates SET provider='zalo' WHERE id=?").bind(id).run();
+      await h.process(id);
+    }
+    expect(spy).not.toHaveBeenCalled();
+    expect(h.calls).toHaveLength(0);
+  });
+
   it("drains a paused inbound after an assertion failure before disposing its runtime", async () => {
     const h = await harness();
     let started!: () => void;

@@ -116,6 +116,7 @@ export interface ProcessBoundChatDependencies {
   randomBytes?: RandomBytes;
   intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
   semantic?: BoundChatSemanticDependencies;
+  processingFeedback?: () => Promise<void>;
 }
 
 export interface BoundChatSemanticDependencies {
@@ -210,6 +211,11 @@ async function semanticCommand(
     return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
   }
   const pending = await semantic.contextStore.findPending(scope);
+  try {
+    await dependencies.processingFeedback?.();
+  } catch {
+    // Provider UX feedback is intentionally best effort and never changes semantics.
+  }
   const result = await semantic.service.interpret({
     text: message.text, interpretationReferenceTime: message.receivedAt,
     processingNow: now(), timezone: "Asia/Ho_Chi_Minh",

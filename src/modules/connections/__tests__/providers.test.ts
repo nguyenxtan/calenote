@@ -5,6 +5,7 @@ import {
   getZaloWebhookInfo,
   diagnoseZaloWebhookPayload,
   parseZaloWebhook,
+  sendZaloTyping,
   sendZaloText,
   setZaloWebhook,
   testZaloWebhook,
@@ -294,6 +295,40 @@ describe("Telegram Bot API adapter", () => {
 });
 
 describe("provider webhook and outbound adapters", () => {
+  it("sends Zalo's documented typing action with no receipt contract", async () => {
+    const token = "12345678:typing-safe-token";
+    const requester = vi.fn(async () => ({ ok: true }));
+
+    await expect(sendZaloTyping(token, "chat-1", requester)).resolves.toBeUndefined();
+    expect(requester).toHaveBeenCalledWith({
+      provider: "zalo",
+      hostname: "bot-api.zaloplatforms.com",
+      path: `/bot${token}/sendChatAction`,
+      operation: "sendChatAction",
+      timeoutMs: 1_000,
+      body: { chat_id: "chat-1", action: "typing" },
+    });
+  });
+
+  it.each([
+    ["missing documented ok", { result: {} }, "INVALID_RESPONSE"],
+    ["documented failure", { ok: false, error_code: 500 }, "FAILED"],
+  ] as const)("classifies a Zalo typing %s safely", async (_case, payload, code) => {
+    const failure = await captureAdapterFailure(() => sendZaloTyping(
+      "12345678:typing-safe-token", "chat-1", async () => payload,
+    ));
+    expect(failure.caught).toEqual(new ProviderOperationError(code));
+    expect(failure.serialized).not.toContain("typing-safe-token");
+    expect(failure.serialized).not.toContain("chat-1");
+  });
+
+  it("rejects an empty Zalo typing chat before requesting", async () => {
+    const requester = vi.fn();
+    await expect(sendZaloTyping("12345678:typing-safe-token", "", requester))
+      .rejects.toEqual(new ProviderVerificationError("INVALID_PROVIDER_RESPONSE"));
+    expect(requester).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed successful webhook and send payloads instead of returning a null receipt", async () => {
     const token = "12345678:abc-xyz_789";
     await expect(setZaloWebhook(token, { url: "https://calenote.iconiclogs.com/a", secretToken: "abcdefgh" }, async () => ({ ok: true, result: {} }))).rejects.toEqual(new ProviderOperationError("INVALID_RESPONSE"));
