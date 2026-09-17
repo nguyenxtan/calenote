@@ -110,6 +110,7 @@ describe("injected strict semantic gateway", () => {
   });
 
   it.each([
+    [{ status: 200, body: "", oversized: true }, "SCHEMA_INVALID"],
     [{ status: 200, body: "a".repeat(20_001) }, "SCHEMA_INVALID"],
     [{ status: 200, body: "{}" }, "SCHEMA_INVALID"],
     [{ status: 200, body: JSON.stringify({ choices: [{ message: { content: "not JSON" }, finish_reason: "stop" }] }) }, "INVALID_JSON"],

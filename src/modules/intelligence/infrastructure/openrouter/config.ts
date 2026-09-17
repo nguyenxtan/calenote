@@ -1,6 +1,14 @@
 import type { OpenRouterConfig } from "./gateway";
+import type { SemanticGatewayConfig } from "./semantic-gateway";
 
 export type OpenRouterRuntimeConfig = { status: "OFF" } | { status: "UNAVAILABLE" } | { status: "READY"; config: OpenRouterConfig };
+export type SemanticRuntimeConfig = { status: "OFF" } | { status: "UNAVAILABLE" } | {
+  status: "READY";
+  apiKey: string;
+  model: "google/gemini-2.5-flash-lite";
+  provider: "google-vertex/eu";
+  config: SemanticGatewayConfig;
+};
 const model = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/u;
 const provider = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._:-]+)+$/u;
 export function parseOpenRouterRuntimeConfig(env: Partial<Record<"AI_MODE" | "OPENROUTER_API_KEY" | "OPENROUTER_FREE_MODEL" | "OPENROUTER_PRIVACY_MODEL" | "OPENROUTER_PRIVACY_PROVIDER" | "OPENROUTER_FALLBACK_MODELS" | "AI_TIMEOUT_MS" | "AI_MAX_INPUT_CHARS" | "AI_MAX_OUTPUT_TOKENS" | "AI_MAX_PRIVACY_PRICE", string>>): OpenRouterRuntimeConfig {
@@ -17,4 +25,38 @@ export function parseOpenRouterRuntimeConfig(env: Partial<Record<"AI_MODE" | "OP
   const validPrivacyPrice = privacyPrice !== undefined && Number.isFinite(privacyPrice) && privacyPrice > 0;
   if (!env.OPENROUTER_API_KEY || !primary || !model.test(primary) || timeoutMs === null || maxInputChars === null || maxOutputTokens === null || env.OPENROUTER_FALLBACK_MODELS || (mode === "privacy" && (!env.OPENROUTER_PRIVACY_PROVIDER || !provider.test(env.OPENROUTER_PRIVACY_PROVIDER) || !validPrivacyPrice))) return { status: "UNAVAILABLE" };
   return { status: "READY", config: { mode, apiKey: env.OPENROUTER_API_KEY, privacyModel: primary, privacyProvider: env.OPENROUTER_PRIVACY_PROVIDER!, maxPrivacyPrice: privacyPrice!, timeoutMs, maxInputChars, maxOutputTokens } };
+}
+
+/** Semantic V1 has exactly one production route: the reviewed ZDR Gemini Vertex endpoint. */
+export function parseSemanticRuntimeConfig(env: Partial<Record<"AI_MODE" | "OPENROUTER_API_KEY" | "OPENROUTER_PRIVACY_MODEL" | "OPENROUTER_PRIVACY_PROVIDER" | "OPENROUTER_FALLBACK_MODELS" | "AI_TIMEOUT_MS" | "AI_MAX_INPUT_CHARS" | "AI_MAX_OUTPUT_TOKENS" | "AI_MAX_PRIVACY_PRICE", string>>): SemanticRuntimeConfig {
+  const base = parseOpenRouterRuntimeConfig(env);
+  if (base.status === "OFF") return base;
+  if (base.status !== "READY" || base.config.mode !== "privacy"
+    || base.config.privacyModel !== "google/gemini-2.5-flash-lite"
+    || base.config.privacyProvider !== "google-vertex/eu"
+    || base.config.maxInputChars > 1_800
+    || base.config.maxPrivacyPrice === undefined
+    || base.config.maxPrivacyPrice < 0.4) return { status: "UNAVAILABLE" };
+  return {
+    status: "READY",
+    apiKey: base.config.apiKey,
+    model: "google/gemini-2.5-flash-lite",
+    provider: "google-vertex/eu",
+    config: {
+      maxInputChars: base.config.maxInputChars,
+      maxInputTokens: 12_000,
+      maxOutputTokens: base.config.maxOutputTokens,
+      maxResponseBytes: 20_000,
+      timeoutMs: base.config.timeoutMs,
+      primary: {
+        model: "google/gemini-2.5-flash-lite",
+        provider: "google-vertex/eu",
+        requireZdr: true,
+        promptPriceMicrounitsPerMillionTokens: 100_000,
+        completionPriceMicrounitsPerMillionTokens: 400_000,
+      },
+      freePrimary: undefined,
+      paidFallback: undefined,
+    },
+  };
 }

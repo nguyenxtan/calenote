@@ -67,6 +67,17 @@ function harness(options: { responses?: Array<ReturnType<typeof response> | Erro
 
 describe("bounded semantic routing", () => {
   afterEach(() => vi.useRealTimers());
+  it("uses exactly one pinned privacy primary with a durable budget fence and no fallback", async () => {
+    const h = harness();
+    const gateway = createSemanticGateway({ ...limits, primary: route }, h.transport);
+    const service = createSemanticService({ mode: "privacy", gateway, budgetStore: h.budget,
+      attemptStore: { claimInbound: h.claimInbound }, now: () => NOW, observe: (event) => h.observations.push(event) });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
+    expect(h.events).toEqual(["reserve", "mark", "dispatch", "finalize"]);
+    expect(h.transport).toHaveBeenCalledTimes(1);
+    expect(h.observations).toContainEqual(expect.objectContaining({ tier: "PRIMARY", fallbackUsed: false }));
+  });
+
   it("off returns local help without any claim, reservation or model request", async () => {
     const h = harness({ mode: "off" });
     expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "AI_DISABLED" });

@@ -9,7 +9,7 @@ export const SemanticInputSchema = z.object({
   previousContext: SemanticContextSlotsSchema.optional(),
 }).strict();
 export type SemanticInput = z.infer<typeof SemanticInputSchema>;
-export type SemanticTier = "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK";
+export type SemanticTier = "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK";
 export type SemanticFailureCategory = "UNAVAILABLE" | "TIMEOUT" | "RATE_LIMITED" | "PROVIDER_FAILURE"
   | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT";
 export interface SemanticUsage {

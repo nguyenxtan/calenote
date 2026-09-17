@@ -24,7 +24,7 @@ export interface SemanticObservation {
   model?: string;
   provider?: string;
   latencyMs: number;
-  resultCategory: "SUCCESS" | `FREE_${SemanticFailureCategory}` | `PAID_${SemanticFailureCategory}`;
+  resultCategory: "SUCCESS" | `PRIMARY_${SemanticFailureCategory}` | `FREE_${SemanticFailureCategory}` | `PAID_${SemanticFailureCategory}`;
   schemaValid: boolean | null;
   fallbackUsed: boolean;
   costMicrounits?: number | null;
@@ -32,7 +32,7 @@ export interface SemanticObservation {
   completionTokens?: number;
 }
 export interface SemanticServiceDependencies {
-  mode: "off" | "semantic";
+  mode: "off" | "semantic" | "privacy";
   paidFallbackEnabled?: boolean;
   gateway: SemanticGateway;
   budgetStore: SemanticBudgetStore;
@@ -58,7 +58,7 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
       ...(attempt.status === "READY" ? { model: attempt.model, provider: attempt.provider } : {}),
       latencyMs: Number.isFinite(elapsed) ? Math.max(0, Math.round(elapsed)) : 0,
       resultCategory: result.status === "SUCCESS" ? "SUCCESS"
-        : `${tier === "FREE_PRIMARY" ? "FREE" : "PAID"}_${result.category}`,
+        : `${tier === "PRIMARY" ? "PRIMARY" : tier === "FREE_PRIMARY" ? "FREE" : "PAID"}_${result.category}`,
       schemaValid: result.status === "SUCCESS" ? true
         : ["INVALID_JSON", "SCHEMA_INVALID"].includes(result.category) ? false : null,
       fallbackUsed: tier === "CHEAP_PAID_FALLBACK",
@@ -73,7 +73,7 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
   return {
     async interpret(rawInput: SemanticServiceInput): Promise<SemanticServiceResult> {
       if (deps.mode === "off") return { kind: "SAFE_HELP", code: "AI_DISABLED" };
-      if (deps.mode !== "semantic") return unavailable();
+      if (deps.mode !== "semantic" && deps.mode !== "privacy") return unavailable();
       const parsed = SemanticServiceInputSchema.safeParse(rawInput);
       if (!parsed.success) return { kind: "SAFE_HELP", code: "INVALID_INPUT" };
       const { ownerId, sourceInboundId, processingNow, ...input } = parsed.data;
@@ -82,6 +82,27 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
           return { kind: "SAFE_HELP", code: "ALREADY_ATTEMPTED" };
         }
       } catch { return { kind: "SAFE_HELP", code: "ALREADY_ATTEMPTED" }; }
+
+      if (deps.mode === "privacy") {
+        let primary: PreparedSemanticAttempt;
+        try { primary = deps.gateway.prepare("PRIMARY", input); } catch { return unavailable(); }
+        if (primary.status !== "READY") return unavailable();
+        let reservation;
+        try { reservation = await deps.budgetStore.reservePaidCall({ ownerId, sourceInboundId, now: deps.now() }); } catch {
+          return { kind: "SAFE_HELP", code: "BUDGET_EXHAUSTED" };
+        }
+        if (reservation.status !== "RESERVED") return { kind: "SAFE_HELP", code: "BUDGET_EXHAUSTED" };
+        const scope = { ownerId, reservationId: reservation.reservationId };
+        if (!Number.isSafeInteger(reservation.reservedMaximumMicrounits)
+          || reservation.reservedMaximumMicrounits < primary.maximumCostMicrounits) {
+          try { await deps.budgetStore.releaseOrExpireReservation({ ...scope, reason: "SAFE_FAILURE", now: deps.now() }); } catch { /* expiry reclaims it */ }
+          return unavailable();
+        }
+        try { if (!await deps.budgetStore.markDispatched({ ...scope, now: deps.now() })) return unavailable(); } catch { return unavailable(); }
+        const result = await dispatch(primary, "PRIMARY");
+        try { await deps.budgetStore.finalizeUsage({ ...scope, actualCostMicrounits: result.usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* expiry preserves the ceiling */ }
+        return result.status === "SUCCESS" ? validateSemanticPayload(result.interpretation, Math.max(processingNow, deps.now())) : unavailable();
+      }
 
       let free: PreparedSemanticAttempt;
       try { free = deps.gateway.prepare("FREE_PRIMARY", input); } catch { return unavailable(); }

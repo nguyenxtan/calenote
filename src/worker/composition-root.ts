@@ -26,7 +26,7 @@ import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/d
 import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
 import { cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
-import { createKeyring } from "@/modules/security/keyring";
+import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
 import {
   approveActionCandidate,
@@ -47,7 +47,11 @@ import type { WebhookRouteDependencies } from "./routes/webhooks";
 import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
-import { parseOpenRouterRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { createSemanticGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
+import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { D1SemanticBudgetStore } from "@/modules/semantic/infrastructure/d1/budget-store";
+import { D1SemanticContextStore } from "@/modules/semantic/infrastructure/d1/context-store";
 import { PRODUCTION_APP_ORIGIN } from "./origin-policy";
 
 export const CANONICAL_APP_ORIGIN = PRODUCTION_APP_ORIGIN;
@@ -262,6 +266,74 @@ export async function createIntelligenceGateway(env?: Env): Promise<Intelligence
   return (await createIntelligenceCapability(env)).gateway;
 }
 
+const semanticBudgetLimits = {
+  ownerDailyFallbackLimit: 50,
+  ownerMonthlyCostMicrounits: 500_000,
+  globalDailyCostMicrounits: 2_000_000,
+  reservationTtlMs: 300_000,
+} as const;
+
+const unavailableSemanticGateway: SemanticGateway = {
+  prepare: () => ({ status: "FAILURE", category: "UNAVAILABLE" }),
+};
+
+/** Reads at most the reviewed response ceiling, including when the provider omits Content-Length. */
+export async function readBoundedSemanticResponse(response: Response, maximumBytes: number): Promise<{ body: string; oversized: boolean }> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && Number.isSafeInteger(Number(declaredLength)) && Number(declaredLength) > maximumBytes) {
+    await response.body?.cancel();
+    return { body: "", oversized: true };
+  }
+  if (response.body === null) return { body: "", oversized: false };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel();
+        return { body: "", oversized: true };
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+  return { body: new TextDecoder().decode(body), oversized: false };
+}
+
+/** The sole production Semantic V1 route: pinned Gemini Vertex with no fallback. */
+export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyring) {
+  const policy = parseSemanticRuntimeConfig(env);
+  const keyring = suppliedKeyring ?? await createKeyring(env.CALENOTE_MASTER_KEY);
+  const route = policy.status === "READY" ? policy.config.primary! : undefined;
+  return {
+    mode: policy.status === "READY" ? "privacy" as const : "off" as const,
+    gateway: policy.status === "READY" ? createSemanticGateway(policy.config, async (request, options) => {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST", signal: options.signal,
+        headers: { Authorization: `Bearer ${policy.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      return { status: response.status, ...await readBoundedSemanticResponse(response, policy.config.maxResponseBytes) };
+    }) : unavailableSemanticGateway,
+    budgetStore: new D1SemanticBudgetStore(env.DB, {
+      ...semanticBudgetLimits,
+      maxInputTokens: policy.status === "READY" ? policy.config.maxInputTokens : 12_000,
+      maxOutputTokens: policy.status === "READY" ? policy.config.maxOutputTokens : 256,
+      promptPriceMicrounitsPerMillionTokens: route?.promptPriceMicrounitsPerMillionTokens ?? 100_000,
+      completionPriceMicrounitsPerMillionTokens: route?.completionPriceMicrounitsPerMillionTokens ?? 400_000,
+    }),
+    contextStore: new D1SemanticContextStore(env.DB, keyring),
+  };
+}
+
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
 
 export async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
@@ -271,12 +343,12 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
-  const intelligence = await createIntelligenceCapability(env);
+  const semantic = await createSemanticCapability(env, keyring);
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
       keyring,
-      intelligence,
+      semantic,
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),

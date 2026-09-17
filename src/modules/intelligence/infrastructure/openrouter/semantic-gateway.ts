@@ -17,6 +17,7 @@ const configSchema = z.object({
   maxOutputTokens: z.number().int().min(1).max(4_096),
   maxResponseBytes: z.number().int().min(1).max(1_000_000),
   timeoutMs: z.number().int().min(1).max(30_000),
+  primary: routeSchema.optional(),
   freePrimary: routeSchema.optional(),
   paidFallback: routeSchema.optional(),
 }).strict();
@@ -34,6 +35,7 @@ export interface SemanticJsonRequest {
 export type SemanticTransport = (request: SemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{
   status: number;
   body: string;
+  oversized?: boolean;
 }>;
 
 const envelopeSchema = z.object({
@@ -66,12 +68,12 @@ function containsSensitiveInput(value: string): boolean {
     || /(?:^|\s)\/connect\b/iu.test(value);
 }
 
-function decodeResponse(response: { status: number; body: string }, config: SemanticGatewayConfig,
+function decodeResponse(response: { status: number; body: string; oversized?: boolean }, config: SemanticGatewayConfig,
   maximum: number): SemanticAttemptResult {
   if (response.status === 408) return { status: "FAILURE", category: "TIMEOUT" };
   if (response.status === 429) return { status: "FAILURE", category: "RATE_LIMITED" };
   if (response.status === 404) return { status: "FAILURE", category: "UNAVAILABLE" };
-  if (typeof response.body !== "string" || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
+  if (response.oversized === true || typeof response.body !== "string" || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
     return { status: "FAILURE", category: "SCHEMA_INVALID" };
   }
   let body: unknown;
@@ -112,7 +114,7 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
           && containsSensitiveInput(parsedInput.data.previousContext.title ?? ""))) {
         return { status: "FAILURE", category: "INVALID_INPUT" };
       }
-      const route = tier === "FREE_PRIMARY" ? config.freePrimary : config.paidFallback;
+      const route = tier === "PRIMARY" ? config.primary : tier === "FREE_PRIMARY" ? config.freePrimary : config.paidFallback;
       if (!route) return { status: "FAILURE", category: "UNAVAILABLE" };
       const request: SemanticJsonRequest = {
         model: route.model,
