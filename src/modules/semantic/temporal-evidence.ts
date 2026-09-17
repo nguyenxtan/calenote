@@ -292,7 +292,6 @@ type GrammarInput = {
   nextAtom: number[];
   firstDateSeparator: number[];
   firstClockSeparator: number[];
-  firstDelimiter: number[];
 };
 
 type Expression =
@@ -300,20 +299,26 @@ type Expression =
   | { dimension: "time"; parsed: Parsed<TimeCandidate> }
   | { dimension: "range"; parsed: Parsed<RangeCandidate> };
 
+type SeparatorClass = "SPACE" | "DATE_INTERNAL" | "CLOCK_INTERNAL" | "DOT_INTERNAL" | "SENTENCE";
+
+// The sole lexical separator registry. DOT remains internal until the span
+// machine proves a sentence boundary; no production can silently skip it.
+const SEPARATOR_CLASSES: Partial<Record<TokenKind, SeparatorClass>> = {
+  WHITESPACE: "SPACE", SLASH: "DATE_INTERNAL", HYPHEN: "DATE_INTERNAL",
+  COLON: "CLOCK_INTERNAL", DOT: "DOT_INTERNAL", COMMA: "SENTENCE", PUNCTUATION: "SENTENCE",
+};
+
 function isSeparator(kind: TokenKind): boolean {
-  return kind === "WHITESPACE" || kind === "SLASH" || kind === "COLON"
-    || kind === "HYPHEN" || kind === "COMMA" || kind === "DOT" || kind === "PUNCTUATION";
+  return SEPARATOR_CLASSES[kind] !== undefined;
 }
 
 function grammarInput(tokens: TemporalToken[], counters: ScannerCounters): GrammarInput {
   const nextAtom = new Array<number>(tokens.length + 1);
   const firstDateSeparator = new Array<number>(tokens.length + 1);
   const firstClockSeparator = new Array<number>(tokens.length + 1);
-  const firstDelimiter = new Array<number>(tokens.length + 1);
   nextAtom[tokens.length] = tokens.length;
   firstDateSeparator[tokens.length] = tokens.length;
   firstClockSeparator[tokens.length] = tokens.length;
-  firstDelimiter[tokens.length] = tokens.length;
   // Index separator runs once. Every subsequent grammar probe is O(1), even
   // for arbitrarily long punctuation runs. Positions preserve which side of
   // a message delimiter owns structural date/clock syntax.
@@ -326,10 +331,8 @@ function grammarInput(tokens: TemporalToken[], counters: ScannerCounters): Gramm
       ? index : separator ? firstDateSeparator[index + 1] : tokens.length;
     firstClockSeparator[index] = kind === "COLON"
       ? index : separator ? firstClockSeparator[index + 1] : tokens.length;
-    firstDelimiter[index] = kind === "COMMA" || kind === "DOT" || kind === "PUNCTUATION"
-      ? index : separator ? firstDelimiter[index + 1] : tokens.length;
   }
-  return { tokens, nextAtom, firstDateSeparator, firstClockSeparator, firstDelimiter };
+  return { tokens, nextAtom, firstDateSeparator, firstClockSeparator };
 }
 
 function followingAtom(input: GrammarInput, index: number): number {
@@ -428,6 +431,22 @@ function parseVietnameseDateAt(
   };
 }
 
+type NumericDateState = "DAY" | "MONTH_SEPARATOR" | "MONTH" | "YEAR_SEPARATOR" | "YEAR"
+  | "ISO_YEAR" | "ISO_MONTH_SEPARATOR" | "ISO_MONTH" | "ISO_DAY_SEPARATOR" | "ISO_DAY";
+
+const NUMERIC_DATE_TRANSITIONS: Record<NumericDateState, Partial<Record<TokenKind, NumericDateState>>> = {
+  DAY: { SLASH: "MONTH_SEPARATOR", HYPHEN: "MONTH_SEPARATOR" },
+  MONTH_SEPARATOR: { NUMBER: "MONTH" },
+  MONTH: { SLASH: "YEAR_SEPARATOR" },
+  YEAR_SEPARATOR: { NUMBER: "YEAR" },
+  YEAR: {},
+  ISO_YEAR: { HYPHEN: "ISO_MONTH_SEPARATOR" },
+  ISO_MONTH_SEPARATOR: { NUMBER: "ISO_MONTH" },
+  ISO_MONTH: { HYPHEN: "ISO_DAY_SEPARATOR" },
+  ISO_DAY_SEPARATOR: { NUMBER: "ISO_DAY" },
+  ISO_DAY: {},
+};
+
 function parseNumericDateAt(
   input: GrammarInput,
   index: number,
@@ -436,65 +455,43 @@ function parseNumericDateAt(
   const { tokens } = input;
   const first = tokens[index];
   if (first?.kind !== "NUMBER") return null;
-  const separatorIndex = nextNonWhitespace(tokens, index + 1);
-  const separator = tokens[separatorIndex];
-  if (separator?.kind !== "SLASH" && separator?.kind !== "HYPHEN") {
-    return input.firstDateSeparator[index + 1] < tokens.length ? invalidDate(index + 1) : null;
-  }
-  const isIso = first.raw.length === 4 && separator.kind === "HYPHEN";
-  const hadWhitespaceBeforeSeparator = separatorIndex !== index + 1;
-  const secondIndex = nextNonWhitespace(tokens, separatorIndex + 1);
-  if (hadWhitespaceBeforeSeparator
-    || secondIndex !== separatorIndex + 1
-    || tokens[secondIndex]?.kind !== "NUMBER") {
-    return invalidDate(separatorIndex + 1);
-  }
-
-  if (isIso) {
-    const secondSeparatorIndex = nextNonWhitespace(tokens, secondIndex + 1);
-    const dayIndex = nextNonWhitespace(tokens, secondSeparatorIndex + 1);
-    if (secondSeparatorIndex !== secondIndex + 1
-      || tokens[secondSeparatorIndex]?.kind !== "HYPHEN"
-      || dayIndex !== secondSeparatorIndex + 1
-      || tokens[dayIndex]?.kind !== "NUMBER") {
-      return invalidDate(secondIndex + 1);
-    }
-    const endIndex = dayIndex + 1;
-    return {
-      candidate: resolveExplicitDate(
-        numberValue(first),
-        numberValue(tokens[secondIndex]),
-        numberValue(tokens[dayIndex]),
-        reference,
-      ),
-      nextIndex: endIndex,
-    };
-  }
-
+  if (input.firstDateSeparator[index + 1] === tokens.length) return null;
+  const isIso = first.raw.length === 4 && tokens[index + 1]?.kind === "HYPHEN";
+  let state: NumericDateState = isIso ? "ISO_YEAR" : "DAY";
+  let cursor = index + 1;
+  let day = numberValue(first);
+  let month = Number.NaN;
   let year: number | undefined;
-  let endIndex = secondIndex + 1;
-  const yearSeparatorIndex = nextNonWhitespace(tokens, endIndex);
-  if (tokens[yearSeparatorIndex]?.kind === "SLASH") {
-    const yearIndex = nextNonWhitespace(tokens, yearSeparatorIndex + 1);
-    if (yearSeparatorIndex !== endIndex
-      || yearIndex !== yearSeparatorIndex + 1
-      || tokens[yearIndex]?.kind !== "NUMBER"
-      || tokens[yearIndex].raw.length !== 4) {
-      return invalidDate(yearSeparatorIndex + 1);
+  if (isIso) year = numberValue(first);
+  // This acyclic grammar takes at most four transitions. Terminal MONTH,
+  // YEAR and ISO_DAY states still require maximal-span validation below.
+  while (cursor < tokens.length) {
+    const next: NumericDateState | undefined = NUMERIC_DATE_TRANSITIONS[state][tokens[cursor].kind];
+    if (next === undefined) break;
+    state = next;
+    if (state === "MONTH" || state === "ISO_MONTH") month = numberValue(tokens[cursor]);
+    if (state === "ISO_DAY") day = numberValue(tokens[cursor]);
+    if (state === "YEAR") {
+      if (tokens[cursor].raw.length !== 4) return invalidDate(cursor + 1);
+      year = numberValue(tokens[cursor]);
     }
-    year = numberValue(tokens[yearIndex]);
-    endIndex = yearIndex + 1;
+    cursor += 1;
   }
+  if (state !== "MONTH" && state !== "YEAR" && state !== "ISO_DAY") return invalidDate(cursor);
   return {
-    candidate: resolveExplicitDate(
-      year,
-      numberValue(tokens[secondIndex]),
-      numberValue(first),
-      reference,
-    ),
-    nextIndex: endIndex,
+    candidate: resolveExplicitDate(year, month, day, reference),
+    nextIndex: cursor,
   };
 }
+
+type ClockState = "HOUR" | "SPACE_AFTER_HOUR" | "TIME_SEPARATOR" | "MINUTE" | "HOUR_MARKER";
+const CLOCK_TRANSITIONS: Record<ClockState, Partial<Record<TokenKind, ClockState>>> = {
+  HOUR: { COLON: "TIME_SEPARATOR", H: "HOUR_MARKER", WHITESPACE: "SPACE_AFTER_HOUR" },
+  SPACE_AFTER_HOUR: { GIO: "HOUR_MARKER" },
+  TIME_SEPARATOR: { NUMBER: "MINUTE" },
+  MINUTE: {},
+  HOUR_MARKER: {},
+};
 
 function parseTimeFromNumberAt(
   input: GrammarInput,
@@ -505,33 +502,28 @@ function parseTimeFromNumberAt(
   if (hourToken?.kind !== "NUMBER") return null;
   const nextIndex = nextNonWhitespace(tokens, index + 1);
   const next = tokens[nextIndex];
-  let minute = 0;
-  let endIndex: number;
+  const unitStarter = next?.kind === "H" || next?.kind === "GIO"
+    || (nextIndex === index + 1 && next?.kind === "UNKNOWN_WORD"
+      && next.raw.toLocaleLowerCase("vi-VN").startsWith("h"));
+  if (!unitStarter && input.firstClockSeparator[index + 1] === tokens.length) return null;
 
-  if (next?.kind === "COLON") {
-    const minuteIndex = nextNonWhitespace(tokens, nextIndex + 1);
-    if (nextIndex !== index + 1
-      || minuteIndex !== nextIndex + 1
-      || tokens[minuteIndex]?.kind !== "NUMBER"
-      || tokens[minuteIndex].raw.length !== 2) {
-      return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
+  let state: ClockState = "HOUR";
+  let endIndex = index + 1;
+  let minute = 0;
+  while (endIndex < tokens.length) {
+    const nextState: ClockState | undefined = CLOCK_TRANSITIONS[state][tokens[endIndex].kind];
+    if (nextState === undefined) break;
+    state = nextState;
+    if (state === "MINUTE") {
+      if (tokens[endIndex].raw.length !== 2) {
+        return { candidate: { kind: "INVALID" }, nextIndex: endIndex + 1 };
+      }
+      minute = numberValue(tokens[endIndex]);
     }
-    minute = numberValue(tokens[minuteIndex]);
-    endIndex = minuteIndex + 1;
-  } else if (next?.kind === "H" && nextIndex === index + 1) {
-    endIndex = nextIndex + 1;
-  } else if (next?.kind === "GIO" && tokens[index + 1]?.kind === "WHITESPACE") {
-    endIndex = nextIndex + 1;
-  } else if (next?.kind === "H" || next?.kind === "GIO") {
-    return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
-  } else if (nextIndex === index + 1
-    && next?.kind === "UNKNOWN_WORD"
-    && next.raw.toLocaleLowerCase("vi-VN").startsWith("h")) {
-    return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
-  } else {
-    return input.firstClockSeparator[index + 1] < tokens.length
-      ? { candidate: { kind: "INVALID" }, nextIndex: index + 1 }
-      : null;
+    endIndex += 1;
+  }
+  if (state !== "MINUTE" && state !== "HOUR_MARKER") {
+    return { candidate: { kind: "INVALID" }, nextIndex: endIndex };
   }
 
   const hour = numberValue(hourToken);
@@ -597,23 +589,31 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
 
 // Core productions own positive AND malformed recognition. No production
 // resolves evidence or decides whether the following expression is separate.
+// These finite starter classes deliberately recognize incomplete productions.
+// A leading separator commits the fragment to its dimension even when the
+// remaining numeric component cannot form a complete date or clock.
+const INCOMPLETE_STARTERS: Partial<Record<TokenKind, "date" | "time">> = {
+  SLASH: "date", HYPHEN: "date", COLON: "time",
+};
+
+function incompleteStarterAt(input: GrammarInput, index: number, reference: ReferenceDate): Expression | null {
+  const dimension = INCOMPLETE_STARTERS[input.tokens[index]?.kind];
+  if (dimension === undefined) return null;
+  const numberIndex = followingAtom(input, index);
+  if (input.tokens[numberIndex]?.kind !== "NUMBER") return null;
+  if (dimension === "date") {
+    const numeric = parseNumericDateAt(input, numberIndex, reference);
+    return { dimension, parsed: invalidDate(numeric?.nextIndex ?? numberIndex + 1) };
+  }
+  return { dimension, parsed: { candidate: { kind: "INVALID" }, nextIndex: numberIndex + 1 } };
+}
+
 function expressionAt(input: GrammarInput, index: number, reference: ReferenceDate): Expression | null {
   const { tokens } = input;
   const token = tokens[index];
   if (token === undefined) return null;
-  if (token.kind === "COLON") {
-    const minuteIndex = nextNonWhitespace(tokens, index + 1);
-    return tokens[minuteIndex]?.kind === "NUMBER" ? {
-      dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex: minuteIndex + 1 },
-    } : null;
-  }
-  if (token.kind === "SLASH" || token.kind === "HYPHEN") {
-    const numberIndex = followingAtom(input, index);
-    const numericDate = parseNumericDateAt(input, numberIndex, reference);
-    return numericDate === null ? null : {
-      dimension: "date", parsed: invalidDate(numericDate.nextIndex),
-    };
-  }
+  const incomplete = incompleteStarterAt(input, index, reference);
+  if (incomplete !== null) return incomplete;
   if (isSeparator(token.kind)) return null;
   const range = parseRangeAt(input, index);
   if (range !== null) return { dimension: "range", parsed: range };
@@ -659,51 +659,118 @@ function invalidExpression(expression: Expression): Expression {
   return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex } };
 }
 
-function completeExpression(input: GrammarInput, expression: Expression, reference: ReferenceDate): Expression {
+type SeparatorState = "EMPTY" | "SPACE" | "COLON" | "SPACED_COLON" | "COLON_BOUNDARY" | "INTERNAL" | "MALFORMED";
+type InternalClass = Exclude<SeparatorClass, "SENTENCE">;
+
+// A repeated/mixed internal run has an absorbing MALFORMED state. The sole
+// colon boundary production is SPACE COLON SPACE between separate starters.
+// This preserves the reviewed punctuation form without accepting attached or
+// repeated colons because a later expression happens to be recognizable.
+const SEPARATOR_TRANSITIONS: Record<SeparatorState, Record<InternalClass, SeparatorState>> = {
+  EMPTY: { SPACE: "SPACE", CLOCK_INTERNAL: "COLON", DATE_INTERNAL: "INTERNAL", DOT_INTERNAL: "INTERNAL" },
+  SPACE: { SPACE: "SPACE", CLOCK_INTERNAL: "SPACED_COLON", DATE_INTERNAL: "INTERNAL", DOT_INTERNAL: "INTERNAL" },
+  COLON: { SPACE: "COLON", CLOCK_INTERNAL: "MALFORMED", DATE_INTERNAL: "MALFORMED", DOT_INTERNAL: "MALFORMED" },
+  SPACED_COLON: { SPACE: "COLON_BOUNDARY", CLOCK_INTERNAL: "MALFORMED", DATE_INTERNAL: "MALFORMED", DOT_INTERNAL: "MALFORMED" },
+  COLON_BOUNDARY: { SPACE: "COLON_BOUNDARY", CLOCK_INTERNAL: "MALFORMED", DATE_INTERNAL: "MALFORMED", DOT_INTERNAL: "MALFORMED" },
+  INTERNAL: { SPACE: "INTERNAL", CLOCK_INTERNAL: "MALFORMED", DATE_INTERNAL: "MALFORMED", DOT_INTERNAL: "MALFORMED" },
+  MALFORMED: { SPACE: "MALFORMED", CLOCK_INTERNAL: "MALFORMED", DATE_INTERNAL: "MALFORMED", DOT_INTERNAL: "MALFORMED" },
+};
+
+function isMalformed(expression: Expression): boolean {
+  if (expression.dimension === "date") return expression.parsed.candidate.localDate === null;
+  if (expression.dimension === "range") return expression.parsed.candidate.state === "AMBIGUOUS";
+  return expression.parsed.candidate.kind !== "VALID";
+}
+
+// Consumes the maximal span, with an irreversible COMPLETE -> MALFORMED
+// transition. Recognition of a later expression is only a recovery boundary;
+// it never changes the classification of the span already consumed.
+function consumeTemporalSpan(
+  input: GrammarInput,
+  initial: Expression,
+  reference: ReferenceDate,
+  counters: ScannerCounters,
+): Expression {
   const { tokens } = input;
-  const end = expression.parsed.nextIndex;
-  const atomIndex = input.nextAtom[end] ?? tokens.length;
-  const atom = tokens[atomIndex];
-  const delimiter = input.firstDelimiter[end] ?? tokens.length;
-  const dateSuffix = input.firstDateSeparator[end] < delimiter;
-  const clockSuffix = input.firstClockSeparator[end] < delimiter;
-  const separated = atomIndex !== end;
+  let expression = initial;
+  let cursor = initial.parsed.nextIndex;
+  let separatorState: SeparatorState = "EMPTY";
+  let leadingDateSeparator: number | null = null;
+  let sentenceBoundary = false;
 
-  // Syntax before a message delimiter belongs to this production. Validate
-  // that suffix before looking at later evidence: a later production cannot
-  // repair an already-dangling clock or date separator.
-  if (dateSuffix || (expression.dimension === "time" && clockSuffix && delimiter < atomIndex)) {
-    return invalidExpression(expression);
-  }
-
-  // Syntax after a delimiter belongs to the following production, including
-  // malformed starters such as /21/09 and :30. Do not skip it in lookahead.
-  const following = delimiter < atomIndex ? Math.min(
-    input.firstDateSeparator[delimiter + 1],
-    input.firstClockSeparator[delimiter + 1],
-    atomIndex,
-  ) : atomIndex;
-  const nextExpression = expressionAt(input, following, reference);
-  if (separated && nextExpression !== null) {
-    if (expression.dimension === "time" && expression.parsed.candidate.kind === "VALID"
-      && (atom?.kind === "DAYPART" || atom?.kind === "MERIDIEM")) {
-      return {
-        dimension: "time",
-        parsed: { candidate: { kind: "MODIFIER" }, nextIndex: nextExpression.parsed.nextIndex },
-      };
-    }
-    // A colon accepted between independent productions is a boundary, not
-    // also a leading malformed-clock candidate on the next scan iteration.
-    if (delimiter === tokens.length) expression.parsed.nextIndex = atomIndex;
+  const finish = (nextIndex: number): Expression => {
+    expression.parsed.nextIndex = nextIndex;
     return expression;
+  };
+  const malformed = () => { expression = invalidExpression(expression); };
+
+  while (cursor < tokens.length) {
+    counters.grammarSteps += 1;
+    const token = tokens[cursor];
+    const separator = SEPARATOR_CLASSES[token.kind];
+    if (separator !== undefined) {
+      // Sentence punctuation can close a complete run only before a new
+      // expression or ordinary text. Numeric tails are classified below.
+      const periodBoundary = separator === "DOT_INTERNAL"
+        && (tokens[cursor + 1]?.kind === "WHITESPACE" || cursor + 1 === tokens.length)
+        && (separatorState === "EMPTY" || separatorState === "SPACE");
+      if (separator === "SENTENCE" || periodBoundary) {
+        if (separatorState !== "EMPTY" && separatorState !== "SPACE") malformed();
+        sentenceBoundary = true;
+        separatorState = "SPACE";
+        cursor += 1;
+        // A separator-led fragment after sentence punctuation belongs to
+        // the next candidate, including incomplete /09 and :.30 forms.
+        const next = nextNonWhitespace(tokens, cursor);
+        if (incompleteStarterAt(input, next, reference) !== null) return finish(next);
+        continue;
+      }
+      if (separator === "DATE_INTERNAL" && leadingDateSeparator === null) leadingDateSeparator = cursor;
+      separatorState = SEPARATOR_TRANSITIONS[separatorState][separator];
+      cursor += 1;
+      continue;
+    }
+
+    const following = expressionAt(input, cursor, reference);
+    const safe = separatorState === "SPACE" || separatorState === "COLON_BOUNDARY";
+    if (following !== null && safe) {
+      if (expression.dimension === "time" && expression.parsed.candidate.kind === "VALID"
+        && (token.kind === "DAYPART" || token.kind === "MERIDIEM")) {
+        expression = { dimension: "time", parsed: {
+          candidate: { kind: "MODIFIER" }, nextIndex: following.parsed.nextIndex,
+        } };
+        cursor = following.parsed.nextIndex;
+        separatorState = "EMPTY";
+        continue;
+      }
+      return finish(cursor);
+    }
+    if (separatorState === "SPACE" && token.kind !== "NUMBER") return finish(cursor);
+
+    // An attached word, bare number, or internal separator continuation is
+    // part of this span. Once invalid, later text cannot authorize its prefix.
+    malformed();
+    if (leadingDateSeparator !== null && expression.dimension !== "date") {
+      // Overlapping date syntax invalidates this span, and is also retained
+      // as a malformed DATE starter instead of silently dropping a dimension.
+      return finish(leadingDateSeparator);
+    }
+    if (following !== null && separatorState !== "EMPTY") {
+      // Internal colons belong to the current span; an independent date or
+      // range beginning at the next atom remains available after recovery.
+      if (following.dimension !== expression.dimension || sentenceBoundary) return finish(cursor);
+      cursor = following.parsed.nextIndex;
+    } else {
+      cursor += 1;
+    }
+    separatorState = "EMPTY";
+    sentenceBoundary = false;
   }
-  if (expression.dimension === "time" && clockSuffix) return invalidExpression(expression);
-  if (atom === undefined) return expression;
-  // An attached atom or a bare numeric component cannot terminate a complete
-  // production. Keep its candidate invalid; the outer scan still visits the
-  // remainder, so unrelated subsequent expressions cannot be swallowed.
-  if (!separated || atom.kind === "NUMBER") return invalidExpression(expression);
-  return expression;
+  if (separatorState !== "EMPTY" && separatorState !== "SPACE") malformed();
+  // isMalformed documents the absorbing span classification, including
+  // malformed core productions that never reached COMPLETE.
+  if (isMalformed(initial) && !isMalformed(expression)) expression = invalidExpression(expression);
+  return finish(cursor);
 }
 
 function rangeFromDate(candidate: DateCandidate): RangeCandidate {
@@ -729,7 +796,7 @@ function scanTemporalGrammar(
       index += 1;
       continue;
     }
-    const expression = completeExpression(input, core, reference);
+    const expression = consumeTemporalSpan(input, core, reference, counters);
     if (expression.dimension === "date") {
       candidates.dates.push(expression.parsed.candidate);
       candidates.ranges.push(rangeFromDate(expression.parsed.candidate));

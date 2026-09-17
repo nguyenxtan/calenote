@@ -205,6 +205,98 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["8:00::20/09", "8:00:::20/09", "8:00:: 20/09", "8:00 : : 20/09"])(
+    "never repairs a malformed separator run with a later date: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+        date: { state: "RESOLVED", localDate: "2026-09-20" },
+        range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+      });
+    },
+  );
+
+  it.each([
+    ["/09", "date"], ["/ 09", "date"], ["20/", "date"], ["20//", "date"],
+    ["20/09/", "date"], ["20/09 /2027", "date"],
+    [":30", "time"], [":.30", "time"], [":,30", "time"], [":;30", "time"],
+    ["8:", "time"], ["8::", "time"], ["8:00:", "time"], ["8:00::30", "time"],
+  ] as const)("retains incomplete starter %s alone and with same-dimension evidence", (fragment, dimension) => {
+    const valid = dimension === "date" ? "20/09" : "8h";
+    for (const text of [fragment, `${valid} ${fragment}`, `${valid} rồi ${fragment}`, `${fragment} rồi ${valid}`]) {
+      const { evidence, diagnostics } = temporalEvidenceModule.inspectTemporalScanner({ text, referenceNow });
+      expect(evidence[dimension], text).toMatchObject({ state: "AMBIGUOUS" });
+      expect(diagnostics.candidateCount, text).toBeGreaterThan(0);
+      if (dimension === "date") expect(evidence.range, text).toEqual({ state: "AMBIGUOUS" });
+    }
+  });
+
+  it.each(["; ", ", ", ". "])("keeps separator-led fragments on their side of %j", (boundary) => {
+    for (const fragment of ["/09", "/ 09", "//09", "/.09"]) {
+      for (const text of [`8h${boundary}${fragment}`, `${fragment}${boundary}8h`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          time: { state: "RESOLVED", localTime: "08:00" },
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          range: { state: "AMBIGUOUS" },
+        });
+      }
+    }
+    for (const fragment of [":30", ":.30", ":,30", ":;30"]) {
+      for (const text of [`20/09${boundary}${fragment}`, `${fragment}${boundary}20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+          date: { state: "RESOLVED", localDate: "2026-09-20" },
+          range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+        });
+      }
+    }
+  });
+
+  it("rejects finite generated internal-separator continuations without accepting a prefix", () => {
+    const expressions = [
+      ["8h", "time"], ["8:00", "time"], ["8 giờ", "time"],
+      ["20/09", "date"], ["2026-09-20", "date"], ["mai", "date"],
+      ["tuần này", "range"], ["7 ngày tới", "range"],
+    ] as const;
+    const internalSeparators = [":", "/", ".", "-"];
+    for (const [expression, dimension] of expressions) {
+      expect(extractTemporalEvidence({ text: expression, referenceNow })[dimension].state).toBe("RESOLVED");
+      for (const first of internalSeparators) {
+        for (const second of internalSeparators) {
+          for (const spacing of ["", " ", "\u00a0"]) {
+            // No safe sentence boundary inside the continuation: a period
+            // followed by whitespace would start a separate fragment.
+            const text = `${expression}${spacing}${first}${second}30`;
+            expect(extractTemporalEvidence({ text, referenceNow })[dimension].state, text).toBe("AMBIGUOUS");
+          }
+        }
+      }
+    }
+  });
+
+  it("composes a finite matrix of safe boundaries and valid different dimensions", () => {
+    for (const [date, localDate] of [["20/09", "2026-09-20"], ["mai", "2026-09-17"], ["2026-09-20", "2026-09-20"]]) {
+      for (const time of ["8h", "8:00", "8 giờ"]) {
+        for (const boundary of [" ", "\u00a0", ",", ", ", "; ", ". ", " : "]) {
+          for (const text of [`${date}${boundary}${time}`, `${time}${boundary}${date}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "RESOLVED", localDate },
+              time: { state: "RESOLVED", localTime: "08:00" },
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it.each([["8h", "time"], ["20/09", "date"], ["tuần này", "range"]] as const)(
+    "does not treat an internal colon after %s as a boundary before ordinary text", (expression, dimension) => {
+      for (const spacing of [" ", "\u00a0", "\n"]) {
+        const text = `${expression}${spacing}:${spacing}gọi khách`;
+        expect(extractTemporalEvidence({ text, referenceNow })[dimension].state, text).toBe("AMBIGUOUS");
+      }
+    },
+  );
+
   it.each(["8:00:", "8:00 :", "8h:", "8 giờ :"])(
     "retains the local malformed clock %s before independent date or range evidence", (clock) => {
       for (const separator of ["; ", ", ", ". ", ";\u00a0"]) {
