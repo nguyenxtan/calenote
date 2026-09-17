@@ -137,6 +137,42 @@ evidence. New evidence may fill only missing slots. A conflict must clarify or
 reject according to an explicit backend policy; it must never silently replace
 a previously resolved date, time, title, or range. No transcript is stored.
 
+## Task 1 scanner grammar supplement
+
+Task 1 does not use prefix matching plus suffix guards, per-example punctuation
+exceptions, or accumulating regex continuation patches. Its canonical internal
+engine is:
+
+```text
+raw input -> lexical tokens -> temporal starter detection
+  -> maximal temporal-span consumption -> finite-state grammar classification
+  -> VALID | MALFORMED candidate emission -> per-dimension reconciliation
+  -> TemporalEvidence
+```
+
+The tokenizer is a single linear pass. A finite, central grammar classifies
+`TEMPORAL_INTERNAL_SEPARATOR` (`:`, `/`, `.`, `-`), safe expression boundaries,
+and malformed separator runs by token/state transition rather than raw-string
+exceptions. A candidate consumes its maximal temporal-looking span; a complete
+prefix cannot be accepted while an internal continuation makes that span
+malformed. A later, safely separable different-dimension expression may still
+be emitted independently.
+
+A finite incomplete-starter registry ensures token-pattern fragments such as a
+leading date separator plus number, number plus an incomplete date separator,
+leading time separator plus temporal-looking continuation, or number plus an
+incomplete time separator emit a malformed candidate rather than ordinary text.
+This registry is limited to V1 temporal grammar and adds no natural-language
+semantics.
+
+Full-message scanning emits every temporal-looking occurrence as either a
+valid or malformed candidate before resolving a dimension. For each dimension,
+any malformed candidate together with a valid candidate fails closed; valid
+candidates in different dimensions compose when separated by a safe boundary.
+The scanner stays provider/DB/network/LLM-free and O(n): one lexical pass plus
+bounded finite-state grammar processing. Local latency evidence is
+observational, not a CI gate; product targets are P95 <= 5 ms and P99 <= 10 ms.
+
 ## Privacy, routing, budgets, and benchmark
 
 Production enablement remains `AI_MODE=privacy`; `off` disables semantic calls

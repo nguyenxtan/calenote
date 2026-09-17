@@ -23,6 +23,10 @@ test("hybrid temporal authority documents keep application safety and production
   assert.match(spec, /sole path from a draft to one reminder mutation/u);
   assert.match(spec, /New evidence may fill only missing slots/u);
   assert.match(spec, /must never silently replace/u);
+  assert.match(spec, /Task 1 scanner grammar supplement/u);
+  assert.match(spec, /maximal temporal-span consumption/u);
+  assert.match(spec, /finite incomplete-starter registry/u);
+  assert.match(spec, /one lexical pass plus bounded finite-state grammar processing/u);
   assert.match(spec, /`AI_MODE=privacy`/u);
   assert.match(spec, /`free` is unavailable\/reserved/u);
   assert.match(spec, /50/u);
@@ -43,4 +47,5 @@ test("hybrid temporal authority documents keep application safety and production
   assert.match(plan, /exactly-one confirmation mutation/u);
   assert.match(plan, /pilot\/full cross-resume/u);
   assert.match(plan, /No live inference until focused tests, `pnpm check`, diff validation, and review pass/u);
+  assert.match(plan, /Implement a finite-state scanner, not prefix guards/u);
 });

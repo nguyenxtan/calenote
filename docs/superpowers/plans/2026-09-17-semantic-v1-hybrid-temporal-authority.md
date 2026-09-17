@@ -65,14 +65,24 @@ returns a safe merge or explicit conflict.
 - [ ] **Step 2: Run** `pnpm exec vitest run
   src/modules/semantic/temporal-evidence.test.ts`; expect the module import to
   fail before implementation.
-- [ ] **Step 3: Implement only reviewed deterministic forms.** Normalize exact
-  times to `HH:mm`, validate calendar/time, and return `MISSING` or
-  `AMBIGUOUS` rather than guessing. Do not import a DB or provider module.
+- [ ] **Step 3: Implement a finite-state scanner, not prefix guards.** Make one
+  lexical pass, detect temporal starters, consume maximal temporal-looking
+  spans, classify central separator ownership, and emit valid or malformed
+  candidates before resolution. Normalize exact times to `HH:mm`, validate
+  calendar/time, and return `MISSING` or `AMBIGUOUS` rather than guessing. Do
+  not import a DB or provider module.
 - [ ] **Step 4: Add continuation tests.** Missing time may be filled while a
   resolved tomorrow date remains; conflicting follow-up evidence yields a
   conflict/clarification signal and never overwrites a resolved slot.
 - [ ] **Step 5: Run the focused suite and commit**
   `feat(semantic): add deterministic temporal evidence`.
+
+- [ ] **Step 6: Add deterministic adversarial and performance evidence.** Prove
+  repeated/internal separators and incomplete starter token patterns cannot
+  authorize a valid prefix; prove safe-boundary date/time composition. Keep a
+  finite incomplete-starter registry, scanner diagnostics, and non-flaky local
+  P50/P95/P99 benchmark outside CI timing gates. Require P95 <= 5 ms and
+  P99 <= 10 ms as product budgets, with no network/DB/LLM call.
 
 ### Task 2: Remove temporal authority from the provider contract
 
