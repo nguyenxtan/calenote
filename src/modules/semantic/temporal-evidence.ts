@@ -60,6 +60,9 @@ type DateCandidate = {
 
 type RangeCandidate = Extract<TemporalRangeEvidence, { state: "RESOLVED" }>;
 
+type TemporalTokenClass = "DATE" | "RELATIVE_DATE" | "TIME" | "RANGE";
+type TemporalContinuation = "NONE" | "INVALID" | "MODIFIER";
+
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1_000;
 
 function padTwo(value: number): string {
@@ -123,22 +126,53 @@ function resolveExplicitDate(
   };
 }
 
+function classifyTemporalContinuation(
+  text: string,
+  tokenEnd: number,
+  tokenClass: TemporalTokenClass,
+): TemporalContinuation {
+  const suffix = text.slice(tokenEnd);
+
+  if (tokenClass === "TIME") {
+    if (/^:\s*\d/u.test(suffix) || /^\s+\d{1,2}(?=$|[^\p{L}\p{N}])/u.test(suffix)) {
+      return "INVALID";
+    }
+    if (/^\s+(?:sáng|chiều|tối|am|pm)(?=$|[^\p{L}\p{N}])/iu.test(suffix)) {
+      return "MODIFIER";
+    }
+    return "NONE";
+  }
+
+  if (tokenClass === "DATE") {
+    if (/^[\/-]\s*[\p{L}\p{N}]/u.test(suffix) || /^\s+năm(?=$|[^\p{L}\p{N}])/iu.test(suffix)) {
+      return "INVALID";
+    }
+    return "NONE";
+  }
+
+  if (tokenClass === "RELATIVE_DATE") {
+    return /^\s+mốt(?=$|[^\p{L}\p{N}])/iu.test(suffix) ? "INVALID" : "NONE";
+  }
+
+  return /^[\/:\-]\s*[\p{L}\p{N}]/u.test(suffix) ? "INVALID" : "NONE";
+}
+
 function findDateCandidates(text: string, reference: ReferenceDate): DateCandidate[] {
   const candidates: DateCandidate[] = [];
-  const malformedYearPatterns = [
-    /(^|[^\p{L}\p{N}])(?:ngày\s+)?\d{1,2}\/\d{1,2}\/(\d+)(?=$|[^\p{L}\p{N}])/giu,
-    /(^|[^\p{L}\p{N}])(?:ngày\s+)?\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+(\d+)(?=$|[^\p{L}\p{N}])/giu,
-  ];
-  for (const malformedYearPattern of malformedYearPatterns) {
-    for (const match of text.matchAll(malformedYearPattern)) {
-      if (match[2].length !== 4) {
-        candidates.push({ source: "EXPLICIT_DATE", localDate: null });
-      }
-    }
-  }
   const pattern = /(^|[^\p{L}\p{N}])((hôm nay|ngày mai|mai)|(\d{4})-(\d{1,2})-(\d{1,2})|(?:ngày\s+)?(\d{1,2})\s+tháng\s+(\d{1,2})(?:\s+năm\s+(\d{4}))?|(?:ngày\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)(?=$|[^\p{L}\p{N}])/giu;
 
   for (const match of text.matchAll(pattern)) {
+    const tokenClass = match[3] === undefined ? "DATE" : "RELATIVE_DATE";
+    const continuation = classifyTemporalContinuation(
+      text,
+      (match.index ?? 0) + match[0].length,
+      tokenClass,
+    );
+    if (continuation !== "NONE") {
+      candidates.push({ source: "EXPLICIT_DATE", localDate: null });
+      continue;
+    }
+
     if (match[3] !== undefined) {
       const relative = match[3].toLocaleLowerCase("vi-VN");
       const tomorrow = relative === "mai" || relative === "ngày mai";
@@ -196,12 +230,21 @@ function resolveDateEvidence(candidates: DateCandidate[]): TemporalDateEvidence 
 }
 
 function resolveTimeEvidence(text: string): TemporalTimeEvidence {
-  const candidates: Array<{ hour: number; minute: number }> = [];
+  const candidates: Array<{
+    hour: number;
+    minute: number;
+    continuation: TemporalContinuation;
+  }> = [];
   const pattern = /(^|[^\p{L}\p{N}])(?:(?:lúc\s+)?(\d{1,2}):(\d{2})|(?:lúc\s+)?(\d{1,2})h|(?:lúc\s+)?(\d{1,2})\s+giờ)(?=$|[^\p{L}\p{N}])/giu;
   for (const match of text.matchAll(pattern)) {
     candidates.push({
       hour: Number(match[2] ?? match[4] ?? match[5]),
       minute: match[3] === undefined ? 0 : Number(match[3]),
+      continuation: classifyTemporalContinuation(
+        text,
+        (match.index ?? 0) + match[0].length,
+        "TIME",
+      ),
     });
   }
 
@@ -211,12 +254,10 @@ function resolveTimeEvidence(text: string): TemporalTimeEvidence {
   if (candidates.length > 1) {
     return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
   }
-  const unsupportedNumericContinuation = /(^|[^\p{L}\p{N}])(?:lúc\s+)?\d{1,2}(?:h|\s+giờ)\s+\d{1,2}(?=$|[^\p{L}\p{N}])/iu;
-  if (unsupportedNumericContinuation.test(text)) {
+  if (candidates[0]?.continuation === "INVALID") {
     return { state: "AMBIGUOUS", reason: "INVALID_TIME" };
   }
-  const unsupportedDaypartContinuation = /(^|[^\p{L}\p{N}])(?:lúc\s+)?\d{1,2}(?:h|\s+giờ)\s+(?:sáng|chiều|tối)(?=$|[^\p{L}\p{N}])/iu;
-  if (unsupportedDaypartContinuation.test(text)) {
+  if (candidates[0]?.continuation === "MODIFIER") {
     return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
   }
   if (candidates.length === 1) {
@@ -253,7 +294,15 @@ function resolveRangeEvidence(text: string, dates: DateCandidate[]): TemporalRan
     { pattern: /(^|[^\p{L}\p{N}])sắp\s+tới(?=$|[^\p{L}\p{N}])/iu, kind: "UPCOMING" },
   ] as const;
   for (const reviewed of reviewedRanges) {
-    if (reviewed.pattern.test(text)) {
+    const match = reviewed.pattern.exec(text);
+    if (match !== null && classifyTemporalContinuation(
+      text,
+      (match.index ?? 0) + match[0].length,
+      "RANGE",
+    ) !== "NONE") {
+      return { state: "AMBIGUOUS" };
+    }
+    if (match !== null) {
       candidates.push({ state: "RESOLVED", kind: reviewed.kind, localDate: null });
     }
   }

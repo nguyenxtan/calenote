@@ -118,9 +118,42 @@ describe("extractTemporalEvidence", () => {
   });
 
   it.each([
+    ["8:00 tối", "MULTIPLE_TIME_EXPRESSIONS"],
+    ["lúc 8:00 tối", "MULTIPLE_TIME_EXPRESSIONS"],
+    ["8:00 pm", "MULTIPLE_TIME_EXPRESSIONS"],
+    ["8:00:30", "INVALID_TIME"],
+  ] as const)("fails closed for the unsupported colon-time continuation %s", (text, reason) => {
+    expect(extractTemporalEvidence({ text, referenceNow }).time).toEqual({
+      state: "AMBIGUOUS",
+      reason,
+    });
+  });
+
+  it.each([
     "20/09/26",
     "ngày 20 tháng 9 năm 20",
   ])("fails closed for the incomplete explicit year %s", (text) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it.each([
+    "2026-09-20/7",
+    "20/09/2026/7",
+    "ngày 20 tháng 9 năm 2026/7",
+    "20/09/abcd",
+    "ngày 20 tháng 9 năm abc",
+  ])("does not resolve a date or range from the malformed continuation %s", (text) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it.each([
+    "mai mốt",
+    "ngày mai mốt",
+  ])("does not resolve tomorrow from the unsupported relative continuation %s", (text) => {
     const evidence = extractTemporalEvidence({ text, referenceNow });
     expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
     expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
