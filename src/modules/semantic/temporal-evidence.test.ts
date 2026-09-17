@@ -205,6 +205,101 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["8:00:", "8:00 :", "8h:", "8 giờ :"])(
+    "retains the local malformed clock %s before independent date or range evidence", (clock) => {
+      for (const separator of ["; ", ", ", ". ", ";\u00a0"]) {
+        for (const [following, expected] of [
+          ["20/09", { date: { state: "RESOLVED", localDate: "2026-09-20" },
+            range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" } }],
+          ["mai", { date: { state: "RESOLVED", localDate: "2026-09-17" },
+            range: { state: "RESOLVED", kind: "TOMORROW", localDate: null } }],
+          ["tuần này", { date: { state: "MISSING" },
+            range: { state: "RESOLVED", kind: "THIS_WEEK", localDate: null } }],
+        ] as const) {
+          for (const text of [`${clock}${separator}${following}`, `${following}${separator}${clock}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              ...expected, time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+            });
+          }
+        }
+      }
+    },
+  );
+
+  it.each([
+    ["20/09", "ngày 21", "date"],
+    ["tuần này", "8 ngày tới", "range"],
+    ["tuần này", "07 ngày tới", "range"],
+    ["8h", ":30", "time"],
+  ] as const)("collects incomplete or unsupported starters %s / %s in both orders", (
+    valid, malformed, dimension,
+  ) => {
+    for (const text of [malformed, `${valid} rồi ${malformed}`, `${malformed} rồi ${valid}`]) {
+      const { evidence, diagnostics } = temporalEvidenceModule.inspectTemporalScanner({ text, referenceNow });
+      expect(evidence[dimension].state, text).toBe("AMBIGUOUS");
+      expect(diagnostics.candidateCount, text).toBeGreaterThan(0);
+      if (dimension === "date") expect(evidence.range, text).toEqual({ state: "AMBIGUOUS" });
+    }
+  });
+
+  it.each(["ngày 20/09", "ngày 2026-09-20"])(
+    "recognizes the complete numeric date after its day introducer: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({
+        date: { state: "RESOLVED", localDate: "2026-09-20" },
+        range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+        time: { state: "MISSING" },
+      });
+    },
+  );
+
+  it("keeps ordinary numbers without temporal productions absent", () => {
+    expect(extractTemporalEvidence({ text: "nhắc gọi 21 khách", referenceNow })).toMatchObject({
+      date: { state: "MISSING" }, time: { state: "MISSING" }, range: { state: "MISSING" },
+    });
+  });
+
+  it.each([
+    ["8h", "ngày 21", { time: { state: "RESOLVED", localTime: "08:00" },
+      date: { state: "AMBIGUOUS" }, range: { state: "AMBIGUOUS" } }],
+    ["8h", "8 ngày tới", { time: { state: "RESOLVED", localTime: "08:00" },
+      date: { state: "MISSING" }, range: { state: "AMBIGUOUS" } }],
+    ["8h", "07 ngày tới", { time: { state: "RESOLVED", localTime: "08:00" },
+      date: { state: "MISSING" }, range: { state: "AMBIGUOUS" } }],
+    ["20/09", ":30", { date: { state: "RESOLVED", localDate: "2026-09-20" },
+      range: { state: "RESOLVED", kind: "DATE" }, time: { state: "AMBIGUOUS" } }],
+  ] as const)("keeps %s independent of the malformed starter %s", (valid, malformed, expected) => {
+    for (const separator of [" rồi ", "; ", ", ", ". "]) {
+      for (const text of [`${valid}${separator}${malformed}`, `${malformed}${separator}${valid}`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject(expected);
+      }
+    }
+  });
+
+  it.each(["; ", ", ", ". ", ";\u00a0"])(
+    "assigns leading date syntax after %j to the following date in either order", (separator) => {
+      for (const clock of ["8h", "8:00", "8 giờ"]) {
+        for (const malformed of ["/21/09", "-21/09", "/ 21/09", "--21/09"]) {
+          for (const text of [`${clock}${separator}${malformed}`, `${malformed}${separator}${clock}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              time: { state: "RESOLVED", localTime: "08:00" },
+              date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+              range: { state: "AMBIGUOUS" },
+            });
+          }
+        }
+      }
+    },
+  );
+
+  it.each(["8h /21/09", "8h -21/09", "8h/21/09"])(
+    "keeps overlapping date syntax without a message delimiter conservative: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+        date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+      });
+    },
+  );
+
   it.each([
     "\u0009", "\u000a", "\u000b", "\u000c", "\u000d", "\u0020", "\u0085",
     "\u00a0", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004",

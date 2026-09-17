@@ -290,8 +290,9 @@ function invalidDate(nextIndex: number): Parsed<DateCandidate> {
 type GrammarInput = {
   tokens: TemporalToken[];
   nextAtom: number[];
-  structuralGap: boolean[];
-  clockGap: boolean[];
+  firstDateSeparator: number[];
+  firstClockSeparator: number[];
+  firstDelimiter: number[];
 };
 
 type Expression =
@@ -306,22 +307,29 @@ function isSeparator(kind: TokenKind): boolean {
 
 function grammarInput(tokens: TemporalToken[], counters: ScannerCounters): GrammarInput {
   const nextAtom = new Array<number>(tokens.length + 1);
-  const structuralGap = new Array<boolean>(tokens.length + 1);
-  const clockGap = new Array<boolean>(tokens.length + 1);
+  const firstDateSeparator = new Array<number>(tokens.length + 1);
+  const firstClockSeparator = new Array<number>(tokens.length + 1);
+  const firstDelimiter = new Array<number>(tokens.length + 1);
   nextAtom[tokens.length] = tokens.length;
-  structuralGap[tokens.length] = false;
-  clockGap[tokens.length] = false;
+  firstDateSeparator[tokens.length] = tokens.length;
+  firstClockSeparator[tokens.length] = tokens.length;
+  firstDelimiter[tokens.length] = tokens.length;
   // Index separator runs once. Every subsequent grammar probe is O(1), even
-  // for arbitrarily long punctuation runs between malformed components.
+  // for arbitrarily long punctuation runs. Positions preserve which side of
+  // a message delimiter owns structural date/clock syntax.
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     counters.grammarSteps += 1;
     const kind = tokens[index].kind;
-    nextAtom[index] = isSeparator(kind) ? nextAtom[index + 1] : index;
-    structuralGap[index] = isSeparator(kind)
-      && (kind === "SLASH" || kind === "HYPHEN" || structuralGap[index + 1]);
-    clockGap[index] = isSeparator(kind) && (kind === "COLON" || clockGap[index + 1]);
+    const separator = isSeparator(kind);
+    nextAtom[index] = separator ? nextAtom[index + 1] : index;
+    firstDateSeparator[index] = kind === "SLASH" || kind === "HYPHEN"
+      ? index : separator ? firstDateSeparator[index + 1] : tokens.length;
+    firstClockSeparator[index] = kind === "COLON"
+      ? index : separator ? firstClockSeparator[index + 1] : tokens.length;
+    firstDelimiter[index] = kind === "COMMA" || kind === "DOT" || kind === "PUNCTUATION"
+      ? index : separator ? firstDelimiter[index + 1] : tokens.length;
   }
-  return { tokens, nextAtom, structuralGap, clockGap };
+  return { tokens, nextAtom, firstDateSeparator, firstClockSeparator, firstDelimiter };
 }
 
 function followingAtom(input: GrammarInput, index: number): number {
@@ -383,7 +391,11 @@ function parseVietnameseDateAt(
   if (tokens[dayIndex]?.kind !== "NUMBER") return null;
   const monthWordIndex = followingAtom(input, dayIndex);
   if (tokens[monthWordIndex]?.kind !== "THANG") {
-    return valid ? null : invalidDate(index + 1);
+    if (tokens[index]?.kind !== "NGAY") return null;
+    // A day introducer commits to a date production. A complete numeric date
+    // is still supported; an unfinished day alone is malformed, not absent.
+    const numeric = parseNumericDateAt(input, dayIndex, reference);
+    return valid && numeric !== null ? numeric : invalidDate(numeric?.nextIndex ?? dayIndex + 1);
   }
   const monthIndex = followingAtom(input, monthWordIndex);
   if (tokens[monthIndex]?.kind !== "NUMBER") return invalidDate(monthWordIndex + 1);
@@ -427,7 +439,7 @@ function parseNumericDateAt(
   const separatorIndex = nextNonWhitespace(tokens, index + 1);
   const separator = tokens[separatorIndex];
   if (separator?.kind !== "SLASH" && separator?.kind !== "HYPHEN") {
-    return input.structuralGap[index + 1] ? invalidDate(index + 1) : null;
+    return input.firstDateSeparator[index + 1] < tokens.length ? invalidDate(index + 1) : null;
   }
   const isIso = first.raw.length === 4 && separator.kind === "HYPHEN";
   const hadWhitespaceBeforeSeparator = separatorIndex !== index + 1;
@@ -517,7 +529,7 @@ function parseTimeFromNumberAt(
     && next.raw.toLocaleLowerCase("vi-VN").startsWith("h")) {
     return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
   } else {
-    return input.clockGap[index + 1]
+    return input.firstClockSeparator[index + 1] < tokens.length
       ? { candidate: { kind: "INVALID" }, nextIndex: index + 1 }
       : null;
   }
@@ -562,14 +574,15 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
     valid = hasRequiredSpace(tokens, index, secondIndex);
     kind = expected === "NAY" ? "THIS_WEEK" : "UPCOMING";
     endIndex = secondIndex + 1;
-  } else if (tokens[index]?.kind === "NUMBER" && tokens[index].raw === "7") {
+  } else if (tokens[index]?.kind === "NUMBER") {
     const ngayIndex = followingAtom(input, index);
     if (tokens[ngayIndex]?.kind !== "NGAY") return null;
     const toiIndex = followingAtom(input, ngayIndex);
     if (tokens[toiIndex]?.kind !== "TOI") {
       return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1 };
     }
-    valid = hasRequiredSpace(tokens, index, ngayIndex) && hasRequiredSpace(tokens, ngayIndex, toiIndex);
+    valid = tokens[index].raw === "7"
+      && hasRequiredSpace(tokens, index, ngayIndex) && hasRequiredSpace(tokens, ngayIndex, toiIndex);
     kind = "NEXT_7_DAYS";
     endIndex = toiIndex + 1;
   } else {
@@ -588,6 +601,12 @@ function expressionAt(input: GrammarInput, index: number, reference: ReferenceDa
   const { tokens } = input;
   const token = tokens[index];
   if (token === undefined) return null;
+  if (token.kind === "COLON") {
+    const minuteIndex = nextNonWhitespace(tokens, index + 1);
+    return tokens[minuteIndex]?.kind === "NUMBER" ? {
+      dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex: minuteIndex + 1 },
+    } : null;
+  }
   if (token.kind === "SLASH" || token.kind === "HYPHEN") {
     const numberIndex = followingAtom(input, index);
     const numericDate = parseNumericDateAt(input, numberIndex, reference);
@@ -645,12 +664,26 @@ function completeExpression(input: GrammarInput, expression: Expression, referen
   const end = expression.parsed.nextIndex;
   const atomIndex = input.nextAtom[end] ?? tokens.length;
   const atom = tokens[atomIndex];
-  const nextExpression = expressionAt(input, atomIndex, reference);
+  const delimiter = input.firstDelimiter[end] ?? tokens.length;
+  const dateSuffix = input.firstDateSeparator[end] < delimiter;
+  const clockSuffix = input.firstClockSeparator[end] < delimiter;
   const separated = atomIndex !== end;
 
-  // Whitespace/message punctuation can separate independent productions,
-  // including malformed ones. Slash/hyphen instead structurally extend them.
-  if (input.structuralGap[end]) return invalidExpression(expression);
+  // Syntax before a message delimiter belongs to this production. Validate
+  // that suffix before looking at later evidence: a later production cannot
+  // repair an already-dangling clock or date separator.
+  if (dateSuffix || (expression.dimension === "time" && clockSuffix && delimiter < atomIndex)) {
+    return invalidExpression(expression);
+  }
+
+  // Syntax after a delimiter belongs to the following production, including
+  // malformed starters such as /21/09 and :30. Do not skip it in lookahead.
+  const following = delimiter < atomIndex ? Math.min(
+    input.firstDateSeparator[delimiter + 1],
+    input.firstClockSeparator[delimiter + 1],
+    atomIndex,
+  ) : atomIndex;
+  const nextExpression = expressionAt(input, following, reference);
   if (separated && nextExpression !== null) {
     if (expression.dimension === "time" && expression.parsed.candidate.kind === "VALID"
       && (atom?.kind === "DAYPART" || atom?.kind === "MERIDIEM")) {
@@ -659,9 +692,12 @@ function completeExpression(input: GrammarInput, expression: Expression, referen
         parsed: { candidate: { kind: "MODIFIER" }, nextIndex: nextExpression.parsed.nextIndex },
       };
     }
+    // A colon accepted between independent productions is a boundary, not
+    // also a leading malformed-clock candidate on the next scan iteration.
+    if (delimiter === tokens.length) expression.parsed.nextIndex = atomIndex;
     return expression;
   }
-  if (expression.dimension === "time" && input.clockGap[end]) return invalidExpression(expression);
+  if (expression.dimension === "time" && clockSuffix) return invalidExpression(expression);
   if (atom === undefined) return expression;
   // An attached atom or a bare numeric component cannot terminate a complete
   // production. Keep its candidate invalid; the outer scan still visits the
