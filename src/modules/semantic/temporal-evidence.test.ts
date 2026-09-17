@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as temporalEvidenceModule from "./temporal-evidence";
 import { extractTemporalEvidence, mergeTemporalEvidence } from "./temporal-evidence";
 
 const referenceNow = Date.UTC(2026, 8, 16, 2);
@@ -200,5 +201,175 @@ describe("mergeTemporalEvidence", () => {
       conflicts: ["date", "time", "range"],
       evidence: previous,
     });
+  });
+});
+
+describe("bounded temporal grammar scanner", () => {
+  it.each([
+    ["20/09 /2027", "date"],
+    ["8:00 :30", "time"],
+    ["8 giờ rưỡi", "time"],
+    ["8:00 p.m.", "time"],
+    ["mai-mốt", "date"],
+    ["ngày mai-mốt", "date"],
+  ] as const)("rejects the complete unsupported expression %s", (text, dimension) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    if (dimension === "date") {
+      expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+      expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+    } else {
+      expect(evidence.time).toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+    }
+  });
+
+  it.each([
+    "8 :00",
+    "8::00",
+    "8h30",
+    "8h-30",
+    "8h,30",
+    "8:00::30",
+    "8 h",
+    "8giờ",
+    "8:00abc",
+    "8:00 p. m.",
+  ])("rejects adversarial time separators and suffixes in %s", (text) => {
+    expect(extractTemporalEvidence({ text, referenceNow }).time).toEqual({
+      state: "AMBIGUOUS",
+      reason: "INVALID_TIME",
+    });
+  });
+
+  it.each([
+    "20 /09",
+    "20//09",
+    "20/09//2027",
+    "20/09,2027",
+    "20/09, 2027",
+    "20/09.2027",
+    "20/09abc",
+    "2026-09-20:7",
+    "ngày 20 tháng 9 năm",
+  ])("rejects adversarial date separators and suffixes in %s", (text) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it("scans the complete message before resolving a range", () => {
+    expect(extractTemporalEvidence({
+      text: "tuần này và tuần này/7",
+      referenceNow,
+    }).range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it("rejects punctuation-separated relative-date extensions", () => {
+    const evidence = extractTemporalEvidence({ text: "mai / mốt", referenceNow });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it.each([
+    ["8h 20/09", "DAY_MONTH", "2026-09-20", "08:00"],
+    ["20/09 8h", "DAY_MONTH", "2026-09-20", "08:00"],
+    ["mai 8h", "TOMORROW", "2026-09-17", "08:00"],
+  ] as const)("resolves independent valid date and time expressions in %s", (
+    text,
+    source,
+    localDate,
+    localTime,
+  ) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence.date).toEqual({ state: "RESOLVED", source, localDate });
+    expect(evidence.time).toEqual({ state: "RESOLVED", source: "EXACT_TIME", localTime });
+  });
+
+  it("does not cross-poison unrelated dimensions", () => {
+    const malformedTime = extractTemporalEvidence({ text: "20/09 8:00 :30", referenceNow });
+    expect(malformedTime.date).toEqual({
+      state: "RESOLVED",
+      source: "DAY_MONTH",
+      localDate: "2026-09-20",
+    });
+    expect(malformedTime.time).toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+
+    const malformedDate = extractTemporalEvidence({ text: "8h 20/09 /2027", referenceNow });
+    expect(malformedDate.time).toEqual({
+      state: "RESOLVED",
+      source: "EXACT_TIME",
+      localTime: "08:00",
+    });
+    expect(malformedDate.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+  });
+
+  it("fails closed when a valid time is followed by a malformed time", () => {
+    expect(extractTemporalEvidence({
+      text: "8h rồi 8:00 :30",
+      referenceNow,
+    }).time).toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+  });
+
+  it("fails closed when a valid date is followed by a malformed date", () => {
+    const evidence = extractTemporalEvidence({
+      text: "20/09 rồi 21/09 /2027",
+      referenceNow,
+    });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it("exposes deterministic bounded-work diagnostics with zero external calls", () => {
+    const inspectTemporalScanner = Reflect.get(
+      temporalEvidenceModule,
+      "inspectTemporalScanner",
+    ) as undefined | ((input: { text: string; referenceNow: number }) => {
+      evidence: ReturnType<typeof extractTemporalEvidence>;
+      diagnostics: {
+        strategy: string;
+        inputCodeUnits: number;
+        lexicalSteps: number;
+        tokenCount: number;
+        grammarSteps: number;
+        candidateCount: number;
+        llmCalls: number;
+        networkCalls: number;
+        dbCalls: number;
+      };
+    });
+    expect(inspectTemporalScanner).toBeTypeOf("function");
+    if (inspectTemporalScanner === undefined) return;
+
+    const inputs = [
+      "mai 8h nhắc tui gọi khách",
+      "8h 20/09 rồi xem tuần này",
+      "20//09 8:00 :30 mai-mốt ".repeat(40).slice(0, 1_024),
+    ];
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      for (const text of inputs) {
+        const first = inspectTemporalScanner({ text, referenceNow });
+        const second = inspectTemporalScanner({ text, referenceNow });
+        expect(second).toEqual(first);
+        expect(first.evidence).toEqual(extractTemporalEvidence({ text, referenceNow }));
+        expect(first.diagnostics).toMatchObject({
+          strategy: "SINGLE_LINEAR_LEXICAL_SCAN_BOUNDED_GRAMMAR",
+          inputCodeUnits: text.length,
+          llmCalls: 0,
+          networkCalls: 0,
+          dbCalls: 0,
+        });
+        expect(first.diagnostics.lexicalSteps).toBeLessThanOrEqual(text.length + 1);
+        expect(first.diagnostics.grammarSteps).toBeLessThanOrEqual(
+          first.diagnostics.tokenCount * 4 + 4,
+        );
+        expect(first.diagnostics.candidateCount).toBeLessThanOrEqual(
+          first.diagnostics.tokenCount + 1,
+        );
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

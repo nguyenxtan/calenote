@@ -58,10 +58,74 @@ type DateCandidate = {
   localDate: LocalDate | null;
 };
 
-type RangeCandidate = Extract<TemporalRangeEvidence, { state: "RESOLVED" }>;
+type TimeCandidate =
+  | { kind: "VALID"; localTime: LocalTime }
+  | { kind: "INVALID" }
+  | { kind: "MODIFIER" }
+  | { kind: "DAYPART" };
 
-type TemporalTokenClass = "DATE" | "RELATIVE_DATE" | "TIME" | "RANGE";
-type TemporalContinuation = "NONE" | "INVALID" | "MODIFIER";
+type ResolvedRangeCandidate = Extract<TemporalRangeEvidence, { state: "RESOLVED" }>;
+type RangeCandidate = ResolvedRangeCandidate | { state: "AMBIGUOUS" };
+
+type TokenKind =
+  | "NUMBER"
+  | "WHITESPACE"
+  | "SLASH"
+  | "COLON"
+  | "HYPHEN"
+  | "COMMA"
+  | "DOT"
+  | "H"
+  | "HOM"
+  | "NAY"
+  | "MAI"
+  | "MOT"
+  | "NGAY"
+  | "THANG"
+  | "NAM"
+  | "LUC"
+  | "GIO"
+  | "TUAN"
+  | "TOI"
+  | "SAP"
+  | "DAYPART"
+  | "RUOI"
+  | "MERIDIEM"
+  | "UNKNOWN_WORD"
+  | "PUNCTUATION";
+
+type TemporalToken = {
+  kind: TokenKind;
+  start: number;
+  end: number;
+  raw: string;
+};
+
+type ScannerCounters = {
+  lexicalSteps: number;
+  grammarSteps: number;
+  candidateCount: number;
+};
+
+export type TemporalScannerDiagnostics = {
+  strategy: "SINGLE_LINEAR_LEXICAL_SCAN_BOUNDED_GRAMMAR";
+  inputCodeUnits: number;
+  lexicalSteps: number;
+  tokenCount: number;
+  grammarSteps: number;
+  candidateCount: number;
+  llmCalls: 0;
+  networkCalls: 0;
+  dbCalls: 0;
+};
+
+type ScanCandidates = {
+  dates: DateCandidate[];
+  times: TimeCandidate[];
+  ranges: RangeCandidate[];
+};
+
+type Parsed<T> = { candidate: T; nextIndex: number };
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1_000;
 
@@ -88,6 +152,9 @@ function localReferenceParts(referenceNow: number): ReferenceDate & { hour: numb
     throw new RangeError("referenceNow must be a finite epoch millisecond value");
   }
   const local = new Date(referenceNow + VIETNAM_OFFSET_MS);
+  if (Number.isNaN(local.getTime())) {
+    throw new RangeError("referenceNow must be a valid epoch millisecond value");
+  }
   return {
     year: local.getUTCFullYear(),
     month: local.getUTCMonth() + 1,
@@ -111,7 +178,7 @@ function resolveExplicitDate(
   month: number,
   day: number,
   reference: ReferenceDate,
-): { source: "EXPLICIT_DATE" | "DAY_MONTH"; localDate: LocalDate | null } {
+): DateCandidate {
   const source = year === undefined ? "DAY_MONTH" : "EXPLICIT_DATE";
   let resolvedYear = year ?? reference.year;
   if (year === undefined) {
@@ -126,85 +193,537 @@ function resolveExplicitDate(
   };
 }
 
-function classifyTemporalContinuation(
-  text: string,
-  tokenEnd: number,
-  tokenClass: TemporalTokenClass,
-): TemporalContinuation {
-  const suffix = text.slice(tokenEnd);
-
-  if (tokenClass === "TIME") {
-    if (/^:\s*\d/u.test(suffix) || /^\s+\d{1,2}(?=$|[^\p{L}\p{N}])/u.test(suffix)) {
-      return "INVALID";
-    }
-    if (/^\s+(?:sáng|chiều|tối|am|pm)(?=$|[^\p{L}\p{N}])/iu.test(suffix)) {
-      return "MODIFIER";
-    }
-    return "NONE";
-  }
-
-  if (tokenClass === "DATE") {
-    if (/^[\/-]\s*[\p{L}\p{N}]/u.test(suffix) || /^\s+năm(?=$|[^\p{L}\p{N}])/iu.test(suffix)) {
-      return "INVALID";
-    }
-    return "NONE";
-  }
-
-  if (tokenClass === "RELATIVE_DATE") {
-    return /^\s+mốt(?=$|[^\p{L}\p{N}])/iu.test(suffix) ? "INVALID" : "NONE";
-  }
-
-  return /^[\/:\-]\s*[\p{L}\p{N}]/u.test(suffix) ? "INVALID" : "NONE";
+function isDigit(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return code >= 48 && code <= 57;
 }
 
-function findDateCandidates(text: string, reference: ReferenceDate): DateCandidate[] {
-  const candidates: DateCandidate[] = [];
-  const pattern = /(^|[^\p{L}\p{N}])((hôm nay|ngày mai|mai)|(\d{4})-(\d{1,2})-(\d{1,2})|(?:ngày\s+)?(\d{1,2})\s+tháng\s+(\d{1,2})(?:\s+năm\s+(\d{4}))?|(?:ngày\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)(?=$|[^\p{L}\p{N}])/giu;
+function isWhitespace(character: string): boolean {
+  return character === " " || character === "\t" || character === "\n" || character === "\r";
+}
 
-  for (const match of text.matchAll(pattern)) {
-    const tokenClass = match[3] === undefined ? "DATE" : "RELATIVE_DATE";
-    const continuation = classifyTemporalContinuation(
-      text,
-      (match.index ?? 0) + match[0].length,
-      tokenClass,
-    );
-    if (continuation !== "NONE") {
-      candidates.push({ source: "EXPLICIT_DATE", localDate: null });
-      continue;
+function isWordCharacter(character: string): boolean {
+  return /[\p{L}\p{M}]/u.test(character);
+}
+
+function wordKind(raw: string): TokenKind {
+  switch (raw.normalize("NFC").toLocaleLowerCase("vi-VN")) {
+    case "h": return "H";
+    case "hôm": return "HOM";
+    case "nay":
+    case "này": return "NAY";
+    case "mai": return "MAI";
+    case "mốt": return "MOT";
+    case "ngày": return "NGAY";
+    case "tháng": return "THANG";
+    case "năm": return "NAM";
+    case "lúc": return "LUC";
+    case "giờ": return "GIO";
+    case "tuần": return "TUAN";
+    case "tới": return "TOI";
+    case "sắp": return "SAP";
+    case "sáng":
+    case "chiều":
+    case "tối": return "DAYPART";
+    case "rưỡi": return "RUOI";
+    case "am":
+    case "pm": return "MERIDIEM";
+    default: return "UNKNOWN_WORD";
+  }
+}
+
+function tokenizeTemporalText(text: string, counters: ScannerCounters): TemporalToken[] {
+  const tokens: TemporalToken[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const start = index;
+    const character = text[index];
+    let kind: TokenKind;
+
+    if (isWhitespace(character)) {
+      index += 1;
+      while (index < text.length && isWhitespace(text[index])) index += 1;
+      kind = "WHITESPACE";
+    } else if (isDigit(character)) {
+      index += 1;
+      while (index < text.length && isDigit(text[index])) index += 1;
+      kind = "NUMBER";
+    } else if (isWordCharacter(character)) {
+      index += 1;
+      while (index < text.length && isWordCharacter(text[index])) index += 1;
+      kind = wordKind(text.slice(start, index));
+    } else {
+      index += 1;
+      switch (character) {
+        case "/": kind = "SLASH"; break;
+        case ":": kind = "COLON"; break;
+        case "-": kind = "HYPHEN"; break;
+        case ",": kind = "COMMA"; break;
+        case ".": kind = "DOT"; break;
+        default: kind = "PUNCTUATION";
+      }
     }
 
-    if (match[3] !== undefined) {
-      const relative = match[3].toLocaleLowerCase("vi-VN");
-      const tomorrow = relative === "mai" || relative === "ngày mai";
-      candidates.push({
-        source: tomorrow ? "TOMORROW" : "TODAY",
-        localDate: formatDate(addLocalDays(reference, tomorrow ? 1 : 0)),
-      });
-      continue;
-    }
+    counters.lexicalSteps += index - start;
+    tokens.push({ kind, start, end: index, raw: text.slice(start, index) });
+  }
+  return tokens;
+}
 
-    if (match[4] !== undefined) {
-      candidates.push({
-        source: "EXPLICIT_DATE",
-        localDate: resolveExplicitDate(
-          Number(match[4]),
-          Number(match[5]),
-          Number(match[6]),
-          reference,
-        ).localDate,
-      });
-      continue;
-    }
+function nextNonWhitespace(tokens: TemporalToken[], index: number): number {
+  return tokens[index]?.kind === "WHITESPACE" ? index + 1 : index;
+}
 
-    const day = Number(match[7] ?? match[10]);
-    const month = Number(match[8] ?? match[11]);
-    const yearText = match[9] ?? match[12];
-    candidates.push(resolveExplicitDate(
-      yearText === undefined ? undefined : Number(yearText),
-      month,
-      day,
+function afterRequiredWhitespace(
+  tokens: TemporalToken[],
+  index: number,
+  kind: TokenKind,
+): number | null {
+  if (tokens[index]?.kind !== "WHITESPACE" || tokens[index + 1]?.kind !== kind) return null;
+  return index + 1;
+}
+
+function adjacent(tokens: TemporalToken[], leftIndex: number, rightIndex: number): boolean {
+  return tokens[leftIndex] !== undefined
+    && tokens[rightIndex] !== undefined
+    && tokens[leftIndex].end === tokens[rightIndex].start;
+}
+
+function numberValue(token: TemporalToken | undefined): number {
+  return token?.kind === "NUMBER" ? Number(token.raw) : Number.NaN;
+}
+
+function invalidDate(nextIndex: number): Parsed<DateCandidate> {
+  return {
+    candidate: { source: "EXPLICIT_DATE", localDate: null },
+    nextIndex,
+  };
+}
+
+function temporalTailEnd(tokens: TemporalToken[], index: number): number {
+  let cursor = index;
+  let remaining = 4;
+  while (cursor < tokens.length && remaining > 0) {
+    if (tokens[cursor].kind === "WHITESPACE" && remaining < 4) break;
+    cursor += 1;
+    remaining -= 1;
+  }
+  return Math.max(index + 1, cursor);
+}
+
+function dateHasUnsupportedTail(tokens: TemporalToken[], endIndex: number): boolean {
+  const nextIndex = nextNonWhitespace(tokens, endIndex);
+  const next = tokens[nextIndex];
+  if (next === undefined) return false;
+  if (next.kind === "SLASH" || next.kind === "HYPHEN") return true;
+  if (next.kind === "COMMA" || next.kind === "DOT" || next.kind === "COLON") {
+    return tokens[nextNonWhitespace(tokens, nextIndex + 1)]?.kind === "NUMBER";
+  }
+  return nextIndex === endIndex
+    && (next.kind === "NUMBER" || next.kind === "UNKNOWN_WORD")
+    && adjacent(tokens, endIndex - 1, nextIndex);
+}
+
+function parseRelativeDateAt(
+  tokens: TemporalToken[],
+  index: number,
+  reference: ReferenceDate,
+): Parsed<DateCandidate> | null {
+  let source: "TODAY" | "TOMORROW";
+  let endIndex: number;
+  if (tokens[index]?.kind === "HOM") {
+    const nayIndex = afterRequiredWhitespace(tokens, index + 1, "NAY");
+    if (nayIndex === null) return null;
+    source = "TODAY";
+    endIndex = nayIndex + 1;
+  } else if (tokens[index]?.kind === "NGAY") {
+    const maiIndex = afterRequiredWhitespace(tokens, index + 1, "MAI");
+    if (maiIndex === null) return null;
+    source = "TOMORROW";
+    endIndex = maiIndex + 1;
+  } else if (tokens[index]?.kind === "MAI") {
+    source = "TOMORROW";
+    endIndex = index + 1;
+  } else {
+    return null;
+  }
+
+  const continuationIndex = nextNonWhitespace(tokens, endIndex);
+  const continuationKind = tokens[continuationIndex]?.kind;
+  if (continuationKind === "MOT"
+    || ((continuationKind === "HYPHEN"
+      || continuationKind === "SLASH"
+      || continuationKind === "DOT"
+      || continuationKind === "COMMA")
+      && tokens[nextNonWhitespace(tokens, continuationIndex + 1)]?.kind === "MOT")) {
+    return invalidDate(temporalTailEnd(tokens, continuationIndex));
+  }
+  const days = source === "TOMORROW" ? 1 : 0;
+  return {
+    candidate: { source, localDate: formatDate(addLocalDays(reference, days)) },
+    nextIndex: endIndex,
+  };
+}
+
+function parseVietnameseDateAt(
+  tokens: TemporalToken[],
+  index: number,
+  reference: ReferenceDate,
+): Parsed<DateCandidate> | null {
+  let dayIndex = index;
+  if (tokens[index]?.kind === "NGAY") {
+    const following = afterRequiredWhitespace(tokens, index + 1, "NUMBER");
+    if (following === null) return null;
+    dayIndex = following;
+  }
+  if (tokens[dayIndex]?.kind !== "NUMBER") return null;
+  const monthWordIndex = afterRequiredWhitespace(tokens, dayIndex + 1, "THANG");
+  if (monthWordIndex === null) return null;
+  const monthIndex = afterRequiredWhitespace(tokens, monthWordIndex + 1, "NUMBER");
+  if (monthIndex === null) return invalidDate(temporalTailEnd(tokens, monthWordIndex + 1));
+
+  let year: number | undefined;
+  let endIndex = monthIndex + 1;
+  const maybeYearWord = afterRequiredWhitespace(tokens, endIndex, "NAM");
+  if (maybeYearWord !== null) {
+    const yearIndex = afterRequiredWhitespace(tokens, maybeYearWord + 1, "NUMBER");
+    if (yearIndex === null || tokens[yearIndex].raw.length !== 4) {
+      return invalidDate(temporalTailEnd(tokens, maybeYearWord));
+    }
+    year = numberValue(tokens[yearIndex]);
+    endIndex = yearIndex + 1;
+  }
+  if (dateHasUnsupportedTail(tokens, endIndex)) {
+    return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
+  }
+  return {
+    candidate: resolveExplicitDate(
+      year,
+      numberValue(tokens[monthIndex]),
+      numberValue(tokens[dayIndex]),
       reference,
-    ));
+    ),
+    nextIndex: endIndex,
+  };
+}
+
+function parseNumericDateAt(
+  tokens: TemporalToken[],
+  index: number,
+  reference: ReferenceDate,
+): Parsed<DateCandidate> | null {
+  const first = tokens[index];
+  if (first?.kind !== "NUMBER") return null;
+  const separatorIndex = nextNonWhitespace(tokens, index + 1);
+  const separator = tokens[separatorIndex];
+  if (separator?.kind !== "SLASH" && separator?.kind !== "HYPHEN") return null;
+  const isIso = first.raw.length === 4 && separator.kind === "HYPHEN";
+  const hadWhitespaceBeforeSeparator = separatorIndex !== index + 1;
+  const secondIndex = nextNonWhitespace(tokens, separatorIndex + 1);
+  if (hadWhitespaceBeforeSeparator
+    || secondIndex !== separatorIndex + 1
+    || tokens[secondIndex]?.kind !== "NUMBER") {
+    return invalidDate(temporalTailEnd(tokens, separatorIndex));
+  }
+
+  if (isIso) {
+    const secondSeparatorIndex = nextNonWhitespace(tokens, secondIndex + 1);
+    const dayIndex = nextNonWhitespace(tokens, secondSeparatorIndex + 1);
+    if (secondSeparatorIndex !== secondIndex + 1
+      || tokens[secondSeparatorIndex]?.kind !== "HYPHEN"
+      || dayIndex !== secondSeparatorIndex + 1
+      || tokens[dayIndex]?.kind !== "NUMBER") {
+      return invalidDate(temporalTailEnd(tokens, secondSeparatorIndex));
+    }
+    const endIndex = dayIndex + 1;
+    if (dateHasUnsupportedTail(tokens, endIndex)) {
+      return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
+    }
+    return {
+      candidate: resolveExplicitDate(
+        numberValue(first),
+        numberValue(tokens[secondIndex]),
+        numberValue(tokens[dayIndex]),
+        reference,
+      ),
+      nextIndex: endIndex,
+    };
+  }
+
+  let year: number | undefined;
+  let endIndex = secondIndex + 1;
+  const yearSeparatorIndex = nextNonWhitespace(tokens, endIndex);
+  if (tokens[yearSeparatorIndex]?.kind === "SLASH") {
+    const yearIndex = nextNonWhitespace(tokens, yearSeparatorIndex + 1);
+    if (yearSeparatorIndex !== endIndex
+      || yearIndex !== yearSeparatorIndex + 1
+      || tokens[yearIndex]?.kind !== "NUMBER"
+      || tokens[yearIndex].raw.length !== 4) {
+      return invalidDate(temporalTailEnd(tokens, yearSeparatorIndex));
+    }
+    year = numberValue(tokens[yearIndex]);
+    endIndex = yearIndex + 1;
+  }
+  if (dateHasUnsupportedTail(tokens, endIndex)) {
+    return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
+  }
+  return {
+    candidate: resolveExplicitDate(
+      year,
+      numberValue(tokens[secondIndex]),
+      numberValue(first),
+      reference,
+    ),
+    nextIndex: endIndex,
+  };
+}
+
+function looksLikeDateStart(tokens: TemporalToken[], index: number): boolean {
+  if (tokens[index]?.kind !== "NUMBER") return false;
+  const nextIndex = nextNonWhitespace(tokens, index + 1);
+  return tokens[nextIndex]?.kind === "SLASH"
+    || tokens[nextIndex]?.kind === "HYPHEN"
+    || tokens[nextIndex]?.kind === "THANG";
+}
+
+function looksLikeTimeStart(tokens: TemporalToken[], index: number): boolean {
+  if (tokens[index]?.kind === "LUC") return true;
+  if (tokens[index]?.kind !== "NUMBER") return false;
+  const nextIndex = nextNonWhitespace(tokens, index + 1);
+  return tokens[nextIndex]?.kind === "COLON"
+    || tokens[nextIndex]?.kind === "H"
+    || tokens[nextIndex]?.kind === "GIO";
+}
+
+function isDottedMeridiem(tokens: TemporalToken[], index: number): boolean {
+  if (tokens[index]?.kind !== "UNKNOWN_WORD"
+    || tokens[index].raw.toLocaleLowerCase("vi-VN") !== "p") return false;
+  const firstDot = nextNonWhitespace(tokens, index + 1);
+  const mIndex = nextNonWhitespace(tokens, firstDot + 1);
+  const secondDot = nextNonWhitespace(tokens, mIndex + 1);
+  return tokens[firstDot]?.kind === "DOT"
+    && tokens[mIndex]?.kind === "UNKNOWN_WORD"
+    && tokens[mIndex].raw.toLocaleLowerCase("vi-VN") === "m"
+    && tokens[secondDot]?.kind === "DOT";
+}
+
+function timeContinuation(
+  tokens: TemporalToken[],
+  endIndex: number,
+): { kind: "NONE" | "INVALID" | "MODIFIER"; nextIndex: number } {
+  const continuationIndex = nextNonWhitespace(tokens, endIndex);
+  const continuation = tokens[continuationIndex];
+  if (continuation === undefined) return { kind: "NONE", nextIndex: endIndex };
+  const separated = continuationIndex !== endIndex;
+
+  if (separated && (
+    looksLikeDateStart(tokens, continuationIndex)
+    || looksLikeTimeStart(tokens, continuationIndex)
+  )) {
+    return { kind: "NONE", nextIndex: endIndex };
+  }
+  if (continuation.kind === "DAYPART" || continuation.kind === "MERIDIEM") {
+    return { kind: "MODIFIER", nextIndex: temporalTailEnd(tokens, continuationIndex) };
+  }
+  if (continuation.kind === "RUOI" || isDottedMeridiem(tokens, continuationIndex)) {
+    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
+  }
+  if (continuation.kind === "COLON"
+    || continuation.kind === "HYPHEN"
+    || continuation.kind === "COMMA"
+    || continuation.kind === "SLASH"
+    || continuation.kind === "NUMBER") {
+    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
+  }
+  if (!separated && continuation.kind === "UNKNOWN_WORD") {
+    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
+  }
+  return { kind: "NONE", nextIndex: endIndex };
+}
+
+function parseTimeFromNumberAt(
+  tokens: TemporalToken[],
+  index: number,
+): Parsed<TimeCandidate> | null {
+  const hourToken = tokens[index];
+  if (hourToken?.kind !== "NUMBER") return null;
+  const nextIndex = nextNonWhitespace(tokens, index + 1);
+  const next = tokens[nextIndex];
+  let minute = 0;
+  let endIndex: number;
+
+  if (next?.kind === "COLON") {
+    const minuteIndex = nextNonWhitespace(tokens, nextIndex + 1);
+    if (nextIndex !== index + 1
+      || minuteIndex !== nextIndex + 1
+      || tokens[minuteIndex]?.kind !== "NUMBER"
+      || tokens[minuteIndex].raw.length !== 2) {
+      return { candidate: { kind: "INVALID" }, nextIndex: temporalTailEnd(tokens, nextIndex) };
+    }
+    minute = numberValue(tokens[minuteIndex]);
+    endIndex = minuteIndex + 1;
+  } else if (next?.kind === "H" && nextIndex === index + 1) {
+    endIndex = nextIndex + 1;
+  } else if (next?.kind === "GIO" && tokens[index + 1]?.kind === "WHITESPACE") {
+    endIndex = nextIndex + 1;
+  } else if (next?.kind === "H" || next?.kind === "GIO") {
+    return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
+  } else if (nextIndex === index + 1
+    && next?.kind === "UNKNOWN_WORD"
+    && next.raw.toLocaleLowerCase("vi-VN").startsWith("h")) {
+    return { candidate: { kind: "INVALID" }, nextIndex: temporalTailEnd(tokens, nextIndex) };
+  } else {
+    return null;
+  }
+
+  const continuation = timeContinuation(tokens, endIndex);
+  if (continuation.kind === "INVALID") {
+    return { candidate: { kind: "INVALID" }, nextIndex: continuation.nextIndex };
+  }
+  if (continuation.kind === "MODIFIER") {
+    return { candidate: { kind: "MODIFIER" }, nextIndex: continuation.nextIndex };
+  }
+  const hour = numberValue(hourToken);
+  if (hour > 23 || minute > 59) {
+    return { candidate: { kind: "INVALID" }, nextIndex: endIndex };
+  }
+  return {
+    candidate: {
+      kind: "VALID",
+      localTime: `${padTwo(hour)}:${padTwo(minute)}` as LocalTime,
+    },
+    nextIndex: endIndex,
+  };
+}
+
+function parseTimeAt(tokens: TemporalToken[], index: number): Parsed<TimeCandidate> | null {
+  if (tokens[index]?.kind === "LUC") {
+    const hourIndex = afterRequiredWhitespace(tokens, index + 1, "NUMBER");
+    if (hourIndex === null) {
+      return { candidate: { kind: "INVALID" }, nextIndex: index + 1 };
+    }
+    return parseTimeFromNumberAt(tokens, hourIndex)
+      ?? { candidate: { kind: "INVALID" }, nextIndex: hourIndex + 1 };
+  }
+  return parseTimeFromNumberAt(tokens, index);
+}
+
+function rangeHasUnsupportedTail(tokens: TemporalToken[], endIndex: number): boolean {
+  const nextIndex = nextNonWhitespace(tokens, endIndex);
+  const kind = tokens[nextIndex]?.kind;
+  return kind === "SLASH" || kind === "COLON" || kind === "HYPHEN";
+}
+
+function parseRangeAt(tokens: TemporalToken[], index: number): Parsed<RangeCandidate> | null {
+  let kind: ResolvedRangeCandidate["kind"] | null = null;
+  let endIndex = index;
+  if (tokens[index]?.kind === "TUAN") {
+    const nayIndex = afterRequiredWhitespace(tokens, index + 1, "NAY");
+    if (nayIndex === null) return null;
+    kind = "THIS_WEEK";
+    endIndex = nayIndex + 1;
+  } else if (tokens[index]?.kind === "SAP") {
+    const toiIndex = afterRequiredWhitespace(tokens, index + 1, "TOI");
+    if (toiIndex === null) return null;
+    kind = "UPCOMING";
+    endIndex = toiIndex + 1;
+  } else if (tokens[index]?.kind === "NUMBER" && tokens[index].raw === "7") {
+    const ngayIndex = afterRequiredWhitespace(tokens, index + 1, "NGAY");
+    if (ngayIndex === null) return null;
+    const toiIndex = afterRequiredWhitespace(tokens, ngayIndex + 1, "TOI");
+    if (toiIndex === null) return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1 };
+    kind = "NEXT_7_DAYS";
+    endIndex = toiIndex + 1;
+  } else {
+    return null;
+  }
+
+  if (rangeHasUnsupportedTail(tokens, endIndex)) {
+    return {
+      candidate: { state: "AMBIGUOUS" },
+      nextIndex: temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)),
+    };
+  }
+  return {
+    candidate: { state: "RESOLVED", kind, localDate: null },
+    nextIndex: endIndex,
+  };
+}
+
+function rangeFromDate(candidate: DateCandidate): RangeCandidate {
+  if (candidate.localDate === null) return { state: "AMBIGUOUS" };
+  if (candidate.source === "TODAY" || candidate.source === "TOMORROW") {
+    return { state: "RESOLVED", kind: candidate.source, localDate: null };
+  }
+  return { state: "RESOLVED", kind: "DATE", localDate: candidate.localDate };
+}
+
+function scanTemporalGrammar(
+  tokens: TemporalToken[],
+  reference: ReferenceDate,
+  counters: ScannerCounters,
+): ScanCandidates {
+  const candidates: ScanCandidates = { dates: [], times: [], ranges: [] };
+  let index = 0;
+  while (index < tokens.length) {
+    counters.grammarSteps += 1;
+    const token = tokens[index];
+    if (token.kind === "WHITESPACE" || token.kind === "UNKNOWN_WORD" || token.kind === "PUNCTUATION") {
+      index += 1;
+      continue;
+    }
+
+    const range = parseRangeAt(tokens, index);
+    if (range !== null) {
+      candidates.ranges.push(range.candidate);
+      counters.candidateCount += 1;
+      index = Math.max(index + 1, range.nextIndex);
+      continue;
+    }
+
+    const relativeDate = parseRelativeDateAt(tokens, index, reference);
+    if (relativeDate !== null) {
+      candidates.dates.push(relativeDate.candidate);
+      candidates.ranges.push(rangeFromDate(relativeDate.candidate));
+      counters.candidateCount += 2;
+      index = Math.max(index + 1, relativeDate.nextIndex);
+      continue;
+    }
+
+    const vietnameseDate = parseVietnameseDateAt(tokens, index, reference);
+    if (vietnameseDate !== null) {
+      candidates.dates.push(vietnameseDate.candidate);
+      candidates.ranges.push(rangeFromDate(vietnameseDate.candidate));
+      counters.candidateCount += 2;
+      index = Math.max(index + 1, vietnameseDate.nextIndex);
+      continue;
+    }
+
+    const numericDate = parseNumericDateAt(tokens, index, reference);
+    if (numericDate !== null) {
+      candidates.dates.push(numericDate.candidate);
+      candidates.ranges.push(rangeFromDate(numericDate.candidate));
+      counters.candidateCount += 2;
+      index = Math.max(index + 1, numericDate.nextIndex);
+      continue;
+    }
+
+    const time = parseTimeAt(tokens, index);
+    if (time !== null) {
+      candidates.times.push(time.candidate);
+      counters.candidateCount += 1;
+      index = Math.max(index + 1, time.nextIndex);
+      continue;
+    }
+
+    if (token.kind === "DAYPART") {
+      candidates.times.push({ kind: "DAYPART" });
+      counters.candidateCount += 1;
+    } else if (token.kind === "MERIDIEM" || token.kind === "RUOI") {
+      candidates.times.push({ kind: "INVALID" });
+      counters.candidateCount += 1;
+    }
+    index += 1;
   }
   return candidates;
 }
@@ -229,108 +748,80 @@ function resolveDateEvidence(candidates: DateCandidate[]): TemporalDateEvidence 
   };
 }
 
-function resolveTimeEvidence(text: string): TemporalTimeEvidence {
-  const candidates: Array<{
-    hour: number;
-    minute: number;
-    continuation: TemporalContinuation;
-  }> = [];
-  const pattern = /(^|[^\p{L}\p{N}])(?:(?:lúc\s+)?(\d{1,2}):(\d{2})|(?:lúc\s+)?(\d{1,2})h|(?:lúc\s+)?(\d{1,2})\s+giờ)(?=$|[^\p{L}\p{N}])/giu;
-  for (const match of text.matchAll(pattern)) {
-    candidates.push({
-      hour: Number(match[2] ?? match[4] ?? match[5]),
-      minute: match[3] === undefined ? 0 : Number(match[3]),
-      continuation: classifyTemporalContinuation(
-        text,
-        (match.index ?? 0) + match[0].length,
-        "TIME",
-      ),
-    });
-  }
-
-  if (candidates.some(({ hour, minute }) => hour > 23 || minute > 59)) {
+function resolveTimeEvidence(candidates: TimeCandidate[]): TemporalTimeEvidence {
+  if (candidates.some((candidate) => candidate.kind === "INVALID")) {
     return { state: "AMBIGUOUS", reason: "INVALID_TIME" };
   }
-  if (candidates.length > 1) {
+  if (candidates.some((candidate) => candidate.kind === "MODIFIER")) {
     return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
   }
-  if (candidates[0]?.continuation === "INVALID") {
-    return { state: "AMBIGUOUS", reason: "INVALID_TIME" };
-  }
-  if (candidates[0]?.continuation === "MODIFIER") {
+  const valid = candidates.filter((candidate): candidate is Extract<TimeCandidate, { kind: "VALID" }> => (
+    candidate.kind === "VALID"
+  ));
+  if (valid.length > 1) {
     return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
   }
-  if (candidates.length === 1) {
-    return {
-      state: "RESOLVED",
-      source: "EXACT_TIME",
-      localTime: `${padTwo(candidates[0].hour)}:${padTwo(candidates[0].minute)}` as LocalTime,
-    };
+  if (valid.length === 1 && candidates.length === 1) {
+    return { state: "RESOLVED", source: "EXACT_TIME", localTime: valid[0].localTime };
   }
-  if (/(^|[^\p{L}\p{N}])(sáng|chiều|tối)(?=$|[^\p{L}\p{N}])/iu.test(text)) {
+  if (candidates.some((candidate) => candidate.kind === "DAYPART")) {
     return { state: "AMBIGUOUS", reason: "DAYPART_WITHOUT_EXACT_TIME" };
   }
   return { state: "MISSING" };
 }
 
-function rangeFromDate(candidate: DateCandidate): RangeCandidate | null {
-  if (candidate.localDate === null) return null;
-  if (candidate.source === "TODAY" || candidate.source === "TOMORROW") {
-    return { state: "RESOLVED", kind: candidate.source, localDate: null };
-  }
-  return { state: "RESOLVED", kind: "DATE", localDate: candidate.localDate };
-}
-
-function resolveRangeEvidence(text: string, dates: DateCandidate[]): TemporalRangeEvidence {
-  const candidates: RangeCandidate[] = [];
-  for (const date of dates) {
-    const range = rangeFromDate(date);
-    if (range !== null) candidates.push(range);
-  }
-
-  const reviewedRanges = [
-    { pattern: /(^|[^\p{L}\p{N}])tuần\s+này(?=$|[^\p{L}\p{N}])/iu, kind: "THIS_WEEK" },
-    { pattern: /(^|[^\p{L}\p{N}])7\s+ngày\s+tới(?=$|[^\p{L}\p{N}])/iu, kind: "NEXT_7_DAYS" },
-    { pattern: /(^|[^\p{L}\p{N}])sắp\s+tới(?=$|[^\p{L}\p{N}])/iu, kind: "UPCOMING" },
-  ] as const;
-  for (const reviewed of reviewedRanges) {
-    const match = reviewed.pattern.exec(text);
-    if (match !== null && classifyTemporalContinuation(
-      text,
-      (match.index ?? 0) + match[0].length,
-      "RANGE",
-    ) !== "NONE") {
-      return { state: "AMBIGUOUS" };
-    }
-    if (match !== null) {
-      candidates.push({ state: "RESOLVED", kind: reviewed.kind, localDate: null });
-    }
-  }
-
-  if (dates.some((date) => date.localDate === null) || candidates.length > 1) {
+function resolveRangeEvidence(candidates: RangeCandidate[]): TemporalRangeEvidence {
+  if (candidates.length === 0) return { state: "MISSING" };
+  if (candidates.some((candidate) => candidate.state === "AMBIGUOUS") || candidates.length > 1) {
     return { state: "AMBIGUOUS" };
   }
-  return candidates[0] ?? { state: "MISSING" };
+  return candidates[0];
+}
+
+function runTemporalScanner(input: {
+  text: string;
+  referenceNow: number;
+}): { evidence: TemporalEvidence; diagnostics: TemporalScannerDiagnostics } {
+  const reference = localReferenceParts(input.referenceNow);
+  const counters: ScannerCounters = { lexicalSteps: 0, grammarSteps: 0, candidateCount: 0 };
+  const tokens = tokenizeTemporalText(input.text, counters);
+  const candidates = scanTemporalGrammar(tokens, reference, counters);
+  const evidence: TemporalEvidence = {
+    timezone: TEMPORAL_EVIDENCE_TIMEZONE,
+    referenceLocalDate: formatDate(reference),
+    referenceLocalTime: `${padTwo(reference.hour)}:${padTwo(reference.minute)}` as LocalTime,
+    date: resolveDateEvidence(candidates.dates),
+    time: resolveTimeEvidence(candidates.times),
+    range: resolveRangeEvidence(candidates.ranges),
+  };
+  return {
+    evidence,
+    diagnostics: {
+      strategy: "SINGLE_LINEAR_LEXICAL_SCAN_BOUNDED_GRAMMAR",
+      inputCodeUnits: input.text.length,
+      lexicalSteps: counters.lexicalSteps,
+      tokenCount: tokens.length,
+      grammarSteps: counters.grammarSteps,
+      candidateCount: counters.candidateCount,
+      llmCalls: 0,
+      networkCalls: 0,
+      dbCalls: 0,
+    },
+  };
 }
 
 export function extractTemporalEvidence(input: {
   text: string;
   referenceNow: number;
 }): TemporalEvidence {
-  const normalized = input.text.normalize("NFC").replace(/\s+/gu, " ").trim();
-  const reference = localReferenceParts(input.referenceNow);
-  const referenceLocalDate = formatDate(reference);
-  const referenceLocalTime = `${padTwo(reference.hour)}:${padTwo(reference.minute)}` as LocalTime;
-  const dates = findDateCandidates(normalized, reference);
+  return runTemporalScanner(input).evidence;
+}
 
-  return {
-    timezone: TEMPORAL_EVIDENCE_TIMEZONE,
-    referenceLocalDate,
-    referenceLocalTime,
-    date: resolveDateEvidence(dates),
-    time: resolveTimeEvidence(normalized),
-    range: resolveRangeEvidence(normalized, dates),
-  };
+export function inspectTemporalScanner(input: {
+  text: string;
+  referenceNow: number;
+}): { evidence: TemporalEvidence; diagnostics: TemporalScannerDiagnostics } {
+  return runTemporalScanner(input);
 }
 
 function resolvedValuesMatch(
