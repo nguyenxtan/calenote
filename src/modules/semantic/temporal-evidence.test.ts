@@ -106,6 +106,26 @@ describe("extractTemporalEvidence", () => {
     });
   });
 
+  it.each([
+    ["8 giờ 30", "INVALID_TIME"],
+    ["8 giờ 60", "INVALID_TIME"],
+    ["8 giờ tối", "MULTIPLE_TIME_EXPRESSIONS"],
+  ] as const)("fails closed for the unsupported exact-time continuation %s", (text, reason) => {
+    expect(extractTemporalEvidence({ text, referenceNow }).time).toEqual({
+      state: "AMBIGUOUS",
+      reason,
+    });
+  });
+
+  it.each([
+    "20/09/26",
+    "ngày 20 tháng 9 năm 20",
+  ])("fails closed for the incomplete explicit year %s", (text) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence.date).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
   it("does not finalize conflicting list ranges", () => {
     expect(extractTemporalEvidence({ text: "tuần này và 7 ngày tới", referenceNow }).range).toEqual({
       state: "AMBIGUOUS",

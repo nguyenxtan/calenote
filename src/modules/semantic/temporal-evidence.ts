@@ -125,6 +125,17 @@ function resolveExplicitDate(
 
 function findDateCandidates(text: string, reference: ReferenceDate): DateCandidate[] {
   const candidates: DateCandidate[] = [];
+  const malformedYearPatterns = [
+    /(^|[^\p{L}\p{N}])(?:ngày\s+)?\d{1,2}\/\d{1,2}\/(\d+)(?=$|[^\p{L}\p{N}])/giu,
+    /(^|[^\p{L}\p{N}])(?:ngày\s+)?\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+(\d+)(?=$|[^\p{L}\p{N}])/giu,
+  ];
+  for (const malformedYearPattern of malformedYearPatterns) {
+    for (const match of text.matchAll(malformedYearPattern)) {
+      if (match[2].length !== 4) {
+        candidates.push({ source: "EXPLICIT_DATE", localDate: null });
+      }
+    }
+  }
   const pattern = /(^|[^\p{L}\p{N}])((hôm nay|ngày mai|mai)|(\d{4})-(\d{1,2})-(\d{1,2})|(?:ngày\s+)?(\d{1,2})\s+tháng\s+(\d{1,2})(?:\s+năm\s+(\d{4}))?|(?:ngày\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)(?=$|[^\p{L}\p{N}])/giu;
 
   for (const match of text.matchAll(pattern)) {
@@ -198,6 +209,14 @@ function resolveTimeEvidence(text: string): TemporalTimeEvidence {
     return { state: "AMBIGUOUS", reason: "INVALID_TIME" };
   }
   if (candidates.length > 1) {
+    return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
+  }
+  const unsupportedNumericContinuation = /(^|[^\p{L}\p{N}])(?:lúc\s+)?\d{1,2}(?:h|\s+giờ)\s+\d{1,2}(?=$|[^\p{L}\p{N}])/iu;
+  if (unsupportedNumericContinuation.test(text)) {
+    return { state: "AMBIGUOUS", reason: "INVALID_TIME" };
+  }
+  const unsupportedDaypartContinuation = /(^|[^\p{L}\p{N}])(?:lúc\s+)?\d{1,2}(?:h|\s+giờ)\s+(?:sáng|chiều|tối)(?=$|[^\p{L}\p{N}])/iu;
+  if (unsupportedDaypartContinuation.test(text)) {
     return { state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" };
   }
   if (candidates.length === 1) {
