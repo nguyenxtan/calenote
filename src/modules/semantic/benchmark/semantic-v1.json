@@ -217,14 +217,7 @@
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
-      "expected": {
-        "intent": "NEEDS_CLARIFICATION",
-        "targetIntent": "LIST_REMINDERS",
-        "missingFields": [
-          "range"
-        ],
-        "question": "Bạn muốn xem lịch trong khoảng nào?"
-      },
+      "expected": { "intent": "LIST_REMINDERS", "rangeKind": "TODAY", "localDate": null },
       "businessValidation": "ACCEPT"
     },
     {
@@ -491,14 +484,7 @@
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
-      "expected": {
-        "intent": "NEEDS_CLARIFICATION",
-        "targetIntent": "LIST_REMINDERS",
-        "missingFields": [
-          "range"
-        ],
-        "question": "Bạn muốn xem lịch trong khoảng nào?"
-      },
+      "expected": { "intent": "LIST_REMINDERS", "rangeKind": "TOMORROW", "localDate": null },
       "businessValidation": "ACCEPT"
     },
     {
@@ -2957,14 +2943,7 @@
       "interpretationReferenceTime": "2026-09-16T09:00:00+07:00",
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
-      "expected": {
-        "intent": "NEEDS_CLARIFICATION",
-        "targetIntent": "LIST_REMINDERS",
-        "missingFields": [
-          "range"
-        ],
-        "question": "Bạn muốn xem lịch trong khoảng nào?"
-      },
+      "expected": { "intent": "LIST_REMINDERS", "rangeKind": "TOMORROW", "localDate": null },
       "businessValidation": "ACCEPT"
     },
     {
@@ -3247,12 +3226,12 @@
         }
       },
       "expected": {
-        "intent": "NEEDS_CLARIFICATION",
-        "targetIntent": "CREATE_REMINDER",
-        "missingFields": [
-          "date"
-        ],
-        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
+        "intent": "CREATE_REMINDER",
+        "title": "việc nối tiếp 209",
+        "localDate": "2026-09-17",
+        "localTime": "09:00",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "needsClarification": false
       },
       "businessValidation": "ACCEPT"
     },

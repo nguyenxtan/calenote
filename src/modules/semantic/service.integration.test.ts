@@ -32,7 +32,7 @@ beforeEach(async () => {
 afterEach(async () => { await runtime?.dispose(); });
 
 const input = (index: number) => ({ ownerId: "one", sourceInboundId: `one-${index}`, text: "nhắc việc",
-  interpretationReferenceTime: NOW, processingNow: clock, timezone: "Asia/Ho_Chi_Minh" as const });
+  referenceTime: NOW, processingNow: clock, timezone: "Asia/Ho_Chi_Minh" as const });
 function service(transport: SemanticTransport, overrides = {}) {
   const route = { model: "fixture/paid", provider: "fixture-provider", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 500_000, completionPriceMicrounitsPerMillionTokens: 500_000 };

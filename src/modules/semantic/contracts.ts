@@ -4,6 +4,8 @@ export const SEMANTIC_TIMEZONE = "Asia/Ho_Chi_Minh" as const;
 export const MAX_SEMANTIC_TITLE_CODE_UNITS = 1_800;
 export const MAX_CLARIFICATION_QUESTION_CODE_UNITS = 500;
 export const MAX_CLARIFICATION_MISSING_FIELDS = 4;
+/** Bump with any Zod-only validation behavior not represented in JSON Schema. */
+export const SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION = "semantic-runtime-validation-1";
 
 export const LocalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const LocalTimeSchema = z.string().regex(/^\d{2}:\d{2}$/);

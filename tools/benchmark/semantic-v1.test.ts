@@ -163,7 +163,7 @@ describe("semantic V1 offline benchmark scaffold", () => {
       totalCases: 216, scoredCases: 0, missingCases: 216, estimatedCostMicrounits: null,
       schemaValidRate: null, intentCorrectRate: null, localDateCorrectRate: null,
       localTimeCorrectRate: null, titleCorrectRate: null, clarificationCorrectRate: null,
-      listRangeEligibleCases: 48, listRangeCorrectCases: 0, listRangeCorrectRate: null,
+      listRangeEligibleCases: 51, listRangeCorrectCases: 0, listRangeCorrectRate: null,
     });
     expect(transport.interpret).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();

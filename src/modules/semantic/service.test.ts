@@ -7,7 +7,7 @@ import type { PaidCallReservation, SemanticBudgetStore } from "./budget-store";
 const NOW = Date.UTC(2026, 8, 16, 5, 5);
 const input = {
   ownerId: "owner-private", sourceInboundId: "inbound-private", text: "nhắc mình uống thuốc",
-  interpretationReferenceTime: NOW - 600_000, processingNow: NOW, timezone: "Asia/Ho_Chi_Minh" as const,
+  referenceTime: NOW - 600_000, processingNow: NOW, timezone: "Asia/Ho_Chi_Minh" as const,
 };
 const limits = {
   maxInputChars: 1_800, maxInputTokens: 12_000, maxOutputTokens: 256,

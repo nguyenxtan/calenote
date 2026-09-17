@@ -287,7 +287,7 @@ describe("semantic inbound lifecycle", () => {
     expect(await h.process("confirm")).toEqual({ status: "TERMINAL" });
     expect(await h.count("reminders")).toBe(1);
     expect(h.calls).toHaveLength(1);
-    expect(h.calls[0].input).toEqual({ text: "nhớ giùm tui cái việc đó sáng mai", interpretationReferenceTime: NOW, timezone: "Asia/Ho_Chi_Minh" });
+    expect(h.calls[0].input).toEqual({ text: "nhớ giùm tui cái việc đó sáng mai", referenceLocalDate: "2026-09-16", referenceLocalTime: "15:00", timezone: "Asia/Ho_Chi_Minh" });
   });
 
   it("semantic off overrides the old parser and terminalizes locally with zero calls", async () => {

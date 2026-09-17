@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { SemanticInputSchema, type PreparedSemanticAttempt, type SemanticAttemptResult,
+import { SemanticInputSchema, semanticReferenceWallClock, type PreparedSemanticAttempt, type SemanticAttemptResult,
   type SemanticFailureCategory, type SemanticGateway, type SemanticTier } from "../intelligence/semantic-gateway";
 import type { SemanticBudgetStore } from "./budget-store";
 import { validateSemanticPayload, type SemanticValidationResult } from "./validation";
 
-export const SemanticServiceInputSchema = SemanticInputSchema.extend({
+export const SemanticServiceInputSchema = z.object({
+  text: SemanticInputSchema.shape.text,
+  referenceTime: z.number().int().nonnegative().max(8_639_999_999_000_000),
+  timezone: SemanticInputSchema.shape.timezone,
+  previousContext: SemanticInputSchema.shape.previousContext,
   ownerId: z.string().min(1).max(200),
   sourceInboundId: z.string().min(1).max(200),
   processingNow: z.number().int().nonnegative().max(8_639_999_999_000_000),
@@ -76,7 +80,9 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
       if (deps.mode !== "semantic" && deps.mode !== "privacy") return unavailable();
       const parsed = SemanticServiceInputSchema.safeParse(rawInput);
       if (!parsed.success) return { kind: "SAFE_HELP", code: "INVALID_INPUT" };
-      const { ownerId, sourceInboundId, processingNow, ...input } = parsed.data;
+      const { ownerId, sourceInboundId, processingNow, referenceTime, ...rawSemanticInput } = parsed.data;
+      let input;
+      try { input = { ...rawSemanticInput, ...semanticReferenceWallClock(referenceTime) }; } catch { return { kind: "SAFE_HELP", code: "INVALID_INPUT" }; }
       try {
         if (!await deps.attemptStore.claimInbound({ ownerId, sourceInboundId })) {
           return { kind: "SAFE_HELP", code: "ALREADY_ATTEMPTED" };

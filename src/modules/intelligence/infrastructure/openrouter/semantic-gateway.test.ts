@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";
-import type { SemanticInput } from "../../semantic-gateway";
+import { semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 
-const input = { text: "nhắc mình", interpretationReferenceTime: Date.UTC(2026, 8, 16, 5), timezone: "Asia/Ho_Chi_Minh" as const };
+const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
 const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
   promptPriceMicrounitsPerMillionTokens: 500_000, completionPriceMicrounitsPerMillionTokens: 500_000 };
 const freeRoute = { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 };
@@ -14,6 +14,12 @@ const success = { status: 200, body: JSON.stringify({ choices: [{ message: { con
 afterEach(() => vi.useRealTimers());
 
 describe("injected strict semantic gateway", () => {
+  it("derives the authoritative Vietnamese wall clock instead of sending an epoch to the model", () => {
+    expect(semanticReferenceWallClock(Date.parse("2026-09-16T09:00:00+07:00"))).toEqual({
+      referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",
+    });
+  });
+
   it("pins an explicit provider/model with privacy, strict schema, no streaming and bounded output", async () => {
     const requests: SemanticJsonRequest[] = [];
     const gateway = createSemanticGateway(config, async (request) => { requests.push(request); return success; });
@@ -68,7 +74,7 @@ describe("injected strict semantic gateway", () => {
     { ...input, text: "password=secret" },
     { ...input, text: "/connect connection-code" },
     { ...input, ownerId: "do-not-send" },
-    { ...input, interpretationReferenceTime: NaN },
+    { ...input, referenceLocalDate: "not-a-date" },
     { ...input, previousContext: { transcript: "do-not-send" } },
   ])("rejects invalid or sensitive semantic input before preparing dispatch %#", (badInput) => {
     const transport = vi.fn(async () => success);

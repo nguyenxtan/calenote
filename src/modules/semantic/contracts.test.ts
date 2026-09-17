@@ -99,6 +99,10 @@ describe("semantic-v1 synthetic benchmark", () => {
       expected: { intent: "NEEDS_CLARIFICATION", missingFields: ["time"] },
       businessValidation: "ACCEPT",
     });
+    expect(byId.get("synthetic-today-014")?.expected).toEqual({ intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null });
+    expect(byId.get("synthetic-tomorrow-032")?.expected).toEqual({ intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null });
+    expect(byId.get("synthetic-typo-194")?.expected).toEqual({ intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null });
+    expect(byId.get("synthetic-multi-turn-continuation-209")?.expected).toMatchObject({ intent: "CREATE_REMINDER", localDate: "2026-09-17", localTime: "09:00" });
     for (const item of fixture.cases.filter((item) => item.message.startsWith("xem lich ngay mai"))) {
       expect(item.expected).toMatchObject({ intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null });
     }

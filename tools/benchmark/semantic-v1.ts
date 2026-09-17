@@ -9,7 +9,7 @@ export const CANONICAL_SYNTHETIC_FIXTURE_PATH = resolve(fileURLToPath(
 ));
 export const CANONICAL_SYNTHETIC_FIXTURE_CASE_COUNT = 216;
 export const CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256 = "b715de4ac817b1e6e8641a6d6f3c4c80a0d1fc63a5cb60f50fe63e389ecd0a90";
-export const CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 = "7cb1b003e6ad481bbf01205b669cce95567b69bb63a6bb7645759e7f5492b37c";
+export const CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 = "0ceb0a8c623dece41bf94026789439cd8782e8889e00d9cb2e1caeabfee30b50";
 
 export type SyntheticSemanticFixtureCase = {
   id: string;
@@ -163,19 +163,19 @@ async function loadCanonicalSyntheticFixture(path: string): Promise<SyntheticSem
   return fixture;
 }
 
-function sameFields(left: string[], right: string[]): boolean {
+export function sameFields(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((field, index) => field === right[index]);
 }
 
-function equalRelevantFields(expected: SemanticInterpretation, actual: SemanticInterpretation, field: "localDate" | "localTime" | "title"): boolean {
+export function equalRelevantFields(expected: SemanticInterpretation, actual: SemanticInterpretation, field: "localDate" | "localTime" | "title"): boolean {
   return expected.intent === "CREATE_REMINDER" && actual.intent === "CREATE_REMINDER" && expected[field] === actual[field];
 }
 
-function scoreRate(correct: number, eligible: number): Rate {
+export function scoreRate(correct: number, eligible: number): Rate {
   return eligible === 0 ? null : correct / eligible;
 }
 
-function percentile95(latencies: number[]): number | null {
+export function percentile95(latencies: number[]): number | null {
   if (latencies.length === 0) return null;
   const sorted = [...latencies].sort((left, right) => left - right);
   return sorted[Math.ceil(sorted.length * 0.95) - 1] ?? null;

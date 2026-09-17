@@ -110,7 +110,7 @@ describe("Worker composition root", () => {
     } as unknown as Env);
     expect(capability).toMatchObject({ mode: "privacy" });
     expect(capability?.gateway.prepare("PRIMARY", {
-      text: "nhắc việc", interpretationReferenceTime: 1, timezone: "Asia/Ho_Chi_Minh",
+      text: "nhắc việc", referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",
     })).toMatchObject({ status: "READY", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu" });
   });
 
@@ -127,7 +127,7 @@ describe("Worker composition root", () => {
     expect(off.mode).toBe("off");
     expect(wrongRoute.mode).toBe("off");
     expect(wrongRoute.gateway.prepare("PRIMARY", {
-      text: "nhắc việc", interpretationReferenceTime: 1, timezone: "Asia/Ho_Chi_Minh",
+      text: "nhắc việc", referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",
     })).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
   });
 

@@ -3,6 +3,9 @@ import { dirname, resolve } from "node:path";
 import { createLiveSemanticBenchmarkRunner, createOpenRouterTransport, GEMINI_PILOT_CASE_IDS } from "./live-semantic-v1.ts";
 
 const directory = dirname(fileURLToPath(import.meta.url));
+const stateDirectory = process.env.SEMANTIC_BENCHMARK_STATE_DIRECTORY
+  ? resolve(process.env.SEMANTIC_BENCHMARK_STATE_DIRECTORY)
+  : resolve(directory, "../../benchmark-state/semantic-v1");
 const args = process.argv.slice(2).filter((argument, index) => !(index === 0 && argument === "--"));
 const preflight = args[0] === "--preflight";
 const runIdIndex = args.indexOf("--run-id");
@@ -23,7 +26,7 @@ const profileOptions = profile === "gemini-pilot"
     ] };
 const runner = createLiveSemanticBenchmarkRunner({
   fixturePath: resolve(directory, "../../src/modules/semantic/benchmark/semantic-v1.json"),
-  stateDirectory: resolve(directory, "../../benchmark-state/semantic-v1"), runId: args[runIdIndex + 1], transport,
+  stateDirectory, runId: args[runIdIndex + 1], transport,
   ...profileOptions,
   onProgress: (line) => console.log(line),
 });

@@ -248,24 +248,27 @@ describe("live semantic V1 benchmark runner", () => {
   });
 
   it("keeps the explicit CLI preflight network-free and Keychain-independent", async () => {
+    const isolated = await stateDirectory();
     const source = await readFile(new URL("./run-semantic-v1-live.mjs", import.meta.url), "utf8");
     expect(source).toContain("process.env.OPENROUTER_API_KEY");
     expect(source).not.toMatch(/find-generic-password|security\s+find|keychain/iu);
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--run-id", "test-preflight-qwen-safe"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--run-id", "test-preflight-qwen-safe-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
     expect(output.stdout).toContain('"networkRequests":0');
     expect(output.stdout).toContain('"apiKey":"ABSENT"');
     expect(output.stderr).toBe("");
   });
 
   it("exposes the exact Gemini pilot profile through the CLI without dispatching", async () => {
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", "gemini-pilot", "--run-id", "test-preflight-gemini-pilot"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    const isolated = await stateDirectory();
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", "gemini-pilot", "--run-id", "test-preflight-gemini-pilot-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
     expect(output.stdout).toContain('"caseCount":36');
     expect(output.stdout).toContain('"projectedMaxRequests":36');
     expect(output.stdout).toContain('"networkRequests":0');
   });
 
   it("accepts package-script argument forwarding for the network-free preflight", async () => {
-    const output = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--run-id", "test-preflight-qwen-pnpm"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    const isolated = await stateDirectory();
+    const output = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--run-id", "test-preflight-qwen-pnpm-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
     expect(output.stdout).toContain('"networkRequests":0');
   });
 });

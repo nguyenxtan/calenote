@@ -217,7 +217,7 @@ async function semanticCommand(
     // Provider UX feedback is intentionally best effort and never changes semantics.
   }
   const result = await semantic.service.interpret({
-    text: message.text, interpretationReferenceTime: message.receivedAt,
+    text: message.text, referenceTime: message.receivedAt,
     processingNow: now(), timezone: "Asia/Ho_Chi_Minh",
     ownerId: context.userId, sourceInboundId: message.id,
     ...(pending ? { previousContext: pending.slots } : {}),
