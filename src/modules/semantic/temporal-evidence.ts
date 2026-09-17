@@ -199,7 +199,9 @@ function isDigit(character: string): boolean {
 }
 
 function isWhitespace(character: string): boolean {
-  return character === " " || character === "\t" || character === "\n" || character === "\r";
+  // Unicode White_Space plus BOM, which ECMAScript also treats as whitespace.
+  // Classification does not rewrite the input: token offsets/raw remain exact.
+  return /[\p{White_Space}\uFEFF]/u.test(character);
 }
 
 function isWordCharacter(character: string): boolean {
@@ -274,21 +276,6 @@ function nextNonWhitespace(tokens: TemporalToken[], index: number): number {
   return tokens[index]?.kind === "WHITESPACE" ? index + 1 : index;
 }
 
-function afterRequiredWhitespace(
-  tokens: TemporalToken[],
-  index: number,
-  kind: TokenKind,
-): number | null {
-  if (tokens[index]?.kind !== "WHITESPACE" || tokens[index + 1]?.kind !== kind) return null;
-  return index + 1;
-}
-
-function adjacent(tokens: TemporalToken[], leftIndex: number, rightIndex: number): boolean {
-  return tokens[leftIndex] !== undefined
-    && tokens[rightIndex] !== undefined
-    && tokens[leftIndex].end === tokens[rightIndex].start;
-}
-
 function numberValue(token: TemporalToken | undefined): number {
   return token?.kind === "NUMBER" ? Number(token.raw) : Number.NaN;
 }
@@ -300,45 +287,69 @@ function invalidDate(nextIndex: number): Parsed<DateCandidate> {
   };
 }
 
-function temporalTailEnd(tokens: TemporalToken[], index: number): number {
-  let cursor = index;
-  let remaining = 4;
-  while (cursor < tokens.length && remaining > 0) {
-    if (tokens[cursor].kind === "WHITESPACE" && remaining < 4) break;
-    cursor += 1;
-    remaining -= 1;
-  }
-  return Math.max(index + 1, cursor);
+type GrammarInput = {
+  tokens: TemporalToken[];
+  nextAtom: number[];
+  structuralGap: boolean[];
+  clockGap: boolean[];
+};
+
+type Expression =
+  | { dimension: "date"; parsed: Parsed<DateCandidate> }
+  | { dimension: "time"; parsed: Parsed<TimeCandidate> }
+  | { dimension: "range"; parsed: Parsed<RangeCandidate> };
+
+function isSeparator(kind: TokenKind): boolean {
+  return kind === "WHITESPACE" || kind === "SLASH" || kind === "COLON"
+    || kind === "HYPHEN" || kind === "COMMA" || kind === "DOT" || kind === "PUNCTUATION";
 }
 
-function dateHasUnsupportedTail(tokens: TemporalToken[], endIndex: number): boolean {
-  const nextIndex = nextNonWhitespace(tokens, endIndex);
-  const next = tokens[nextIndex];
-  if (next === undefined) return false;
-  if (next.kind === "SLASH" || next.kind === "HYPHEN") return true;
-  if (next.kind === "COMMA" || next.kind === "DOT" || next.kind === "COLON") {
-    return tokens[nextNonWhitespace(tokens, nextIndex + 1)]?.kind === "NUMBER";
+function grammarInput(tokens: TemporalToken[], counters: ScannerCounters): GrammarInput {
+  const nextAtom = new Array<number>(tokens.length + 1);
+  const structuralGap = new Array<boolean>(tokens.length + 1);
+  const clockGap = new Array<boolean>(tokens.length + 1);
+  nextAtom[tokens.length] = tokens.length;
+  structuralGap[tokens.length] = false;
+  clockGap[tokens.length] = false;
+  // Index separator runs once. Every subsequent grammar probe is O(1), even
+  // for arbitrarily long punctuation runs between malformed components.
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    counters.grammarSteps += 1;
+    const kind = tokens[index].kind;
+    nextAtom[index] = isSeparator(kind) ? nextAtom[index + 1] : index;
+    structuralGap[index] = isSeparator(kind)
+      && (kind === "SLASH" || kind === "HYPHEN" || structuralGap[index + 1]);
+    clockGap[index] = isSeparator(kind) && (kind === "COLON" || clockGap[index + 1]);
   }
-  return nextIndex === endIndex
-    && (next.kind === "NUMBER" || next.kind === "UNKNOWN_WORD")
-    && adjacent(tokens, endIndex - 1, nextIndex);
+  return { tokens, nextAtom, structuralGap, clockGap };
+}
+
+function followingAtom(input: GrammarInput, index: number): number {
+  return input.nextAtom[index + 1] ?? input.tokens.length;
+}
+
+function hasRequiredSpace(tokens: TemporalToken[], left: number, right: number): boolean {
+  return right === left + 2 && tokens[left + 1]?.kind === "WHITESPACE";
 }
 
 function parseRelativeDateAt(
-  tokens: TemporalToken[],
+  input: GrammarInput,
   index: number,
   reference: ReferenceDate,
 ): Parsed<DateCandidate> | null {
+  const { tokens } = input;
   let source: "TODAY" | "TOMORROW";
   let endIndex: number;
   if (tokens[index]?.kind === "HOM") {
-    const nayIndex = afterRequiredWhitespace(tokens, index + 1, "NAY");
-    if (nayIndex === null) return null;
+    const nayIndex = followingAtom(input, index);
+    if (tokens[nayIndex]?.kind !== "NAY") return invalidDate(index + 1);
+    if (!hasRequiredSpace(tokens, index, nayIndex)) return invalidDate(nayIndex + 1);
     source = "TODAY";
     endIndex = nayIndex + 1;
   } else if (tokens[index]?.kind === "NGAY") {
-    const maiIndex = afterRequiredWhitespace(tokens, index + 1, "MAI");
-    if (maiIndex === null) return null;
+    const maiIndex = followingAtom(input, index);
+    if (tokens[maiIndex]?.kind !== "MAI") return null;
+    if (!hasRequiredSpace(tokens, index, maiIndex)) return invalidDate(maiIndex + 1);
     source = "TOMORROW";
     endIndex = maiIndex + 1;
   } else if (tokens[index]?.kind === "MAI") {
@@ -348,16 +359,6 @@ function parseRelativeDateAt(
     return null;
   }
 
-  const continuationIndex = nextNonWhitespace(tokens, endIndex);
-  const continuationKind = tokens[continuationIndex]?.kind;
-  if (continuationKind === "MOT"
-    || ((continuationKind === "HYPHEN"
-      || continuationKind === "SLASH"
-      || continuationKind === "DOT"
-      || continuationKind === "COMMA")
-      && tokens[nextNonWhitespace(tokens, continuationIndex + 1)]?.kind === "MOT")) {
-    return invalidDate(temporalTailEnd(tokens, continuationIndex));
-  }
   const days = source === "TOMORROW" ? 1 : 0;
   return {
     candidate: { source, localDate: formatDate(addLocalDays(reference, days)) },
@@ -366,36 +367,44 @@ function parseRelativeDateAt(
 }
 
 function parseVietnameseDateAt(
-  tokens: TemporalToken[],
+  input: GrammarInput,
   index: number,
   reference: ReferenceDate,
 ): Parsed<DateCandidate> | null {
+  const { tokens } = input;
   let dayIndex = index;
+  let valid = true;
   if (tokens[index]?.kind === "NGAY") {
-    const following = afterRequiredWhitespace(tokens, index + 1, "NUMBER");
-    if (following === null) return null;
+    const following = followingAtom(input, index);
+    if (tokens[following]?.kind !== "NUMBER") return null;
+    valid = hasRequiredSpace(tokens, index, following);
     dayIndex = following;
   }
   if (tokens[dayIndex]?.kind !== "NUMBER") return null;
-  const monthWordIndex = afterRequiredWhitespace(tokens, dayIndex + 1, "THANG");
-  if (monthWordIndex === null) return null;
-  const monthIndex = afterRequiredWhitespace(tokens, monthWordIndex + 1, "NUMBER");
-  if (monthIndex === null) return invalidDate(temporalTailEnd(tokens, monthWordIndex + 1));
+  const monthWordIndex = followingAtom(input, dayIndex);
+  if (tokens[monthWordIndex]?.kind !== "THANG") {
+    return valid ? null : invalidDate(index + 1);
+  }
+  const monthIndex = followingAtom(input, monthWordIndex);
+  if (tokens[monthIndex]?.kind !== "NUMBER") return invalidDate(monthWordIndex + 1);
+  valid &&= hasRequiredSpace(tokens, dayIndex, monthWordIndex)
+    && hasRequiredSpace(tokens, monthWordIndex, monthIndex);
 
   let year: number | undefined;
   let endIndex = monthIndex + 1;
-  const maybeYearWord = afterRequiredWhitespace(tokens, endIndex, "NAM");
-  if (maybeYearWord !== null) {
-    const yearIndex = afterRequiredWhitespace(tokens, maybeYearWord + 1, "NUMBER");
-    if (yearIndex === null || tokens[yearIndex].raw.length !== 4) {
-      return invalidDate(temporalTailEnd(tokens, maybeYearWord));
+  const maybeYearWord = followingAtom(input, monthIndex);
+  if (tokens[maybeYearWord]?.kind === "NAM") {
+    const yearIndex = followingAtom(input, maybeYearWord);
+    if (tokens[yearIndex]?.kind !== "NUMBER") return invalidDate(maybeYearWord + 1);
+    if (tokens[yearIndex].raw.length !== 4) {
+      return invalidDate(yearIndex + 1);
     }
+    valid &&= hasRequiredSpace(tokens, monthIndex, maybeYearWord)
+      && hasRequiredSpace(tokens, maybeYearWord, yearIndex);
     year = numberValue(tokens[yearIndex]);
     endIndex = yearIndex + 1;
   }
-  if (dateHasUnsupportedTail(tokens, endIndex)) {
-    return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
-  }
+  if (!valid) return invalidDate(endIndex);
   return {
     candidate: resolveExplicitDate(
       year,
@@ -408,22 +417,25 @@ function parseVietnameseDateAt(
 }
 
 function parseNumericDateAt(
-  tokens: TemporalToken[],
+  input: GrammarInput,
   index: number,
   reference: ReferenceDate,
 ): Parsed<DateCandidate> | null {
+  const { tokens } = input;
   const first = tokens[index];
   if (first?.kind !== "NUMBER") return null;
   const separatorIndex = nextNonWhitespace(tokens, index + 1);
   const separator = tokens[separatorIndex];
-  if (separator?.kind !== "SLASH" && separator?.kind !== "HYPHEN") return null;
+  if (separator?.kind !== "SLASH" && separator?.kind !== "HYPHEN") {
+    return input.structuralGap[index + 1] ? invalidDate(index + 1) : null;
+  }
   const isIso = first.raw.length === 4 && separator.kind === "HYPHEN";
   const hadWhitespaceBeforeSeparator = separatorIndex !== index + 1;
   const secondIndex = nextNonWhitespace(tokens, separatorIndex + 1);
   if (hadWhitespaceBeforeSeparator
     || secondIndex !== separatorIndex + 1
     || tokens[secondIndex]?.kind !== "NUMBER") {
-    return invalidDate(temporalTailEnd(tokens, separatorIndex));
+    return invalidDate(separatorIndex + 1);
   }
 
   if (isIso) {
@@ -433,12 +445,9 @@ function parseNumericDateAt(
       || tokens[secondSeparatorIndex]?.kind !== "HYPHEN"
       || dayIndex !== secondSeparatorIndex + 1
       || tokens[dayIndex]?.kind !== "NUMBER") {
-      return invalidDate(temporalTailEnd(tokens, secondSeparatorIndex));
+      return invalidDate(secondIndex + 1);
     }
     const endIndex = dayIndex + 1;
-    if (dateHasUnsupportedTail(tokens, endIndex)) {
-      return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
-    }
     return {
       candidate: resolveExplicitDate(
         numberValue(first),
@@ -459,13 +468,10 @@ function parseNumericDateAt(
       || yearIndex !== yearSeparatorIndex + 1
       || tokens[yearIndex]?.kind !== "NUMBER"
       || tokens[yearIndex].raw.length !== 4) {
-      return invalidDate(temporalTailEnd(tokens, yearSeparatorIndex));
+      return invalidDate(yearSeparatorIndex + 1);
     }
     year = numberValue(tokens[yearIndex]);
     endIndex = yearIndex + 1;
-  }
-  if (dateHasUnsupportedTail(tokens, endIndex)) {
-    return invalidDate(temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)));
   }
   return {
     candidate: resolveExplicitDate(
@@ -478,73 +484,11 @@ function parseNumericDateAt(
   };
 }
 
-function looksLikeDateStart(tokens: TemporalToken[], index: number): boolean {
-  if (tokens[index]?.kind !== "NUMBER") return false;
-  const nextIndex = nextNonWhitespace(tokens, index + 1);
-  return tokens[nextIndex]?.kind === "SLASH"
-    || tokens[nextIndex]?.kind === "HYPHEN"
-    || tokens[nextIndex]?.kind === "THANG";
-}
-
-function looksLikeTimeStart(tokens: TemporalToken[], index: number): boolean {
-  if (tokens[index]?.kind === "LUC") return true;
-  if (tokens[index]?.kind !== "NUMBER") return false;
-  const nextIndex = nextNonWhitespace(tokens, index + 1);
-  return tokens[nextIndex]?.kind === "COLON"
-    || tokens[nextIndex]?.kind === "H"
-    || tokens[nextIndex]?.kind === "GIO";
-}
-
-function isDottedMeridiem(tokens: TemporalToken[], index: number): boolean {
-  if (tokens[index]?.kind !== "UNKNOWN_WORD"
-    || tokens[index].raw.toLocaleLowerCase("vi-VN") !== "p") return false;
-  const firstDot = nextNonWhitespace(tokens, index + 1);
-  const mIndex = nextNonWhitespace(tokens, firstDot + 1);
-  const secondDot = nextNonWhitespace(tokens, mIndex + 1);
-  return tokens[firstDot]?.kind === "DOT"
-    && tokens[mIndex]?.kind === "UNKNOWN_WORD"
-    && tokens[mIndex].raw.toLocaleLowerCase("vi-VN") === "m"
-    && tokens[secondDot]?.kind === "DOT";
-}
-
-function timeContinuation(
-  tokens: TemporalToken[],
-  endIndex: number,
-): { kind: "NONE" | "INVALID" | "MODIFIER"; nextIndex: number } {
-  const continuationIndex = nextNonWhitespace(tokens, endIndex);
-  const continuation = tokens[continuationIndex];
-  if (continuation === undefined) return { kind: "NONE", nextIndex: endIndex };
-  const separated = continuationIndex !== endIndex;
-
-  if (separated && (
-    looksLikeDateStart(tokens, continuationIndex)
-    || looksLikeTimeStart(tokens, continuationIndex)
-  )) {
-    return { kind: "NONE", nextIndex: endIndex };
-  }
-  if (continuation.kind === "DAYPART" || continuation.kind === "MERIDIEM") {
-    return { kind: "MODIFIER", nextIndex: temporalTailEnd(tokens, continuationIndex) };
-  }
-  if (continuation.kind === "RUOI" || isDottedMeridiem(tokens, continuationIndex)) {
-    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
-  }
-  if (continuation.kind === "COLON"
-    || continuation.kind === "HYPHEN"
-    || continuation.kind === "COMMA"
-    || continuation.kind === "SLASH"
-    || continuation.kind === "NUMBER") {
-    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
-  }
-  if (!separated && continuation.kind === "UNKNOWN_WORD") {
-    return { kind: "INVALID", nextIndex: temporalTailEnd(tokens, continuationIndex) };
-  }
-  return { kind: "NONE", nextIndex: endIndex };
-}
-
 function parseTimeFromNumberAt(
-  tokens: TemporalToken[],
+  input: GrammarInput,
   index: number,
 ): Parsed<TimeCandidate> | null {
+  const { tokens } = input;
   const hourToken = tokens[index];
   if (hourToken?.kind !== "NUMBER") return null;
   const nextIndex = nextNonWhitespace(tokens, index + 1);
@@ -558,7 +502,7 @@ function parseTimeFromNumberAt(
       || minuteIndex !== nextIndex + 1
       || tokens[minuteIndex]?.kind !== "NUMBER"
       || tokens[minuteIndex].raw.length !== 2) {
-      return { candidate: { kind: "INVALID" }, nextIndex: temporalTailEnd(tokens, nextIndex) };
+      return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
     }
     minute = numberValue(tokens[minuteIndex]);
     endIndex = minuteIndex + 1;
@@ -571,18 +515,13 @@ function parseTimeFromNumberAt(
   } else if (nextIndex === index + 1
     && next?.kind === "UNKNOWN_WORD"
     && next.raw.toLocaleLowerCase("vi-VN").startsWith("h")) {
-    return { candidate: { kind: "INVALID" }, nextIndex: temporalTailEnd(tokens, nextIndex) };
+    return { candidate: { kind: "INVALID" }, nextIndex: nextIndex + 1 };
   } else {
-    return null;
+    return input.clockGap[index + 1]
+      ? { candidate: { kind: "INVALID" }, nextIndex: index + 1 }
+      : null;
   }
 
-  const continuation = timeContinuation(tokens, endIndex);
-  if (continuation.kind === "INVALID") {
-    return { candidate: { kind: "INVALID" }, nextIndex: continuation.nextIndex };
-  }
-  if (continuation.kind === "MODIFIER") {
-    return { candidate: { kind: "MODIFIER" }, nextIndex: continuation.nextIndex };
-  }
   const hour = numberValue(hourToken);
   if (hour > 23 || minute > 59) {
     return { candidate: { kind: "INVALID" }, nextIndex: endIndex };
@@ -596,58 +535,139 @@ function parseTimeFromNumberAt(
   };
 }
 
-function parseTimeAt(tokens: TemporalToken[], index: number): Parsed<TimeCandidate> | null {
+function parseTimeAt(input: GrammarInput, index: number): Parsed<TimeCandidate> | null {
+  const { tokens } = input;
   if (tokens[index]?.kind === "LUC") {
-    const hourIndex = afterRequiredWhitespace(tokens, index + 1, "NUMBER");
-    if (hourIndex === null) {
+    const hourIndex = followingAtom(input, index);
+    if (tokens[hourIndex]?.kind !== "NUMBER" || !hasRequiredSpace(tokens, index, hourIndex)) {
       return { candidate: { kind: "INVALID" }, nextIndex: index + 1 };
     }
-    return parseTimeFromNumberAt(tokens, hourIndex)
+    return parseTimeFromNumberAt(input, hourIndex)
       ?? { candidate: { kind: "INVALID" }, nextIndex: hourIndex + 1 };
   }
-  return parseTimeFromNumberAt(tokens, index);
+  return parseTimeFromNumberAt(input, index);
 }
 
-function rangeHasUnsupportedTail(tokens: TemporalToken[], endIndex: number): boolean {
-  const nextIndex = nextNonWhitespace(tokens, endIndex);
-  const kind = tokens[nextIndex]?.kind;
-  return kind === "SLASH" || kind === "COLON" || kind === "HYPHEN";
-}
-
-function parseRangeAt(tokens: TemporalToken[], index: number): Parsed<RangeCandidate> | null {
+function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate> | null {
+  const { tokens } = input;
   let kind: ResolvedRangeCandidate["kind"] | null = null;
   let endIndex = index;
-  if (tokens[index]?.kind === "TUAN") {
-    const nayIndex = afterRequiredWhitespace(tokens, index + 1, "NAY");
-    if (nayIndex === null) return null;
-    kind = "THIS_WEEK";
-    endIndex = nayIndex + 1;
-  } else if (tokens[index]?.kind === "SAP") {
-    const toiIndex = afterRequiredWhitespace(tokens, index + 1, "TOI");
-    if (toiIndex === null) return null;
-    kind = "UPCOMING";
-    endIndex = toiIndex + 1;
+  let valid = true;
+  if (tokens[index]?.kind === "TUAN" || tokens[index]?.kind === "SAP") {
+    const secondIndex = followingAtom(input, index);
+    const expected = tokens[index].kind === "TUAN" ? "NAY" : "TOI";
+    if (tokens[secondIndex]?.kind !== expected) {
+      return { candidate: { state: "AMBIGUOUS" }, nextIndex: index + 1 };
+    }
+    valid = hasRequiredSpace(tokens, index, secondIndex);
+    kind = expected === "NAY" ? "THIS_WEEK" : "UPCOMING";
+    endIndex = secondIndex + 1;
   } else if (tokens[index]?.kind === "NUMBER" && tokens[index].raw === "7") {
-    const ngayIndex = afterRequiredWhitespace(tokens, index + 1, "NGAY");
-    if (ngayIndex === null) return null;
-    const toiIndex = afterRequiredWhitespace(tokens, ngayIndex + 1, "TOI");
-    if (toiIndex === null) return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1 };
+    const ngayIndex = followingAtom(input, index);
+    if (tokens[ngayIndex]?.kind !== "NGAY") return null;
+    const toiIndex = followingAtom(input, ngayIndex);
+    if (tokens[toiIndex]?.kind !== "TOI") {
+      return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1 };
+    }
+    valid = hasRequiredSpace(tokens, index, ngayIndex) && hasRequiredSpace(tokens, ngayIndex, toiIndex);
     kind = "NEXT_7_DAYS";
     endIndex = toiIndex + 1;
   } else {
     return null;
   }
 
-  if (rangeHasUnsupportedTail(tokens, endIndex)) {
-    return {
-      candidate: { state: "AMBIGUOUS" },
-      nextIndex: temporalTailEnd(tokens, nextNonWhitespace(tokens, endIndex)),
-    };
-  }
   return {
-    candidate: { state: "RESOLVED", kind, localDate: null },
+    candidate: valid ? { state: "RESOLVED", kind, localDate: null } : { state: "AMBIGUOUS" },
     nextIndex: endIndex,
   };
+}
+
+// Core productions own positive AND malformed recognition. No production
+// resolves evidence or decides whether the following expression is separate.
+function expressionAt(input: GrammarInput, index: number, reference: ReferenceDate): Expression | null {
+  const { tokens } = input;
+  const token = tokens[index];
+  if (token === undefined) return null;
+  if (token.kind === "SLASH" || token.kind === "HYPHEN") {
+    const numberIndex = followingAtom(input, index);
+    const numericDate = parseNumericDateAt(input, numberIndex, reference);
+    return numericDate === null ? null : {
+      dimension: "date", parsed: invalidDate(numericDate.nextIndex),
+    };
+  }
+  if (isSeparator(token.kind)) return null;
+  const range = parseRangeAt(input, index);
+  if (range !== null) return { dimension: "range", parsed: range };
+  const date = parseRelativeDateAt(input, index, reference)
+    ?? parseVietnameseDateAt(input, index, reference)
+    ?? parseNumericDateAt(input, index, reference);
+  if (date !== null) return { dimension: "date", parsed: date };
+  const time = parseTimeAt(input, index);
+  if (time !== null) return { dimension: "time", parsed: time };
+  if (token.kind === "MOT" || token.kind === "THANG" || token.kind === "NAM") {
+    return { dimension: "date", parsed: invalidDate(index + 1) };
+  }
+  if (token.kind === "H" || token.kind === "GIO" || token.kind === "RUOI"
+    || token.kind === "MERIDIEM" || token.kind === "DAYPART") {
+    return {
+      dimension: "time",
+      parsed: { candidate: { kind: token.kind === "DAYPART" ? "DAYPART" : "INVALID" }, nextIndex: index + 1 },
+    };
+  }
+  if (token.kind === "UNKNOWN_WORD") {
+    const letter = token.raw.toLowerCase();
+    const mIndex = followingAtom(input, index);
+    if ((letter === "a" || letter === "p")
+      && tokens[nextNonWhitespace(tokens, index + 1)]?.kind === "DOT") {
+      return {
+        dimension: "time",
+        parsed: {
+          candidate: { kind: "INVALID" },
+          nextIndex: tokens[mIndex]?.raw.toLowerCase() === "m" ? mIndex + 1 : index + 1,
+        },
+      };
+    }
+  }
+  return null;
+}
+
+function invalidExpression(expression: Expression): Expression {
+  const nextIndex = expression.parsed.nextIndex;
+  if (expression.dimension === "date") return { dimension: "date", parsed: invalidDate(nextIndex) };
+  if (expression.dimension === "range") {
+    return { dimension: "range", parsed: { candidate: { state: "AMBIGUOUS" }, nextIndex } };
+  }
+  return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex } };
+}
+
+function completeExpression(input: GrammarInput, expression: Expression, reference: ReferenceDate): Expression {
+  const { tokens } = input;
+  const end = expression.parsed.nextIndex;
+  const atomIndex = input.nextAtom[end] ?? tokens.length;
+  const atom = tokens[atomIndex];
+  const nextExpression = expressionAt(input, atomIndex, reference);
+  const separated = atomIndex !== end;
+
+  // Whitespace/message punctuation can separate independent productions,
+  // including malformed ones. Slash/hyphen instead structurally extend them.
+  if (input.structuralGap[end]) return invalidExpression(expression);
+  if (separated && nextExpression !== null) {
+    if (expression.dimension === "time" && expression.parsed.candidate.kind === "VALID"
+      && (atom?.kind === "DAYPART" || atom?.kind === "MERIDIEM")) {
+      return {
+        dimension: "time",
+        parsed: { candidate: { kind: "MODIFIER" }, nextIndex: nextExpression.parsed.nextIndex },
+      };
+    }
+    return expression;
+  }
+  if (expression.dimension === "time" && input.clockGap[end]) return invalidExpression(expression);
+  if (atom === undefined) return expression;
+  // An attached atom or a bare numeric component cannot terminate a complete
+  // production. Keep its candidate invalid; the outer scan still visits the
+  // remainder, so unrelated subsequent expressions cannot be swallowed.
+  if (!separated || atom.kind === "NUMBER") return invalidExpression(expression);
+  return expression;
 }
 
 function rangeFromDate(candidate: DateCandidate): RangeCandidate {
@@ -664,66 +684,28 @@ function scanTemporalGrammar(
   counters: ScannerCounters,
 ): ScanCandidates {
   const candidates: ScanCandidates = { dates: [], times: [], ranges: [] };
+  const input = grammarInput(tokens, counters);
   let index = 0;
   while (index < tokens.length) {
     counters.grammarSteps += 1;
-    const token = tokens[index];
-    if (token.kind === "WHITESPACE" || token.kind === "UNKNOWN_WORD" || token.kind === "PUNCTUATION") {
+    const core = expressionAt(input, index, reference);
+    if (core === null) {
       index += 1;
       continue;
     }
-
-    const range = parseRangeAt(tokens, index);
-    if (range !== null) {
-      candidates.ranges.push(range.candidate);
-      counters.candidateCount += 1;
-      index = Math.max(index + 1, range.nextIndex);
-      continue;
-    }
-
-    const relativeDate = parseRelativeDateAt(tokens, index, reference);
-    if (relativeDate !== null) {
-      candidates.dates.push(relativeDate.candidate);
-      candidates.ranges.push(rangeFromDate(relativeDate.candidate));
+    const expression = completeExpression(input, core, reference);
+    if (expression.dimension === "date") {
+      candidates.dates.push(expression.parsed.candidate);
+      candidates.ranges.push(rangeFromDate(expression.parsed.candidate));
       counters.candidateCount += 2;
-      index = Math.max(index + 1, relativeDate.nextIndex);
-      continue;
-    }
-
-    const vietnameseDate = parseVietnameseDateAt(tokens, index, reference);
-    if (vietnameseDate !== null) {
-      candidates.dates.push(vietnameseDate.candidate);
-      candidates.ranges.push(rangeFromDate(vietnameseDate.candidate));
-      counters.candidateCount += 2;
-      index = Math.max(index + 1, vietnameseDate.nextIndex);
-      continue;
-    }
-
-    const numericDate = parseNumericDateAt(tokens, index, reference);
-    if (numericDate !== null) {
-      candidates.dates.push(numericDate.candidate);
-      candidates.ranges.push(rangeFromDate(numericDate.candidate));
-      counters.candidateCount += 2;
-      index = Math.max(index + 1, numericDate.nextIndex);
-      continue;
-    }
-
-    const time = parseTimeAt(tokens, index);
-    if (time !== null) {
-      candidates.times.push(time.candidate);
+    } else if (expression.dimension === "time") {
+      candidates.times.push(expression.parsed.candidate);
       counters.candidateCount += 1;
-      index = Math.max(index + 1, time.nextIndex);
-      continue;
-    }
-
-    if (token.kind === "DAYPART") {
-      candidates.times.push({ kind: "DAYPART" });
-      counters.candidateCount += 1;
-    } else if (token.kind === "MERIDIEM" || token.kind === "RUOI") {
-      candidates.times.push({ kind: "INVALID" });
+    } else {
+      candidates.ranges.push(expression.parsed.candidate);
       counters.candidateCount += 1;
     }
-    index += 1;
+    index = Math.max(index + 1, expression.parsed.nextIndex);
   }
   return candidates;
 }

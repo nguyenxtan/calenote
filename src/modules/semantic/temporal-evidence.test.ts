@@ -206,6 +206,119 @@ describe("mergeTemporalEvidence", () => {
 
 describe("bounded temporal grammar scanner", () => {
   it.each([
+    "\u0009", "\u000a", "\u000b", "\u000c", "\u000d", "\u0020", "\u0085",
+    "\u00a0", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004",
+    "\u2005", "\u2006", "\u2007", "\u2008", "\u2009", "\u200a", "\u2028",
+    "\u2029", "\u202f", "\u205f", "\u3000", "\ufeff",
+  ])("treats lexical whitespace %j consistently without losing temporal fragments", (space) => {
+    for (const text of [`20/09${space}/2027`, `mai${space}mốt`]) {
+      const evidence = extractTemporalEvidence({ text, referenceNow });
+      expect(evidence.date, text).toEqual({ state: "AMBIGUOUS", reason: "INVALID_DATE" });
+      expect(evidence.range, text).toEqual({ state: "AMBIGUOUS" });
+    }
+    expect(extractTemporalEvidence({ text: `8:00${space}:30`, referenceNow }).time)
+      .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+    expect(extractTemporalEvidence({ text: `8h rồi 9${space}giờ`, referenceNow }).time)
+      .toEqual({ state: "AMBIGUOUS", reason: "MULTIPLE_TIME_EXPRESSIONS" });
+    expect(extractTemporalEvidence({ text: `mai${space}8${space}giờ`, referenceNow }))
+      .toMatchObject({
+        date: { state: "RESOLVED", localDate: "2026-09-17" },
+        time: { state: "RESOLVED", localTime: "08:00" },
+      });
+  });
+
+  it.each([
+    "8:00 a.m.", "8:00 a. m.", "8:00 p.m", "8:00 a.m", "8:00 p . m",
+    "8:00h", "8:00giờ", "8:00 h", "8:00 giờ", "8:00.30", "8:00 .30",
+    "8:00:", "8:00 :", "8:00 a.", "8:00 p.",
+    "8:00 a..m.", "8:00 p . m .",
+  ])("rejects unsupported clock productions rather than accepting their prefix: %s", (text) => {
+    expect(extractTemporalEvidence({ text, referenceNow }).time)
+      .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+  });
+
+  it.each([
+    ["mai--mốt", "date"], ["mai: mốt", "date"], ["mai/2027", "date"],
+    ["mai2", "date"], ["mai... / -- mốt", "date"],
+    ["tuần này7", "range"], ["tuần này.7", "range"],
+    ["7 ngày tới.7", "range"], ["sắp tới7", "range"],
+  ] as const)("collects malformed relative and range endings: %s", (text, dimension) => {
+    const evidence = extractTemporalEvidence({ text, referenceNow });
+    expect(evidence[dimension].state).toBe("AMBIGUOUS");
+    expect(evidence.range).toEqual({ state: "AMBIGUOUS" });
+  });
+
+  it.each([
+    ["20/09", "ngày/21 tháng 9", "date"],
+    ["20/09", "21tháng9", "date"],
+    ["20/09", "21 tháng /9", "date"],
+    ["20/09", "21 tháng 9năm2027", "date"],
+    ["tuần này", "tuần/ này", "range"],
+    ["tuần này", "tuần / này", "range"],
+    ["tuần này", "tuần này/7", "range"],
+    ["tuần này", "7ngày tới", "range"],
+    ["tuần này", "7 ngày/tới", "range"],
+    ["tuần này", "7 ngày tới/7", "range"],
+    ["tuần này", "sắp/ tới", "range"],
+    ["tuần này", "sắp / tới", "range"],
+    ["tuần này", "sắp tới/7", "range"],
+    ["8h", "lúc/9 giờ", "time"],
+    ["8h", "9: 00", "time"],
+    ["8h", "9:00.30", "time"],
+  ] as const)("retains malformed %s / %s candidates alone and in both orders", (
+    valid, malformed, dimension,
+  ) => {
+    for (const text of [malformed, `${valid} rồi ${malformed}`, `${malformed} rồi ${valid}`]) {
+      const { evidence, diagnostics } = temporalEvidenceModule.inspectTemporalScanner({
+        text, referenceNow,
+      });
+      expect(evidence[dimension].state, text).toBe("AMBIGUOUS");
+      expect(diagnostics.candidateCount, text).toBeGreaterThan(0);
+      if (dimension === "date") expect(evidence.range, text).toEqual({ state: "AMBIGUOUS" });
+    }
+  });
+
+  it.each([",", ", ", ". ", "; ", " : "])(
+    "uses %j as a boundary between independent temporal expressions in either order", (separator) => {
+      for (const text of [`20/09${separator}8h`, `8h${separator}20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "RESOLVED", source: "DAY_MONTH", localDate: "2026-09-20" },
+          time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+        });
+      }
+      for (const text of [`20/09${separator}8:00 .30`, `8:00 .30${separator}20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "RESOLVED", localDate: "2026-09-20" },
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+        });
+      }
+      for (const text of [`8h${separator}21tháng9`, `21tháng9${separator}8h`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          time: { state: "RESOLVED", localTime: "08:00" },
+        });
+      }
+    },
+  );
+
+  it.each([
+    ["20/09", "21./09", "date"],
+    ["20/09", "21, /09", "date"],
+    ["20/09", "/21/09", "date"],
+    ["8h", "9.:00", "time"],
+    ["8h", "9,. :00", "time"],
+  ] as const)("collects numeric syntax errors instead of discarding them: %s / %s", (
+    valid, malformed, dimension,
+  ) => {
+    for (const text of [malformed, `${valid} rồi ${malformed}`, `${malformed} rồi ${valid}`]) {
+      const evidence = extractTemporalEvidence({ text, referenceNow });
+      expect(evidence[dimension], text).toEqual({
+        state: "AMBIGUOUS", reason: dimension === "date" ? "INVALID_DATE" : "INVALID_TIME",
+      });
+    }
+  });
+
+  it.each([
     ["20/09 /2027", "date"],
     ["8:00 :30", "time"],
     ["8 giờ rưỡi", "time"],
@@ -343,6 +456,8 @@ describe("bounded temporal grammar scanner", () => {
       "mai 8h nhắc tui gọi khách",
       "8h 20/09 rồi xem tuần này",
       "20//09 8:00 :30 mai-mốt ".repeat(40).slice(0, 1_024),
+      `mai${"-. \u00a0".repeat(256)}mốt, 8h`,
+      `21${"., ".repeat(256)}/09 rồi 8h`,
     ];
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
