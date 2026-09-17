@@ -205,6 +205,42 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["9:; /09", "8h; 9:; /09", "9:; /09; 8h"])(
+    "retains the incomplete clock before a separate malformed date: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow }).time)
+        .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+    },
+  );
+
+  it("retains starter identity across a finite delimiter/ownership transition matrix", () => {
+    for (const clock of ["9:", "9::", "9: :"]) {
+      for (const delimiter of [";", ",", "!", "?"]) {
+        for (const space of ["", " ", "\u00a0"]) {
+          for (const dateSeparator of ["/", "-"]) {
+            const fragment = `${clock}${delimiter}${space}${dateSeparator}09`;
+            for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `8h rồi ${fragment}`, `${fragment} rồi 8h`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                range: { state: "AMBIGUOUS" },
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it.each(["20/13 : 8h", "8h : 20/13", "ngày 20 tháng 13 : 8h", "8h : ngày 20 tháng 13"])(
+    "does not assign the safe colon boundary of an invalid date to the independent time: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+        time: { state: "RESOLVED", localTime: "08:00" },
+        date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+        range: { state: "AMBIGUOUS" },
+      });
+    },
+  );
+
   it.each(["9:/00", "9:-00", "9: /00", "9:./00", "9::/00", "9::./00"])(
     "retains the malformed clock dimension of mixed numeric separators: %s", (fragment) => {
       for (const text of [fragment, `8h rồi ${fragment}`, `${fragment} rồi 8h`, `8h; ${fragment}`, `${fragment}; 8h`]) {

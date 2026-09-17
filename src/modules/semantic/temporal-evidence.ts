@@ -341,6 +341,13 @@ function followingAtom(input: GrammarInput, index: number): number {
 
 type NumericSeparatorOwnership = "NONE" | "DATE" | "TIME" | "MIXED";
 
+const OWNERSHIP_TRANSITIONS: Record<NumericSeparatorOwnership, Record<NumericSeparatorOwnership, NumericSeparatorOwnership>> = {
+  NONE: { NONE: "NONE", DATE: "DATE", TIME: "TIME", MIXED: "MIXED" },
+  DATE: { NONE: "DATE", DATE: "DATE", TIME: "MIXED", MIXED: "MIXED" },
+  TIME: { NONE: "TIME", DATE: "MIXED", TIME: "TIME", MIXED: "MIXED" },
+  MIXED: { NONE: "MIXED", DATE: "MIXED", TIME: "MIXED", MIXED: "MIXED" },
+};
+
 function numericSeparatorOwnership(input: GrammarInput, index: number, spanEnd: number): NumericSeparatorOwnership {
   if (input.tokens[index]?.kind !== "NUMBER") return "NONE";
   const date = input.firstDateSeparator[index + 1] < spanEnd;
@@ -695,6 +702,8 @@ function isMalformed(expression: Expression): boolean {
   return expression.parsed.candidate.kind !== "VALID";
 }
 
+type TemporalSpan = { expression: Expression; contentEnd: number };
+
 // Consumes the maximal span, with an irreversible COMPLETE -> MALFORMED
 // transition. Recognition of a later expression is only a recovery boundary;
 // it never changes the classification of the span already consumed.
@@ -703,19 +712,23 @@ function consumeTemporalSpan(
   initial: Expression,
   reference: ReferenceDate,
   counters: ScannerCounters,
-): Expression {
+): TemporalSpan {
   const { tokens } = input;
   let expression = initial;
   let cursor = initial.parsed.nextIndex;
   let separatorState: SeparatorState = "EMPTY";
   let leadingDateSeparator: number | null = null;
   let sentenceBoundary = false;
+  let contentEnd = cursor;
 
-  const finish = (nextIndex: number): Expression => {
+  const finish = (nextIndex: number): TemporalSpan => {
     expression.parsed.nextIndex = nextIndex;
-    return expression;
+    return { expression, contentEnd: Math.min(contentEnd, nextIndex) };
   };
-  const malformed = () => { expression = invalidExpression(expression); };
+  const malformed = () => {
+    expression = invalidExpression(expression);
+    contentEnd = Math.max(contentEnd, cursor);
+  };
 
   while (cursor < tokens.length) {
     counters.grammarSteps += 1;
@@ -753,6 +766,7 @@ function consumeTemporalSpan(
           candidate: { kind: "MODIFIER" }, nextIndex: following.parsed.nextIndex,
         } };
         cursor = following.parsed.nextIndex;
+        contentEnd = cursor;
         separatorState = "EMPTY";
         continue;
       }
@@ -776,6 +790,7 @@ function consumeTemporalSpan(
     } else {
       cursor += 1;
     }
+    contentEnd = cursor;
     separatorState = "EMPTY";
     sentenceBoundary = false;
   }
@@ -784,6 +799,43 @@ function consumeTemporalSpan(
   // malformed core productions that never reached COMPLETE.
   if (isMalformed(initial) && !isMalformed(expression)) expression = invalidExpression(expression);
   return finish(cursor);
+}
+
+function classifyTemporalSpan(
+  input: GrammarInput,
+  start: number,
+  span: TemporalSpan,
+  counters: ScannerCounters,
+): Expression[] {
+  let ownership: NumericSeparatorOwnership = "NONE";
+  // Collect every committed numeric starter/internal transition before
+  // choosing emitted dimensions. Accepted boundaries are outside contentEnd,
+  // even when nextIndex consumes those boundaries to resume the scan.
+  for (let owned = start; owned < span.contentEnd; owned += 1) {
+    counters.grammarSteps += 1;
+    ownership = OWNERSHIP_TRANSITIONS[ownership][numericSeparatorOwnership(input, owned, span.contentEnd)];
+  }
+  const primary = span.expression;
+  const dimensions = new Set<TemporalEvidenceField>();
+  if (ownership === "DATE" || ownership === "MIXED") dimensions.add("date");
+  if (ownership === "TIME" || ownership === "MIXED") dimensions.add("time");
+  // A word/range starter retains its own dimension. Numeric DATE/TIME
+  // classification instead follows the owned syntax, never lookahead beyond
+  // the span: an owned NUMBER COLON remains TIME even if DATE probed first.
+  if (input.tokens[start].kind !== "NUMBER" || primary.dimension === "range" || ownership === "NONE") {
+    dimensions.add(primary.dimension);
+  }
+  const expressions: Expression[] = [];
+  for (const dimension of dimensions) {
+    if (dimension === primary.dimension) {
+      expressions.push(dimensions.size === 1 ? primary : invalidExpression(primary));
+    } else if (dimension === "date") {
+      expressions.push({ dimension, parsed: invalidDate(primary.parsed.nextIndex) });
+    } else if (dimension === "time") {
+      expressions.push({ dimension, parsed: { candidate: { kind: "INVALID" }, nextIndex: primary.parsed.nextIndex } });
+    }
+  }
+  return expressions;
 }
 
 function rangeFromDate(candidate: DateCandidate): RangeCandidate {
@@ -809,41 +861,21 @@ function scanTemporalGrammar(
       index += 1;
       continue;
     }
-    let expression = consumeTemporalSpan(input, core, reference, counters);
-    let mixedNumericOwnership = false;
-    // Classify every numeric starter actually owned by this maximal span,
-    // including starters consumed by a word-led core or malformed recovery.
-    // Safe boundaries end the interval before a later independent expression.
-    for (let owned = index; owned < expression.parsed.nextIndex; owned += 1) {
-      counters.grammarSteps += 1;
-      if (numericSeparatorOwnership(input, owned, expression.parsed.nextIndex) === "MIXED") {
-        mixedNumericOwnership = true;
+    const span = consumeTemporalSpan(input, core, reference, counters);
+    for (const expression of classifyTemporalSpan(input, index, span, counters)) {
+      if (expression.dimension === "date") {
+        candidates.dates.push(expression.parsed.candidate);
+        candidates.ranges.push(rangeFromDate(expression.parsed.candidate));
+        counters.candidateCount += 2;
+      } else if (expression.dimension === "time") {
+        candidates.times.push(expression.parsed.candidate);
+        counters.candidateCount += 1;
+      } else {
+        candidates.ranges.push(expression.parsed.candidate);
+        counters.candidateCount += 1;
       }
     }
-    if (mixedNumericOwnership) expression = invalidExpression(expression);
-    if (expression.dimension === "date") {
-      candidates.dates.push(expression.parsed.candidate);
-      candidates.ranges.push(rangeFromDate(expression.parsed.candidate));
-      counters.candidateCount += 2;
-    } else if (expression.dimension === "time") {
-      candidates.times.push(expression.parsed.candidate);
-      counters.candidateCount += 1;
-    } else {
-      candidates.ranges.push(expression.parsed.candidate);
-      counters.candidateCount += 1;
-    }
-    // A mixed numeric separator run implicates both DATE and TIME. Emit the
-    // missing malformed dimensions, independently of primary-parser priority.
-    if (mixedNumericOwnership && expression.dimension !== "date") {
-      candidates.dates.push({ source: "EXPLICIT_DATE", localDate: null });
-      candidates.ranges.push({ state: "AMBIGUOUS" });
-      counters.candidateCount += 2;
-    }
-    if (mixedNumericOwnership && expression.dimension !== "time") {
-      candidates.times.push({ kind: "INVALID" });
-      counters.candidateCount += 1;
-    }
-    index = Math.max(index + 1, expression.parsed.nextIndex);
+    index = Math.max(index + 1, span.expression.parsed.nextIndex);
   }
   return candidates;
 }
