@@ -205,6 +205,54 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["9:/00", "9:-00", "9: /00", "9:./00", "9::/00", "9::./00"])(
+    "retains the malformed clock dimension of mixed numeric separators: %s", (fragment) => {
+      for (const text of [fragment, `8h rồi ${fragment}`, `${fragment} rồi 8h`, `8h; ${fragment}`, `${fragment}; 8h`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }).time, text)
+          .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+      }
+    },
+  );
+
+  it("retains both implicated dimensions for finite mixed numeric-starter mutations", () => {
+    for (const dateSeparator of ["/", "-"]) {
+      for (const clockSeparator of [":", "::", ":."]) {
+        for (const gap of ["", " ", "\u00a0"]) {
+          for (const run of [`${clockSeparator}${gap}${dateSeparator}`, `${dateSeparator}${gap}${clockSeparator}`]) {
+            const fragment = `9${run}00`;
+            for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `20/09; ${fragment}`, `${fragment}; 20/09`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                range: { state: "AMBIGUOUS" },
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it.each(["20/09 9:00", "9:00 20/09", "2026-09-20; 9h", "9 giờ; 20/09/2026"])(
+    "keeps valid numeric date/time ownership separate: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({
+        date: { state: "RESOLVED", localDate: "2026-09-20" },
+        time: { state: "RESOLVED", localTime: "09:00" },
+        range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+      });
+    },
+  );
+
+  it.each(["; ", ", ", ". "])("keeps mixed starter ownership within its own side of %j", (boundary) => {
+    for (const text of [`20/09${boundary}:/30`, `:/30${boundary}20/09`]) {
+      expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+        date: { state: "RESOLVED", localDate: "2026-09-20" },
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+        range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+      });
+    }
+  });
+
   it.each(["8:00::20/09", "8:00:::20/09", "8:00:: 20/09", "8:00 : : 20/09"])(
     "never repairs a malformed separator run with a later date: %s", (text) => {
       expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({

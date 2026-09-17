@@ -339,6 +339,19 @@ function followingAtom(input: GrammarInput, index: number): number {
   return input.nextAtom[index + 1] ?? input.tokens.length;
 }
 
+type NumericSeparatorOwnership = "NONE" | "DATE" | "TIME" | "MIXED";
+
+function numericSeparatorOwnership(input: GrammarInput, index: number, spanEnd: number): NumericSeparatorOwnership {
+  if (input.tokens[index]?.kind !== "NUMBER") return "NONE";
+  const date = input.firstDateSeparator[index + 1] < spanEnd;
+  const time = input.firstClockSeparator[index + 1] < spanEnd;
+  // Ownership is the union of structural separator classes in this numeric
+  // starter's gap. MIXED is irreversible; choosing a primary grammar must not
+  // erase the other dimension when that grammar consumes the malformed span.
+  if (date && time) return "MIXED";
+  return date ? "DATE" : time ? "TIME" : "NONE";
+}
+
 function hasRequiredSpace(tokens: TemporalToken[], left: number, right: number): boolean {
   return right === left + 2 && tokens[left + 1]?.kind === "WHITESPACE";
 }
@@ -796,7 +809,18 @@ function scanTemporalGrammar(
       index += 1;
       continue;
     }
-    const expression = consumeTemporalSpan(input, core, reference, counters);
+    let expression = consumeTemporalSpan(input, core, reference, counters);
+    let mixedNumericOwnership = false;
+    // Classify every numeric starter actually owned by this maximal span,
+    // including starters consumed by a word-led core or malformed recovery.
+    // Safe boundaries end the interval before a later independent expression.
+    for (let owned = index; owned < expression.parsed.nextIndex; owned += 1) {
+      counters.grammarSteps += 1;
+      if (numericSeparatorOwnership(input, owned, expression.parsed.nextIndex) === "MIXED") {
+        mixedNumericOwnership = true;
+      }
+    }
+    if (mixedNumericOwnership) expression = invalidExpression(expression);
     if (expression.dimension === "date") {
       candidates.dates.push(expression.parsed.candidate);
       candidates.ranges.push(rangeFromDate(expression.parsed.candidate));
@@ -806,6 +830,17 @@ function scanTemporalGrammar(
       counters.candidateCount += 1;
     } else {
       candidates.ranges.push(expression.parsed.candidate);
+      counters.candidateCount += 1;
+    }
+    // A mixed numeric separator run implicates both DATE and TIME. Emit the
+    // missing malformed dimensions, independently of primary-parser priority.
+    if (mixedNumericOwnership && expression.dimension !== "date") {
+      candidates.dates.push({ source: "EXPLICIT_DATE", localDate: null });
+      candidates.ranges.push({ state: "AMBIGUOUS" });
+      counters.candidateCount += 2;
+    }
+    if (mixedNumericOwnership && expression.dimension !== "time") {
+      candidates.times.push({ kind: "INVALID" });
       counters.candidateCount += 1;
     }
     index = Math.max(index + 1, expression.parsed.nextIndex);
