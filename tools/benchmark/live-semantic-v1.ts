@@ -27,7 +27,7 @@ const MAX_LIVE_RESPONSE_BYTES = 1_000_000;
 
 export type LiveBenchmarkCandidate = {
   candidateId: string;
-  model: "qwen/qwen3-30b-a3b-instruct-2507" | "nvidia/nemotron-3.5-lightning" | "google/gemini-2.5-flash-lite";
+  model: "qwen/qwen3-30b-a3b-instruct-2507" | "nvidia/nemotron-3.5-lightning" | "google/gemini-2.5-flash-lite" | "google/gemini-2.5-flash";
   provider: string;
   reasoning: "OMIT" | "DISABLED";
   promptPriceMicrounitsPerMillionTokens: number;
@@ -119,21 +119,23 @@ function benchmarkContext(raw: unknown): unknown {
 }
 function validateCandidate(candidate: LiveBenchmarkCandidate): void {
   if (!candidate || !/^[a-z0-9][a-z0-9._-]{0,80}$/u.test(candidate.candidateId)
-    || (candidate.model !== "qwen/qwen3-30b-a3b-instruct-2507" && candidate.model !== "nvidia/nemotron-3.5-lightning" && candidate.model !== "google/gemini-2.5-flash-lite")
+    || (candidate.model !== "qwen/qwen3-30b-a3b-instruct-2507" && candidate.model !== "nvidia/nemotron-3.5-lightning" && candidate.model !== "google/gemini-2.5-flash-lite" && candidate.model !== "google/gemini-2.5-flash")
     || (candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.provider !== "siliconflow/fp8" || candidate.reasoning !== "OMIT"))
     || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.provider !== "phala" || candidate.reasoning !== "DISABLED"))
     || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.provider !== "google-vertex/eu" || candidate.reasoning !== "OMIT"))
+    || (candidate.model === "google/gemini-2.5-flash" && (candidate.provider !== "google-vertex/eu" || candidate.reasoning !== "DISABLED"))
     || !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._:-]+)*$/u.test(candidate.provider)) throw new TypeError("Invalid approved benchmark candidate");
   assertSafeInteger(candidate.promptPriceMicrounitsPerMillionTokens, "candidate prompt price");
   assertSafeInteger(candidate.completionPriceMicrounitsPerMillionTokens, "candidate completion price");
   if ((candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.promptPriceMicrounitsPerMillionTokens !== 90_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 300_000))
     || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.promptPriceMicrounitsPerMillionTokens !== 80_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 200_000))
-    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.promptPriceMicrounitsPerMillionTokens !== 100_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 400_000))) {
+    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.promptPriceMicrounitsPerMillionTokens !== 100_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 400_000))
+    || (candidate.model === "google/gemini-2.5-flash" && (candidate.promptPriceMicrounitsPerMillionTokens !== 300_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 2_500_000))) {
     throw new TypeError("Candidate pricing does not match the pinned price");
   }
 }
 function approvedCandidateSet(candidates: LiveBenchmarkCandidate[]): boolean {
-  return (candidates.length === 1 && candidates[0]?.model === "google/gemini-2.5-flash-lite") || (candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2
+  return (candidates.length === 1 && (candidates[0]?.model === "google/gemini-2.5-flash-lite" || candidates[0]?.model === "google/gemini-2.5-flash")) || (candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2
     && candidates.some((candidate) => candidate.model === "qwen/qwen3-30b-a3b-instruct-2507")
     && candidates.some((candidate) => candidate.model === "nvidia/nemotron-3.5-lightning"));
 }

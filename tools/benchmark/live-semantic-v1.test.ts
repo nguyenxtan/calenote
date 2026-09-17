@@ -5,12 +5,16 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CANONICAL_SEMANTIC_PROMPT } from "../../src/modules/intelligence/semantic-gateway";
+import { SemanticInterpretationJsonSchema } from "../../src/modules/semantic/contracts";
 import { CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 } from "./semantic-v1";
 import {
   createLiveSemanticBenchmarkRunner,
+  createOpenRouterTransport,
   GEMINI_PILOT_CASE_IDS,
   type LiveBenchmarkCandidate,
   type LiveBenchmarkTransport,
+  type LiveSemanticJsonRequest,
 } from "./live-semantic-v1";
 
 const fixturePath = resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json");
@@ -20,6 +24,7 @@ const candidates: LiveBenchmarkCandidate[] = [
   { candidateId: "nemotron", model: "nvidia/nemotron-3.5-lightning", provider: "phala", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
 ];
 const gemini: LiveBenchmarkCandidate = { candidateId: "gemini-2.5-flash-lite", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", reasoning: "OMIT", promptPriceMicrounitsPerMillionTokens: 100_000, completionPriceMicrounitsPerMillionTokens: 400_000 };
+const flash: LiveBenchmarkCandidate = { candidateId: "gemini-2.5-flash", model: "google/gemini-2.5-flash", provider: "google-vertex/eu", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 300_000, completionPriceMicrounitsPerMillionTokens: 2_500_000 };
 
 const response = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.000001, prompt_tokens: 1, completion_tokens: 1 } });
 const stateDirectories: string[] = [];
@@ -45,6 +50,19 @@ afterEach(async () => {
 });
 
 describe("live semantic V1 benchmark runner", () => {
+  it("keeps a test sentinel API key in Authorization only, never the serialized request body", async () => {
+    const sentinel = "CALENOTE_TEST_SENTINEL_OPENROUTER_KEY_DO_NOT_LEAK";
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ choices: [], usage: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    const request = { model: "google/gemini-2.5-flash", stream: false, max_tokens: 32, messages: [{ role: "system", content: "safe" }], response_format: { type: "json_schema", json_schema: { name: "semantic_interpretation", strict: true, schema: SemanticInterpretationJsonSchema } }, provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.3, completion: 2.5 } }, reasoning: { effort: "none", exclude: true } } satisfies LiveSemanticJsonRequest;
+    await createOpenRouterTransport(sentinel)(request, { signal: new AbortController().signal });
+    const init = (fetcher as unknown as { mock: { calls: Array<[unknown, RequestInit]> } }).mock.calls[0]?.[1] as RequestInit;
+    const body = String(init.body);
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${sentinel}`);
+    expect(body).not.toContain(sentinel);
+    expect(JSON.stringify(request)).not.toContain(sentinel);
+    expect(JSON.parse(body)).toMatchObject({ model: request.model, messages: request.messages, response_format: request.response_format, provider: request.provider, reasoning: request.reasoning });
+  });
   it("permits only the pinned single-route Gemini pilot over the fixed 36-case stratified subset", async () => {
     const transport = fakeTransport();
     const report = await runner(await stateDirectory(), transport, {
@@ -53,6 +71,57 @@ describe("live semantic V1 benchmark runner", () => {
     }).preflight({ apiKeyPresent: false });
     expect(report).toMatchObject({ caseCount: 36, candidateModels: ["google/gemini-2.5-flash-lite"], projectedMaxRequests: 36, projectedMaxCostMicrounits: 46_908, networkRequests: 0 });
     expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("permits the pinned Gemini Flash pilot with disabled reasoning and a $0.21 cap", async () => {
+    const report = await runner(await stateDirectory(), fakeTransport(), {
+      candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000,
+    }).preflight({ apiKeyPresent: false });
+    expect(report).toMatchObject({ caseCount: 36, candidateModels: ["google/gemini-2.5-flash"], projectedMaxRequests: 36, projectedMaxCostMicrounits: 200_160, networkRequests: 0 });
+  });
+
+  it("preflights Flash full against all 216 canonical cases with its independent cap", async () => {
+    const transport = fakeTransport();
+    const report = await runner(await stateDirectory(), transport, { candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
+    expect(report).toMatchObject({ caseCount: 216, projectedMaxRequests: 216, maxHttpRequests: 220, maxCostMicrounits: 1_210_000, networkRequests: 0 });
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("separates Flash pilot and full provenance and rejects cross-scope ledger reuse", async () => {
+    const directory = await stateDirectory();
+    const reportDirectory = await stateDirectory();
+    const pilot = runner(directory, fakeTransport(), { runId: "flash-scope", candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000 });
+    const full = runner(directory, fakeTransport(), { runId: "flash-scope", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 });
+    const pilotReport = await pilot.preflight({ apiKeyPresent: false });
+    const fullReport = await runner(reportDirectory, fakeTransport(), { runId: "flash-full", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
+    expect(pilotReport.provenance.fixtureCaseIdsSha256).not.toBe(fullReport.provenance.fixtureCaseIdsSha256);
+    await expect(full.preflight({ apiKeyPresent: false })).rejects.toThrow("ledger");
+    const reverseDirectory = await stateDirectory();
+    await runner(reverseDirectory, fakeTransport(), { runId: "flash-scope-reverse", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
+    await expect(runner(reverseDirectory, fakeTransport(), { runId: "flash-scope-reverse", candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000 }).preflight({ apiKeyPresent: false })).rejects.toThrow("ledger");
+  });
+
+  it("emits the pinned Flash privacy envelope with reasoning disabled while Flash Lite omits reasoning", async () => {
+    const flashTransport = fakeTransport();
+    await runner(await stateDirectory(), flashTransport, {
+      candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000,
+    }).run({ apiKeyPresent: true });
+    const flashRequest = (flashTransport as unknown as { mock: { calls: Array<[Record<string, unknown> & { messages: Array<Record<string, unknown>> }]> } }).mock.calls[0]?.[0];
+    expect(flashRequest).toMatchObject({ model: "google/gemini-2.5-flash", stream: false, max_tokens: 1_024,
+      reasoning: { effort: "none", exclude: true }, response_format: { type: "json_schema", json_schema: { strict: true } },
+      provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.3, completion: 2.5 } },
+    });
+    expect(flashRequest.messages).toHaveLength(2);
+    expect(flashRequest.messages[0]).toEqual({ role: "system", content: CANONICAL_SEMANTIC_PROMPT });
+    expect(flashRequest.messages[1]).toMatchObject({ role: "user" });
+    expect((flashRequest.response_format as { json_schema: { schema: unknown } }).json_schema.schema).toEqual(SemanticInterpretationJsonSchema);
+    expect(flashRequest).not.toHaveProperty("tools");
+    expect(flashRequest).not.toHaveProperty("functions");
+    expect(flashRequest).not.toHaveProperty("function_call");
+    expect(flashRequest).not.toHaveProperty("tool_choice");
+    const liteTransport = fakeTransport();
+    await runner(await stateDirectory(), liteTransport, { candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 100_000 }).run({ apiKeyPresent: true });
+    expect((liteTransport as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls[0]?.[0]).not.toHaveProperty("reasoning");
   });
 
   it("rejects an altered Gemini provider or price before it can create a ledger", async () => {
