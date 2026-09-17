@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 } from "./semantic-v1";
 import {
   createLiveSemanticBenchmarkRunner,
+  GEMINI_PILOT_CASE_IDS,
   type LiveBenchmarkCandidate,
   type LiveBenchmarkTransport,
 } from "./live-semantic-v1";
@@ -18,6 +19,7 @@ const candidates: LiveBenchmarkCandidate[] = [
   { candidateId: "qwen", model: "qwen/qwen3-30b-a3b-instruct-2507", provider: "siliconflow/fp8", promptPriceMicrounitsPerMillionTokens: 90_000, completionPriceMicrounitsPerMillionTokens: 300_000, reasoning: "OMIT" },
   { candidateId: "nemotron", model: "nvidia/nemotron-3.5-lightning", provider: "phala", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
 ];
+const gemini: LiveBenchmarkCandidate = { candidateId: "gemini-2.5-flash-lite", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", reasoning: "OMIT", promptPriceMicrounitsPerMillionTokens: 100_000, completionPriceMicrounitsPerMillionTokens: 400_000 };
 
 const response = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.000001, prompt_tokens: 1, completion_tokens: 1 } });
 const stateDirectories: string[] = [];
@@ -43,12 +45,33 @@ afterEach(async () => {
 });
 
 describe("live semantic V1 benchmark runner", () => {
+  it("permits only the pinned single-route Gemini pilot over the fixed 36-case stratified subset", async () => {
+    const transport = fakeTransport();
+    const report = await runner(await stateDirectory(), transport, {
+      candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 100_000,
+      maxInputTokens: 12_000, maxOutputTokens: 256,
+    }).preflight({ apiKeyPresent: false });
+    expect(report).toMatchObject({ caseCount: 36, candidateModels: ["google/gemini-2.5-flash-lite"], projectedMaxRequests: 36, projectedMaxCostMicrounits: 46_908, networkRequests: 0 });
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("rejects an altered Gemini provider or price before it can create a ledger", async () => {
+    const directory = await stateDirectory();
+    expect(() => runner(directory, fakeTransport(), { candidates: [{ ...gemini, provider: "google-vertex/global" }], caseIds: GEMINI_PILOT_CASE_IDS })).toThrow("Invalid approved benchmark candidate");
+    expect(() => runner(directory, fakeTransport(), { candidates: [{ ...gemini, completionPriceMicrounitsPerMillionTokens: 1 }], caseIds: GEMINI_PILOT_CASE_IDS })).toThrow("pinned price");
+  });
+
+  it("refuses a Gemini full or arbitrary subset before the pilot quality gate exists", async () => {
+    const directory = await stateDirectory();
+    expect(() => runner(directory, fakeTransport(), { candidates: [gemini] })).toThrow("fixed Gemini pilot subset");
+    expect(() => runner(directory, fakeTransport(), { candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS.slice(0, -1) })).toThrow("fixed Gemini pilot subset");
+  });
   it("rejects the retired gpt-oss candidate and accepts the exact Qwen SiliconFlow replacement", async () => {
     const directory = await stateDirectory();
     expect(() => runner(directory, fakeTransport(), { candidates: [
       { candidateId: "gpt-oss", model: "openai/gpt-oss-120b", provider: "crusoe/bf16", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 50_000, completionPriceMicrounitsPerMillionTokens: 250_000 } as unknown as LiveBenchmarkCandidate,
       candidates[1],
-    ] })).toThrow("exactly the two approved");
+    ] })).toThrow("approved benchmark candidate set");
     await expect(runner(directory, fakeTransport()).preflight({ apiKeyPresent: false })).resolves.toMatchObject({ candidateModels: ["qwen/qwen3-30b-a3b-instruct-2507", "nvidia/nemotron-3.5-lightning"] });
   });
 
@@ -232,6 +255,13 @@ describe("live semantic V1 benchmark runner", () => {
     expect(output.stdout).toContain('"networkRequests":0');
     expect(output.stdout).toContain('"apiKey":"ABSENT"');
     expect(output.stderr).toBe("");
+  });
+
+  it("exposes the exact Gemini pilot profile through the CLI without dispatching", async () => {
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", "gemini-pilot", "--run-id", "test-preflight-gemini-pilot"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "" } });
+    expect(output.stdout).toContain('"caseCount":36');
+    expect(output.stdout).toContain('"projectedMaxRequests":36');
+    expect(output.stdout).toContain('"networkRequests":0');
   });
 
   it("accepts package-script argument forwarding for the network-free preflight", async () => {

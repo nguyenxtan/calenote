@@ -21,7 +21,7 @@ const MAX_LIVE_RESPONSE_BYTES = 1_000_000;
 
 export type LiveBenchmarkCandidate = {
   candidateId: string;
-  model: "qwen/qwen3-30b-a3b-instruct-2507" | "nvidia/nemotron-3.5-lightning";
+  model: "qwen/qwen3-30b-a3b-instruct-2507" | "nvidia/nemotron-3.5-lightning" | "google/gemini-2.5-flash-lite";
   provider: string;
   reasoning: "OMIT" | "DISABLED";
   promptPriceMicrounitsPerMillionTokens: number;
@@ -59,8 +59,15 @@ export type LiveBenchmarkRun = {
 export type LiveBenchmarkOptions = {
   fixturePath: string; stateDirectory: string; runId: string; candidates: LiveBenchmarkCandidate[];
   transport: LiveBenchmarkTransport; maxHttpRequests?: number; maxCostMicrounits?: number;
-  maxInputTokens?: number; maxOutputTokens?: number; onProgress?: (line: string) => void;
+  maxInputTokens?: number; maxOutputTokens?: number; caseIds?: readonly string[]; onProgress?: (line: string) => void;
 };
+
+/** Fixed, intent-stratified, canonical-fixture subset for the authorized Gemini pilot. */
+export const GEMINI_PILOT_CASE_IDS = [
+  "synthetic-today-001", "synthetic-today-007", "synthetic-today-011", "synthetic-tomorrow-019", "synthetic-tomorrow-025", "synthetic-tomorrow-029", "synthetic-explicit-date-037", "synthetic-explicit-date-043", "synthetic-explicit-date-047", "synthetic-daypart-055", "synthetic-daypart-061", "synthetic-daypart-065",
+  "synthetic-colloquialism-073", "synthetic-colloquialism-079", "synthetic-colloquialism-087", "synthetic-filler-091", "synthetic-filler-097", "synthetic-filler-105", "synthetic-reordered-syntax-109", "synthetic-reordered-syntax-115", "synthetic-reordered-syntax-123", "synthetic-implicit-request-127", "synthetic-implicit-request-133", "synthetic-implicit-request-141",
+  "synthetic-missing-or-ambiguous-145", "synthetic-missing-or-ambiguous-155", "synthetic-missing-or-ambiguous-161", "synthetic-past-time-163", "synthetic-past-time-173", "synthetic-past-time-179", "synthetic-typo-181", "synthetic-typo-191", "synthetic-typo-197", "synthetic-multi-turn-continuation-200", "synthetic-multi-turn-continuation-209", "synthetic-multi-turn-continuation-215",
+] as const;
 
 const safeCategory = new Set(["UNAVAILABLE", "TIMEOUT", "RATE_LIMITED", "PROVIDER_FAILURE", "INVALID_JSON", "SCHEMA_INVALID", "REQUIRED_FEATURE_UNSUPPORTED", "INVALID_INPUT"]);
 function assertSafeInteger(value: number, label: string): void { if (!Number.isSafeInteger(value) || value < 0) throw new TypeError(`Invalid ${label}`); }
@@ -99,21 +106,23 @@ function benchmarkContext(raw: unknown): unknown {
 }
 function validateCandidate(candidate: LiveBenchmarkCandidate): void {
   if (!candidate || !/^[a-z0-9][a-z0-9._-]{0,80}$/u.test(candidate.candidateId)
-    || (candidate.model !== "qwen/qwen3-30b-a3b-instruct-2507" && candidate.model !== "nvidia/nemotron-3.5-lightning")
+    || (candidate.model !== "qwen/qwen3-30b-a3b-instruct-2507" && candidate.model !== "nvidia/nemotron-3.5-lightning" && candidate.model !== "google/gemini-2.5-flash-lite")
     || (candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.provider !== "siliconflow/fp8" || candidate.reasoning !== "OMIT"))
     || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.provider !== "phala" || candidate.reasoning !== "DISABLED"))
+    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.provider !== "google-vertex/eu" || candidate.reasoning !== "OMIT"))
     || !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._:-]+)*$/u.test(candidate.provider)) throw new TypeError("Invalid approved benchmark candidate");
   assertSafeInteger(candidate.promptPriceMicrounitsPerMillionTokens, "candidate prompt price");
   assertSafeInteger(candidate.completionPriceMicrounitsPerMillionTokens, "candidate completion price");
   if ((candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.promptPriceMicrounitsPerMillionTokens !== 90_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 300_000))
-    || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.promptPriceMicrounitsPerMillionTokens !== 80_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 200_000))) {
+    || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.promptPriceMicrounitsPerMillionTokens !== 80_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 200_000))
+    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.promptPriceMicrounitsPerMillionTokens !== 100_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 400_000))) {
     throw new TypeError("Candidate pricing does not match the pinned price");
   }
 }
 function approvedCandidateSet(candidates: LiveBenchmarkCandidate[]): boolean {
-  return candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2
+  return (candidates.length === 1 && candidates[0]?.model === "google/gemini-2.5-flash-lite") || (candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2
     && candidates.some((candidate) => candidate.model === "qwen/qwen3-30b-a3b-instruct-2507")
-    && candidates.some((candidate) => candidate.model === "nvidia/nemotron-3.5-lightning");
+    && candidates.some((candidate) => candidate.model === "nvidia/nemotron-3.5-lightning"));
 }
 function decodeLiveResponse(response: { status: number; body: string; oversized?: boolean }): { status: "SUCCESS"; interpretation: unknown; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } | { status: "FAILURE"; category: string; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } {
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > MAX_LIVE_RESPONSE_BYTES) return { status: "FAILURE", category: "SCHEMA_INVALID" };
@@ -172,10 +181,17 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
   const maxOutputTokens = options.maxOutputTokens ?? 1_024;
   assertSafeInteger(maxHttpRequests, "HTTP request cap"); assertSafeInteger(maxCostMicrounits, "cost cap");
   if (!Number.isInteger(maxInputTokens) || maxInputTokens < 1 || maxInputTokens > 100_000 || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4_096) throw new TypeError("Invalid bounded token configuration");
-  if (typeof options.transport !== "function" || !approvedCandidateSet(options.candidates) || new Set(options.candidates.map((item) => item.candidateId)).size !== options.candidates.length) throw new TypeError("Live runner requires exactly the two approved benchmark models");
+  if (typeof options.transport !== "function" || !approvedCandidateSet(options.candidates) || new Set(options.candidates.map((item) => item.candidateId)).size !== options.candidates.length) throw new TypeError("Live runner requires an approved benchmark candidate set");
   options.candidates.forEach(validateCandidate);
   const ledgerFile = ledgerPath(options.stateDirectory, options.runId);
-  const configDigest = digest({ version: LIVE_BENCHMARK_VERSION, candidates: options.candidates, maxHttpRequests, maxCostMicrounits, maxInputTokens, maxOutputTokens });
+  const selectedCaseIds = options.caseIds === undefined ? undefined : [...options.caseIds];
+  if (selectedCaseIds !== undefined && (selectedCaseIds.length === 0 || new Set(selectedCaseIds).size !== selectedCaseIds.length || selectedCaseIds.some((id) => typeof id !== "string"))) throw new TypeError("Invalid selected benchmark cases");
+  if (options.candidates.length === 1 && options.candidates[0]?.model === "google/gemini-2.5-flash-lite"
+    && (selectedCaseIds === undefined || selectedCaseIds.length !== GEMINI_PILOT_CASE_IDS.length
+      || selectedCaseIds.some((id, index) => id !== GEMINI_PILOT_CASE_IDS[index]))) {
+    throw new TypeError("Gemini requires the fixed Gemini pilot subset until quality-gated full authorization");
+  }
+  const configDigest = digest({ version: LIVE_BENCHMARK_VERSION, candidates: options.candidates, maxHttpRequests, maxCostMicrounits, maxInputTokens, maxOutputTokens, selectedCaseIds });
 
   async function fixture(): Promise<SyntheticSemanticFixture> {
     if (resolve(options.fixturePath) !== CANONICAL_SYNTHETIC_FIXTURE_PATH) throw new TypeError("Live runner requires the canonical fixture path");
@@ -183,7 +199,10 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
     if (createHash("sha256").update(source).digest("hex") !== CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256) throw new TypeError("Live runner canonical fixture digest mismatch");
     const loaded = await loadSyntheticSemanticFixture(CANONICAL_SYNTHETIC_FIXTURE_PATH);
     assertCanonicalSyntheticFixtureIdentity(options.fixturePath, loaded);
-    return loaded;
+    if (selectedCaseIds === undefined) return loaded;
+    const selected = new Set(selectedCaseIds);
+    if (selectedCaseIds.some((id) => !loaded.cases.some((item) => item.id === id))) throw new TypeError("Selected benchmark case is not canonical");
+    return { ...loaded, cases: loaded.cases.filter((item) => selected.has(item.id)) };
   }
   const expected = (): Omit<Ledger, "attempts"> => ({ schemaVersion: 1, benchmarkVersion: LIVE_BENCHMARK_VERSION, runId: options.runId, fixtureContentDigest: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256, configDigest });
   async function readLedger(): Promise<Ledger | null> {
