@@ -817,12 +817,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 055",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -834,12 +832,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 056",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -851,12 +847,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 057",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -868,12 +862,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 058",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -885,12 +877,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 059",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -902,12 +892,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 060",
-        "localDate": "2026-09-17",
-        "localTime": "14:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1091,12 +1079,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 073",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1108,12 +1094,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 074",
-        "localDate": "2026-09-17",
-        "localTime": "09:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1125,12 +1109,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 075",
-        "localDate": "2026-09-17",
-        "localTime": "10:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1142,12 +1124,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 076",
-        "localDate": "2026-09-17",
-        "localTime": "11:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1159,12 +1139,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 077",
-        "localDate": "2026-09-17",
-        "localTime": "12:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1176,12 +1154,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 078",
-        "localDate": "2026-09-17",
-        "localTime": "13:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1365,12 +1341,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 091",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1382,12 +1356,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 092",
-        "localDate": "2026-09-17",
-        "localTime": "09:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1399,12 +1371,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 093",
-        "localDate": "2026-09-17",
-        "localTime": "10:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1416,12 +1386,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 094",
-        "localDate": "2026-09-17",
-        "localTime": "11:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1433,12 +1401,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 095",
-        "localDate": "2026-09-17",
-        "localTime": "12:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1450,12 +1416,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 096",
-        "localDate": "2026-09-17",
-        "localTime": "13:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1639,12 +1603,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 109",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1656,12 +1618,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 110",
-        "localDate": "2026-09-17",
-        "localTime": "09:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1673,12 +1633,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 111",
-        "localDate": "2026-09-17",
-        "localTime": "10:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1690,12 +1648,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 112",
-        "localDate": "2026-09-17",
-        "localTime": "11:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1707,12 +1663,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 113",
-        "localDate": "2026-09-17",
-        "localTime": "12:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1724,12 +1678,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 114",
-        "localDate": "2026-09-17",
-        "localTime": "13:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1913,12 +1865,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 127",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1930,12 +1880,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 128",
-        "localDate": "2026-09-17",
-        "localTime": "09:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1947,12 +1895,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 129",
-        "localDate": "2026-09-17",
-        "localTime": "10:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1964,12 +1910,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 130",
-        "localDate": "2026-09-17",
-        "localTime": "11:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1981,12 +1925,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 131",
-        "localDate": "2026-09-17",
-        "localTime": "12:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -1998,12 +1940,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 132",
-        "localDate": "2026-09-17",
-        "localTime": "13:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2187,12 +2127,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 145",
-        "localDate": "2026-09-17",
-        "localTime": "08:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2204,12 +2142,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 146",
-        "localDate": "2026-09-17",
-        "localTime": "09:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2221,12 +2157,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 147",
-        "localDate": "2026-09-17",
-        "localTime": "10:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2238,12 +2172,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 148",
-        "localDate": "2026-09-17",
-        "localTime": "11:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2255,12 +2187,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 149",
-        "localDate": "2026-09-17",
-        "localTime": "12:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },
@@ -2272,12 +2202,10 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "priorContext": null,
       "expected": {
-        "intent": "CREATE_REMINDER",
-        "title": "việc tổng hợp 150",
-        "localDate": "2026-09-17",
-        "localTime": "13:00",
-        "timezone": "Asia/Ho_Chi_Minh",
-        "needsClarification": false
+        "intent": "NEEDS_CLARIFICATION",
+        "targetIntent": "CREATE_REMINDER",
+        "missingFields": ["date"],
+        "question": "Bạn muốn bổ sung thông tin còn thiếu nào?"
       },
       "businessValidation": "ACCEPT"
     },

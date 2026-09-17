@@ -32,6 +32,29 @@ describe("semantic V1 offline benchmark scaffold", () => {
     expect(fixture.cases.every((item) => item.id.startsWith("synthetic-"))).toBe(true);
   });
 
+  it("requires date clarification rather than an invented calendar date for date-free reminder inputs", async () => {
+    const fixture = await loadSyntheticSemanticFixture(fixturePath);
+    const dateFreeReminderIds = [
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-daypart-${String(55 + index).padStart(3, "0")}`),
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-colloquialism-${String(73 + index).padStart(3, "0")}`),
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-filler-${String(91 + index).padStart(3, "0")}`),
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-reordered-syntax-${String(109 + index).padStart(3, "0")}`),
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-implicit-request-${String(127 + index).padStart(3, "0")}`),
+      ...Array.from({ length: 6 }, (_, index) => `synthetic-missing-or-ambiguous-${String(145 + index).padStart(3, "0")}`),
+    ];
+    const cases = fixture.cases.filter((item) => dateFreeReminderIds.includes(item.id));
+
+    expect(cases).toHaveLength(36);
+    for (const item of cases) {
+      expect(item.priorContext).toBeNull();
+      expect(item.expected).toMatchObject({
+        intent: "NEEDS_CLARIFICATION",
+        targetIntent: "CREATE_REMINDER",
+        missingFields: ["date"],
+      });
+    }
+  });
+
   it("rejects a noncanonical fixture path at the offline runner boundary", async () => {
     await expect(runOfflineSemanticBenchmark({ fixturePath: resolve(process.cwd(), "fixtures/semantic-v1.json") }))
       .rejects.toThrow("canonical fixture path");

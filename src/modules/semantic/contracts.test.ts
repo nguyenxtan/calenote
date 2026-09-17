@@ -92,7 +92,7 @@ describe("semantic-v1 synthetic benchmark", () => {
 
     expect(byId.get("synthetic-daypart-055")).toMatchObject({
       message: "buổi chiều lúc 2 giờ nhắc tôi việc tổng hợp 055",
-      expected: { intent: "CREATE_REMINDER", localTime: "14:00" },
+      expected: { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["date"] },
     });
     expect(byId.get("synthetic-multi-turn-continuation-199")).toMatchObject({
       message: "4 giờ chiều 08:00 nhắc tôi việc nối tiếp 199",
