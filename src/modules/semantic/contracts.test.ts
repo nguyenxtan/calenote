@@ -105,7 +105,7 @@ describe("SemanticInterpretationSchema", () => {
 describe("semantic-v1 synthetic benchmark", () => {
   it("contains at least 200 synthetic Vietnamese cases with fixed expectations", async () => {
     const fixture = JSON.parse(await readFile(resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json"), "utf8")) as { version: string; cases: Array<Record<string, unknown>> };
-    expect(fixture.version).toBe("semantic-v1-synthetic");
+    expect(fixture.version).toBe("semantic-v1-synthetic-hybrid-1");
     expect(fixture.cases.length).toBeGreaterThanOrEqual(200);
     expect(new Set(fixture.cases.map((item) => item.category)).size).toBeGreaterThanOrEqual(12);
     expect(new Set(fixture.cases.map((item) => (item.expected as { intent: string }).intent))).toEqual(new Set([

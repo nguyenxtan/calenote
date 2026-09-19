@@ -1,33 +1,33 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { CANONICAL_SEMANTIC_PROMPT, CANONICAL_SEMANTIC_PROMPT_VERSION, SemanticInputSchema, semanticReferenceWallClock } from "../../src/modules/intelligence/semantic-gateway";
-import { SemanticContextSlotsSchema } from "../../src/modules/semantic/context-store";
-import { SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION, SemanticInterpretationJsonSchema, SemanticInterpretationSchema } from "../../src/modules/semantic/contracts";
+import { SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION, ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema } from "../../src/modules/semantic/contracts";
 import {
   CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256,
   CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256,
   CANONICAL_SYNTHETIC_FIXTURE_PATH,
   assertCanonicalSyntheticFixtureIdentity,
   calculateSemanticBenchmarkMetrics,
-  equalRelevantFields,
-  percentile95,
-  sameFields,
-  scoreRate,
+  assertTemporalEvidencePreflight,
+  benchmarkContext,
+  benchmarkTemporalEvidence,
+  temporalEvidencePreflight,
+  evaluateHybridQualityGate,
+  type HybridBenchmarkProfile,
   loadSyntheticSemanticFixture,
   type OfflineBenchmarkObservation,
   type SyntheticSemanticFixture,
 } from "./semantic-v1";
 
-export const LIVE_BENCHMARK_VERSION = "live-semantic-v1-2";
-export const SCORER_VERSION = "semantic-scorer-2";
-export const DEFAULT_MAX_HTTP_REQUESTS = 450;
-export const DEFAULT_MAX_COST_MICROUNITS = 500_000;
+export const LIVE_BENCHMARK_VERSION = "live-semantic-v1-hybrid-1";
+export const SCORER_VERSION = "hybrid-final-outcome-scorer-1";
 const MAX_LIVE_RESPONSE_BYTES = 1_000_000;
 
 export type LiveBenchmarkCandidate = {
   candidateId: string;
-  model: "qwen/qwen3-30b-a3b-instruct-2507" | "nvidia/nemotron-3.5-lightning" | "google/gemini-2.5-flash-lite" | "google/gemini-2.5-flash";
+  model: "google/gemini-2.5-flash-lite";
   provider: string;
   reasoning: "OMIT" | "DISABLED";
   promptPriceMicrounitsPerMillionTokens: number;
@@ -35,7 +35,7 @@ export type LiveBenchmarkCandidate = {
 };
 export type LiveSemanticJsonRequest = {
   model: string; stream: false; max_tokens: number; messages: Array<{ role: "system" | "user"; content: string }>;
-  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof SemanticInterpretationJsonSchema } };
+  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny"; zdr: true; max_price: { prompt: number; completion: number } };
   reasoning?: { effort: "none"; exclude: true };
 };
@@ -49,27 +49,32 @@ type LedgerAttempt = {
   interpretation?: unknown;
 };
 type Ledger = {
-  schemaVersion: 1; benchmarkVersion: string; runId: string; fixtureContentDigest: string;
+  schemaVersion: 2; benchmarkVersion: string; runId: string; fixtureContentDigest: string;
   configDigest: string; attempts: LedgerAttempt[];
 };
 export type LiveBenchmarkPreflight = {
   caseCount: number; fixtureContentDigest: string; candidateModels: string[]; ledgerPath: string;
   maxHttpRequests: number; maxCostMicrounits: number; projectedMaxRequests: number;
   projectedMaxCostMicrounits: number; apiKey: "PRESENT" | "ABSENT"; networkRequests: 0;
+  temporalEvidence: ReturnType<typeof temporalEvidencePreflight>;
   provenance: BenchmarkProvenance;
 };
 export type BenchmarkProvenance = {
   benchmarkContractVersion: string; promptVersion: string; promptSha256: string; runtimeValidationContractVersion: string; fixtureSha256: string;
   fixtureCaseIdsSha256: string; schemaSha256: string; scorerVersion: string; scorerSha256: string;
   model: string[]; provider: string[]; runId: string;
+  temporalExtractorSha256: string; reconcilerSha256: string; requestSha256: string; profile: HybridBenchmarkProfile;
+  maxHttpRequests: number; maxCostMicrounits: number; maxInputTokens: number; maxOutputTokens: number; retryLimit: 0; allowFallbacks: false;
 };
 export type LiveBenchmarkRun = {
+  qualityGates: Record<string, ReturnType<typeof evaluateHybridQualityGate>>;
   status: "COMPLETE" | "INCOMPLETE_REQUEST_CAP" | "INCOMPLETE_COST_CAP" | "BLOCKED_API_KEY";
   metricsByCandidate: Record<string, ReturnType<typeof calculateSemanticBenchmarkMetrics>>; requestCount: number;
   retainedCostMicrounits: number; ledgerPath: string;
   provenance: BenchmarkProvenance;
 };
 export type LiveBenchmarkOptions = {
+  profile: HybridBenchmarkProfile;
   fixturePath: string; stateDirectory: string; runId: string; candidates: LiveBenchmarkCandidate[];
   transport: LiveBenchmarkTransport; maxHttpRequests?: number; maxCostMicrounits?: number;
   maxInputTokens?: number; maxOutputTokens?: number; caseIds?: readonly string[]; onProgress?: (line: string) => void;
@@ -84,11 +89,11 @@ export const GEMINI_PILOT_CASE_IDS = [
 
 const safeCategory = new Set(["UNAVAILABLE", "TIMEOUT", "RATE_LIMITED", "PROVIDER_FAILURE", "INVALID_JSON", "SCHEMA_INVALID", "REQUIRED_FEATURE_UNSUPPORTED", "INVALID_INPUT"]);
 function assertSafeInteger(value: number, label: string): void { if (!Number.isSafeInteger(value) || value < 0) throw new TypeError(`Invalid ${label}`); }
-function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex"); }
 function attemptKey(candidateId: string, caseId: string): string { return `${candidateId}\u0000${caseId}`; }
 function now(): string { return new Date().toISOString(); }
 function ledgerPath(stateDirectory: string, runId: string): string {
-  if (!/^[A-Za-z0-9._-]{1,120}$/u.test(runId)) throw new TypeError("Invalid safe benchmark run ID");
+  if (!/^semantic-v1-hybrid-[A-Za-z0-9._-]{1,100}$/u.test(runId)) throw new TypeError("New hybrid ledger ID required; historical IDs are superseded");
   return join(resolve(stateDirectory), `${runId}.json`);
 }
 function candidateMaximum(candidate: LiveBenchmarkCandidate, maxInputTokens: number, maxOutputTokens: number): number {
@@ -98,46 +103,20 @@ function candidateMaximum(candidate: LiveBenchmarkCandidate, maxInputTokens: num
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new TypeError("Candidate maximum cost is unsafe");
   return Number(value);
 }
-function benchmarkContext(raw: unknown): unknown {
-  if (!raw || typeof raw !== "object") return undefined;
-  const value = raw as { intent?: unknown; resolvedSlots?: unknown };
-  const slots = value.resolvedSlots && typeof value.resolvedSlots === "object" ? value.resolvedSlots as Record<string, unknown> : {};
-  if (value.intent === "CREATE_REMINDER") {
-    const missingFields = ([slots.title, slots.localDate, slots.localTime].every((item) => item !== undefined)
-      ? ["time"] : [["title", slots.title], ["date", slots.localDate], ["time", slots.localTime]].filter(([, item]) => item === undefined).map(([field]) => field)).slice(0, 4);
-    const parsed = SemanticContextSlotsSchema.safeParse({ targetIntent: "CREATE_REMINDER", title: typeof slots.title === "string" ? slots.title : null,
-      localDate: typeof slots.localDate === "string" ? slots.localDate : null, localTime: typeof slots.localTime === "string" ? slots.localTime : null, missingFields });
-    return parsed.success ? parsed.data : undefined;
-  }
-  if (value.intent === "LIST_REMINDERS") {
-    const missingFields = slots.rangeKind === undefined && slots.localDate === undefined ? ["range"] : ["range"];
-    const parsed = SemanticContextSlotsSchema.safeParse({ targetIntent: "LIST_REMINDERS", rangeKind: typeof slots.rangeKind === "string" ? slots.rangeKind : null,
-      localDate: typeof slots.localDate === "string" ? slots.localDate : null, missingFields });
-    return parsed.success ? parsed.data : undefined;
-  }
-  return undefined;
-}
 function validateCandidate(candidate: LiveBenchmarkCandidate): void {
-  if (!candidate || !/^[a-z0-9][a-z0-9._-]{0,80}$/u.test(candidate.candidateId)
-    || (candidate.model !== "qwen/qwen3-30b-a3b-instruct-2507" && candidate.model !== "nvidia/nemotron-3.5-lightning" && candidate.model !== "google/gemini-2.5-flash-lite" && candidate.model !== "google/gemini-2.5-flash")
-    || (candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.provider !== "siliconflow/fp8" || candidate.reasoning !== "OMIT"))
-    || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.provider !== "phala" || candidate.reasoning !== "DISABLED"))
-    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.provider !== "google-vertex/eu" || candidate.reasoning !== "OMIT"))
-    || (candidate.model === "google/gemini-2.5-flash" && (candidate.provider !== "google-vertex/eu" || candidate.reasoning !== "DISABLED"))
-    || !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._:-]+)*$/u.test(candidate.provider)) throw new TypeError("Invalid approved benchmark candidate");
-  assertSafeInteger(candidate.promptPriceMicrounitsPerMillionTokens, "candidate prompt price");
-  assertSafeInteger(candidate.completionPriceMicrounitsPerMillionTokens, "candidate completion price");
-  if ((candidate.model === "qwen/qwen3-30b-a3b-instruct-2507" && (candidate.promptPriceMicrounitsPerMillionTokens !== 90_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 300_000))
-    || (candidate.model === "nvidia/nemotron-3.5-lightning" && (candidate.promptPriceMicrounitsPerMillionTokens !== 80_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 200_000))
-    || (candidate.model === "google/gemini-2.5-flash-lite" && (candidate.promptPriceMicrounitsPerMillionTokens !== 100_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 400_000))
-    || (candidate.model === "google/gemini-2.5-flash" && (candidate.promptPriceMicrounitsPerMillionTokens !== 300_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 2_500_000))) {
+  if (!candidate || candidate.candidateId !== "gemini-2.5-flash-lite"
+    || candidate.model !== "google/gemini-2.5-flash-lite" || candidate.provider !== "google-vertex/eu"
+    || candidate.reasoning !== "OMIT") throw new TypeError("Invalid approved hybrid benchmark candidate");
+  if (candidate.promptPriceMicrounitsPerMillionTokens !== 100_000 || candidate.completionPriceMicrounitsPerMillionTokens !== 400_000) {
     throw new TypeError("Candidate pricing does not match the pinned price");
   }
 }
-function approvedCandidateSet(candidates: LiveBenchmarkCandidate[]): boolean {
-  return (candidates.length === 1 && (candidates[0]?.model === "google/gemini-2.5-flash-lite" || candidates[0]?.model === "google/gemini-2.5-flash")) || (candidates.length === 2 && new Set(candidates.map((candidate) => candidate.model)).size === 2
-    && candidates.some((candidate) => candidate.model === "qwen/qwen3-30b-a3b-instruct-2507")
-    && candidates.some((candidate) => candidate.model === "nvidia/nemotron-3.5-lightning"));
+export const HYBRID_BENCHMARK_PROFILES = {
+  "gemini-flash-lite-hybrid-pilot": { maxHttpRequests: 40, maxCostMicrounits: 100_000, maxInputTokens: 12_000, maxOutputTokens: 256, caseIds: GEMINI_PILOT_CASE_IDS },
+  "gemini-flash-lite-hybrid-full": { maxHttpRequests: 220, maxCostMicrounits: 500_000, maxInputTokens: 12_000, maxOutputTokens: 256, caseIds: undefined },
+} as const;
+function sourceDigest(paths: string[]): string {
+  return digest(paths.map((path) => ({ path, source: readFileSync(new URL(path, import.meta.url), "utf8") })));
 }
 function decodeLiveResponse(response: { status: number; body: string; oversized?: boolean }): { status: "SUCCESS"; interpretation: unknown; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } | { status: "FAILURE"; category: string; usage?: { costMicrounits: number; promptTokens?: number; completionTokens?: number } } {
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > MAX_LIVE_RESPONSE_BYTES) return { status: "FAILURE", category: "SCHEMA_INVALID" };
@@ -153,23 +132,28 @@ function decodeLiveResponse(response: { status: number; body: string; oversized?
   const content = body?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || body?.choices?.length !== 1 || body?.choices?.[0]?.finish_reason !== "stop") return { status: "FAILURE", category: "SCHEMA_INVALID", usage };
   let interpretation: unknown; try { interpretation = JSON.parse(content); } catch { return { status: "FAILURE", category: "INVALID_JSON", usage }; }
-  return SemanticInterpretationSchema.safeParse(interpretation).success ? { status: "SUCCESS", interpretation, usage } : { status: "FAILURE", category: "SCHEMA_INVALID", usage };
+  return ModelSemanticInterpretationSchema.safeParse(interpretation).success ? { status: "SUCCESS", interpretation, usage } : { status: "FAILURE", category: "SCHEMA_INVALID", usage };
 }
-function validateLedger(value: unknown, expected: Omit<Ledger, "attempts">): Ledger {
+function validateLedger(value: unknown, expected: Omit<Ledger, "attempts">, scope: { caseIds: Set<string>; candidateId: string; reservedCost: number }): Ledger {
   if (!value || typeof value !== "object") throw new TypeError("Corrupt benchmark ledger");
   const ledger = value as Partial<Ledger>;
-  if (ledger.schemaVersion !== 1 || ledger.benchmarkVersion !== expected.benchmarkVersion || ledger.runId !== expected.runId
+  if (ledger.schemaVersion !== 2 || ledger.benchmarkVersion !== expected.benchmarkVersion || ledger.runId !== expected.runId
     || ledger.fixtureContentDigest !== expected.fixtureContentDigest || ledger.configDigest !== expected.configDigest || !Array.isArray(ledger.attempts)) {
     throw new TypeError("Incompatible benchmark ledger");
   }
-    const seen = new Set<string>();
+  const seen = new Set<string>();
   for (const attempt of ledger.attempts) {
     if (!attempt || typeof attempt !== "object" || typeof attempt.candidateId !== "string" || typeof attempt.caseId !== "string"
       || !Number.isSafeInteger(attempt.ordinal) || attempt.ordinal < 1 || !["RESERVED", "DISPATCHED", "COMPLETED", "FAILED", "UNKNOWN_DISPATCHED", "RELEASED"].includes(attempt.state)
       || typeof attempt.reservedAt !== "string" || !Number.isSafeInteger(attempt.reservedCostMicrounits) || attempt.reservedCostMicrounits < 0
       || (attempt.state !== "RELEASED" && seen.has(attemptKey(attempt.candidateId, attempt.caseId)))) throw new TypeError("Corrupt benchmark ledger attempt");
     if (attempt.state !== "RELEASED") seen.add(attemptKey(attempt.candidateId, attempt.caseId));
-    if (attempt.interpretation !== undefined && !SemanticInterpretationSchema.safeParse(attempt.interpretation).success) throw new TypeError("Corrupt benchmark ledger interpretation");
+    if (!scope.caseIds.has(attempt.caseId) || attempt.candidateId !== scope.candidateId || attempt.reservedCostMicrounits !== scope.reservedCost
+      || (attempt.finalizedCostMicrounits !== undefined && (!Number.isSafeInteger(attempt.finalizedCostMicrounits) || attempt.finalizedCostMicrounits < scope.reservedCost))
+      || (attempt.latencyMs !== undefined && (!Number.isFinite(attempt.latencyMs) || attempt.latencyMs < 0))
+      || (attempt.state === "COMPLETED" && (attempt.interpretation === undefined || attempt.latencyMs === undefined || attempt.finalizedCostMicrounits === undefined))
+      || (attempt.state !== "COMPLETED" && attempt.interpretation !== undefined)) throw new TypeError("Corrupt benchmark ledger scope or accounting");
+    if (attempt.interpretation !== undefined && !ModelSemanticInterpretationSchema.safeParse(attempt.interpretation).success) throw new TypeError("Corrupt benchmark ledger interpretation");
   }
   return ledger as Ledger;
 }
@@ -190,24 +174,38 @@ async function atomicWrite(path: string, ledger: Ledger): Promise<void> {
 }
 
 export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions) {
-  const maxHttpRequests = options.maxHttpRequests ?? DEFAULT_MAX_HTTP_REQUESTS;
-  const maxCostMicrounits = options.maxCostMicrounits ?? DEFAULT_MAX_COST_MICROUNITS;
-  const maxInputTokens = options.maxInputTokens ?? 10_000;
-  const maxOutputTokens = options.maxOutputTokens ?? 1_024;
+  options = { ...options, candidates: structuredClone(options.candidates), caseIds: options.caseIds && [...options.caseIds] };
+  if (!Object.hasOwn(HYBRID_BENCHMARK_PROFILES, options.profile)) throw new TypeError("An exact hybrid benchmark profile is required");
+  const profile = HYBRID_BENCHMARK_PROFILES[options.profile];
+  const maxHttpRequests = options.maxHttpRequests ?? profile.maxHttpRequests;
+  const maxCostMicrounits = options.maxCostMicrounits ?? profile.maxCostMicrounits;
+  const maxInputTokens = options.maxInputTokens ?? profile.maxInputTokens;
+  const maxOutputTokens = options.maxOutputTokens ?? profile.maxOutputTokens;
   assertSafeInteger(maxHttpRequests, "HTTP request cap"); assertSafeInteger(maxCostMicrounits, "cost cap");
-  if (!Number.isInteger(maxInputTokens) || maxInputTokens < 1 || maxInputTokens > 100_000 || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4_096) throw new TypeError("Invalid bounded token configuration");
-  if (typeof options.transport !== "function" || !approvedCandidateSet(options.candidates) || new Set(options.candidates.map((item) => item.candidateId)).size !== options.candidates.length) throw new TypeError("Live runner requires an approved benchmark candidate set");
+  if (maxHttpRequests > profile.maxHttpRequests || maxCostMicrounits > profile.maxCostMicrounits
+    || maxInputTokens !== profile.maxInputTokens || maxOutputTokens !== profile.maxOutputTokens) throw new TypeError("Hybrid profile cap/token limits cannot be raised or changed");
+  if (typeof options.transport !== "function" || options.candidates.length !== 1) throw new TypeError("Live runner requires the exact hybrid benchmark candidate");
   options.candidates.forEach(validateCandidate);
   const ledgerFile = ledgerPath(options.stateDirectory, options.runId);
-  const selectedCaseIds = options.caseIds === undefined ? undefined : [...options.caseIds];
-  if (selectedCaseIds !== undefined && (selectedCaseIds.length === 0 || new Set(selectedCaseIds).size !== selectedCaseIds.length || selectedCaseIds.some((id) => typeof id !== "string"))) throw new TypeError("Invalid selected benchmark cases");
-  if (options.candidates.length === 1 && options.candidates[0]?.model === "google/gemini-2.5-flash-lite"
-    && (selectedCaseIds === undefined || selectedCaseIds.length !== GEMINI_PILOT_CASE_IDS.length
-      || selectedCaseIds.some((id, index) => id !== GEMINI_PILOT_CASE_IDS[index]))) {
-    throw new TypeError("Gemini requires the fixed Gemini pilot subset until quality-gated full authorization");
-  }
-  const provenance = (): BenchmarkProvenance => ({ benchmarkContractVersion: LIVE_BENCHMARK_VERSION, promptVersion: CANONICAL_SEMANTIC_PROMPT_VERSION, promptSha256: digest(CANONICAL_SEMANTIC_PROMPT), runtimeValidationContractVersion: SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION, fixtureSha256: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256, fixtureCaseIdsSha256: selectedCaseIds === undefined ? CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256 : digest(selectedCaseIds), schemaSha256: digest(SemanticInterpretationJsonSchema), scorerVersion: SCORER_VERSION, scorerSha256: digest([calculateSemanticBenchmarkMetrics.toString(), sameFields.toString(), equalRelevantFields.toString(), scoreRate.toString(), percentile95.toString(), JSON.stringify(SemanticInterpretationJsonSchema), SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION].join("\n")), model: options.candidates.map((candidate) => candidate.model), provider: options.candidates.map((candidate) => candidate.provider), runId: options.runId });
-  const configDigest = digest({ provenance: provenance(), candidates: options.candidates, maxHttpRequests, maxCostMicrounits, maxInputTokens, maxOutputTokens, selectedCaseIds });
+  const selectedCaseIds = options.caseIds ?? profile.caseIds;
+  if (digest(selectedCaseIds) !== digest(profile.caseIds)) throw new TypeError("Hybrid profile requires its exact canonical subset");
+  const provenanceValue: BenchmarkProvenance = {
+    benchmarkContractVersion: LIVE_BENCHMARK_VERSION, promptVersion: CANONICAL_SEMANTIC_PROMPT_VERSION,
+    promptSha256: digest(CANONICAL_SEMANTIC_PROMPT), runtimeValidationContractVersion: SEMANTIC_RUNTIME_VALIDATION_CONTRACT_VERSION,
+    fixtureSha256: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256,
+    fixtureCaseIdsSha256: selectedCaseIds === undefined ? CANONICAL_SYNTHETIC_FIXTURE_IDS_SHA256 : digest(selectedCaseIds),
+    schemaSha256: sourceDigest(["../../src/modules/semantic/contracts.ts"]),
+    temporalExtractorSha256: sourceDigest(["../../src/modules/semantic/temporal-evidence.ts"]),
+    reconcilerSha256: sourceDigest(["../../src/modules/semantic/reconciliation.ts", "../../src/modules/semantic/validation.ts", "../../src/modules/semantic/context-store.ts", "../../src/modules/semantic/contracts.ts"]),
+    scorerVersion: SCORER_VERSION, scorerSha256: sourceDigest(["./semantic-v1.ts"]),
+    requestSha256: sourceDigest(["./live-semantic-v1.ts", "./run-semantic-v1-live.mjs", "../../src/modules/intelligence/semantic-gateway.ts"]),
+    model: options.candidates.map((candidate) => candidate.model), provider: options.candidates.map((candidate) => candidate.provider),
+    runId: options.runId, profile: options.profile, maxHttpRequests, maxCostMicrounits, maxInputTokens, maxOutputTokens, retryLimit: 0, allowFallbacks: false,
+  };
+  const provenance = (): BenchmarkProvenance => structuredClone(provenanceValue);
+  const configDigest = digest({ provenance: provenance(), candidates: options.candidates,
+    modelSchema: ModelSemanticInterpretationJsonSchema, selectedCaseIds });
+  let ledgerCaseIds = new Set<string>();
 
   async function fixture(): Promise<SyntheticSemanticFixture> {
     if (resolve(options.fixturePath) !== CANONICAL_SYNTHETIC_FIXTURE_PATH) throw new TypeError("Live runner requires the canonical fixture path");
@@ -215,17 +213,20 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
     if (createHash("sha256").update(source).digest("hex") !== CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256) throw new TypeError("Live runner canonical fixture digest mismatch");
     const loaded = await loadSyntheticSemanticFixture(CANONICAL_SYNTHETIC_FIXTURE_PATH);
     assertCanonicalSyntheticFixtureIdentity(options.fixturePath, loaded);
+    assertTemporalEvidencePreflight(loaded);
+    ledgerCaseIds = new Set(selectedCaseIds ?? loaded.cases.map((item) => item.id));
     if (selectedCaseIds === undefined) return loaded;
     const selected = new Set(selectedCaseIds);
     if (selectedCaseIds.some((id) => !loaded.cases.some((item) => item.id === id))) throw new TypeError("Selected benchmark case is not canonical");
     return { ...loaded, cases: loaded.cases.filter((item) => selected.has(item.id)) };
   }
-  const expected = (): Omit<Ledger, "attempts"> => ({ schemaVersion: 1, benchmarkVersion: LIVE_BENCHMARK_VERSION, runId: options.runId, fixtureContentDigest: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256, configDigest });
+  const expected = (): Omit<Ledger, "attempts"> => ({ schemaVersion: 2, benchmarkVersion: LIVE_BENCHMARK_VERSION, runId: options.runId, fixtureContentDigest: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256, configDigest });
   async function readLedger(): Promise<Ledger | null> {
     let source: string;
     try { source = await readFile(ledgerFile, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
-    try { return validateLedger(JSON.parse(source), expected()); }
+    try { return validateLedger(JSON.parse(source), expected(), { caseIds: ledgerCaseIds,
+      candidateId: options.candidates[0].candidateId, reservedCost: candidateMaximum(options.candidates[0], maxInputTokens, maxOutputTokens) }); }
     catch { throw new TypeError("Corrupt benchmark ledger"); }
   }
   async function loadOrCreate(): Promise<Ledger> {
@@ -239,14 +240,29 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
     const charged = ledger.attempts.filter((attempt) => attempt.state !== "RELEASED");
     return { requests: charged.length, cost: charged.reduce((sum, attempt) => sum + (attempt.finalizedCostMicrounits ?? attempt.reservedCostMicrounits), 0) };
   }
+  function requestFor(candidate: LiveBenchmarkCandidate, item: SyntheticSemanticFixture["cases"][number]): LiveSemanticJsonRequest {
+    const previousContext = benchmarkContext(item.priorContext);
+    const semanticInput = SemanticInputSchema.parse({ text: item.message, temporalEvidence: benchmarkTemporalEvidence(item),
+      ...semanticReferenceWallClock(Date.parse(item.interpretationReferenceTime)), ...(previousContext ? { previousContext } : {}) });
+    const request: LiveSemanticJsonRequest = { model: candidate.model, stream: false, max_tokens: maxOutputTokens,
+      messages: [{ role: "system", content: CANONICAL_SEMANTIC_PROMPT }, { role: "user", content: JSON.stringify(semanticInput) }],
+      response_format: { type: "json_schema", json_schema: { name: "model_semantic_interpretation", strict: true, schema: structuredClone(ModelSemanticInterpretationJsonSchema) } },
+      provider: { only: [candidate.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,
+        max_price: { prompt: candidate.promptPriceMicrounitsPerMillionTokens / 1_000_000, completion: candidate.completionPriceMicrounitsPerMillionTokens / 1_000_000 } } };
+    // UTF-8 bytes plus framing allowance are a conservative input-token ceiling.
+    if (new TextEncoder().encode(JSON.stringify(request)).byteLength + 512 > maxInputTokens) throw new TypeError("Hybrid request exceeds input token budget");
+    return request;
+  }
   async function preflight(input: { apiKeyPresent: boolean }): Promise<LiveBenchmarkPreflight> {
-    const loaded = await fixture(); await loadOrCreate();
+    const loaded = await fixture();
+    for (const item of loaded.cases) requestFor(options.candidates[0], item);
+    await loadOrCreate();
     const perRequest = options.candidates.map((candidate) => candidateMaximum(candidate, maxInputTokens, maxOutputTokens));
     return { caseCount: loaded.cases.length, fixtureContentDigest: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256,
       candidateModels: options.candidates.map((candidate) => candidate.model), ledgerPath: ledgerFile, maxHttpRequests, maxCostMicrounits,
       projectedMaxRequests: loaded.cases.length * options.candidates.length,
       projectedMaxCostMicrounits: loaded.cases.length * perRequest.reduce((sum, cost) => sum + cost, 0),
-      apiKey: input.apiKeyPresent ? "PRESENT" : "ABSENT", networkRequests: 0, provenance: provenance() };
+      apiKey: input.apiKeyPresent ? "PRESENT" : "ABSENT", networkRequests: 0, temporalEvidence: temporalEvidencePreflight(loaded), provenance: provenance() };
   }
   async function save(ledger: Ledger): Promise<void> { await atomicWrite(ledgerFile, ledger); }
   async function acquireRunLock(): Promise<Awaited<ReturnType<typeof open>>> {
@@ -294,17 +310,13 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
       const current = counts(ledger); const reserve = candidateMaximum(candidate, maxInputTokens, maxOutputTokens);
       if (current.requests + 1 > maxHttpRequests) return result("INCOMPLETE_REQUEST_CAP", loaded, ledger);
       if (current.cost + reserve > maxCostMicrounits) return result("INCOMPLETE_COST_CAP", loaded, ledger);
+      const request = requestFor(candidate, item);
       const attempt: LedgerAttempt = { candidateId: candidate.candidateId, caseId: item.id, ordinal, state: "RESERVED", reservedAt: now(), reservedCostMicrounits: reserve };
       ledger.attempts.push(attempt); await save(ledger);
       attempt.state = "DISPATCHED"; attempt.dispatchedAt = now(); await save(ledger);
-      const previousContext = benchmarkContext(item.priorContext);
-      const semanticInput = SemanticInputSchema.safeParse({ text: item.message, ...semanticReferenceWallClock(Date.parse(item.interpretationReferenceTime)), ...(previousContext ? { previousContext } : {}) });
-      const request: LiveSemanticJsonRequest = { model: candidate.model, stream: false, max_tokens: maxOutputTokens,
-        messages: [{ role: "system", content: CANONICAL_SEMANTIC_PROMPT }, { role: "user", content: JSON.stringify(semanticInput.success ? semanticInput.data : {}) }],
-        response_format: { type: "json_schema", json_schema: { name: "semantic_interpretation", strict: true, schema: structuredClone(SemanticInterpretationJsonSchema) } },
-        provider: { only: [candidate.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: candidate.promptPriceMicrounitsPerMillionTokens / 1_000_000, completion: candidate.completionPriceMicrounitsPerMillionTokens / 1_000_000 } }, ...(candidate.reasoning === "DISABLED" ? { reasoning: { effort: "none" as const, exclude: true as const } } : {}) };
+
       const start = Date.now();
-      const outcome = semanticInput.success ? await (async () => { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 30_000); try { return decodeLiveResponse(await options.transport(request, { signal: controller.signal })); } catch { return { status: "FAILURE" as const, category: controller.signal.aborted ? "TIMEOUT" : "PROVIDER_FAILURE" }; } finally { clearTimeout(timer); } })() : { status: "FAILURE" as const, category: "INVALID_INPUT" as const };
+      const outcome = await (async () => { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 30_000); try { return decodeLiveResponse(await options.transport(request, { signal: controller.signal })); } catch { return { status: "FAILURE" as const, category: controller.signal.aborted ? "TIMEOUT" : "PROVIDER_FAILURE" }; } finally { clearTimeout(timer); } })();
       attempt.latencyMs = Math.max(0, Date.now() - start); attempt.completedAt = now();
       const usage = "usage" in outcome ? outcome.usage : undefined;
       const knownCost = usage?.costMicrounits;
@@ -315,6 +327,7 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
       if (outcome.status === "SUCCESS") { attempt.state = "COMPLETED"; attempt.interpretation = outcome.interpretation; }
       else { attempt.state = "FAILED"; attempt.errorCategory = safeCategory.has(outcome.category) ? outcome.category : "PROVIDER_FAILURE"; }
       await save(ledger); progress(candidate, ordinal, loaded, ledger, attempt.state, attempt.latencyMs);
+      if (counts(ledger).cost > maxCostMicrounits) return result("INCOMPLETE_COST_CAP", loaded, ledger);
       }
       return result("COMPLETE", loaded, ledger);
     } finally { await releaseRunLock(lock); }
@@ -327,7 +340,10 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
       metricsByCandidate[candidate.candidateId] = calculateSemanticBenchmarkMetrics(loaded, observations);
     }
     const count = counts(ledger);
-    return { status, metricsByCandidate, requestCount: count.requests, retainedCostMicrounits: count.cost, ledgerPath: ledgerFile, provenance: provenance() };
+    if (count.cost > maxCostMicrounits) status = "INCOMPLETE_COST_CAP";
+    else if (count.requests > maxHttpRequests) status = "INCOMPLETE_REQUEST_CAP";
+    const qualityGates = Object.fromEntries(Object.entries(metricsByCandidate).map(([id, metrics]) => [id, evaluateHybridQualityGate(options.profile, metrics)]));
+    return { status, qualityGates, metricsByCandidate, requestCount: count.requests, retainedCostMicrounits: count.cost, ledgerPath: ledgerFile, provenance: provenance() };
   }
   return { preflight, run };
 }
@@ -336,7 +352,7 @@ export function createLiveSemanticBenchmarkRunner(options: LiveBenchmarkOptions)
 export function createOpenRouterTransport(apiKey: string): LiveBenchmarkTransport {
   if (typeof apiKey !== "string" || apiKey.length === 0) throw new TypeError("OPENROUTER_API_KEY is required");
   return async (request: LiveSemanticJsonRequest, options: { signal: AbortSignal }) => {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", signal: options.signal,
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal: options.signal,
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify(request) });
     if (Number(response.headers.get("content-length")) > MAX_LIVE_RESPONSE_BYTES) return { status: response.status, body: "", oversized: true };
     if (!response.body) return { status: response.status, body: "" };

@@ -5,233 +5,137 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  assertCanonicalSyntheticFixtureIdentity,
-  calculateSemanticBenchmarkMetrics,
-  loadSyntheticSemanticFixture,
-  renderOfflineBenchmarkEvidence,
-  runOfflineSemanticBenchmark,
-  type CandidateBenchmarkTransport,
-  type SyntheticSemanticFixture,
+  assertCanonicalSyntheticFixtureIdentity, assertTemporalEvidencePreflight, calculateSemanticBenchmarkMetrics,
+  evaluateHybridQualityGate, loadSyntheticSemanticFixture, renderOfflineBenchmarkEvidence,
+  runOfflineSemanticBenchmark, temporalEvidencePreflight, type CandidateBenchmarkTransport,
 } from "./semantic-v1";
 
 const fixturePath = resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json");
 const runFile = promisify(execFile);
+const fixture = await loadSyntheticSemanticFixture(fixturePath);
+function subset(...indexes: number[]) { return { ...fixture, cases: indexes.map((index) => fixture.cases[index]) }; }
+function observations(cases = fixture.cases) { return cases.map((item) => ({ caseId: item.id, interpretation: item.expectedModel, latencyMs: 5, estimatedCostMicrounits: 1 })); }
 
-describe("semantic V1 offline benchmark scaffold", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.doUnmock("node:fs/promises");
-    vi.resetModules();
-  });
+describe("hybrid semantic V1 fixture and final-outcome scorer", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.doUnmock("node:fs/promises"); vi.resetModules(); });
 
-  it("loads the frozen 216-case synthetic fixture reproducibly", async () => {
-    const fixture = await loadSyntheticSemanticFixture(fixturePath);
-
-    expect(fixture.version).toBe("semantic-v1-synthetic");
+  it("loads 216 unique canonical identities with independently recorded hybrid expectations", () => {
+    expect(fixture.version).toBe("semantic-v1-synthetic-hybrid-1");
     expect(fixture.cases).toHaveLength(216);
-    expect(fixture.cases.every((item) => item.id.startsWith("synthetic-"))).toBe(true);
+    expect(new Set(fixture.cases.map((item) => item.id)).size).toBe(216);
+    expect(temporalEvidencePreflight(fixture)).toMatchObject({ correctCases: 216, correctRate: 1, failedCaseIds: [], networkRequests: 0 });
   });
 
-  it("requires date clarification rather than an invented calendar date for date-free reminder inputs", async () => {
-    const fixture = await loadSyntheticSemanticFixture(fixturePath);
-    const dateFreeReminderIds = [
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-daypart-${String(55 + index).padStart(3, "0")}`),
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-colloquialism-${String(73 + index).padStart(3, "0")}`),
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-filler-${String(91 + index).padStart(3, "0")}`),
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-reordered-syntax-${String(109 + index).padStart(3, "0")}`),
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-implicit-request-${String(127 + index).padStart(3, "0")}`),
-      ...Array.from({ length: 6 }, (_, index) => `synthetic-missing-or-ambiguous-${String(145 + index).padStart(3, "0")}`),
-    ];
-    const cases = fixture.cases.filter((item) => dateFreeReminderIds.includes(item.id));
+  it("keeps old expectations historical while scoring past-time, dayparts, and context conflicts safely", () => {
+    expect(fixture.cases[0].expected.intent).toBe("CREATE_REMINDER");
+    expect(fixture.cases[0].expectedOutcome).toEqual({ kind: "SAFE_CLARIFICATION", code: "PAST_TIME" });
+    expect(fixture.cases[54].expectedOutcome).toEqual({ kind: "CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["date", "time"] });
+    expect(fixture.cases[199].expectedOutcome).toEqual({ kind: "CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"] });
+    expect(fixture.cases[208].expectedOutcome).toEqual({ kind: "SAFE_CLARIFICATION", code: "CONFLICTING_CONTEXT" });
+    expect(fixture.cases[186].expectedOutcome).toEqual({ kind: "CLARIFICATION", targetIntent: "LIST_REMINDERS", missingFields: ["range"] });
+    expect(calculateSemanticBenchmarkMetrics(fixture, observations())).toMatchObject({
+      schemaValidRate: 1, intentCorrectRate: 1, finalOutcomeCorrectRate: 1, localDateCorrectRate: 1,
+      localTimeCorrectRate: 1, listRangeCorrectRate: 1, clarificationCorrectRate: 1, safetyFailureCases: 0,
+      localDateEligibleCases: 22, listRangeEligibleCases: 44, clarificationEligibleCases: 93,
+    });
+  });
 
-    expect(cases).toHaveLength(36);
-    for (const item of cases) {
-      expect(item.priorContext).toBeNull();
-      expect(item.expected).toMatchObject({
-        intent: "NEEDS_CLARIFICATION",
-        targetIntent: "CREATE_REMINDER",
-        missingFields: ["date"],
-      });
+  it("fails the zero-network preflight if a reviewed temporal value disagrees", () => {
+    const modified = structuredClone(subset(18));
+    modified.cases[0].expectedTemporalEvidence.date = { state: "RESOLVED", source: "TOMORROW", localDate: "2026-09-18" };
+    expect(() => assertTemporalEvidencePreflight(modified)).toThrow("synthetic-tomorrow-019");
+    expect(calculateSemanticBenchmarkMetrics(modified, [])).toMatchObject({ temporalEvidenceCorrectRate: 0 });
+  });
+
+  it("checks all evidence dimensions and reference fields, not just the resolved date", () => {
+    for (const field of ["referenceLocalDate", "referenceLocalTime", "timezone", "date", "time", "range"] as const) {
+      const modified = structuredClone(subset(18));
+      Object.assign(modified.cases[0].expectedTemporalEvidence, { [field]: null });
+      expect(() => assertTemporalEvidencePreflight(modified)).toThrow("preflight failed");
     }
   });
 
-  it("rejects a noncanonical fixture path at the offline runner boundary", async () => {
-    await expect(runOfflineSemanticBenchmark({ fixturePath: resolve(process.cwd(), "fixtures/semantic-v1.json") }))
-      .rejects.toThrow("canonical fixture path");
-  });
-
-  it("rejects a canonical-path fixture with a count below the frozen 216 cases", async () => {
-    const fixture = await loadSyntheticSemanticFixture(fixturePath);
-
-    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, {
-      ...fixture,
-      cases: fixture.cases.slice(0, -1),
-    })).toThrow("exactly 216");
-  });
-
-  it("rejects a canonical-path fixture whose synthetic identity differs", async () => {
-    const fixture = await loadSyntheticSemanticFixture(fixturePath);
-    const cases = fixture.cases.map((item, index) => index === 0 ? { ...item, id: "synthetic-tampered-001" } : item);
-
-    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, { ...fixture, cases }))
-      .toThrow("identity");
-  });
-
-  it("rejects altered canonical fixture bytes at the private reviewed-digest gate", async () => {
+  it("rejects noncanonical path/count/IDs and altered canonical bytes", async () => {
+    await expect(runOfflineSemanticBenchmark({ fixturePath: "/tmp/noncanonical.json" })).rejects.toThrow("canonical fixture path");
+    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, subset(0))).toThrow("exactly 216");
+    const changed = structuredClone(fixture); changed.cases[0].id = "synthetic-tampered";
+    expect(() => assertCanonicalSyntheticFixtureIdentity(fixturePath, changed)).toThrow("identity");
     const source = await readFile(fixturePath, "utf8");
-    const alteredSource = `${source}\n`;
     vi.resetModules();
-    vi.doMock("node:fs/promises", async (importOriginal) => ({
-      ...await importOriginal<typeof import("node:fs/promises")>(),
-      readFile: vi.fn(async () => alteredSource),
-    }));
-    const runner = await import("./semantic-v1");
-
-    await expect(runner.runOfflineSemanticBenchmark({ fixturePath }))
-      .rejects.toThrow("content does not match the reviewed digest");
+    vi.doMock("node:fs/promises", async (importOriginal) => ({ ...await importOriginal<typeof import("node:fs/promises")>(), readFile: vi.fn(async () => source + "\n") }));
+    await expect((await import("./semantic-v1")).runOfflineSemanticBenchmark({ fixturePath })).rejects.toThrow("reviewed digest");
   });
 
-  it("calculates aggregate schema, semantic, latency, and estimated-cost metrics without retaining outputs", () => {
-    const fixture: SyntheticSemanticFixture = {
-      version: "semantic-v1-synthetic",
-      cases: [
-        {
-          id: "synthetic-create-001", category: "test", message: "synthetic only",
-          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
-          expected: { intent: "CREATE_REMINDER", title: "Việc", localDate: "2026-09-17", localTime: "09:00", timezone: "Asia/Ho_Chi_Minh", needsClarification: false },
-          businessValidation: "ACCEPT",
-        },
-        {
-          id: "synthetic-clarification-002", category: "test", message: "synthetic only",
-          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
-          expected: { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "Khi nào?" },
-          businessValidation: "ACCEPT",
-        },
-      ],
-    };
-
-    const metrics = calculateSemanticBenchmarkMetrics(fixture, [
-      {
-        caseId: "synthetic-create-001", latencyMs: 10, estimatedCostMicrounits: 7,
-        interpretation: { intent: "CREATE_REMINDER", title: "Việc", localDate: "2026-09-17", localTime: "09:00", timezone: "Asia/Ho_Chi_Minh", needsClarification: false },
-      },
-      {
-        caseId: "synthetic-clarification-002", latencyMs: 30, estimatedCostMicrounits: 11,
-        interpretation: { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["date"], question: "Khi nào?" },
-      },
-    ]);
-
-    expect(metrics).toMatchObject({
-      totalCases: 2, scoredCases: 2, missingCases: 0, schemaValidCases: 2,
-      intentCorrectCases: 2, localDateCorrectCases: 1, localTimeCorrectCases: 1,
-      titleCorrectCases: 1, clarificationCorrectCases: 0,
-      p95LatencyMs: 30, estimatedCostMicrounits: 18,
-    });
-    expect(metrics.schemaValidRate).toBe(1);
-    expect(metrics.clarificationCorrectRate).toBe(0);
+  it("penalizes missing and invalid schema observations against the full eligible denominators", () => {
+    const cases = subset(18, 19);
+    const measured = observations(cases.cases);
+    const metrics = calculateSemanticBenchmarkMetrics(cases, [measured[0]]);
+    expect(metrics).toMatchObject({ scoredCases: 1, missingCases: 1, schemaValidRate: 0.5, localDateCorrectRate: 0.5 });
+    expect(calculateSemanticBenchmarkMetrics(cases, [{ ...measured[0], interpretation: cases.cases[0].expected }])).toMatchObject({ schemaValidCases: 0, intentCorrectCases: 0 });
+    expect(() => calculateSemanticBenchmarkMetrics(cases, [measured[0], measured[0]])).toThrow("observation");
+    expect(() => calculateSemanticBenchmarkMetrics(cases, [{ ...measured[0], estimatedCostMicrounits: -1 }])).toThrow("observation");
   });
 
-  it.each([
-    {
-      mismatch: "range kind",
-      expected: { intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null } as const,
-      actual: { intent: "LIST_REMINDERS", rangeKind: "TOMORROW", localDate: null } as const,
-    },
-    {
-      mismatch: "explicit local date",
-      expected: { intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-20" } as const,
-      actual: { intent: "LIST_REMINDERS", rangeKind: "DATE", localDate: "2026-09-21" } as const,
-    },
-  ])("reduces exact LIST range/date accuracy for a wrong $mismatch despite a valid intent", ({ expected, actual }) => {
-    const fixture: SyntheticSemanticFixture = {
-      version: "semantic-v1-synthetic",
-      cases: [
-        {
-          id: "synthetic-list-correct", category: "test", message: "synthetic only",
-          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
-          expected: { intent: "LIST_REMINDERS", rangeKind: "UPCOMING", localDate: null }, businessValidation: "ACCEPT",
-        },
-        {
-          id: "synthetic-list-incorrect", category: "test", message: "synthetic only",
-          interpretationReferenceTime: "2026-09-16T09:00:00+07:00", timezone: "Asia/Ho_Chi_Minh", priorContext: null,
-          expected, businessValidation: "ACCEPT",
-        },
-      ],
-    };
-
-    const metrics = calculateSemanticBenchmarkMetrics(fixture, [
-      {
-        caseId: "synthetic-list-correct", latencyMs: 10, estimatedCostMicrounits: null,
-        interpretation: { intent: "LIST_REMINDERS", rangeKind: "UPCOMING", localDate: null },
-      },
-      { caseId: "synthetic-list-incorrect", latencyMs: 10, estimatedCostMicrounits: null, interpretation: actual },
-    ]);
-
-    expect(metrics.schemaValidRate).toBe(1);
-    expect(metrics.intentCorrectRate).toBe(1);
-    expect(metrics).toMatchObject({ listRangeEligibleCases: 2, listRangeCorrectCases: 1, listRangeCorrectRate: 0.5 });
+  it("measures final LIST range and clarification only when the model leads to the right reconciled outcome", () => {
+    const cases = subset(6, 10);
+    const measured = observations(cases.cases);
+    measured[0].interpretation = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null };
+    expect(calculateSemanticBenchmarkMetrics(cases, measured)).toMatchObject({ schemaValidRate: 1, intentCorrectRate: 0.5, listRangeCorrectRate: 0, clarificationCorrectRate: 1 });
+    const clarification = subset(10);
+    const wrongTarget = observations(clarification.cases);
+    wrongTarget[0].interpretation = { intent: "LIST_REMINDERS", title: null, titleState: "NOT_APPLICABLE", targetIntent: null };
+    expect(calculateSemanticBenchmarkMetrics(clarification, wrongTarget)).toMatchObject({ intentCorrectRate: 0, clarificationCorrectRate: 0 });
   });
 
-  it("runs the normal dry-run without calling an injected transport or global fetch", async () => {
-    const transport: CandidateBenchmarkTransport = { interpret: vi.fn(async () => {
-      throw new Error("the offline runner must not dispatch candidates");
-    }) };
-    const fetcher = vi.fn();
-    vi.stubGlobal("fetch", fetcher);
+  it("reports title similarity separately and hard-fails a fabricated draft on a missing-title case", () => {
+    const cases = subset(18);
+    const measured = observations(cases.cases);
+    measured[0].interpretation = { ...measured[0].interpretation, title: "invented title" };
+    const metrics = calculateSemanticBenchmarkMetrics(cases, measured);
+    expect(metrics).toMatchObject({ localDateCorrectRate: 1, localTimeCorrectRate: 1, titleCorrectRate: 0, safetyFailureCases: 0 });
+    const missingTitle = subset(29);
+    const fabricated = observations(missingTitle.cases);
+    fabricated[0].interpretation = { intent: "CREATE_REMINDER", title: "invented title", titleState: "RESOLVED", targetIntent: null };
+    expect(calculateSemanticBenchmarkMetrics(missingTitle, fabricated).safetyFailureCases).toBe(1);
+    const complete = { ...calculateSemanticBenchmarkMetrics(fixture, observations()), safetyFailureCases: 1 };
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", complete)).toEqual({ status: "FAIL", failures: ["SAFETY_FAILURE"] });
+  });
 
+  it("applies the pilot and full gates independently, including null/unmeasured metrics", () => {
+    const complete = calculateSemanticBenchmarkMetrics(fixture, observations());
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", complete).status).toBe("PASS");
+    const pilot = { ...complete, totalCases: 36, scoredCases: 36, schemaValidRate: 0.99, intentCorrectRate: 0.93 };
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-pilot", pilot).failures).toEqual(["SCHEMA", "FINAL_INTENT"]);
+    for (const [field, failure, value] of [
+      ["schemaValidRate", "SCHEMA", 0.989], ["intentCorrectRate", "FINAL_INTENT", 0.899],
+      ["localDateCorrectRate", "FINAL_DATE", 0.949], ["localTimeCorrectRate", "FINAL_TIME", 0.949],
+      ["listRangeCorrectRate", "FINAL_LIST_RANGE", 0.949], ["clarificationCorrectRate", "FINAL_CLARIFICATION", 0.899],
+      ["temporalEvidenceCorrectRate", "TEMPORAL_EVIDENCE", 0.999],
+    ] as const) expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", { ...complete, [field]: value }).failures).toContain(failure);
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", calculateSemanticBenchmarkMetrics(fixture, [])).status).toBe("FAIL");
+  });
+
+  it("honors the full 99% schema gate while retaining failed cases in every denominator", () => {
+    // Two absent UNSUPPORTED responses leave 214/216 valid/final-correct cases.
+    const measured = observations().filter((item) => !["synthetic-multi-turn-continuation-215", "synthetic-multi-turn-continuation-216"].includes(item.caseId));
+    const metrics = calculateSemanticBenchmarkMetrics(fixture, measured);
+    expect(metrics.schemaValidRate).toBe(214 / 216);
+    expect(metrics.missingCases).toBe(2);
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", metrics).status).toBe("PASS");
+    expect(evaluateHybridQualityGate("gemini-flash-lite-hybrid-full", calculateSemanticBenchmarkMetrics(fixture, measured.slice(0, -1))).failures).toContain("SCHEMA");
+  });
+
+  it("runs offline without transport/fetch and renders only safe aggregates", async () => {
+    const transport: CandidateBenchmarkTransport = { interpret: vi.fn(async () => { throw new Error("NO NETWORK"); }) };
+    const fetcher = vi.fn(() => { throw new Error("NO NETWORK"); }); vi.stubGlobal("fetch", fetcher);
     const result = await runOfflineSemanticBenchmark({ fixturePath, transport });
-
-    expect(result.execution).toEqual({ mode: "OFFLINE_DRY_RUN", candidateTransportInvoked: false });
-    expect(result.metrics).toMatchObject({
-      totalCases: 216, scoredCases: 0, missingCases: 216, estimatedCostMicrounits: null,
-      schemaValidRate: null, intentCorrectRate: null, localDateCorrectRate: null,
-      localTimeCorrectRate: null, titleCorrectRate: null, clarificationCorrectRate: null,
-      listRangeEligibleCases: 51, listRangeCorrectCases: 0, listRangeCorrectRate: null,
-    });
-    expect(transport.interpret).not.toHaveBeenCalled();
-    expect(fetcher).not.toHaveBeenCalled();
-  });
-
-  it("renders evidence containing only safe aggregate metadata and never fixture prompts or interpretations", async () => {
-    const result = await runOfflineSemanticBenchmark({ fixturePath });
+    expect(result.metrics).toMatchObject({ totalCases: 216, scoredCases: 0, missingCases: 216, schemaValidRate: null, temporalEvidenceCorrectRate: 1 });
+    expect(transport.interpret).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
     const evidence = renderOfflineBenchmarkEvidence(result);
-    const fixture = await loadSyntheticSemanticFixture(fixturePath);
-
-    expect(evidence).toContain("OFFLINE_DRY_RUN");
-    expect(evidence).toContain("216");
     expect(evidence).toContain("No candidate was executed");
-    expect(evidence).toContain("| LIST range/date-correct rate | not measured |");
-    for (const item of fixture.cases) {
-      expect(evidence).not.toContain(item.message);
-      expect(evidence).not.toContain(JSON.stringify(item.expected));
-    }
-    expect(evidence).not.toMatch(/api[_ -]?key|authorization|secret|prompt|response/iu);
-  });
-
-  it("has no environment or HTTP dependency in the offline runner source", async () => {
-    const source = await readFile(new URL("./semantic-v1.ts", import.meta.url), "utf8");
-
-    expect(source).not.toContain("process.env");
-    expect(source).not.toMatch(/\bfetch\s*\(/u);
-    expect(source).not.toMatch(/openrouter|authorization|api[_-]?key/iu);
-  });
-
-  it("keeps the normal CLI limited to the offline dry-run runner", async () => {
-    const source = await readFile(new URL("./run-semantic-v1-offline.mjs", import.meta.url), "utf8");
-
-    expect(source).toContain("runOfflineSemanticBenchmark");
-    expect(source).not.toContain("process.env");
-    expect(source).not.toMatch(/\bfetch\s*\(/u);
-    expect(source).not.toMatch(/openrouter|authorization|api[_-]?key/iu);
-  });
-
-  it("executes the normal CLI as an offline dry-run", async () => {
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-offline.mjs"], {
-      cwd: process.cwd(),
-    });
-
-    expect(output.stdout).toContain("Execution mode: OFFLINE_DRY_RUN");
-    expect(output.stdout).toContain("No candidate was executed");
+    for (const item of fixture.cases) { expect(evidence).not.toContain(item.message); expect(evidence).not.toContain(JSON.stringify(item.expectedModel)); }
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-offline.mjs"]);
+    expect(output.stdout).toContain("Temporal Evidence accuracy | 100.00%");
     expect(output.stderr).toBe("");
   });
 });

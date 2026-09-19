@@ -2,342 +2,235 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CANONICAL_SEMANTIC_PROMPT } from "../../src/modules/intelligence/semantic-gateway";
-import { SemanticInterpretationJsonSchema } from "../../src/modules/semantic/contracts";
-import { CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256 } from "./semantic-v1";
-import {
-  createLiveSemanticBenchmarkRunner,
-  createOpenRouterTransport,
-  GEMINI_PILOT_CASE_IDS,
-  type LiveBenchmarkCandidate,
-  type LiveBenchmarkTransport,
-  type LiveSemanticJsonRequest,
-} from "./live-semantic-v1";
+import { ModelSemanticInterpretationJsonSchema } from "../../src/modules/semantic/contracts";
+import { CANONICAL_SYNTHETIC_FIXTURE_PATH, loadSyntheticSemanticFixture } from "./semantic-v1";
+import { createLiveSemanticBenchmarkRunner, createOpenRouterTransport, GEMINI_PILOT_CASE_IDS, type LiveBenchmarkOptions, type LiveBenchmarkTransport, type LiveSemanticJsonRequest } from "./live-semantic-v1";
 
-const fixturePath = resolve(process.cwd(), "src/modules/semantic/benchmark/semantic-v1.json");
 const runFile = promisify(execFile);
-const candidates: LiveBenchmarkCandidate[] = [
-  { candidateId: "qwen", model: "qwen/qwen3-30b-a3b-instruct-2507", provider: "siliconflow/fp8", promptPriceMicrounitsPerMillionTokens: 90_000, completionPriceMicrounitsPerMillionTokens: 300_000, reasoning: "OMIT" },
-  { candidateId: "nemotron", model: "nvidia/nemotron-3.5-lightning", provider: "phala", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 80_000, completionPriceMicrounitsPerMillionTokens: 200_000 },
-];
-const gemini: LiveBenchmarkCandidate = { candidateId: "gemini-2.5-flash-lite", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", reasoning: "OMIT", promptPriceMicrounitsPerMillionTokens: 100_000, completionPriceMicrounitsPerMillionTokens: 400_000 };
-const flash: LiveBenchmarkCandidate = { candidateId: "gemini-2.5-flash", model: "google/gemini-2.5-flash", provider: "google-vertex/eu", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 300_000, completionPriceMicrounitsPerMillionTokens: 2_500_000 };
-
-const response = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.000001, prompt_tokens: 1, completion_tokens: 1 } });
-const stateDirectories: string[] = [];
-
-async function stateDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), "calenote-live-benchmark-"));
-  stateDirectories.push(directory);
-  return directory;
+const gemini = { candidateId: "gemini-2.5-flash-lite", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", reasoning: "OMIT", promptPriceMicrounitsPerMillionTokens: 100_000, completionPriceMicrounitsPerMillionTokens: 400_000 } as const;
+const model = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null };
+const response = JSON.stringify({ choices: [{ message: { content: JSON.stringify(model) }, finish_reason: "stop" }], usage: { cost: 0.000001, prompt_tokens: 1, completion_tokens: 1 } });
+const directories: string[] = [];
+async function directory() { const path = await mkdtemp(join(tmpdir(), "calenote-live-benchmark-")); directories.push(path); return path; }
+function options(stateDirectory: string, transport: LiveBenchmarkTransport, overrides: Partial<LiveBenchmarkOptions> = {}): LiveBenchmarkOptions {
+  return { fixturePath: CANONICAL_SYNTHETIC_FIXTURE_PATH, stateDirectory, runId: "semantic-v1-hybrid-test",
+    candidates: [gemini], transport, profile: "gemini-flash-lite-hybrid-pilot", ...overrides };
 }
-function runner(directory: string, transport: LiveBenchmarkTransport, overrides: Record<string, unknown> = {}) {
-  return createLiveSemanticBenchmarkRunner({
-    fixturePath, stateDirectory: directory, runId: "safe-run-001", candidates, transport,
-    maxHttpRequests: 450, maxCostMicrounits: 500_000, maxInputTokens: 10_000, maxOutputTokens: 1_024,
-    ...overrides,
+function runner(stateDirectory: string, transport: LiveBenchmarkTransport, overrides: Partial<LiveBenchmarkOptions> = {}) { return createLiveSemanticBenchmarkRunner(options(stateDirectory, transport, overrides)); }
+function fakeTransport(body = response) { return vi.fn<LiveBenchmarkTransport>(async () => ({ status: 200, body })); }
+afterEach(async () => { vi.unstubAllGlobals(); vi.doUnmock("node:fs"); vi.doUnmock("./semantic-v1"); vi.doUnmock("../../src/modules/intelligence/semantic-gateway"); vi.resetModules(); await Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
+
+describe("hybrid live runner with local fake transport only", () => {
+  it("rejects an oversized canonical request in preflight before ledger creation or dispatch", async () => {
+    vi.resetModules();
+    vi.doMock("../../src/modules/intelligence/semantic-gateway", async (original) => ({
+      ...await original<typeof import("../../src/modules/intelligence/semantic-gateway")>(), CANONICAL_SEMANTIC_PROMPT: "x".repeat(12_001),
+    }));
+    const path = await directory(); const transport = fakeTransport();
+    const create = (await import("./live-semantic-v1")).createLiveSemanticBenchmarkRunner;
+    await expect(create(options(path, transport)).preflight({ apiKeyPresent: true })).rejects.toThrow("input token budget");
+    expect(transport).not.toHaveBeenCalled();
+    await expect(readFile(join(path, "semantic-v1-hybrid-test.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
-}
-function fakeTransport(body = response): LiveBenchmarkTransport {
-  return vi.fn(async () => ({ status: 200, body }));
-}
+  it("emits canonical prompt/model schema/evidence and exact pinned no-fallback privacy envelope", async () => {
+    const transport = fakeTransport();
+    const result = await runner(await directory(), transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const request = transport.mock.calls[0]?.[0] as unknown as LiveSemanticJsonRequest;
+    expect(result.requestCount).toBe(1);
+    expect(request).toMatchObject({ model: gemini.model, stream: false, max_tokens: 256,
+      provider: { only: [gemini.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
+    expect(request.messages[0]).toEqual({ role: "system", content: CANONICAL_SEMANTIC_PROMPT });
+    expect(request.response_format.json_schema.schema).toEqual(ModelSemanticInterpretationJsonSchema);
+    expect(JSON.parse(request.messages[1].content)).toMatchObject({ temporalEvidence: { date: { state: "RESOLVED", localDate: "2026-09-16" }, time: { state: "RESOLVED", localTime: "08:00" } } });
+    for (const key of ["reasoning", "tools", "functions", "tool_choice", "function_call"]) expect(request).not.toHaveProperty(key);
+  });
 
-afterEach(async () => {
-  await Promise.all(stateDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
-});
-
-describe("live semantic V1 benchmark runner", () => {
-  it("keeps a test sentinel API key in Authorization only, never the serialized request body", async () => {
-    const sentinel = "CALENOTE_TEST_SENTINEL_OPENROUTER_KEY_DO_NOT_LEAK";
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ choices: [], usage: {} }), { status: 200 }));
-    vi.stubGlobal("fetch", fetcher);
-    const request = { model: "google/gemini-2.5-flash", stream: false, max_tokens: 32, messages: [{ role: "system", content: "safe" }], response_format: { type: "json_schema", json_schema: { name: "semantic_interpretation", strict: true, schema: SemanticInterpretationJsonSchema } }, provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.3, completion: 2.5 } }, reasoning: { effort: "none", exclude: true } } satisfies LiveSemanticJsonRequest;
+  it("sends only an injected sentinel in Authorization and rejects redirects", async () => {
+    const transport = fakeTransport();
+    await runner(await directory(), transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const request = transport.mock.calls[0]?.[0] as unknown as LiveSemanticJsonRequest;
+    const sentinel = "SYNTHETIC_TEST_KEY";
+    const fetcher = vi.fn<typeof fetch>(async () => new Response("{}", { status: 200 })); vi.stubGlobal("fetch", fetcher);
     await createOpenRouterTransport(sentinel)(request, { signal: new AbortController().signal });
-    const init = (fetcher as unknown as { mock: { calls: Array<[unknown, RequestInit]> } }).mock.calls[0]?.[1] as RequestInit;
-    const body = String(init.body);
-    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${sentinel}`);
-    expect(body).not.toContain(sentinel);
-    expect(JSON.stringify(request)).not.toContain(sentinel);
-    expect(JSON.parse(body)).toMatchObject({ model: request.model, messages: request.messages, response_format: request.response_format, provider: request.provider, reasoning: request.reasoning });
-  });
-  it("permits only the pinned single-route Gemini pilot over the fixed 36-case stratified subset", async () => {
-    const transport = fakeTransport();
-    const report = await runner(await stateDirectory(), transport, {
-      candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 100_000,
-      maxInputTokens: 12_000, maxOutputTokens: 256,
-    }).preflight({ apiKeyPresent: false });
-    expect(report).toMatchObject({ caseCount: 36, candidateModels: ["google/gemini-2.5-flash-lite"], projectedMaxRequests: 36, projectedMaxCostMicrounits: 46_908, networkRequests: 0 });
-    expect(transport).not.toHaveBeenCalled();
+    const init = fetcher.mock.calls[0]?.[1] as unknown as RequestInit;
+    expect(init).toMatchObject({ redirect: "error", headers: { authorization: "Bearer SYNTHETIC_TEST_KEY" } });
+    expect(String(init.body)).not.toContain(sentinel);
   });
 
-  it("permits the pinned Gemini Flash pilot with disabled reasoning and a $0.21 cap", async () => {
-    const report = await runner(await stateDirectory(), fakeTransport(), {
-      candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000,
-    }).preflight({ apiKeyPresent: false });
-    expect(report).toMatchObject({ caseCount: 36, candidateModels: ["google/gemini-2.5-flash"], projectedMaxRequests: 36, projectedMaxCostMicrounits: 200_160, networkRequests: 0 });
-  });
-
-  it("preflights Flash full against all 216 canonical cases with its independent cap", async () => {
-    const transport = fakeTransport();
-    const report = await runner(await stateDirectory(), transport, { candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
-    expect(report).toMatchObject({ caseCount: 216, projectedMaxRequests: 216, maxHttpRequests: 220, maxCostMicrounits: 1_210_000, networkRequests: 0 });
-    expect(transport).not.toHaveBeenCalled();
-  });
-
-  it("separates Flash pilot and full provenance and rejects cross-scope ledger reuse", async () => {
-    const directory = await stateDirectory();
-    const reportDirectory = await stateDirectory();
-    const pilot = runner(directory, fakeTransport(), { runId: "flash-scope", candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000 });
-    const full = runner(directory, fakeTransport(), { runId: "flash-scope", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 });
-    const pilotReport = await pilot.preflight({ apiKeyPresent: false });
-    const fullReport = await runner(reportDirectory, fakeTransport(), { runId: "flash-full", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
-    expect(pilotReport.provenance.fixtureCaseIdsSha256).not.toBe(fullReport.provenance.fixtureCaseIdsSha256);
-    await expect(full.preflight({ apiKeyPresent: false })).rejects.toThrow("ledger");
-    const reverseDirectory = await stateDirectory();
-    await runner(reverseDirectory, fakeTransport(), { runId: "flash-scope-reverse", candidates: [flash], maxHttpRequests: 220, maxCostMicrounits: 1_210_000 }).preflight({ apiKeyPresent: false });
-    await expect(runner(reverseDirectory, fakeTransport(), { runId: "flash-scope-reverse", candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000 }).preflight({ apiKeyPresent: false })).rejects.toThrow("ledger");
-  });
-
-  it("emits the pinned Flash privacy envelope with reasoning disabled while Flash Lite omits reasoning", async () => {
-    const flashTransport = fakeTransport();
-    await runner(await stateDirectory(), flashTransport, {
-      candidates: [flash], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 210_000,
-    }).run({ apiKeyPresent: true });
-    const flashRequest = (flashTransport as unknown as { mock: { calls: Array<[Record<string, unknown> & { messages: Array<Record<string, unknown>> }]> } }).mock.calls[0]?.[0];
-    expect(flashRequest).toMatchObject({ model: "google/gemini-2.5-flash", stream: false, max_tokens: 1_024,
-      reasoning: { effort: "none", exclude: true }, response_format: { type: "json_schema", json_schema: { strict: true } },
-      provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.3, completion: 2.5 } },
+  it("runs deterministic preflight before ledger creation or transport when evidence is wrong", async () => {
+    vi.doMock("./semantic-v1", async (original) => {
+      const source = await original<typeof import("./semantic-v1")>();
+      return { ...source, loadSyntheticSemanticFixture: async (path: string) => {
+        const fixture = await source.loadSyntheticSemanticFixture(path);
+        fixture.cases[215].expectedTemporalEvidence.date = { state: "RESOLVED", source: "TODAY", localDate: "2026-09-16" };
+        return fixture;
+      } };
     });
-    expect(flashRequest.messages).toHaveLength(2);
-    expect(flashRequest.messages[0]).toEqual({ role: "system", content: CANONICAL_SEMANTIC_PROMPT });
-    expect(flashRequest.messages[1]).toMatchObject({ role: "user" });
-    expect((flashRequest.response_format as { json_schema: { schema: unknown } }).json_schema.schema).toEqual(SemanticInterpretationJsonSchema);
-    expect(flashRequest).not.toHaveProperty("tools");
-    expect(flashRequest).not.toHaveProperty("functions");
-    expect(flashRequest).not.toHaveProperty("function_call");
-    expect(flashRequest).not.toHaveProperty("tool_choice");
-    const liteTransport = fakeTransport();
-    await runner(await stateDirectory(), liteTransport, { candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS, maxHttpRequests: 40, maxCostMicrounits: 100_000 }).run({ apiKeyPresent: true });
-    expect((liteTransport as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls[0]?.[0]).not.toHaveProperty("reasoning");
-  });
-
-  it("rejects an altered Gemini provider or price before it can create a ledger", async () => {
-    const directory = await stateDirectory();
-    expect(() => runner(directory, fakeTransport(), { candidates: [{ ...gemini, provider: "google-vertex/global" }], caseIds: GEMINI_PILOT_CASE_IDS })).toThrow("Invalid approved benchmark candidate");
-    expect(() => runner(directory, fakeTransport(), { candidates: [{ ...gemini, completionPriceMicrounitsPerMillionTokens: 1 }], caseIds: GEMINI_PILOT_CASE_IDS })).toThrow("pinned price");
-  });
-
-  it("refuses a Gemini full or arbitrary subset before the pilot quality gate exists", async () => {
-    const directory = await stateDirectory();
-    expect(() => runner(directory, fakeTransport(), { candidates: [gemini] })).toThrow("fixed Gemini pilot subset");
-    expect(() => runner(directory, fakeTransport(), { candidates: [gemini], caseIds: GEMINI_PILOT_CASE_IDS.slice(0, -1) })).toThrow("fixed Gemini pilot subset");
-  });
-  it("rejects the retired gpt-oss candidate and accepts the exact Qwen SiliconFlow replacement", async () => {
-    const directory = await stateDirectory();
-    expect(() => runner(directory, fakeTransport(), { candidates: [
-      { candidateId: "gpt-oss", model: "openai/gpt-oss-120b", provider: "crusoe/bf16", reasoning: "DISABLED", promptPriceMicrounitsPerMillionTokens: 50_000, completionPriceMicrounitsPerMillionTokens: 250_000 } as unknown as LiveBenchmarkCandidate,
-      candidates[1],
-    ] })).toThrow("approved benchmark candidate set");
-    await expect(runner(directory, fakeTransport()).preflight({ apiKeyPresent: false })).resolves.toMatchObject({ candidateModels: ["qwen/qwen3-30b-a3b-instruct-2507", "nvidia/nemotron-3.5-lightning"] });
-  });
-
-  it("rejects altered endpoint prices even when model, provider, and capability are otherwise approved", async () => {
-    const qwenDirectory = await stateDirectory();
-    const nemotronDirectory = await stateDirectory();
-    expect(() => runner(qwenDirectory, fakeTransport(), { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 1 }, candidates[1]] })).toThrow("pinned price");
-    expect(() => runner(nemotronDirectory, fakeTransport(), { candidates: [candidates[0], { ...candidates[1], completionPriceMicrounitsPerMillionTokens: 1 }] })).toThrow("pinned price");
-  });
-
-  it("preflight verifies the pinned 216-case fixture without dispatching", async () => {
-    const transport = fakeTransport();
-    const report = await runner(await stateDirectory(), transport).preflight({ apiKeyPresent: false });
-    expect(report).toMatchObject({ caseCount: 216, fixtureContentDigest: CANONICAL_SYNTHETIC_FIXTURE_CONTENT_SHA256, networkRequests: 0, apiKey: "ABSENT" });
+    const path = await directory(); const transport = fakeTransport();
+    const create = (await import("./live-semantic-v1")).createLiveSemanticBenchmarkRunner;
+    await expect(create(options(path, transport)).run({ apiKeyPresent: true })).rejects.toThrow("temporal preflight");
+    await expect(readFile(join(path, "semantic-v1-hybrid-test.json"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("fails closed before transport when fixture identity is not canonical", async () => {
-    const transport = fakeTransport();
-    await expect(runner(await stateDirectory(), transport, { fixturePath: "/tmp/not-the-reviewed-fixture.json" }).preflight({ apiKeyPresent: true }))
-      .rejects.toThrow("canonical fixture");
+  it("rejects historical IDs, schema versions, and corrupt ledgers without rewriting", async () => {
+    const path = await directory(); const transport = fakeTransport();
+    expect(() => runner(path, transport, { runId: "gemini-flash-lite-contract-v3-20260917-01" })).toThrow("historical IDs");
+    const report = await runner(path, transport).preflight({ apiKeyPresent: false });
+    const old = JSON.parse(await readFile(report.ledgerPath, "utf8")); old.schemaVersion = 1; old.benchmarkVersion = "live-semantic-v1-2";
+    const source = JSON.stringify(old); await writeFile(report.ledgerPath, source);
+    await expect(runner(path, transport).preflight({ apiKeyPresent: true })).rejects.toThrow("ledger");
+    expect(await readFile(report.ledgerPath, "utf8")).toBe(source);
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("persists RESERVED and then DISPATCHED before invoking transport", async () => {
-    const directory = await stateDirectory();
-    let observedStates: string[] = [];
-    const transport: LiveBenchmarkTransport = vi.fn(async () => {
-      const ledger = JSON.parse(await readFile(join(directory, "safe-run-001.json"), "utf8"));
-      observedStates = ledger.attempts.map((attempt: { state: string }) => attempt.state);
+  it.each(["../../src/modules/semantic/temporal-evidence.ts", "../../src/modules/semantic/reconciliation.ts", "../../src/modules/semantic/contracts.ts", "./semantic-v1.ts"])("invalidates resume when provenance dependency %s changes", async (dependency) => {
+    const path = await directory();
+    const first = await runner(path, fakeTransport()).preflight({ apiKeyPresent: false });
+    const before = await readFile(first.ledgerPath, "utf8");
+    vi.doMock("node:fs", async (original) => {
+      const fs = await original<typeof import("node:fs")>();
+      return { ...fs, readFileSync: (file: URL, encoding: "utf8") => {
+        const content = fs.readFileSync(file, encoding);
+        return file.href === new URL(dependency, import.meta.url).href ? content + "\n// changed contract" : content;
+      } };
+    });
+    const create = (await import("./live-semantic-v1")).createLiveSemanticBenchmarkRunner;
+    await expect(create(options(path, fakeTransport())).preflight({ apiKeyPresent: false })).rejects.toThrow("ledger");
+    expect(await readFile(first.ledgerPath, "utf8")).toBe(before);
+  });
+
+  it("rejects altered candidate, provider, price, profiles, subsets and cap increases", async () => {
+    const path = await directory();
+    for (const candidate of [{ ...gemini, provider: "google-vertex/global" }, { ...gemini, promptPriceMicrounitsPerMillionTokens: 1 }]) {
+      expect(() => runner(path, fakeTransport(), { candidates: [candidate] })).toThrow();
+    }
+    for (const override of [{ maxHttpRequests: 41 }, { maxCostMicrounits: 100_001 }, { maxInputTokens: 11_999 }, { maxOutputTokens: 257 }, { caseIds: GEMINI_PILOT_CASE_IDS.slice(1) }]) {
+      expect(() => runner(path, fakeTransport(), override)).toThrow();
+    }
+    expect(() => runner(path, fakeTransport(), { profile: "legacy-pair" as never })).toThrow("profile");
+    expect(() => runner(path, fakeTransport(), { profile: "gemini-flash-lite-hybrid-full", maxHttpRequests: 221 })).toThrow("cap");
+  });
+
+  it("reserves durably before dispatch and resumes completed attempts exactly once", async () => {
+    const path = await directory();
+    const transport = vi.fn(async () => {
+      const ledger = JSON.parse(await readFile(join(path, "semantic-v1-hybrid-test.json"), "utf8"));
+      expect(ledger.attempts).toMatchObject([{ state: "DISPATCHED", reservedCostMicrounits: 1_303 }]);
       return { status: 200, body: response };
     });
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(observedStates).toEqual(["DISPATCHED"]);
+    const first = await runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const second = await runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    expect(first.metricsByCandidate[gemini.candidateId].scoredCases).toBe(1);
+    expect(second.requestCount).toBe(1); expect(transport).toHaveBeenCalledTimes(1);
   });
 
-  it("omits reasoning for the non-thinking Qwen endpoint", async () => {
-    const transport: LiveBenchmarkTransport = vi.fn(async (request) => {
-      expect(request.model).toBe("qwen/qwen3-30b-a3b-instruct-2507");
-      expect("reasoning" in request).toBe(false);
-      expect(request.response_format.json_schema.strict).toBe(true);
-      expect(request.provider).toMatchObject({ only: ["siliconflow/fp8"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true });
-      return { status: 200, body: response };
+  it.each(["DISPATCHED", "RESERVED"] as const)("recovers %s without retrying dispatched work or double-charging undelivered reservations", async (state) => {
+    const path = await directory();
+    const result = await runner(path, fakeTransport(), { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const ledger = JSON.parse(await readFile(result.ledgerPath, "utf8"));
+    ledger.attempts[0] = { candidateId: gemini.candidateId, caseId: GEMINI_PILOT_CASE_IDS[0], ordinal: 1, state, reservedAt: "2026-09-19T00:00:00.000Z", reservedCostMicrounits: 1_303 };
+    await writeFile(result.ledgerPath, JSON.stringify(ledger));
+    const transport = fakeTransport(); const resumed = await runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    expect(resumed.requestCount).toBe(1); expect(transport).toHaveBeenCalledTimes(state === "RESERVED" ? 1 : 0);
+  });
+
+  it.each(["negative-cost", "foreign-case", "foreign-candidate", "missing-completion"] as const)("rejects ledger corruption %s before dispatch", async (corruption) => {
+    const path = await directory();
+    const result = await runner(path, fakeTransport(), { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const ledger = JSON.parse(await readFile(result.ledgerPath, "utf8"));
+    if (corruption === "negative-cost") ledger.attempts[0].finalizedCostMicrounits = -1_000_000;
+    if (corruption === "foreign-case") ledger.attempts[0].caseId = "synthetic-other";
+    if (corruption === "foreign-candidate") ledger.attempts[0].candidateId = "other";
+    if (corruption === "missing-completion") delete ledger.attempts[0].interpretation;
+    await writeFile(result.ledgerPath, JSON.stringify(ledger));
+    const transport = fakeTransport();
+    await expect(runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true })).rejects.toThrow("ledger");
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("stops before exceeding request or conservative cost caps and preserves overages", async () => {
+    const transport = fakeTransport();
+    const request = await runner(await directory(), transport, { maxHttpRequests: 0 }).run({ apiKeyPresent: true });
+    expect(request.status).toBe("INCOMPLETE_REQUEST_CAP"); expect(transport).not.toHaveBeenCalled();
+    const cost = await runner(await directory(), transport, { maxCostMicrounits: 1_302 }).run({ apiKeyPresent: true });
+    expect(cost.status).toBe("INCOMPLETE_COST_CAP"); expect(transport).not.toHaveBeenCalled();
+    const overage = JSON.parse(response); overage.usage.cost = 0.11;
+    const over = fakeTransport(JSON.stringify(overage));
+    const result = await runner(await directory(), over).run({ apiKeyPresent: true });
+    expect(result).toMatchObject({ status: "INCOMPLETE_COST_CAP", requestCount: 1, retainedCostMicrounits: 110_000 });
+    expect(over).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a final-call cost overage failed on both completion and resume", async () => {
+    let calls = 0;
+    const transport = vi.fn(async () => {
+      const result = JSON.parse(response); result.usage.cost = ++calls === 36 ? 0.11 : 0;
+      return { status: 200, body: JSON.stringify(result) };
     });
-    await runner(await stateDirectory(), transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const path = await directory();
+    const result = await runner(path, transport).run({ apiKeyPresent: true });
+    expect(result).toMatchObject({ status: "INCOMPLETE_COST_CAP", requestCount: 36 });
+    const resumed = await runner(path, transport).run({ apiKeyPresent: true });
+    expect(resumed.status).toBe("INCOMPLETE_COST_CAP");
+    expect(transport).toHaveBeenCalledTimes(36);
   });
 
-  it("persists a schema-valid completed observation and reuses it without a second call", async () => {
-    const directory = await stateDirectory();
-    const transport = fakeTransport();
-    const first = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    const second = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(first.metricsByCandidate.qwen.scoredCases).toBe(1);
-    expect(second.metricsByCandidate.qwen.scoredCases).toBe(1);
+  it.each(["not-json", "temporal-injection", "oversized", "rate-limit"])("terminalizes %s without retries, fallback, raw persistence or a passing gate", async (kind) => {
+    const body = kind === "oversized" ? "x".repeat(1_000_001) : JSON.stringify({ choices: [{ message: { content: kind === "temporal-injection" ? JSON.stringify({ ...model, localDate: "2030-01-01" }) : "not-json" }, finish_reason: "stop" }] });
+    const transport = vi.fn(async () => ({ status: kind === "rate-limit" ? 429 : 200, body }));
+    const path = await directory();
+    const first = await runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    await runner(path, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    const ledger = await readFile(first.ledgerPath, "utf8");
+    expect(ledger).toContain('"state":"FAILED"'); expect(ledger).not.toContain("not-json"); expect(ledger).not.toContain("2030-01-01");
+    expect(first.retainedCostMicrounits).toBe(1_303);
+    expect(first.qualityGates[gemini.candidateId].status).toBe("FAIL");
     expect(transport).toHaveBeenCalledTimes(1);
   });
 
-  it("does not retry an attempt left UNKNOWN_DISPATCHED after a restart", async () => {
-    const directory = await stateDirectory();
-    await expect(runner(directory, fakeTransport(), { maxHttpRequests: 1 }).run({ apiKeyPresent: true })).resolves.toBeDefined();
-    const current = JSON.parse(await readFile(join(directory, "safe-run-001.json"), "utf8"));
-    current.attempts[0].state = "DISPATCHED";
-    await (await import("node:fs/promises")).writeFile(join(directory, "safe-run-001.json"), JSON.stringify(current));
-    const transport = fakeTransport();
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(transport).not.toHaveBeenCalled();
+  it("fences concurrent ledger runners deterministically", async () => {
+    const path = await directory(); let release: () => void = () => {}; let reached: () => void = () => {};
+    const arrived = new Promise<void>((resolve) => { reached = resolve; });
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const first = runner(path, async () => { reached(); await blocked; return { status: 200, body: response }; }, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
+    await arrived;
+    try { await expect(runner(path, fakeTransport(), { maxHttpRequests: 1 }).run({ apiKeyPresent: true })).rejects.toThrow("locked"); }
+    finally { release(); await first; }
   });
 
-  it("recovers a proven never-dispatched reservation without undercounting a later dispatch", async () => {
-    const directory = await stateDirectory();
-    await runner(directory, fakeTransport(), { maxHttpRequests: 1 }).preflight({ apiKeyPresent: true });
-    const path = join(directory, "safe-run-001.json");
-    const ledger = JSON.parse(await readFile(path, "utf8"));
-    ledger.attempts.push({ candidateId: "qwen", caseId: "synthetic-relative-001", ordinal: 1, state: "RESERVED", reservedAt: new Date().toISOString(), reservedCostMicrounits: 1 });
-    await writeFile(path, JSON.stringify(ledger));
-    const transport = fakeTransport();
-    const resumed = await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(resumed.requestCount).toBe(1);
-    expect(transport).toHaveBeenCalledTimes(1);
+  it("uses all fixed pilot inputs, bounded context, and reconciled metrics for an offline oracle response run", async () => {
+    const fixture = await loadSyntheticSemanticFixture(CANONICAL_SYNTHETIC_FIXTURE_PATH);
+    const selected = fixture.cases.filter((item) => GEMINI_PILOT_CASE_IDS.includes(item.id as never));
+    let index = 0;
+    const transport = vi.fn(async (request: LiveSemanticJsonRequest) => {
+      const item = selected[index++]; const input = JSON.parse(request.messages[1].content);
+      expect(input.text).toBe(item.message); expect(input.temporalEvidence).toEqual(item.expectedTemporalEvidence);
+      if (item.priorContext) expect(input.previousContext).toMatchObject({ targetIntent: "CREATE_REMINDER", localDate: "2026-09-17" });
+      return { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(item.expectedModel) }, finish_reason: "stop" }] }) };
+    });
+    const result = await runner(await directory(), transport).run({ apiKeyPresent: true });
+    expect(result).toMatchObject({ status: "COMPLETE", requestCount: 36, retainedCostMicrounits: 46_908 });
+    expect(result.qualityGates[gemini.candidateId]).toEqual({ status: "PASS", failures: [] });
   });
 
-  it("fails closed when another local runner holds the durable ledger lock", async () => {
-    const directory = await stateDirectory();
-    let unblock: (() => void) | undefined;
-    const blocked = new Promise<void>((resolve) => { unblock = resolve; });
-    const first = runner(directory, vi.fn(async () => { await blocked; return { status: 200, body: response }; }), { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    const secondTransport = fakeTransport();
-    await expect(runner(directory, secondTransport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true })).rejects.toThrow("locked");
-    unblock?.(); await first;
-    expect(secondTransport).not.toHaveBeenCalled();
-  });
-
-  it("stops before request 451 and before a cost reservation above the hard cap", async () => {
-    const requests = fakeTransport();
-    const directory = await stateDirectory();
-    const requestCapped = await runner(directory, requests, { maxHttpRequests: 0 }).run({ apiKeyPresent: true });
-    expect(requestCapped.status).toBe("INCOMPLETE_REQUEST_CAP");
-    expect(requests).not.toHaveBeenCalled();
-    const costCapped = await runner(await stateDirectory(), fakeTransport(), { maxCostMicrounits: 1 }).run({ apiKeyPresent: true });
-    expect(costCapped.status).toBe("INCOMPLETE_COST_CAP");
-  });
-
-  it("stops before the next durable dispatch when the exact two-model run reaches its cap", async () => {
-    const transport = fakeTransport();
-    const run = await runner(await stateDirectory(), transport, { maxHttpRequests: 431 }).run({ apiKeyPresent: true });
-    expect(run.status).toBe("INCOMPLETE_REQUEST_CAP");
-    expect(run.requestCount).toBe(431);
-    expect(transport).toHaveBeenCalledTimes(431);
-  }, 15_000);
-
-  it("retains the conservative reservation for unknown usage and never automatically retries failures", async () => {
-    const directory = await stateDirectory();
-    const transport = fakeTransport(JSON.stringify({ choices: [{ message: { content: "not-json" }, finish_reason: "stop" }] }));
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    const ledger = JSON.parse(await readFile(join(directory, "safe-run-001.json"), "utf8"));
-    expect(ledger.attempts[0]).toMatchObject({ state: "FAILED", finalizedCostMicrounits: ledger.attempts[0].reservedCostMicrounits, errorCategory: "INVALID_JSON" });
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(transport).toHaveBeenCalledTimes(1);
-  });
-
-  it("retains a reported overage rather than under-accounting it", async () => {
-    const directory = await stateDirectory();
-    const overage = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: "HELP" }) }, finish_reason: "stop" }], usage: { cost: 0.9, prompt_tokens: 1, completion_tokens: 1 } });
-    await runner(directory, fakeTransport(overage), { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    const ledger = JSON.parse(await readFile(join(directory, "safe-run-001.json"), "utf8"));
-    expect(ledger.attempts[0].finalizedCostMicrounits).toBe(900_000);
-  });
-
-  it("terminalizes an oversized provider body without retaining or retrying it", async () => {
-    const directory = await stateDirectory();
-    const oversized = "x".repeat(1_000_001);
-    const transport = fakeTransport(oversized);
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    const ledger = await readFile(join(directory, "safe-run-001.json"), "utf8");
-    expect(ledger).toContain("SCHEMA_INVALID");
-    expect(ledger).not.toContain(oversized);
-    await runner(directory, transport, { maxHttpRequests: 1 }).run({ apiKeyPresent: true });
-    expect(transport).toHaveBeenCalledTimes(1);
-  });
-
-  it("fails closed on corrupt or incompatible local ledger without resetting it", async () => {
-    const directory = await stateDirectory();
-    await (await import("node:fs/promises")).writeFile(join(directory, "safe-run-001.json"), "{partial");
-    const transport = fakeTransport();
-    await expect(runner(directory, transport).preflight({ apiKeyPresent: true })).rejects.toThrow("ledger");
-    expect(transport).not.toHaveBeenCalled();
-  });
-
-  it("rejects an incompatible candidate configuration and does not write a replacement ledger", async () => {
-    const directory = await stateDirectory();
-    await runner(directory, fakeTransport()).preflight({ apiKeyPresent: true });
-    const transport = fakeTransport();
-    expect(() => runner(directory, transport, { candidates: [{ ...candidates[0], promptPriceMicrounitsPerMillionTokens: 90_001 }, candidates[1]] }))
-      .toThrow("pinned price");
-    expect(transport).not.toHaveBeenCalled();
-  });
-
-  it("never persists synthetic message text, transport bodies, headers, or a supplied key", async () => {
-    const directory = await stateDirectory();
-    const forbidden = "not-a-real-secret-value";
-    await runner(directory, fakeTransport()).preflight({ apiKeyPresent: true });
-    const ledger = await readFile(join(directory, "safe-run-001.json"), "utf8");
-    expect(ledger).not.toContain(forbidden);
-    expect(ledger).not.toMatch(/authorization|header|message|prompt|response/iu);
-  });
-
-  it("emits only allowlisted safe progress while retaining the exact approved candidate set", async () => {
-    const progress: string[] = [];
-    const transport = fakeTransport();
-    await runner(await stateDirectory(), transport, { maxHttpRequests: 1, onProgress: (line: string) => progress.push(line) }).run({ apiKeyPresent: true });
-    expect(progress.join("\n")).toContain("qwen/qwen3-30b-a3b-instruct-2507");
-    expect(progress.join("\n")).not.toMatch(/authorization|api[_ -]?key|not-json|choices/iu);
-  });
-
-  it("keeps the explicit CLI preflight network-free and Keychain-independent", async () => {
-    const isolated = await stateDirectory();
-    const source = await readFile(new URL("./run-semantic-v1-live.mjs", import.meta.url), "utf8");
-    expect(source).toContain("process.env.OPENROUTER_API_KEY");
-    expect(source).not.toMatch(/find-generic-password|security\s+find|keychain/iu);
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--run-id", "test-preflight-qwen-safe-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
-    expect(output.stdout).toContain('"networkRequests":0');
-    expect(output.stdout).toContain('"apiKey":"ABSENT"');
+  it.each(["gemini-flash-lite-hybrid-pilot", "gemini-flash-lite-hybrid-full"])("preflights exact CLI profile %s without credentials or transport", async (profile) => {
+    const path = await directory();
+    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", profile, "--run-id", "semantic-v1-hybrid-cli-test"],
+      { env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: path } });
+    const report = JSON.parse(output.stdout);
+    expect(report).toMatchObject({ caseCount: profile.endsWith("pilot") ? 36 : 216, networkRequests: 0, apiKey: "ABSENT", temporalEvidence: { correctRate: 1 } });
     expect(output.stderr).toBe("");
   });
 
-  it("exposes the exact Gemini pilot profile through the CLI without dispatching", async () => {
-    const isolated = await stateDirectory();
-    const output = await runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", "gemini-pilot", "--run-id", "test-preflight-gemini-pilot-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
-    expect(output.stdout).toContain('"caseCount":36');
-    expect(output.stdout).toContain('"projectedMaxRequests":36');
-    expect(output.stdout).toContain('"networkRequests":0');
-  });
-
-  it("accepts package-script argument forwarding for the network-free preflight", async () => {
-    const isolated = await stateDirectory();
-    const output = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--run-id", "test-preflight-qwen-pnpm-v2"], { cwd: process.cwd(), env: { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: isolated } });
-    expect(output.stdout).toContain('"networkRequests":0');
+  it("accepts pnpm forwarding and rejects old CLI profiles with zero dispatch", async () => {
+    const path = await directory(); const env = { ...process.env, OPENROUTER_API_KEY: "", SEMANTIC_BENCHMARK_STATE_DIRECTORY: path };
+    const result = await runFile("pnpm", ["benchmark:semantic-v1:live", "--", "--preflight", "--profile", "gemini-flash-lite-hybrid-pilot", "--run-id", "semantic-v1-hybrid-cli-pnpm"], { env });
+    expect(result.stdout).toContain('"networkRequests":0');
+    await expect(runFile(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-typescript-loader.mjs", "tools/benchmark/run-semantic-v1-live.mjs", "--preflight", "--profile", "gemini-pilot", "--run-id", "old"], { env })).rejects.toMatchObject({ code: 1 });
   });
 });
