@@ -10,6 +10,7 @@ export const MAX_SEMANTIC_SCHEDULE_AHEAD_MS = 366 * 24 * 60 * 60 * 1_000;
 export type SemanticValidationFailureCode =
   | "INVALID_DATE_OR_TIME"
   | "INVALID_RANGE"
+  | "CONFLICTING_CONTEXT"
   | "PAST_TIME"
   | "TOO_FAR";
 
@@ -36,7 +37,8 @@ export type SemanticValidationResult =
     };
   }
   | { kind: "SAFE_CLARIFICATION"; code: SemanticValidationFailureCode }
-  | { kind: "SAFE_HELP"; code: "HELP" | "UNSUPPORTED" | "INVALID_SEMANTIC_INTERPRETATION" | "INVALID_PROCESSING_TIME" };
+  | { kind: "SAFE_HELP"; code: "HELP" | "UNSUPPORTED" | "AMBIGUOUS_INTENT" | "INVALID_CONTEXT"
+    | "INVALID_TEMPORAL_EVIDENCE" | "INVALID_SEMANTIC_INTERPRETATION" | "INVALID_PROCESSING_TIME" };
 
 interface LocalDateParts {
   year: number;
@@ -75,6 +77,15 @@ function parseLocalTime(value: string): LocalTimeParts | null {
   const hour = Number(match[1]);
   const minute = Number(match[2]);
   return hour <= 23 && minute <= 59 ? { hour, minute } : null;
+}
+
+/** Shared calendar checks for application outcomes, evidence and encrypted slots. */
+export function isValidSemanticLocalDate(value: string): boolean {
+  return parseLocalDate(value) !== null;
+}
+
+export function isValidSemanticLocalTime(value: string): boolean {
+  return parseLocalTime(value) !== null;
 }
 
 function vietnamLocalTimestamp(date: LocalDateParts, time: LocalTimeParts): number {

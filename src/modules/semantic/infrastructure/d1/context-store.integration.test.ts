@@ -7,6 +7,8 @@ import type { Miniflare } from "miniflare";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SemanticContextStore } from "./context-store";
 import { NOW, seedSemanticRuntime, semanticRuntime } from "./runtime.test-support";
+import { reconcileSemanticInterpretation } from "../../reconciliation";
+import { extractTemporalEvidence } from "../../temporal-evidence";
 
 let runtime: Miniflare;
 let db: D1Database;
@@ -29,6 +31,41 @@ afterEach(async () => {
 });
 
 describe("encrypted semantic context on disposable workerd D1", () => {
+  it("persists reconciled slots encrypted and resumes after restart without creating a reminder", async () => {
+    const first = reconcileSemanticInterpretation({
+      modelInterpretation: { intent: "CREATE_REMINDER", title: "gọi khách bí mật", titleState: "RESOLVED", targetIntent: null },
+      temporalEvidence: extractTemporalEvidence({ text: "mai nhắc tui gọi khách bí mật", referenceNow: NOW }), processingNow: NOW,
+    });
+    if (first.kind !== "CLARIFICATION") throw new Error("Expected clarification");
+    expect(await store().createPending({ ...pending(), slots: first.contextSlots })).toBe("CREATED");
+    const stored = JSON.stringify(await db.prepare("SELECT * FROM semantic_contexts").first());
+    expect(stored).not.toContain("gọi khách bí mật");
+    expect(stored).not.toContain("2026-09-17");
+    await runtime.dispose();
+    ({ db, runtime } = await semanticRuntime(directory));
+    const previous = await read();
+    expect(previous?.slots).toEqual({ targetIntent: "CREATE_REMINDER", title: "gọi khách bí mật", localDate: "2026-09-17", localTime: null, missingFields: ["time"] });
+    const second = reconcileSemanticInterpretation({
+      modelInterpretation: { intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null },
+      temporalEvidence: extractTemporalEvidence({ text: "9h", referenceNow: NOW + 1 }), previousContext: previous?.slots, processingNow: NOW + 1,
+    });
+    expect(second).toEqual({ kind: "CREATE", candidate: { title: "gọi khách bí mật", scheduledAt: Date.UTC(2026, 8, 17, 2), timezone: "Asia/Ho_Chi_Minh" } });
+    expect(await db.prepare("SELECT count(*) AS count FROM reminders").first()).toEqual({ count: 0 });
+    expect(await read()).toEqual(previous); // Reconciliation itself cannot resolve or mutate storage.
+  });
+
+  it("rejects conflicting follow-up evidence without changing the encrypted pending slots", async () => {
+    await store().createPending(pending());
+    const before = await db.prepare("SELECT * FROM semantic_contexts").first();
+    const previous = await read();
+    expect(reconcileSemanticInterpretation({
+      modelInterpretation: { intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null },
+      temporalEvidence: extractTemporalEvidence({ text: "hôm nay 9h", referenceNow: NOW }), previousContext: previous?.slots, processingNow: NOW,
+    })).toEqual({ kind: "SAFE_CLARIFICATION", code: "CONFLICTING_CONTEXT" });
+    expect(await db.prepare("SELECT * FROM semantic_contexts").first()).toEqual(before);
+    expect(await db.prepare("SELECT count(*) AS count FROM reminders").first()).toEqual({ count: 0 });
+  });
+
   it("encrypts minimal slots and rereads them after a real runtime restart", async () => {
     expect(await store().createPending(pending())).toBe("CREATED");
     const row = await db.prepare("SELECT * FROM semantic_contexts").first();
@@ -87,9 +124,22 @@ describe("encrypted semantic context on disposable workerd D1", () => {
     for (const bad of [
       { ...pending(), slots: { ...slots, transcript: "private text" } },
       { ...pending(), slots: { ...slots, title: "x".repeat(1801) } },
+      { ...pending(), slots: { ...slots, title: "   " } },
+      { ...pending(), slots: { ...slots, localDate: "2026-02-30" } },
+      { ...pending(), slots: { ...slots, localTime: "24:00" } },
+      { ...pending(), slots: { ...slots, missingFields: ["range" as const] } },
       { ...pending(), expiresAt: NOW },
       { ...pending(), expiresAt: NOW + 1_800_001 },
     ]) await expect(store().createPending(bad)).rejects.toThrow();
+    expect(await db.prepare("SELECT count(*) AS count FROM semantic_contexts").first()).toEqual({ count: 0 });
+  });
+
+  it("rejects inconsistent list slots before encryption/persistence", async () => {
+    for (const listSlots of [
+      { targetIntent: "LIST_REMINDERS", rangeKind: "DATE", localDate: null, missingFields: ["range"] },
+      { targetIntent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: "2026-09-17", missingFields: ["range"] },
+      { targetIntent: "LIST_REMINDERS", rangeKind: null, localDate: null, missingFields: ["time"] },
+    ]) await expect(store().createPending({ ...pending(), slots: listSlots as never })).rejects.toThrow();
     expect(await db.prepare("SELECT count(*) AS count FROM semantic_contexts").first()).toEqual({ count: 0 });
   });
 
