@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { LocalDateSchema, LocalTimeSchema, SEMANTIC_TIMEZONE, type ModelSemanticInterpretation } from "../semantic/contracts";
 import { SemanticContextSlotsSchema } from "../semantic/context-store";
+import { TemporalEvidenceSchema } from "../semantic/reconciliation";
 
 export const SemanticInputSchema = z.object({
   text: z.string().min(1).max(1_800),
@@ -8,6 +9,9 @@ export const SemanticInputSchema = z.object({
   referenceLocalTime: LocalTimeSchema,
   timezone: z.literal(SEMANTIC_TIMEZONE),
   previousContext: SemanticContextSlotsSchema.optional(),
+  // Legacy benchmark callers are migrated separately. Runtime composition
+  // always supplies evidence extracted from the immutable inbound receipt.
+  temporalEvidence: TemporalEvidenceSchema.optional(),
 }).strict();
 export type SemanticInput = z.infer<typeof SemanticInputSchema>;
 

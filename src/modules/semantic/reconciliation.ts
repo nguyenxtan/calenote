@@ -14,7 +14,7 @@ const missing = z.object({ state: z.literal("MISSING") }).strict();
 
 // This checks the internal boundary too: a malformed serialized/context value
 // must not gain authority just because a TypeScript caller asserted its type.
-const TemporalEvidenceSchema = z.object({
+export const TemporalEvidenceSchema = z.object({
   timezone: z.literal(SEMANTIC_TIMEZONE),
   referenceLocalDate: localDate,
   referenceLocalTime: localTime,

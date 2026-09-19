@@ -12,7 +12,7 @@ import {
 } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import type { createSemanticService } from "@/modules/semantic/service";
-import type { SemanticContextStore, SemanticContextSlots } from "@/modules/semantic/context-store";
+import type { SemanticContextStore } from "@/modules/semantic/context-store";
 import { semanticQueryRange, type QueriedReminder, type SemanticReminderQuery } from "./semantic-query";
 import {
   MAX_REMINDER_TITLE_CODE_UNITS,
@@ -211,17 +211,12 @@ async function semanticCommand(
     return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
   }
   const pending = await semantic.contextStore.findPending(scope);
-  try {
-    await dependencies.processingFeedback?.();
-  } catch {
-    // Provider UX feedback is intentionally best effort and never changes semantics.
-  }
   const result = await semantic.service.interpret({
     text: message.text, referenceTime: message.receivedAt,
     processingNow: now(), timezone: "Asia/Ho_Chi_Minh",
     ownerId: context.userId, sourceInboundId: message.id,
     ...(pending ? { previousContext: pending.slots } : {}),
-  });
+  }, dependencies.processingFeedback);
   if (result.kind === "SAFE_HELP" || result.kind === "SAFE_CLARIFICATION") {
     const reply = result.kind === "SAFE_CLARIFICATION" && result.code === "PAST_TIME"
       ? "Thời điểm nhắc đã qua. Hãy gửi lại ngày và giờ trong tương lai."
@@ -256,18 +251,10 @@ async function semanticCommand(
     return { status: "REMINDERS_LISTED" };
   }
 
-  const { targetIntent, missingFields } = result.clarification;
-  // The approved clarification contract has no newly extracted slot values.
-  // Retain only prior typed slots, never infer slots from or persist a transcript.
-  const slots: SemanticContextSlots = targetIntent === "CREATE_REMINDER"
-    ? { targetIntent, title: null, localDate: null, localTime: null,
-      ...(pending?.slots.targetIntent === targetIntent ? pending.slots : {}), missingFields }
-    : { targetIntent, rangeKind: null, localDate: null,
-      ...(pending?.slots.targetIntent === targetIntent ? pending.slots : {}), missingFields };
   const createdAt = now();
   const saved = await semantic.contextStore.createPending({ ...scope, now: createdAt,
     id: randomOpaqueId(randomBytes), sourceInboundId: message.id, claimMarker: message.claimMarker,
-    slots, expiresAt: createdAt + DRAFT_LIFETIME_MS,
+    slots: result.contextSlots, expiresAt: createdAt + DRAFT_LIFETIME_MS,
   });
   if (saved === "CONFLICT") return rejectResolutionConflict(message, now(), dependencies, randomBytes);
   if (!await semantic.complete(message, context, now())) return { status: "SUPERSEDED" };

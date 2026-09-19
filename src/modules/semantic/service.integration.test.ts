@@ -60,7 +60,7 @@ describe("semantic router with atomic local D1 budgets", () => {
     const outcomes = await Promise.all(Array.from({ length: 12 }, (_, index) => service(transport, override).interpret(input(index))));
     expect(freeCalls).toBe(12);
     expect(paidCalls).toBe(1);
-    expect(outcomes.filter((result) => result.kind === "SAFE_HELP" && result.code === "INVALID_SEMANTIC_INTERPRETATION")).toHaveLength(1);
+    expect(outcomes.filter((result) => result.kind === "SAFE_HELP" && result.code === "HELP")).toHaveLength(1);
     expect(outcomes.filter((result) => result.kind === "SAFE_HELP" && result.code === "BUDGET_EXHAUSTED")).toHaveLength(11);
     const rows = await db.prepare("SELECT reserved_calls, finalized_calls, reserved_microunits, finalized_microunits FROM semantic_budget_windows").all();
     for (const row of rows.results) expect(row).toEqual({ reserved_calls: 0, finalized_calls: 1, reserved_microunits: 0, finalized_microunits: 6_128 });
@@ -77,7 +77,7 @@ describe("semantic router with atomic local D1 budgets", () => {
       paidCalls++;
       return success;
     };
-    expect(await service(transport).interpret(input(1))).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await service(transport).interpret(input(1))).toEqual({ kind: "SAFE_HELP", code: "HELP" });
     expect(paidCalls).toBe(1);
     expect(await db.prepare("SELECT state FROM semantic_budget_reservations WHERE source_inbound_id = 'one-0'").first()).toEqual({ state: "EXPIRED" });
     expect(await budget.reservePaidCall({ ownerId: "one", sourceInboundId: "one-0", now: clock })).toEqual({ status: "BUDGET_EXHAUSTED" });

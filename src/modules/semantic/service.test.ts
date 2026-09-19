@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSemanticService } from "./service";
-import { createSemanticGateway } from "../intelligence/infrastructure/openrouter/semantic-gateway";
+import { createSemanticGateway, type SemanticJsonRequest } from "../intelligence/infrastructure/openrouter/semantic-gateway";
 import type { PaidCallReservation, SemanticBudgetStore } from "./budget-store";
 
 const NOW = Date.UTC(2026, 8, 16, 5, 5);
@@ -24,8 +24,10 @@ const help = response(modelHelp);
 function harness(options: { responses?: Array<ReturnType<typeof response> | Error>; mode?: "off" | "semantic";
   reserve?: "deny" | "throw"; mark?: "deny" | "throw"; finalizeThrows?: boolean; claim?: "deny" | "throw" } = {}) {
   const events: string[] = [];
+  const requests: SemanticJsonRequest[] = [];
   const seen = new Set<string>();
-  const transport = vi.fn(async () => {
+  const transport = vi.fn(async (request: SemanticJsonRequest) => {
+    requests.push(request);
     events.push("dispatch");
     const next = options.responses?.shift() ?? help;
     if (next instanceof Error) throw next;
@@ -63,7 +65,7 @@ function harness(options: { responses?: Array<ReturnType<typeof response> | Erro
     freePrimary: { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 }, paidFallback: route }, transport);
   const makeService = () => createSemanticService({ mode: options.mode ?? "semantic", paidFallbackEnabled: true, gateway, budgetStore: budget,
     attemptStore: { claimInbound }, now: () => NOW, observe: (event) => observations.push(event) });
-  return { service: makeService(), makeService, gateway, transport, budget, events, claimInbound, observations };
+  return { service: makeService(), makeService, gateway, transport, budget, events, claimInbound, observations, requests };
 }
 
 describe("bounded semantic routing", () => {
@@ -73,7 +75,7 @@ describe("bounded semantic routing", () => {
     const gateway = createSemanticGateway({ ...limits, primary: route }, h.transport);
     const service = createSemanticService({ mode: "privacy", gateway, budgetStore: h.budget,
       attemptStore: { claimInbound: h.claimInbound }, now: () => NOW, observe: (event) => h.observations.push(event) });
-    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
     expect(h.events).toEqual(["reserve", "mark", "dispatch", "finalize"]);
     expect(h.transport).toHaveBeenCalledTimes(1);
     expect(h.observations).toContainEqual(expect.objectContaining({ tier: "PRIMARY", fallbackUsed: false }));
@@ -88,15 +90,15 @@ describe("bounded semantic routing", () => {
   });
 
   it.each([
-    modelHelp,
-    { ...modelHelp, intent: "UNSUPPORTED" },
-    { ...modelHelp, intent: "LIST_REMINDERS" },
-    { ...modelHelp, intent: "AMBIGUOUS" },
-    { intent: "CREATE_REMINDER", title: "Việc", titleState: "RESOLVED", targetIntent: null },
-    { intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null },
-  ])("fails closed without escalation until backend reconciliation is composed: %j", async (payload) => {
+    [modelHelp, { kind: "SAFE_HELP", code: "HELP" }],
+    [{ ...modelHelp, intent: "UNSUPPORTED" }, { kind: "SAFE_HELP", code: "UNSUPPORTED" }],
+    [{ ...modelHelp, intent: "LIST_REMINDERS" }, { kind: "CLARIFICATION", contextSlots: { targetIntent: "LIST_REMINDERS", rangeKind: null, localDate: null, missingFields: ["range"] } }],
+    [{ ...modelHelp, intent: "AMBIGUOUS" }, { kind: "SAFE_HELP", code: "AMBIGUOUS_INTENT" }],
+    [{ intent: "CREATE_REMINDER", title: "Việc", titleState: "RESOLVED", targetIntent: null }, { kind: "CLARIFICATION", contextSlots: { targetIntent: "CREATE_REMINDER", title: "Việc", localDate: null, localTime: null, missingFields: ["date", "time"] } }],
+    [{ intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null }, { kind: "CLARIFICATION", contextSlots: { targetIntent: "CREATE_REMINDER", title: null, localDate: null, localTime: null, missingFields: ["title", "date", "time"] } }],
+  ])("reconciles semantic-only output without escalation: %j", async (payload, expected) => {
     const h = harness({ responses: [response(payload)] });
-    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await h.service.interpret(input)).toMatchObject(expected);
     expect(h.transport).toHaveBeenCalledTimes(1);
     expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
   });
@@ -126,7 +128,7 @@ describe("bounded semantic routing", () => {
   it("lets one concurrent delivery consume the attempt claim across service instances", async () => {
     const h = harness({ responses: [{ status: 503, body: "" }, help] });
     const results = await Promise.all(Array.from({ length: 12 }, () => h.makeService().interpret(input)));
-    expect(results.filter((result) => result.kind === "SAFE_HELP" && result.code === "INVALID_SEMANTIC_INTERPRETATION")).toHaveLength(1);
+    expect(results.filter((result) => result.kind === "SAFE_HELP" && result.code === "HELP")).toHaveLength(1);
     expect(h.transport).toHaveBeenCalledTimes(2);
   });
 
@@ -147,7 +149,7 @@ describe("bounded semantic routing", () => {
   it("finalizes known safe provider cost and never exposes semantic content in observations", async () => {
     const h = harness({ responses: [{ status: 503, body: "" }, response(modelHelp,
       { prompt_tokens: 100, completion_tokens: 20, cost: 0.00005, secret: "provider-sensitive" })] });
-    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await h.service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
     expect(h.budget.finalizeUsage).toHaveBeenCalledWith({ ownerId: input.ownerId, reservationId: "reservation-private", actualCostMicrounits: 50, now: NOW });
     const safe = JSON.stringify(h.observations);
     for (const privateValue of [input.text, input.ownerId, input.sourceInboundId, "reservation-private", "provider-sensitive"]) {
@@ -187,7 +189,7 @@ describe("bounded semantic routing", () => {
     const gateway = createSemanticGateway({ ...limits, paidFallback: route }, h.transport);
     const service = createSemanticService({ mode: "semantic", paidFallbackEnabled: true, gateway, budgetStore: h.budget,
       attemptStore: { claimInbound: h.claimInbound }, now: () => NOW });
-    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "HELP" });
     expect(h.events).toEqual(["reserve", "mark", "dispatch", "finalize"]);
   });
 
@@ -209,7 +211,7 @@ describe("bounded semantic routing", () => {
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
-  it("cannot draft from a semantic title even after provider latency until reconciliation exists", async () => {
+  it("rejects evidence that becomes past during provider latency without changing its reference time", async () => {
     const h = harness();
     let clock = NOW;
     const transport = vi.fn(async () => {
@@ -220,8 +222,30 @@ describe("bounded semantic routing", () => {
       freePrimary: { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 }, paidFallback: route }, transport);
     const service = createSemanticService({ mode: "semantic", paidFallbackEnabled: true, gateway, budgetStore: h.budget,
       attemptStore: { claimInbound: h.claimInbound }, now: () => clock });
-    expect(await service.interpret(input)).toEqual({ kind: "SAFE_HELP", code: "INVALID_SEMANTIC_INTERPRETATION" });
+    expect(await service.interpret({ ...input, text: "hôm nay 13h nhắc việc" })).toEqual({ kind: "SAFE_CLARIFICATION", code: "PAST_TIME" });
     expect(transport).toHaveBeenCalledTimes(1);
     expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
+  });
+
+  it("sends exact deterministic evidence to the real gateway and drafts only those values", async () => {
+    const h = harness({ responses: [response({ intent: "CREATE_REMINDER", title: "gọi khách", titleState: "RESOLVED", targetIntent: null })] });
+    expect(await h.service.interpret({ ...input, text: "mai 8h nhắc tui gọi khách" })).toEqual({
+      kind: "CREATE", candidate: { title: "gọi khách", scheduledAt: Date.UTC(2026, 8, 17, 1), timezone: "Asia/Ho_Chi_Minh" },
+    });
+    expect(JSON.parse(h.requests[0].messages[1].content)).toEqual({
+      text: "mai 8h nhắc tui gọi khách", referenceLocalDate: "2026-09-16", referenceLocalTime: "11:55", timezone: "Asia/Ho_Chi_Minh",
+      temporalEvidence: { referenceLocalDate: "2026-09-16", referenceLocalTime: "11:55", timezone: "Asia/Ho_Chi_Minh",
+        date: { state: "RESOLVED", source: "TOMORROW", localDate: "2026-09-17" },
+        time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+        range: { state: "RESOLVED", kind: "TOMORROW", localDate: null } },
+    });
+  });
+
+  it("merges bounded context with fresh evidence and keeps model title text out of temporal authority", async () => {
+    const h = harness({ responses: [response({ intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null })] });
+    const previousContext = { targetIntent: "CREATE_REMINDER" as const, title: "gọi khách ngày 2099-12-31", localDate: "2026-09-17", localTime: null, missingFields: ["time" as const] };
+    expect(await h.service.interpret({ ...input, text: "9h", previousContext })).toEqual({ kind: "CREATE",
+      candidate: { title: previousContext.title, scheduledAt: Date.UTC(2026, 8, 17, 2), timezone: "Asia/Ho_Chi_Minh" } });
+    expect(JSON.parse(h.requests[0].messages[1].content).previousContext).toEqual(previousContext);
   });
 });
