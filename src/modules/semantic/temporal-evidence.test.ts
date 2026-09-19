@@ -205,6 +205,101 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each([";", ",", "!", "?"])(
+    "retains malformed DATE ownership after numeric clock fragments across %j", (delimiter) => {
+      for (const clock of ["9:", "9::", "9: :", ":30", ":.30", ":/30"]) {
+        for (const space of ["", " ", "\u00a0", "\n"]) {
+          const fragment = `${clock}${delimiter}${space}ngày`;
+          for (const text of [fragment, `20/09; ${fragment}`, `${fragment}; 20/09`,
+            `20/09 rồi ${fragment}`, `${fragment} rồi 20/09`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+              time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+              range: { state: "AMBIGUOUS" },
+            });
+          }
+        }
+      }
+    },
+  );
+
+  it.each([";", ",", "!", "?"])(
+    "keeps complete DATE expressions independent of numeric clock fragments across %j", (delimiter) => {
+      for (const clock of ["9:", "9::", "9: :", ":30", ":.30", ":/30"]) {
+        for (const space of ["", " ", "\u00a0", "\n"]) {
+          for (const [date, expectedDate, expectedRange] of [
+            ["ngày mai", { state: "RESOLVED", source: "TOMORROW", localDate: "2026-09-17" },
+              { state: "RESOLVED", kind: "TOMORROW", localDate: null }],
+            ["ngày 20 tháng 9", { state: "RESOLVED", source: "DAY_MONTH", localDate: "2026-09-20" },
+              { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" }],
+            ["ngày 20/09", { state: "RESOLVED", source: "DAY_MONTH", localDate: "2026-09-20" },
+              { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" }],
+          ] as const) {
+            for (const text of [`${clock}${delimiter}${space}${date}`, `${date}${delimiter}${space}${clock}`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                date: expectedDate, range: expectedRange,
+                time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+              });
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it.each([";", ",", "!", "?"])(
+    "keeps numeric and word-led clocks independent of an incomplete DATE across %j", (delimiter) => {
+      for (const space of ["", " ", "\u00a0", "\n"]) {
+        for (const clock of ["8h", "8 giờ", "8:00", "lúc 8h", "lúc 8 giờ", "lúc 8:00"]) {
+          for (const text of [`ngày${delimiter}${space}${clock}`, `${clock}${delimiter}${space}ngày`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+              range: { state: "AMBIGUOUS" },
+              time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+            });
+          }
+        }
+      }
+    },
+  );
+
+  it.each([";", ",", "!", "?", ". "])(
+    "does not lend an ordinary number across %j to a later date introducer", (delimiter) => {
+      for (const number of ["7", "30"]) {
+        for (const [date, expectedDate, expectedRange] of [
+          ["ngày", { state: "AMBIGUOUS", reason: "INVALID_DATE" }, { state: "AMBIGUOUS" }],
+          ["ngày mai", { state: "RESOLVED", source: "TOMORROW", localDate: "2026-09-17" },
+            { state: "RESOLVED", kind: "TOMORROW", localDate: null }],
+          ["ngày 20/09", { state: "RESOLVED", source: "DAY_MONTH", localDate: "2026-09-20" },
+            { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" }],
+        ] as const) {
+          const text = `${number}${delimiter} ${date}`;
+          expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+            date: expectedDate, range: expectedRange, time: { state: "MISSING" },
+          });
+        }
+      }
+    },
+  );
+
+  it.each(["ngày 20 tháng", "20 tháng", "ngày 20 tháng 9 năm", "20 tháng 9 năm"])(
+    "does not let the incomplete month or year connector in %s consume a separate clock", (fragment) => {
+      for (const delimiter of [";", ",", "!", "?"]) {
+        for (const space of ["", " ", "\u00a0", "\n"]) {
+          for (const clock of ["8h", "8 giờ", "8:00", "lúc 8h", "lúc 8 giờ", "lúc 8:00"]) {
+            for (const text of [`${fragment}${delimiter}${space}${clock}`, `${clock}${delimiter}${space}${fragment}`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                range: { state: "AMBIGUOUS" },
+                time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+              });
+            }
+          }
+        }
+      }
+    },
+  );
+
   it.each(["mai/9h", "hôm nay/9h", "20/09/2026/9h", "tuần này/9h", "/:lúc 9h"])(
     "does not recover a valid time from the unclosed temporal island %s", (fragment) => {
       for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,

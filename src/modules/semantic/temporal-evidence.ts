@@ -348,6 +348,14 @@ function followingAtom(input: GrammarInput, index: number): number {
   return input.nextAtom[index + 1] ?? input.tokens.length;
 }
 
+function followingCoreToken(input: GrammarInput, index: number): number {
+  // Only an adjacent atom or one whitespace token can extend a word-led
+  // production. Leave every punctuation run at the cursor for the island
+  // machine to classify before any later atom can be consumed. The broader
+  // followingAtom index is for structural discovery, not parser advancement.
+  return nextNonWhitespace(input.tokens, index + 1);
+}
+
 // Ownership is structural, including RANGE; it never comes from a parser's
 // selected production. DATE also owns its derived list-range evidence.
 const DATE_OWNERSHIP = 1;
@@ -448,13 +456,13 @@ function parseRelativeDateAt(
   let source: "TODAY" | "TOMORROW";
   let endIndex: number;
   if (tokens[index]?.kind === "HOM") {
-    const nayIndex = followingAtom(input, index);
+    const nayIndex = followingCoreToken(input, index);
     if (tokens[nayIndex]?.kind !== "NAY") return invalidDate(index + 1);
     if (!hasRequiredSpace(tokens, index, nayIndex)) return invalidDate(nayIndex + 1, true);
     source = "TODAY";
     endIndex = nayIndex + 1;
   } else if (tokens[index]?.kind === "NGAY") {
-    const maiIndex = followingAtom(input, index);
+    const maiIndex = followingCoreToken(input, index);
     if (tokens[maiIndex]?.kind !== "MAI") return null;
     if (!hasRequiredSpace(tokens, index, maiIndex)) return invalidDate(maiIndex + 1, true);
     source = "TOMORROW";
@@ -483,13 +491,13 @@ function parseVietnameseDateAt(
   let dayIndex = index;
   let valid = true;
   if (tokens[index]?.kind === "NGAY") {
-    const following = followingAtom(input, index);
+    const following = followingCoreToken(input, index);
     if (tokens[following]?.kind !== "NUMBER") return null;
     valid = hasRequiredSpace(tokens, index, following);
     dayIndex = following;
   }
   if (tokens[dayIndex]?.kind !== "NUMBER") return null;
-  const monthWordIndex = followingAtom(input, dayIndex);
+  const monthWordIndex = followingCoreToken(input, dayIndex);
   if (tokens[monthWordIndex]?.kind !== "THANG") {
     if (tokens[index]?.kind !== "NGAY") return null;
     // A day introducer commits to a date production. A complete numeric date
@@ -498,16 +506,16 @@ function parseVietnameseDateAt(
     return valid && numeric !== null ? numeric
       : invalidDate(numeric?.nextIndex ?? dayIndex + 1, numeric?.complete ?? false);
   }
-  const monthIndex = followingAtom(input, monthWordIndex);
+  const monthIndex = followingCoreToken(input, monthWordIndex);
   if (tokens[monthIndex]?.kind !== "NUMBER") return invalidDate(monthWordIndex + 1);
   valid &&= hasRequiredSpace(tokens, dayIndex, monthWordIndex)
     && hasRequiredSpace(tokens, monthWordIndex, monthIndex);
 
   let year: number | undefined;
   let endIndex = monthIndex + 1;
-  const maybeYearWord = followingAtom(input, monthIndex);
+  const maybeYearWord = followingCoreToken(input, monthIndex);
   if (tokens[maybeYearWord]?.kind === "NAM") {
-    const yearIndex = followingAtom(input, maybeYearWord);
+    const yearIndex = followingCoreToken(input, maybeYearWord);
     if (tokens[yearIndex]?.kind !== "NUMBER") return invalidDate(maybeYearWord + 1);
     if (tokens[yearIndex].raw.length !== 4) {
       return invalidDate(yearIndex + 1, true);
@@ -644,7 +652,7 @@ function parseTimeFromNumberAt(
 function parseTimeAt(input: GrammarInput, index: number): Parsed<TimeCandidate> | null {
   const { tokens } = input;
   if (tokens[index]?.kind === "LUC") {
-    const hourIndex = followingAtom(input, index);
+    const hourIndex = followingCoreToken(input, index);
     if (tokens[hourIndex]?.kind !== "NUMBER" || !hasRequiredSpace(tokens, index, hourIndex)) {
       return { candidate: { kind: "INVALID" }, nextIndex: index + 1, complete: false };
     }
@@ -660,7 +668,7 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
   let endIndex = index;
   let valid = true;
   if (tokens[index]?.kind === "TUAN" || tokens[index]?.kind === "SAP") {
-    const secondIndex = followingAtom(input, index);
+    const secondIndex = followingCoreToken(input, index);
     const expected = tokens[index].kind === "TUAN" ? "NAY" : "TOI";
     if (tokens[secondIndex]?.kind !== expected) {
       return { candidate: { state: "AMBIGUOUS" }, nextIndex: index + 1, complete: false };
@@ -669,9 +677,9 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
     kind = expected === "NAY" ? "THIS_WEEK" : "UPCOMING";
     endIndex = secondIndex + 1;
   } else if (tokens[index]?.kind === "NUMBER") {
-    const ngayIndex = followingAtom(input, index);
+    const ngayIndex = followingCoreToken(input, index);
     if (tokens[ngayIndex]?.kind !== "NGAY") return null;
-    const toiIndex = followingAtom(input, ngayIndex);
+    const toiIndex = followingCoreToken(input, ngayIndex);
     if (tokens[toiIndex]?.kind !== "TOI") {
       return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1, complete: false };
     }
@@ -690,8 +698,9 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
   };
 }
 
-// Core parsers only propose values inside an independently discovered island.
-// They cannot remove structural ownership when a production fails.
+// Core parsers advance through adjacent grammar transitions only. They stop
+// before punctuation that needs island-boundary classification, and cannot
+// remove structural ownership when a production fails.
 function expressionAt(input: GrammarInput, index: number, reference: ReferenceDate): Expression | null {
   const { tokens } = input;
   const token = tokens[index];
@@ -717,13 +726,12 @@ function expressionAt(input: GrammarInput, index: number, reference: ReferenceDa
     };
   }
   if (isMeridiemInitial(input, index)) {
-    const mIndex = followingAtom(input, index);
     return {
       dimension: "time",
       parsed: {
         candidate: { kind: "INVALID" },
-        nextIndex: tokens[mIndex]?.raw.toLowerCase() === "m" ? mIndex + 1 : index + 1,
-        complete: tokens[mIndex]?.raw.toLowerCase() === "m",
+        nextIndex: index + 1,
+        complete: false,
       },
     };
   }
