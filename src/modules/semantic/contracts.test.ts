@@ -1,7 +1,56 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SemanticInterpretationJsonSchema, SemanticInterpretationSchema } from "./contracts";
+import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema,
+  SemanticInterpretationJsonSchema, SemanticInterpretationSchema } from "./contracts";
+
+const modelCreate = { intent: "CREATE_REMINDER", title: "Gọi khách", titleState: "RESOLVED", targetIntent: null };
+
+describe("provider model contract", () => {
+  it.each([
+    modelCreate,
+    { ...modelCreate, title: null, titleState: "MISSING" },
+    { ...modelCreate, title: null, titleState: "AMBIGUOUS" },
+    ...["LIST_REMINDERS", "HELP", "UNSUPPORTED"].map((intent) => ({ intent, title: null, titleState: "NOT_APPLICABLE", targetIntent: null })),
+    { intent: "AMBIGUOUS", title: null, titleState: "NOT_APPLICABLE", targetIntent: null },
+    { intent: "AMBIGUOUS", title: null, titleState: "NOT_APPLICABLE", targetIntent: "LIST_REMINDERS" },
+    { ...modelCreate, intent: "AMBIGUOUS", targetIntent: "CREATE_REMINDER" },
+  ])("accepts semantic-only output %#", (payload) => {
+    expect(ModelSemanticInterpretationSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it.each(["localDate", "localTime", "rangeKind", "timezone", "epoch", "scheduledAt", "question", "missingFields", "needsClarification", "ownerId", "sql", "id"])("rejects forbidden provider field %s", (field) => {
+    expect(ModelSemanticInterpretationSchema.safeParse({ ...modelCreate, [field]: "forbidden" }).success).toBe(false);
+  });
+
+  it.each([
+    { ...modelCreate, title: null },
+    { ...modelCreate, title: "" },
+    { ...modelCreate, title: "   " },
+    { ...modelCreate, title: "a".repeat(1_801) },
+    { ...modelCreate, titleState: "MISSING" },
+    { ...modelCreate, titleState: "AMBIGUOUS" },
+    { ...modelCreate, titleState: "NOT_APPLICABLE" },
+    { ...modelCreate, targetIntent: "CREATE_REMINDER" },
+    { ...modelCreate, intent: "LIST_REMINDERS" },
+    { ...modelCreate, intent: "HELP" },
+    { ...modelCreate, intent: "UNSUPPORTED" },
+    { ...modelCreate, intent: "AMBIGUOUS", targetIntent: null },
+    { ...modelCreate, intent: "AMBIGUOUS", targetIntent: "LIST_REMINDERS" },
+    { ...modelCreate, intent: "AMBIGUOUS", title: null, titleState: "NOT_APPLICABLE", targetIntent: "CREATE_REMINDER" },
+    { intent: "HELP" },
+  ])("rejects invalid intent/title-state combinations %#", (payload) => {
+    expect(ModelSemanticInterpretationSchema.safeParse(payload).success).toBe(false);
+  });
+
+  it("emits exactly four required fields in a flat closed JSON schema", () => {
+    expect(ModelSemanticInterpretationJsonSchema).toMatchObject({ type: "object", additionalProperties: false,
+      required: ["intent", "title", "titleState", "targetIntent"] });
+    expect(Object.keys(ModelSemanticInterpretationJsonSchema.properties ?? {})).toEqual(["intent", "title", "titleState", "targetIntent"]);
+    expect(ModelSemanticInterpretationJsonSchema).not.toHaveProperty("oneOf");
+    expect(ModelSemanticInterpretationJsonSchema).not.toHaveProperty("anyOf");
+  });
+});
 
 const validCreate = {
   intent: "CREATE_REMINDER",

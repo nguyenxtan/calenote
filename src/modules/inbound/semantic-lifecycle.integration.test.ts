@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SemanticGateway, SemanticInput, SemanticTier, SemanticAttemptResult } from "@/modules/intelligence/semantic-gateway";
+import type { SemanticInput, SemanticTier } from "@/modules/intelligence/semantic-gateway";
+import { legacyApplicationOutcomeGatewayForTests,
+  type LegacyApplicationOutcomeGateway as SemanticGateway,
+  type LegacyApplicationOutcome as SemanticAttemptResult } from "@/testing/legacy-semantic-outcome.test-support";
 import { createKeyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import { D1SemanticContextStore } from "@/modules/semantic/infrastructure/d1/context-store";
@@ -80,7 +83,10 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
   const store = new D1InboundProcessorStore(db);
   const replies: string[] = [];
   const semantic = { mode: "semantic" as "semantic" | "off", gateway, budgetStore, contextStore, paidFallbackEnabled: false };
-  const deps: ProcessInboundDependencies = { store, keyring, semantic, now: () => now,
+  const deps: ProcessInboundDependencies = { store, keyring, semantic: {
+    gateway: legacyApplicationOutcomeGatewayForTests(() => semantic.gateway), budgetStore, contextStore,
+    get mode() { return semantic.mode; }, get paidFallbackEnabled() { return semantic.paidFallbackEnabled; },
+  }, now: () => now,
     sendText: async (_provider, _token, _chat, text) => { replies.push(text); return { providerMessageId: "synthetic-reply" }; } };
   return { db, keyring, store, semantic, contextStore, calls, replies, deps,
     setNow(value: number) { now = value; },

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SemanticInterpretationJsonSchema, SemanticInterpretationSchema } from "../../../semantic/contracts";
+import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema } from "../../../semantic/contracts";
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
 
@@ -27,7 +27,7 @@ export interface SemanticJsonRequest {
   stream: false;
   messages: Array<{ role: "system" | "user"; content: string }>;
   max_tokens: number;
-  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof SemanticInterpretationJsonSchema } };
+  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
     zdr?: true; max_price: { prompt: number; completion: number } };
 }
@@ -91,7 +91,7 @@ function decodeResponse(response: { status: number; body: string; oversized?: bo
   try { payload = JSON.parse(envelope.data.choices[0].message.content); } catch {
     return { status: "FAILURE", category: "INVALID_JSON", usage };
   }
-  const semantic = SemanticInterpretationSchema.safeParse(payload);
+  const semantic = ModelSemanticInterpretationSchema.safeParse(payload);
   return semantic.success ? { status: "SUCCESS", interpretation: semantic.data, usage }
     : { status: "FAILURE", category: "SCHEMA_INVALID", usage };
 }
@@ -122,7 +122,7 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
         messages: [{ role: "system", content: CANONICAL_SEMANTIC_PROMPT },
           { role: "user", content: JSON.stringify(parsedInput.data) }],
         max_tokens: config.maxOutputTokens,
-        response_format: { type: "json_schema", json_schema: { name: "semantic_interpretation", strict: true, schema: structuredClone(SemanticInterpretationJsonSchema) } },
+        response_format: { type: "json_schema", json_schema: { name: "model_semantic_interpretation", strict: true, schema: structuredClone(ModelSemanticInterpretationJsonSchema) } },
         provider: { only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny",
           ...(route.requireZdr ? { zdr: true } : {}), max_price: {
             prompt: route.promptPriceMicrounitsPerMillionTokens / 1_000_000,

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";
-import { semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
+import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
+import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
 const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
@@ -9,7 +10,8 @@ const route = { model: "fixture/model", provider: "fixture-provider", requireZdr
 const freeRoute = { ...route, promptPriceMicrounitsPerMillionTokens: 0, completionPriceMicrounitsPerMillionTokens: 0 };
 const config = { maxInputChars: 1_800, maxInputTokens: 12_000, maxOutputTokens: 256,
   maxResponseBytes: 20_000, timeoutMs: 100, freePrimary: freeRoute, paidFallback: route };
-const success = { status: 200, body: JSON.stringify({ choices: [{ message: { content: '{"intent":"HELP"}' }, finish_reason: "stop" }] }) };
+const modelHelp = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null };
+const success = { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(modelHelp) }, finish_reason: "stop" }] }) };
 
 afterEach(() => vi.useRealTimers());
 
@@ -27,19 +29,34 @@ describe("injected strict semantic gateway", () => {
     expect(attempt.status).toBe("READY");
     if (attempt.status !== "READY") throw new Error("Expected prepared attempt");
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { intent: "HELP" } });
-    expect(requests[0]).toMatchObject({ model: "fixture/model", stream: false, max_tokens: 256,
-      response_format: { type: "json_schema", json_schema: { strict: true } },
+    expect(requests[0]).toEqual({ model: "fixture/model", stream: false, max_tokens: 256,
+      messages: [{ role: "system", content: CANONICAL_SEMANTIC_PROMPT }, { role: "user", content: JSON.stringify(input) }],
+      response_format: { type: "json_schema", json_schema: { name: "model_semantic_interpretation", strict: true, schema: ModelSemanticInterpretationJsonSchema } },
       provider: { only: ["fixture-provider"], require_parameters: true, data_collection: "deny", zdr: true,
         allow_fallbacks: false, max_price: { prompt: 0, completion: 0 } } });
-    const branches = requests[0].response_format.json_schema.schema.oneOf as Array<Record<string, unknown>>;
-    expect(branches).toHaveLength(5);
-    expect(branches.every((branch) => branch.additionalProperties === false)).toBe(true);
+    expect(requests[0].response_format.json_schema.schema.additionalProperties).toBe(false);
     expect(requests[0]).not.toHaveProperty("tools");
     expect(requests[0]).not.toHaveProperty("models");
+    expect(requests[0]).not.toHaveProperty("functions");
+    expect(requests[0]).not.toHaveProperty("api_key");
     expect(requests[0].messages).toHaveLength(2);
     expect(JSON.parse(requests[0].messages[1].content)).toEqual(input);
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
     expect(requests).toHaveLength(1);
+  });
+
+  it.each([
+    { intent: "CREATE_REMINDER", title: "Call", localDate: "2026-09-17", localTime: "09:00", timezone: "Asia/Ho_Chi_Minh", needsClarification: false },
+    { intent: "LIST_REMINDERS", rangeKind: "TODAY", localDate: null },
+    { intent: "NEEDS_CLARIFICATION", targetIntent: "CREATE_REMINDER", missingFields: ["time"], question: "When?" },
+    ...["localDate", "localTime", "rangeKind", "timezone", "epoch", "scheduledAt", "question"].map((field) => ({ ...modelHelp, [field]: "forbidden" })),
+    { ...modelHelp, title: "Not applicable" },
+  ])("rejects temporal authority and invalid model combinations at decode %#", async (payload) => {
+    const attempt = createSemanticGateway(config, async () => ({ status: 200,
+      body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: "stop" }] }),
+    })).prepare("FREE_PRIMARY", input);
+    if (attempt.status !== "READY") throw new Error("Expected prepared attempt");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
   });
 
   it("omits optional ZDR only when the explicit route does not require it", async () => {
@@ -130,7 +147,7 @@ describe("injected strict semantic gateway", () => {
 
   it.each([-1, NaN, 1, "0.00005"]) ("ignores unsafe or above-reservation provider cost %j", async (cost) => {
     const attempt = createSemanticGateway(config, async () => ({ status: 200, body: JSON.stringify({
-      choices: [{ message: { content: '{"intent":"HELP"}' }, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify(modelHelp) }, finish_reason: "stop" }],
       usage: { cost, prompt_tokens: 100, completion_tokens: 20 },
     }) })).prepare("CHEAP_PAID_FALLBACK", input);
     if (attempt.status !== "READY") throw new Error("Expected prepared attempt");
