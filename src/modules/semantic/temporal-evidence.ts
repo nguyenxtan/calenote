@@ -125,7 +125,9 @@ type ScanCandidates = {
   ranges: RangeCandidate[];
 };
 
-type Parsed<T> = { candidate: T; nextIndex: number };
+// Completion describes syntax, not value validity: 20/13 has both date
+// operands, while 20/ still owes an operand to its temporal island.
+type Parsed<T> = { candidate: T; nextIndex: number; complete: boolean };
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1_000;
 
@@ -286,10 +288,11 @@ function numberValue(token: TemporalToken | undefined): number {
   return token?.kind === "NUMBER" ? Number(token.raw) : Number.NaN;
 }
 
-function invalidDate(nextIndex: number): Parsed<DateCandidate> {
+function invalidDate(nextIndex: number, complete = false): Parsed<DateCandidate> {
   return {
     candidate: { source: "EXPLICIT_DATE", localDate: null },
     nextIndex,
+    complete,
   };
 }
 
@@ -382,7 +385,10 @@ function structuralSeedAt(input: GrammarInput, index: number): DimensionOwnershi
   if (token === undefined) return 0;
   const separator = SEPARATOR_CLASSES[token.kind];
   if (separator === "DATE_INTERNAL" || separator === "CLOCK_INTERNAL") {
-    if (tokens[followingAtom(input, index)]?.kind !== "NUMBER") return 0;
+    const atom = followingAtom(input, index);
+    const next = tokens[atom];
+    if (next === undefined || (next.kind !== "NUMBER" && wordOwnership(next.kind) === 0
+      && !isMeridiemInitial(input, atom))) return 0;
     return separator === "DATE_INTERNAL" ? DATE_OWNERSHIP | RANGE_OWNERSHIP : TIME_OWNERSHIP;
   }
   if (token.kind === "NUMBER") {
@@ -444,13 +450,13 @@ function parseRelativeDateAt(
   if (tokens[index]?.kind === "HOM") {
     const nayIndex = followingAtom(input, index);
     if (tokens[nayIndex]?.kind !== "NAY") return invalidDate(index + 1);
-    if (!hasRequiredSpace(tokens, index, nayIndex)) return invalidDate(nayIndex + 1);
+    if (!hasRequiredSpace(tokens, index, nayIndex)) return invalidDate(nayIndex + 1, true);
     source = "TODAY";
     endIndex = nayIndex + 1;
   } else if (tokens[index]?.kind === "NGAY") {
     const maiIndex = followingAtom(input, index);
     if (tokens[maiIndex]?.kind !== "MAI") return null;
-    if (!hasRequiredSpace(tokens, index, maiIndex)) return invalidDate(maiIndex + 1);
+    if (!hasRequiredSpace(tokens, index, maiIndex)) return invalidDate(maiIndex + 1, true);
     source = "TOMORROW";
     endIndex = maiIndex + 1;
   } else if (tokens[index]?.kind === "MAI") {
@@ -464,6 +470,7 @@ function parseRelativeDateAt(
   return {
     candidate: { source, localDate: formatDate(addLocalDays(reference, days)) },
     nextIndex: endIndex,
+    complete: true,
   };
 }
 
@@ -488,7 +495,8 @@ function parseVietnameseDateAt(
     // A day introducer commits to a date production. A complete numeric date
     // is still supported; an unfinished day alone is malformed, not absent.
     const numeric = parseNumericDateAt(input, dayIndex, reference);
-    return valid && numeric !== null ? numeric : invalidDate(numeric?.nextIndex ?? dayIndex + 1);
+    return valid && numeric !== null ? numeric
+      : invalidDate(numeric?.nextIndex ?? dayIndex + 1, numeric?.complete ?? false);
   }
   const monthIndex = followingAtom(input, monthWordIndex);
   if (tokens[monthIndex]?.kind !== "NUMBER") return invalidDate(monthWordIndex + 1);
@@ -502,14 +510,14 @@ function parseVietnameseDateAt(
     const yearIndex = followingAtom(input, maybeYearWord);
     if (tokens[yearIndex]?.kind !== "NUMBER") return invalidDate(maybeYearWord + 1);
     if (tokens[yearIndex].raw.length !== 4) {
-      return invalidDate(yearIndex + 1);
+      return invalidDate(yearIndex + 1, true);
     }
     valid &&= hasRequiredSpace(tokens, monthIndex, maybeYearWord)
       && hasRequiredSpace(tokens, maybeYearWord, yearIndex);
     year = numberValue(tokens[yearIndex]);
     endIndex = yearIndex + 1;
   }
-  if (!valid) return invalidDate(endIndex);
+  if (!valid) return invalidDate(endIndex, true);
   return {
     candidate: resolveExplicitDate(
       year,
@@ -518,6 +526,7 @@ function parseVietnameseDateAt(
       reference,
     ),
     nextIndex: endIndex,
+    complete: true,
   };
 }
 
@@ -562,7 +571,7 @@ function parseNumericDateAt(
     if (state === "MONTH" || state === "ISO_MONTH") month = numberValue(tokens[cursor]);
     if (state === "ISO_DAY") day = numberValue(tokens[cursor]);
     if (state === "YEAR") {
-      if (tokens[cursor].raw.length !== 4) return invalidDate(cursor + 1);
+      if (tokens[cursor].raw.length !== 4) return invalidDate(cursor + 1, true);
       year = numberValue(tokens[cursor]);
     }
     cursor += 1;
@@ -571,6 +580,7 @@ function parseNumericDateAt(
   return {
     candidate: resolveExplicitDate(year, month, day, reference),
     nextIndex: cursor,
+    complete: true,
   };
 }
 
@@ -604,19 +614,22 @@ function parseTimeFromNumberAt(
     state = nextState;
     if (state === "MINUTE") {
       if (tokens[endIndex].raw.length !== 2) {
-        return { candidate: { kind: "INVALID" }, nextIndex: endIndex + 1 };
+        return { candidate: { kind: "INVALID" }, nextIndex: endIndex + 1, complete: true };
       }
       minute = numberValue(tokens[endIndex]);
     }
     endIndex += 1;
   }
   if (state !== "MINUTE" && state !== "HOUR_MARKER") {
-    return { candidate: { kind: "INVALID" }, nextIndex: endIndex };
+    // Whitespace only belongs to the hour-marker production when GIO follows;
+    // otherwise leave it for the island boundary state machine.
+    if (state === "SPACE_AFTER_HOUR") endIndex -= 1;
+    return { candidate: { kind: "INVALID" }, nextIndex: endIndex, complete: false };
   }
 
   const hour = numberValue(hourToken);
   if (hour > 23 || minute > 59) {
-    return { candidate: { kind: "INVALID" }, nextIndex: endIndex };
+    return { candidate: { kind: "INVALID" }, nextIndex: endIndex, complete: true };
   }
   return {
     candidate: {
@@ -624,6 +637,7 @@ function parseTimeFromNumberAt(
       localTime: `${padTwo(hour)}:${padTwo(minute)}` as LocalTime,
     },
     nextIndex: endIndex,
+    complete: true,
   };
 }
 
@@ -632,10 +646,10 @@ function parseTimeAt(input: GrammarInput, index: number): Parsed<TimeCandidate> 
   if (tokens[index]?.kind === "LUC") {
     const hourIndex = followingAtom(input, index);
     if (tokens[hourIndex]?.kind !== "NUMBER" || !hasRequiredSpace(tokens, index, hourIndex)) {
-      return { candidate: { kind: "INVALID" }, nextIndex: index + 1 };
+      return { candidate: { kind: "INVALID" }, nextIndex: index + 1, complete: false };
     }
     return parseTimeFromNumberAt(input, hourIndex)
-      ?? { candidate: { kind: "INVALID" }, nextIndex: hourIndex + 1 };
+      ?? { candidate: { kind: "INVALID" }, nextIndex: hourIndex + 1, complete: false };
   }
   return parseTimeFromNumberAt(input, index);
 }
@@ -649,7 +663,7 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
     const secondIndex = followingAtom(input, index);
     const expected = tokens[index].kind === "TUAN" ? "NAY" : "TOI";
     if (tokens[secondIndex]?.kind !== expected) {
-      return { candidate: { state: "AMBIGUOUS" }, nextIndex: index + 1 };
+      return { candidate: { state: "AMBIGUOUS" }, nextIndex: index + 1, complete: false };
     }
     valid = hasRequiredSpace(tokens, index, secondIndex);
     kind = expected === "NAY" ? "THIS_WEEK" : "UPCOMING";
@@ -659,7 +673,7 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
     if (tokens[ngayIndex]?.kind !== "NGAY") return null;
     const toiIndex = followingAtom(input, ngayIndex);
     if (tokens[toiIndex]?.kind !== "TOI") {
-      return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1 };
+      return { candidate: { state: "AMBIGUOUS" }, nextIndex: ngayIndex + 1, complete: false };
     }
     valid = tokens[index].raw === "7"
       && hasRequiredSpace(tokens, index, ngayIndex) && hasRequiredSpace(tokens, ngayIndex, toiIndex);
@@ -672,6 +686,7 @@ function parseRangeAt(input: GrammarInput, index: number): Parsed<RangeCandidate
   return {
     candidate: valid ? { state: "RESOLVED", kind, localDate: null } : { state: "AMBIGUOUS" },
     nextIndex: endIndex,
+    complete: true,
   };
 }
 
@@ -691,13 +706,14 @@ function expressionAt(input: GrammarInput, index: number, reference: ReferenceDa
   const time = parseTimeAt(input, index);
   if (time !== null) return { dimension: "time", parsed: time };
   if (token.kind === "MOT" || token.kind === "THANG" || token.kind === "NAM") {
-    return { dimension: "date", parsed: invalidDate(index + 1) };
+    return { dimension: "date", parsed: invalidDate(index + 1, token.kind === "MOT") };
   }
   if (token.kind === "H" || token.kind === "GIO" || token.kind === "RUOI"
     || token.kind === "MERIDIEM" || token.kind === "DAYPART") {
     return {
       dimension: "time",
-      parsed: { candidate: { kind: token.kind === "DAYPART" ? "DAYPART" : "INVALID" }, nextIndex: index + 1 },
+      parsed: { candidate: { kind: token.kind === "DAYPART" ? "DAYPART" : "INVALID" },
+        nextIndex: index + 1, complete: true },
     };
   }
   if (isMeridiemInitial(input, index)) {
@@ -707,6 +723,7 @@ function expressionAt(input: GrammarInput, index: number, reference: ReferenceDa
       parsed: {
         candidate: { kind: "INVALID" },
         nextIndex: tokens[mIndex]?.raw.toLowerCase() === "m" ? mIndex + 1 : index + 1,
+        complete: tokens[mIndex]?.raw.toLowerCase() === "m",
       },
     };
   }
@@ -718,21 +735,24 @@ function islandCoreAt(input: GrammarInput, index: number, reference: ReferenceDa
   if (ownership === 0) return null;
   const parsed = expressionAt(input, index, reference);
   if (parsed !== null) return parsed;
-  const nextIndex = isSeparator(input.tokens[index].kind) ? followingAtom(input, index) + 1 : index + 1;
+  // A separator-led island must still consume the complete following atom's
+  // production. Skipping its first token would lose word-led clock syntax.
+  const nextIndex = index + 1;
   if (ownership & DATE_OWNERSHIP) return { dimension: "date", parsed: invalidDate(nextIndex) };
   if (ownership & TIME_OWNERSHIP) {
-    return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex } };
+    return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex, complete: false } };
   }
-  return { dimension: "range", parsed: { candidate: { state: "AMBIGUOUS" }, nextIndex } };
+  return { dimension: "range", parsed: { candidate: { state: "AMBIGUOUS" }, nextIndex, complete: false } };
 }
 
 function invalidExpression(expression: Expression): Expression {
   const nextIndex = expression.parsed.nextIndex;
-  if (expression.dimension === "date") return { dimension: "date", parsed: invalidDate(nextIndex) };
+  const complete = expression.parsed.complete;
+  if (expression.dimension === "date") return { dimension: "date", parsed: invalidDate(nextIndex, complete) };
   if (expression.dimension === "range") {
-    return { dimension: "range", parsed: { candidate: { state: "AMBIGUOUS" }, nextIndex } };
+    return { dimension: "range", parsed: { candidate: { state: "AMBIGUOUS" }, nextIndex, complete } };
   }
-  return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex } };
+  return { dimension: "time", parsed: { candidate: { kind: "INVALID" }, nextIndex, complete } };
 }
 
 type SeparatorState = "EMPTY" | "SPACE" | "COLON" | "SPACED_COLON" | "COLON_BOUNDARY" | "INTERNAL" | "MALFORMED";
@@ -758,6 +778,17 @@ function isMalformed(expression: Expression): boolean {
   return expression.parsed.candidate.kind !== "VALID";
 }
 
+function independentStarterAt(input: GrammarInput, index: number): boolean {
+  // Suffixes borrow an operand from the left. Their whitespace does not prove
+  // a new expression, even if the left parser has just consumed that operand.
+  switch (input.tokens[index].kind) {
+    case "H": case "GIO": case "RUOI": case "MERIDIEM": case "THANG": case "NAM":
+      return false;
+    default:
+      return !isMeridiemInitial(input, index);
+  }
+}
+
 type IslandBounds = { core: Expression; contentEnd: number; nextIndex: number };
 
 type TemporalIsland = {
@@ -774,6 +805,7 @@ type TemporalIsland = {
 // it never changes the classification of the span already consumed.
 function consumeIslandBounds(
   input: GrammarInput,
+  start: number,
   initial: Expression,
   reference: ReferenceDate,
   counters: ScannerCounters,
@@ -784,6 +816,9 @@ function consumeIslandBounds(
   let separatorState: SeparatorState = "EMPTY";
   let sentenceBoundary = false;
   let contentEnd = cursor;
+  let complete = initial.parsed.complete;
+  const coreOwnership = collectIslandOwnership(input, start, cursor, counters);
+  let clockOnlyRun = true;
 
   const finish = (nextIndex: number): IslandBounds => {
     return { core: expression, contentEnd: Math.min(contentEnd, nextIndex), nextIndex };
@@ -800,13 +835,21 @@ function consumeIslandBounds(
     if (separator !== undefined) {
       // Sentence punctuation can close a complete run only before a new
       // expression or ordinary text. Numeric tails are classified below.
+      // A sentence can also terminate an erroneous numeric operand (ngày 21.)
+      // but cannot erase a pending separator or word connector.
+      const terminalOperand = tokens[contentEnd - 1]?.kind === "NUMBER";
+      const closedRun = (complete || terminalOperand)
+        && (separatorState === "EMPTY" || separatorState === "SPACE");
+      const closedClock = initial.parsed.complete && contentEnd === initial.parsed.nextIndex
+        && coreOwnership === TIME_OWNERSHIP && clockOnlyRun;
       const periodBoundary = separator === "DOT_INTERNAL"
         && (tokens[cursor + 1]?.kind === "WHITESPACE" || cursor + 1 === tokens.length)
-        && (separatorState === "EMPTY" || separatorState === "SPACE");
+        && (closedRun || closedClock);
       if (separator === "SENTENCE" || periodBoundary) {
         if (separatorState !== "EMPTY" && separatorState !== "SPACE") malformed();
         sentenceBoundary = true;
         separatorState = "SPACE";
+        clockOnlyRun = true;
         cursor += 1;
         // A separator-led fragment after sentence punctuation belongs to
         // the next candidate, including incomplete /09 and :.30 forms.
@@ -815,40 +858,54 @@ function consumeIslandBounds(
         continue;
       }
       separatorState = SEPARATOR_TRANSITIONS[separatorState][separator];
+      clockOnlyRun &&= separator === "SPACE" || separator === "CLOCK_INTERNAL";
       cursor += 1;
       continue;
     }
 
     const following = islandCoreAt(input, cursor, reference);
-    const safe = separatorState === "SPACE" || separatorState === "COLON_BOUNDARY";
-    if (following !== null && safe) {
+    const separated = separatorState === "SPACE" || separatorState === "COLON_BOUNDARY";
+    const independent = following !== null && independentStarterAt(input, cursor);
+    if (following !== null && separated && (complete || sentenceBoundary)) {
       if (expression.dimension === "time" && expression.parsed.candidate.kind === "VALID"
         && (token.kind === "DAYPART" || token.kind === "MERIDIEM")) {
         expression = { dimension: "time", parsed: {
-          candidate: { kind: "MODIFIER" }, nextIndex: following.parsed.nextIndex,
+          candidate: { kind: "MODIFIER" }, nextIndex: following.parsed.nextIndex, complete: true,
         } };
         cursor = following.parsed.nextIndex;
         contentEnd = cursor;
         separatorState = "EMPTY";
         continue;
       }
-      return finish(cursor);
+      if (independent || sentenceBoundary) return finish(cursor);
     }
-    if (separatorState === "SPACE" && token.kind !== "NUMBER") return finish(cursor);
+    if (following === null && separatorState === "SPACE" && token.kind !== "NUMBER") return finish(cursor);
+
+    // Only a completed clock can own a clock-only malformed continuation
+    // before an independent DATE/RANGE starter. DATE separators or unfinished
+    // connectors cannot use this recovery: they still own the right operand.
+    const recoverClock = independent && initial.parsed.complete
+      && contentEnd === initial.parsed.nextIndex && coreOwnership === TIME_OWNERSHIP
+      && clockOnlyRun && separatorState !== "EMPTY" && separatorState !== "SPACE"
+      && (structuralSeedAt(input, cursor) & TIME_OWNERSHIP) === 0;
 
     // An attached word, bare number, or internal separator continuation is
     // part of this span. Once invalid, later text cannot authorize its prefix.
     malformed();
-    if (following !== null && separatorState !== "EMPTY") {
-      // Internal colons belong to the current span; an independent date or
-      // range beginning at the next atom remains available after recovery.
-      if (following.dimension !== expression.dimension || sentenceBoundary) return finish(cursor);
+    if (recoverClock) return finish(cursor);
+    if (following !== null) {
+      const terminalOperand = token.kind === "NUMBER" && following.parsed.nextIndex === cursor + 1;
       cursor = following.parsed.nextIndex;
+      complete = following.parsed.complete || terminalOperand;
     } else {
       cursor += 1;
+      // A terminal atom closes an erroneous production; its malformed
+      // evidence remains. A later safe boundary can then separate an island.
+      complete = true;
     }
     contentEnd = cursor;
     separatorState = "EMPTY";
+    clockOnlyRun = true;
     sentenceBoundary = false;
   }
   if (separatorState !== "EMPTY" && separatorState !== "SPACE") malformed();
@@ -922,7 +979,7 @@ function scanTemporalGrammar(
       index += 1;
       continue;
     }
-    const bounds = consumeIslandBounds(input, core, reference, counters);
+    const bounds = consumeIslandBounds(input, index, core, reference, counters);
     const island = collectTemporalIsland(input, index, bounds, counters);
     candidates.dates.push(...island.candidates.dates);
     candidates.times.push(...island.candidates.times);

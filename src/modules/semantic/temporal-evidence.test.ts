@@ -205,6 +205,121 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["mai/9h", "hôm nay/9h", "20/09/2026/9h", "tuần này/9h", "/:lúc 9h"])(
+    "does not recover a valid time from the unclosed temporal island %s", (fragment) => {
+      for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,
+        `20/09; ${fragment}`, `${fragment}; 20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+          range: { state: "AMBIGUOUS" },
+        });
+      }
+    },
+  );
+
+  it("retains clock ownership across finite internal-boundary and starter classes", () => {
+    for (const prefix of ["mai", "hôm nay", "ngày mai", "20/09", "20/09/2026",
+      "ngày 20 tháng 9", "tuần này", "sắp tới"]) {
+      for (const run of ["/", "-", "//", "./", "/-", "/.", "-."]) {
+        for (const clock of ["9h", "9 giờ", "9:00", "lúc 9h", "lúc 9 giờ", "lúc 9:00"]) {
+          for (const space of ["", " ", "\u00a0", "\n"]) {
+            const fragment = `${prefix}${space}${run}${space}${clock}`;
+            for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,
+              `20/09; ${fragment}`, `${fragment}; 20/09`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                range: { state: "AMBIGUOUS" },
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("does not close an unfinished date separator with a spaced period before a word-led clock", () => {
+    for (const run of ["/.", "-.", "//.", "/-."]) {
+      for (const clock of ["lúc 9h", "lúc 9 giờ", "lúc 9:00"]) {
+        for (const space of [" ", "\u00a0", "\n"]) {
+          const fragment = `${run}${space}${clock}`;
+          for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,
+            `20/09; ${fragment}`, `${fragment}; 20/09`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+              time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+              range: { state: "AMBIGUOUS" },
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it("opens islands before word-led starters using the same structural separator classes", () => {
+    for (const dateSeparator of ["/", "-"]) {
+      for (const clockRun of [":", "::", ":.", ":.:"]) {
+        for (const space of ["", " ", "\u00a0", "\n"]) {
+          for (const clock of ["lúc 9h", "lúc 9 giờ", "lúc 9:00"]) {
+            const fragment = `${dateSeparator}${space}${clockRun}${space}${clock}`;
+            for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,
+              `8h rồi ${fragment}`, `${fragment} rồi 8h`, `20/09; ${fragment}`,
+              `${fragment}; 20/09`, `20/09 rồi ${fragment}`, `${fragment} rồi 20/09`]) {
+              expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                range: { state: "AMBIGUOUS" },
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it.each([
+    ["20/", "date"], ["20/09/", "date"], ["ngày", "date"],
+    ["ngày 20 tháng", "date"], ["hôm", "date"],
+    ["tuần", "range"], ["7 ngày", "range"], ["sắp", "range"], ["9:", "time"],
+  ] as const)("keeps the incomplete %s connector responsible for a following temporal starter", (prefix, dimension) => {
+    for (const clock of ["9h", "9 giờ", "9:00", "lúc 9h", "lúc 9 giờ", "lúc 9:00"]) {
+      for (const boundary of [" ", "\u00a0", "\n", " : "]) {
+        const fragment = `${prefix}${boundary}${clock}`;
+        for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`,
+          `8h rồi ${fragment}`, `${fragment} rồi 8h`]) {
+          const evidence = extractTemporalEvidence({ text, referenceNow });
+          expect(evidence.time, text).toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+          expect(evidence[dimension].state, text).toBe("AMBIGUOUS");
+          if (dimension === "date") expect(evidence.range, text).toEqual({ state: "AMBIGUOUS" });
+        }
+      }
+    }
+  });
+
+  it("preserves complete DATE and RANGE expressions across safe boundaries before word-led clocks", () => {
+    for (const [prefix, expected] of [
+      ["mai", { date: { state: "RESOLVED", localDate: "2026-09-17" },
+        range: { state: "RESOLVED", kind: "TOMORROW" } }],
+      ["20/09/2026", { date: { state: "RESOLVED", localDate: "2026-09-20" },
+        range: { state: "RESOLVED", kind: "DATE" } }],
+      ["20/13", { date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+        range: { state: "AMBIGUOUS" } }],
+      ["tuần này", { date: { state: "MISSING" }, range: { state: "RESOLVED", kind: "THIS_WEEK" } }],
+      ["sắp tới", { date: { state: "MISSING" }, range: { state: "RESOLVED", kind: "UPCOMING" } }],
+    ] as const) {
+      for (const clock of ["lúc 9h", "lúc 9 giờ", "lúc 9:00"]) {
+        for (const boundary of [" ", "\u00a0", "\n", "; ", ",", ". ", " : "]) {
+          for (const text of [`${prefix}${boundary}${clock}`, `${clock}${boundary}${prefix}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              ...expected, time: { state: "RESOLVED", localTime: "09:00" },
+            });
+          }
+        }
+      }
+    }
+  });
+
   it.each(["/:30", "/ :30", "/9h", "20/9h", "ngày 9h"])(
     "retains every structural dimension in the malformed temporal island %s", (fragment) => {
       for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `20/09; ${fragment}`, `${fragment}; 20/09`]) {
