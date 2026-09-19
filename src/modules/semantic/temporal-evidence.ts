@@ -298,7 +298,7 @@ function invalidDate(nextIndex: number, complete = false): Parsed<DateCandidate>
 
 type GrammarInput = {
   tokens: TemporalToken[];
-  nextAtom: number[];
+  nextStructuralStop: number[];
   firstDateSeparator: number[];
   firstClockSeparator: number[];
 };
@@ -321,38 +321,59 @@ function isSeparator(kind: TokenKind): boolean {
   return SEPARATOR_CLASSES[kind] !== undefined;
 }
 
+function isSpacedPeriod(tokens: TemporalToken[], index: number): boolean {
+  return tokens[index]?.kind === "DOT"
+    && (tokens[index + 1]?.kind === "WHITESPACE" || index + 1 === tokens.length);
+}
+
 function grammarInput(tokens: TemporalToken[], counters: ScannerCounters): GrammarInput {
-  const nextAtom = new Array<number>(tokens.length + 1);
+  const nextStructuralStop = new Array<number>(tokens.length + 1);
   const firstDateSeparator = new Array<number>(tokens.length + 1);
   const firstClockSeparator = new Array<number>(tokens.length + 1);
-  nextAtom[tokens.length] = tokens.length;
+  nextStructuralStop[tokens.length] = tokens.length;
   firstDateSeparator[tokens.length] = tokens.length;
   firstClockSeparator[tokens.length] = tokens.length;
   // Index separator runs once. Every subsequent grammar probe is O(1), even
-  // for arbitrarily long punctuation runs. Positions preserve which side of
-  // a message delimiter owns structural date/clock syntax.
+  // for arbitrarily long punctuation runs. Sentence boundaries reset every
+  // relation: neither a starter nor a pending operand can borrow syntax from
+  // the next island. Context-dependent periods remain for the span machine.
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     counters.grammarSteps += 1;
     const kind = tokens[index].kind;
+    if (SEPARATOR_CLASSES[kind] === "SENTENCE") {
+      nextStructuralStop[index] = index;
+      firstDateSeparator[index] = tokens.length;
+      firstClockSeparator[index] = tokens.length;
+      continue;
+    }
     const separator = isSeparator(kind);
-    nextAtom[index] = separator ? nextAtom[index + 1] : index;
+    nextStructuralStop[index] = separator ? nextStructuralStop[index + 1] : index;
     firstDateSeparator[index] = kind === "SLASH" || kind === "HYPHEN"
       ? index : separator ? firstDateSeparator[index + 1] : tokens.length;
     firstClockSeparator[index] = kind === "COLON"
       ? index : separator ? firstClockSeparator[index + 1] : tokens.length;
   }
-  return { tokens, nextAtom, firstDateSeparator, firstClockSeparator };
+  return { tokens, nextStructuralStop, firstDateSeparator, firstClockSeparator };
 }
 
-function followingAtom(input: GrammarInput, index: number): number {
-  return input.nextAtom[index + 1] ?? input.tokens.length;
+function followingStructuralStop(input: GrammarInput, index: number): number {
+  return input.nextStructuralStop[index + 1] ?? input.tokens.length;
+}
+
+function numericContinuationStart(input: GrammarInput, index: number): number {
+  // Before a number has any internal separator, it is a terminal operand.
+  // A sentence-position period therefore ends its structural relationships,
+  // just as it does in the island machine. Once an internal run starts, the
+  // pending operand keeps that run intact, including subsequent periods.
+  const next = nextNonWhitespace(input.tokens, index + 1);
+  return isSpacedPeriod(input.tokens, next) ? input.tokens.length : index + 1;
 }
 
 function followingCoreToken(input: GrammarInput, index: number): number {
   // Only an adjacent atom or one whitespace token can extend a word-led
   // production. Leave every punctuation run at the cursor for the island
   // machine to classify before any later atom can be consumed. The broader
-  // followingAtom index is for structural discovery, not parser advancement.
+  // structural-stop index is for bounded discovery, not parser advancement.
   return nextNonWhitespace(input.tokens, index + 1);
 }
 
@@ -393,17 +414,21 @@ function structuralSeedAt(input: GrammarInput, index: number): DimensionOwnershi
   if (token === undefined) return 0;
   const separator = SEPARATOR_CLASSES[token.kind];
   if (separator === "DATE_INTERNAL" || separator === "CLOCK_INTERNAL") {
-    const atom = followingAtom(input, index);
-    const next = tokens[atom];
+    const stop = followingStructuralStop(input, index);
+    const next = tokens[stop];
+    // A sentence can terminate a pending internal separator without supplying
+    // its operand. Retain that local malformed ownership regardless of what
+    // follows the boundary; never inspect the next island to qualify it.
     if (next === undefined || (next.kind !== "NUMBER" && wordOwnership(next.kind) === 0
-      && !isMeridiemInitial(input, atom))) return 0;
+      && SEPARATOR_CLASSES[next.kind] !== "SENTENCE" && !isMeridiemInitial(input, stop))) return 0;
     return separator === "DATE_INTERNAL" ? DATE_OWNERSHIP | RANGE_OWNERSHIP : TIME_OWNERSHIP;
   }
   if (token.kind === "NUMBER") {
+    const continuation = numericContinuationStart(input, index);
     let ownership = 0;
-    if (input.firstDateSeparator[index + 1] < tokens.length) ownership |= DATE_OWNERSHIP | RANGE_OWNERSHIP;
-    if (input.firstClockSeparator[index + 1] < tokens.length) ownership |= TIME_OWNERSHIP;
-    const following = tokens[followingAtom(input, index)]?.kind;
+    if (input.firstDateSeparator[continuation] < tokens.length) ownership |= DATE_OWNERSHIP | RANGE_OWNERSHIP;
+    if (input.firstClockSeparator[continuation] < tokens.length) ownership |= TIME_OWNERSHIP;
+    const following = tokens[input.nextStructuralStop[continuation]]?.kind;
     if (following === "NGAY") ownership |= RANGE_OWNERSHIP;
     if (following === "THANG") ownership |= DATE_OWNERSHIP | RANGE_OWNERSHIP;
     const adjacent = tokens[nextNonWhitespace(tokens, index + 1)]?.kind;
@@ -562,7 +587,7 @@ function parseNumericDateAt(
   const { tokens } = input;
   const first = tokens[index];
   if (first?.kind !== "NUMBER") return null;
-  if (input.firstDateSeparator[index + 1] === tokens.length) return null;
+  if (input.firstDateSeparator[numericContinuationStart(input, index)] === tokens.length) return null;
   const isIso = first.raw.length === 4 && tokens[index + 1]?.kind === "HYPHEN";
   let state: NumericDateState = isIso ? "ISO_YEAR" : "DAY";
   let cursor = index + 1;
@@ -611,7 +636,7 @@ function parseTimeFromNumberAt(
   const nextIndex = nextNonWhitespace(tokens, index + 1);
   const next = tokens[nextIndex];
   const unitStarter = next?.kind === "H" || next?.kind === "GIO";
-  if (!unitStarter && input.firstClockSeparator[index + 1] === tokens.length) return null;
+  if (!unitStarter && input.firstClockSeparator[numericContinuationStart(input, index)] === tokens.length) return null;
 
   let state: ClockState = "HOUR";
   let endIndex = index + 1;
@@ -850,9 +875,7 @@ function consumeIslandBounds(
         && (separatorState === "EMPTY" || separatorState === "SPACE");
       const closedClock = initial.parsed.complete && contentEnd === initial.parsed.nextIndex
         && coreOwnership === TIME_OWNERSHIP && clockOnlyRun;
-      const periodBoundary = separator === "DOT_INTERNAL"
-        && (tokens[cursor + 1]?.kind === "WHITESPACE" || cursor + 1 === tokens.length)
-        && (closedRun || closedClock);
+      const periodBoundary = isSpacedPeriod(tokens, cursor) && (closedRun || closedClock);
       if (separator === "SENTENCE" || periodBoundary) {
         if (separatorState !== "EMPTY" && separatorState !== "SPACE") malformed();
         sentenceBoundary = true;

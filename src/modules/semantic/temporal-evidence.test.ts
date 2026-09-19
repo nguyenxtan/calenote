@@ -204,6 +204,148 @@ describe("mergeTemporalEvidence", () => {
   });
 });
 
+describe("temporal starter boundary confinement", () => {
+  it.each([
+    [":;", false], [":,", false], [":/;", false], ["/:;", true],
+  ] as const)("retains the locally terminated pending separator in %s without borrowing later syntax", (fragment, ownsDate) => {
+    for (const suffix of ["", " ghi chú", " 30", " lúc 8h"]) {
+      const text = fragment + suffix;
+      expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+        date: ownsDate ? { state: "AMBIGUOUS", reason: "INVALID_DATE" } : { state: "MISSING" },
+        range: ownsDate ? { state: "AMBIGUOUS" } : { state: "MISSING" },
+      });
+    }
+  });
+
+  it.each([
+    "8 giờ 30; ngày mai", "ngày mai; 8 giờ 30",
+    "8 giờ 30. ngày mai", "ngày mai. 8 giờ 30",
+    "8 giờ : 30; ngày mai", "ngày mai; 8 giờ : 30",
+  ])("retains the malformed local clock and independent tomorrow in %s", (text) => {
+    expect(extractTemporalEvidence({ text, referenceNow })).toMatchObject({
+      time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+      date: { state: "RESOLVED", source: "TOMORROW", localDate: "2026-09-17" },
+      range: { state: "RESOLVED", kind: "TOMORROW", localDate: null },
+    });
+  });
+
+  it.each(["8h", "8 giờ", "8:00", "lúc 8h", "lúc 8 giờ", "lúc 8:00"])(
+    "does not let a numeric tail after %s borrow a separate DATE starter", (clock) => {
+      for (const tail of ["7", "30", "60"]) {
+        for (const space of [" ", "\u00a0", "\n"]) {
+          const fragment = `${clock}${space}${tail}`;
+          expect(extractTemporalEvidence({ text: fragment, referenceNow }).time)
+            .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+          for (const delimiter of [";", ",", "!", "?", ". "]) {
+            for (const gap of ["", " ", "\u00a0", "\n"]) {
+              for (const [date, expectedDate, expectedRange] of [
+                ["ngày mai", { state: "RESOLVED", localDate: "2026-09-17" },
+                  { state: "RESOLVED", kind: "TOMORROW" }],
+                ["ngày 20 tháng 9", { state: "RESOLVED", localDate: "2026-09-20" },
+                  { state: "RESOLVED", kind: "DATE" }],
+                ["ngày 20/09", { state: "RESOLVED", localDate: "2026-09-20" },
+                  { state: "RESOLVED", kind: "DATE" }],
+                ["ngày", { state: "AMBIGUOUS", reason: "INVALID_DATE" }, { state: "AMBIGUOUS" }],
+                ["tháng", { state: "AMBIGUOUS", reason: "INVALID_DATE" }, { state: "AMBIGUOUS" }],
+                ["/09", { state: "AMBIGUOUS", reason: "INVALID_DATE" }, { state: "AMBIGUOUS" }],
+                ["-09", { state: "AMBIGUOUS", reason: "INVALID_DATE" }, { state: "AMBIGUOUS" }],
+              ] as const) {
+                for (const text of [`${fragment}${delimiter}${gap}${date}`, `${date}${delimiter}${gap}${fragment}`]) {
+                  expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                    time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                    date: expectedDate, range: expectedRange,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it.each(["mai", "hôm nay", "ngày mai", "20/09", "20/09/2026", "ngày 20 tháng 9"])(
+    "keeps a numeric tail owned by DATE/RANGE in %s before independent clock fragments", (date) => {
+      for (const tail of ["7", "30", "60"]) {
+        for (const space of [" ", "\u00a0", "\n"]) {
+          const fragment = `${date}${space}${tail}`;
+          expect(extractTemporalEvidence({ text: fragment, referenceNow })).toMatchObject({
+            date: { state: "AMBIGUOUS", reason: "INVALID_DATE" }, range: { state: "AMBIGUOUS" },
+          });
+          for (const delimiter of [";", ",", "!", "?", ". "]) {
+            for (const clock of [":30", ":.30", ":/30"]) {
+              for (const text of [`${fragment}${delimiter}${space}${clock}`, `${clock}${delimiter}${space}${fragment}`]) {
+                expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                  date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+                  range: { state: "AMBIGUOUS" },
+                  time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                });
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it.each(["tuần này", "7 ngày tới", "sắp tới"])(
+    "keeps a numeric tail owned by RANGE in %s before independent clock fragments", (range) => {
+      for (const tail of ["7", "30", "60"]) {
+        for (const space of [" ", "\u00a0", "\n"]) {
+          const fragment = `${range}${space}${tail}`;
+          expect(extractTemporalEvidence({ text: fragment, referenceNow }).range).toEqual({ state: "AMBIGUOUS" });
+          for (const delimiter of [";", ",", "!", "?", ". "]) {
+            for (const clock of [":30", ":.30", ":/30"]) {
+              for (const text of [`${fragment}${delimiter}${space}${clock}`, `${clock}${delimiter}${space}${fragment}`]) {
+                expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                  date: { state: "MISSING" }, range: { state: "AMBIGUOUS" },
+                  time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+                });
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it("retains mixed ownership and independent evidence in every three-island ordering", () => {
+    for (const [first, second, third] of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+      for (const fragments of [["8 giờ 30", "ngày mai", "tuần này"], ["20/9h 30", "ngày mai", "8h"]]) {
+        for (const boundary of ["; ", ",\u00a0", "!\n", ". "]) {
+          const text = [fragments[first], fragments[second], fragments[third]].join(boundary);
+          expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+            time: { state: "AMBIGUOUS", reason: "INVALID_TIME" }, range: { state: "AMBIGUOUS" },
+            date: fragments[0] === "8 giờ 30"
+              ? { state: "RESOLVED", localDate: "2026-09-17" }
+              : { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          });
+        }
+      }
+    }
+  });
+
+  it("preserves independent cores at safe boundaries and pending operands at unsafe boundaries", () => {
+    for (const boundary of [" ", "; ", ", ", "! ", "? ", ". ", " : ", " rồi "]) {
+      for (const text of [`8h${boundary}ngày mai`, `ngày mai${boundary}8h`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          time: { state: "RESOLVED", localTime: "08:00" },
+          date: { state: "RESOLVED", localDate: "2026-09-17" },
+        });
+      }
+    }
+    for (const run of ["/", "-", "/:", "/.", "-.", "/. "]) {
+      for (const word of ["lúc 9h", "ngày mai", "tháng 9"]) {
+        const text = `8 giờ 30${run}${word}`;
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" }, range: { state: "AMBIGUOUS" },
+        });
+      }
+    }
+  });
+});
+
 describe("bounded temporal grammar scanner", () => {
   it.each([";", ",", "!", "?"])(
     "retains malformed DATE ownership after numeric clock fragments across %j", (delimiter) => {
