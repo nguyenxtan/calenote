@@ -205,6 +205,61 @@ describe("mergeTemporalEvidence", () => {
 });
 
 describe("bounded temporal grammar scanner", () => {
+  it.each(["/:30", "/ :30", "/9h", "20/9h", "ngày 9h"])(
+    "retains every structural dimension in the malformed temporal island %s", (fragment) => {
+      for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `20/09; ${fragment}`, `${fragment}; 20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+          range: { state: "AMBIGUOUS" },
+        });
+      }
+    },
+  );
+
+  it("keeps leading-clock and hour-marker ownership through malformed date islands", () => {
+    const fragments: string[] = [];
+    for (const dateSeparator of ["/", "-"]) {
+      for (const clockSeparator of [":", "::", ":.", ":.:"]) {
+        for (const space of ["", " ", "\u00a0", "\n"]) {
+          fragments.push(`${dateSeparator}${space}${clockSeparator}30`);
+        }
+      }
+    }
+    for (const datePrefix of ["/", "-", "20/", "20-", "ngày ", "ngày 20 tháng "]) {
+      for (const clock of ["9h", "9giờ"]) fragments.push(`${datePrefix}${clock}`);
+    }
+    for (const fragment of fragments) {
+      for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `8h rồi ${fragment}`, `${fragment} rồi 8h`,
+        `20/09; ${fragment}`, `${fragment}; 20/09`, `20/09 rồi ${fragment}`, `${fragment} rồi 20/09`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+          range: { state: "AMBIGUOUS" },
+        });
+      }
+    }
+  });
+
+  it.each(["tuần này9h", "7 ngày tới9h", "sắp tới9h"])(
+    "retains both RANGE and TIME ownership in the malformed island %s", (fragment) => {
+      for (const text of [fragment, `8h; ${fragment}`, `${fragment}; 8h`, `tuần này; ${fragment}`, `${fragment}; tuần này`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "MISSING" },
+          time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+          range: { state: "AMBIGUOUS" },
+        });
+      }
+    },
+  );
+
+  it.each(["9hours", "8h; 9hours", "9hours; 8h"])(
+    "retains an attached hour marker before unsupported word content: %s", (text) => {
+      expect(extractTemporalEvidence({ text, referenceNow }).time)
+        .toEqual({ state: "AMBIGUOUS", reason: "INVALID_TIME" });
+    },
+  );
+
   it.each(["9:; /09", "8h; 9:; /09", "9:; /09; 8h"])(
     "retains the incomplete clock before a separate malformed date: %s", (text) => {
       expect(extractTemporalEvidence({ text, referenceNow }).time)
