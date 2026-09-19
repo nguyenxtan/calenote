@@ -204,6 +204,167 @@ describe("mergeTemporalEvidence", () => {
   });
 });
 
+describe("structural handoff after a safe sentence boundary", () => {
+  const boundaries = [";", ",", "!", "?", "—", ". "];
+  const gaps = ["", " ", "\u00a0", "\n"];
+  const malformedClocks = [".:30", "..:30", "...::30", ".:/30", "..:-30", ".:.30", ".;.:30"];
+  const malformedDates = ["./09", "..-09", "...//09", "./.09", "..--09", ".-/09", ".;./09"];
+
+  it.each([
+    ["20/09", "DAY_MONTH", "2026-09-20", "DATE", "2026-09-20"],
+    ["20/09/2026", "EXPLICIT_DATE", "2026-09-20", "DATE", "2026-09-20"],
+    ["ngày 20 tháng 9", "DAY_MONTH", "2026-09-20", "DATE", "2026-09-20"],
+    ["ngày mai", "TOMORROW", "2026-09-17", "TOMORROW", null],
+    ["mai", "TOMORROW", "2026-09-17", "TOMORROW", null],
+    ["hôm nay", "TODAY", "2026-09-16", "TODAY", null],
+  ] as const)("preserves %s independently of dot-led malformed TIME in both orders", (
+    date, source, localDate, kind, rangeDate,
+  ) => {
+    for (const fragment of malformedClocks) {
+      for (const boundary of boundaries) {
+        for (const gap of gaps) {
+          for (const text of [`${date}${boundary}${gap}${fragment}`, `${fragment}${boundary}${gap}${date}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "RESOLVED", source, localDate },
+              time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+              range: { state: "RESOLVED", kind, localDate: rangeDate },
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it.each([
+    ["tuần này", "THIS_WEEK"], ["7 ngày tới", "NEXT_7_DAYS"], ["sắp tới", "UPCOMING"],
+  ] as const)("preserves %s independently of dot-led malformed TIME in both orders", (range, kind) => {
+    for (const fragment of malformedClocks) {
+      for (const boundary of boundaries) {
+        for (const gap of gaps) {
+          for (const text of [`${range}${boundary}${gap}${fragment}`, `${fragment}${boundary}${gap}${range}`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "MISSING" }, time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+              range: { state: "RESOLVED", kind, localDate: null },
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it.each(["8h", "8 giờ", "8:00", "lúc 8h", "lúc 8 giờ", "lúc 8:00"])(
+    "preserves %s independently of dot-led malformed DATE and RANGE in both orders", (clock) => {
+      for (const [fragments, date, delimiters] of [
+        [malformedDates, { state: "AMBIGUOUS", reason: "INVALID_DATE" }, boundaries],
+        [[".8 ngày tới", "..07 ngày tới", "...sắp tới7"], { state: "MISSING" }, boundaries],
+        // An unfinished word connector cannot prove that a following period
+        // is a sentence boundary; unconditional sentence punctuation still can.
+        [[".tuần", "..7 ngày", "...sắp"], { state: "MISSING" }, [";", ",", "!", "?", "—"]],
+      ] as const) {
+        for (const fragment of fragments) {
+          for (const boundary of delimiters) {
+            for (const gap of gaps) {
+              for (const text of [`${clock}${boundary}${gap}${fragment}`, `${fragment}${boundary}${gap}${clock}`]) {
+                expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+                  date, time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+                  range: { state: "AMBIGUOUS" },
+                });
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it.each([".lúc 9h", "..lúc 9 giờ", "...lúc 9:00"])(
+    "confines nearby word-led TIME %s to the right island", (clock) => {
+      for (const boundary of boundaries) {
+        for (const gap of gaps) {
+          for (const text of [`20/09${boundary}${gap}${clock}`, `${clock}${boundary}${gap}20/09`]) {
+            expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+              date: { state: "RESOLVED", source: "DAY_MONTH", localDate: "2026-09-20" },
+              time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "09:00" },
+              range: { state: "RESOLVED", kind: "DATE", localDate: "2026-09-20" },
+            });
+          }
+        }
+      }
+    },
+  );
+
+  it.each([
+    [".ngày mai", "TOMORROW", "2026-09-17", "TOMORROW", null],
+    ["..ngày 20/09", "DAY_MONTH", "2026-09-20", "DATE", "2026-09-20"],
+    ["...ngày 20 tháng 9", "DAY_MONTH", "2026-09-20", "DATE", "2026-09-20"],
+  ] as const)("confines nearby word-led DATE %s to the right island", (
+    date, source, localDate, kind, rangeDate,
+  ) => {
+    for (const boundary of boundaries) {
+      for (const gap of gaps) {
+        for (const text of [`8h${boundary}${gap}${date}`, `${date}${boundary}${gap}8h`]) {
+          expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+            date: { state: "RESOLVED", source, localDate },
+            time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+            range: { state: "RESOLVED", kind, localDate: rangeDate },
+          });
+        }
+      }
+    }
+  });
+
+  it("retains malformed local ownership in isolation and both same-dimension orders", () => {
+    for (const [fragments, valid, expected] of [
+      [malformedClocks, "8h", { date: { state: "MISSING" },
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" }, range: { state: "MISSING" } }],
+      [malformedDates, "20/09", { date: { state: "AMBIGUOUS", reason: "INVALID_DATE" },
+        time: { state: "MISSING" }, range: { state: "AMBIGUOUS" } }],
+      [[".tuần", "..7 ngày", "...sắp"], "tuần này", { date: { state: "MISSING" },
+        time: { state: "MISSING" }, range: { state: "AMBIGUOUS" } }],
+    ] as const) {
+      for (const fragment of fragments) {
+        for (const text of [fragment, `${valid}; ${fragment}`, `${fragment}; ${valid}`]) {
+          expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject(expected);
+        }
+      }
+    }
+  });
+
+  it("does not attach unseeded separators before ordinary text to a completed left island", () => {
+    for (const fragment of ["/ ghi chú", ". ghi chú", ".. / ghi chú", "—. ghi chú"]) {
+      for (const text of [`8h; ${fragment}`, `${fragment}; 8h`]) {
+        expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+          date: { state: "MISSING" }, range: { state: "MISSING" },
+          time: { state: "RESOLVED", source: "EXACT_TIME", localTime: "08:00" },
+        });
+      }
+    }
+  });
+
+  it("keeps unsafe internal runs attached while a proven sentence boundary transfers the run", () => {
+    for (const [core, fragment, dimension] of [
+      ["20/09", ".:30", "date"], ["20/09", "..:30", "date"],
+      ["8h", "./09", "time"], ["tuần này", ".:30", "range"],
+    ] as const) {
+      for (const gap of ["", " ", "\u00a0", "\n"]) {
+        const unsafe = `${core}${gap}${fragment}`;
+        expect(extractTemporalEvidence({ text: unsafe, referenceNow })[dimension].state, unsafe)
+          .toBe("AMBIGUOUS");
+        const safe = `${core}. ${gap}${fragment}`;
+        expect(extractTemporalEvidence({ text: safe, referenceNow })[dimension].state, safe)
+          .toBe("RESOLVED");
+      }
+    }
+    for (const fragment of [".tuần", "..7 ngày", "...sắp"]) {
+      const text = `${fragment}. lúc 8h`;
+      expect(extractTemporalEvidence({ text, referenceNow }), text).toMatchObject({
+        date: { state: "MISSING" }, range: { state: "AMBIGUOUS" },
+        time: { state: "AMBIGUOUS", reason: "INVALID_TIME" },
+      });
+    }
+  });
+});
+
 describe("temporal starter boundary confinement", () => {
   it.each([
     [":;", false], [":,", false], [":/;", false], ["/:;", true],

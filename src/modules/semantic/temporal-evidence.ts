@@ -882,10 +882,12 @@ function consumeIslandBounds(
         separatorState = "SPACE";
         clockOnlyRun = true;
         cursor += 1;
-        // A separator-led fragment after sentence punctuation belongs to
-        // the next candidate, including incomplete /09 and :.30 forms.
+        // The boundary owns the handoff, not the next token's seedability.
+        // Restart structural discovery before the entire right separator
+        // run, even when its leading tokens have no temporal ownership.
+        // Nothing in that run can reopen this island's content boundary.
         const next = nextNonWhitespace(tokens, cursor);
-        if (isSeparator(tokens[next]?.kind) && structuralSeedAt(input, next) !== 0) return finish(next);
+        if (isSeparator(tokens[next]?.kind)) return finish(next);
         continue;
       }
       separatorState = SEPARATOR_TRANSITIONS[separatorState][separator];
