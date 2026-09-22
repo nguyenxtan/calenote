@@ -20,10 +20,20 @@
   },
   "vars": {
     "APP_ORIGIN": "https://calenote.iconiclogs.com",
-    "CALENOTE_RUNTIME_ENVIRONMENT": "production"
+    "CALENOTE_RUNTIME_ENVIRONMENT": "production",
+    "AI_MODE": "privacy",
+    "OPENROUTER_PRIVACY_MODEL": "google/gemini-2.5-flash-lite",
+    "OPENROUTER_PRIVACY_PROVIDER": "google-vertex/eu",
+    "AI_MAX_PRIVACY_PRICE": "0.4",
+    "AI_TIMEOUT_MS": "30000",
+    "AI_MAX_INPUT_CHARS": "1800",
+    "AI_MAX_OUTPUT_TOKENS": "256",
+    "OWNER_DAILY_CALL_LIMIT": "50",
+    "OWNER_MONTHLY_COST_MICROUNITS": "500000",
+    "GLOBAL_DAILY_COST_MICROUNITS": "2000000"
   },
   "secrets": {
-    "required": ["CALENOTE_MASTER_KEY"]
+    "required": ["CALENOTE_MASTER_KEY", "OPENROUTER_API_KEY"]
   },
   "d1_databases": [
     {

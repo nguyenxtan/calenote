@@ -49,7 +49,7 @@ import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligen
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
-import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig, SEMANTIC_BUDGET_CEILINGS } from "@/modules/intelligence/infrastructure/openrouter/config";
 import { D1SemanticBudgetStore } from "@/modules/semantic/infrastructure/d1/budget-store";
 import { D1SemanticContextStore } from "@/modules/semantic/infrastructure/d1/context-store";
 import { PRODUCTION_APP_ORIGIN } from "./origin-policy";
@@ -266,13 +266,6 @@ export async function createIntelligenceGateway(env?: Env): Promise<Intelligence
   return (await createIntelligenceCapability(env)).gateway;
 }
 
-const semanticBudgetLimits = {
-  ownerDailyFallbackLimit: 50,
-  ownerMonthlyCostMicrounits: 500_000,
-  globalDailyCostMicrounits: 2_000_000,
-  reservationTtlMs: 300_000,
-} as const;
-
 const unavailableSemanticGateway: SemanticGateway = {
   prepare: () => ({ status: "FAILURE", category: "UNAVAILABLE" }),
 };
@@ -324,7 +317,7 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
       return { status: response.status, ...await readBoundedSemanticResponse(response, policy.config.maxResponseBytes) };
     }) : unavailableSemanticGateway,
     budgetStore: new D1SemanticBudgetStore(env.DB, {
-      ...semanticBudgetLimits,
+      ...(policy.status === "READY" ? policy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
       maxInputTokens: policy.status === "READY" ? policy.config.maxInputTokens : 12_000,
       maxOutputTokens: policy.status === "READY" ? policy.config.maxOutputTokens : 256,
       promptPriceMicrounitsPerMillionTokens: route?.promptPriceMicrounitsPerMillionTokens ?? 100_000,

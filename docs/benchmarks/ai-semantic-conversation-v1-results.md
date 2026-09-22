@@ -2,8 +2,59 @@
 
 ## Hybrid temporal-authority benchmark contract — 2026-09-19
 
-Status: `TOOLING_IMPLEMENTED — LIVE_HYBRID_NOT_RUN — MODEL_SELECTED=NONE`.
-All old model-selection records below and all pre-hybrid local ledgers carry
+Status: `TASK_5_ACCEPTED=YES — FULL_BENCHMARK_PASS=YES`.
+Selected model: `google/gemini-2.5-flash-lite`; provider: `google-vertex/eu`;
+fallback: **none**. This is accepted quality evidence, not evidence of a
+production deployment. Task 6 remote-state/security/authorization gates remain
+mandatory before any production mutation.
+
+### Latest accepted hybrid full run
+
+Run: `semantic-v1-hybrid-full-20260919-1827-01`, 216 canonical synthetic cases,
+216 completed/scored, zero missing, zero retries. The accepted LIST-range
+reconciliation repair is recorded at source-content checkpoint
+`24cfcef406b66565e3fde017233f0b425698304a`. The run used those source contents
+before they were committed; it is not claimed to have executed from that commit.
+
+| Metric | Result | Full gate |
+| --- | --- | --- |
+| Schema validity | 100.00% (216/216) | >=99% |
+| Final intent | 97.69% (211/216) | >=90% |
+| Final date | 100.00% (22/22) | >=95% |
+| Final time | 100.00% (22/22) | >=95% |
+| Final LIST range | 100.00% (44/44) | >=95% |
+| Final clarification | 91.40% (85/93) | >=90% |
+| Temporal Evidence | 100.00% (216/216) | 100% |
+| Safety failures | 0 | 0 |
+| Retained conservative cost | $0.281448 | <=$0.50 |
+
+Non-gating metrics remain visible: exact title match 1/22 (4.55%), aggregate
+final-outcome match 187/216 (86.57%), P95 latency 1,021 ms. Title exact match
+is not semantic-title quality and was not an approved selection gate. Neither
+these residual mismatches nor the eight missing clarification matches are
+represented as perfect model behavior. Real-user acceptance remains required.
+Cost is the sum of retained request reservations, not a provider invoice.
+
+The committed [safe aggregate and provenance](evidence/semantic-v1-hybrid-full-20260919-1827-01.json)
+binds the prompt, schema, fixture/order, extractor, reconciler, scorer, request
+contract, route and caps. It was reconstructed offline from the complete
+existing ledger, with source-digest preflight validation and unchanged ledger
+SHA-256 `a50c3603e162c31b0c0249b021c8bc084acee9247f7a96198967f4f349c68d97`.
+No benchmark was rerun; no inference or production data was used in this
+reconciliation. The original local ledger is preserved, not replaced or deleted.
+
+### Earlier failed hybrid run — historical / superseded
+
+`semantic-v1-hybrid-full-20260919-1029-01` remains **FAIL**, with final LIST
+range 41/44 (93.18%), below the 95% gate. Its other observations were schema
+216/216, intent 208/216 (96.30%), date/time 22/22 each, clarification 86/93
+(92.47%), evidence 216/216, safety failures 0, retained cost $0.281448.
+It is superseded for production selection by the later accepted `1827-01`
+run above. Its failure is not erased, relabeled PASS, or used as current state.
+
+### Hybrid contract and historical applicability
+
+All pre-hybrid model-selection records below and all pre-hybrid local ledgers carry
 the applicability label
 `SUPERSEDED_FOR_PRODUCTION_SELECTION_BY_HYBRID_TEMPORAL_AUTHORITY`.
 Their recorded observations remain historical, unchanged, and ineligible for
@@ -80,10 +131,11 @@ Preserved historical ledger IDs include:
 - `gemini-flash-contract-v1-20260917-01`
 - `gemini-flash-contract-v2-20260917-01`
 
-The hybrid live pilot and full run have **not** been executed. Local oracle
-responses test the harness only and do not establish model quality or select a
-production model. No production secret, migration, master promotion, deploy,
-or live provider operation is authorized by this tooling evidence.
+The accepted live hybrid full run is recorded above. Local oracle responses
+still test the harness only and are not live quality evidence. The historical
+sections below retain their original results and do not override Task 5's
+accepted hybrid selection. No production secret, migration, master promotion,
+deployment or further live inference is performed by this evidence update.
 
 ## 2026-09-16 live synthetic selection run
 

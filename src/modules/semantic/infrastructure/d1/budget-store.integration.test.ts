@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Miniflare } from "miniflare";
@@ -38,6 +38,29 @@ afterEach(async () => {
 });
 
 describe("atomic paid budgets on disposable workerd D1", () => {
+  it.each([
+    { OWNER_DAILY_CALL_LIMIT: "1" },
+    { OWNER_MONTHLY_COST_MICROUNITS: "1303" },
+    { GLOBAL_DAILY_COST_MICROUNITS: "1303" },
+  ])("enforces canonical config through real composition and D1 with tightened limit %j", async (override) => {
+    const { createSemanticCapability } = await import("@/worker/composition-root");
+    const config = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
+    const capability = await createSemanticCapability({
+      ...config.vars, ...override, DB: db,
+      CALENOTE_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      OPENROUTER_API_KEY: "synthetic-never-dispatched",
+    });
+    expect(capability.mode).toBe("privacy");
+    const results = await Promise.all([0, 1].map((index) => capability.budgetStore.reservePaidCall(request(index))));
+    expect(results.filter((result) => result.status === "RESERVED")).toEqual([
+      expect.objectContaining({ reservedMaximumMicrounits: 1303 }),
+    ]);
+    expect(results.filter((result) => result.status === "BUDGET_EXHAUSTED")).toHaveLength(1);
+    for (const row of (await windows()).results) {
+      expect(row).toMatchObject({ reserved_calls: 1, reserved_microunits: 1303, finalized_microunits: 0 });
+    }
+  });
+
   it("reserves the deterministic ceiling across all windows and reapplying migration preserves it", async () => {
     const result = await store().reservePaidCall(request(0));
     expect(result).toMatchObject({ status: "RESERVED", reservedMaximumMicrounits: 100 });

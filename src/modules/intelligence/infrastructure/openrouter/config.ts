@@ -1,12 +1,22 @@
 import type { OpenRouterConfig } from "./gateway";
 import type { SemanticGatewayConfig } from "./semantic-gateway";
 
+export const SEMANTIC_BUDGET_CEILINGS = Object.freeze({
+  ownerDailyFallbackLimit: 50,
+  ownerMonthlyCostMicrounits: 500_000,
+  globalDailyCostMicrounits: 2_000_000,
+  reservationTtlMs: 300_000,
+});
+type BudgetEnvironmentKey = "OWNER_DAILY_CALL_LIMIT" | "OWNER_MONTHLY_COST_MICROUNITS" | "GLOBAL_DAILY_COST_MICROUNITS";
+type SemanticBudgetLimits = { [K in keyof typeof SEMANTIC_BUDGET_CEILINGS]: number };
+
 export type OpenRouterRuntimeConfig = { status: "OFF" } | { status: "UNAVAILABLE" } | { status: "READY"; config: OpenRouterConfig };
 export type SemanticRuntimeConfig = { status: "OFF" } | { status: "UNAVAILABLE" } | {
   status: "READY";
   apiKey: string;
   model: "google/gemini-2.5-flash-lite";
   provider: "google-vertex/eu";
+  budgetLimits: SemanticBudgetLimits;
   config: SemanticGatewayConfig;
 };
 const model = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/u;
@@ -28,7 +38,7 @@ export function parseOpenRouterRuntimeConfig(env: Partial<Record<"AI_MODE" | "OP
 }
 
 /** Semantic V1 has exactly one production route: the reviewed ZDR Gemini Vertex endpoint. */
-export function parseSemanticRuntimeConfig(env: Partial<Record<"AI_MODE" | "OPENROUTER_API_KEY" | "OPENROUTER_PRIVACY_MODEL" | "OPENROUTER_PRIVACY_PROVIDER" | "OPENROUTER_FALLBACK_MODELS" | "AI_TIMEOUT_MS" | "AI_MAX_INPUT_CHARS" | "AI_MAX_OUTPUT_TOKENS" | "AI_MAX_PRIVACY_PRICE", string>>): SemanticRuntimeConfig {
+export function parseSemanticRuntimeConfig(env: Partial<Record<BudgetEnvironmentKey | "AI_MODE" | "OPENROUTER_API_KEY" | "OPENROUTER_PRIVACY_MODEL" | "OPENROUTER_PRIVACY_PROVIDER" | "OPENROUTER_FALLBACK_MODELS" | "AI_TIMEOUT_MS" | "AI_MAX_INPUT_CHARS" | "AI_MAX_OUTPUT_TOKENS" | "AI_MAX_PRIVACY_PRICE", string>>): SemanticRuntimeConfig {
   const base = parseOpenRouterRuntimeConfig(env);
   if (base.status === "OFF") return base;
   if (base.status !== "READY" || base.config.mode !== "privacy"
@@ -37,11 +47,21 @@ export function parseSemanticRuntimeConfig(env: Partial<Record<"AI_MODE" | "OPEN
     || base.config.maxInputChars > 1_800
     || base.config.maxPrivacyPrice === undefined
     || base.config.maxPrivacyPrice < 0.4) return { status: "UNAVAILABLE" };
+  // Config may tighten the approved hard limits, never raise or disable them.
+  const limit = (key: BudgetEnvironmentKey, ceiling: number) => {
+    const value = env[key] === undefined ? ceiling : Number(env[key]);
+    return Number.isSafeInteger(value) && value > 0 && value <= ceiling ? value : null;
+  };
+  const ownerDailyFallbackLimit = limit("OWNER_DAILY_CALL_LIMIT", SEMANTIC_BUDGET_CEILINGS.ownerDailyFallbackLimit);
+  const ownerMonthlyCostMicrounits = limit("OWNER_MONTHLY_COST_MICROUNITS", SEMANTIC_BUDGET_CEILINGS.ownerMonthlyCostMicrounits);
+  const globalDailyCostMicrounits = limit("GLOBAL_DAILY_COST_MICROUNITS", SEMANTIC_BUDGET_CEILINGS.globalDailyCostMicrounits);
+  if (ownerDailyFallbackLimit === null || ownerMonthlyCostMicrounits === null || globalDailyCostMicrounits === null) return { status: "UNAVAILABLE" };
   return {
     status: "READY",
     apiKey: base.config.apiKey,
     model: "google/gemini-2.5-flash-lite",
     provider: "google-vertex/eu",
+    budgetLimits: { ownerDailyFallbackLimit, ownerMonthlyCostMicrounits, globalDailyCostMicrounits, reservationTtlMs: SEMANTIC_BUDGET_CEILINGS.reservationTtlMs },
     config: {
       maxInputChars: base.config.maxInputChars,
       maxInputTokens: 12_000,

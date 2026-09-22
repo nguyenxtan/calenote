@@ -1,0 +1,78 @@
+{
+  "evidenceKind": "SAFE_AGGREGATE_FROM_EXISTING_COMPLETED_LEDGER",
+  "task5Accepted": true,
+  "sourceContentCheckpoint": "24cfcef406b66565e3fde017233f0b425698304a",
+  "sourceCheckpointNote": "Records source contents used by the accepted run before those contents were committed; not an execution SHA claim.",
+  "ledgerSha256": "a50c3603e162c31b0c0249b021c8bc084acee9247f7a96198967f4f349c68d97",
+  "ledgerConfigDigest": "3ecbf2bb5c7090e6cd039523b533e750708e9f07a01287244f183cb15bb57c50",
+  "provenance": {
+    "benchmarkContractVersion": "live-semantic-v1-hybrid-1",
+    "promptVersion": "semantic-v1-hybrid-model-1",
+    "promptSha256": "12ab84e0cde013226be8d265e934e8a8b8d7648bc32aa3f50effcb23d001c6c9",
+    "runtimeValidationContractVersion": "semantic-runtime-validation-2-hybrid-model",
+    "fixtureSha256": "af8c54c5c825a5f4a1218e4fc044e6be23ef50db708c19e566d0e8df2a4ac617",
+    "fixtureCaseIdsSha256": "b715de4ac817b1e6e8641a6d6f3c4c80a0d1fc63a5cb60f50fe63e389ecd0a90",
+    "schemaSha256": "7c8b5ed9afbb805d1c139702dc5d8a34ef41592e3cc96cb6ee5b2cb759a2697e",
+    "temporalExtractorSha256": "b4d705d9ebcacf4f0cf0740c4e212bf74197a47ff3af41ed058cf589cf920b55",
+    "reconcilerSha256": "394047205a1fd529eab4995b7139bd13a117f5260bee146b88f6f4a7470ee9b4",
+    "scorerVersion": "hybrid-final-outcome-scorer-1",
+    "scorerSha256": "ad7e55b57a0a036d81b02cc79927cb7112f5abed4550710b2f7a0ea4f50e0f75",
+    "requestSha256": "4d7109ef5a0f716e85fabdaba2ad3efeddeb38c3566ab11ef63943bd4e01199e",
+    "model": [
+      "google/gemini-2.5-flash-lite"
+    ],
+    "provider": [
+      "google-vertex/eu"
+    ],
+    "runId": "semantic-v1-hybrid-full-20260919-1827-01",
+    "profile": "gemini-flash-lite-hybrid-full",
+    "maxHttpRequests": 220,
+    "maxCostMicrounits": 500000,
+    "maxInputTokens": 12000,
+    "maxOutputTokens": 256,
+    "retryLimit": 0,
+    "allowFallbacks": false
+  },
+  "metrics": {
+    "temporalEvidenceCorrectCases": 216,
+    "temporalEvidenceCorrectRate": 1,
+    "finalOutcomeCorrectCases": 187,
+    "finalOutcomeCorrectRate": 0.8657407407407407,
+    "safetyFailureCases": 0,
+    "totalCases": 216,
+    "scoredCases": 216,
+    "missingCases": 0,
+    "schemaValidCases": 216,
+    "schemaValidRate": 1,
+    "intentCorrectCases": 211,
+    "intentCorrectRate": 0.9768518518518519,
+    "localDateEligibleCases": 22,
+    "localDateCorrectCases": 22,
+    "localDateCorrectRate": 1,
+    "localTimeEligibleCases": 22,
+    "localTimeCorrectCases": 22,
+    "localTimeCorrectRate": 1,
+    "titleEligibleCases": 22,
+    "titleCorrectCases": 1,
+    "titleCorrectRate": 0.045454545454545456,
+    "listRangeEligibleCases": 44,
+    "listRangeCorrectCases": 44,
+    "listRangeCorrectRate": 1,
+    "clarificationEligibleCases": 93,
+    "clarificationCorrectCases": 85,
+    "clarificationCorrectRate": 0.9139784946236559,
+    "p95LatencyMs": 1021,
+    "estimatedCostMicrounits": 281448,
+    "estimatedCostMeasuredCases": 216
+  },
+  "qualityGate": {
+    "status": "PASS",
+    "failures": []
+  },
+  "costBasis": "RETAINED_CONSERVATIVE_RESERVATIONS_NOT_PROVIDER_INVOICE",
+  "supersedesRunId": "semantic-v1-hybrid-full-20260919-1029-01",
+  "reconciliation": {
+    "networkRequests": 0,
+    "ledgerUnchanged": true
+  }
+}
