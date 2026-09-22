@@ -103,6 +103,12 @@ describe("bounded semantic routing", () => {
     expect(h.budget.reservePaidCall).not.toHaveBeenCalled();
   });
 
+  it("keeps an explicit list-query phrase read-only when the model returns create semantics", async () => {
+    const h = harness({ responses: [response({ intent: "CREATE_REMINDER", title: "xem lịch", titleState: "RESOLVED", targetIntent: null })] });
+    expect(await h.service.interpret({ ...input, sourceInboundId: "inbound-list-grammar", text: "ngày mai xem lịch" }))
+      .toEqual({ kind: "QUERY", rangeKind: "TOMORROW", localDate: null });
+  });
+
   it.each([
     [404, "", "FREE_UNAVAILABLE"], [408, "", "FREE_TIMEOUT"], [429, "", "FREE_RATE_LIMITED"],
     [503, "", "FREE_PROVIDER_FAILURE"], [200, "not JSON", "FREE_INVALID_JSON"],

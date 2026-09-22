@@ -64,8 +64,33 @@ function priorEvidence(slots: SemanticContextSlots, current: TemporalEvidence): 
   return base;
 }
 
+function foldedWords(text: string): string[] {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/u).filter(Boolean);
+}
+
+/**
+ * A read-only list phrase must be explicit; a resolved date/range by itself is
+ * also valid reminder evidence. This grammar is intentionally independent of
+ * model title text and only arbitrates an otherwise create-classified result.
+ */
+function isExplicitListQuery(text: string | undefined): boolean {
+  if (typeof text !== "string") return false;
+  const words = foldedWords(text);
+  const firstListVerb = words.findIndex((word, index) => word === "xem" || word === "co"
+    || (word === "liet" && words[index + 1] === "ke"));
+  const hasListVerb = firstListVerb !== -1;
+  const hasListSubject = words.includes("lich")
+    || words.some((word, index) => word === "cac" && words[index + 1] === "viec")
+    || words.some((word, index) => word === "nhac" && words[index + 1] === "viec");
+  const hasReminderDirective = words.some((word, index) => word === "nhac" && (index < firstListVerb
+    || ["toi", "tui", "minh", "em", "anh", "chi", "cho"].includes(words[index + 1] ?? "")));
+  return hasListVerb && hasListSubject && !hasReminderDirective;
+}
+
 /** Pure outcome construction. Storage, encryption, draft creation and confirmation remain with the application. */
 export function reconcileSemanticInterpretation(input: {
+  text?: string;
   modelInterpretation: ModelSemanticInterpretation;
   temporalEvidence: TemporalEvidence;
   previousContext?: SemanticContextSlots;
@@ -83,12 +108,14 @@ export function reconcileSemanticInterpretation(input: {
   const parsedEvidence = TemporalEvidenceSchema.safeParse(input.temporalEvidence);
   if (!parsedEvidence.success) return { kind: "SAFE_HELP", code: "INVALID_TEMPORAL_EVIDENCE" };
   let evidence = parsedEvidence.data as TemporalEvidence;
+  const intent = model.intent === "CREATE_REMINDER" && evidence.range.state === "RESOLVED" && isExplicitListQuery(input.text)
+    ? "LIST_REMINDERS" : model.intent;
   let previous: SemanticContextSlots | undefined;
   if (input.previousContext !== undefined) {
     const parsedContext = SemanticContextSlotsSchema.safeParse(input.previousContext);
     if (!parsedContext.success) return { kind: "SAFE_HELP", code: "INVALID_CONTEXT" };
     previous = parsedContext.data;
-    if (previous.targetIntent !== model.intent) return { kind: "SAFE_CLARIFICATION", code: "CONFLICTING_CONTEXT" };
+    if (previous.targetIntent !== intent) return { kind: "SAFE_CLARIFICATION", code: "CONFLICTING_CONTEXT" };
     // Fresh list contexts contain only a missing range. Older/externally
     // supplied resolved relative ranges have no receipt anchor in these slots;
     // accepting one would silently move it to this inbound's calendar window.
@@ -100,7 +127,7 @@ export function reconcileSemanticInterpretation(input: {
     evidence = merged.evidence;
   }
 
-  if (model.intent === "LIST_REMINDERS") {
+  if (intent === "LIST_REMINDERS") {
     if (evidence.range.state !== "RESOLVED") return clarify({
       targetIntent: "LIST_REMINDERS", rangeKind: null, localDate: null, missingFields: ["range"],
     });

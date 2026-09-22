@@ -14,7 +14,7 @@ const list: ModelSemanticInterpretation = {
 };
 const evidence = (text: string, referenceNow = NOW) => extractTemporalEvidence({ text, referenceNow });
 const reconcile = (text: string, modelInterpretation: ModelSemanticInterpretation = create(), previousContext?: SemanticContextSlots) => (
-  reconcileSemanticInterpretation({ modelInterpretation, temporalEvidence: evidence(text), previousContext, processingNow: NOW })
+  reconcileSemanticInterpretation({ text, modelInterpretation, temporalEvidence: evidence(text), previousContext, processingNow: NOW })
 );
 
 function pending(text = "mai nhắc tui gọi khách", model = create()): SemanticContextSlots {
@@ -57,6 +57,40 @@ describe("deterministic semantic reconciliation", () => {
     expect(result).toEqual({ kind: "QUERY", rangeKind, localDate });
     if (result.kind !== "QUERY") throw new Error("Expected query");
     expect(semanticQueryRange(result, NOW)).toEqual({ start: Date.parse(start!), end: Date.parse(end!) });
+  });
+
+  it.each([
+    ["ngày mai xem lịch", "TOMORROW", null],
+    ["ngày 22 tháng 9 xem lịch", "DATE", "2026-09-22"],
+    ["ngay mai xem lịch", "TOMORROW", null],
+    ["xem lịch tuần này", "THIS_WEEK", null],
+    ["xem các nhắc việc sắp tới", "UPCOMING", null],
+  ] as const)("uses a resolved range for list-query grammar despite a create model result: %s", (text, rangeKind, localDate) => {
+    expect(reconcile(text, create("xem lịch"))).toEqual({ kind: "QUERY", rangeKind, localDate });
+  });
+
+  it("does not mistake a reminder directive containing a list phrase for a read query", () => {
+    expect(reconcile("mai nhắc tôi xem lịch", create("xem lịch"))).toMatchObject({
+      kind: "CLARIFICATION", clarification: { targetIntent: "CREATE_REMINDER", missingFields: ["time"] },
+    });
+  });
+
+  it("keeps a reminder directive without a pronoun out of list-query arbitration", () => {
+    expect(reconcile("mai nhắc xem lịch", create("xem lịch"))).toMatchObject({
+      kind: "CLARIFICATION", clarification: { targetIntent: "CREATE_REMINDER", missingFields: ["time"] },
+    });
+  });
+
+  it("requires a list verb to introduce rather than follow a reminder directive", () => {
+    expect(reconcile("mai nhắc việc xem lịch", create("xem lịch"))).toMatchObject({
+      kind: "CLARIFICATION", clarification: { targetIntent: "CREATE_REMINDER", missingFields: ["time"] },
+    });
+  });
+
+  it("keeps a personal-pronoun reminder directive authoritative after a list verb", () => {
+    expect(reconcile("xem lịch rồi nhắc tôi họp ngày mai", create("họp"))).toMatchObject({
+      kind: "CLARIFICATION", clarification: { targetIntent: "CREATE_REMINDER", missingFields: ["time"] },
+    });
   });
 
   it.each(["có lịch gì", "hôm nay hay mai có gì", "tuần", "31/02/2026 có gì"])("clarifies an unresolved list range for %s", (text) => {

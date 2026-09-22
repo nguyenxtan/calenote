@@ -273,7 +273,7 @@ export function calculateSemanticBenchmarkMetrics(
     const parsed = ModelSemanticInterpretationSchema.safeParse(observation.interpretation);
     if (!parsed.success) continue;
     schemaValidCases += 1;
-    const actual = finalOutcome(reconcileSemanticInterpretation({ modelInterpretation: parsed.data,
+    const actual = finalOutcome(reconcileSemanticInterpretation({ text: item.message, modelInterpretation: parsed.data,
       temporalEvidence: benchmarkTemporalEvidence(item), previousContext: benchmarkContext(item.priorContext),
       processingNow: Date.parse(item.interpretationReferenceTime) }));
     const expected = item.expectedOutcome;

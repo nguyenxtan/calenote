@@ -101,7 +101,7 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
         try { await processingFeedback?.(); } catch { /* UX feedback cannot change the semantic outcome. */ }
       };
       const reconcile = (result: Extract<SemanticAttemptResult, { status: "SUCCESS" }>) => reconcileSemanticInterpretation({
-        modelInterpretation: result.interpretation, temporalEvidence: input.temporalEvidence,
+        text: input.text, modelInterpretation: result.interpretation, temporalEvidence: input.temporalEvidence,
         previousContext: input.previousContext, processingNow: Math.max(processingNow, deps.now()),
       });
 
