@@ -100,6 +100,24 @@ describe("TodayExperience", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Hãy nhập nội dung và thời điểm nhắc hợp lệ.");
   });
 
+  it("offers quick-start ideas without creating a reminder or inventing a time", async () => {
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminders") return json({ data: { reminders: [] } });
+      if (path === "/api/actions") return json({ data: { actions: [] } });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const interaction = userEvent.setup();
+    render(<TodayExperience />);
+
+    await interaction.click(await screen.findByRole("button", { name: "Nhắc gọi mẹ" }));
+    expect(screen.getByLabelText("Nội dung nhắc hẹn")).toHaveValue("Gọi mẹ");
+    expect(screen.queryByLabelText("Thời điểm nhắc")).not.toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
+  });
+
   it("rejects a proposal only through its existing decision endpoint", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
