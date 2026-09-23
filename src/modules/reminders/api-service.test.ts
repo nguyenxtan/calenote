@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it } from "vitest";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { RateLimitExceededError } from "@/modules/onboarding/service";

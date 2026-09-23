@@ -1,5 +1,11 @@
 # Calenote Conversational Core V1 Implementation Plan
 
+> **Status: SUPERSEDED — do not execute.** Replaced by
+> [AI Semantic Conversation V1 Implementation Plan](2026-09-16-ai-semantic-conversation-v1.md).
+> Preserve only its proven platform-boundary references; do not resume this
+> plan's broad deterministic Vietnamese NLP, old routing modes, UI-sync, or
+> bind-hardening work as part of Semantic Conversation V1.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver a provider-agnostic Vietnamese conversational reminder core with deterministic-first interpretation, an optional privacy-mode semantic fallback, persistent clarification continuation, idempotent binding, and automatic connection-state UI feedback.

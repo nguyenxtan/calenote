@@ -7,12 +7,14 @@
   "scripts": {
     "dev": "next dev",
     "dev:worker": "wrangler dev",
-    "dev:local": "wrangler dev --local --local-protocol https --port 8787 --var APP_ORIGIN:https://localhost:8787 --var CALENOTE_RUNTIME_ENVIRONMENT:local",
+    "dev:local": "wrangler dev --local --local-protocol https --port 8787 --var APP_ORIGIN:https://localhost:8787 --var CALENOTE_RUNTIME_ENVIRONMENT:local --var AI_MODE:off",
     "build": "next build",
     "deploy": "wrangler deploy",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "benchmark:semantic-v1:offline": "node --experimental-strip-types --import ./tools/benchmark/register-typescript-loader.mjs tools/benchmark/run-semantic-v1-offline.mjs",
+    "benchmark:semantic-v1:live": "node --experimental-strip-types --import ./tools/benchmark/register-typescript-loader.mjs tools/benchmark/run-semantic-v1-live.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "check": "pnpm test && node --test docs/architecture/current-state.test.mjs && pnpm typecheck && pnpm lint && pnpm build && pnpm exec wrangler types --check && pnpm exec wrangler deploy --dry-run"

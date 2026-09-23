@@ -9,6 +9,7 @@ import type {
   ResolveDraftMutation,
 } from "../../command-service";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 
 interface ContextRow {
   chat_identity_id: string;
@@ -140,7 +141,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     return row ? pendingDraft(row) : null;
   }
 
-  private boundIdentityExpression(): string {
+  private boundIdentityExpression(enforceConversationOrder = false): string {
     return `SELECT ci.id
             FROM inbound_updates current
             JOIN bot_connections c
@@ -156,7 +157,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
               ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
             WHERE current.id = ? AND current.connection_id = ?
               AND current.provider_user_id = ? AND current.private_chat_id = ?
-              AND current.state = 'PROCESSING' AND current.transition_marker = ?`;
+              AND current.state = 'PROCESSING' AND current.transition_marker = ?
+              ${enforceConversationOrder ? `AND NOT ${newerConversationOutcomeSql("current")}` : ""}`;
   }
 
   private ownershipBindings(message: BoundChatMessage): unknown[] {
@@ -182,7 +184,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   }
 
   async createDraft(input: CreateDraftMutation): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression();
+    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
     const ownership = this.ownershipBindings(input.message);
     const statements = [
       this.database
@@ -295,6 +297,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       return "COMMITTED";
     } catch (error) {
       if (!expectedMutationConflict(error)) throw error;
+      if (input.enforceConversationOrder
+        && await rejectSupersededSemanticInbound(this.database, input.message, input.now)) return "SUPERSEDED";
       if (!await this.stillOwned(input.message)) return "SUPERSEDED";
       const newer = await this.database
         .prepare(
@@ -317,7 +321,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   }
 
   async confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression();
+    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
     const ownership = this.ownershipBindings(input.message);
     const statements = [
       this.database
@@ -468,7 +472,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     action: string,
     inboundState: "PROCESSED" | "REJECTED",
   ): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression();
+    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
     const ownership = this.ownershipBindings(input.message);
     const timeGuard = draftStatus === "EXPIRED"
       ? "AND (expires_at <= ? OR scheduled_at <= ?)"
@@ -562,6 +566,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       return "COMMITTED";
     } catch (error) {
       if (!expectedMutationConflict(error)) throw error;
+      if (input.enforceConversationOrder
+        && await rejectSupersededSemanticInbound(this.database, input.message, input.now)) return "SUPERSEDED";
       if (!await this.stillOwned(input.message)) return "SUPERSEDED";
       const draft = await this.database
         .prepare(
@@ -604,13 +610,14 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     }
   }
 
-  async rejectMessage(message: BoundChatMessage, auditId: string, now: number): Promise<boolean> {
+  async rejectMessage(message: BoundChatMessage, auditId: string, now: number, enforceConversationOrder = false): Promise<boolean> {
     const statements = [
       this.database
         .prepare(
           `UPDATE inbound_updates
            SET state = 'REJECTED', processed_at = ?
-           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?`,
+           WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?
+             ${enforceConversationOrder ? `AND NOT ${newerConversationOutcomeSql("inbound_updates")}` : ""}`,
         )
         .bind(now, message.id, message.claimMarker),
       this.database
@@ -644,6 +651,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
       return true;
     } catch (error) {
       if (!expectedMutationConflict(error)) throw error;
+      if (enforceConversationOrder
+        && await rejectSupersededSemanticInbound(this.database, message, now)) return false;
       if (!await this.stillOwned(message)) return false;
       throw error;
     }

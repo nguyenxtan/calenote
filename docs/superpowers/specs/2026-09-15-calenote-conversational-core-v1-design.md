@@ -2,7 +2,14 @@
 
 ## Status and scope
 
-**Status:** APPROVED DESIGN — READY FOR IMPLEMENTATION PLAN.
+**Status:** SUPERSEDED — do not implement.
+
+**Superseded by:** [AI Semantic Conversation V1](2026-09-16-ai-semantic-conversation-v1-design.md).
+
+This document records the former deterministic-first conversational-core
+proposal. Its provider, ownership, confirmation, encryption, queue, and D1
+boundaries remain useful context, but its Vietnamese NLP and `off/free/privacy`
+routing design is not an implementation authority.
 
 This design delivers a provider-agnostic Vietnamese conversational reminder
 core. It builds on the proven Zalo ingress, encrypted D1 persistence, queue

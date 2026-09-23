@@ -62,7 +62,7 @@ export async function verifyZaloBotToken(
 
 function path(
   token: string,
-  operation: "getMe" | "setWebhook" | "sendMessage" | "getWebhookInfo" | "testWebhook",
+  operation: "getMe" | "setWebhook" | "sendMessage" | "sendChatAction" | "getWebhookInfo" | "testWebhook",
 ): string {
   if (!isSafeProviderToken("zalo", token)) {
     throw new ProviderVerificationError("INVALID_TOKEN_FORMAT");
@@ -311,6 +311,27 @@ export async function sendZaloText(
   return {
     providerMessageId: String(providerMessageId),
   };
+}
+
+export async function sendZaloTyping(
+  token: string,
+  chatId: string,
+  requester: ProviderRequester = postSecretProviderJson,
+): Promise<void> {
+  if (!chatId) {
+    throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
+  }
+
+  const payload = await requester({
+    provider: "zalo",
+    hostname: ZALO_BOT_API_HOSTNAME,
+    path: path(token, "sendChatAction"),
+    operation: "sendChatAction",
+    timeoutMs: 1_000,
+    body: { chat_id: chatId, action: "typing" },
+  });
+
+  operationPayload(payload);
 }
 
 export function parseZaloWebhook(payload: unknown): InboundTextMessage | null {

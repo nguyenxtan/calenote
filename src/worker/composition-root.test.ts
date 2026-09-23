@@ -95,6 +95,68 @@ describe("Worker composition root", () => {
     } as unknown as Env)).resolves.toMatchObject({ mode: "privacy" });
   });
 
+  it("composes the pinned privacy-only Semantic V1 capability", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      createSemanticCapability?: (env: Env) => Promise<{ mode: "off" | "privacy"; gateway: { prepare: (tier: "PRIMARY", input: unknown) => unknown } }>;
+    };
+    expect(root.createSemanticCapability).toEqual(expect.any(Function));
+    const capability = await root.createSemanticCapability!({
+      ...environment(),
+      AI_MODE: "privacy",
+      OPENROUTER_API_KEY: "test-only-key",
+      OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
+      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu",
+      AI_MAX_PRIVACY_PRICE: "0.4",
+    } as unknown as Env);
+    expect(capability).toMatchObject({ mode: "privacy" });
+    expect(capability?.gateway.prepare("PRIMARY", {
+      text: "nhắc việc", referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",
+    })).toMatchObject({ status: "READY", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu" });
+  });
+
+  it("composes an explicit disabled Semantic V1 boundary when the privacy route is off or unapproved", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      createSemanticCapability?: (env: Env) => Promise<{ mode: "off" | "privacy"; gateway: { prepare: (tier: "PRIMARY", input: unknown) => unknown } }>;
+    };
+    const off = await root.createSemanticCapability!(environment());
+    const wrongRoute = await root.createSemanticCapability!({
+      ...environment(), AI_MODE: "privacy", OPENROUTER_API_KEY: "test-only-key",
+      OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite", OPENROUTER_PRIVACY_PROVIDER: "google-vertex/global",
+      AI_MAX_PRIVACY_PRICE: "0.4",
+    } as unknown as Env);
+    expect(off.mode).toBe("off");
+    expect(wrongRoute.mode).toBe("off");
+    expect(wrongRoute.gateway.prepare("PRIMARY", {
+      text: "nhắc việc", referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",
+    })).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
+  });
+
+  it("stops reading a chunked provider response at the configured semantic byte ceiling", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      readBoundedSemanticResponse?: (response: Response, maximumBytes: number) => Promise<{ body: string; oversized: boolean }>;
+    };
+    expect(root.readBoundedSemanticResponse).toEqual(expect.any(Function));
+    let cancelled = false;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode("x".repeat(20_001))); },
+      cancel() { cancelled = true; },
+    }));
+    await expect(root.readBoundedSemanticResponse!(response, 20_000)).resolves.toEqual({ body: "", oversized: true });
+    expect(cancelled).toBe(true);
+  });
+
+  it("cancels an oversized provider response declared before its body is read", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      readBoundedSemanticResponse?: (response: Response, maximumBytes: number) => Promise<{ body: string; oversized: boolean }>;
+    };
+    let cancelled = false;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      cancel() { cancelled = true; },
+    }), { headers: { "content-length": "20001" } });
+    await expect(root.readBoundedSemanticResponse!(response, 20_000)).resolves.toEqual({ body: "", oversized: true });
+    expect(cancelled).toBe(true);
+  });
+
   it("keeps concrete Worker dependency construction inside the composition root", async () => {
     const routerSource = await readFile(resolve(process.cwd(), "src/worker/router.ts"), "utf8");
     const entrypointSource = await readFile(resolve(process.cwd(), "src/worker/index.ts"), "utf8");

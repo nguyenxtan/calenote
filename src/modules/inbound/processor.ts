@@ -4,7 +4,7 @@ import type {
   SendReceipt,
 } from "@/modules/connections/contracts";
 import { sendTelegramText } from "@/modules/connections/providers/telegram";
-import { sendZaloText } from "@/modules/connections/providers/zalo";
+import { sendZaloText, sendZaloTyping } from "@/modules/connections/providers/zalo";
 import {
   INBOUND_PROCESSING_LEASE_MS,
   type InboundState,
@@ -26,6 +26,7 @@ import {
   type MutationResult,
   type PendingDraft,
   type ProcessBoundChatResult,
+  type BoundChatSemanticDependencies,
   type ReminderCommandStore,
 } from "@/modules/reminders/command-service";
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
@@ -33,6 +34,11 @@ import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { MAX_INBOUND_PROCESS_ATTEMPTS } from "@/modules/reminders/scheduler";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import { createSemanticService, type SemanticServiceDependencies } from "@/modules/semantic/service";
+import type { SemanticContextStore } from "@/modules/semantic/context-store";
+import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
+import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
+import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -116,6 +122,9 @@ export interface BindPrivateChatInput {
 }
 
 export interface InboundProcessorStore extends ReminderCommandStore {
+  claimSemanticAttempt(message: BoundChatMessage, ownerId: string, now: number): Promise<boolean>;
+  completeSemanticMessage(message: BoundChatMessage, context: BoundChatContext, now: number): Promise<boolean>;
+  listSemanticReminders(input: SemanticReminderQuery): Promise<QueriedReminder[]>;
   claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult>;
   bindPrivateChat(input: BindPrivateChatInput): Promise<boolean>;
   reject(inboundId: string, claimMarker: string, now: number): Promise<boolean>;
@@ -137,14 +146,22 @@ type SendText = (
   text: string,
 ) => Promise<SendReceipt>;
 
+type SendProcessingFeedback = (
+  provider: BotProvider,
+  token: string,
+  privateChatId: string,
+) => Promise<void>;
+
 export interface ProcessInboundDependencies {
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
+  sendProcessingFeedback?: SendProcessingFeedback;
   recordDiagnostic?: (diagnostic: InboundProcessingDiagnostic | InboundEarlyProcessingDiagnostic) => void;
   now?: Clock;
   randomBytes?: RandomBytes;
   intelligence?: { mode: IntelligenceMode; gateway: IntelligenceGateway; sensitiveValues?: readonly string[] };
+  semantic?: Omit<SemanticServiceDependencies, "now" | "attemptStore"> & { contextStore: SemanticContextStore };
 }
 
 export interface InboundProcessingDiagnostic {
@@ -194,6 +211,16 @@ export async function sendProviderText(
     return sendZaloText(token, privateChatId, text, requester);
   }
   return sendTelegramText(token, privateChatId, text, requester);
+}
+
+export async function sendProviderProcessingFeedback(
+  provider: BotProvider,
+  token: string,
+  privateChatId: string,
+): Promise<void> {
+  if (provider === "zalo") {
+    await sendZaloTyping(token, privateChatId);
+  }
 }
 
 export type ProcessInboundResult =
@@ -273,6 +300,50 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
 
   rejectMessage(...input: Parameters<ReminderCommandStore["rejectMessage"]>): Promise<boolean> {
     return this.reminderCommands.rejectMessage(...input);
+  }
+
+  async claimSemanticAttempt(message: BoundChatMessage, ownerId: string, now: number): Promise<boolean> {
+    // The audit primary key is a permanent one-shot fence for this inbound.
+    // Claim-marker fencing alone expires and would allow another model call after a crash.
+    const result = await this.database.prepare(
+      `INSERT INTO audit_events (id,actor_user_id,action,target_user_id,target_connection_id,result,created_at)
+       SELECT ?,c.user_id,'SEMANTIC_ATTEMPT_CLAIMED',c.user_id,c.id,'SUCCESS',?
+       FROM inbound_updates i
+       JOIN bot_connections c ON c.id=i.connection_id AND c.state='ACTIVE_BOUND'
+       JOIN chat_identities ci ON ci.connection_id=c.id
+         AND ci.provider_user_id=i.provider_user_id AND ci.private_chat_id=i.private_chat_id
+       JOIN workspaces w ON w.owner_user_id=c.user_id AND w.kind='PERSONAL'
+       JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
+       WHERE i.id=? AND i.connection_id=? AND i.provider_user_id=? AND i.private_chat_id=?
+         AND i.state='PROCESSING' AND i.transition_marker=? AND c.user_id=?
+       ON CONFLICT (id) DO NOTHING`,
+    ).bind(`semantic-attempt:${message.id}`, now, message.id, message.connectionId,
+      message.providerUserId, message.privateChatId, message.claimMarker, ownerId).run();
+    return d1Changes(result) === 1;
+  }
+
+  async completeSemanticMessage(message: BoundChatMessage, context: BoundChatContext, now: number): Promise<boolean> {
+    const result = await this.database.prepare(
+      `UPDATE inbound_updates SET state='PROCESSED',processed_at=?
+       WHERE id=? AND connection_id=? AND provider_user_id=? AND private_chat_id=?
+         AND state='PROCESSING' AND transition_marker=? AND EXISTS (
+           SELECT 1 FROM bot_connections c
+           JOIN chat_identities ci ON ci.connection_id=c.id
+           JOIN workspaces w ON w.owner_user_id=c.user_id AND w.kind='PERSONAL'
+           JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
+           WHERE c.id=inbound_updates.connection_id AND c.state='ACTIVE_BOUND'
+             AND ci.provider_user_id=inbound_updates.provider_user_id AND ci.private_chat_id=inbound_updates.private_chat_id
+             AND c.user_id=? AND ci.id=? AND w.id=?)
+         AND NOT ${newerConversationOutcomeSql("inbound_updates")}`,
+    ).bind(now, message.id, message.connectionId, message.providerUserId, message.privateChatId,
+      message.claimMarker, context.userId, context.chatIdentityId, context.workspaceId).run();
+    if (d1Changes(result) === 1) return true;
+    await rejectSupersededSemanticInbound(this.database, message, now);
+    return false;
+  }
+
+  listSemanticReminders(input: SemanticReminderQuery): Promise<QueriedReminder[]> {
+    return new D1SemanticReminderQueryStore(this.database).list(input);
   }
 
   async claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult> {
@@ -682,6 +753,15 @@ export async function processInbound(
   }
 
   if (message.connectionState === "ACTIVE_BOUND") {
+    const semantic: BoundChatSemanticDependencies | undefined = dependencies.semantic && {
+      service: createSemanticService({ ...dependencies.semantic, now,
+        attemptStore: { claimInbound: async (scope) => scope.sourceInboundId === message.id
+          && dependencies.store.claimSemanticAttempt(message, scope.ownerId, now()) },
+      }),
+      contextStore: dependencies.semantic.contextStore,
+      complete: (current, context, time) => dependencies.store.completeSemanticMessage(current, context, time),
+      list: (input) => dependencies.store.listSemanticReminders(input),
+    };
     return processBoundChatMessage(message, {
       store: dependencies.store,
       keyring: dependencies.keyring,
@@ -690,7 +770,25 @@ export async function processInbound(
       reply: async (text) => {
         await replyAfterTerminal(message, text, dependencies);
       },
+      processingFeedback: message.provider === "zalo" ? async () => {
+        try {
+          const token = await dependencies.keyring.decryptCredential(
+            message.connectionId,
+            message.provider,
+            message.credentialVersion,
+            { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
+          );
+          await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
+            message.provider,
+            token,
+            message.privateChatId,
+          );
+        } catch {
+          // Typing is bounded, no-retry UX feedback rather than a business outcome.
+        }
+      } : undefined,
       intelligence: dependencies.intelligence,
+      semantic,
     });
   }
 
