@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/contracts/api/session";
@@ -28,8 +28,11 @@ describe("AppShell account menu", () => {
     renderShell();
 
     await interaction.click(screen.getByRole("button", { name: /tài khoản tuyền bích/i }));
-    expect(screen.getByRole("menuitem", { name: "Cài đặt" })).toHaveAttribute("href", "/app/settings");
-    await interaction.click(screen.getByRole("menuitem", { name: "Đăng xuất" }));
+    const accountActions = screen.getByRole("group", { name: "Tài khoản" });
+    expect(accountActions).toBeVisible();
+    expect(screen.queryByRole("menu", { name: "Tài khoản" })).not.toBeInTheDocument();
+    expect(within(accountActions).getByRole("link", { name: "Cài đặt" })).toHaveAttribute("href", "/app/settings");
+    await interaction.click(within(accountActions).getByRole("button", { name: "Đăng xuất" }));
 
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST" })));
     expect(replace).toHaveBeenCalledWith("/login");
@@ -41,7 +44,7 @@ describe("AppShell account menu", () => {
     renderShell();
 
     await interaction.click(screen.getByRole("button", { name: /tài khoản tuyền bích/i }));
-    await interaction.click(screen.getByRole("menuitem", { name: "Đăng xuất" }));
+    await interaction.click(screen.getByRole("button", { name: "Đăng xuất" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa thể đăng xuất.");
     expect(screen.getByRole("button", { name: /tài khoản tuyền bích/i })).toBeVisible();
@@ -54,7 +57,7 @@ describe("AppShell account menu", () => {
     renderShell();
 
     await interaction.click(screen.getByRole("button", { name: /tài khoản tuyền bích/i }));
-    await interaction.click(screen.getByRole("menuitem", { name: "Đăng xuất" }));
+    await interaction.click(screen.getByRole("button", { name: "Đăng xuất" }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -66,10 +69,10 @@ describe("AppShell account menu", () => {
     const trigger = screen.getByRole("button", { name: /tài khoản tuyền bích/i });
 
     await interaction.click(trigger);
-    expect(screen.getByRole("menu")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Tài khoản" })).toBeVisible();
     fireEvent.keyDown(document, { key: "Escape" });
 
-    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Tài khoản" })).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
   });
 });

@@ -92,13 +92,13 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
         {secondary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
       </nav>
       <div className={styles.account} ref={accountRef}>
-        <button ref={accountTriggerRef} className={styles.profile} type="button" aria-label={`Tài khoản ${user.displayName}`} aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => { setAccountError(null); setAccountOpen((open) => !open); }}>
+        <button ref={accountTriggerRef} className={styles.profile} type="button" aria-label={`Tài khoản ${user.displayName}`} aria-controls="account-actions" aria-expanded={accountOpen} onClick={() => { setAccountError(null); setAccountOpen((open) => !open); }}>
           <span className={styles.avatar} aria-hidden="true">{initial}</span>
           <span><strong>{user.displayName}</strong><small>{user.timezone}</small></span>
         </button>
-        {accountOpen && <div className={styles.accountMenu} role="menu" aria-label="Tài khoản">
-          <Link role="menuitem" href="/app/settings" onClick={() => closeAccount()}>Cài đặt</Link>
-          <button role="menuitem" type="button" disabled={loggingOut} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>
+        {accountOpen && <div className={styles.accountMenu} id="account-actions" role="group" aria-label="Tài khoản">
+          <Link href="/app/settings" onClick={() => closeAccount()}>Cài đặt</Link>
+          <button type="button" disabled={loggingOut} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>
           {accountError && <p role="alert">{accountError}</p>}
         </div>}
       </div>
