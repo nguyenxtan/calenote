@@ -7,3 +7,14 @@
 .selectedTime { margin: 5px 0 0; color: var(--cn-text-2); font-size: 13px; font-weight: 650; }
 @media (min-width: 901px) { .quickCapture { padding: 14px 18px 12px; }.quickCapture textarea { min-height: 44px; } }
 @media (min-width: 901px) { .reminder { grid-template-columns: 70px 8px minmax(0, 1fr); } }
+
+.header > p:not(.eyebrow) { margin: 8px 0 0; color: var(--cn-text-3); }
+.eyebrow { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; color: #e65320; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.quickCapture { padding: 19px 20px 14px; border-color: #ffe2cf; border-radius: 22px; background: linear-gradient(135deg, #fff, #fff8f2); box-shadow: 0 15px 38px rgb(237 91 29 / 9%); }
+.captureFoot { border-top-color: #f5e7dd; }
+.quickIdeas { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; }
+.quickIdeas span { margin-right: 3px; color: var(--cn-text-3); font-size: 12px; }
+.quickIdeas button { min-height: 30px !important; padding: 0 10px !important; border: 1px solid #f4d4c1 !important; border-radius: 999px !important; background: #fff !important; color: #a44019 !important; box-shadow: none !important; font-size: 12px; }
+.quickIdeas button:hover { background: #fff0e6 !important; }
+.dot { background: #f05a25; }
+.next { border-color: #f1dacb; background: linear-gradient(135deg, #fff5ee, #fffdf8); }

@@ -194,4 +194,16 @@ describe("FinalScreenExperience connections", () => {
 describe("FinalScreenExperience settings", () => {
   afterEach(() => vi.restoreAllMocks());
   it("uses the preferences API while keeping account and AI controls honest", async () => { const fetcher=installSettingsFetch(); const interaction=userEvent.setup(); render(<FinalScreenExperience screen="settings" />); await screen.findByRole("heading",{name:"Cài đặt"}); expect(screen.getByDisplayValue("Mai")).toHaveAttribute("readonly"); expect(screen.queryByRole("button",{name:/lưu/i})).not.toBeInTheDocument(); expect(screen.queryByText(/OpenRouter|API key|max price/i)).not.toBeInTheDocument(); await interaction.selectOptions(screen.getByLabelText("Cách xưng hô"),"ong_tui"); await waitFor(()=>expect(fetcher).toHaveBeenCalledWith("/api/preferences",expect.objectContaining({method:"PATCH"}))); expect(screen.getByRole("status")).toHaveTextContent("Cài đặt đã được lưu."); });
+
+  it("describes the production assistant as privacy-preserving and non-authoritative", async () => {
+    installSettingsFetch();
+    render(<FinalScreenExperience screen="settings" />);
+
+    await screen.findByRole("heading", { name: "Cài đặt" });
+    expect(screen.getByRole("heading", { name: "Trợ lý Semantic" })).toBeVisible();
+    expect(screen.getByText(/chế độ riêng tư/i)).toBeVisible();
+    expect(screen.getByText(/ngày giờ, quyền và việc tạo lời nhắc do Calenote xử lý/i)).toBeVisible();
+    expect(screen.getByText(/chỉ được tạo sau khi bạn xác nhận rõ ràng/i)).toBeVisible();
+    expect(screen.queryByText(/miễn phí|chi phí rất thấp/i)).not.toBeInTheDocument();
+  });
 });
