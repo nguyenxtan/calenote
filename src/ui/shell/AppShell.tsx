@@ -60,10 +60,19 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     setLoggingOut(true);
     setAccountError(null);
     try {
-      await apiRequest("/api/auth/logout", { method: "POST", body: {}, authenticated: true });
+      await apiRequest("/api/auth/logout", {
+        method: "POST",
+        body: {},
+        authenticated: true,
+        onUnauthorized: () => {
+          closeAccount();
+          replace("/login");
+        },
+      });
       closeAccount();
       replace("/login");
     } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 401) return;
       setAccountError(error instanceof ApiResponseError
         ? error.message
         : error instanceof AmbiguousMutationError

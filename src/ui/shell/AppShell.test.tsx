@@ -47,6 +47,18 @@ describe("AppShell account menu", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("returns to login when the server has already ended the session", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ error: { code: "UNAUTHORIZED", message: "Hết phiên." } }, 401)));
+    const interaction = userEvent.setup();
+    renderShell();
+
+    await interaction.click(screen.getByRole("button", { name: /tài khoản tuyền bích/i }));
+    await interaction.click(screen.getByRole("menuitem", { name: "Đăng xuất" }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("closes on Escape and restores focus to the account trigger", async () => {
     const interaction = userEvent.setup();
     renderShell();
