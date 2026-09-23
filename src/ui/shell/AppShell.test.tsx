@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SessionUser } from "@/contracts/api/session";
 import { AppShell } from "./AppShell";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
-const account = { displayName: "Tuyền Bích", email: "bich@example.com", timezone: "Asia/Ho_Chi_Minh" };
+const account: SessionUser = { displayName: "Tuyền Bích", email: "bich@example.com", timezone: "Asia/Ho_Chi_Minh" };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
