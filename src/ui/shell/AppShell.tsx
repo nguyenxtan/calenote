@@ -53,6 +53,7 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     document.addEventListener("mousedown", outside);
     return () => { document.removeEventListener("keydown", close); document.removeEventListener("mousedown", outside); };
   }, [accountOpen, closeAccount]);
+  useEffect(() => { try { document.documentElement.dataset.density = window.localStorage.getItem("calenote-ui-density") === "compact" ? "compact" : "comfortable"; } catch { /* Storage is optional; retain comfortable layout. */ } }, []);
   const initial = user.displayName.trim().slice(0, 1).toLocaleUpperCase("vi-VN") || "C";
 
   async function logout() {

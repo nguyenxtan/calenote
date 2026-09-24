@@ -109,18 +109,18 @@ describe("apiRequest", () => {
     });
   });
 
-  it("classifies an unsettled mutation as ambiguous and never retries it", async () => {
+  it.each(["POST", "PATCH", "DELETE"] as const)("classifies an unsettled %s mutation as ambiguous and never retries it", async (method) => {
     const fetcher = vi.fn(async () => { throw new TypeError("connection reset"); });
     vi.stubGlobal("fetch", fetcher);
 
     await expect(apiRequest("/api/reminders", {
-      method: "POST",
+      method,
       body: { title: "Gọi cho mẹ" },
     })).rejects.toBeInstanceOf(AmbiguousMutationError);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("treats an unreadable successful mutation response as ambiguous", async () => {
+  it.each(["POST", "PATCH", "DELETE"] as const)("treats an unreadable successful %s response as ambiguous", async (method) => {
     const fetcher = vi.fn(async () => new Response("truncated", {
       status: 201,
       headers: { "content-type": "application/json" },
@@ -128,7 +128,7 @@ describe("apiRequest", () => {
     vi.stubGlobal("fetch", fetcher);
 
     await expect(apiRequest("/api/reminders", {
-      method: "POST",
+      method,
       body: { title: "Có thể đã được lưu" },
     })).rejects.toBeInstanceOf(AmbiguousMutationError);
     expect(fetcher).toHaveBeenCalledTimes(1);

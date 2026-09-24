@@ -8,6 +8,7 @@ import { ActionDecisionResponseSchema, ActionsResponseSchema, type PublicPending
 import { RemindersResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
+import { projectReminders } from "./projection";
 import styles from "./TodayExperience.module.css";
 
 type SessionState = "checking" | "ready" | "error" | "redirecting";
@@ -49,22 +50,28 @@ export function TodayExperience() {
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const tick = () => setNow(Date.now()); const timer = setInterval(tick, 30_000); window.addEventListener("focus", tick); return () => { clearInterval(timer); window.removeEventListener("focus", tick); }; }, []);
   const epoch = useRef(0);
   const mutationLocked = useRef(false);
+  const reminderRequest = useRef(0);
+  const actionRequest = useRef(0);
 
   const clearAndRedirect = useCallback(() => {
     epoch.current += 1; setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS); setSessionState("redirecting"); replace("/login");
   }, [replace]);
 
   const loadReminders = useCallback(async (current: number) => {
+    const request = ++reminderRequest.current;
     setReminders((state) => ({ ...state, loading: true, error: null }));
-    try { const data = await apiRequest<unknown>("/api/reminders", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = RemindersResponseSchema.parse({ data }).data.reminders; if (epoch.current === current) setReminders({ value: next, loading: false, error: null }); }
-    catch (error) { if (!isAbort(error) && epoch.current === current) setReminders((state) => ({ ...state, loading: false, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải nhắc hẹn." })); }
+    try { const data = await apiRequest<unknown>("/api/reminders", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = RemindersResponseSchema.parse({ data }).data.reminders; if (epoch.current === current && request === reminderRequest.current) setReminders({ value: next, loading: false, error: null }); }
+    catch (error) { if (!isAbort(error) && epoch.current === current && request === reminderRequest.current) setReminders((state) => ({ ...state, loading: false, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải nhắc hẹn." })); }
   }, [clearAndRedirect]);
   const loadActions = useCallback(async (current: number) => {
+    const request = ++actionRequest.current;
     setActions((state) => ({ ...state, loading: true, error: null }));
-    try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current) setActions({ value: next, loading: false, error: null }); }
-    catch (error) { if (!isAbort(error) && epoch.current === current) setActions((state) => ({ ...state, loading: false, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); }
+    try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current && request === actionRequest.current) setActions({ value: next, loading: false, error: null }); }
+    catch (error) { if (!isAbort(error) && epoch.current === current && request === actionRequest.current) setActions((state) => ({ ...state, loading: false, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); }
   }, [clearAndRedirect]);
 
   const start = useCallback(async () => {
@@ -73,6 +80,21 @@ export function TodayExperience() {
     catch (error) { if (!isAbort(error) && epoch.current === current) { setSessionState("error"); setSessionError("Chưa thể xác thực phiên. Vui lòng thử lại."); } }
   }, [clearAndRedirect, loadActions, loadReminders]);
   useEffect(() => { void start(); return () => { epoch.current += 1; }; }, [start]);
+  useEffect(() => {
+    if (sessionState !== "ready") return;
+    let refreshing = false;
+    const refresh = async () => {
+      if (document.visibilityState === "hidden" || refreshing || mutationLocked.current) return;
+      refreshing = true;
+      const current = epoch.current;
+      try { await Promise.all([loadReminders(current), loadActions(current)]); }
+      finally { refreshing = false; }
+    };
+    const timer = setInterval(() => void refresh(), 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [sessionState, loadReminders, loadActions]);
 
   async function createReminder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!user || mutationLocked.current) return;
@@ -85,7 +107,7 @@ export function TodayExperience() {
   }
 
   async function decide(candidate: PublicPendingAction, decision: "approve" | "reject") {
-    if (!user || mutationLocked.current) return; mutationLocked.current = true; setDecidingId(candidate.id); setNotice(null); const current = epoch.current;
+    if (!user || mutationLocked.current) return; mutationLocked.current = true; actionRequest.current += 1; setDecidingId(candidate.id); setNotice(null); const current = epoch.current;
     try { const data = await apiRequest<unknown>(`/api/actions/${candidate.id}/${decision}`, { method: "POST", body: {}, authenticated: true, onUnauthorized: clearAndRedirect }); ActionDecisionResponseSchema.parse({ data }); if (epoch.current === current) { setActions((state) => ({ ...state, value: state.value?.filter((item) => item.id !== candidate.id) ?? null })); setNotice(decision === "approve" ? "Đề xuất đã được duyệt và chuyển qua luồng nhắc hẹn." : "Đề xuất đã được bỏ qua."); if (decision === "approve") await loadReminders(current); } }
     catch (error) { if (epoch.current === current) setActions((state) => ({ ...state, error: error instanceof ApiResponseError ? error.message : "Chưa thể cập nhật đề xuất." })); }
     finally { if (epoch.current === current) { setDecidingId(null); mutationLocked.current = false; } }
@@ -93,12 +115,15 @@ export function TodayExperience() {
 
   if (sessionState !== "ready" || !user) return <main className={styles.entry}><section className={styles.entryCard}>{sessionState === "error" ? <><h1>Chưa mở được Calenote</h1><p>{sessionError}</p><button type="button" onClick={() => void start()}>Thử lại</button></> : <><h1>Đang mở Calenote</h1><p>Calenote chưa hiển thị dữ liệu cá nhân.</p></>}</section></main>;
 
-  const upcoming = reminders.value?.filter((item) => item.status !== "CANCELLED").sort((a, b) => a.scheduledAt - b.scheduledAt) ?? [];
-  return <AppShell user={user}><main className={styles.page}><header className={styles.header}><p className={styles.eyebrow}><Sparkles aria-hidden="true" size={14} />Không gian hôm nay</p><h1>Chào, {user.displayName}</h1><p>Một nơi nhẹ nhàng để biết điều gì đang chờ mình.</p></header>
+  const projection = projectReminders(reminders.value ?? [], now);
+  const upcoming = projection.today;
+  const fullDate = (at: number) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(at);
+  return <AppShell user={user}><main className={styles.page}><header className={styles.header}><p className={styles.eyebrow}><Sparkles aria-hidden="true" size={14} />Ngày của bạn</p><h1>Chào, {user.displayName}</h1><p>{new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)} · Giờ Việt Nam</p></header>
     <section className={styles.captureSection} aria-labelledby="quick-capture-title"><h2 className={styles.visuallyHidden} id="quick-capture-title">Tạo lời nhắc nhanh</h2><form className={styles.quickCapture} onSubmit={createReminder}><label className={styles.visuallyHidden} htmlFor="capture-title">Nội dung nhắc hẹn</label><textarea id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bạn muốn Calenote nhắc điều gì?" aria-describedby="capture-help" /><p id="capture-help" className={styles.captureHelp}>Bắt đầu bằng nội dung, rồi chọn thời gian chính xác trước khi lưu.</p><div className={styles.captureFoot}><div>{showManualTime ? <><label htmlFor="capture-time">Thời điểm nhắc</label><input id="capture-time" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></> : <button className={styles.timeTrigger} type="button" onClick={() => setShowManualTime(true)}>Chọn thời gian</button>}{scheduledFor && <p className={styles.selectedTime}>{humanTime(vietnamWallClockToEpoch(scheduledFor) ?? 0)}</p>}</div><button type="submit" disabled={creating}>{creating ? "Đang lưu…" : "Tạo lời nhắc"}</button></div><div className={styles.quickIdeas} aria-label="Gợi ý bắt đầu"><span>Bắt đầu nhanh</span><button type="button" onClick={() => setTitle("Gọi mẹ")}>Nhắc gọi mẹ</button><button type="button" onClick={() => setTitle("Lên kế hoạch tuần")}>Lên kế hoạch tuần</button><button type="button" onClick={() => setTitle("Chuẩn bị cho ngày mai")}>Chuẩn bị cho ngày mai</button></div>{captureError && <p className={styles.inlineError} role="alert">{captureError}</p>}</form></section>
     {notice && <p className={styles.notice} role="status"><CircleCheck aria-hidden="true" size={18} />{notice}</p>}
-    <div className={styles.grid}><section aria-labelledby="today-title"><div className={styles.sectionHead}><div><p>Tiếp theo</p><h2 id="today-title">Hôm nay</h2></div></div>{reminders.error ? <LocalError message={reminders.error} onRetry={() => void loadReminders(epoch.current)} /> : reminders.value === null ? <Skeleton /> : upcoming.length === 0 ? <Empty title="Hôm nay đang khá thoáng." text="Tạo lời nhắc khi cần." /> : <div className={styles.timeline}>{upcoming.map((item) => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{status(item.status)}</p></div></article>)}</div>}</section>
-      <aside className={styles.context}>{upcoming[0] && <section className={styles.next}><p>Nhịp hôm nay</p><strong>{time(upcoming[0].scheduledAt)}</strong><h2>{upcoming[0].title}</h2><span>{upcoming.length} lời nhắc còn lại</span></section>}</aside></div>
+    <div className={styles.grid}><section aria-labelledby="today-title"><div className={styles.sectionHead}><div><p>Lịch trong ngày</p><h2 id="today-title">Còn lại hôm nay</h2></div></div>{reminders.error ? <LocalError message={reminders.error} onRetry={() => void loadReminders(epoch.current)} /> : reminders.value === null ? <Skeleton /> : upcoming.length === 0 ? <Empty title="Hôm nay không còn lời nhắc sắp tới." text="Bạn có thể thêm lời nhắc mới hoặc xem những ngày tiếp theo bên dưới." /> : <div className={styles.timeline}>{upcoming.map((item) => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{status(item.status)}</p></div></article>)}</div>}</section>
+      <aside className={styles.context}>{upcoming[0] && <section className={styles.next}><p>Lời nhắc tiếp theo hôm nay</p><strong>{time(upcoming[0].scheduledAt)}</strong><h2>{upcoming[0].title}</h2><span>{upcoming.length} lời nhắc còn lại</span></section>}</aside></div>
+    {reminders.value !== null && !reminders.error && <>{projection.attention.length > 0 && <section className={styles.attention} aria-label="Lời nhắc cần kiểm tra"><div className={styles.sectionHead}><h2>Cần kiểm tra · {projection.attention.length}</h2></div><p className={styles.captureHelp}>Đã đến giờ hoặc gửi chưa thành công. Đây không phải lời nhắc sắp tới.</p><div className={styles.timeline}>{projection.attention.map(item => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{fullDate(item.scheduledAt)} · {["FAILED", "UNCERTAIN"].includes(item.status) ? status(item.status) : "Đã đến giờ · đang chờ gửi"}</p></div></article>)}</div></section>}{projection.future.length > 0 && <section className={styles.attention} aria-label="Lời nhắc những ngày tới"><div className={styles.sectionHead}><h2>Những ngày tới</h2><a href="/app/reminders">Xem tất cả →</a></div><div className={styles.timeline}>{projection.future.slice(0, 5).map(item => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{fullDate(item.scheduledAt)} · {status(item.status)}</p></div></article>)}</div></section>}<p className={styles.history}>{projection.sentToday.length} lời nhắc hôm nay đã gửi · <a href="/app/reminders">Xem lịch sử lời nhắc</a></p></>}
     <section className={styles.attention} aria-labelledby="attention-title"><div className={styles.sectionHead}><div><h2 id="attention-title">Cần bạn xác nhận</h2></div></div>{actions.error ? <LocalError message={actions.error} onRetry={() => void loadActions(epoch.current)} /> : actions.value === null ? <Skeleton /> : actions.value.length === 0 ? <Empty title="Không có gì cần bạn xác nhận." text="Đề xuất mới sẽ xuất hiện ở đây." /> : <div className={styles.actions}>{actions.value.map((candidate) => <article className={styles.proposal} key={candidate.id}><span className={styles.proposalLabel}>Calenote đề xuất</span><h3>{candidate.title}</h3><p>{humanTime(candidate.scheduledAt)} · Chưa tạo lời nhắc</p><div><button type="button" aria-label={`Đồng ý ${candidate.title}`} disabled={decidingId === candidate.id} onClick={() => void decide(candidate, "approve")}><Check aria-hidden="true" size={17} />{decidingId === candidate.id ? "Đang xử lý…" : "Đồng ý"}</button><button type="button" aria-label={`Bỏ qua ${candidate.title}`} disabled={decidingId === candidate.id} onClick={() => void decide(candidate, "reject")}>Bỏ qua</button></div></article>)}</div>}</section>
   </main></AppShell>;
 }

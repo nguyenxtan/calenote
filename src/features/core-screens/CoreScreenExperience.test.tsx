@@ -52,7 +52,8 @@ describe("CoreScreenExperience", () => {
     const fetcher = installFetch((path) => path === `/api/reminders/${reminder.publicId}/cancel` ? json({ data: { cancelled: true } }) : undefined);
     const interaction = userEvent.setup();
     render(<CoreScreenExperience screen="reminders" />);
-    expect((await screen.findAllByText("Sắp tới")).length).toBeGreaterThan(1);
+    expect(await screen.findByText("Sắp tới")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Đang chờ" })).toHaveAttribute("aria-selected", "true");
     await interaction.click(screen.getByRole("button", { name: `Huỷ ${reminder.title}` }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/reminders/${reminder.publicId}/cancel`, expect.objectContaining({ method: "POST" })));
   });
