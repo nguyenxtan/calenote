@@ -26,15 +26,11 @@ export type SemanticServiceResult = SemanticReconciliationResult | {
 export interface SemanticObservation {
   requestDispatched: boolean;
   tier: SemanticTier;
-  model?: string;
-  provider?: string;
   latencyMs: number;
   resultCategory: "SUCCESS" | `PRIMARY_${SemanticFailureCategory}` | `FREE_${SemanticFailureCategory}` | `PAID_${SemanticFailureCategory}`;
   schemaValid: boolean | null;
   fallbackUsed: boolean;
   costMicrounits?: number | null;
-  promptTokens?: number;
-  completionTokens?: number;
 }
 export interface SemanticServiceDependencies {
   mode: "off" | "semantic" | "privacy";
@@ -62,16 +58,13 @@ export function createSemanticService(deps: SemanticServiceDependencies) {
     const elapsed = deps.now() - started;
     const observation: SemanticObservation = {
       requestDispatched: attempt.status === "READY", tier,
-      ...(attempt.status === "READY" ? { model: attempt.model, provider: attempt.provider } : {}),
       latencyMs: Number.isFinite(elapsed) ? Math.max(0, Math.round(elapsed)) : 0,
       resultCategory: result.status === "SUCCESS" ? "SUCCESS"
         : `${tier === "PRIMARY" ? "PRIMARY" : tier === "FREE_PRIMARY" ? "FREE" : "PAID"}_${result.category}`,
       schemaValid: result.status === "SUCCESS" ? true
         : ["INVALID_JSON", "SCHEMA_INVALID"].includes(result.category) ? false : null,
       fallbackUsed: tier === "CHEAP_PAID_FALLBACK",
-      ...(result.usage ? { costMicrounits: result.usage.costMicrounits,
-        ...(result.usage.promptTokens === undefined ? {} : { promptTokens: result.usage.promptTokens }),
-        ...(result.usage.completionTokens === undefined ? {} : { completionTokens: result.usage.completionTokens }) } : {}),
+      ...(result.usage ? { costMicrounits: result.usage.costMicrounits } : {}),
     };
     try { deps.observe?.(observation); } catch { /* Telemetry never changes the outcome. */ }
     return result;

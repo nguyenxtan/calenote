@@ -426,6 +426,138 @@ describe("semantic inbound lifecycle", () => {
       .toEqual({ status: "RESOLVED", resolution_inbound_id: "answer" });
   });
 
+  it("asks only for the missing title when a Vietnamese noon date is otherwise complete", async () => {
+    const h = await harness([{ status: "SUCCESS", usage: { costMicrounits: 0 }, interpretation: {
+      intent: "CREATE_REMINDER", title: null, titleState: "MISSING", targetIntent: null,
+    } }]);
+    await h.add("missing-title", "Nhắc lúc 12h trưa ngày 10/10");
+
+    expect(await h.process("missing-title")).toEqual({ status: "CLARIFICATION_REQUESTED" });
+    expect(h.replies).toEqual(["Bạn muốn được nhắc việc gì?"]);
+    expect(await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 }))
+      .toMatchObject({ slots: { targetIntent: "CREATE_REMINDER", title: null, localDate: "2026-10-10", localTime: "12:00", missingFields: ["title"] } });
+    expect(await h.count("command_drafts")).toBe(0);
+  });
+
+  it("creates only a draft for a complete Vietnamese noon reminder", async () => {
+    const h = await harness([{ status: "SUCCESS", usage: { costMicrounits: 0 }, interpretation: {
+      intent: "CREATE_REMINDER", title: "đi thi ở quang trung", titleState: "RESOLVED", targetIntent: null,
+    } }]);
+    await h.add("complete-noon", "Ngày 10/10 lúc 12h trưa nhắc đi thi ở quang trung");
+
+    expect(await h.process("complete-noon")).toEqual({ status: "DRAFT_CREATED" });
+    expect(await h.count("command_drafts")).toBe(1);
+    expect(await h.count("reminders")).toBe(0);
+    expect(await h.db.prepare("SELECT scheduled_at FROM command_drafts").first())
+      .toEqual({ scheduled_at: Date.UTC(2026, 9, 10, 5) });
+  });
+
+  it("refuses an unsupported recurring continuation without consuming encrypted pending context", async () => {
+    const h = await harness([clarify, continuation]);
+    await h.add("question", "mai nhắc Bí mật hoa lan tím");
+    expect(await h.process("question")).toEqual({ status: "CLARIFICATION_REQUESTED" });
+    const pendingBefore = await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 });
+
+    await h.add("recurrence", "Gấp nên nhắc liên tục 3 ngày gần nhất lúc 12h trưa", { receivedAt: NOW + 1 });
+    expect(await h.process("recurrence")).toEqual({ status: "REJECTED" });
+    expect(h.replies.at(-1)).toBe("Hiện Calenote chưa hỗ trợ lời nhắc lặp lại. Mình chưa tạo lời nhắc nào; hãy gửi một ngày và giờ cụ thể.");
+    expect(await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 })).toEqual(pendingBefore);
+    expect(h.calls).toHaveLength(1);
+    expect(await h.count("command_drafts")).toBe(0);
+
+    await h.add("answer", "12h trưa", { receivedAt: NOW + 2 });
+    expect(await h.process("answer")).toEqual({ status: "DRAFT_CREATED" });
+    expect(await h.db.prepare("SELECT scheduled_at FROM command_drafts").first())
+      .toEqual({ scheduled_at: Date.UTC(2026, 8, 17, 5) });
+  });
+
+  it("refuses a frequency marker plus a numeric calendar expression without consuming pending context", async () => {
+    const h = await harness([clarify, continuation]);
+    await h.add("question", "mai nhắc Bí mật hoa lan tím");
+    expect(await h.process("question")).toEqual({ status: "CLARIFICATION_REQUESTED" });
+    const pendingBefore = await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 });
+
+    await h.add("numeric-recurrence", "Mỗi 10/10 lúc 12h trưa nhắc đi thi ở quang trung", { receivedAt: NOW + 1 });
+    expect(await h.process("numeric-recurrence")).toEqual({ status: "REJECTED" });
+    expect(h.replies.at(-1)).toBe("Hiện Calenote chưa hỗ trợ lời nhắc lặp lại. Mình chưa tạo lời nhắc nào; hãy gửi một ngày và giờ cụ thể.");
+    expect(await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 })).toEqual(pendingBefore);
+    expect(h.calls).toHaveLength(1);
+    expect(await h.count("command_drafts")).toBe(0);
+  });
+
+  it("screens an unsupported recurrence before any encrypted context lookup", async () => {
+    const h = await harness();
+    h.contextStore.findPending = async () => { throw new Error("context lookup must not occur"); };
+    await h.add("early-recurrence", "Mỗi 10/10 lúc 12h trưa nhắc đi thi ở quang trung");
+
+    expect(await h.process("early-recurrence")).toEqual({ status: "REJECTED" });
+    expect(h.replies).toEqual(["Hiện Calenote chưa hỗ trợ lời nhắc lặp lại. Mình chưa tạo lời nhắc nào; hãy gửi một ngày và giờ cụ thể."]);
+    expect(h.calls).toHaveLength(0);
+    expect(await h.count("command_drafts")).toBe(0);
+  });
+
+  it.each([
+    "Mỗi 12h nhắc kiểm tra hệ thống",
+    "liên tục 08:30 nhắc kiểm tra hệ thống",
+    "nhắc liên tục trong 3 ngày lúc 12h",
+    "mỗi vào lúc 08:30 nhắc kiểm tra hệ thống",
+    "mỗi thứ 2 lúc 08:30 nhắc kiểm tra hệ thống",
+    "Mỗi hai ngày nhắc kiểm tra hệ thống",
+    "liên tục ba tuần nhắc kiểm tra hệ thống",
+  ])("refuses a recurrence marker bound to a numeric clock expression: %s", async (text) => {
+    const h = await harness();
+    await h.add("clock-recurrence", text);
+
+    expect(await h.process("clock-recurrence")).toEqual({ status: "REJECTED" });
+    expect(h.calls).toHaveLength(0);
+    expect(await h.count("command_drafts")).toBe(0);
+  });
+
+  it("does not treat a title ending in the proper name Hằng as a recurrence", async () => {
+    const h = await harness();
+    await h.add("proper-name", "Mai 8h nhắc gọi Hằng");
+
+    expect(await h.process("proper-name")).toEqual({ status: "DRAFT_CREATED" });
+    expect(h.calls).toHaveLength(1);
+    expect(await h.count("command_drafts")).toBe(1);
+  });
+
+  it("keeps a pending clarification and gives a truthful retry reply when the semantic provider is unavailable", async () => {
+    const h = await harness([clarify, { status: "FAILURE", category: "PROVIDER_FAILURE" }]);
+    await h.add("question", "mai nhắc Bí mật hoa lan tím");
+    expect(await h.process("question")).toEqual({ status: "CLARIFICATION_REQUESTED" });
+    const pendingBefore = await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 });
+
+    await h.add("answer", "12h trưa", { receivedAt: NOW + 1 });
+    expect(await h.process("answer")).toEqual({ status: "REJECTED" });
+    expect(h.replies.at(-1)).toBe("Mình chưa xử lý được câu trả lời này lúc này. Lời nhắc chưa được tạo; bạn có thể gửi lại câu trả lời cho câu hỏi trước.");
+    expect(await h.contextStore.findPending({ ownerId: "one", chatIdentityId: "chat-one", now: NOW + 1_000 })).toEqual(pendingBefore);
+    expect(await h.count("command_drafts")).toBe(0);
+    expect(await h.count("reminders")).toBe(0);
+  });
+
+  it("never falls back to legacy parser help when a semantic context lookup fails", async () => {
+    const h = await harness();
+    h.contextStore.findPending = async () => { throw new Error("private context store failure"); };
+    await h.add("context-store-failure", "Ngày 10/10 lúc 12h trưa nhắc đi thi");
+
+    expect(await h.process("context-store-failure")).toEqual({ status: "REJECTED" });
+    expect(h.replies).toEqual(["Mình chưa xử lý được yêu cầu này lúc này. Chưa có lời nhắc nào được tạo; bạn có thể gửi lại yêu cầu sau ít phút."]);
+    expect(await h.count("command_drafts")).toBe(0);
+    expect(await h.count("reminders")).toBe(0);
+  });
+
+  it("keeps cancellation fail-closed when encrypted clarification context cannot be read", async () => {
+    const h = await harness();
+    h.contextStore.findPending = async () => { throw new Error("private context store failure"); };
+    await h.add("cancel-context-store-failure", "hủy");
+
+    expect(await h.process("cancel-context-store-failure")).toEqual({ status: "REJECTED" });
+    expect(h.replies).toEqual(["Mình chưa xử lý được câu trả lời này lúc này. Lời nhắc chưa được tạo; bạn có thể gửi lại câu trả lời cho câu hỏi trước."]);
+    expect(await h.count("command_drafts")).toBe(0);
+    expect(await h.count("reminders")).toBe(0);
+  });
+
   it("cancels clarification deterministically without creating a reminder", async () => {
     const h = await harness([clarify]);
     await h.add("question", "nhắc tôi với");
