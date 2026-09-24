@@ -32,6 +32,10 @@ const HELP_REPLY = [
   "Chưa hiểu lời nhắc. Ví dụ: mai 8h nhắc tôi gọi cho mẹ.",
   "Calenote hỗ trợ hôm nay, mai, ngày kia hoặc DD/MM, cùng giờ dạng 8h hoặc 15:30.",
 ].join(" ");
+const RECURRENCE_UNSUPPORTED_REPLY = "Hiện Calenote chưa hỗ trợ lời nhắc lặp lại. Mình chưa tạo lời nhắc nào; hãy gửi một ngày và giờ cụ thể.";
+const RETRY_PENDING_REPLY = "Mình chưa xử lý được câu trả lời này lúc này. Lời nhắc chưa được tạo; bạn có thể gửi lại câu trả lời cho câu hỏi trước.";
+const RETRY_NEW_REQUEST_REPLY = "Mình chưa xử lý được yêu cầu này lúc này. Chưa có lời nhắc nào được tạo; bạn có thể gửi lại yêu cầu sau ít phút.";
+const CONTEXT_CONFLICT_REPLY = "Mình chưa thể áp dụng câu trả lời này vào lời nhắc đang chờ. Hãy trả lời đúng phần mình vừa hỏi hoặc gửi “hủy” để bắt đầu lại.";
 const IDENTITY_REPLY = "Cuộc trò chuyện này chưa được liên kết đúng với Calenote. Hãy tạo mã /connect mới trên trang Calenote.";
 const NO_PENDING_REPLY = "Không còn lời nhắc nào đang chờ xác nhận.";
 const EXPIRED_REPLY = "Lời nhắc chờ xác nhận đã hết hạn. Hãy gửi lại nội dung nhắc.";
@@ -143,6 +147,41 @@ function normalizeWholeMessage(text: string): string {
     .toLocaleLowerCase("vi-VN");
 }
 
+function foldedWords(text: string): string[] {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("vi-VN")
+    .split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * V1 deliberately has no recurrence storage or occurrence lifecycle. This is
+ * a small cadence grammar, not a list of example sentences: a recurrence
+ * marker must combine with a calendar unit (or be the explicit "lặp lại"
+ * form) before it can refuse an otherwise valid one-off continuation.
+ */
+function requestsUnsupportedRecurrence(text: string): boolean {
+  const words = foldedWords(text);
+  const cadenceUnits = new Set(["gio", "ngay", "tuan", "thang", "nam"]);
+  const hasCadenceUnit = words.some((word) => cadenceUnits.has(word));
+  const hasFrequencyMarker = words.some((word) => word === "moi" || word === "hang");
+  const hasContinuousMarker = words.some((word, index) => word === "lien" && words[index + 1] === "tuc");
+  const hasRepeatMarker = words.some((word, index) => word === "lap" && words[index + 1] === "lai");
+  return hasRepeatMarker || (hasCadenceUnit && (hasFrequencyMarker || hasContinuousMarker));
+}
+
+function semanticSafeReply(result: { kind: "SAFE_HELP" | "SAFE_CLARIFICATION"; code: string }, pending: boolean): string {
+  if (result.kind === "SAFE_CLARIFICATION" && result.code === "PAST_TIME") {
+    return "Thời điểm nhắc đã qua. Hãy gửi lại ngày và giờ trong tương lai.";
+  }
+  if (result.kind === "SAFE_CLARIFICATION" && result.code === "CONFLICTING_CONTEXT") {
+    return CONTEXT_CONFLICT_REPLY;
+  }
+  const transient = new Set(["AI_DISABLED", "AI_UNAVAILABLE", "BUDGET_EXHAUSTED", "ALREADY_ATTEMPTED"]);
+  if (transient.has(result.code)) return pending ? RETRY_PENDING_REPLY : RETRY_NEW_REQUEST_REPLY;
+  return pending
+    ? "Mình chưa thể áp dụng câu trả lời này vào lời nhắc đang chờ. Hãy gửi lại phần thông tin mình vừa hỏi."
+    : "Mình chưa xác định được yêu cầu một cách an toàn. Chưa có lời nhắc nào được tạo.";
+}
+
 function draftReply(candidate: ParsedReminderCandidate): string {
   if (candidate.title.length > MAX_REMINDER_TITLE_CODE_UNITS) {
     throw new TypeError("Reminder title exceeds reply-safe limit");
@@ -210,6 +249,9 @@ async function semanticCommand(
   if (context.timezone !== "Asia/Ho_Chi_Minh") {
     return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
   }
+  if (requestsUnsupportedRecurrence(message.text)) {
+    return rejectWithReply(message, RECURRENCE_UNSUPPORTED_REPLY, now(), dependencies, randomBytes);
+  }
   const pending = await semantic.contextStore.findPending(scope);
   const result = await semantic.service.interpret({
     text: message.text, referenceTime: message.receivedAt,
@@ -218,10 +260,7 @@ async function semanticCommand(
     ...(pending ? { previousContext: pending.slots } : {}),
   }, dependencies.processingFeedback);
   if (result.kind === "SAFE_HELP" || result.kind === "SAFE_CLARIFICATION") {
-    const reply = result.kind === "SAFE_CLARIFICATION" && result.code === "PAST_TIME"
-      ? "Thời điểm nhắc đã qua. Hãy gửi lại ngày và giờ trong tương lai."
-      : HELP_REPLY;
-    return rejectWithReply(message, reply, now(), dependencies, randomBytes);
+    return rejectWithReply(message, semanticSafeReply(result, pending !== null), now(), dependencies, randomBytes);
   }
 
   // Resolve under the current inbound claim before applying the accepted outcome.
@@ -372,7 +411,7 @@ export async function processBoundChatMessage(
       if ("status" in resolved) return resolved;
       candidate = resolved;
     } catch {
-      return rejectWithReply(message, HELP_REPLY, now(), dependencies, randomBytes);
+      return rejectWithReply(message, RETRY_NEW_REQUEST_REPLY, now(), dependencies, randomBytes);
     }
   } else {
     // Compatibility path until a separately reviewed runtime cutover supplies semantic.

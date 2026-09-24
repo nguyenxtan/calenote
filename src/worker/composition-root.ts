@@ -52,9 +52,28 @@ import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
 import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig, SEMANTIC_BUDGET_CEILINGS } from "@/modules/intelligence/infrastructure/openrouter/config";
 import { D1SemanticBudgetStore } from "@/modules/semantic/infrastructure/d1/budget-store";
 import { D1SemanticContextStore } from "@/modules/semantic/infrastructure/d1/context-store";
+import type { SemanticObservation } from "@/modules/semantic/service";
 import { PRODUCTION_APP_ORIGIN } from "./origin-policy";
 
 export const CANONICAL_APP_ORIGIN = PRODUCTION_APP_ORIGIN;
+
+/** Runtime telemetry is intentionally a closed allow-list: never serialize inbound or provider payloads. */
+function recordSemanticObservation(observation: SemanticObservation): void {
+  console.log(JSON.stringify({
+    operation: "semantic_interpretation",
+    request_dispatched: observation.requestDispatched,
+    tier: observation.tier,
+    ...(observation.model === undefined ? {} : { model: observation.model }),
+    ...(observation.provider === undefined ? {} : { provider: observation.provider }),
+    latency_ms: observation.latencyMs,
+    result_category: observation.resultCategory,
+    schema_valid: observation.schemaValid,
+    fallback_used: observation.fallbackUsed,
+    ...(observation.costMicrounits === undefined ? {} : { cost_microunits: observation.costMicrounits }),
+    ...(observation.promptTokens === undefined ? {} : { prompt_tokens: observation.promptTokens }),
+    ...(observation.completionTokens === undefined ? {} : { completion_tokens: observation.completionTokens }),
+  }));
+}
 
 export class ServiceUnavailableError extends Error {
   constructor() {
@@ -324,6 +343,7 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
       completionPriceMicrounitsPerMillionTokens: route?.completionPriceMicrounitsPerMillionTokens ?? 400_000,
     }),
     contextStore: new D1SemanticContextStore(env.DB, keyring),
+    observe: recordSemanticObservation,
   };
 }
 

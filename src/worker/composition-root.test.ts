@@ -114,6 +114,31 @@ describe("Worker composition root", () => {
     })).toMatchObject({ status: "READY", model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu" });
   });
 
+  it("emits only whitelisted semantic outcome telemetry", async () => {
+    const root = await import("./composition-root") as typeof import("./composition-root") & {
+      createSemanticCapability?: (env: Env) => Promise<{ observe?: (event: unknown) => void }>;
+    };
+    const logged = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const capability = await root.createSemanticCapability!({
+      ...environment(),
+      AI_MODE: "privacy",
+      OPENROUTER_API_KEY: "test-only-key",
+      OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
+      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu",
+      AI_MAX_PRIVACY_PRICE: "0.4",
+    } as unknown as Env);
+    const privateValues = ["nhắc bí mật", "owner-private", "context-title", "provider-response", "test-only-key"];
+    expect(capability.observe).toEqual(expect.any(Function));
+    const invokeWithUntrustedRuntimeValue = capability.observe as unknown as ((event: unknown) => void);
+    invokeWithUntrustedRuntimeValue({ requestDispatched: true, tier: "PRIMARY", model: "fixture/model", provider: "fixture-provider",
+      latencyMs: 12, resultCategory: "PRIMARY_PROVIDER_FAILURE", schemaValid: null, fallbackUsed: false,
+      text: privateValues[0], ownerId: privateValues[1], title: privateValues[2], response: privateValues[3], apiKey: privateValues[4] });
+    const serialized = logged.mock.calls.map((args) => args.join(" ")).join("\n");
+    for (const privateValue of privateValues) expect(serialized).not.toContain(privateValue);
+    expect(serialized).toContain("semantic_interpretation");
+    expect(serialized).toContain("PRIMARY_PROVIDER_FAILURE");
+  });
+
   it("composes an explicit disabled Semantic V1 boundary when the privacy route is off or unapproved", async () => {
     const root = await import("./composition-root") as typeof import("./composition-root") & {
       createSemanticCapability?: (env: Env) => Promise<{ mode: "off" | "privacy"; gateway: { prepare: (tier: "PRIMARY", input: unknown) => unknown } }>;
