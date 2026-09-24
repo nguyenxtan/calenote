@@ -1,10 +1,10 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Calenote mark</title>
-  <desc id="desc">A rounded blue C-shaped ribbon with a warm orange note tab.</desc>
+  <desc id="desc">A rounded orange C-shaped ribbon with a warm orange note tab.</desc>
   <defs>
     <linearGradient id="b" x1="12" y1="10" x2="49" y2="55" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#60A5FA"/>
-      <stop offset="1" stop-color="#2563EB"/>
+      <stop stop-color="#FB923C"/>
+      <stop offset="1" stop-color="#C2410C"/>
     </linearGradient>
     <linearGradient id="o" x1="38" y1="22" x2="53" y2="39" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FDBA74"/>

@@ -53,7 +53,7 @@
   padding: 0 4px;
   color: #fdfcf6;
   font-size: 14px;
-  font-weight: 750;
+  font-weight:600;
 }
 
 .storyCopy {
@@ -67,7 +67,7 @@
   margin: 0 0 12px;
   color: var(--leaf);
   font-size: 11px;
-  font-weight: 850;
+  font-weight:600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -112,7 +112,7 @@
   margin: 0 0 12px;
   color: #fdfcf6;
   font-size: 12px;
-  font-weight: 750;
+  font-weight:600;
 }
 
 .chatUser {
@@ -204,7 +204,7 @@
   align-items: center;
   color: var(--leaf);
   font-size: 14px;
-  font-weight: 750;
+  font-weight:600;
 }
 
 .progress {
@@ -222,7 +222,7 @@
   gap: 7px;
   align-items: center;
   font-size: 11px;
-  font-weight: 760;
+  font-weight:600;
 }
 
 .progressItem:not(:last-child)::after {
@@ -327,7 +327,7 @@
   margin: 0;
   font-family: var(--font-serif);
   font-size: clamp(31px, 3.3vw, 43px);
-  font-weight: 560;
+  font-weight:600;
   letter-spacing: -0.035em;
   line-height: 1.06;
 }
@@ -356,7 +356,7 @@
 .field > label:first-child,
 .field > label {
   font-size: 13px;
-  font-weight: 780;
+  font-weight:600;
 }
 
 .field input {
@@ -427,7 +427,7 @@
   background: var(--leaf);
   box-shadow: 0 8px 20px rgb(47 107 79 / 16%);
   font-size: 14px;
-  font-weight: 790;
+  font-weight:600;
 }
 
 .form .primaryButton {
@@ -496,7 +496,7 @@
   color: #fff;
   border-radius: 13px;
   font-size: 20px;
-  font-weight: 850;
+  font-weight:600;
 }
 
 .zaloLogo { background: #1769e0; }
@@ -571,7 +571,7 @@
   border-radius: 8px;
   background: var(--leaf-soft);
   font-size: 11px;
-  font-weight: 850;
+  font-weight:600;
 }
 
 .guideList p,
@@ -598,7 +598,7 @@
   align-items: center;
   color: var(--leaf);
   font-size: 13px;
-  font-weight: 760;
+  font-weight:600;
 }
 
 .officialLink {
@@ -842,3 +842,23 @@
   .card { padding-inline: 15px; }
   .progressItem > span:last-child { font-size: 9px; }
 }
+
+.page { background: var(--cn-bg); }
+.storyPanel { color: var(--cn-text); background: radial-gradient(circle at 0% 80%, #ffe0c5, transparent 70%), #fff5eb; border-right: 1px solid var(--cn-border); }
+.storyPanel::after { border-color: #f3c9a6; box-shadow: 0 0 0 60px #f7d8be33, 0 0 0 120px #f7d8be22; }
+.loginLink, .storyCopy > p:last-child, .storyFooter, .previewBoundary { color: var(--cn-text-2); }
+.storyCopy .eyebrow, .storyCopy h1 em, .storyFooter svg { color: var(--cn-brand-700); }
+.storyCopy h1 { font-size: clamp(36px, 4vw, 56px); font-weight: 600; line-height: 1.2; letter-spacing: -.045em; }
+.storyCopy > p:last-child { font-size: 14px; }
+.chatPreview { background: #ffffff99; border-color: var(--cn-border); box-shadow: var(--cn-shadow-sm); }
+.chatUser { background: var(--cn-brand-soft); color: var(--cn-brand-700); }
+.chatBot { background: #fff; border: 1px solid var(--cn-border); }
+.workspace { background: radial-gradient(circle at 100% 0, #fff0e5, transparent 60%), var(--cn-bg); }
+.card { border: 1px solid var(--cn-border); background: white; min-height: 0; border-radius: 22px; box-shadow: var(--cn-shadow-md); padding: 36px; }
+.stepContent { min-height: 0; gap: 18px; }
+.stepHeader { margin-bottom: 6px; }
+.stepHeader h2, .readyContent h2 { font-size: 30px; font-weight: 600; line-height: 1.3; }
+.primaryButton { margin-top: 22px; font-weight: 500; border-radius: 10px; background: var(--cn-brand-500); box-shadow: none; }
+.timezoneCard, .callout { border-color: #f3d6c4; }
+.storyPanel .storyTop img { filter: none; }
+@media(max-width:620px) { .card { padding: 24px 20px; } .storyCopy h1 { font-size: 34px; } .storyCopy { margin-bottom: 0; } .chatPreview, .storyFooter { display: none; } .stepHeader h2 { font-size: 26px; } }

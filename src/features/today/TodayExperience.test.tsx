@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,51 @@ const action = { id: "A".repeat(22), title: "Họp vận hành ngày mai", sched
 
 describe("TodayExperience", () => {
   beforeEach(() => replace.mockReset());
+
+  it("refreshes server delivery state on focus instead of retaining a stale pending reminder", async () => {
+    const scheduledAt = Date.parse("2026-09-24T12:00:00+07:00");
+    const now = vi.spyOn(Date, "now").mockReturnValue(scheduledAt - 10_000);
+    let sent = false;
+    const fetcher = vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/actions") return json({ data: { actions: [] } });
+      return json({ data: { reminders: [{ ...reminder, scheduledAt, status: sent ? "SENT" : "PENDING" }] } });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<TodayExperience />);
+    await screen.findByText("1 lời nhắc còn lại");
+    sent = true;
+    now.mockReturnValue(scheduledAt + 20_000);
+    fireEvent.focus(window);
+    await screen.findByText(/1 lời nhắc hôm nay đã gửi/);
+    expect(screen.queryByRole("region", { name: "Lời nhắc cần kiểm tra" })).not.toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("refreshes an open page across Vietnam midnight and stops the interval on unmount", async () => {
+    const midnight = Date.parse("2026-09-25T00:00:00+07:00");
+    const now = vi.spyOn(Date, "now").mockReturnValue(midnight - 20_000);
+    let sent = false;
+    const fetcher = vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/actions") return json({ data: { actions: [] } });
+      return json({ data: { reminders: [{ ...reminder, scheduledAt: midnight + 10_000, status: sent ? "SENT" : "PENDING" }] } });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { unmount } = render(<TodayExperience />);
+      await screen.findByRole("region", { name: "Lời nhắc những ngày tới" });
+      sent = true; now.mockReturnValue(midnight + 40_000);
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      await screen.findByText(/1 lời nhắc hôm nay đã gửi/);
+      expect(screen.queryByRole("region", { name: "Lời nhắc những ngày tới" })).not.toBeInTheDocument();
+      unmount();
+      const count = fetcher.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(fetcher).toHaveBeenCalledTimes(count);
+    } finally { vi.useRealTimers(); }
+  });
 
   it("does not reveal personal data until session confirmation, then renders the active Today shell", async () => {
     let resolveSession!: (response: Response) => void;

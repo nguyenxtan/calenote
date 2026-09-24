@@ -1,7 +1,7 @@
 const MAX_RESPONSE_BYTES = 128 * 1_024;
 const SAFE_FALLBACK = "Calenote chưa thể hoàn tất yêu cầu.";
 
-type ApiMethod = "GET" | "POST" | "DELETE";
+type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH";
 
 interface ApiRequestOptions {
   method?: ApiMethod;
@@ -149,7 +149,7 @@ export async function apiRequest<T>(
     });
   } catch (error) {
     if (isAbort(error)) throw error;
-    if (method === "POST" || method === "DELETE") throw new AmbiguousMutationError();
+    if (method === "POST" || method === "DELETE" || method === "PATCH") throw new AmbiguousMutationError();
     throw new ApiNetworkError();
   }
 
@@ -158,7 +158,7 @@ export async function apiRequest<T>(
   try {
     payload = await readBoundedJson(response);
   } catch (error) {
-    if (response.ok && (method === "POST" || method === "DELETE")) {
+    if (response.ok && (method === "POST" || method === "DELETE" || method === "PATCH")) {
       throw new AmbiguousMutationError();
     }
     throw error;
@@ -168,7 +168,7 @@ export async function apiRequest<T>(
     throw new ApiResponseError(response.status, error.code, error.message);
   }
   if (!("data" in payload)) {
-    if (method === "POST" || method === "DELETE") throw new AmbiguousMutationError();
+    if (method === "POST" || method === "DELETE" || method === "PATCH") throw new AmbiguousMutationError();
     throw invalidResponse(response.status);
   }
   return payload.data as T;

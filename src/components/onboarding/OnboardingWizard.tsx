@@ -465,7 +465,7 @@ export function OnboardingWizard() {
     <main className={styles.page}>
       <section className={styles.storyPanel} aria-label="Calenote hoạt động như thế nào">
         <div className={styles.storyTop}>
-          <CalenoteMark inverse />
+          <CalenoteMark />
           <Link href="/login" className={styles.loginLink}>Đăng nhập</Link>
         </div>
 
