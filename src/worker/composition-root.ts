@@ -63,15 +63,11 @@ function recordSemanticObservation(observation: SemanticObservation): void {
     operation: "semantic_interpretation",
     request_dispatched: observation.requestDispatched,
     tier: observation.tier,
-    ...(observation.model === undefined ? {} : { model: observation.model }),
-    ...(observation.provider === undefined ? {} : { provider: observation.provider }),
     latency_ms: observation.latencyMs,
     result_category: observation.resultCategory,
     schema_valid: observation.schemaValid,
     fallback_used: observation.fallbackUsed,
     ...(observation.costMicrounits === undefined ? {} : { cost_microunits: observation.costMicrounits }),
-    ...(observation.promptTokens === undefined ? {} : { prompt_tokens: observation.promptTokens }),
-    ...(observation.completionTokens === undefined ? {} : { completion_tokens: observation.completionTokens }),
   }));
 }
 

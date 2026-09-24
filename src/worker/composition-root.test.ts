@@ -132,11 +132,16 @@ describe("Worker composition root", () => {
     const invokeWithUntrustedRuntimeValue = capability.observe as unknown as ((event: unknown) => void);
     invokeWithUntrustedRuntimeValue({ requestDispatched: true, tier: "PRIMARY", model: "fixture/model", provider: "fixture-provider",
       latencyMs: 12, resultCategory: "PRIMARY_PROVIDER_FAILURE", schemaValid: null, fallbackUsed: false,
+      promptTokens: 100, completionTokens: 20,
       text: privateValues[0], ownerId: privateValues[1], title: privateValues[2], response: privateValues[3], apiKey: privateValues[4] });
     const serialized = logged.mock.calls.map((args) => args.join(" ")).join("\n");
     for (const privateValue of privateValues) expect(serialized).not.toContain(privateValue);
     expect(serialized).toContain("semantic_interpretation");
     expect(serialized).toContain("PRIMARY_PROVIDER_FAILURE");
+    expect(serialized).not.toContain("prompt_tokens");
+    expect(serialized).not.toContain("completion_tokens");
+    expect(serialized).not.toContain("fixture/model");
+    expect(serialized).not.toContain("fixture-provider");
   });
 
   it("composes an explicit disabled Semantic V1 boundary when the privacy route is off or unapproved", async () => {

@@ -147,25 +147,37 @@ function normalizeWholeMessage(text: string): string {
     .toLocaleLowerCase("vi-VN");
 }
 
-function foldedWords(text: string): string[] {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("vi-VN")
-    .split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-}
-
 /**
  * V1 deliberately has no recurrence storage or occurrence lifecycle. This is
- * a small cadence grammar, not a list of example sentences: a recurrence
- * marker must combine with a calendar unit (or be the explicit "lặp lại"
- * form) before it can refuse an otherwise valid one-off continuation.
+ * a small cadence grammar, not a list of example sentences. A frequency or
+ * continuous marker must lead through at most two temporal connectors into a
+ * cadence, numeric date, or clock expression; a marker later in ordinary
+ * title text cannot borrow a preceding temporal expression.
  */
 function requestsUnsupportedRecurrence(text: string): boolean {
-  const words = foldedWords(text);
-  const cadenceUnits = new Set(["gio", "ngay", "tuan", "thang", "nam"]);
-  const hasCadenceUnit = words.some((word) => cadenceUnits.has(word));
-  const hasFrequencyMarker = words.some((word) => word === "moi" || word === "hang");
-  const hasContinuousMarker = words.some((word, index) => word === "lien" && words[index + 1] === "tuc");
-  const hasRepeatMarker = words.some((word, index) => word === "lap" && words[index + 1] === "lai");
-  return hasRepeatMarker || (hasCadenceUnit && (hasFrequencyMarker || hasContinuousMarker));
+  const folded = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("vi-VN");
+  if (/(?:^|[^\p{L}\p{N}])lap\s+lai(?=$|[^\p{L}\p{N}])/u.test(folded)) return true;
+  const marker = /(?:^|[^\p{L}\p{N}])(moi|hang|lien\s+tuc)(?=$|[^\p{L}\p{N}])/gu;
+  const temporalAtom = "(?:(?:\\d+\\s*)?(?:gio|ngay|tuan|thang|nam)(?=$|[^\\p{L}\\p{N}])|\\d{1,2}\\s*(?:(?:h|gio)(?=$|[^\\p{L}\\p{N}])|:\\s*\\d{2}(?=$|[^\\p{L}\\p{N}]))|\\d{1,4}\\s*[/.-]\\s*\\d{1,2}(?:\\s*[/.-]\\s*\\d{2,4})?(?=$|[^\\p{L}\\p{N}])|thu\\s*[2-8](?=$|[^\\p{L}\\p{N}]))";
+  const directCadence = new RegExp(`^\\s*${temporalAtom}`, "u");
+  const connectorCadence = new RegExp(`^\\s*(?:(?:trong|vao|luc)\\s+){1,2}${temporalAtom}`, "u");
+  const VietnameseNumberWord = "(?:mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi)";
+  const cadenceUnit = "(?:gio|ngay|tuan|thang|nam)(?=$|[^\\p{L}\\p{N}])";
+  const wordCadence = new RegExp(`^\\s*${VietnameseNumberWord}\\s+${cadenceUnit}`, "u");
+  const connectorWordCadence = new RegExp(`^\\s*(?:(?:trong|vao|luc)\\s+){1,2}${VietnameseNumberWord}\\s+${cadenceUnit}`, "u");
+  for (const match of folded.matchAll(marker)) {
+    const markerText = match[1];
+    const start = match.index ?? 0;
+    const following = folded.slice(start + match[0].length);
+    if (directCadence.test(following) || wordCadence.test(following)) return true;
+    // An uppercase/proper-name-like `Hằng` may appear after normal title text.
+    // Only let it cross a connector if it begins a new clause; the other
+    // recurrence markers remain valid in ordinary imperative wording.
+    const previousNonSpace = folded.slice(0, start).trimEnd().at(-1);
+    const followsTitleWord = markerText === "hang" && previousNonSpace !== undefined && /[\p{L}\p{N}]/u.test(previousNonSpace);
+    if (!followsTitleWord && (connectorCadence.test(following) || connectorWordCadence.test(following))) return true;
+  }
+  return false;
 }
 
 function semanticSafeReply(result: { kind: "SAFE_HELP" | "SAFE_CLARIFICATION"; code: string }, pending: boolean): string {
@@ -332,7 +344,7 @@ export async function processBoundChatMessage(
           if (!cancelledContext) return rejectResolutionConflict(message, processingNow, dependencies, randomBytes);
         }
       } catch {
-        return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
+        return rejectWithReply(message, RETRY_PENDING_REPLY, processingNow, dependencies, randomBytes);
       }
     }
     const draft = await dependencies.store.findPendingDraft(message, context.chatIdentityId);
