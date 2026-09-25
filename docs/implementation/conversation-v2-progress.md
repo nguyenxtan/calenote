@@ -29,6 +29,25 @@ fresh independent whole-branch review before release. No per-task human review.
 - No production bindings/configuration, secrets, provider calls or deployment.
 - Task implementation checkpoint only; whole-branch acceptance remains pending.
 
+## Task 2 — deterministic calendar/event/cadence evidence
+
+- RED: missing cadence/calendar behavior; ownership regression exposed accent
+  folding before the accepted scanner. Preserve original NFC spans; match only
+  new productions on a separate folded shadow. Scanner implementation unchanged.
+- RED: reminder title containing an event word stole the reminder date; bounded
+  utterance roles now distinguish reminder titles from event declarations.
+- Focused calendar + conversation + accepted scanner: 367 tests PASS.
+- Independent published reference facts include century boundaries, normal/leap
+  months and near-midnight Vietnam/China differences. Exhaustive supported-day
+  round-trip and exact offline regeneration PASS. See lunar conversion document.
+- Full check: 82 files / 1544 tests PASS; documentation, typecheck, lint, build,
+  Worker types and deployment dry-run PASS. No upload or promotion.
+- Scanner 15000 samples: P50 0.008000 ms, P95 0.144625 ms, P99 0.194125 ms.
+- Initial full gate caught a pre-existing wall-clock-sensitive login rate-limit
+  test at the 10-minute window boundary (401 instead of 429). Freeze Date.now
+  inside that test and restore it afterwards; production limits/code unchanged.
+  Exact test and entire check rerun PASS. This test-only repair is intentional.
+
 ## Remaining work
 
-Tasks 2–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 3–9 remain. No user-facing V2 capability is enabled or deployed.
