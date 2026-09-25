@@ -50,7 +50,7 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 5–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 6–9 remain. No user-facing V2 capability is enabled or deployed.
 
 ## Task 3 — encrypted revision-fenced context
 
@@ -85,3 +85,15 @@ Tasks 5–9 remain. No user-facing V2 capability is enabled or deployed.
 - Focused reconciliation/response/wrapper: 68/68 PASS. Fresh full check after
   final fixes: 85 files / 1619 tests PASS; typecheck, lint, build, Worker types,
   dry-run and diff check PASS. Final independent whole-branch review pending.
+
+## Task 5 — Finite series and atomic lifecycle
+
+- Finite 2–30 daily occurrences; full preview is revalidated at confirmation,
+  never shortened after a due time passes.
+- Additive migration 0008 stores encrypted proposals/calendar provenance and
+  fences atomic creation/cancellation. One-off provenance and context cleanup
+  remain compatible with the legacy confirmation transaction.
+- Focused local D1/expansion/context tests: 86/86. Legacy command, scheduler and
+  delivery suites on the additive schema: 85/85. Fresh full check: 87 files,
+  1,681 tests; typecheck, build, lint, Worker type/dry-run and diff checks pass.
+- No remote migration, provider call or deployment performed.

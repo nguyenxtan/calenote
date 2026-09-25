@@ -292,6 +292,12 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         ),
     ];
 
+    if (input.encryptedCalendarFacts) {
+      statements.splice(2, 0, this.database.prepare(`INSERT INTO command_draft_calendar_facts
+        (draft_id,payload_ciphertext,payload_iv,key_version)
+        SELECT id,?,?,1 FROM command_drafts WHERE id = ? AND source_inbound_id = ? AND status = 'PENDING'`)
+        .bind(input.encryptedCalendarFacts.ciphertext, input.encryptedCalendarFacts.iv, input.draftId, input.message.id));
+    }
     try {
       await this.database.batch(statements);
       return "COMMITTED";

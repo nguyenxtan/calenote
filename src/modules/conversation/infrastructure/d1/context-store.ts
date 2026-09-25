@@ -11,7 +11,7 @@ const newerV2 = `EXISTS (SELECT 1 FROM conversation_context_outcomes outcome
     AND later.private_chat_id = i.private_chat_id
     AND (later.received_at > i.received_at OR (later.received_at = i.received_at AND later.rowid > i.rowid)))`;
 // Rechecked in every mutation statement, never a select-then-trust decision.
-const ownedInbound = `SELECT i.id FROM inbound_updates i
+export const ownedInbound = `SELECT i.id FROM inbound_updates i
   JOIN chat_identities ci ON ci.connection_id = i.connection_id
     AND ci.provider_user_id = i.provider_user_id AND ci.private_chat_id = i.private_chat_id
   JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
@@ -22,7 +22,7 @@ const orderedAfter = `EXISTS (SELECT 1 FROM inbound_updates current JOIN inbound
   ON prior.id = conversation_contexts.last_inbound_id
   WHERE current.id = ? AND (current.received_at > prior.received_at
     OR (current.received_at = prior.received_at AND current.rowid > prior.rowid)))`;
-function auth(scope: ConversationScope) {
+export function auth(scope: ConversationScope) {
   return [scope.sourceInboundId, scope.claimMarker, scope.chatIdentityId, scope.ownerId, scope.now];
 }
 const encryptionIdentity = (scope: ConversationScope, id: string) => JSON.stringify([scope.ownerId, scope.chatIdentityId, id]);

@@ -86,6 +86,8 @@ export interface CreateDraftMutation extends CommandMutationBase {
   scheduledAt: number;
   timezone: string;
   expiresAt: number;
+  /** Optional V2 metadata encrypted against owner/chat/draft, not provider data. */
+  encryptedCalendarFacts?: EncryptedValue;
 }
 
 export interface ConfirmDraftMutation extends CommandMutationBase {
