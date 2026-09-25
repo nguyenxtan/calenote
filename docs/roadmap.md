@@ -55,14 +55,30 @@ the semantic path. Its presence does not prove user-visible latency; the next
 design measures and reduces feedback delay without changing Queue batching or
 per-chat concurrency.
 
-**DESIGN_APPROVED / IMPLEMENTATION_PLAN_REVIEW_PENDING — 2026-09-25:**
+**IMPLEMENTATION_AUTHORIZED — 2026-09-25 (not yet implemented):**
 [Conversation V2, finite urgent reminders, and explicit lunar dates](./superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md)
 consolidates contextual greetings, clarification/edit/abandon behavior,
 encrypted short-lived conversation context, finite daily reminder series,
 explicit-opt-in Vietnamese lunar dates, and typing responsiveness. These are
 approved design changes, not implemented capabilities or production claims.
 The [implementation plan](./superpowers/plans/2026-09-25-conversation-v2-urgent-lunar.md)
-still requires user review and an execution choice before runtime work.
+is approved for whole-package execution and automated verification. The user
+will review the complete flows on their UAT domain, not each implementation
+task. Existing resource-isolation and immutable-SHA deployment gates remain.
+
+### Future admin — Releases and Features
+
+**REQUESTED / NOT_IMPLEMENTED — 2026-09-25.** Add a dedicated admin menu showing
+release version, source SHA, active Worker version, deployment time, environment,
+included features, change notes, acceptance status and rollback baseline. Show
+which features are available versus disabled or still under UAT; do not equate
+feature presence in source with deployment or activation.
+
+Define authenticated admin authorization and audit before adding control
+actions. Any future enable/disable or rollout control must respect dependencies,
+migration compatibility and ongoing reminders; a menu must not grant deployment
+authority or pretend to provide a kill switch that the runtime does not enforce.
+Build this admin scope separately before revisiting continuous-message handling.
 
 ### Continuous-message handling — after admin
 

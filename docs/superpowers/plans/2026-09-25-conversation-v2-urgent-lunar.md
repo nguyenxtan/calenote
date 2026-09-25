@@ -10,7 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md`
 
-**Status:** PLAN_REVIEW_PENDING. Spec approved by user on 2026-09-25. No runtime work, provider calls, migrations, or deployment are authorized by this document alone.
+**Status:** IMPLEMENTATION_AUTHORIZED — user approved whole-package execution
+and UAT review on 2026-09-25. Execute inline with automated task gates and final
+independent whole-branch review; no task-by-task human approval. Provider calls,
+remote migrations and deployment retain their separate safety gates.
 
 ## Global Constraints
 
