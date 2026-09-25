@@ -1,11 +1,13 @@
 # Conversation V2 — contextual reminders, finite urgent series, explicit lunar dates
 
 Date: 2026-09-25
-Status: **DRAFT_FOR_USER_REVIEW**
+Status: **DESIGN_APPROVED — IMPLEMENTATION_PLAN_REVIEW_PENDING**
 Inspected source: `9018344f1f8b1e0adf4d7905d3e7e6550f9ee5ad`.
 This document proposes behavior; it does not claim implementation, benchmark
 acceptance, migration authorization, or deployment. Conversation-level scope
-was requested by the user; this written specification still needs review.
+was requested by the user. The user approved this written specification with
+“làm đi” on 2026-09-25. This approves preparation of the implementation plan;
+runtime implementation still requires that plan's review and execution choice.
 
 ## 1. Intent and scope
 

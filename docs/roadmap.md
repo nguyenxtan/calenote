@@ -55,13 +55,14 @@ the semantic path. Its presence does not prove user-visible latency; the next
 design measures and reduces feedback delay without changing Queue batching or
 per-chat concurrency.
 
-**DRAFT_FOR_USER_REVIEW — 2026-09-25:**
+**DESIGN_APPROVED / IMPLEMENTATION_PLAN_REVIEW_PENDING — 2026-09-25:**
 [Conversation V2, finite urgent reminders, and explicit lunar dates](./superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md)
 consolidates contextual greetings, clarification/edit/abandon behavior,
 encrypted short-lived conversation context, finite daily reminder series,
 explicit-opt-in Vietnamese lunar dates, and typing responsiveness. These are
-proposed changes, not implemented capabilities or production claims. Written
-spec and implementation-plan review remain required before runtime work.
+approved design changes, not implemented capabilities or production claims.
+The [implementation plan](./superpowers/plans/2026-09-25-conversation-v2-urgent-lunar.md)
+still requires user review and an execution choice before runtime work.
 
 ### Continuous-message handling — after admin
 
