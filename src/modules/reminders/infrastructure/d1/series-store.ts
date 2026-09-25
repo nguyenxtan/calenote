@@ -3,6 +3,7 @@ import { PendingRequestSchema, type ConversationScope, type PendingRequest } fro
 import { D1ConversationStore, ownedInbound, auth } from "@/modules/conversation/infrastructure/d1/context-store";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { Keyring } from "@/modules/security/keyring";
+import { randomOpaqueId } from "@/modules/platform/types";
 import { expandFiniteSeries, type SeriesStore } from "../../series";
 
 const createPayload = z.object({ request: PendingRequestSchema,
@@ -15,7 +16,7 @@ interface ProposalRow {
   source_inbound_id: string; expires_at: number; payload_ciphertext: unknown; payload_iv: unknown; key_version: number;
 }
 const binding = (scope: ConversationScope, id: string) => JSON.stringify([scope.ownerId, scope.chatIdentityId, id]);
-const token = () => crypto.randomUUID();
+const token = () => randomOpaqueId();
 // Statements following a claim depend on a fresh, unique transaction marker.
 // A concurrent loser's no-op UPDATE cannot authorize any subsequent insert.
 const claimed = "EXISTS (SELECT 1 FROM reminder_series_proposals p WHERE p.id = ? AND p.transaction_marker = ?)";

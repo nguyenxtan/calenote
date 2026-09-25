@@ -7,6 +7,7 @@ import type { PendingRequest } from "@/modules/conversation/contracts";
 import { D1SeriesStore } from "./series-store";
 import { D1ReminderSchedulerStore } from "./scheduler-store";
 import { D1ReminderCommandStore } from "./command-store";
+import { parseQueueJob } from "@/worker/index";
 
 const dispose: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(dispose.splice(0).map(fn => fn())); });
@@ -36,6 +37,16 @@ async function harness(count = 3) {
     confirm: (index = 1) => series.confirm(h.scope(index), proposal!.proposalId, proposal!.revision) };
 }
 describe("finite series atomic storage", () => {
+  it("creates children whose identifiers are accepted by the real delivery Queue contract", async () => {
+    const h = await harness();
+    await h.confirm();
+    const children = (await h.db.prepare("SELECT id FROM reminders").all<{ id: string }>()).results;
+    expect(children).toHaveLength(3);
+    for (const child of children) {
+      const job = { type: "DELIVER_REMINDER", reminderId: child.id };
+      expect(parseQueueJob(job)).toEqual(job);
+    }
+  });
   it("one proposal commits exactly one series and three children under concurrent confirmation", async () => {
     const h = await harness();
     expect(await h.counts()).toEqual({ series: 0, occurrences: 0, reminders: 0 });
