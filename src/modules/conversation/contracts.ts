@@ -46,12 +46,20 @@ export const DateFactSchema = z.object({
 export type DateFact = z.infer<typeof DateFactSchema>;
 export const SeriesRelationSchema = z.enum(["STARTING_ON", "BEFORE_EVENT", "INCLUDING_EVENT"]);
 export type SeriesRelation = z.infer<typeof SeriesRelationSchema>;
+// Application-owned unresolved operands, never part of the provider schema.
+export const PendingLunarInputSchema = z.object({
+  day: z.number().int().min(1).max(30), month: z.number().int().min(1).max(12),
+  year: z.number().int().min(1900).max(2100).nullable(), leap: z.boolean().nullable(),
+  role: z.enum(["EVENT", "REMINDER"]), sourceInboundId: identifier,
+}).strict();
+export type PendingLunarInput = z.infer<typeof PendingLunarInputSchema>;
 export const PendingRequestSchema = z.object({
   title: z.string().min(1).max(MAX_SEMANTIC_TITLE_CODE_UNITS).refine(text => text.trim().length > 0).nullable(),
   calendar: CalendarKindSchema,
   eventDate: DateFactSchema.nullable(), reminderDate: DateFactSchema.nullable(),
   reminderTime: z.string().refine(isValidSemanticLocalTime).nullable(),
   count: z.number().int().min(1).max(30).nullable(), relation: SeriesRelationSchema.nullable(),
+  lunarInput: PendingLunarInputSchema.optional(),
   missing: z.array(MissingFieldSchema).max(9).refine(fields => new Set(fields).size === fields.length),
 }).strict();
 export type PendingRequest = z.infer<typeof PendingRequestSchema>;

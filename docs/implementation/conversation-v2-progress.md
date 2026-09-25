@@ -50,7 +50,7 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 4–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 5–9 remain. No user-facing V2 capability is enabled or deployed.
 
 ## Task 3 — encrypted revision-fenced context
 
@@ -68,3 +68,20 @@ Tasks 4–9 remain. No user-facing V2 capability is enabled or deployed.
   DB or provider access. Existing V1 semantic data and drafts remain unchanged.
 - Full check PASS: 83 files / 1569 tests; typecheck, lint, build, generated types,
   dry-run and diff check PASS. Final independent branch review still pending.
+
+## Task 4 — pure reconciliation and local response composition
+
+- RED: absent reconciliation/composer, then multi-turn lunar year/leap/count
+  loss, ambiguous-title revival and ambiguous replacement dropping context.
+- Pure backend decisions preserve deterministic dates/times; explicit edits
+  need both semantic edit intent and a caller-validated edit control. Expiry
+  uses an explicit clock input rather than a hidden wall-clock read.
+- Pending lunar operands remain encrypted application state, not model fields.
+  Year-only/leap-only answers complete deterministic conversion. Missing daily
+  count remains a clarification across turns; no inferred recurrence default.
+- Friendly/concise replies are stable local compositions, one question at a
+  time, without a second model call or premature creation claim. Capability
+  response checks release readiness. HELP/LIST/greeting do not update context.
+- Focused reconciliation/response/wrapper: 68/68 PASS. Fresh full check after
+  final fixes: 85 files / 1619 tests PASS; typecheck, lint, build, Worker types,
+  dry-run and diff check PASS. Final independent whole-branch review pending.

@@ -1,10 +1,11 @@
-import type { CalendarKind, DateFact, MissingField, SeriesRelation } from "./contracts";
+import { PendingLunarInputSchema, type CalendarKind, type DateFact, type MissingField, type SeriesRelation, type PendingLunarInput, type PendingRequest } from "./contracts";
 import type { LunarCalendarAdapter } from "./lunar-calendar";
 import { extractTemporalEvidence } from "../semantic/temporal-evidence";
 export type Evidence<T> = { state: "MISSING" } | { state: "RESOLVED"; value: T } | { state: "AMBIGUOUS"; reason: string };
 export interface ConversationTemporalEvidence {
   calendar: Evidence<CalendarKind>; eventDate: Evidence<DateFact>; reminderDate: Evidence<DateFact>;
   time: Evidence<string>; count: Evidence<number>; relation: Evidence<SeriesRelation>; missing: MissingField[];
+  lunarInput?: PendingLunarInput;
 }
 // Matching new dialogue productions must not rewrite the accepted scanner's
 // vocabulary. Keep original NFC graphemes for every span we do not consume.
@@ -34,11 +35,24 @@ function replaceProduction(text: string, pattern: RegExp,
   return result + text.slice(cursor);
 }
 export function extractConversationTemporalEvidence(input: {
-  text: string; receivedAt: number; sourceInboundId: string; currentCalendar: CalendarKind;
+  text: string; receivedAt: number; sourceInboundId: string; currentCalendar: CalendarKind; previousRequest?: PendingRequest;
 }, calendar: LunarCalendarAdapter): ConversationTemporalEvidence {
   const result: ConversationTemporalEvidence = { calendar: { state: "MISSING" }, eventDate: { state: "MISSING" }, reminderDate: { state: "MISSING" },
     time: { state: "MISSING" }, count: { state: "MISSING" }, relation: { state: "MISSING" }, missing: [] };
-  const original = input.text.normalize("NFC");
+  let original = input.text.normalize("NFC");
+  const priorLunar = input.currentCalendar === "LUNAR_VN" ? input.previousRequest?.lunarInput : undefined;
+  let lunarFollowup = false;
+  if (priorLunar) {
+    const answer = fold(original).trim();
+    const year = /^(?:nam\s+)?(\d{4})[.!]?$/u.exec(answer);
+    const leap = /^(?:thang\s+)?(nhuan|thuong|khong nhuan)[.!]?$/u.exec(answer);
+    if ((year && input.previousRequest?.missing.includes("year")) || (leap && input.previousRequest?.missing.includes("leapMonth"))) {
+      const requestedYear = year ? Number(year[1]) : priorLunar.year;
+      const requestedLeap = leap ? leap[1] === "nhuan" : priorLunar.leap;
+      original = `${priorLunar.day}/${priorLunar.month}${requestedYear !== null ? `/${requestedYear}` : ""} âm lịch${requestedLeap !== null ? requestedLeap ? " tháng nhuận" : " tháng thường" : ""}`;
+      lunarFollowup = true;
+    }
+  }
   const text = fold(original);
   const lunarRequested = /\b(?:am lich|lich am|ngay am)\b/u.test(text);
   const solarRequested = /\b(?:duong lich|lich duong)\b/u.test(text);
@@ -54,7 +68,7 @@ export function extractConversationTemporalEvidence(input: {
   result.calendar = { state: "RESOLVED", value: calendarKind };
   let scanText = original;
   const counts: number[] = [];
-  const cadenceRequested = /\b(?:lien tuc|moi ngay|nhac)\b/u.test(text);
+  const cadenceRequested = /\b(?:lien tuc|moi ngay|nhac)\b/u.test(text) || !!input.previousRequest?.missing.includes("seriesCount");
   // Consume complete cadence productions, retaining every separator outside
   // them. Their count is not a date operand; incomplete productions remain for
   // the accepted Temporal Island scanner to reject rather than being erased.
@@ -68,6 +82,8 @@ export function extractConversationTemporalEvidence(input: {
     result.count = counts.length === 1 && counts[0] >= 1 && counts[0] <= 30
       ? { state: "RESOLVED", value: counts[0] } : { state: "AMBIGUOUS", reason: "INVALID_OR_MULTIPLE_COUNTS" };
   }
+  if (!counts.length && /\b(?:lien tuc|moi ngay)\b/u.test(text)) result.missing.push("seriesCount");
+  scanText = replaceProduction(scanText, /\b(?:moi ngay|lien tuc)\b/gu, span => " ".repeat(span.length));
   scanText = replaceProduction(scanText, /\b(khong\s+)?tinh\s+(?:ca\s+)?ngay\s+(?:thi|han)\b/gu, (span, excluded) => {
     const value = excluded ? "BEFORE_EVENT" : "INCLUDING_EVENT";
     result.relation = result.relation.state === "RESOLVED" && result.relation.value !== value
@@ -82,6 +98,7 @@ export function extractConversationTemporalEvidence(input: {
   const lunarFacts: DateFact[] = [];
   let lunarInvalid = false;
   let lunarIncomplete = false;
+  const lunarInputs: PendingLunarInput[] = [];
   if (calendarKind === "LUNAR_VN") {
     scanText = scanText.replace(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{4}))?\b/gu,
       (_span, day: string, month: string, year: string | undefined) => {
@@ -89,11 +106,15 @@ export function extractConversationTemporalEvidence(input: {
         // Keep surrounding separators/starters untouched so malformed mixed
         // islands still own DATE/TIME. Never extract a clean prefix and discard
         // its continuation. Missing/invalid conversions cannot resolve DATE.
+        const explicitNormal = /\bthang (?:thuong|khong nhuan)\b/u.test(text);
+        const explicitLeap = /\bthang nhuan\b/u.test(text);
+        const partial = PendingLunarInputSchema.safeParse({ day: Number(day), month: Number(month), year: year ? Number(year) : null,
+          leap: explicitNormal ? false : explicitLeap ? true : null, role: "REMINDER", sourceInboundId: input.sourceInboundId });
+        if (!partial.success) { lunarInvalid = true; return "01/01/2000"; }
+        lunarInputs.push(partial.data);
         if (!year) {
           result.missing.push("year"); lunarIncomplete = true; return "01/01/2000";
         }
-        const explicitNormal = /\bthang (?:thuong|khong nhuan)\b/u.test(text);
-        const explicitLeap = /\bthang nhuan\b/u.test(text);
         if (explicitNormal && explicitLeap) { lunarInvalid = true; return "01/01/2000"; }
         if (!explicitNormal && !explicitLeap && calendar.hasLeapMonth(Number(year), Number(month))) {
           result.missing.push("leapMonth"); lunarIncomplete = true; return "01/01/2000";
@@ -125,7 +146,12 @@ export function extractConversationTemporalEvidence(input: {
   const eventStart = text.search(/\b(?:thi|deadline|han chot)\b/u);
   const reminderStart = text.search(/\bnhac\b/u);
   const eventFrame = (eventStart >= 0 && (reminderStart < 0 || eventStart < reminderStart))
-    || (result.relation.state === "RESOLVED" && result.relation.value !== "STARTING_ON");
+    || (result.relation.state === "RESOLVED" && result.relation.value !== "STARTING_ON")
+    || (lunarFollowup && priorLunar?.role === "EVENT");
+  if (lunarIncomplete && !lunarInvalid && evidence.date.state !== "AMBIGUOUS" && lunarInputs.length === 1) {
+    result.lunarInput = { ...lunarInputs[0], role: eventFrame ? "EVENT" : "REMINDER" };
+  }
+  if (lunarInputs.length > 1) date = { state: "AMBIGUOUS", reason: "MULTIPLE_LUNAR_DATES" };
   if (eventFrame) {
     result.eventDate = date;
     if (date.state === "MISSING" && !lunarIncomplete) result.missing.push("eventDate");
