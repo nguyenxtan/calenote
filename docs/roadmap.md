@@ -50,18 +50,44 @@ production evidence.
 
 ### Conversation UX and reminder lifecycle
 
-**NEXT — bounded UX slice:** add a Zalo `sendChatAction("typing")` processing
-indicator. Keep it separate from Semantic Conversation V1; it must not change
-semantic routing, reminder mutation, provider configuration, or production
-acceptance evidence without its own reviewed scope.
+**Existing source capability:** Zalo `sendChatAction("typing")` is wired into
+the semantic path. Its presence does not prove user-visible latency; the next
+design measures and reduces feedback delay without changing Queue batching or
+per-chat concurrency.
+
+**DRAFT_FOR_USER_REVIEW — 2026-09-25:**
+[Conversation V2, finite urgent reminders, and explicit lunar dates](./superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md)
+consolidates contextual greetings, clarification/edit/abandon behavior,
+encrypted short-lived conversation context, finite daily reminder series,
+explicit-opt-in Vietnamese lunar dates, and typing responsiveness. These are
+proposed changes, not implemented capabilities or production claims. Written
+spec and implementation-plan review remain required before runtime work.
+
+### Continuous-message handling — after admin
+
+**DEFERRED_BY_USER — 2026-09-25.** Revisit only after the admin page is built.
+This dependency does not authorize building admin in the conversation slice.
+
+- Evaluate per-chat burst grouping/debounce, ordered processing, cancellation
+  of superseded in-flight interpretation, and stale-response suppression.
+- Measure queue wait, end-to-end response latency, duplicate/reordered webhook
+  delivery, and messages arriving while the previous response is processing.
+- Require a separate design for bounded waits, ownership, durable ordering,
+  cost limits, and confirmation behavior before changing concurrency.
+- Do not add a batching wait, parallelize inbound jobs, or change production
+  Queue settings as part of Conversation V2. Preserve existing dedupe and
+  claim/revision fences in the meantime.
+
+### Later reminder and delivery capabilities
 
 **FUTURE product design — not implemented:** define these contracts before
 adding behavior, schema changes, provider calls, or delivery guarantees:
 
 - `SMART_DEADLINE` reminder cadence, including deadline completion and overdue
   semantics;
-- recurring yearly events, Vietnamese lunar-calendar (`LUNAR_VN`) handling,
-  and the lifecycle distinction between a recurrence occurrence and its series;
+- recurring yearly events and indefinite lunar/solar recurrence; the proposed
+  Conversation V2 slice covers explicit one-off lunar dates and finite daily
+  series only, not annual recurrence or astronomical moon-phase tracking;
 - notification-delivery preferences and App/Web canonical notification history;
 - Zalo and Telegram external-delivery adapters, plus delivery fallback policy;
 - future iOS/mobile push delivery;
@@ -69,7 +95,7 @@ adding behavior, schema changes, provider calls, or delivery guarantees:
   current-device identification, revoke-one-device, logout-all-other-devices,
   and no forced logout of an existing device when another device logs in.
 
-These are backlog/design items only. They are not part of PR #1 and require
+These later capabilities are backlog/design items only. They are not part of PR #1 and require
 separately approved product, persistence, privacy, and operational designs.
 
 ### Optional intelligence
