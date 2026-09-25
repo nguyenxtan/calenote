@@ -29,6 +29,14 @@ function fixture() {
   return { deps, dispatch, handle };
 }
 describe("conversation paid-call and semantic safety boundary", () => {
+  it("starts managed feedback after the durable claim but before context loading", async () => {
+    const h = fixture(); const order: string[] = [];
+    h.deps.runtimeStore.claimAttempt = async () => { order.push("claim"); return true; };
+    h.deps.processingFeedback = async () => { order.push("feedback"); };
+    h.deps.contextStore.load = async () => { order.push("context"); return null; };
+    expect((await h.handle()).status).toBe("CLARIFICATION_REQUESTED");
+    expect(order).toEqual(["claim", "feedback", "context"]);
+  });
   it.each(["claimed", "unavailable", "exhausted", "underfunded", "fence-false", "fence-uncertain"])("does not dispatch on %s", async boundary => {
     const h = fixture();
     if (boundary === "claimed") h.deps.runtimeStore.claimAttempt = async () => false;

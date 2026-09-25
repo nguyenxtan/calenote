@@ -350,7 +350,7 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
 
-export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean } = {}): Promise<RuntimeOperations> {
+export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
@@ -375,6 +375,9 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       store: inboundStore,
       keyring,
       semantic,
+      feedbackLifetime,
+      observeTiming: timing => console.log(JSON.stringify({ operation: "conversation_timing", ...timing })),
+      observeFeedback: (outcome, elapsedMs) => console.log(JSON.stringify({ operation: "processing_feedback", outcome, elapsedMs })),
       ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
         runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
         getTone: async (ownerId: string) => {

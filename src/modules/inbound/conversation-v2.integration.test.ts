@@ -50,40 +50,53 @@ async function harness() {
   return { ...h, send, process, count, dispatch, replies, seriesStore, runtimeStore, service };
 }
 describe("guarded conversation V2 integration", () => {
-  it("real Worker composition opt-in routes encrypted inbound through the V2 gateway, with safe default-off", async () => {
+  it.each(["telegram", "zalo"] as const)("real %s composition uses V2 and does not wait for typing transport settlement", async provider => {
     const h = await harness();
     const encrypted = await h.keyring.encryptSensitive("inbound-message", "one-0", 1, "thi hết môn ngày 11/10/2026 ở Quang Trung");
-    const credential = await h.keyring.encryptCredential("connection-one", "telegram", 1, "synthetic-token");
-    await h.db.prepare("UPDATE bot_connections SET encrypted_token = ?, encrypted_token_iv = ? WHERE id = 'connection-one'")
-      .bind(credential.ciphertext, credential.iv).run();
-    await h.db.prepare("UPDATE inbound_updates SET state = 'PENDING', transition_marker = NULL, message_ciphertext = ?, message_iv = ? WHERE id = 'one-0'")
-      .bind(encrypted.ciphertext, encrypted.iv).run();
+    const credential = await h.keyring.encryptCredential("connection-one", provider, 1, "synthetic-token");
+    await h.db.prepare("UPDATE bot_connections SET provider=?, encrypted_token = ?, encrypted_token_iv = ? WHERE id = 'connection-one'")
+      .bind(provider, credential.ciphertext, credential.iv).run();
+    await h.db.prepare("UPDATE inbound_updates SET provider=?, state = 'PENDING', transition_marker = NULL, message_ciphertext = ?, message_iv = ? WHERE id = 'one-0'")
+      .bind(provider, encrypted.ciphertext, encrypted.iv).run();
     const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
     const env = { ...config.vars, DB: h.db, JOBS: { send: vi.fn() }, CALENOTE_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", OPENROUTER_API_KEY: "synthetic-no-network" } as unknown as Env;
     vi.spyOn(Date, "now").mockReturnValue(NOW + 100);
     const requests: Record<string, unknown>[] = [];
     const outbound: string[] = [];
+    const tasks: Promise<unknown>[] = []; let typingSignal: AbortSignal | null | undefined; let inferenceStartedBeforeAbort = false;
     await h.db.prepare("INSERT INTO user_preferences (user_id,address_style,tone,updated_at) VALUES ('one','ban','concise',1)").run();
     vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
       if (url === "https://openrouter.ai/api/v1/chat/completions") {
+        inferenceStartedBeforeAbort = !typingSignal?.aborted;
         requests.push(JSON.parse(init.body as string));
         return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(create()) }, finish_reason: "stop" }] }));
       }
-      if (url.startsWith("https://api.telegram.org/")) {
+      if (url.endsWith("/sendChatAction")) {
+        typingSignal = init.signal;
+        expect(JSON.parse(init.body as string)).toEqual({ chat_id: "private-one", action: "typing" });
+        expect(init.redirect).toBe("manual");
+        return new Promise<Response>((_resolve, reject) => { init.signal?.addEventListener("abort", () => reject(new Error("synthetic deadline")), { once: true }); });
+      }
+      if (url.startsWith("https://api.telegram.org/") || url.endsWith("/sendMessage")) {
         outbound.push(JSON.parse(init.body as string).text);
-        return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }));
+        return new Response(JSON.stringify(provider === "telegram" ? { ok: true, result: { message_id: 1 } } : { ok: true, result: { message_id: "synthetic" } }));
       }
       throw new Error("Unapproved synthetic transport endpoint");
     }));
     const off = await createRuntimeOperations(env);
     expect(off.purgeConversationContexts).toBeUndefined();
-    const operations = await createRuntimeOperations(env, { conversationV2: true });
+    const operations = await createRuntimeOperations(env, { conversationV2: true }, { waitUntil: task => { tasks.push(task); } });
     expect((await operations.processInbound("one-0")).status).toBe("CLARIFICATION_REQUESTED");
     expect(requests).toHaveLength(1);
     expect(requests[0].response_format).toMatchObject({ json_schema: { name: "conversation_semantic_interpretation" } });
     expect(await h.db.prepare("SELECT state FROM inbound_updates WHERE id = 'one-0'").first("state")).toBe("PROCESSED");
     expect(await h.count()).toBe(0);
     expect(outbound).toEqual(["Bạn muốn mình nhắc lúc mấy giờ?"]);
+    expect(inferenceStartedBeforeAbort).toBe(true);
+    if (provider === "zalo") {
+      expect(tasks).toHaveLength(1); expect(typingSignal?.aborted).toBe(false);
+      await Promise.all(tasks); expect(typingSignal?.aborted).toBe(true);
+    }
   });
   it("preserves exam context, previews all dates and creates three children only on explicit confirmation", async () => {
     const h = await harness();

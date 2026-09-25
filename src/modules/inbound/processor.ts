@@ -40,6 +40,8 @@ import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure
 import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
 import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { createConversationService, type ConversationServiceDependencies } from "@/modules/conversation/service";
+import { startProcessingFeedback, observeTiming, type ConversationTiming, type FeedbackLifetime } from "@/modules/conversation/processing-feedback";
+import { executeProviderRequest, postSecretProviderJson } from "@/modules/connections/providers/secret-provider-transport";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -151,9 +153,13 @@ type SendProcessingFeedback = (
   provider: BotProvider,
   token: string,
   privateChatId: string,
+  signal?: AbortSignal,
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  feedbackLifetime?: FeedbackLifetime;
+  observeTiming?: (value: ConversationTiming) => void;
+  observeFeedback?: (outcome: "OK" | "FAILED" | "TIMEOUT", elapsedMs: number) => void;
   conversation?: Omit<ConversationServiceDependencies, "commandStore" | "keyring" | "now" | "reply" | "list" | "processingFeedback">;
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
@@ -219,9 +225,11 @@ export async function sendProviderProcessingFeedback(
   provider: BotProvider,
   token: string,
   privateChatId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (provider === "zalo") {
-    await sendZaloTyping(token, privateChatId);
+    await sendZaloTyping(token, privateChatId, request => postSecretProviderJson(request, input =>
+      executeProviderRequest(input, fetch, signal ? AbortSignal.any([signal, AbortSignal.timeout(1000)]) : undefined)));
   }
 }
 
@@ -697,6 +705,7 @@ export async function processInbound(
   }
   if (claim.status !== "CLAIMED") return claim;
   const message = claim.message;
+  observeTiming(dependencies.observeTiming, "QUEUE_WAIT", message.processingStartedAt - message.receivedAt);
   const commandCode = parseConnectCommand(message.text);
   recordZaloEarlyDiagnostic(message.provider, dependencies.recordDiagnostic, {
     claim_attempted: true,
@@ -764,26 +773,42 @@ export async function processInbound(
       complete: (current, context, time) => dependencies.store.completeSemanticMessage(current, context, time),
       list: (input) => dependencies.store.listSemanticReminders(input),
     };
-    const processingFeedback = message.provider === "zalo" ? async () => {
-        try {
+    const processingFeedback = message.provider === "zalo" && dependencies.feedbackLifetime ? async () => {
+      const started = performance.now();
+      let releaseDispatch!: () => void;
+      const dispatched = new Promise<void>(resolve => { releaseDispatch = resolve; });
+      startProcessingFeedback({ eligible: true, lifetime: dependencies.feedbackLifetime!, observe: (outcome, elapsed) => {
+        releaseDispatch(); dependencies.observeFeedback?.(outcome, elapsed);
+      },
+        send: async signal => {
           const token = await dependencies.keyring.decryptCredential(
             message.connectionId,
             message.provider,
             message.credentialVersion,
             { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
           );
+          if (signal.aborted) return;
+          observeTiming(dependencies.observeTiming, "TYPING_DISPATCH", performance.now() - started);
+          releaseDispatch();
           await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
             message.provider,
             token,
             message.privateChatId,
+            signal,
           );
-        } catch {
-          // Typing is bounded, no-retry UX feedback rather than a business outcome.
         }
+      });
+      // V1 waits only for local credential preparation/dispatch, never provider
+      // settlement. V2 starts this managed operation before loading context.
+      await dispatched;
       } : undefined;
-    const reply = async (text: string) => { await replyAfterTerminal(message, text, dependencies); };
+    const reply = async (text: string) => {
+      const started = performance.now();
+      try { await replyAfterTerminal(message, text, dependencies); }
+      finally { observeTiming(dependencies.observeTiming, "FINAL_REPLY", performance.now() - started); }
+    };
     const conversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
-      commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback,
+      commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback, observeTiming: dependencies.observeTiming,
       list: input => dependencies.store.listSemanticReminders(input),
     }) : undefined;
     return processBoundChatMessage(message, {

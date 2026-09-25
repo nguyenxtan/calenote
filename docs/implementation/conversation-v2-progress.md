@@ -50,7 +50,7 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 7–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 8–9 remain. No user-facing V2 capability is enabled or deployed.
 
 ## Task 3 — encrypted revision-fenced context
 
@@ -116,3 +116,20 @@ Tasks 7–9 remain. No user-facing V2 capability is enabled or deployed.
   lanes; cron and Queue configuration unchanged.
 - Full fresh check: 89 files / 1711 tests PASS; typecheck/lint/build/types/dry-run
   PASS. Independent whole-branch acceptance still pending.
+
+## Task 7 — nonblocking managed typing
+
+- V2 durable eligibility precedes context load and managed feedback initiation.
+  The feedback task is owned by Worker waitUntil and has a 1000 ms deadline
+  which aborts the actual HTTP signal, not just the waiting promise.
+- V1 preserves dispatch ordering: it waits for local credential preparation,
+  not provider settlement. No lifetime means no background provider request.
+- Distinct content-free queue-wait, typing-dispatch, model and final-reply
+  durations; safe feedback outcome enums. No token/message/identity telemetry.
+- RED: context loaded before feedback; real composition did not register any
+  lifetime task. GREEN: mocked Zalo transport remains pending while inference
+  and final reply complete; real transport receives abort at deadline.
+- Fresh full check: 90 files / 1719 tests PASS. No live calls or deployment.
+- Local arm64 Node v26.7.0, 10000 mock-dispatch samples: P50 0.000333 ms,
+  P95 0.000833 ms, P99 0.001875 ms. This measures local dispatch overhead, not
+  real Zalo UI latency or end-to-end provider response time.

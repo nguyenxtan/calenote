@@ -17,6 +17,7 @@ import type { LunarCalendarAdapter } from "./lunar-calendar";
 import { extractConversationTemporalEvidence } from "./temporal";
 import { reconcileConversation } from "./reconcile";
 import { composeConversationReply } from "./responses";
+import { observeTiming, type ConversationTiming } from "./processing-feedback";
 
 export interface ConversationServiceDependencies {
   contextStore: ConversationStore; seriesStore: SeriesStore; commandStore: ReminderCommandStore;
@@ -25,7 +26,8 @@ export interface ConversationServiceDependencies {
   keyring: Pick<Keyring, "encryptSensitive" | "decryptSensitive">;
   now(): number; reply(text: string): Promise<void>;
   list(input: SemanticReminderQuery): Promise<QueriedReminder[]>;
-  processingFeedback?: () => Promise<void>;
+  processingFeedback?: () => void;
+  observeTiming?: (value: ConversationTiming) => void;
   tone?: "friendly" | "concise";
   getTone?(ownerId: string): Promise<"friendly" | "concise">;
 }
@@ -43,7 +45,6 @@ export function createConversationService(deps: ConversationServiceDependencies)
     await reply(text); return { status };
   }
   async function interpret(scope: ConversationScope, input: ConversationInput): Promise<ConversationModel | null> {
-    if (!await deps.runtimeStore.claimAttempt(scope)) return null;
     const attempt = deps.gateway.prepare("PRIMARY", input);
     if (attempt.status !== "READY") return null;
     const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: scope.sourceInboundId, now: deps.now() });
@@ -53,9 +54,10 @@ export function createConversationService(deps: ConversationServiceDependencies)
       await deps.budgetStore.releaseOrExpireReservation({ ...budgetScope, reason: "SAFE_FAILURE", now: deps.now() }); return null;
     }
     if (!await deps.budgetStore.markDispatched({ ...budgetScope, now: deps.now() })) return null;
-    try { await deps.processingFeedback?.(); } catch { /* Task 7 supplies managed nonblocking feedback. */ }
     let result: SemanticAttemptResult<ConversationModel>;
+    const modelStarted = performance.now();
     try { result = await attempt.dispatch(); } catch { result = { status: "FAILURE", category: "PROVIDER_FAILURE" }; }
+    observeTiming(deps.observeTiming, "MODEL", performance.now() - modelStarted);
     try { await deps.budgetStore.finalizeUsage({ ...budgetScope, actualCostMicrounits: result.usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* Expiry charges dispatched ceiling. */ }
     if (result.status !== "SUCCESS") return null;
     const parsed = ConversationModelSchema.safeParse(result.interpretation);
@@ -79,6 +81,12 @@ export function createConversationService(deps: ConversationServiceDependencies)
       const normalized = message.text.normalize("NFC").trim().toLocaleLowerCase("vi-VN");
       try {
         if (context.timezone !== "Asia/Ho_Chi_Minh") return finish(scope, unavailable);
+        const deterministic = confirm.has(normalized) || cancel.has(normalized) || greeting.test(normalized)
+          || ["help", "/help", "trợ giúp", "hướng dẫn"].includes(normalized);
+        if (!deterministic) {
+          if (!await deps.runtimeStore.claimAttempt(scope)) return finish(scope, unavailable);
+          try { deps.processingFeedback?.(); } catch { /* Managed UX feedback has no business authority. */ }
+        }
         const previous = await deps.contextStore.load(scope);
         const pending = await deps.seriesStore.findPending(scope);
         if (confirm.has(normalized)) {

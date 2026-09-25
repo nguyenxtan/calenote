@@ -153,8 +153,7 @@ export default {
     return routeRequest(request, env, ctx);
   },
   async queue(batch: MessageBatch<unknown>, env, ctx) {
-    void ctx;
-    await handleQueueEvent(batch, () => createRuntimeOperations(env));
+    await handleQueueEvent(batch, () => createRuntimeOperations(env, {}, ctx));
   },
   async scheduled(controller, env, ctx) {
     void ctx;
