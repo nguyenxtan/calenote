@@ -50,4 +50,21 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 3–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 4–9 remain. No user-facing V2 capability is enabled or deployed.
+
+## Task 3 — encrypted revision-fenced context
+
+- Additive local migration 0007 only; historical migrations unchanged. Not
+  applied remotely. Owner/chat/claim checks and revision CAS guard mutations.
+- RED: module absent, then explicit security regressions for scope-bound AAD,
+  nullable encryption metadata, and atomic expired-buffer replacement.
+- Encryption identity binds owner/chat/context; sensitive content never stored
+  in plaintext. Completed/cancelled/invalid/expired payloads are removed while
+  content-free outcome history retains replay and ordering fences.
+- Local D1 covers revision races, rollback on outcome failure, replay, cross-user
+  access, stale claims, corrupt ciphertext/key/AAD/schema, Unicode/byte bounds,
+  TTL, legacy draft exclusion, populated migration replay and indexed cleanup.
+- Cleanup tested with 101 synthetic contexts: at most 100 per call; no production
+  DB or provider access. Existing V1 semantic data and drafts remain unchanged.
+- Full check PASS: 83 files / 1569 tests; typecheck, lint, build, generated types,
+  dry-run and diff check PASS. Final independent branch review still pending.
