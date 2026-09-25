@@ -77,7 +77,15 @@ export function reconcileConversation(input: {
   if (model.titleState === "AMBIGUOUS") request.title = null;
   const missing: MissingField[] = [];
   if (!request.title || model.titleState === "AMBIGUOUS") missing.push("title");
-  for (const field of temporal.missing) if (!missing.includes(field)) missing.push(field);
+  // Evidence describes this turn; absence in a relation-only answer must not
+  // erase a previously resolved authoritative slot in the merged request.
+  for (const field of temporal.missing) {
+    const resolved = field === "eventDate" ? request.eventDate !== null
+      : field === "date" ? request.reminderDate !== null
+        : field === "time" ? request.reminderTime !== null
+          : field === "seriesCount" ? request.count !== null : false;
+    if (!resolved && !missing.includes(field)) missing.push(field);
+  }
   if (request.lunarInput) {
     if (request.lunarInput.year === null) missing.push("year");
     else if (request.missing.includes("leapMonth")) missing.push("leapMonth");

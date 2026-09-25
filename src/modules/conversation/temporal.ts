@@ -146,6 +146,7 @@ export function extractConversationTemporalEvidence(input: {
   const eventStart = text.search(/\b(?:thi|deadline|han chot)\b/u);
   const reminderStart = text.search(/\bnhac\b/u);
   const eventFrame = (eventStart >= 0 && (reminderStart < 0 || eventStart < reminderStart))
+    || (eventStart >= 0 && date.state === "MISSING" && /\b(?:gap|urgent)\b/u.test(text))
     || (result.relation.state === "RESOLVED" && result.relation.value !== "STARTING_ON")
     || (lunarFollowup && priorLunar?.role === "EVENT");
   if (lunarIncomplete && !lunarInvalid && evidence.date.state !== "AMBIGUOUS" && lunarInputs.length === 1) {

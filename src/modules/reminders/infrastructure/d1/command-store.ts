@@ -10,6 +10,7 @@ import type {
 } from "../../command-service";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { ownedInbound, auth } from "@/modules/conversation/infrastructure/d1/context-store";
 
 interface ContextRow {
   chat_identity_id: string;
@@ -184,8 +185,15 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   }
 
   async createDraft(input: CreateDraftMutation): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
-    const ownership = this.ownershipBindings(input.message);
+    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder) + (input.conversationFence ? `
+      AND EXISTS (${ownedInbound}) AND EXISTS (SELECT 1 FROM conversation_contexts v2
+        WHERE v2.id = ? AND v2.revision = ? AND v2.status = 'DRAFT_READY' AND v2.last_inbound_id = ?
+          AND v2.chat_identity_id = ci.id AND v2.owner_id = c.user_id AND v2.expires_at > ?)` : "");
+    const ownership = [...this.ownershipBindings(input.message), ...(input.conversationFence ? [
+      ...auth({ sourceInboundId: input.message.id, claimMarker: input.message.claimMarker, ownerId: input.context.userId,
+        chatIdentityId: input.context.chatIdentityId, now: input.now }), input.conversationFence.id,
+      input.conversationFence.revision, input.message.id, input.now,
+    ] : [])];
     const statements = [
       this.database
         .prepare(

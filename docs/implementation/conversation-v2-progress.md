@@ -50,7 +50,7 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 6–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 7–9 remain. No user-facing V2 capability is enabled or deployed.
 
 ## Task 3 — encrypted revision-fenced context
 
@@ -97,3 +97,22 @@ Tasks 6–9 remain. No user-facing V2 capability is enabled or deployed.
   delivery suites on the additive schema: 85/85. Fresh full check: 87 files,
   1,681 tests; typecheck, build, lint, Worker type/dry-run and diff checks pass.
 - No remote migration, provider call or deployment performed.
+
+## Task 6 — guarded inbound composition
+
+- Explicit default-off application capability composes the V2 gateway,
+  encrypted context, deterministic reconciliation and existing one-off/series
+  transactions. No new production environment switch.
+- Real encrypted inbound/Worker composition tested with synthetic transport;
+  legacy drafts drain through deterministic controls before V2 can take over.
+- Three-turn exam flow, exact preview, confirmation retry, abandonment, read-only
+  LIST, new-request lunar reset, provider failure, missing schema, ownership and
+  durable attempt/budget fences covered. Proposal text exceeding the outbound
+  bound is rejected before storing a confirmable proposal, not truncated.
+- Relation-only follow-ups reconcile missing current-turn facts against already
+  resolved context. Urgency without an event anchor asks for it, never invents
+  cadence. User tone is read from owned preferences.
+- Bounded expiry cleanup joins the existing scheduler without aborting other
+  lanes; cron and Queue configuration unchanged.
+- Full fresh check: 89 files / 1711 tests PASS; typecheck/lint/build/types/dry-run
+  PASS. Independent whole-branch acceptance still pending.

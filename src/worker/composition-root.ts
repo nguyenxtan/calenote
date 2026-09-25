@@ -47,7 +47,12 @@ import type { WebhookRouteDependencies } from "./routes/webhooks";
 import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
-import { createSemanticGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { D1ConversationStore } from "@/modules/conversation/infrastructure/d1/context-store";
+import { D1ConversationRuntimeStore } from "@/modules/conversation/infrastructure/d1/runtime-store";
+import { D1SeriesStore } from "@/modules/reminders/infrastructure/d1/series-store";
+import { lunarCalendar } from "@/modules/conversation/lunar-calendar";
+import type { ConversationServiceDependencies } from "@/modules/conversation/service";
 import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
 import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig, SEMANTIC_BUDGET_CEILINGS } from "@/modules/intelligence/infrastructure/openrouter/config";
 import { D1SemanticBudgetStore } from "@/modules/semantic/infrastructure/d1/budget-store";
@@ -345,7 +350,7 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
 
-export async function createRuntimeOperations(env: Env): Promise<RuntimeOperations> {
+export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean } = {}): Promise<RuntimeOperations> {
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
@@ -353,11 +358,30 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
   const semantic = await createSemanticCapability(env, keyring);
+  // A capability is an explicit application composition choice, never an
+  // unreviewed environment switch. Existing deployments remain V1 by default.
+  const contexts = capabilities.conversationV2 ? new D1ConversationStore(env.DB, keyring) : undefined;
+  const policy = capabilities.conversationV2 ? parseSemanticRuntimeConfig(env) : undefined;
+  const conversationGateway: ConversationServiceDependencies["gateway"] = policy?.status === "READY"
+    ? createConversationGateway(policy.config, async (request, options) => {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST", signal: options.signal,
+        headers: { Authorization: `Bearer ${policy.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
+      });
+      return { status: response.status, ...await readBoundedSemanticResponse(response, policy.config.maxResponseBytes) };
+    }) : { prepare: () => ({ status: "FAILURE", category: "UNAVAILABLE" }) };
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
       keyring,
       semantic,
+      ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
+        runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
+        getTone: async (ownerId: string) => {
+          const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
+          return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;
+        },
+        gateway: conversationGateway, budgetStore: semantic.budgetStore } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
@@ -365,5 +389,15 @@ export async function createRuntimeOperations(env: Env): Promise<RuntimeOperatio
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, { store: loginStore, enqueue: (job) => env.JOBS.send(job) }),
+    ...(contexts ? { purgeConversationContexts: async (now: number, limit: number) => {
+      try {
+        const count = await contexts.purgeExpired(now, limit);
+        console.log(JSON.stringify({ operation: "conversation_cleanup", outcome: "OK", count }));
+        return count;
+      } catch {
+        console.log(JSON.stringify({ operation: "conversation_cleanup", outcome: "FAILED" }));
+        return 0;
+      }
+    } } : {}),
   };
 }

@@ -80,6 +80,7 @@ interface CommandMutationBase {
 }
 
 export interface CreateDraftMutation extends CommandMutationBase {
+  conversationFence?: { id: string; revision: number };
   draftId: string;
   encryptedTitle: EncryptedValue;
   titleKeyVersion: number;
@@ -115,6 +116,7 @@ export interface ReminderCommandStore {
 }
 
 export interface ProcessBoundChatDependencies {
+  conversation?: { handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult> };
   store: ReminderCommandStore;
   keyring: Pick<Keyring, "encryptSensitive" | "decryptSensitive">;
   reply(text: string): Promise<void>;
@@ -331,6 +333,15 @@ export async function processBoundChatMessage(
   }
 
   const normalized = normalizeWholeMessage(message.text);
+  if (dependencies.conversation && !normalized.startsWith("/connect")) {
+    // Existing one-off proposals keep their old deterministic confirmation
+    // authority; unrelated messages cannot enter a competing V2 draft.
+    const pending = await dependencies.store.findPendingDraft(message, context.chatIdentityId);
+    if (!pending) return dependencies.conversation.handle(message, context);
+    if (!CONFIRM_WORDS.has(normalized) && !CANCEL_WORDS.has(normalized)) {
+      return rejectWithReply(message, "Bạn còn một lời nhắc đang chờ. Gửi “có” để xác nhận hoặc “hủy” để bỏ trước nhé.", processingNow, dependencies, randomBytes);
+    }
+  }
   if (dependencies.semantic && (HELP_WORDS.has(normalized) || normalized.startsWith("/connect"))) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }

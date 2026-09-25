@@ -27,6 +27,24 @@ const afterSource = `EXISTS (SELECT 1 FROM inbound_updates current JOIN inbound_
 export class D1SeriesStore implements SeriesStore {
   constructor(private readonly db: D1Database, private readonly keyring: Keyring) {}
 
+  async findPending(scope: ConversationScope): ReturnType<SeriesStore["findPending"]> {
+    const row = await this.db.prepare(`SELECT id,revision,action FROM reminder_series_proposals
+      WHERE owner_id = ? AND chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?
+        AND EXISTS (${ownedInbound}) AND ${afterSource}
+        AND (action = 'CANCEL' OR EXISTS (SELECT 1 FROM conversation_contexts c
+          WHERE c.id = context_id AND c.revision = context_revision AND c.status = 'DRAFT_READY' AND c.expires_at > ?))`)
+      .bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope), scope.sourceInboundId, scope.now)
+      .first<{ id: string; revision: number; action: "CREATE" | "CANCEL" }>();
+    return row ? { proposalId: row.id, revision: row.revision, action: row.action } : null;
+  }
+  async discard(scope: ConversationScope, proposalId: string, revision: number): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE reminder_series_proposals SET status = 'CANCELLED', resolution_inbound_id = ?
+      WHERE id = ? AND revision = ? AND owner_id = ? AND chat_identity_id = ? AND status = 'PENDING'
+        AND EXISTS (${ownedInbound}) AND ${afterSource}`)
+      .bind(scope.sourceInboundId, proposalId, revision, scope.ownerId, scope.chatIdentityId, ...auth(scope), scope.sourceInboundId).run();
+    return result.meta.changes === 1;
+  }
+
   private async read(scope: ConversationScope, id: string, revision: number): Promise<ProposalRow | null> {
     if (!Number.isSafeInteger(revision) || revision < 1 || !Number.isSafeInteger(scope.now)) return null;
     return this.db.prepare(`SELECT * FROM reminder_series_proposals WHERE id = ? AND revision = ?

@@ -39,6 +39,7 @@ import type { SemanticContextStore } from "@/modules/semantic/context-store";
 import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
 import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
 import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { createConversationService, type ConversationServiceDependencies } from "@/modules/conversation/service";
 
 const CONNECT_COMMAND = /^\/connect ([A-HJ-NP-Z2-9]{26})$/u;
 const BIND_SUCCESS_REPLY = "Đã kết nối cuộc trò chuyện riêng này với Calenote.";
@@ -153,6 +154,7 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  conversation?: Omit<ConversationServiceDependencies, "commandStore" | "keyring" | "now" | "reply" | "list" | "processingFeedback">;
   store: InboundProcessorStore;
   keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive" | "digestCode" | "decryptCredential">;
   sendText?: SendText;
@@ -762,15 +764,7 @@ export async function processInbound(
       complete: (current, context, time) => dependencies.store.completeSemanticMessage(current, context, time),
       list: (input) => dependencies.store.listSemanticReminders(input),
     };
-    return processBoundChatMessage(message, {
-      store: dependencies.store,
-      keyring: dependencies.keyring,
-      now,
-      randomBytes,
-      reply: async (text) => {
-        await replyAfterTerminal(message, text, dependencies);
-      },
-      processingFeedback: message.provider === "zalo" ? async () => {
+    const processingFeedback = message.provider === "zalo" ? async () => {
         try {
           const token = await dependencies.keyring.decryptCredential(
             message.connectionId,
@@ -786,7 +780,14 @@ export async function processInbound(
         } catch {
           // Typing is bounded, no-retry UX feedback rather than a business outcome.
         }
-      } : undefined,
+      } : undefined;
+    const reply = async (text: string) => { await replyAfterTerminal(message, text, dependencies); };
+    const conversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
+      commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback,
+      list: input => dependencies.store.listSemanticReminders(input),
+    }) : undefined;
+    return processBoundChatMessage(message, {
+      store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
       intelligence: dependencies.intelligence,
       semantic,
     });

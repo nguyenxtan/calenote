@@ -39,6 +39,10 @@ describe("deterministic conversation reconciliation", () => {
     expect(decide("nhắc", snapshot({ title: "ôn thi", eventDate: date("2026-10-11"), count: 3, relation: "BEFORE_EVENT" }), continuation))
       .toMatchObject({ kind: "CLARIFY", field: "time", request: { eventDate: date("2026-10-11") } });
   });
+  it.each(["3 ngày trước ngày thi", "3 ngày trước ngày thi, không tính ngày thi"])("does not re-ask a resolved event anchor on relation-only followup: %s", text => {
+    expect(decide(text, snapshot({ title: "ôn thi", eventDate: date("2026-10-11"), reminderTime: "12:00", count: 3,
+      missing: ["seriesRelation"] }), continuation)).toMatchObject({ kind: "PROPOSE", request: { eventDate: date("2026-10-11"), relation: "BEFORE_EVENT", missing: [] } });
+  });
   it("fills a missing time without re-inferring prior date or title", () => {
     expect(decide("9h", snapshot({ title: "gọi khách", reminderDate: date("2026-09-26") }), continuation))
       .toMatchObject({ kind: "PROPOSE", request: { title: "gọi khách", reminderDate: date("2026-09-26"), reminderTime: "09:00" } });

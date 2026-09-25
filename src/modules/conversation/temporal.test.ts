@@ -28,6 +28,12 @@ it("distinguishes an event date from the time to remind", () => {
   expect(value.reminderDate.state).toBe("MISSING");
   expect(value.time.state).toBe("MISSING");
 });
+it.each(["nhắc ôn thi, gấp lắm", "gấp: nhắc chuẩn bị deadline", "nhắc hoàn thành trước hạn chót, urgent"])("asks for an unknown urgent event anchor without inventing cadence: %s", text => {
+  const evidence = extract(text);
+  expect(evidence.missing).toContain("eventDate");
+  expect(evidence.count.state).toBe("MISSING");
+  expect(evidence.eventDate.state).toBe("MISSING");
+});
 it("keeps conflicting dates ambiguous", () => {
   expect(extract("ngày 10/10/2026 hoặc 11/10/2026 nhắc ôn thi").reminderDate.state).toBe("AMBIGUOUS");
 });

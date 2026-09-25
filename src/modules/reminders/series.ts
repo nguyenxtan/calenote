@@ -35,6 +35,8 @@ export function expandFiniteSeries(request: PendingRequest, now: number): Series
 }
 
 export interface SeriesStore {
+  findPending(scope: ConversationScope): Promise<{ proposalId: string; revision: number; action: "CREATE" | "CANCEL" } | null>;
+  discard(scope: ConversationScope, proposalId: string, revision: number): Promise<boolean>;
   propose(scope: ConversationScope, request: PendingRequest, contextId: string, contextRevision: number): Promise<{ proposalId: string; revision: number } | null>;
   confirm(scope: ConversationScope, proposalId: string, revision: number): Promise<
     { status: "CONFIRMED" | "ALREADY_CONFIRMED"; seriesId: string } | { status: "STALE" | "EXPIRED" | "REJECTED" }>;
