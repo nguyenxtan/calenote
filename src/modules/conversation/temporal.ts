@@ -6,6 +6,7 @@ export interface ConversationTemporalEvidence {
   calendar: Evidence<CalendarKind>; eventDate: Evidence<DateFact>; reminderDate: Evidence<DateFact>;
   time: Evidence<string>; count: Evidence<number>; relation: Evidence<SeriesRelation>; missing: MissingField[];
   lunarInput?: PendingLunarInput;
+  unsupportedCadence?: boolean;
 }
 // Matching new dialogue productions must not rewrite the accepted scanner's
 // vocabulary. Keep original NFC graphemes for every span we do not consume.
@@ -54,6 +55,14 @@ export function extractConversationTemporalEvidence(input: {
     }
   }
   const text = fold(original);
+  // Classify cadence before consuming counts: an interval (every N days)
+  // is not a finite count (N consecutive days). Only daily finite grammar is
+  // supported; other frequency units and explicit repetition fail closed.
+  result.unsupportedCadence = /\blap\s+lai\b/u.test(text);
+  for (const frequency of text.matchAll(/\b(moi|hang|lien\s+tuc)\s+(?:(?:trong|vao|luc)\s+){0,2}(?:(\d+|mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi)\s*)?(giay|phut|gio|h|ngay|tuan|thang|nam|thu\s*[2-8])\b/gu)) {
+    const [, marker, interval, unit] = frequency;
+    if (unit !== "ngay" || marker === "hang" || (marker === "moi" && interval !== undefined)) result.unsupportedCadence = true;
+  }
   const lunarRequested = /\b(?:am lich|lich am|ngay am)\b/u.test(text);
   const solarRequested = /\b(?:duong lich|lich duong)\b/u.test(text);
   // A question about the capability is not a scheduling request.

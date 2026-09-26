@@ -55,7 +55,7 @@ the semantic path. Its presence does not prove user-visible latency; the next
 design measures and reduces feedback delay without changing Queue batching or
 per-chat concurrency.
 
-**LOCAL_IMPLEMENTATION — 2026-09-26; default-off, final review/live acceptance pending:**
+**OFFLINE_VERIFIED — 2026-09-26; default-off, live acceptance pending:**
 [Conversation V2, finite urgent reminders, and explicit lunar dates](./superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md)
 consolidates contextual greetings, clarification/edit/abandon behavior,
 encrypted short-lived conversation context, finite daily reminder series,

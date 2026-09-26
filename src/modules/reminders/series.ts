@@ -8,10 +8,16 @@ export type SeriesExpansion = { status: "READY"; occurrences: SeriesOccurrence[]
 const DAY = 86_400_000;
 
 export function expandFiniteSeries(request: PendingRequest, now: number): SeriesExpansion {
+  if (request.count !== null && request.count < 2) return { status: "REJECTED", reason: "LIMIT" };
+  return expandFiniteOccurrences(request, now);
+}
+
+/** Shared relation arithmetic, including a single occurrence before an event. */
+export function expandFiniteOccurrences(request: PendingRequest, now: number): SeriesExpansion {
   const reject = (reason: "MISSING" | "INVALID" | "PAST" | "LIMIT"): SeriesExpansion => ({ status: "REJECTED", reason });
   if (!PendingRequestSchema.safeParse(request).success || !Number.isSafeInteger(now) || now < 0) return reject("INVALID");
   if (!request.title || !request.reminderTime || !request.relation || request.count === null || request.missing.length || request.lunarInput) return reject("MISSING");
-  if (request.count < 2 || request.count > 30) return reject("LIMIT");
+  if (request.count < 1 || request.count > 30) return reject("LIMIT");
   const anchor = request.relation === "STARTING_ON" ? request.reminderDate : request.eventDate;
   if (!anchor) return reject("MISSING");
   if (anchor.calendar !== request.calendar) return reject("INVALID");

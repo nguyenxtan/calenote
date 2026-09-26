@@ -33,7 +33,7 @@ No live requests, account credentials or production data were used.
 ## Provenance
 
 Implementation base: `4fa122036719a53f257568bd84370bfdccbdab86`.
-Task 9 working-tree content is bound by these SHA-256 digests, not falsely
+Task 9 post-review working-tree content is bound by these SHA-256 digests, not falsely
 attributed to the base commit. Recompute after any covered source change.
 
 | Component | SHA-256 |
@@ -42,9 +42,9 @@ attributed to the base commit. Recompute after any covered source change.
 | canonical prompt | `c73a46d1481201ce523b4a501f4f43f7a43690f8fcb102e13ebcb03f70f06a37` |
 | strict model schema | `87b6bb1dae63cd6e2671a3cc8abf33fb58d008d240d92d646fa0cca241aff27a` |
 | calendar artifact file | `68e4cc28fad325ffaa56467b2b0639b6313f9f6899c497db431d21f216c59ff3` |
-| reconciliation | `f93a231ad2899dbdc2862655ada5c56779284be981978a492b798953bdc7dda4` |
+| reconciliation | `c274b8b76ebe619a7211ec716f7bdb2ea7293f580bbbe3b0ffa189a0cad42ee3` |
 | scorer | `1a96efec63a37aee220906b9327c4b113a01b654987fcc737d4a8b67c0e92540` |
-| runtime source tree | `8b55dedfc6ba802cdd78f2231105d58b774ce3c5b01887e2636c3ad8be578bd8` |
+| runtime source tree | `7d6e52b4a3b1d209c3deea903ab11d65fc7fe722c55f9a32655677bc245a3625` |
 | migrations tree | `03f06c154a9d937d48134b65e3523eb569a976e54b397b634329d82cf3ee8d8b` |
 | canonical configuration | `c6ffbcff7bc3adf7773fe5518b9b9f0e3a7731b041256dcd645c2196d6d09fb0` |
 
@@ -74,6 +74,15 @@ uncertain deliveries are not marked recalled. This proves local compatibility,
 not a remote migration or current deployed rollback version.
 
 ## Live acceptance still required
+
+The independent review of `cab27b6..07f2f6f` found four Important issues,
+not a clean acceptance from green tests alone: unsupported cadence downgrade,
+count-one event offset, transferred one-off dialogue gating, and incomplete
+latency measurements. The author correction pass has dedicated failing-then-
+passing service/D1/transport regressions, including transaction races and
+rollback. The refreshed corpus above still passes 37/37, but does not itself
+exercise every integration regression. See the execution evidence for final
+whole-repository counts. No second independent review is claimed.
 
 Same first candidate only: `google/gemini-2.5-flash-lite`, `google-vertex/eu`,
 privacy/ZDR, no fallback. Before inference, approve a **new** V2 live profile,

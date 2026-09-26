@@ -764,6 +764,9 @@ export async function processInbound(
   }
 
   if (message.connectionState === "ACTIVE_BOUND") {
+    // Common monotonic origin includes bound identity/claim preparation,
+    // context, inference and persistence, not just the final transport call.
+    const eligibleStarted = performance.now();
     const semantic: BoundChatSemanticDependencies | undefined = dependencies.semantic && {
       service: createSemanticService({ ...dependencies.semantic, now,
         attemptStore: { claimInbound: async (scope) => scope.sourceInboundId === message.id
@@ -774,7 +777,6 @@ export async function processInbound(
       list: (input) => dependencies.store.listSemanticReminders(input),
     };
     const processingFeedback = message.provider === "zalo" && dependencies.feedbackLifetime ? async () => {
-      const started = performance.now();
       let releaseDispatch!: () => void;
       const dispatched = new Promise<void>(resolve => { releaseDispatch = resolve; });
       startProcessingFeedback({ eligible: true, lifetime: dependencies.feedbackLifetime!, observe: (outcome, elapsed) => {
@@ -788,7 +790,7 @@ export async function processInbound(
             { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
           );
           if (signal.aborted) return;
-          observeTiming(dependencies.observeTiming, "TYPING_DISPATCH", performance.now() - started);
+          observeTiming(dependencies.observeTiming, "TYPING_DISPATCH", performance.now() - eligibleStarted);
           releaseDispatch();
           await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
             message.provider,
@@ -803,9 +805,8 @@ export async function processInbound(
       await dispatched;
       } : undefined;
     const reply = async (text: string) => {
-      const started = performance.now();
       try { await replyAfterTerminal(message, text, dependencies); }
-      finally { observeTiming(dependencies.observeTiming, "FINAL_REPLY", performance.now() - started); }
+      finally { observeTiming(dependencies.observeTiming, "FINAL_REPLY", performance.now() - eligibleStarted); }
     };
     const conversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
       commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback, observeTiming: dependencies.observeTiming,

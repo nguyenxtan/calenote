@@ -171,6 +171,19 @@ it("never reads an expired draft even within the conversation idle TTL", async (
   expect(await h.store.load({...h.scope(1), now: NOW + 600_000})).toBeNull();
 });
 
+it("a no-op revision replay cannot invalidate a draft written after the original CAS", async () => {
+  await h.store.save(h.scope(), null, h.initial);
+  const next = { ...h.initial, revision: 2 };
+  expect(await h.store.save(h.scope(1), 1, next)).toBe("SAVED");
+  // Emulate an old Worker finishing an already-started legacy draft write.
+  await h.db.prepare(`INSERT INTO command_drafts
+    (id,chat_identity_id,source_inbound_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,expires_at,created_at,updated_at)
+    VALUES ('late-draft','chat-one','one-0',x'01',zeroblob(12),1,?,'Asia/Ho_Chi_Minh','PENDING',?,?,?)`)
+    .bind(NOW + 100_000, NOW + 60_000, NOW, NOW).run();
+  expect(await h.store.save({ ...h.scope(1), claimMarker: "revoked" }, 1, next)).toBe("STALE");
+  expect(await h.db.prepare("SELECT status FROM command_drafts WHERE id = 'late-draft'").first("status")).toBe("PENDING");
+});
+
 it("rolls back a context revision if its durable outcome cannot be recorded", async () => {
   await h.store.save(h.scope(), null, h.initial);
   await h.db.prepare(`INSERT INTO conversation_context_outcomes

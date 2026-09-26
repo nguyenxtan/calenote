@@ -50,7 +50,9 @@ fresh independent whole-branch review before release. No per-task human review.
 
 ## Remaining work
 
-Tasks 8–9 remain. No user-facing V2 capability is enabled or deployed.
+Tasks 1–9 are implemented and offline-verified. Final review findings and the
+author correction evidence are recorded below. No user-facing V2 capability is
+enabled or deployed; live evaluation and release authorization remain.
 
 ## Task 3 — encrypted revision-fenced context
 
@@ -176,6 +178,59 @@ Tasks 8–9 remain. No user-facing V2 capability is enabled or deployed.
   new conversation modules or offline runner; timing sinks project only bounded
   stage/outcome/duration, cleanup logs only outcome/count. Existing ingress
   diagnostic allowlists preserved. No live key/provider/database access.
-- Final independent whole-branch review remains pending at this checkpoint.
-  Capability stays default-off. Live V2 evaluation, remote migration, reviewed
+- Final independent whole-branch review at `cab27b6..07f2f6f` returned
+  Critical 0 / Important 4 / Minor 0. Author correction pass below; no second
+  independent review is claimed. Capability stays default-off.
+  Live V2 evaluation, remote migration, reviewed
   master promotion and exact-master deploy authorization remain release gates.
+
+## Final review correction pass
+
+1. Unsupported recurrence must not degrade to one-off: service RED tests caught
+   weekly, minute-frequency, repeat and mixed daily/weekly requests. Classify
+   cadence before consuming finite counts, so every-N-days is not confused with
+   N-consecutive-days. Only the bounded daily grammar is supported.
+2. Count-one BEFORE_EVENT must apply its offset: service RED scheduled 11/10
+   instead of 10/10. Shared finite occurrence arithmetic now applies before the
+   canonical one-off transfer. Series storage still requires 2–30 children.
+3. A V2 one-off must permit contextual edit/greeting/capability/LIST: real D1
+   RED tests hit the old blanket pending guard. Owner/claim/context/transfer
+   lineage now distinguishes V2 from legacy drafts. Context revision and old
+   draft invalidation are atomic; old confirmation and edit cannot both win.
+   Tests cover edit-first, confirm-first, concurrent execution, failure rollback,
+   contextual abandonment and unchanged context/drafts during read-only dialogue.
+   An additional RED replay test caught a no-op CAS cancelling a later legacy
+   draft; invalidation now requires this transaction's successful outcome write.
+4. Typing/final-reply metrics must include processing: injected claim/model/send
+   durations exposed FINAL_REPLY=30ms despite 600ms elapsed. Both stages now
+   share the post-inbound-claim monotonic origin, while MODEL remains its own
+   duration and QUEUE_WAIT remains separate. This is not a real Zalo UI metric.
+
+Review scope rulings: live Gemini quality/Zalo-visible timing require separately
+authorized live acceptance; remote schema/config/rollback require read-only
+release preflight; offline lunar vectors do not replace a refreshed external
+calendar-source audit; admin releases and burst-message handling stay deferred.
+Potential cost: live-model/remote compatibility or unsupported-language gaps may
+remain despite local tests, so none of these are labelled production-ready.
+
+Final fresh verification after the last CAS fix:
+
+- Focused conversation/series/scorer/local D1: 9 files / **210 tests PASS**.
+- Full `pnpm check`: **94 files / 1759 tests PASS**, documentation test PASS,
+  typecheck/lint/build/Worker type check/dry-run PASS (107.10-second test phase).
+- Separate `pnpm typecheck` and `git diff --check`: PASS.
+- Fatal-on-network corpus: 22 scenarios / **37 turns PASS**; provenance refreshed
+  in the benchmark report, historical V1 artifacts untouched.
+- Static observability scan: no direct logging, network call or environment
+  credential access in new conversation modules/offline runner; only bounded
+  timing/outcome/count sinks in composition. No live transport was exercised.
+- Full check reported 146 nonfatal lint warnings from the generated ignored
+  benchmark bundle, identical to the prior Task 9 run; zero lint errors. This
+  generated scratch artifact is not committed or part of deployed runtime.
+- Independent review findings: Critical 0 / Important 4 / Minor 0 at reviewed
+  head; all four Important findings addressed by the author RED→GREEN pass.
+  Remaining known Critical/Important implementation findings: 0. This is not a
+  fresh second-review verdict and not production/live-model acceptance.
+
+The worktree and plan-specific evidence are retained per the explicit preserve-
+work instruction; no reset, stash, deletion, push, merge or deployment occurred.

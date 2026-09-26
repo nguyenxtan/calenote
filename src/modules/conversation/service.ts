@@ -7,7 +7,7 @@ import { reconcileSemanticInterpretation } from "@/modules/semantic/reconciliati
 import { MAX_SEMANTIC_SCHEDULE_AHEAD_MS } from "@/modules/semantic/validation";
 import type { BoundChatContext, BoundChatMessage, ProcessBoundChatResult, ReminderCommandStore } from "@/modules/reminders/command-service";
 import { semanticQueryRange, type SemanticReminderQuery, type QueriedReminder } from "@/modules/reminders/semantic-query";
-import { expandFiniteSeries, type SeriesStore } from "@/modules/reminders/series";
+import { expandFiniteOccurrences, expandFiniteSeries, type SeriesStore } from "@/modules/reminders/series";
 import { CONVERSATION_ABSOLUTE_TTL_MS, CONVERSATION_IDLE_TTL_MS, ConversationSnapshotSchema,
   ConversationModelSchema, type ConversationModel, type ConversationScope, type ConversationSnapshot, type PendingRequest } from "./contracts";
 import type { ConversationInput } from "./prompt";
@@ -75,6 +75,10 @@ export function createConversationService(deps: ConversationServiceDependencies)
     };
   }
   return {
+    async ownsPendingDraft(message: BoundChatMessage, context: BoundChatContext, draftId: string): Promise<boolean> {
+      return deps.runtimeStore.ownsPendingDraft({ ownerId: context.userId, chatIdentityId: context.chatIdentityId,
+        sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() }, draftId);
+    },
     async handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult> {
       const scope: ConversationScope = { ownerId: context.userId, chatIdentityId: context.chatIdentityId,
         sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() };
@@ -155,9 +159,12 @@ export function createConversationService(deps: ConversationServiceDependencies)
               + expansion.occurrences.map(item => `${displayDate(item.localDate)} ${request.reminderTime}`).join("\n");
           } else {
             const date = request.reminderDate ?? request.eventDate;
-            scheduledAt = date && request.reminderTime ? Date.parse(`${date.solarDate}T${request.reminderTime}:00+07:00`) : NaN;
+            const expansion = request.relation ? expandFiniteOccurrences({ ...request, count: request.count ?? 1 }, deps.now()) : null;
+            scheduledAt = expansion ? expansion.status === "READY" ? expansion.occurrences[0].scheduledAt : NaN
+              : date && request.reminderTime ? Date.parse(`${date.solarDate}T${request.reminderTime}:00+07:00`) : NaN;
             if (!Number.isSafeInteger(scheduledAt) || scheduledAt <= deps.now() || scheduledAt - deps.now() > MAX_SEMANTIC_SCHEDULE_AHEAD_MS) return finish(scope, "Thời điểm nhắc chưa hợp lệ hoặc đã qua. Bạn chọn lại ngày giờ nhé; chưa tạo lời nhắc nào.");
-            preview = `${request.title}\n${displayDate(date!.solarDate)} ${request.reminderTime} · Asia/Ho_Chi_Minh`;
+            const localDate = expansion?.status === "READY" ? expansion.occurrences[0].localDate : date!.solarDate;
+            preview = `${request.title}\n${displayDate(localDate)} ${request.reminderTime} · Asia/Ho_Chi_Minh`;
           }
           if (request.eventDate) preview += `\nNgày sự kiện: ${displayDate(request.eventDate.solarDate)} dương lịch.`;
           const anchor = request.reminderDate ?? request.eventDate;

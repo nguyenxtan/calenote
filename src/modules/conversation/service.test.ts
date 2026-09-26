@@ -15,20 +15,34 @@ function fixture() {
     commandStore: { findBoundContext: async () => null, findPendingDraft: async () => null,
       createDraft: vi.fn(async () => "CONFLICT" as const), confirmDraft: vi.fn(async () => "CONFLICT" as const), cancelDraft: async () => "CONFLICT",
       expireDraft: async () => "CONFLICT", rejectMessage: async () => true },
-    runtimeStore: { claimAttempt: vi.fn(async () => true), complete: vi.fn(async () => true) },
+    runtimeStore: { ownsPendingDraft: async () => false, claimAttempt: vi.fn(async () => true), complete: vi.fn(async () => true) },
     gateway: { prepare: vi.fn(() => ({ status: "READY" as const, model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", maximumCostMicrounits: 10, dispatch })) },
     budgetStore: { reservePaidCall: vi.fn(async () => ({ status: "RESERVED" as const, reservationId: "synthetic", reservedMaximumMicrounits: 10 })),
       markDispatched: vi.fn(async () => true), finalizeUsage: vi.fn(async () => true), releaseOrExpireReservation: vi.fn(async () => true), reapExpiredReservations: async () => 0 },
     keyring: { encryptSensitive: async () => { throw new Error("Unexpected mutation"); }, decryptSensitive: async () => "synthetic" },
     now: () => now, calendar: lunarCalendar, reply: vi.fn(async () => {}), list: vi.fn(async () => []),
   };
-  const handle = () => createConversationService(deps).handle({ id: "inbound", connectionId: "connection", providerUserId: "provider-user",
-    privateChatId: "chat", claimMarker: "claim", text: "mai nhắc gọi mẹ", receivedAt: now }, {
+  const handle = (text = "mai nhắc gọi mẹ") => createConversationService(deps).handle({ id: "inbound", connectionId: "connection", providerUserId: "provider-user",
+    privateChatId: "chat", claimMarker: "claim", text, receivedAt: now }, {
     userId: "owner", chatIdentityId: "chat-identity", workspaceId: "workspace", timezone: "Asia/Ho_Chi_Minh", inboundRowId: 1,
   });
   return { deps, dispatch, handle };
 }
 describe("conversation paid-call and semantic safety boundary", () => {
+  it.each(["mỗi tuần", "hàng tháng", "mỗi năm", "mỗi 2 giờ", "mỗi 30 phút", "mỗi 2 ngày", "mỗi 9h", "liên tục 2 giờ", "lặp lại", "3 ngày liên tục mỗi tuần"])("never downgrades unsupported cadence %s into a proposal", async cadence => {
+    const h = fixture();
+    await h.handle(`mai 9h nhắc gọi mẹ ${cadence}`);
+    expect(h.deps.contextStore.save).not.toHaveBeenCalled();
+    expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
+    expect(h.deps.seriesStore.propose).not.toHaveBeenCalled();
+  });
+  it("applies BEFORE_EVENT arithmetic before transferring a count-one draft", async () => {
+    const h = fixture();
+    h.deps.keyring.encryptSensitive = async () => ({ ciphertext: new ArrayBuffer(16), iv: new ArrayBuffer(12) });
+    h.deps.commandStore.createDraft = vi.fn(async () => "COMMITTED" as const);
+    expect((await h.handle("nhắc gọi mẹ 1 ngày trước ngày thi 11/10/2026 lúc 9h")).status).toBe("DRAFT_CREATED");
+    expect(h.deps.commandStore.createDraft).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: Date.parse("2026-10-10T09:00:00+07:00") }));
+  });
   it("starts managed feedback after the durable claim but before context loading", async () => {
     const h = fixture(); const order: string[] = [];
     h.deps.runtimeStore.claimAttempt = async () => { order.push("claim"); return true; };

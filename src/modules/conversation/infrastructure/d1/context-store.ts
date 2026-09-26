@@ -91,8 +91,9 @@ export class D1ConversationStore implements ConversationStore {
         .bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope));
       const result = await this.database.batch([
         ...(expectedRevision === null ? [expiry] : []), statement, this.recordOutcome(scope, next.id, next.revision, "SAVE"),
+        this.invalidateTransferredDraft(scope, next.id, next.revision),
       ]);
-      return result[result.length - 2].meta.changes === 1 ? "SAVED" : "STALE";
+      return result[expectedRevision === null ? 1 : 0].meta.changes === 1 ? "SAVED" : "STALE";
     } catch (error) {
       if (error instanceof Error && /UNIQUE constraint failed/iu.test(error.message)) return "STALE";
       throw error;
@@ -107,6 +108,24 @@ export class D1ConversationStore implements ConversationStore {
       SELECT ?,?,?,?,? WHERE changes() = 1`).bind(id, revision, scope.sourceInboundId, operation, scope.now);
   }
 
+  private invalidateTransferredDraft(scope: ConversationScope, id: string, revision: number) {
+    // Runs in the context CAS transaction. A concurrent confirmation either
+    // wins first (CAS fails), or sees the old draft already cancelled.
+    // Prior SAVE lineage excludes unrelated V1 drafts; replay cannot cancel
+    // its own replacement. No dependency on the later series migration.
+    return this.database.prepare(`UPDATE command_drafts SET status = 'CANCELLED', resolution_inbound_id = ?, updated_at = ?
+      WHERE changes() = 1 AND chat_identity_id = ? AND status = 'PENDING' AND source_inbound_id <> ?
+        AND EXISTS (SELECT 1 FROM conversation_contexts c WHERE c.id = ? AND c.owner_id = ?
+          AND c.chat_identity_id = ? AND c.revision = ? AND c.last_inbound_id = ?
+          AND EXISTS (SELECT 1 FROM conversation_context_outcomes o WHERE o.context_id = c.id
+            AND o.revision = c.revision AND o.source_inbound_id = c.last_inbound_id)
+          AND EXISTS (SELECT 1 FROM conversation_context_outcomes prior WHERE prior.context_id = c.id
+            AND prior.revision = c.revision - 1 AND prior.operation = 'SAVE'
+            AND prior.source_inbound_id = command_drafts.source_inbound_id))`)
+      .bind(scope.sourceInboundId, scope.now, scope.chatIdentityId, scope.sourceInboundId,
+        id, scope.ownerId, scope.chatIdentityId, revision, scope.sourceInboundId);
+  }
+
   async finish(scope: ConversationScope, id: string, expectedRevision: number,
     status: "COMPLETED" | "CANCELLED" | "INVALID"): Promise<boolean> {
     if (!validScope(scope) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1
@@ -119,6 +138,7 @@ export class D1ConversationStore implements ConversationStore {
         .bind(status, scope.now, scope.sourceInboundId, scope.claimMarker, id, scope.ownerId, scope.chatIdentityId,
           expectedRevision, scope.now, ...auth(scope), scope.sourceInboundId, scope.sourceInboundId),
       this.recordOutcome(scope, id, expectedRevision + 1, "FINISH"),
+      this.invalidateTransferredDraft(scope, id, expectedRevision + 1),
     ]);
     if (result[0].meta.changes === 1) return true;
     return Boolean(await this.database.prepare(`SELECT 1 FROM conversation_contexts WHERE id = ? AND owner_id = ?

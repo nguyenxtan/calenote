@@ -40,6 +40,7 @@ export function reconcileConversation(input: {
     return { kind: "CLARIFY", request: { ...(active?.request ?? request), missing: ["intent"] }, field: "intent" };
   }
   const temporal = input.temporal;
+  if (temporal.unsupportedCadence) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
   if ([temporal.calendar, temporal.eventDate, temporal.reminderDate, temporal.time, temporal.count, temporal.relation]
     .some(fact => fact.state === "AMBIGUOUS")) return conflict();
   const edit = model.dialogueAct === "EDIT" && input.editRequested;
