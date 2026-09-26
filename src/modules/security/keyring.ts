@@ -15,6 +15,9 @@ function webBytes(value: Uint8Array): WebBytes {
 export type SensitiveContentPurpose =
   | "inbound-message"
   | "semantic-context"
+  | "conversation-context"
+  | "series-proposal"
+  | "reminder-calendar"
   | "draft-title"
   | "action-candidate-title"
   | "reminder-title"

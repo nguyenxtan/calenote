@@ -34,6 +34,20 @@ plans are audit evidence only; they do not override this document.
 
 ## Worker runtime and persistence
 
+### Undeployed Conversation V2 branch — 2026-09-26
+
+The isolated `codex/conversation-v2-urgent-lunar` package adds bounded encrypted
+dialogue context, finite daily series, explicit Vietnamese lunar dates, managed
+nonblocking typing and owner-scoped web series controls. These paths are
+default-off application capabilities. They are **not** a deployed or live-model
+accepted feature. New additive migrations 0007/0008 have only been tested locally.
+See [offline evidence](../benchmarks/conversation-v2-results.md),
+[implementation progress](../implementation/conversation-v2-progress.md) and
+[release gates](../runbooks/conversation-v2-release.md). The domain is intended
+for user UAT, but existing production-labelled resources are not thereby isolated.
+
+### Existing runtime
+
 `src/worker/index.ts` is the runtime composition root. It composes the HTTP
 router/controllers, D1 stores, encrypted keyring, provider adapters, Queue
 producer/consumer, and scheduled handler. Queue payloads carry opaque IDs, not

@@ -42,7 +42,7 @@ async function createHarness(options: HarnessOptions = {}) {
   const deliveryApi = await deliveryModule();
   expect(deliveryApi).not.toBeNull();
   if (!deliveryApi) throw new Error("delivery module missing");
-  const db = new SqliteD1Database();
+  const db = new SqliteD1Database({ conversationV2: true });
   databases.push(db);
   const keyring = await createKeyring(master);
   const encryptedToken = await keyring.encryptCredential(connectionId, "telegram", 1, token);

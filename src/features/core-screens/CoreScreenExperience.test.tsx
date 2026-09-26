@@ -16,11 +16,13 @@ beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-10T05
 afterEach(() => { vi.restoreAllMocks(); });
 
 function installFetch(extra: (path: string) => Response | undefined = () => undefined) {
-  const fetcher = vi.fn(async (input: string | URL | Request) => {
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    void init;
     const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
     if (path === "/api/session") return json({ data: { user } });
     if (path === "/api/reminders") return json({ data: { reminders: [reminder] } });
     if (path === "/api/actions") return json({ data: { actions: [action] } });
+    if (path === "/api/reminder-series") return extra(path) ?? json({ data: { series: [] } });
     return extra(path) ?? json({ error: { code: "NOT_FOUND", message: "Không tìm thấy." } }, 404);
   });
   vi.stubGlobal("fetch", fetcher);
@@ -28,6 +30,23 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 }
 
 describe("CoreScreenExperience", () => {
+  it("loads grouped series from the authenticated API and refreshes after an explicit decision", async () => {
+    let confirmed = false;
+    const series = { publicId: "A".repeat(22), title: "Ôn thi theo chuỗi", revision: 1, state: "PROPOSED", action: "CREATE",
+      calendarLabel: "Dương lịch", eventLabel: null, occurrences: ["2026-10-08", "2026-10-09", "2026-10-10"].map(localDate => ({ localDate, localTime: "12:00", status: "PROPOSED" })) };
+    const fetcher = installFetch(path => path === "/api/reminder-series" ? json({ data: { series: confirmed ? [] : [series] } }) : undefined);
+    const initial = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (input, ...rest) => {
+      const init = rest[0] as RequestInit | undefined;
+      if (input === "/api/reminder-series" && init?.method === "POST") { confirmed = true; return json({ data: { result: "CONFIRMED" } }); }
+      return initial(input);
+    });
+    render(<CoreScreenExperience screen="reminders" />);
+    expect(await screen.findByText(series.title)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Xác nhận tạo chuỗi nhắc" }));
+    await waitFor(() => expect(screen.queryByText(series.title)).not.toBeInTheDocument());
+    expect(fetcher).toHaveBeenCalledWith("/api/reminder-series", expect.objectContaining({ method: "POST", body: JSON.stringify({ publicId: series.publicId, revision: 1, action: "CONFIRM" }) }));
+  });
   it("renders a calendar from authenticated reminder data and exposes period controls", async () => {
     installFetch();
     const interaction = userEvent.setup();

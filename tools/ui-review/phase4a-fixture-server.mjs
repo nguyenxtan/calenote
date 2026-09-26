@@ -4,6 +4,7 @@ import path from "node:path";
 
 const scenarios = new Set(["populated", "action-candidate", "empty", "partial-failure", "calendar-populated", "calendar-empty", "calendar-error", "inbox-populated", "inbox-empty", "inbox-error", "reminders-populated", "reminders-empty", "reminders-error", "connections", "connections-attention", "activity", "activity-empty", "settings", "landing", "login-email", "login-otp", "onboarding-welcome", "onboarding-provider", "onboarding-connection", "onboarding-success"]);
 const scenario = process.argv[process.argv.indexOf("--scenario") + 1];
+scenarios.add("series");
 const port = Number(process.argv[process.argv.indexOf("--port") + 1] ?? 4174);
 const outputRootArgument = process.argv.indexOf("--output-root");
 const outputRoot = path.resolve(outputRootArgument === -1 ? "out" : process.argv[outputRootArgument + 1]);
@@ -28,6 +29,11 @@ const empty = { data: { reminders: [] } };
 const emptyActions = { data: { actions: [] } };
 const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "application/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 function fixture(pathname, method) {
+  if (pathname === "/api/reminder-series") return [200, { data: { series: scenario === "series" ? [{
+    publicId: "AAAAAAAAAAAAAAAAAAAAAA", revision: 1, title: "Ôn thi — chuỗi nhắc mẫu", state: "PROPOSED", action: "CREATE",
+    calendarLabel: "Âm lịch Việt Nam: 1/9/2026 → 10/10/2026 dương lịch", eventLabel: "Ngày sự kiện: 11/10/2026 dương lịch",
+    occurrences: Array.from({ length: 30 }, (_, index) => ({ localDate: `2026-10-${String(index + 1).padStart(2, "0")}`, localTime: "12:00", status: "PROPOSED" })),
+  }] : [] } }];
   if (pathname === "/api/session") return [scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? 401 : 200, scenario.startsWith("login-") || scenario.startsWith("onboarding-") ? { error: { code: "UNAUTHENTICATED", message: "Đăng nhập là cần thiết." } } : session];
   if (pathname === "/api/auth/request-code" && method === "POST") return [202, { data: { accepted: true } }];
   if (pathname === "/api/auth/verify-code" && method === "POST") return [200, { data: { authenticated: true } }];

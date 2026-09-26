@@ -29,6 +29,7 @@ export interface QueueOperations {
 }
 
 export interface ScheduledOperations {
+  purgeConversationContexts?(now: number, limit: number): Promise<unknown>;
   claimDueReminders(now: number, limit: number): Promise<unknown>;
   redriveInboundOrphans(now: number, limit: number): Promise<unknown>;
   redriveLoginCodes(now: number, limit: number): Promise<unknown>;
@@ -143,6 +144,7 @@ export async function runScheduledWork(
     operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT),
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
+    ...(operations.purgeConversationContexts ? [operations.purgeConversationContexts(controller.scheduledTime, 100)] : []),
   ]);
 }
 
@@ -151,8 +153,7 @@ export default {
     return routeRequest(request, env, ctx);
   },
   async queue(batch: MessageBatch<unknown>, env, ctx) {
-    void ctx;
-    await handleQueueEvent(batch, () => createRuntimeOperations(env));
+    await handleQueueEvent(batch, () => createRuntimeOperations(env, {}, ctx));
   },
   async scheduled(controller, env, ctx) {
     void ctx;

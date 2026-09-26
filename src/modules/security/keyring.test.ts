@@ -69,6 +69,16 @@ describe("Keyring", () => {
     expect(keys.constantTimeEqual(secrets.headerSecret, `${secrets.headerSecret}x`)).toBe(false);
   });
 
+  it("separates conversation context from V1 semantic context and other scopes", async () => {
+    const keys = await createKeyring(TEST_MASTER_KEY);
+    const scope = JSON.stringify(["owner", "chat", "context"]);
+    const encrypted = await keys.encryptSensitive("conversation-context", scope, 1, "synthetic context");
+    expect(await keys.decryptSensitive("conversation-context", scope, 1, encrypted)).toBe("synthetic context");
+    await expect(keys.decryptSensitive("semantic-context", scope, 1, encrypted)).rejects.toThrow();
+    await expect(keys.decryptSensitive("conversation-context", JSON.stringify(["other", "chat", "context"]), 1, encrypted)).rejects.toThrow();
+    await expect(keys.decryptSensitive("conversation-context", scope, 2, encrypted)).rejects.toThrow();
+  });
+
   it.each([
     ["same", "same", true], ["same", "sane", false], ["same", "x", false],
     ["same", "x".repeat(257), false], ["same", "săm", false],

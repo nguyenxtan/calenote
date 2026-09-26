@@ -1,0 +1,85 @@
+{
+  "version": "conversation-v2-offline-1", "transport": "MOCK", "referenceNow": 1790305200000,
+  "models": {
+    "create": {"intent":"CREATE_REMINDER","title":"gọi mẹ","titleState":"RESOLVED","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null},
+    "exam": {"intent":"CREATE_REMINDER","title":"ôn thi","titleState":"RESOLVED","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null},
+    "continue": {"intent":"CREATE_REMINDER","title":null,"titleState":"MISSING","targetIntent":null,"dialogueAct":"CONTINUE","continuation":"YES","capability":null},
+    "edit": {"intent":"CREATE_REMINDER","title":null,"titleState":"MISSING","targetIntent":null,"dialogueAct":"EDIT","continuation":"YES","capability":null},
+    "missing-title": {"intent":"CREATE_REMINDER","title":null,"titleState":"MISSING","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null},
+    "ambiguous-title": {"intent":"CREATE_REMINDER","title":null,"titleState":"AMBIGUOUS","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null},
+    "ambiguous": {"intent":"AMBIGUOUS","title":null,"titleState":"MISSING","targetIntent":"CREATE_REMINDER","dialogueAct":"AMBIGUOUS","continuation":"UNCERTAIN","capability":null},
+    "greet": {"intent":"HELP","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"GREET","continuation":"NO","capability":null},
+    "lunar-help": {"intent":"HELP","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"CAPABILITY","continuation":"NO","capability":"LUNAR"},
+    "abandon": {"intent":"HELP","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"ABANDON","continuation":"YES","capability":null},
+    "uncertain-abandon": {"intent":"HELP","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"ABANDON","continuation":"UNCERTAIN","capability":null},
+    "list": {"intent":"LIST_REMINDERS","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null},
+    "unsupported": {"intent":"UNSUPPORTED","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null,"dialogueAct":"NEW_REQUEST","continuation":"NO","capability":null}
+  },
+  "cases": [
+    {"id":"complete-one-off","turns":[
+      {"text":"mai 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"gọi mẹ","date":"2026-09-26","time":"08:00"}}}
+    ]},
+    {"id":"time-completion","turns":[
+      {"text":"mai nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"9h","model":"continue","expected":{"evidence":{"calendar":"GREGORIAN","time":"09:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"gọi mẹ","date":"2026-09-26","time":"09:00"}}}
+    ]},
+    {"id":"date-completion","turns":[
+      {"text":"9h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","time":"09:00"},"outcome":"CLARIFY","field":"date","state":"CLARIFYING","mutationCount":0}},
+      {"text":"mai","model":"continue","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"gọi mẹ","date":"2026-09-26","time":"09:00"}}}
+    ]},
+    {"id":"exam-urgent-series","turns":[
+      {"text":"thi hết môn ngày 11/10 ở Quang Trung","model":"exam","expected":{"evidence":{"calendar":"GREGORIAN","eventDate":"2026-10-11"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"12h trưa, nhắc liên tục 3 ngày","model":"continue","expected":{"evidence":{"calendar":"GREGORIAN","time":"12:00","count":3},"outcome":"CLARIFY","field":"seriesRelation","state":"CLARIFYING","mutationCount":0}},
+      {"text":"3 ngày trước ngày thi","model":"continue","expected":{"evidence":{"calendar":"GREGORIAN","count":3,"relation":"BEFORE_EVENT"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"ôn thi","eventDate":"2026-10-11","time":"12:00","count":3,"relation":"BEFORE_EVENT"},"occurrenceDates":["2026-10-08","2026-10-09","2026-10-10"]}}
+    ]},
+    {"id":"lunar-year-completion","turns":[
+      {"text":"âm lịch 1/1 lúc 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"LUNAR_VN","time":"08:00"},"outcome":"CLARIFY","field":"year","state":"CLARIFYING","mutationCount":0}},
+      {"text":"2027","model":"continue","expected":{"evidence":{"calendar":"LUNAR_VN","date":"2027-02-06"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"LUNAR_VN","title":"gọi mẹ","date":"2027-02-06","time":"08:00"}}}
+    ]},
+    {"id":"lunar-leap-completion","turns":[
+      {"text":"âm lịch 1/2 lúc 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"LUNAR_VN","time":"08:00"},"outcome":"CLARIFY","field":"year","state":"CLARIFYING","mutationCount":0}},
+      {"text":"2023","model":"continue","expected":{"evidence":{"calendar":"LUNAR_VN"},"outcome":"CLARIFY","field":"leapMonth","state":"CLARIFYING","mutationCount":0}},
+      {"text":"tháng nhuận","model":"continue","expected":{"evidence":{"calendar":"LUNAR_VN","date":"2023-03-22"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"LUNAR_VN","title":"gọi mẹ","date":"2023-03-22","time":"08:00"}}}
+    ]},
+    {"id":"new-request-resets-calendar","turns":[
+      {"text":"âm lịch 1/1/2027 nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"LUNAR_VN","date":"2027-02-06"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"mai 9h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"09:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"gọi mẹ","date":"2026-09-26","time":"09:00"}}}
+    ]},
+    {"id":"conflict-cannot-overwrite","turns":[
+      {"text":"mai 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0}},
+      {"text":"9h","model":"continue","expected":{"evidence":{"calendar":"GREGORIAN","time":"09:00"},"outcome":"SAFE_REJECT","state":"DRAFT_READY","mutationCount":0}}
+    ]},
+    {"id":"explicit-edit","turns":[
+      {"text":"mai 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0}},
+      {"text":"đổi 9h","model":"edit","expected":{"evidence":{"calendar":"GREGORIAN","time":"09:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"request":{"calendar":"GREGORIAN","title":"gọi mẹ","date":"2026-09-26","time":"09:00"}}}
+    ]},
+    {"id":"abandon-pending","turns":[
+      {"text":"mai nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"bỏ yêu cầu này nhé","model":"abandon","expected":{"evidence":{"calendar":"GREGORIAN"},"outcome":"ABANDON_PENDING","state":"CANCELLED","mutationCount":0}}
+    ]},
+    {"id":"ambiguous-abandonment","turns":[
+      {"text":"mai nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"thế thôi","model":"uncertain-abandon","expected":{"evidence":{"calendar":"GREGORIAN"},"outcome":"CLARIFY","field":"intent","state":"CLARIFYING","mutationCount":0}}
+    ]},
+    {"id":"greeting-and-real-request","turns":[
+      {"text":"xin chào","model":"greet","expected":{"evidence":{"calendar":"GREGORIAN"},"outcome":"GREET","state":"NONE","mutationCount":0}},
+      {"text":"chào bạn, mai 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0}}
+    ]},
+    {"id":"capability-not-opt-in","turns":[
+      {"text":"có lưu âm lịch không?","model":"lunar-help","expected":{"evidence":{"calendar":null},"outcome":"LUNAR_HELP","state":"NONE","mutationCount":0}},
+      {"text":"mai 8h nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0}}
+    ]},
+    {"id":"read-only-list-suspends-context","turns":[
+      {"text":"mai nhắc gọi mẹ","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"CLARIFY","field":"time","state":"CLARIFYING","mutationCount":0}},
+      {"text":"mai tui có gì?","model":"list","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26"},"outcome":"READ_ONLY_LIST","state":"CLARIFYING","mutationCount":0}}
+    ]},
+    {"id":"missing-title","turns":[{"text":"mai 8h nhắc","model":"missing-title","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"CLARIFY","field":"title","state":"CLARIFYING","mutationCount":0}}]},
+    {"id":"ambiguous-title","turns":[{"text":"mai 8h nhắc việc đó","model":"ambiguous-title","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"CLARIFY","field":"title","state":"CLARIFYING","mutationCount":0}}]},
+    {"id":"uncertain-intent","turns":[{"text":"mai 8h","model":"ambiguous","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00"},"outcome":"CLARIFY","field":"intent","state":"CLARIFYING","mutationCount":0}}]},
+    {"id":"malformed-island","turns":[{"text":"mai 8h; /:30","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"AMBIGUOUS","time":"AMBIGUOUS"},"outcome":"SAFE_REJECT","state":"NONE","mutationCount":0}}]},
+    {"id":"unsupported-not-mutating","turns":[{"text":"chuyển tiền","model":"unsupported","expected":{"evidence":{"calendar":"GREGORIAN"},"outcome":"SAFE_REJECT","state":"NONE","mutationCount":0}}]},
+    {"id":"past-series-not-trimmed","turns":[{"text":"nhắc gọi mẹ liên tục 3 ngày bắt đầu 24/09/2026 lúc 8h","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-24","time":"08:00","count":3,"relation":"STARTING_ON"},"outcome":"PROPOSE","state":"DRAFT_READY","mutationCount":0,"expansionRejection":"PAST"}}]},
+    {"id":"no-inferred-count","turns":[{"text":"nhắc gọi mẹ mỗi ngày lúc 9h","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","time":"09:00"},"outcome":"CLARIFY","field":"seriesCount","state":"CLARIFYING","mutationCount":0}}]},
+    {"id":"over-limit-count","turns":[{"text":"mai 8h nhắc gọi mẹ liên tục 31 ngày","model":"create","expected":{"evidence":{"calendar":"GREGORIAN","date":"2026-09-26","time":"08:00","count":"AMBIGUOUS"},"outcome":"SAFE_REJECT","state":"NONE","mutationCount":0}}]}
+  ]
+}

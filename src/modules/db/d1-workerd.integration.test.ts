@@ -45,6 +45,7 @@ interface RuntimeFixture {
 const instances: Miniflare[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(instances.splice(0).map((instance) => instance.dispose()));
 });
 
@@ -348,6 +349,9 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
 
   it("bounds the equalized unknown-proof work by both exact verify limits", async () => {
     const fixture = await migratedRuntime();
+    // This tests counts within one window, not passage of wall time. Crossing
+    // a real ten-minute boundary would correctly reset the production counter.
+    vi.spyOn(Date, "now").mockReturnValue(NOW);
     const router = createRouter();
     const env = workerEnvironment(fixture.db);
     const emailIp = "203.0.113.80";

@@ -48,20 +48,20 @@ export interface SemanticUsage {
   promptTokens?: number;
   completionTokens?: number;
 }
-export type SemanticAttemptResult = {
+export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   status: "SUCCESS";
-  interpretation: ModelSemanticInterpretation;
+  interpretation: T;
   usage: SemanticUsage;
 } | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage };
-export type PreparedSemanticAttempt = {
+export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;
   provider: string;
   maximumCostMicrounits: number;
   /** One shot. No adapter retry or hidden provider fallback is permitted. */
-  dispatch(): Promise<SemanticAttemptResult>;
+  dispatch(): Promise<SemanticAttemptResult<T>>;
 } | { status: "FAILURE"; category: SemanticFailureCategory };
-export interface SemanticGateway {
+export interface SemanticGateway<T = ModelSemanticInterpretation, Input = SemanticInput> {
   /** Validates and prepares without performing any external side effect. */
-  prepare(tier: SemanticTier, input: SemanticInput): PreparedSemanticAttempt;
+  prepare(tier: SemanticTier, input: Input): PreparedSemanticAttempt<T>;
 }
