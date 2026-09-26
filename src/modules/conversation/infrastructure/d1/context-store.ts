@@ -17,7 +17,9 @@ export const ownedInbound = `SELECT i.id FROM inbound_updates i
   JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
   WHERE i.id = ? AND i.transition_marker = ? AND i.state = 'PROCESSING'
     AND ci.id = ? AND c.user_id = ? AND i.received_at <= ?
-    AND NOT ${newerConversationOutcomeSql("i")} AND NOT ${newerV2}`;
+    AND NOT ${newerConversationOutcomeSql("i")} AND NOT ${newerV2}
+    AND NOT EXISTS (SELECT 1 FROM conversation_contexts wc WHERE wc.chat_identity_id = ci.id
+      AND wc.owner_id = c.user_id AND wc.claim_marker LIKE 'web:%' AND wc.updated_at >= i.received_at)`;
 const orderedAfter = `EXISTS (SELECT 1 FROM inbound_updates current JOIN inbound_updates prior
   ON prior.id = conversation_contexts.last_inbound_id
   WHERE current.id = ? AND (current.received_at > prior.received_at

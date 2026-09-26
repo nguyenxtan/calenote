@@ -37,6 +37,58 @@ async function harness(count = 3) {
     confirm: (index = 1) => series.confirm(h.scope(index), proposal!.proposalId, proposal!.revision) };
 }
 describe("finite series atomic storage", () => {
+  it("web confirmation closes context before older queued input can reuse it, without altering an inbound", async () => {
+    const h = await harness();
+    await h.db.prepare("INSERT INTO sessions(id,user_id,digest,expires_at,created_at) VALUES('session-one','one','synthetic',?,?)").bind(NOW + 3600000, NOW).run();
+    const principal = { userId: "one", sessionId: "session-one", expiresAt: NOW + 3600000 };
+    const before = (await h.db.prepare("SELECT id,state,transition_marker FROM inbound_updates").all()).results;
+    expect(await h.series.decideWeb(principal, { publicId: h.proposal.proposalId, revision: 1, action: "CONFIRM" }, NOW + 100)).toBe("CONFIRMED");
+    expect((await h.db.prepare("SELECT id,state,transition_marker FROM inbound_updates").all()).results).toEqual(before);
+    expect(await h.store.save(h.scope(1), null, { ...h.initial, id: "stale-new-context" })).toBe("STALE");
+    const active = (await h.series.listWeb(principal, NOW + 101))[0];
+    const cancel = { publicId: active.publicId, revision: 1, action: "PROPOSE_CANCEL" as const };
+    expect(await h.series.decideWeb(principal, cancel, NOW + 101)).toBe("PROPOSED");
+    const first = (await h.series.listWeb(principal, NOW + 102)).find(row => row.action === "CANCEL")!;
+    expect(await h.series.decideWeb(principal, cancel, NOW + 700000)).toBe("PROPOSED");
+    const renewed = (await h.series.listWeb(principal, NOW + 700001)).find(row => row.action === "CANCEL")!;
+    expect(renewed.revision).toBeGreaterThan(first.revision);
+    await h.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id='one-4'").bind(NOW + 200).run();
+    expect(await h.series.cancelRemaining({ ...h.scope(4), now: NOW + 700001 }, renewed.publicId, renewed.revision)).toBe("STALE");
+    expect(await h.series.decideWeb(principal, { publicId: first.publicId, revision: first.revision, action: "CONFIRM" }, NOW + 700001)).toBe("STALE");
+    expect(await h.series.decideWeb(principal, { publicId: renewed.publicId, revision: renewed.revision, action: "CONFIRM" }, NOW + 700001)).toBe("CANCELLED");
+  });
+  it("web sessions share atomic confirmation and cancellation without forging an inbound or crossing owners", async () => {
+    const h = await harness();
+    await h.db.prepare("INSERT INTO sessions(id,user_id,digest,expires_at,created_at) VALUES('session-one','one','synthetic',?,?)")
+      .bind(NOW + 3600000, NOW).run();
+    const principal = { userId: "one", sessionId: "session-one", expiresAt: NOW + 3600000 };
+    const views = await h.series.listWeb(principal, NOW + 1);
+    expect(views).toHaveLength(1);
+    expect(views[0]).toMatchObject({ state: "PROPOSED", action: "CREATE", occurrences: [
+      { localDate: "2026-10-08", localTime: "12:00", status: "PROPOSED" },
+      { localDate: "2026-10-09", localTime: "12:00", status: "PROPOSED" },
+      { localDate: "2026-10-10", localTime: "12:00", status: "PROPOSED" },
+    ] });
+    expect(await h.series.listWeb({ ...principal, userId: "two" }, NOW + 1)).toEqual([]);
+    const decision = { publicId: views[0].publicId, revision: 1, action: "CONFIRM" as const };
+    expect(await h.series.decideWeb({ ...principal, userId: "two" }, decision, NOW + 1)).toBe("STALE");
+    expect(await h.series.decideWeb(principal, { ...decision, revision: 99 }, NOW + 1)).toBe("STALE");
+    const before = (await h.db.prepare("SELECT id,state FROM inbound_updates").all()).results;
+    const results = await Promise.all([h.series.decideWeb(principal, decision, NOW + 2), h.confirm(1)]);
+    expect(results.some(value => value === "CONFIRMED" || (typeof value === "object" && value.status === "CONFIRMED"))).toBe(true);
+    expect(await h.counts()).toEqual({ series: 1, occurrences: 3, reminders: 3 });
+    const active = (await h.series.listWeb(principal, NOW + 3))[0];
+    expect(active.state).toBe("ACTIVE");
+    expect(await h.series.decideWeb(principal, { publicId: active.publicId, revision: active.revision, action: "PROPOSE_CANCEL" }, NOW + 3)).toBe("PROPOSED");
+    expect(await h.db.prepare("SELECT count(*) n FROM reminders WHERE status='CANCELLED'").first("n")).toBe(0);
+    const cancel = (await h.series.listWeb(principal, NOW + 4)).find(view => view.action === "CANCEL")!;
+    expect(cancel.state).toBe("PROPOSED");
+    expect(await h.series.decideWeb(principal, { publicId: cancel.publicId, revision: cancel.revision, action: "CONFIRM" }, NOW + 4)).toBe("CANCELLED");
+    expect(await h.db.prepare("SELECT count(*) n FROM reminders WHERE status='CANCELLED'").first("n")).toBe(3);
+    expect((await h.db.prepare("SELECT id FROM inbound_updates").all()).results).toHaveLength(before.length);
+    await h.db.prepare("UPDATE sessions SET revoked_at=? WHERE id='session-one'").bind(NOW + 5).run();
+    expect(await h.series.listWeb(principal, NOW + 5)).toEqual([]);
+  });
   it("creates children whose identifiers are accepted by the real delivery Queue contract", async () => {
     const h = await harness();
     await h.confirm();

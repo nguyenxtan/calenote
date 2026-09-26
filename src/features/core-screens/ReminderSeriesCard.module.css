@@ -1,0 +1,13 @@
+.card { padding:24px; margin:20px 0; border:1px solid var(--cn-border); border-radius:var(--cn-r-md); background:var(--cn-surface); overflow-wrap:anywhere; }
+.panel { margin-top:32px; }.panel>p { font-size:13px; color:var(--cn-text-2); }.panel>button { min-height:44px; padding:10px 14px; background:var(--cn-surface); color:var(--cn-text); border:1px solid var(--cn-border); border-radius:var(--cn-r-sm); }
+.card header span { color:var(--cn-brand-700); font-size:12px; font-weight:600; }
+.card h3 { margin:8px 0 16px; font-size:18px; }
+.card p { font-size:14px; color:var(--cn-text-2); }
+.card ol { margin:20px 0; padding:0; list-style:none; }
+.card li { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--cn-border); font-size:14px; }
+.card li span,.card .hint { font-size:12px; color:var(--cn-text-2); }
+.card button { min-height:44px; padding:10px 18px; border:0; border-radius:var(--cn-r-sm); background:var(--cn-brand-700); color:white; font:inherit; cursor:pointer; }
+.card button:focus-visible { outline:3px solid var(--cn-brand-700); outline-offset:4px; }
+.card button:disabled { opacity:.65; cursor:wait; }
+.card [role=alert] { color:#991b1b; }
+@media(max-width:600px) { .card { padding:18px; }.card li { flex-wrap:wrap; }.card button { width:100%; } }

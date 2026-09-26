@@ -1,5 +1,11 @@
 import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
-import type { SessionCredentials } from "@/modules/auth/session";
+import type { SessionCredentials, SessionPrincipal } from "@/modules/auth/session";
+import type { PublicSeriesView, SeriesDecisionRequest } from "@/contracts/api/reminder-series";
+export interface SeriesOperations {
+  requireUser(credentials: SessionCredentials): Promise<SessionPrincipal>;
+  listSeries(principal: SessionPrincipal): Promise<PublicSeriesView[]>;
+  decideSeries(principal: SessionPrincipal, decision: SeriesDecisionRequest): Promise<"CONFIRMED" | "ALREADY_CONFIRMED" | "PROPOSED" | "CANCELLED" | "ALREADY_CANCELLED" | "STALE">;
+}
 import type { OnboardingInput, OnboardingResult, RetryWebhookResult } from "@/modules/onboarding/service";
 import type { RateLimitResult } from "@/modules/rate-limit/service";
 import type { PublicReminder } from "@/modules/reminders/api-service";

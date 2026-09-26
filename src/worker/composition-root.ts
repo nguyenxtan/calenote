@@ -194,6 +194,19 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
   };
 }
 
+export async function createSeriesOperations(env: Env, capabilities: { conversationV2?: boolean } = {}): Promise<import("./routes/operations").SeriesOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessions = new D1SessionStore(env.DB); const store = new D1SeriesStore(env.DB, keyring);
+  return {
+    requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
+    listSeries: principal => capabilities.conversationV2 ? store.listWeb(principal, Date.now()) : Promise.resolve([]),
+    decideSeries: (principal, decision) => {
+      if (!capabilities.conversationV2) throw new ServiceUnavailableError();
+      return store.decideWeb(principal, decision, Date.now());
+    },
+  };
+}
+
 export async function createActionsOperations(env: Env): Promise<ActionsOperations> {
   const keyring = await createRouteKeyring(env);
   const sessionStore = new D1SessionStore(env.DB);

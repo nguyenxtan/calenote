@@ -51,6 +51,9 @@ import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
+import { handleSeries } from "./routes/reminder-series";
+import { createSeriesOperations } from "./composition-root";
+import type { SeriesOperations } from "./routes/operations";
 import type {
   AuthOperations,
   ActionsOperations,
@@ -67,6 +70,7 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+  seriesOperations?: (env: Env) => Promise<SeriesOperations>;
   authOperations?: (env: Env) => Promise<AuthOperations>;
   actionsOperations?: (env: Env) => Promise<ActionsOperations>;
   connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
@@ -170,6 +174,7 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
+  const seriesOperationsFactory = options.seriesOperations ?? createSeriesOperations;
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
@@ -236,6 +241,9 @@ export function createRouter(options: RouterOptions = {}) {
       }
       if (request.method === "GET" && pathname === "/api/reminders") {
         return await handleListReminders(request, () => remindersOperationsFactory(env));
+      }
+      if (["GET", "POST"].includes(request.method) && pathname === "/api/reminder-series") {
+        return await handleSeries(request, appOrigin!, () => seriesOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/actions") {
         return await handleListActions(request, () => actionsOperationsFactory(env));

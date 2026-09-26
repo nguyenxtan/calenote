@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { PendingRequestSchema, type ConversationScope, type PendingRequest } from "@/modules/conversation/contracts";
-import { D1ConversationStore, ownedInbound, auth } from "@/modules/conversation/infrastructure/d1/context-store";
+import { D1ConversationStore, ownedInbound, auth as inboundAuth } from "@/modules/conversation/infrastructure/d1/context-store";
+import type { SessionPrincipal } from "@/modules/auth/session";
+import { PublicSeriesViewSchema, SeriesDecisionRequestSchema, type PublicSeriesView, type SeriesDecisionRequest } from "@/contracts/api/reminder-series";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { Keyring } from "@/modules/security/keyring";
 import { randomOpaqueId } from "@/modules/platform/types";
@@ -22,10 +24,82 @@ const token = () => randomOpaqueId();
 const claimed = "EXISTS (SELECT 1 FROM reminder_series_proposals p WHERE p.id = ? AND p.transaction_marker = ?)";
 const afterSource = `EXISTS (SELECT 1 FROM inbound_updates current JOIN inbound_updates source
   ON source.id = reminder_series_proposals.source_inbound_id WHERE current.id = ?
+  AND current.received_at >= reminder_series_proposals.created_at
   AND (source.received_at < current.received_at OR (source.received_at = current.received_at AND source.rowid < current.rowid)))`;
+type MutationScope = ConversationScope & { webSessionId?: string };
+const ownedWeb = `SELECT s.id FROM sessions s JOIN chat_identities ci ON ci.id = ?
+  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
+  WHERE s.id = ? AND s.user_id = ? AND c.user_id = s.user_id AND s.revoked_at IS NULL AND s.expires_at > ?`;
+const authority = (scope: MutationScope) => scope.webSessionId ? ownedWeb : ownedInbound;
+const auth = (scope: MutationScope) => scope.webSessionId
+  ? [scope.chatIdentityId, scope.webSessionId, scope.ownerId, scope.now] : inboundAuth(scope);
+// For web, sourceInboundId is proposal lineage, NEVER authentication evidence.
+const ordering = (scope: MutationScope) => scope.webSessionId ? "? IS NOT NULL" : afterSource;
 
 export class D1SeriesStore implements SeriesStore {
   constructor(private readonly db: D1Database, private readonly keyring: Keyring) {}
+
+  async listWeb(principal: SessionPrincipal, now: number): Promise<PublicSeriesView[]> {
+    const session = await this.db.prepare("SELECT id FROM sessions WHERE id=? AND user_id=? AND revoked_at IS NULL AND expires_at>?")
+      .bind(principal.sessionId, principal.userId, now).first();
+    if (!session) return [];
+    type ViewRow = ProposalRow & { chat_identity_id: string; public_id?: string; series_id?: string; series_state?: "ACTIVE" | "CANCELLED"; series_revision?: number };
+    const pending = (await this.db.prepare(`SELECT p.* FROM reminder_series_proposals p WHERE p.owner_id=? AND p.status='PENDING' AND p.expires_at>?
+      AND (p.action='CANCEL' OR EXISTS (SELECT 1 FROM conversation_contexts c WHERE c.id=p.context_id AND c.revision=p.context_revision AND c.status='DRAFT_READY' AND c.expires_at>?))
+      ORDER BY p.created_at DESC,p.id LIMIT 10`).bind(principal.userId, now, now).all<ViewRow>()).results;
+    const active = (await this.db.prepare(`SELECT p.*,s.public_id,s.id series_id,s.status series_state,s.revision series_revision
+      FROM reminder_series s JOIN reminder_series_proposals p ON p.id=s.proposal_id WHERE s.owner_id=? ORDER BY s.created_at DESC,s.id LIMIT 10`)
+      .bind(principal.userId).all<ViewRow>()).results;
+    const result: PublicSeriesView[] = [];
+    for (const row of [...pending, ...active]) {
+      const scope = { ownerId: principal.userId, chatIdentityId: row.chat_identity_id, sourceInboundId: row.source_inbound_id, claimMarker: "web", now };
+      let payloadRow: ProposalRow = row;
+      let seriesId = row.series_id;
+      if (row.action === "CANCEL") {
+        seriesId = row.target_series_id!;
+        const original = await this.db.prepare(`SELECT p.* FROM reminder_series s JOIN reminder_series_proposals p ON p.id=s.proposal_id WHERE s.id=? AND s.owner_id=? AND s.chat_identity_id=?`)
+          .bind(seriesId, principal.userId, row.chat_identity_id).first<ProposalRow>();
+        if (!original) continue;
+        payloadRow = original;
+      }
+      const payload = createPayload.parse(await this.decrypt(scope, payloadRow));
+      const children = seriesId ? (await this.db.prepare(`SELECT r.scheduled_at,r.status FROM reminder_series_occurrences o JOIN reminders r ON r.id=o.reminder_id
+        JOIN reminder_series s ON s.id=o.series_id WHERE s.id=? AND s.owner_id=? ORDER BY o.occurrence_index LIMIT 30`).bind(seriesId, principal.userId)
+        .all<{ scheduled_at: number; status: PublicSeriesView["occurrences"][number]["status"] }>()).results : null;
+      const anchor = payload.request.reminderDate ?? payload.request.eventDate;
+      const lunar = anchor?.lunar;
+      const calendarLabel = lunar ? `Âm lịch Việt Nam: ${lunar.day}/${lunar.month}/${lunar.year}${lunar.leap ? " (tháng nhuận)" : ""} → ${anchor!.solarDate} dương lịch` : "Dương lịch";
+      const occurrences = children ? children.map(child => {
+        const wall = new Date(child.scheduled_at + 7 * 3600000).toISOString();
+        return { localDate: wall.slice(0, 10), localTime: wall.slice(11, 16), status: child.status };
+      }) : payload.occurrences.map(item => ({ localDate: item.localDate, localTime: payload.request.reminderTime!, status: "PROPOSED" as const }));
+      result.push(PublicSeriesViewSchema.parse({ publicId: row.public_id ?? row.id, revision: row.series_revision ?? row.revision,
+        title: payload.request.title, state: row.series_state === "ACTIVE" && occurrences.every(item => ["SENT", "CANCELLED"].includes(item.status)) ? "COMPLETED" : row.series_state ?? "PROPOSED",
+        action: row.series_id ? null : row.action, calendarLabel, eventLabel: payload.request.eventDate ? `Ngày sự kiện: ${payload.request.eventDate.solarDate} dương lịch` : null, occurrences }));
+    }
+    return result;
+  }
+
+  async decideWeb(principal: SessionPrincipal, rawDecision: SeriesDecisionRequest, now: number): Promise<"CONFIRMED" | "ALREADY_CONFIRMED" | "PROPOSED" | "CANCELLED" | "ALREADY_CANCELLED" | "STALE"> {
+    const parsed = SeriesDecisionRequestSchema.safeParse(rawDecision); if (!parsed.success) return "STALE";
+    const decision = parsed.data;
+    if (decision.action === "PROPOSE_CANCEL") {
+      const row = await this.db.prepare(`SELECT s.id,s.chat_identity_id,p.source_inbound_id FROM reminder_series s JOIN reminder_series_proposals p ON p.id=s.proposal_id
+        WHERE s.public_id=? AND s.revision=? AND s.owner_id=? AND s.status='ACTIVE'`).bind(decision.publicId, decision.revision, principal.userId)
+        .first<{ id: string; chat_identity_id: string; source_inbound_id: string }>();
+      if (!row) return "STALE";
+      return await this.proposeCancellation({ ownerId: principal.userId, chatIdentityId: row.chat_identity_id,
+        sourceInboundId: row.source_inbound_id, claimMarker: `web:${principal.sessionId}`, webSessionId: principal.sessionId, now }, row.id) ? "PROPOSED" : "STALE";
+    }
+    const row = await this.db.prepare("SELECT * FROM reminder_series_proposals WHERE id=? AND revision=? AND owner_id=?")
+      .bind(decision.publicId, decision.revision, principal.userId).first<ProposalRow & { chat_identity_id: string }>();
+    if (!row) return "STALE";
+    const scope: MutationScope = { ownerId: principal.userId, chatIdentityId: row.chat_identity_id, sourceInboundId: row.source_inbound_id,
+      claimMarker: `web:${principal.sessionId}`, webSessionId: principal.sessionId, now };
+    if (row.action === "CANCEL") return this.cancelRemaining(scope, row.id, row.revision);
+    const result = await this.confirm(scope, row.id, row.revision);
+    return result.status === "CONFIRMED" || result.status === "ALREADY_CONFIRMED" ? result.status : "STALE";
+  }
 
   async findPending(scope: ConversationScope): ReturnType<SeriesStore["findPending"]> {
     const row = await this.db.prepare(`SELECT id,revision,action FROM reminder_series_proposals
@@ -45,10 +119,10 @@ export class D1SeriesStore implements SeriesStore {
     return result.meta.changes === 1;
   }
 
-  private async read(scope: ConversationScope, id: string, revision: number): Promise<ProposalRow | null> {
+  private async read(scope: MutationScope, id: string, revision: number): Promise<ProposalRow | null> {
     if (!Number.isSafeInteger(revision) || revision < 1 || !Number.isSafeInteger(scope.now)) return null;
     return this.db.prepare(`SELECT * FROM reminder_series_proposals WHERE id = ? AND revision = ?
-      AND owner_id = ? AND chat_identity_id = ? AND EXISTS (${ownedInbound})`)
+      AND owner_id = ? AND chat_identity_id = ? AND EXISTS (${authority(scope)})`)
       .bind(id, revision, scope.ownerId, scope.chatIdentityId, ...auth(scope)).first<ProposalRow>();
   }
   private async decrypt(scope: ConversationScope, row: ProposalRow): Promise<unknown> {
@@ -56,11 +130,11 @@ export class D1SeriesStore implements SeriesStore {
       ciphertext: persistedD1Blob(row.payload_ciphertext), iv: persistedD1Blob(row.payload_iv),
     }));
   }
-  private invalidateOld(scope: ConversationScope) {
+  private invalidateOld(scope: MutationScope) {
     return this.db.prepare(`UPDATE reminder_series_proposals SET status = 'INVALID' WHERE chat_identity_id = ? AND owner_id = ?
       AND status = 'PENDING' AND (expires_at <= ? OR (action = 'CREATE' AND NOT EXISTS
         (SELECT 1 FROM conversation_contexts c WHERE c.id = context_id AND c.revision = context_revision
-          AND c.status = 'DRAFT_READY' AND c.expires_at > ?))) AND EXISTS (${ownedInbound})`)
+          AND c.status = 'DRAFT_READY' AND c.expires_at > ?))) AND EXISTS (${authority(scope)})`)
       .bind(scope.chatIdentityId, scope.ownerId, scope.now, scope.now, ...auth(scope));
   }
   async propose(scope: ConversationScope, request: PendingRequest, contextId: string, contextRevision: number) {
@@ -97,7 +171,7 @@ export class D1SeriesStore implements SeriesStore {
     }
   }
 
-  async confirm(scope: ConversationScope, proposalId: string, revision: number): ReturnType<SeriesStore["confirm"]> {
+  async confirm(scope: MutationScope, proposalId: string, revision: number): ReturnType<SeriesStore["confirm"]> {
     const row = await this.read(scope, proposalId, revision);
     if (!row || row.action !== "CREATE") return { status: "STALE" };
     const existing = await this.db.prepare("SELECT id FROM reminder_series WHERE proposal_id = ?").bind(row.id).first<string>("id");
@@ -112,11 +186,11 @@ export class D1SeriesStore implements SeriesStore {
     const claimArgs = [proposalId, marker];
     const statements = [this.db.prepare(`UPDATE reminder_series_proposals SET status = 'CONFIRMED', transaction_marker = ?, resolution_inbound_id = ?
       WHERE id = ? AND revision = ? AND status = 'PENDING' AND expires_at > ? AND owner_id = ? AND chat_identity_id = ?
-        AND EXISTS (${ownedInbound}) AND ${afterSource}
+        AND EXISTS (${authority(scope)}) AND ${ordering(scope)}
         AND EXISTS (SELECT 1 FROM conversation_contexts c WHERE c.id = context_id AND c.revision = context_revision
           AND c.status = 'DRAFT_READY' AND c.expires_at > ? AND c.owner_id = ? AND c.chat_identity_id = ?)
         AND NOT EXISTS (SELECT 1 FROM command_drafts WHERE chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?)`)
-      .bind(marker, scope.sourceInboundId, row.id, revision, scope.now, scope.ownerId, scope.chatIdentityId,
+      .bind(marker, scope.webSessionId ? null : scope.sourceInboundId, row.id, revision, scope.now, scope.ownerId, scope.chatIdentityId,
         ...auth(scope), scope.sourceInboundId, scope.now, scope.ownerId, scope.chatIdentityId, scope.chatIdentityId, scope.now),
     this.db.prepare(`INSERT INTO reminder_series (id,public_id,owner_id,chat_identity_id,proposal_id,revision,status,created_at,updated_at)
       SELECT ?,?,?,?,?,1,'ACTIVE',?,? WHERE ${claimed}`)
@@ -169,32 +243,40 @@ export class D1SeriesStore implements SeriesStore {
       .bind(proposalId, scope.ownerId, scope.chatIdentityId).first<string>("id");
     return winner ? { status: "ALREADY_CONFIRMED", seriesId: winner } : { status: "STALE" };
   }
-  private finishInbound(scope: ConversationScope, id: string, marker: string, action: string) {
-    return [this.db.prepare(`UPDATE inbound_updates SET state = 'PROCESSED', processed_at = ? WHERE id = ? AND state = 'PROCESSING'
-      AND transition_marker = ? AND ${claimed}`).bind(scope.now, scope.sourceInboundId, scope.claimMarker, id, marker),
+  private finishInbound(scope: MutationScope, id: string, marker: string, action: string) {
+    return [...(scope.webSessionId ? [] : [this.db.prepare(`UPDATE inbound_updates SET state = 'PROCESSED', processed_at = ? WHERE id = ? AND state = 'PROCESSING'
+      AND transition_marker = ? AND ${claimed}`).bind(scope.now, scope.sourceInboundId, scope.claimMarker, id, marker)]),
     this.db.prepare(`INSERT INTO audit_events (id,actor_user_id,action,target_user_id,result,created_at)
       SELECT ?,?,?,?,'SUCCESS',? WHERE ${claimed}`).bind(token(), scope.ownerId, action, scope.ownerId, scope.now, id, marker)];
   }
 
-  async proposeCancellation(scope: ConversationScope, seriesId: string) {
+  async proposeCancellation(scope: MutationScope, seriesId: string) {
     const series = await this.db.prepare(`SELECT revision FROM reminder_series WHERE id = ? AND owner_id = ? AND chat_identity_id = ?
-      AND status = 'ACTIVE' AND EXISTS (${ownedInbound})`).bind(seriesId, scope.ownerId, scope.chatIdentityId, ...auth(scope)).first<{ revision: number }>();
+      AND status = 'ACTIVE' AND EXISTS (${authority(scope)})`).bind(seriesId, scope.ownerId, scope.chatIdentityId, ...auth(scope)).first<{ revision: number }>();
     if (!series) return null;
-    const id = token();
+    const prior = scope.webSessionId ? await this.db.prepare(`SELECT id,revision FROM reminder_series_proposals
+      WHERE source_inbound_id=? AND action='CANCEL' AND owner_id=? AND chat_identity_id=? AND target_series_id=?`)
+      .bind(scope.sourceInboundId, scope.ownerId, scope.chatIdentityId, seriesId).first<{ id: string; revision: number }>() : null;
+    const id = prior?.id ?? token(); const revision = prior ? prior.revision + 1 : 1;
     const encrypted = await this.keyring.encryptSensitive("series-proposal", binding(scope, id), 1, JSON.stringify({ seriesId, revision: series.revision }));
     try {
       const result = await this.db.batch([this.invalidateOld(scope), this.db.prepare(`INSERT INTO reminder_series_proposals
         (id,owner_id,chat_identity_id,revision,source_inbound_id,action,target_series_id,target_revision,status,payload_ciphertext,payload_iv,key_version,created_at,expires_at)
-        SELECT ?,?,?,1,?,'CANCEL',?,?,'PENDING',?,?,1,?,? WHERE EXISTS (${ownedInbound})
+        SELECT ?,?,?,?,?,'CANCEL',?,?,'PENDING',?,?,1,?,? WHERE EXISTS (${authority(scope)})
         AND EXISTS (SELECT 1 FROM reminder_series WHERE id = ? AND revision = ? AND status = 'ACTIVE')
         AND NOT EXISTS (SELECT 1 FROM conversation_contexts WHERE chat_identity_id = ? AND status IN ('CLARIFYING','DRAFT_READY') AND expires_at > ?)
-        AND NOT EXISTS (SELECT 1 FROM command_drafts WHERE chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?)`)
-        .bind(id, scope.ownerId, scope.chatIdentityId, scope.sourceInboundId, seriesId, series.revision, encrypted.ciphertext, encrypted.iv,
+        AND NOT EXISTS (SELECT 1 FROM command_drafts WHERE chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?)
+        ${prior ? `ON CONFLICT(source_inbound_id,action) DO UPDATE SET revision=excluded.revision,status='PENDING',
+          payload_ciphertext=excluded.payload_ciphertext,payload_iv=excluded.payload_iv,created_at=excluded.created_at,expires_at=excluded.expires_at,
+          transaction_marker=NULL,resolution_inbound_id=NULL WHERE reminder_series_proposals.id=excluded.id
+          AND reminder_series_proposals.revision=excluded.revision-1 AND reminder_series_proposals.status<>'CONFIRMED'
+          AND reminder_series_proposals.expires_at<=excluded.created_at` : ""}`)
+        .bind(id, scope.ownerId, scope.chatIdentityId, revision, scope.sourceInboundId, seriesId, series.revision, encrypted.ciphertext, encrypted.iv,
           scope.now, scope.now + 600_000, ...auth(scope), seriesId, series.revision, scope.chatIdentityId, scope.now, scope.chatIdentityId, scope.now)]);
-      return result[1].meta.changes === 1 ? { proposalId: id, revision: 1 } : null;
+      return result[1].meta.changes === 1 ? { proposalId: id, revision } : null;
     } catch (error) { if (error instanceof Error && /UNIQUE constraint failed/u.test(error.message)) return null; throw error; }
   }
-  async cancelRemaining(scope: ConversationScope, proposalId: string, revision: number): ReturnType<SeriesStore["cancelRemaining"]> {
+  async cancelRemaining(scope: MutationScope, proposalId: string, revision: number): ReturnType<SeriesStore["cancelRemaining"]> {
     const row = await this.read(scope, proposalId, revision);
     if (!row || row.action !== "CANCEL") return "STALE";
     if (row.status === "CONFIRMED") return "ALREADY_CANCELLED";
@@ -207,12 +289,12 @@ export class D1SeriesStore implements SeriesStore {
     const claimArgs = [proposalId, marker];
     const results = await this.db.batch([
       this.db.prepare(`UPDATE reminder_series_proposals SET status = 'CONFIRMED', transaction_marker = ?, resolution_inbound_id = ?
-        WHERE id = ? AND revision = ? AND status = 'PENDING' AND expires_at > ? AND EXISTS (${ownedInbound}) AND ${afterSource}
+        WHERE id = ? AND revision = ? AND status = 'PENDING' AND expires_at > ? AND EXISTS (${authority(scope)}) AND ${ordering(scope)}
           AND EXISTS (SELECT 1 FROM reminder_series WHERE id = target_series_id AND revision = target_revision AND status = 'ACTIVE'
             AND owner_id = ? AND chat_identity_id = ?)
           AND NOT EXISTS (SELECT 1 FROM conversation_contexts WHERE chat_identity_id = ? AND status IN ('CLARIFYING','DRAFT_READY') AND expires_at > ?)
           AND NOT EXISTS (SELECT 1 FROM command_drafts WHERE chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?)`)
-        .bind(marker, scope.sourceInboundId, proposalId, revision, scope.now, ...auth(scope), scope.sourceInboundId, scope.ownerId, scope.chatIdentityId,
+        .bind(marker, scope.webSessionId ? null : scope.sourceInboundId, proposalId, revision, scope.now, ...auth(scope), scope.sourceInboundId, scope.ownerId, scope.chatIdentityId,
           scope.chatIdentityId, scope.now, scope.chatIdentityId, scope.now),
       this.db.prepare(`UPDATE reminders SET status = 'CANCELLED', cancelled_at = ?, updated_at = ?
         WHERE id IN (SELECT reminder_id FROM reminder_series_occurrences WHERE series_id = ?)

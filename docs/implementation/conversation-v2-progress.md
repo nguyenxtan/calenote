@@ -133,3 +133,24 @@ Tasks 8–9 remain. No user-facing V2 capability is enabled or deployed.
 - Local arm64 Node v26.7.0, 10000 mock-dispatch samples: P50 0.000333 ms,
   P95 0.000833 ms, P99 0.001875 ms. This measures local dispatch overhead, not
   real Zalo UI latency or end-to-end provider response time.
+
+## Task 8 — Web series preview and lifecycle visibility
+
+- Owner/session-scoped GET and revision-bound POST share the Zalo atomic
+  series transactions. Web authority is a live authenticated session, not a
+  fabricated inbound. Original inbound IDs remain lineage only.
+- RED/GREEN: missing web/API/UI boundary; stale queued context takeover;
+  cancellation renewal after expiry; pre-proposal queued confirmation.
+  Web completion leaves a content-free ordering fence, and confirmation must
+  have been received after the proposal was created or renewed.
+- Full date preview includes all 30 occurrences, dual calendar labels, explicit
+  confirmation and two-step cancellation; in-flight/uncertain sends are not
+  claimed as recalled. Owner isolation, revoked sessions and concurrent
+  web/Zalo confirmation use real local D1 tests.
+- Local built-page visual inspection: desktop and mobile viewport, 30 rows
+  visible in the DOM, no horizontal overflow, keyboard focus reaches the
+  confirmation button above mobile navigation. Synthetic fixture only.
+- Listing is bounded to 10 recent series plus 10 pending proposals, clearly
+  labelled in the UI. Historical pagination is not included in this slice.
+- Before pause: full check 93 files / 1730 tests PASS; final fresh resumption
+  verification is recorded in the task ledger before commit. No remote effects.
