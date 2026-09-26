@@ -154,3 +154,28 @@ Tasks 8–9 remain. No user-facing V2 capability is enabled or deployed.
   labelled in the UI. Historical pagination is not included in this slice.
 - Before pause: full check 93 files / 1730 tests PASS; final fresh resumption
   verification is recorded in the task ledger before commit. No remote effects.
+
+## Task 9 — offline corpus and release handoff
+
+- Task 8 fresh resumption gates: focused 61/61; full check 93/1730; typecheck
+  and diff PASS. Committed as `4fa122036719a53f257568bd84370bfdccbdab86`.
+- New scorer RED: module missing. GREEN: 10/10 scorer/provenance tests; malformed
+  accounting, tampered provenance and live-profile injection fail closed.
+- Synthetic corpus: 22 scenarios / 37 turns, temporal 37/37, mocked dialogue
+  37/37, projected state/request/expansion 37/37, zero observed failures.
+  Initial past-date fixture needed an explicit year: DD/MM intentionally rolls
+  to its next occurrence; runtime logic was not changed to fit the fixture.
+- Pure corpus has no persistence authority. Separate real local D1/inbound and
+  legacy command/scheduler/delivery suite: 6 files / 145 tests PASS; covers
+  ciphertext-only storage, no premature mutation, duplicate confirmation,
+  cancellation/claim races, unchanged historical rows and additive migration
+  rollback compatibility. No observed plaintext or duplicate-creation failures.
+- Fresh full check: 94 files / 1740 tests PASS; typecheck, lint, build, Worker
+  types and dry-run PASS. Canonical documentation test and diff validation PASS.
+- Safe-observability scan: no direct logging/network/env credential access in
+  new conversation modules or offline runner; timing sinks project only bounded
+  stage/outcome/duration, cleanup logs only outcome/count. Existing ingress
+  diagnostic allowlists preserved. No live key/provider/database access.
+- Final independent whole-branch review remains pending at this checkpoint.
+  Capability stays default-off. Live V2 evaluation, remote migration, reviewed
+  master promotion and exact-master deploy authorization remain release gates.

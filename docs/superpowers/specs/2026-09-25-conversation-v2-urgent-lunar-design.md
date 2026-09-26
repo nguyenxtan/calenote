@@ -1,13 +1,14 @@
 # Conversation V2 — contextual reminders, finite urgent series, explicit lunar dates
 
 Date: 2026-09-25
-Status: **DESIGN_APPROVED — IMPLEMENTATION_PLAN_REVIEW_PENDING**
+Status: **IMPLEMENTATION_AUTHORIZED — LOCAL_ACCEPTANCE_IN_PROGRESS**
 Inspected source: `9018344f1f8b1e0adf4d7905d3e7e6550f9ee5ad`.
 This document proposes behavior; it does not claim implementation, benchmark
 acceptance, migration authorization, or deployment. Conversation-level scope
-was requested by the user. The user approved this written specification with
-“làm đi” on 2026-09-25. This approves preparation of the implementation plan;
-runtime implementation still requires that plan's review and execution choice.
+was requested by the user. The user approved this written specification and
+whole-package implementation on 2026-09-25. Inline task execution with TDD and
+one final independent whole-branch review supersedes the earlier pending-plan
+and per-task-review wording. Live model and exact-SHA release gates remain.
 
 ## 1. Intent and scope
 
@@ -260,7 +261,7 @@ remain visible in results rather than hidden by a narrower timing metric.
 
 ## 9. Verification and delivery boundaries
 
-Implementation will use TDD and task-level independent review. Required coverage:
+Implementation uses TDD, automated task gates and final independent whole-branch review. Required coverage:
 
 - greeting alone versus greeting plus scheduling request; no welcome spam;
 - known event date retained, missing date asked, event/reminder time separated;
@@ -297,8 +298,8 @@ chat remain separate follow-up work.
 
 ## 10. Written-review checkpoint
 
-This is the consolidated design, not an execution plan. Review the proposed
-limits and product behavior above. After written-spec approval, prepare the
-implementation plan with explicit task ownership, RED/green tests, migration
-review, independent acceptance, and release gates. Runtime implementation waits
-for that plan's review and execution choice.
+This is the consolidated approved design. The corresponding implementation
+plan was authorized for inline whole-package execution on 2026-09-25. Current
+local evidence and remaining release gates are recorded in
+`docs/implementation/conversation-v2-progress.md` and
+`docs/runbooks/conversation-v2-release.md`; this design is not deployment proof.

@@ -47,8 +47,10 @@ Recheck branch, HEAD, status and worktrees before executing. Do not edit the
 older root checkout or create another worktree automatically.
 
 Each task ends with focused tests, `pnpm typecheck`, `git diff --check`, a
-selective commit, and task-level independent acceptance with zero Critical and
-Important findings before the next task. Save RED command/output, GREEN
+selective commit, and automated acceptance before the next task. Final
+independent whole-branch review requires zero unresolved Critical and Important
+findings. This execution ruling supersedes task-level reviewer bullets below.
+Save RED command/output, GREEN
 command/output, commit and review evidence in
 `docs/implementation/conversation-v2-progress.md`. An expected assertion or
 missing-export failure is RED evidence; a broken test runner is not.
@@ -730,8 +732,7 @@ it("cannot label a mock run as live model acceptance", () => {
 | Provider-free/local tests, independent review and release gates | Every task, 9 |
 | Continuous chat after admin | Roadmap only; excluded from implementation |
 
-The plan deliberately creates an independently reviewed acceptance boundary per
-task. Recommended execution: **subagent-driven**, with a fresh implementer and
-fresh reviewer per task, because context encryption, calendar authority and
-atomic multi-reminder creation must not borrow unverified assumptions from one
-another. Written-plan approval and execution choice are still pending.
+Execution approved 2026-09-25: **inline**, with automated TDD/task gates and one
+fresh independent whole-branch review. Earlier subagent-per-task/pending-approval
+wording is superseded. The progress ledger records task completion and rulings;
+provider calls, remote migrations and deployment retain separate release gates.
