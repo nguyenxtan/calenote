@@ -234,3 +234,25 @@ Final fresh verification after the last CAS fix:
 
 The worktree and plan-specific evidence are retained per the explicit preserve-
 work instruction; no reset, stash, deletion, push, merge or deployment occurred.
+
+## PR #8 CI fixture-lifecycle correction
+
+The preceding no-push statement describes the implementation checkpoint. The
+branch was subsequently pushed and PR #8 opened against
+`codex/product-experience-v2`, not master, with user authorization to merge after
+CI. No activation or deployment is included in this PR.
+
+- Push run `36241554006` at `8157b78` timed out the standalone/mixed-greeting
+  test at 5000ms; PR run `36241556889` passed that same test at 2756ms. The failing
+  test included cold workerd startup, eight migrations and fixture seed writes
+  within its business-test deadline, rather than a bounded setup hook.
+- Move only that suite's database initialization to a 20-second `beforeEach`,
+  matching the existing semantic lifecycle suite. Each test still gets a fresh
+  database, unchanged cleanup/assertions and the default 5-second body timeout.
+  No runtime, model, migration or global timeout behavior changed.
+- Fresh exact greeting regression: 1/1 PASS; entire V2 integration: 23/23 PASS.
+- Fresh `pnpm check`: 94 files / 1759 tests PASS; docs/typecheck/lint/build/
+  Worker types/dry-run PASS. Test phase 92.44 seconds. Generated ignored bundle
+  still reports 146 nonfatal lint warnings, zero errors.
+- `git diff --check`: PASS. Remote CI must pass on the corrected head before
+  the normal V2-branch merge; this is not live-model/UAT acceptance.

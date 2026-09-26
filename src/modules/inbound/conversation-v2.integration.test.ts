@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeContextHarness, NOW } from "@/modules/conversation/infrastructure/d1/test-support";
 import { createConversationService } from "@/modules/conversation/service";
 import { D1ConversationRuntimeStore } from "@/modules/conversation/infrastructure/d1/runtime-store";
@@ -17,13 +17,20 @@ const disposals: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(disposals.splice(0).map(fn => fn())); });
 const create = (extra: Partial<ConversationModel> = {}): ConversationModel => ({ intent: "CREATE_REMINDER", title: "thi hết môn ở Quang Trung",
   titleState: "RESOLVED", targetIntent: null, dialogueAct: "CONTINUE", continuation: "YES", capability: null, ...extra });
-async function harness() {
+let fixture: Awaited<ReturnType<typeof makeContextHarness>>;
+// Cold workerd startup, migrations and seed writes belong to fixture setup.
+// Keep a fresh database per test and the default 5-second business-test deadline.
+beforeEach(async () => {
   const h = await makeContextHarness(); disposals.push(h.dispose);
   for (const sql of readFileSync("migrations/0008_finite_reminder_series.sql", "utf8").split(/;\s*(?=CREATE|--|$)/u).map(s => s.trim()).filter(Boolean)) await h.db.prepare(sql).run();
   await h.db.batch([
     h.db.prepare("INSERT INTO workspaces (id,kind,owner_user_id,created_at,updated_at) VALUES ('space-one','PERSONAL','one',1,1)"),
     h.db.prepare("INSERT INTO memberships (workspace_id,user_id,role,created_at) VALUES ('space-one','one','OWNER',1)"),
   ]);
+  fixture = h;
+}, 20_000);
+async function harness() {
+  const h = fixture;
   const commandStore = new D1ReminderCommandStore(h.db);
   const runtimeStore = new D1ConversationRuntimeStore(h.db);
   const seriesStore = new D1SeriesStore(h.db, h.keyring);
