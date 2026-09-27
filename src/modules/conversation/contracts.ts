@@ -39,9 +39,23 @@ export const ConversationModelJsonSchema: typeof conversationBaseJsonSchema = {
   // Zod refinements are runtime-only. Express dialogue ownership on the wire
   // as well; root properties/required/additionalProperties still apply.
   anyOf: [
-    dialogueBranch({ dialogueAct: { type: "string", enum: ["CAPABILITY"] }, capability: { type: "string", enum: ["LUNAR"] }, intent: { type: "string", enum: ["HELP"] } }),
-    dialogueBranch({ dialogueAct: { type: "string", enum: ["GREET", "ABANDON"] }, capability: { type: "null" }, intent: { type: "string", enum: ["HELP"] } }),
-    dialogueBranch({ dialogueAct: { type: "string", enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } }),
+    dialogueBranch({ dialogueAct: { type: "string", enum: ["CAPABILITY"] }, capability: { type: "string", enum: ["LUNAR"] }, intent: { type: "string", enum: ["HELP"] },
+      title: { type: "null" }, titleState: { type: "string", enum: ["NOT_APPLICABLE"] }, targetIntent: { type: "null" } }),
+    dialogueBranch({ dialogueAct: { type: "string", enum: ["GREET", "ABANDON"] }, capability: { type: "null" }, intent: { type: "string", enum: ["HELP"] },
+      title: { type: "null" }, titleState: { type: "string", enum: ["NOT_APPLICABLE"] }, targetIntent: { type: "null" } }),
+    ...[
+      { intent: { type: "string" as const, enum: ["CREATE_REMINDER"] }, targetIntent: { type: "null" as const } },
+      { intent: { type: "string" as const, enum: ["AMBIGUOUS"] }, targetIntent: { type: "string" as const, enum: ["CREATE_REMINDER"] } },
+    ].flatMap(semantic => [
+      { title: { type: "string" as const, minLength: 1, maxLength: MAX_SEMANTIC_TITLE_CODE_UNITS, pattern: "\\S" }, titleState: { type: "string" as const, enum: ["RESOLVED"] } },
+      { title: { type: "null" as const }, titleState: { type: "string" as const, enum: ["MISSING", "AMBIGUOUS"] } },
+    ].map(title => dialogueBranch({ ...semantic, ...title,
+      dialogueAct: { type: "string", enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } }))),
+    ...[
+      { intent: { type: "string" as const, enum: ["LIST_REMINDERS", "HELP", "UNSUPPORTED"] }, targetIntent: { type: "null" as const } },
+      { intent: { type: "string" as const, enum: ["AMBIGUOUS"] }, targetIntent: { enum: [null, "LIST_REMINDERS"] } },
+    ].map(semantic => dialogueBranch({ ...semantic, title: { type: "null" }, titleState: { type: "string", enum: ["NOT_APPLICABLE"] },
+      dialogueAct: { type: "string", enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } })),
   ],
 };
 

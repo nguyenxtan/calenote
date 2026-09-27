@@ -11,13 +11,15 @@ export type ConversationDecision =
 const blank = (): PendingRequest => ({ title: null, calendar: "GREGORIAN", eventDate: null, reminderDate: null,
   reminderTime: null, count: null, relation: null, missing: [] });
 const conflict = (): ConversationDecision => ({ kind: "SAFE_REJECT", code: "CONFLICT" });
+const clarifyIntent = (request: PendingRequest): ConversationDecision => ({ kind: "CLARIFY", field: "intent",
+  request: { ...request, missing: ["intent", ...request.missing.filter(field => field !== "intent")] } });
 const sameDate = (left: DateFact, right: DateFact) => left.solarDate === right.solarDate && left.calendar === right.calendar
   && JSON.stringify(left.lunar) === JSON.stringify(right.lunar) && left.conversionVersion === right.conversionVersion;
 
 /** Pure decision only: no clock reads, storage, identity, confirmation, or mutation. */
 export function reconcileConversation(input: {
   model: ConversationModel; temporal: ConversationTemporalEvidence; previous: ConversationSnapshot | null;
-  now: number; editRequested: boolean;
+  now: number; editRequested: boolean; newRequest?: boolean; abandonRequested?: boolean;
 }): ConversationDecision {
   const parsed = ConversationModelSchema.safeParse(input.model);
   if (!parsed.success || !Number.isSafeInteger(input.now)) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
@@ -27,22 +29,22 @@ export function reconcileConversation(input: {
   // Dialogue uncertainty is not permission to create or replace a pending
   // request, even if the separate semantic intent happens to say CREATE.
   if (model.dialogueAct === "AMBIGUOUS" && (model.intent === "CREATE_REMINDER" || model.intent === "AMBIGUOUS")) {
-    return { kind: "CLARIFY", request: { ...(active?.request ?? blank()), missing: ["intent"] }, field: "intent" };
+    return clarifyIntent(active?.request ?? blank());
   }
   if (model.dialogueAct === "GREET") return { kind: "GREET" };
   if (model.dialogueAct === "CAPABILITY") return { kind: "LUNAR_HELP" };
   if (model.dialogueAct === "ABANDON") {
     if (!active) return { kind: "HELP" };
-    if (model.continuation === "YES") return { kind: "ABANDON_PENDING" };
-    return { kind: "CLARIFY", request: { ...active.request, missing: ["intent"] }, field: "intent" };
+    if (model.continuation === "YES" && input.abandonRequested === true) return { kind: "ABANDON_PENDING" };
+    return clarifyIntent(active.request);
   }
   if (model.intent === "HELP") return { kind: "HELP" };
   if (model.intent === "LIST_REMINDERS") return { kind: "READ_ONLY_LIST" };
   if (model.intent === "UNSUPPORTED") return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
-  const continuing = !!active && model.dialogueAct !== "NEW_REQUEST" && model.continuation === "YES";
+  const continuing = !!active && !input.newRequest && model.dialogueAct !== "NEW_REQUEST" && model.continuation === "YES";
   const request = continuing ? structuredClone(active.request) : blank();
   if (model.intent === "AMBIGUOUS" || (active && model.continuation === "UNCERTAIN")) {
-    return { kind: "CLARIFY", request: { ...(active?.request ?? request), missing: ["intent"] }, field: "intent" };
+    return clarifyIntent(active?.request ?? request);
   }
   const temporal = input.temporal;
   if (temporal.unsupportedCadence) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };

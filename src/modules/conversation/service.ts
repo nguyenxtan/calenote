@@ -14,8 +14,7 @@ import type { ConversationInput } from "./prompt";
 import type { ConversationStore } from "./context-store";
 import type { ConversationRuntimeStore } from "./infrastructure/d1/runtime-store";
 import type { LunarCalendarAdapter } from "./lunar-calendar";
-import { extractConversationTemporalEvidence } from "./temporal";
-import { reconcileConversation } from "./reconcile";
+import { evaluateConversationTurn } from "./turn";
 import { composeConversationReply } from "./responses";
 import { observeTiming, type ConversationTiming } from "./processing-feedback";
 
@@ -34,7 +33,6 @@ export interface ConversationServiceDependencies {
 const confirm = new Set(["có", "ok", "1", "xác nhận"]);
 const cancel = new Set(["hủy", "huỷ", "không", "2"]);
 const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
-const edit = /^(?:đổi|sửa|chuyển|điều chỉnh)(?:\s|$)/u;
 const unavailable = "Mình chưa xử lý được yêu cầu này lúc này. Chưa có lời nhắc mới; thông tin đang chờ vẫn giữ nguyên, bạn thử lại sau nhé.";
 const displayDate = (date: string) => date.split("-").reverse().join("/");
 
@@ -124,11 +122,8 @@ export function createConversationService(deps: ConversationServiceDependencies)
             pendingQuestion: previous.request.missing[0] ?? null,
             turns: previous.turns.map(({ userText, outcomeCode }) => ({ userText, outcomeCode })) } } : {}) });
         if (!model) return finish(scope, unavailable);
-        const continuing = previous !== null && model.dialogueAct !== "NEW_REQUEST" && model.continuation === "YES";
-        const temporal = extractConversationTemporalEvidence({ text: message.text, receivedAt: message.receivedAt,
-          sourceInboundId: message.id, currentCalendar: continuing ? previous.request.calendar : "GREGORIAN",
-          ...(continuing ? { previousRequest: previous.request } : {}) }, deps.calendar);
-        const decision = reconcileConversation({ model, temporal, previous, now: deps.now(), editRequested: edit.test(normalized) });
+        const { decision } = evaluateConversationTurn({ text: message.text, receivedAt: message.receivedAt,
+          sourceInboundId: message.id, model, previous, now: deps.now() }, deps.calendar);
         if (decision.kind === "ABANDON_PENDING") {
           if (previous && !await deps.contextStore.finish(scope, previous.id, previous.revision, "CANCELLED")) return { status: "SUPERSEDED" };
           if (pending) await deps.seriesStore.discard(scope, pending.proposalId, pending.revision);

@@ -1,5 +1,17 @@
 # Conversation V2 execution evidence
 
+## Latest checkpoint — 2026-09-27 boundary repair
+
+Post-live-failure repair is independently reviewed offline: Critical 0 /
+Important 0, focused 181/181, full check 96 files / 1816 tests. Shared turn
+evaluation prevents complete new requests inheriting an old lunar calendar;
+model abandonment alone cannot cancel pending context; clarification preserves
+unresolved lunar operands; full wire title/target constraints match runtime.
+Model/provider/budget, historical ledgers and corpus expectations are unchanged.
+Latest live evidence remains FAIL, not superseded by local tests. No new live
+call, master promotion or UAT deployment occurred in this correction.
+See `docs/benchmarks/conversation-v2-results.md` for evidence and residual gates.
+
 Plan: `docs/superpowers/plans/2026-09-25-conversation-v2-urgent-lunar.md`.
 Execution base: `cab27b641e49bca082927ff5cf0be61105607338`.
 User requests whole-package UAT review; implementation runs inline, with a

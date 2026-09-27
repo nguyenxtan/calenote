@@ -6,8 +6,8 @@ import { z } from "zod";
 import { ConversationModelSchema, ConversationModelJsonSchema, ConversationSnapshotSchema, type ConversationSnapshot } from "../../src/modules/conversation/contracts";
 import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { lunarCalendar } from "../../src/modules/conversation/lunar-calendar";
-import { extractConversationTemporalEvidence, type Evidence } from "../../src/modules/conversation/temporal";
-import { reconcileConversation } from "../../src/modules/conversation/reconcile";
+import type { Evidence } from "../../src/modules/conversation/temporal";
+import { evaluateConversationTurn } from "../../src/modules/conversation/turn";
 import { expandFiniteSeries } from "../../src/modules/reminders/series";
 
 const corpusPath = "src/modules/conversation/benchmark/conversation-v2.json";
@@ -57,12 +57,8 @@ export function runConversationCorpus(raw: unknown) {
     for (const [index, turn] of scenario.turns.entries()) {
       now += turn.delayMs;
       const model = corpus.models[turn.model];
-      const continuing = previous !== null && previous.expiresAt > now && model.dialogueAct !== "NEW_REQUEST" && model.continuation === "YES";
-      const temporal = extractConversationTemporalEvidence({ text: turn.text, receivedAt: now,
-        sourceInboundId: `synthetic-${index}`, currentCalendar: continuing ? previous!.request.calendar : "GREGORIAN",
-        ...(continuing ? { previousRequest: previous!.request } : {}) }, lunarCalendar);
-      const decision = reconcileConversation({ model, temporal, previous, now,
-        editRequested: /^(?:đổi|sửa|chuyển|điều chỉnh)(?:\s|$)/u.test(turn.text.normalize("NFC").trim().toLocaleLowerCase("vi-VN")) });
+      const { continuing, temporal, decision } = evaluateConversationTurn({ text: turn.text, receivedAt: now,
+        sourceInboundId: `synthetic-${index}`, model, previous, now }, lunarCalendar);
       const categories: string[] = [];
       total++;
       const actualEvidence = { calendar: fact(temporal.calendar), eventDate: fact(temporal.eventDate, value => value.solarDate),

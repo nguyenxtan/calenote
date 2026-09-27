@@ -1,5 +1,46 @@
 # Conversation V2 evaluation evidence
 
+## Post-failure boundary repair — 2026-09-27: OFFLINE PASS / LIVE NOT RE-EVALUATED
+
+The repair after `351ad01` addresses the three failures below without altering
+the frozen corpus, expected outcomes, scoring comparisons, budget, provider or
+fallback policy. Historical failed runs remain authoritative live evidence.
+
+- Shared application turn evaluation checks standalone Gregorian temporal
+  evidence before inheriting a pending calendar. A complete reminder clause
+  with a grounded task/date/time can establish an independent request even
+  when the model incorrectly suggests CONTINUE. EDIT/AMBIGUOUS cannot gain this
+  reset authority; incomplete fragments still reconcile against pending facts.
+- ABANDON requires positive whole-utterance pending-request cancellation
+  evidence, not just model confidence. Ambiguous, negated, quoted or conditional
+  wording clarifies intent. Pending unresolved fields are retained behind that
+  question, including lunar year/leap-month state, so later answers can resume.
+- Every emitted schema branch includes the complete object and title/null/
+  target-intent consistency constraints, including nonblank resolved titles.
+  Prompt version 4 removes repeated instructions to fit the unchanged 12000
+  input bound; no input/output or monetary cap was raised.
+- Runtime, offline evaluation and live diagnostic projection now share the
+  same turn boundary. The scorer file changes only orchestration, not its
+  comparisons or acceptance thresholds; future runs have new provenance.
+
+RED evidence: wire schema accepted a null RESOLVED title; wrongly continued
+new requests either rejected or selected lunar dates; confident ABANDON cancelled
+ambiguous/negated/conditional requests. Review additionally exposed unconfirmed
+prefixed edits becoming resets and intent clarification erasing unresolved lunar
+fields; both were reproduced RED and corrected before fresh verification.
+
+Fresh gates: focused **181/181**, full **96 files / 1816 tests**, separate
+typecheck, build, lint (zero errors; 146 existing generated-artifact warnings),
+Worker type check, dry-run and diff check PASS. Independent final review:
+Critical 0 / Important 0 / Minor 0. Real local D1 tests verify preserved encrypted
+context, Gregorian draft timestamp, no pre-confirmation canonical write and
+exactly-one reminder after confirmation/replay. Mock corpus remains 37/37 and
+is explicitly not live acceptance.
+
+No new inference slot, live call, remote D1 operation, master merge or deployment
+was performed for this repair. The last live result below remains FAIL;
+UAT activation stays blocked pending a newly authorized bounded live evaluation.
+
 ## Latest semantic verification — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
 
 Run `conversation-v2-semantic-verification-20260927-final-01`, source

@@ -12,7 +12,7 @@ import type { SemanticAttemptResult } from "../../src/modules/intelligence/seman
 import { processBoundChatMessage } from "../../src/modules/reminders/command-service";
 import { lunarCalendar } from "../../src/modules/conversation/lunar-calendar";
 import { extractConversationTemporalEvidence, type Evidence } from "../../src/modules/conversation/temporal";
-import { reconcileConversation } from "../../src/modules/conversation/reconcile";
+import { evaluateConversationTurn } from "../../src/modules/conversation/turn";
 import { ConversationSnapshotSchema, type ConversationModel, type ConversationSnapshot } from "../../src/modules/conversation/contracts";
 import { persistedD1Blob } from "../../src/modules/db/persisted-blob";
 
@@ -68,10 +68,9 @@ export async function createConversationProbe(config: SemanticGatewayConfig, tra
         {store,keyring:h.keyring,now:()=>now,reply:async()=>{},conversation:service});
       const observed=attempt as SemanticAttemptResult<ConversationModel>|undefined;
       const model=observed?.status==="SUCCESS" ? observed.interpretation : undefined;
-      const continuing=previous!==null && model?.dialogueAct!=="NEW_REQUEST" && model?.continuation==="YES";
-      const temporal=extractConversationTemporalEvidence({text,receivedAt:now,sourceInboundId:`one-${index}`,
-        currentCalendar:continuing?previous!.request.calendar:"GREGORIAN",...(continuing?{previousRequest:previous!.request}:{})},lunarCalendar);
-      const decision=model?reconcileConversation({model,temporal,previous,now,editRequested:/^(?:đổi|sửa|chuyển|điều chỉnh)(?:\s|$)/u.test(text.normalize("NFC").trim().toLocaleLowerCase("vi-VN"))}):undefined;
+      const evaluated=model?evaluateConversationTurn({model,text,previous,now,receivedAt:now,sourceInboundId:`one-${index}`},lunarCalendar):undefined;
+      const temporal=evaluated?.temporal??extractConversationTemporalEvidence({text,receivedAt:now,sourceInboundId:`one-${index}`,currentCalendar:"GREGORIAN"},lunarCalendar);
+      const decision=evaluated?.decision;
       const next=await snapshot();
       const state=await h.db.prepare("SELECT status FROM conversation_contexts WHERE owner_id='one' AND chat_identity_id='chat-one'").first<string>("status")??"NONE";
       const afterProposals=await proposals();

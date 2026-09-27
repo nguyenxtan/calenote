@@ -9,6 +9,25 @@ const help = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE",
   targetIntent: null, dialogueAct: "GREET", continuation: "NO", capability: null };
 
 describe("semantic-only conversation contract", () => {
+  it("wire schema rejects the same title and target-intent combinations as runtime", () => {
+    const wire = z.fromJSONSchema(ConversationModelJsonSchema);
+    for (const intent of ["CREATE_REMINDER", "LIST_REMINDERS", "HELP", "UNSUPPORTED", "AMBIGUOUS"]) {
+      for (const targetIntent of [null, "CREATE_REMINDER", "LIST_REMINDERS"]) {
+        for (const titleState of ["RESOLVED", "MISSING", "AMBIGUOUS", "NOT_APPLICABLE"]) {
+          for (const title of [null, "", " \t\n", "gọi mẹ"]) {
+            const value = { ...create, intent, targetIntent, titleState, title };
+            const applicable = intent === "CREATE_REMINDER" || (intent === "AMBIGUOUS" && targetIntent === "CREATE_REMINDER");
+            const expected = (intent === "AMBIGUOUS" || targetIntent === null) && (applicable
+              ? titleState === "RESOLVED" ? title !== null && title.trim().length > 0
+                : ["MISSING", "AMBIGUOUS"].includes(titleState) && title === null
+              : titleState === "NOT_APPLICABLE" && title === null);
+            expect(wire.safeParse(value).success, JSON.stringify(value)).toBe(expected);
+            expect(ConversationModelSchema.safeParse(value).success).toBe(expected);
+          }
+        }
+      }
+    }
+  });
   it("makes every provider union branch independently complete and strict", () => {
     for (const branch of ConversationModelJsonSchema.anyOf ?? []) {
       expect(branch.required).toEqual(Object.keys(ConversationModelSchema.shape));

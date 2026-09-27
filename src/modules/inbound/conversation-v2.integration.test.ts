@@ -140,11 +140,42 @@ describe("guarded conversation V2 integration", () => {
   it("abandons only pending context without restarting the missing-time loop", async () => {
     const h = await harness();
     await h.send("thi ngày 11/10/2026");
-    const reply = await h.send("thế thôi", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
+    const reply = await h.send("bỏ yêu cầu này nhé", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
       dialogueAct: "ABANDON", continuation: "YES", capability: null });
     expect(reply.reply).toContain("bỏ yêu cầu");
     expect(await h.db.prepare("SELECT status FROM conversation_contexts").first("status")).toBe("CANCELLED");
     expect(await h.count()).toBe(0);
+  });
+  it("an overconfident abandonment label cannot destroy pending encrypted context", async () => {
+    const h = await harness();
+    await h.send("mai nhắc gọi mẹ", create({ title: "gọi mẹ" }));
+    const before = await h.store.load(h.scope(1));
+    const response = await h.send("thế thôi", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
+      dialogueAct: "ABANDON", continuation: "YES", capability: null });
+    expect(response.result.status).toBe("CLARIFICATION_REQUESTED");
+    expect(response.reply).toContain("tiếp tục");
+    const after = await h.store.load(h.scope(2));
+    expect(after?.request).toEqual({ ...before!.request, missing: ["intent", "time"] });
+    expect(after?.status).toBe("CLARIFYING");
+    expect(await h.count()).toBe(0);
+    expect((await h.send("bỏ yêu cầu này nhé", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
+      dialogueAct: "ABANDON", continuation: "YES", capability: null })).result.status).toBe("CANCELLED");
+    expect(await h.store.load(h.scope(3))).toBeNull();
+  });
+  it("a mistaken continuation label cannot schedule a new Gregorian request on the prior lunar calendar", async () => {
+    const h = await harness();
+    await h.send("âm lịch 1/1/2027 nhắc gọi mẹ", create({ title: "gọi mẹ" }));
+    const response = await h.send("mai 9h nhắc gọi mẹ", create({ title: "gọi mẹ" }));
+    expect(response.result.status).toBe("DRAFT_CREATED");
+    expect((await h.store.load(h.scope(2)))?.request).toMatchObject({ calendar: "GREGORIAN", reminderDate: { solarDate: "2026-09-17", lunar: null }, reminderTime: "09:00" });
+    expect(await h.db.prepare("SELECT scheduled_at FROM command_drafts WHERE status='PENDING'").first("scheduled_at"))
+      .toBe(Date.parse("2026-09-17T09:00:00+07:00"));
+    expect(await h.count()).toBe(0);
+    const confirmation = await h.send("có");
+    expect(confirmation.result.status).toBe("CONFIRMED");
+    await h.process(confirmation.message);
+    await h.send("có");
+    expect(await h.count()).toBe(1);
   });
   it("one-off drafts retain context until the legacy confirmation atomically resolves both", async () => {
     const h = await harness();
@@ -237,7 +268,7 @@ describe("guarded conversation V2 integration", () => {
   it("contextual abandon removes the transferred one-off confirmation authority", async () => {
     const h = await harness();
     await h.send("mai 9h nhắc gọi mẹ", create({ title: "gọi mẹ" }));
-    expect((await h.send("thế thôi", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
+    expect((await h.send("bỏ yêu cầu này nhé", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
       dialogueAct: "ABANDON", continuation: "YES", capability: null })).result.status).toBe("CANCELLED");
     expect(await h.db.prepare("SELECT status FROM command_drafts").first("status")).toBe("CANCELLED");
     await h.send("có"); expect(await h.count()).toBe(0);

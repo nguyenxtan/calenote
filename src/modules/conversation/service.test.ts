@@ -29,6 +29,36 @@ function fixture() {
   return { deps, dispatch, handle };
 }
 describe("conversation paid-call and semantic safety boundary", () => {
+  it.each(["mai 9h nhắc gọi mẹ", "nhắc gọi mẹ ngày 28/09/2026 lúc 9h"])("does not let a wrong CONTINUE label import lunar context into a complete request: %s", async text => {
+    const h = fixture();
+    h.deps.contextStore.load = async () => ({ id: "context", revision: 1, status: "CLARIFYING", createdAt: now - 1, expiresAt: now + 60000,
+      request: { title: "gọi mẹ", calendar: "LUNAR_VN", eventDate: null, reminderDate: null, reminderTime: null,
+        count: null, relation: null, missing: ["time"] }, turns: [] });
+    h.dispatch.mockResolvedValue({ status: "SUCCESS", usage: { costMicrounits: 1 }, interpretation: {
+      intent: "CREATE_REMINDER", title: "gọi mẹ", titleState: "RESOLVED", targetIntent: null,
+      dialogueAct: "CONTINUE", continuation: "YES", capability: null } });
+    h.deps.keyring.encryptSensitive = async () => ({ ciphertext: new ArrayBuffer(16), iv: new ArrayBuffer(12) });
+    h.deps.commandStore.createDraft = vi.fn(async () => "COMMITTED" as const);
+    h.deps.commandStore.confirmDraft = vi.fn(async () => "CONFLICT" as const);
+    expect((await h.handle(text)).status).toBe("DRAFT_CREATED");
+    expect(h.deps.contextStore.save).toHaveBeenCalledWith(expect.anything(), 1, expect.objectContaining({ request: expect.objectContaining({
+      calendar: "GREGORIAN", reminderTime: "09:00", reminderDate: expect.objectContaining({ solarDate: text.startsWith("mai") ? "2026-09-26" : "2026-09-28" }),
+    }) }));
+    expect(h.deps.commandStore.confirmDraft).not.toHaveBeenCalled();
+  });
+  it.each(["thế thôi", "vậy nhé", "đừng bỏ yêu cầu này", "nếu bỏ yêu cầu này thì sao?"])("does not grant an AI ABANDON suggestion cancellation authority: %s", async text => {
+    const h = fixture(); const finish = vi.fn(async () => true);
+    h.deps.contextStore.finish = finish;
+    h.deps.contextStore.load = async () => ({ id: "context", revision: 1, status: "CLARIFYING", createdAt: now - 1, expiresAt: now + 60000,
+      request: { title: "gọi mẹ", calendar: "GREGORIAN", eventDate: null, reminderDate: null, reminderTime: null,
+        count: null, relation: null, missing: ["time"] }, turns: [] });
+    h.dispatch.mockResolvedValue({ status: "SUCCESS", usage: { costMicrounits: 1 }, interpretation: {
+      intent: "HELP", title: null, titleState: "NOT_APPLICABLE", targetIntent: null,
+      dialogueAct: "ABANDON", continuation: "YES", capability: null } });
+    expect((await h.handle(text)).status).toBe("CLARIFICATION_REQUESTED");
+    expect(finish).not.toHaveBeenCalled();
+    expect(h.deps.reply).toHaveBeenCalledWith(expect.stringContaining("tiếp tục"));
+  });
   it("sends pending question and lifecycle explicitly without temporal facts or identities", async () => {
     const h=fixture();
     h.deps.contextStore.load=async()=>({id:"secret-context",revision:2,status:"CLARIFYING",createdAt:now-1000,expiresAt:now+60000,

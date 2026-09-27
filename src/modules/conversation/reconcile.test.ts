@@ -3,6 +3,7 @@ import type { ConversationModel, ConversationSnapshot, PendingRequest } from "./
 import { lunarCalendar } from "./lunar-calendar";
 import { extractConversationTemporalEvidence } from "./temporal";
 import { reconcileConversation } from "./reconcile";
+import { isExplicitPendingAbandonment } from "./turn";
 
 const now = Date.UTC(2026, 8, 25, 3);
 const model: ConversationModel = { intent: "CREATE_REMINDER", title: "gọi mẹ", titleState: "RESOLVED", targetIntent: null,
@@ -17,6 +18,7 @@ function snapshot(request: Partial<PendingRequest>): ConversationSnapshot {
 function decide(text: string, previous: ConversationSnapshot | null = null, overrides: Partial<ConversationModel> = {}) {
   return reconcileConversation({ model: { ...model, ...overrides }, previous, now,
     editRequested: /^(?:đổi|sửa)\b/u.test(text),
+    abandonRequested: isExplicitPendingAbandonment(text),
     temporal: extractConversationTemporalEvidence({ text, receivedAt: now, sourceInboundId: "current", currentCalendar: previous?.request.calendar ?? "GREGORIAN", previousRequest: previous?.request }, lunarCalendar) });
 }
 const continuation = { dialogueAct: "CONTINUE" as const, continuation: "YES" as const, title: null, titleState: "MISSING" as const };
@@ -28,7 +30,7 @@ describe("deterministic conversation reconciliation", () => {
   it.each([null, snapshot({title:"gọi khách",reminderDate:date("2026-09-26"),missing:["time"]})])("ambiguous dialogue cannot create or replace a request even with a create intent", previous => {
     const before=structuredClone(previous);
     const decision=decide("mai 9h",previous,{dialogueAct:"AMBIGUOUS",continuation:"NO"});
-    expect(decision).toMatchObject({kind:"CLARIFY",field:"intent",request:{...(previous?.request??empty),missing:["intent"]}});
+    expect(decision).toMatchObject({kind:"CLARIFY",field:"intent",request:{...(previous?.request??empty),missing:previous?["intent","time"]:["intent"]}});
     expect(previous).toEqual(before);
   });
   it("fills a missing title from a title answer while retaining authoritative date and time", () => {
@@ -75,7 +77,7 @@ describe("deterministic conversation reconciliation", () => {
   it.each(["GREET", "CAPABILITY", "ABANDON"] as const)("handles %s without proposing a reminder", dialogueAct => {
     const previous = snapshot({ title: "gọi mẹ", missing: ["time"] });
     const original = structuredClone(previous);
-    expect(decide("chào", previous, { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", dialogueAct,
+    expect(decide(dialogueAct === "ABANDON" ? "bỏ yêu cầu này nhé" : "chào", previous, { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", dialogueAct,
       capability: dialogueAct === "CAPABILITY" ? "LUNAR" : null, continuation: "YES" }).kind)
       .toBe(dialogueAct === "GREET" ? "GREET" : dialogueAct === "CAPABILITY" ? "LUNAR_HELP" : "ABANDON_PENDING");
     expect(previous).toEqual(original);
