@@ -1,6 +1,60 @@
-# Conversation V2 offline acceptance — 2026-09-26
+# Conversation V2 evaluation evidence
 
-Status: **OFFLINE_PASS / LIVE_MODEL_NOT_EVALUATED / NOT_DEPLOYED**.
+## Live evaluation — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
+
+Run `conversation-v2-live-20260927-0953-01` used the frozen
+[bounded live profile](conversation-v2-live-profile.md) at runner commit
+`76a49dc1a20eddff570c190a5bd7070056a34d16`.
+Model `google/gemini-2.5-flash-lite`, provider `google-vertex/eu`, ZDR,
+no fallback and zero retries. Public route, structured-output support and
+price caps were revalidated at `2026-09-27T02:54:10.262Z`.
+
+| Evidence | Result |
+| --- | --- |
+| Authorized ceiling | USD 0.50 / 40 inference requests |
+| Actual requests | 9 |
+| Executed turns | 9 of 37 |
+| Correct final outcomes | 8; remaining 28 NOT_RUN_AFTER_FAILURE |
+| Schema validity | 8/9 attempted calls |
+| Temporal evidence | 9/9 executed turns; full 37-turn gate NOT passed |
+| Safety-category failures | 1 (STATE mismatch after rejected schema) |
+| Provider-reported cost, rounded up per call | 678 microunits = USD 0.000678 |
+| Conservative retained reservation | 11727 microunits = USD 0.011727 |
+| Live acceptance / deployment authorization | NO / NO |
+
+First failed boundary: `lunar-year-completion`, turn 1, `SCHEMA_INVALID`.
+The actual gateway rejected the model result; the service returned `REJECTED`
+instead of preserving the request and asking for the missing lunar year.
+Downstream categories were DIALOGUE, RUNTIME_OUTCOME and STATE. There was no
+premature canonical reminder mutation in any executed turn. The safety counter
+records the failed expected state; it is not evidence of an unauthorized send.
+
+Before the failure, complete one-off, time/date clarification completion, and
+all three urgent-exam series turns passed. The latter persisted a proposal with
+the exact three preceding dates and no canonical reminders. This is partial
+evidence only, not acceptance of the remainder of the corpus.
+
+No raw model response was logged or retained. Therefore the exact invalid field
+cannot be reconstructed from this run; do not claim a prompt-vs-provider root
+cause without additional safe diagnostic evidence. Do not loosen the schema or
+edit expected outcomes to convert this failure into a pass.
+
+Durable local ledger:
+`<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927/authorization.jsonl`.
+SHA-256: `526f151903df51cb0a0bb863b2be94197a5026adcc95a89de70c45ca25a04cb5`.
+Runner digest: `8ad45a7985756ebad44926ed31e537c10f6261ccc960ee033101e88c066fb950`.
+All component digests in the historical table below remained unchanged.
+Preserve this ledger; the campaign is closed, not silently resumable.
+
+Pre-inference verification: 95 test files / 1769 tests PASS; typecheck, build,
+lint (zero errors; existing generated-artifact warnings), Wrangler type check,
+dry-run and diff check PASS. Independent runner review after corrections:
+Critical 0 / Important 0. Actual CLI mock transport: 37/37 PASS, explicitly
+not live evidence. Remote D1, secrets, master and UAT deployment were unchanged.
+
+## Historical offline acceptance — 2026-09-26
+
+Historical status: **OFFLINE_PASS / LIVE_MODEL_NOT_EVALUATED / NOT_DEPLOYED**.
 This is not a replacement for a live Gemini evaluation. Historical Semantic V1
 benchmark artifacts are unchanged and do not accept the new dialogue schema.
 
@@ -85,8 +139,8 @@ exercise every integration regression. See the execution evidence for final
 whole-repository counts. No second independent review is claimed.
 
 Same first candidate only: `google/gemini-2.5-flash-lite`, `google-vertex/eu`,
-privacy/ZDR, no fallback. Before inference, approve a **new** V2 live profile,
-corpus, metrics, maximum requests, cost ceiling and retry policy. This offline
-profile supplies no live transport and consumes no historical authorization.
-Then evaluate actual semantic/dialogue output through the backend and test
-real Zalo timing separately. Keep the capability disabled until accepted.
+privacy/ZDR, no fallback. The subsequently authorized V2 profile was executed
+on 2026-09-27 and failed as recorded above. The offline profile supplies no live
+transport and does not accept that failure. Keep the capability disabled until
+an independently validated correction and a separately recorded live acceptance;
+real Zalo timing remains a separate user-facing verification.
