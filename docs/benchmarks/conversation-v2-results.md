@@ -1,5 +1,68 @@
 # Conversation V2 evaluation evidence
 
+## Latest live verification — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
+
+Run `conversation-v2-verification-20260927-1240-01`, source
+`cea6773bac445b98d721a79510584d217840ec55`, completed all 37 synthetic turns
+through the real gateway/service and encrypted local D1 stores. Endpoint
+eligibility was refreshed at `2026-09-27T06:13:01.362Z`: Gemini 2.5 Flash Lite,
+`google-vertex/eu`, ZDR, no fallback, zero retries. Corpus and scorer unchanged.
+
+| Gate | Observed | Required |
+| --- | --- | --- |
+| Correct final outcomes | 28/37 | At least 36/37 |
+| Schema validity | 36/36 model calls | 100% |
+| Temporal evidence | 36/37 | 37/37 |
+| Safety-category failures | 7 | 0 |
+| Premature canonical reminder mutation | 0 observed | 0 |
+| Provider-reported cost, rounded up per call | 2798 microunits / USD 0.002798 | Within allocation |
+| Conservative retained reservation | 46908 microunits | At most 500000 |
+| Live accepted / deployment authorized | NO / NO | — |
+
+The self-contained schema passed every model response in this run. This does
+not make the end-to-end conversation correct. Exact residual boundaries:
+
+| Case / turn | Failed categories |
+| --- | --- |
+| complete-one-off / 1 | REQUEST |
+| lunar-year-completion / 2 | REQUEST |
+| new-request-resets-calendar / 2 | TEMPORAL, DIALOGUE, RUNTIME_OUTCOME, STATE, REQUEST, DRAFT_PERSISTENCE |
+| abandon-pending / 2 | DIALOGUE, RUNTIME_OUTCOME, STATE |
+| ambiguous-abandonment / 2 | DIALOGUE |
+| missing-title / 1 | DIALOGUE, RUNTIME_OUTCOME, STATE |
+| ambiguous-title / 1 | DIALOGUE, RUNTIME_OUTCOME, STATE |
+| uncertain-intent / 1 | DIALOGUE |
+| unsupported-not-mutating / 1 | DIALOGUE, RUNTIME_OUTCOME, STATE, PRESERVATION |
+
+In the missing/ambiguous-title cases the service created a **draft** instead
+of clarifying; no canonical reminder was created. Explicit abandonment asked
+another clarification instead of cancelling. A new request did not produce the
+expected independent Gregorian draft. REQUEST mismatch reports alone cannot
+identify which field differed or distinguish harmless title paraphrase from a
+material change; raw model outputs were intentionally not retained. Do not
+retroactively loosen these comparisons or claim an exact model-value root cause.
+Safety-category totals include mismatched request/state/preservation, not seven
+unauthorized reminders. The urgent-exam three-turn series passed unchanged.
+
+All four exclusive campaign slots are now consumed. Cumulative provider cost:
+4188 microunits = USD 0.004188; retained reservations: 71665 microunits.
+The aggregate hard allocation remains USD 2. Do not delete/reuse ledgers or
+dispatch additional inference merely because actual usage was below allocation.
+Continue only offline diagnosis until an explicitly bounded new evaluation is
+authorized. No production D1, secret, master or Worker deployment was changed.
+
+Ledger: `<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-verification/authorization.jsonl`.
+SHA-256: `365bf3e8d157a384f4b6beb666c43be9f88859c2aea40f9288ebc01c9db3242c`.
+Provenance digests: prompt `24d0107315a2ae190b3ff6cf26beb633fdfd9b40b82abe42e0dcef1120a3ee4d`,
+schema `5483488e6c70cab31a551705e6a1fc2ea7ba66f85e6327b3c8a4cc02abdbc698`,
+runtime `7c74d30557d7c31d7987ffcd9c8359d738f0dc37ea9554450281eeeb3a602782`,
+runner `eb5d8a148823315684c5a3485534704e794410343d545b1faa876cb6bc0777ea`.
+
+Pre-inference gates: focused 45/45; full `pnpm check` 95 files / 1773 tests;
+typecheck/build/Worker types/dry-run/diff check PASS. Lint had zero errors and
+146 existing generated-artifact warnings. Independent code review: Critical 0,
+Important 0. These local gates did not substitute for live acceptance.
+
 ## First repair attempt — 2026-09-27: FAIL
 
 Run `conversation-v2-repair-20260927-1126-01` at `cbd47d7a5e344e528c1f60f098b9cfded738e261`
