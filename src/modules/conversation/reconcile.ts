@@ -24,6 +24,11 @@ export function reconcileConversation(input: {
   const model = parsed.data;
   const active = input.previous && ["CLARIFYING", "DRAFT_READY"].includes(input.previous.status)
     && input.previous.expiresAt > input.now ? input.previous : null;
+  // Dialogue uncertainty is not permission to create or replace a pending
+  // request, even if the separate semantic intent happens to say CREATE.
+  if (model.dialogueAct === "AMBIGUOUS" && (model.intent === "CREATE_REMINDER" || model.intent === "AMBIGUOUS")) {
+    return { kind: "CLARIFY", request: { ...(active?.request ?? blank()), missing: ["intent"] }, field: "intent" };
+  }
   if (model.dialogueAct === "GREET") return { kind: "GREET" };
   if (model.dialogueAct === "CAPABILITY") return { kind: "LUNAR_HELP" };
   if (model.dialogueAct === "ABANDON") {

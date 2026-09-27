@@ -29,6 +29,17 @@ function fixture() {
   return { deps, dispatch, handle };
 }
 describe("conversation paid-call and semantic safety boundary", () => {
+  it("sends pending question and lifecycle explicitly without temporal facts or identities", async () => {
+    const h=fixture();
+    h.deps.contextStore.load=async()=>({id:"secret-context",revision:2,status:"CLARIFYING",createdAt:now-1000,expiresAt:now+60000,
+      request:{title:"gọi mẹ",calendar:"GREGORIAN",eventDate:null,reminderDate:null,reminderTime:null,count:null,relation:null,missing:["time"]},
+      turns:[{userText:"nhắc gọi mẹ",receivedAt:now-1,outcomeCode:"CLARIFY_TIME"}]});
+    await h.handle("9h");
+    const prepare=vi.mocked(h.deps.gateway.prepare);
+    expect(prepare.mock.calls[0][1]).toMatchObject({conversationContext:{status:"CLARIFYING",pendingQuestion:"time",title:"gọi mẹ"}});
+    expect(JSON.stringify(prepare.mock.calls[0][1])).not.toContain("secret-context");
+    expect(prepare.mock.calls[0][1].conversationContext).not.toHaveProperty("reminderDate");
+  });
   it.each(["mỗi tuần", "hàng tháng", "mỗi năm", "mỗi 2 giờ", "mỗi 30 phút", "mỗi 2 ngày", "mỗi 9h", "liên tục 2 giờ", "lặp lại", "3 ngày liên tục mỗi tuần"])("never downgrades unsupported cadence %s into a proposal", async cadence => {
     const h = fixture();
     await h.handle(`mai 9h nhắc gọi mẹ ${cadence}`);

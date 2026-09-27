@@ -63,3 +63,22 @@ it("keeps safe bounded conversation context in user data only", async () => {
   expect(JSON.parse(requests[0].messages[1].content)).toEqual({ ...input, conversationContext });
   expect(requests[0].messages[0].content).not.toContain("Quang Trung");
 });
+
+it("passes explicit pending state through the real gateway but rejects unbounded state labels", async () => {
+  const requests: SemanticJsonRequest[]=[];
+  const gateway=createConversationGateway(config,async request=>{requests.push(request);return response(interpretation);});
+  const conversationContext={title:"gọi khách",status:"CLARIFYING",pendingQuestion:"time",turns:[]};
+  const prepared=gateway.prepare("PRIMARY",{...input,conversationContext});
+  expect(prepared.status).toBe("READY");
+  if(prepared.status!=="READY")throw Error("not ready");
+  await prepared.dispatch();
+  expect(JSON.parse(requests[0].messages[1].content).conversationContext).toEqual(conversationContext);
+  expect(gateway.prepare("PRIMARY",{...input,conversationContext:{...conversationContext,pendingQuestion:"private-unknown"}}).status).toBe("FAILURE");
+});
+
+it("prepares bounded clarification at the actual 12000 input/256 output limits and fails closed above them", () => {
+  const gateway=createConversationGateway({...config,maxInputTokens:12000,maxOutputTokens:256},async()=>{throw Error("NETWORK_FORBIDDEN");});
+  const conversationContext={title:"nộp hồ sơ",status:"CLARIFYING",pendingQuestion:"time",turns:[{userText:"nhắc nộp hồ sơ",outcomeCode:"CLARIFY_TIME"}]};
+  expect(gateway.prepare("PRIMARY",{...input,text:"14h",conversationContext}).status).toBe("READY");
+  expect(gateway.prepare("PRIMARY",{...input,conversationContext:{...conversationContext,turns:Array(6).fill({userText:"a".repeat(1800),outcomeCode:"CLARIFY_TIME"})}}).status).toBe("FAILURE");
+});

@@ -117,8 +117,11 @@ export function createConversationService(deps: ConversationServiceDependencies)
         if (greeting.test(normalized)) return finish(scope, wording({ kind: "GREET" }));
         if (["help", "/help", "trợ giúp", "hướng dẫn"].includes(normalized)) return finish(scope, wording({ kind: "HELP" }));
         if (pending?.action === "CANCEL") return finish(scope, "Bạn đang có đề xuất hủy chuỗi. Gửi “có” để xác nhận hoặc “hủy” để bỏ đề xuất.");
+        const priorStatus = previous?.status;
+        if (priorStatus !== undefined && priorStatus !== "CLARIFYING" && priorStatus !== "DRAFT_READY") return finish(scope, unavailable);
         const model = await interpret(scope, { text: message.text, ...semanticReferenceWallClock(message.receivedAt),
-          ...(previous ? { conversationContext: { title: previous.request.title,
+          ...(previous ? { conversationContext: { title: previous.request.title, status: priorStatus,
+            pendingQuestion: previous.request.missing[0] ?? null,
             turns: previous.turns.map(({ userText, outcomeCode }) => ({ userText, outcomeCode })) } } : {}) });
         if (!model) return finish(scope, unavailable);
         const continuing = previous !== null && model.dialogueAct !== "NEW_REQUEST" && model.continuation === "YES";

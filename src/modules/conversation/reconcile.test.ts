@@ -22,6 +22,19 @@ function decide(text: string, previous: ConversationSnapshot | null = null, over
 const continuation = { dialogueAct: "CONTINUE" as const, continuation: "YES" as const, title: null, titleState: "MISSING" as const };
 
 describe("deterministic conversation reconciliation", () => {
+  it.each([["LIST_REMINDERS","READ_ONLY_LIST"],["HELP","HELP"],["UNSUPPORTED","SAFE_REJECT"]] as const)("ambiguous dialogue cannot turn %s into a stored clarification", (intent,kind) => {
+    expect(decide("yêu cầu",snapshot({title:"cũ",missing:["time"]}),{intent,title:null,titleState:"NOT_APPLICABLE",dialogueAct:"AMBIGUOUS",continuation:"UNCERTAIN"})).toMatchObject({kind});
+  });
+  it.each([null, snapshot({title:"gọi khách",reminderDate:date("2026-09-26"),missing:["time"]})])("ambiguous dialogue cannot create or replace a request even with a create intent", previous => {
+    const before=structuredClone(previous);
+    const decision=decide("mai 9h",previous,{dialogueAct:"AMBIGUOUS",continuation:"NO"});
+    expect(decision).toMatchObject({kind:"CLARIFY",field:"intent",request:{...(previous?.request??empty),missing:["intent"]}});
+    expect(previous).toEqual(before);
+  });
+  it("fills a missing title from a title answer while retaining authoritative date and time", () => {
+    const previous=snapshot({title:null,reminderDate:date("2026-09-26"),reminderTime:"14:00",missing:["title"]});
+    expect(decide("nộp hồ sơ",previous,{...continuation,title:"nộp hồ sơ",titleState:"RESOLVED"})).toMatchObject({kind:"PROPOSE",request:{title:"nộp hồ sơ",reminderDate:date("2026-09-26"),reminderTime:"14:00",missing:[]}});
+  });
   it("proposes a draft without any mutation instruction", () => {
     expect(decide("mai 8h nhắc gọi mẹ")).toMatchObject({ kind: "PROPOSE", request: { reminderDate: { solarDate: "2026-09-26" }, reminderTime: "08:00", count: null } });
   });
