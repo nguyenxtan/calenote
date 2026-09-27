@@ -9,6 +9,13 @@ const help = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE",
   targetIntent: null, dialogueAct: "GREET", continuation: "NO", capability: null };
 
 describe("semantic-only conversation contract", () => {
+  it("makes every provider union branch independently complete and strict", () => {
+    for (const branch of ConversationModelJsonSchema.anyOf ?? []) {
+      expect(branch.required).toEqual(Object.keys(ConversationModelSchema.shape));
+      expect(branch.additionalProperties).toBe(false);
+      expect(Object.keys(branch.properties ?? {})).toEqual(Object.keys(ConversationModelSchema.shape));
+    }
+  });
   it("enforces capability/dialogue ownership in the emitted JSON contract, not only runtime refinements",()=>{
     const wire=z.fromJSONSchema(ConversationModelJsonSchema);
     for(const dialogueAct of ["NEW_REQUEST","CONTINUE","EDIT","AMBIGUOUS","GREET","ABANDON","CAPABILITY"]){

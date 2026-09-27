@@ -28,14 +28,20 @@ export const ConversationModelSchema = ModelSemanticInterpretationSchema.safeExt
 });
 export type ConversationModel = z.infer<typeof ConversationModelSchema>;
 const conversationBaseJsonSchema = z.toJSONSchema(ConversationModelSchema, { target: "draft-07" });
+// Each branch carries the full object contract. Do not depend on provider
+// schema lowering preserving sibling constraints around a union.
+function dialogueBranch(properties: NonNullable<typeof conversationBaseJsonSchema.properties>): NonNullable<typeof conversationBaseJsonSchema.anyOf>[number] {
+  return { type: "object", additionalProperties: false, required: conversationBaseJsonSchema.required,
+    properties: { ...conversationBaseJsonSchema.properties, ...properties } };
+}
 export const ConversationModelJsonSchema: typeof conversationBaseJsonSchema = {
   ...conversationBaseJsonSchema,
   // Zod refinements are runtime-only. Express dialogue ownership on the wire
   // as well; root properties/required/additionalProperties still apply.
   anyOf: [
-    { type: "object", properties: { dialogueAct: { enum: ["CAPABILITY"] }, capability: { enum: ["LUNAR"] }, intent: { enum: ["HELP"] } } },
-    { type: "object", properties: { dialogueAct: { enum: ["GREET", "ABANDON"] }, capability: { type: "null" }, intent: { enum: ["HELP"] } } },
-    { type: "object", properties: { dialogueAct: { enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } } },
+    dialogueBranch({ dialogueAct: { type: "string", enum: ["CAPABILITY"] }, capability: { type: "string", enum: ["LUNAR"] }, intent: { type: "string", enum: ["HELP"] } }),
+    dialogueBranch({ dialogueAct: { type: "string", enum: ["GREET", "ABANDON"] }, capability: { type: "null" }, intent: { type: "string", enum: ["HELP"] } }),
+    dialogueBranch({ dialogueAct: { type: "string", enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } }),
   ],
 };
 

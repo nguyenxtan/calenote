@@ -1,5 +1,27 @@
 # Conversation V2 evaluation evidence
 
+## First repair attempt — 2026-09-27: FAIL
+
+Run `conversation-v2-repair-20260927-1126-01` at `cbd47d7a5e344e528c1f60f098b9cfded738e261`
+stopped after one request: `complete-one-off` returned `SCHEMA_INVALID`.
+Safe diagnostics: `title/invalid_type` and `invalid_value` for titleState,
+targetIntent, dialogueAct, continuation and capability. No values were retained.
+0/1 executed outcomes passed, schema 0/1, temporal evidence 1/1, one STATE
+safety category, 36 turns not run; zero canonical reminders created.
+Cost: 53 microunits; reservation: 1303 microunits. Cumulative actual cost across
+three campaigns: USD 0.001390. No deployment or production mutation occurred.
+
+The next correction makes each schema union branch independently complete:
+all seven properties, required fields and strict extra-property rejection.
+This preserves the standard JSON Schema accepted-value set. It removes reliance
+on provider handling of sibling constraints around unions, but the safe failure
+evidence alone does **not** prove provider schema lowering caused the failure.
+Provider compatibility and quality still require the final verification slot.
+
+Repair ledger SHA-256:
+`97b37190976995ffdfdc6c03f8788ec76c6e2ad3a3dbf6a4ca53a05b4cc4a2e0`.
+Location: `<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-repair/authorization.jsonl`.
+
 ## Diagnostic reproduction and repair — 2026-09-27
 
 Run `conversation-v2-diagnostic-20260927-1044-01` at `e6a2d91` reproduced
