@@ -23,6 +23,22 @@ the previously observed intermittent contract defect.
 
 ## Frozen profile
 
+### Semantic repair continuation authorization — 2026-09-27
+
+After reviewing the residual failure plan, the user authorized completing the
+repairs and a bounded new evaluation ("làm hết đi"), retaining the USD 2 total.
+Two new exclusive slots are `semantic-diagnostic` and `semantic-verification`,
+USD 0.50 / 40 requests each, zero retries. Before either LIVE run the runner
+requires the exact SHA-256 of all four closed historical ledgers and their final
+COMPLETE records; all dispatched reservations sum to 71665 microunits. Missing,
+changed or incomplete evidence fails closed before HTTP or creating a new ledger.
+Thus the worst-case aggregate is 71665 + 2 * 500000 = 1071665 microunits, below
+USD 2. This does not reuse any old slot or discount ambiguous dispatched usage.
+
+New safe diagnostics include only validated semantic enum labels, canonical
+mismatch field names and a case-only title-difference boolean, never titles,
+dates, user text, identifiers or raw provider output. They do not change scoring.
+
 - Existing immutable V2 corpus: 22 cases / 37 turns, digest
   `5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382`.
 - Real local ephemeral D1, encrypted context, command/service and gateway path.

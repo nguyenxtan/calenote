@@ -14,13 +14,41 @@ import { ConversationModelSchema } from "../../src/modules/conversation/contract
 const CORPUS="src/modules/conversation/benchmark/conversation-v2.json";
 const CORPUS_DIGEST="5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382";
 export const AUTHORIZATION="conversation-v2-live-20260927";
-export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification";
+export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification"|"semantic-diagnostic"|"semantic-verification";
 export function liveDirectory(root:string,slot:CampaignSlot="legacy") {
-  if(!["legacy","diagnostic","repair","verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
-  // Four exclusive slots including the historical campaign, each capped at $0.50.
-  // Entire old allocation stays reserved: aggregate can never exceed $2.
+  if(!["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
+  // Single-use paths stay fixed across worktrees. New semantic slots also
+  // require sealed historical reservations before admission (see below).
   return join(realpathSync(execFileSync("git",["-C",root,"rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim()),"calenote-benchmark-authorizations",
     slot==="legacy"?AUTHORIZATION:`${AUTHORIZATION}-repair-${slot}`);
+}
+export function verifyClosedCampaign(body:string,digest:string):number {
+  if(createHash("sha256").update(body).digest("hex")!==digest)throw new Error("CLOSED_LEDGER_CHANGED");
+  const rows=z.array(z.object({event:z.string(),reservedMicrounits:z.number().int().nonnegative().optional(),retainedCostMicrounits:z.number().int().nonnegative().optional()})).parse(body.trim().split("\n").map(line=>JSON.parse(line)));
+  const reservations=rows.filter(r=>r.event==="DISPATCH").reduce((n,r)=>n+(r.reservedMicrounits??NaN),0);
+  if(rows[0]?.event!=="BEGIN"||rows.at(-1)?.event!=="COMPLETE"||rows.filter(r=>r.event==="COMPLETE").length!==1||!Number.isSafeInteger(reservations)||rows.at(-1)?.retainedCostMicrounits!==reservations)throw new Error("CAMPAIGN_NOT_CLOSED");
+  return reservations;
+}
+function verifySemanticRepairAllocation(root:string) {
+  const closed: [CampaignSlot,string][]=[
+    ["legacy","526f151903df51cb0a0bb863b2be94197a5026adcc95a89de70c45ca25a04cb5"],
+    ["diagnostic","78b96130079e97f3f6b61450139d52a351f3458afda733611a79d39fc19cde42"],
+    ["repair","97b37190976995ffdfdc6c03f8788ec76c6e2ad3a3dbf6a4ca53a05b4cc4a2e0"],
+    ["verification","365bf3e8d157a384f4b6beb666c43be9f88859c2aea40f9288ebc01c9db3242c"],
+  ];
+  const spent=closed.reduce((n,[slot,digest])=>n+verifyClosedCampaign(readFileSync(join(liveDirectory(root,slot),"authorization.jsonl"),"utf8"),digest),0);
+  // New explicit continuation approval: two exclusive $0.50 slots plus ALL
+  // retained historical reservations, not discounted provider-reported usage.
+  if(spent!==71665||spent+2*500000>2000000)throw new Error("AGGREGATE_CAP_EXCEEDED");
+}
+export function safeOutcomeDiagnostics(raw:unknown,actual:Record<string,unknown>|null,expected:Record<string,unknown>) {
+  const parsed=ConversationModelSchema.safeParse(raw);
+  const semantic=parsed.success?((({intent,titleState,targetIntent,dialogueAct,continuation,capability})=>({intent,titleState,targetIntent,dialogueAct,continuation,capability}))(parsed.data)):null;
+  const fields=["calendar","title","eventDate","date","time","count","relation"];
+  const requestMismatchFields=fields.filter(field=>!isDeepStrictEqual(actual?.[field]??null,expected[field]??null));
+  const a=actual?.title,b=expected.title;
+  const titleCaseOnlyDifference=typeof a==="string"&&typeof b==="string"&&a!==b&&a.normalize("NFC").toLocaleLowerCase("vi-VN")===b.normalize("NFC").toLocaleLowerCase("vi-VN");
+  return {semantic,requestMismatchFields,titleCaseOnlyDifference};
 }
 export function safeConversationDiagnostics(response:{status:number;body:string;oversized?:boolean}) {
   if(response.oversized||response.body.length>20000||response.status!==200)return {issues:[],invariants:[]};
@@ -104,6 +132,7 @@ export async function runConversationLive(options:Options) {
   if(!/^[a-zA-Z0-9_-]{1,100}$/u.test(options.runId))throw new Error("INVALID_RUN_ID");
   if(resolve(options.root)!==process.cwd())throw new Error("ROOT_MISMATCH");
   if(options.mode==="LIVE"&&resolve(options.directory)!==liveDirectory(process.cwd(),options.slot))throw new Error("LIVE_DIRECTORY_FIXED");
+  if(options.mode==="LIVE"&&options.slot?.startsWith("semantic-"))verifySemanticRepairAllocation(options.root);
   const preflight=preflightConversationLive(options.root), data=corpus(options.root), runtimeConfig=config(options.root);
   const transport=options.mode==="LIVE"?conversationTransport(options.apiKey):options.transport;
   await mkdir(options.directory,{recursive:true,mode:0o700});
@@ -134,6 +163,9 @@ export async function runConversationLive(options:Options) {
         if(observed.attempt){modelAttempts++;if(observed.attempt.status==="SUCCESS")schemaPassed++;
           else{categories.push(observed.attempt.category);stopped=true;}}
         const expected=turn.expected;
+        const req=observed.next?.request;
+        const requestProjection=req?{calendar:req.calendar,title:req.title,eventDate:req.eventDate?.solarDate??null,date:req.reminderDate?.solarDate??null,time:req.reminderTime,count:req.count,relation:req.relation}:null;
+        await append({event:"OUTCOME_DIAGNOSTICS",caseId:scenario.id,turn:index+1,rawRequestComparisonApplicable:!!expected.request,...safeOutcomeDiagnostics(observed.attempt?.status==="SUCCESS"?observed.attempt.interpretation:null,requestProjection,expected.request??{})});
         const evidence={calendar:null,eventDate:null,date:null,time:null,count:null,relation:null,...expected.evidence};
         if(isDeepStrictEqual(observed.evidence,evidence))temporalPassed++;else categories.push("TEMPORAL");
         const kind=observed.decision?.kind??(turn.text==="xin chào"&&!observed.attempt?"GREET":null);

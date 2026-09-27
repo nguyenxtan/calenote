@@ -3,13 +3,32 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics } from "./conversation-v2-live";
+import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics, safeOutcomeDiagnostics, verifyClosedCampaign } from "./conversation-v2-live";
 import { D1ReminderCommandStore } from "../../src/modules/reminders/infrastructure/d1/command-store";
 import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
 describe("bounded Conversation V2 live evaluation", () => {
+  it("reports mismatched field names and validated semantic labels without titles or arbitrary payloads", () => {
+    const model={intent:"CREATE_REMINDER",title:"private-sentinel",titleState:"RESOLVED",targetIntent:null,dialogueAct:"CONTINUE",continuation:"YES",capability:null};
+    const result=safeOutcomeDiagnostics(model,{title:"private-sentinel",calendar:"LUNAR_VN"},{title:"expected-sentinel",calendar:"GREGORIAN"});
+    expect(result).toEqual({semantic:{intent:"CREATE_REMINDER",titleState:"RESOLVED",targetIntent:null,dialogueAct:"CONTINUE",continuation:"YES",capability:null},requestMismatchFields:["calendar","title"],titleCaseOnlyDifference:false});
+    expect(JSON.stringify(result)).not.toContain("sentinel");
+    expect(safeOutcomeDiagnostics({...model,intent:"private-sentinel"},null,{}).semantic).toBeNull();
+    expect(safeOutcomeDiagnostics(model,{title:"Gọi mẹ"},{title:"gọi mẹ"}).titleCaseOnlyDifference).toBe(true);
+  });
+  it("allows closed campaign reservations only with the exact immutable digest and final completion", () => {
+    const body=[{event:"BEGIN"},{event:"DISPATCH",reservedMicrounits:1303},{event:"COMPLETE",retainedCostMicrounits:1303}].map(row=>JSON.stringify(row)).join("\n")+"\n";
+    const hash=createHash("sha256").update(body).digest("hex");
+    expect(verifyClosedCampaign(body,hash)).toBe(1303);
+    expect(()=>verifyClosedCampaign(body+" ",hash)).toThrow();
+    const incomplete=body.split("\n").slice(0,2).join("\n");
+    expect(()=>verifyClosedCampaign(incomplete,createHash("sha256").update(incomplete).digest("hex"))).toThrow();
+    const inconsistent=body.replace('"retainedCostMicrounits":1303','"retainedCostMicrounits":0');
+    expect(()=>verifyClosedCampaign(inconsistent,createHash("sha256").update(inconsistent).digest("hex"))).toThrow();
+  });
   it("reports schema reasons without leaking payload values or attacker-controlled field names",()=>{
     const payload={intent:"CREATE_REMINDER",title:"private-sentinel-title",titleState:"RESOLVED",targetIntent:null,dialogueAct:"NEW_REQUEST",continuation:"NO",capability:"LUNAR"};
     const response={status:200,body:JSON.stringify({choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]})};
