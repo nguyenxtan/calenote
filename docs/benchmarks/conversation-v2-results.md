@@ -1,5 +1,36 @@
 # Conversation V2 evaluation evidence
 
+## Diagnostic reproduction and repair — 2026-09-27
+
+Run `conversation-v2-diagnostic-20260927-1044-01` at `e6a2d91` reproduced
+the original failure on request 9 (`lunar-year-completion`, turn 1). Safe
+diagnostics recorded only `dialogueAct/custom` and `CAPABILITY_ACT_MISMATCH`:
+the capability flag and dialogue act violated the backend's cross-field rule.
+No raw response, user text, credential or arbitrary model field was retained.
+
+Root cause: Zod's runtime `superRefine` constraints were not represented in
+the JSON schema sent to the provider. The correction adds structural `anyOf`
+dialogue/capability/HELP constraints to that same strict wire schema, retains
+the runtime rejection, and clarifies that a lunar reminder instruction is not
+a lunar-support question. Scheduling and calendar authority remain backend-only.
+The new regression exhausts dialogue/capability/intent combinations against
+both the emitted schema and the runtime validator. Other title refinements
+remain backend-validated and prompt-defined; this is not a claim that arbitrary
+Zod refinements serialize automatically.
+
+Diagnostic result: 8/9 executed turns correct; 28 not run after failure;
+schema 8/9; one STATE safety category; zero canonical reminder mutations.
+Provider-reported cost rounded up per call: 659 microunits; retained reservation
+11727 microunits. Cumulative original + diagnostic actual cost: USD 0.001337.
+Aggregate authorized ceiling is USD 2 including the original run, enforced by
+the four fixed campaign slots in the live profile. This diagnostic is not live
+acceptance of the correction and does not authorize deployment.
+
+Diagnostic ledger SHA-256:
+`78b96130079e97f3f6b61450139d52a351f3458afda733611a79d39fc19cde42`.
+Location: `<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-diagnostic/authorization.jsonl`.
+The original failed ledger below remains unchanged.
+
 ## Live evaluation — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
 
 Run `conversation-v2-live-20260927-0953-01` used the frozen

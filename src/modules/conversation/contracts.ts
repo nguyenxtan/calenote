@@ -27,7 +27,17 @@ export const ConversationModelSchema = ModelSemanticInterpretationSchema.safeExt
   }
 });
 export type ConversationModel = z.infer<typeof ConversationModelSchema>;
-export const ConversationModelJsonSchema = z.toJSONSchema(ConversationModelSchema, { target: "draft-07" });
+const conversationBaseJsonSchema = z.toJSONSchema(ConversationModelSchema, { target: "draft-07" });
+export const ConversationModelJsonSchema: typeof conversationBaseJsonSchema = {
+  ...conversationBaseJsonSchema,
+  // Zod refinements are runtime-only. Express dialogue ownership on the wire
+  // as well; root properties/required/additionalProperties still apply.
+  anyOf: [
+    { type: "object", properties: { dialogueAct: { enum: ["CAPABILITY"] }, capability: { enum: ["LUNAR"] }, intent: { enum: ["HELP"] } } },
+    { type: "object", properties: { dialogueAct: { enum: ["GREET", "ABANDON"] }, capability: { type: "null" }, intent: { enum: ["HELP"] } } },
+    { type: "object", properties: { dialogueAct: { enum: ["CONTINUE", "EDIT", "NEW_REQUEST", "AMBIGUOUS"] }, capability: { type: "null" } } },
+  ],
+};
 
 const instant = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const identifier = z.string().min(1).max(128);

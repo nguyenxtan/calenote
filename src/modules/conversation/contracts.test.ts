@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { ConversationModelSchema, ConversationSnapshotSchema } from "./contracts";
+import { z } from "zod";
+import { ConversationModelJsonSchema, ConversationModelSchema, ConversationSnapshotSchema } from "./contracts";
 
 const create = { intent: "CREATE_REMINDER", title: "ôn thi", titleState: "RESOLVED",
   targetIntent: null, dialogueAct: "NEW_REQUEST", continuation: "NO", capability: null };
@@ -8,6 +9,20 @@ const help = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE",
   targetIntent: null, dialogueAct: "GREET", continuation: "NO", capability: null };
 
 describe("semantic-only conversation contract", () => {
+  it("enforces capability/dialogue ownership in the emitted JSON contract, not only runtime refinements",()=>{
+    const wire=z.fromJSONSchema(ConversationModelJsonSchema);
+    for(const dialogueAct of ["NEW_REQUEST","CONTINUE","EDIT","AMBIGUOUS","GREET","ABANDON","CAPABILITY"]){
+      for(const capability of [null,"LUNAR"]){
+        for(const intent of ["CREATE_REMINDER","HELP","LIST_REMINDERS","UNSUPPORTED","AMBIGUOUS"]){
+          const value={...(intent==="CREATE_REMINDER"?create:help),intent,dialogueAct,capability};
+          const valid=(dialogueAct==="CAPABILITY") === (capability==="LUNAR") &&
+            (!["GREET","ABANDON","CAPABILITY"].includes(dialogueAct)||intent==="HELP");
+          expect(wire.safeParse(value).success,JSON.stringify({intent,dialogueAct,capability})).toBe(valid);
+          expect(ConversationModelSchema.safeParse(value).success).toBe(valid);
+        }
+      }
+    }
+  });
   it("accepts create without scheduling authority", () => {
     expect(ConversationModelSchema.parse(create)).toEqual(create);
   });
