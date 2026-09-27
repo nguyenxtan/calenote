@@ -1,6 +1,80 @@
 # Conversation V2 evaluation evidence
 
-## Latest live verification — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
+## Latest semantic verification — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
+
+Run `conversation-v2-semantic-verification-20260927-final-01`, source
+`93e436f67dcba45b309622a185300d85ab9e545c`, evaluated the unchanged synthetic
+corpus/scorer with prompt `conversation-v2-semantic-dialogue-3`. The real gateway,
+service and encrypted local D1 path were exercised; no remote D1 or Zalo sends.
+Route eligibility was refreshed at `2026-09-27T09:44:04.946Z`: Gemini 2.5 Flash
+Lite, `google-vertex/eu`, ZDR, no fallback, zero retries.
+
+| Gate | Observed | Required |
+| --- | --- | --- |
+| Correct final outcomes | 28/37; 31 executed, 6 not run after schema failure | At least 36/37 |
+| Schema validity | 29/30 model calls | 100% |
+| Temporal evidence | 30/31 executed turns | 37/37 |
+| Safety-category failures | 3 | 0 |
+| Premature canonical reminder mutation | 0 observed | 0 |
+| Provider-reported cost, rounded up per call | 4535 microunits / USD 0.004535 | Within allocation |
+| Conservative retained reservation | 39090 microunits | At most 500000 |
+| Live accepted / deployment authorized | NO / NO | — |
+
+Safe diagnostic evidence narrows three remaining boundaries:
+
+1. `new-request-resets-calendar`, turn 2: the model returned CONTINUE/YES
+   instead of identifying a new request. The service rejected the request;
+   persisted calendar/date/time differed from the expected independent request.
+   This is context-relation classification, not evidence that the temporal
+   scanner independently failed or that the model calculated a date.
+2. `ambiguous-abandonment`, turn 2: HELP/ABANDON/YES caused CANCELLED rather
+   than clarification. A schema-valid relationship suggestion still allowed
+   an ambiguous user closure to cancel pending context.
+3. `ambiguous-title`, turn 1: the gateway rejected a `titleState/custom`
+   refinement violation. No raw values were retained, so the exact field-value
+   combination is unknown. Six remaining turns were not run. Existing title
+   cross-field refinements are runtime-validated, not fully encoded in the wire
+   schema; prompt guidance has not proved sufficient.
+
+The urgent-exam three-turn series, date/time completion, lunar year/leap flows,
+explicit abandonment, missing-title clarification and read-only LIST passed in
+this run. These partial successes do not accept the whole V2 release. Safety
+counts include failed state expectations, not three canonical reminder writes.
+
+Before inference: focused 92/92; full `pnpm check` 95 files / 1784 tests;
+typecheck, build, Worker types/dry-run and diff check PASS. Lint: zero errors,
+146 pre-existing generated-artifact warnings. Independent repair review:
+Critical 0 / Important 0; this is not a live-quality acceptance verdict.
+
+Ledger: `<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-semantic-verification/authorization.jsonl`.
+SHA-256: `971852d0839e44af571ceb4efeb5fd9e4734518178f02caab7be86cbce66fa57`.
+Provenance digests: prompt `5e9dfd72ef47f541eba746f5b33fb92c614a747e4bb06071e6934c43c8cd9832`,
+schema `5483488e6c70cab31a551705e6a1fc2ea7ba66f85e6327b3c8a4cc02abdbc698`,
+reconciliation `be1783ca434570f8cfd784ffc9166642757524a4b4193796970118f24347a01b`,
+runtime `71a90968073f5e121a233cb1d506c35cbb1350571ea82e07fd1445d82a91ec92`,
+runner `e381c9f0d38ffd360efa4065464c6d5ad2a3e94091b81817db4476874cd3d3ce`.
+
+Both newly authorized semantic slots are now closed. Across all six campaigns,
+provider-reported cost is 9585 microunits (USD 0.009585); retained reservations
+total 125088 microunits. The USD 2 ceiling is unchanged, but unspent money is
+not an unused campaign slot. Stop inference and UAT activation at this failed
+gate; do not recycle ledgers, change scoring or silently choose another model.
+No production secrets, migrations, master merge or Worker deployment changed.
+
+## Semantic diagnostic before repair — 2026-09-27: FAIL
+
+Run `conversation-v2-semantic-diagnostic-20260927-1522-01`, source
+`3de9aabd585a342fb7126b667aba1d384789747a`: 11 requests, 10/11 executed
+outcomes correct, schema 10/11, temporal 11/11; 26 turns not run. Failure:
+`lunar-leap-completion` turn 1, `dialogueAct/custom`,
+`CAPABILITY_ACT_MISMATCH`. Earlier schema success was not permanent proof.
+Safe enum diagnostics also showed CONTINUE/YES on initial requests without
+context. No raw model text, titles or private identifiers were retained.
+Cost: 862 microunits; retained reservation: 14333 microunits.
+Ledger: `<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-semantic-diagnostic/authorization.jsonl`.
+SHA-256: `b0353ad0a9cb968a370e26567961832b62b0d641d4e25fb355f8655354760978`.
+
+## Historical live verification — 2026-09-27: FAIL / UAT ACTIVATION BLOCKED
 
 Run `conversation-v2-verification-20260927-1240-01`, source
 `cea6773bac445b98d721a79510584d217840ec55`, completed all 37 synthetic turns
