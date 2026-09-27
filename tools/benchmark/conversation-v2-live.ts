@@ -9,11 +9,37 @@ import { buildConversationProvenance, runConversationCorpus } from "./conversati
 import { parseSemanticRuntimeConfig } from "../../src/modules/intelligence/infrastructure/openrouter/config";
 import type { SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { createConversationProbe } from "./conversation-v2-probe";
+import { ConversationModelSchema } from "../../src/modules/conversation/contracts";
 
 const CORPUS="src/modules/conversation/benchmark/conversation-v2.json";
 const CORPUS_DIGEST="5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382";
 export const AUTHORIZATION="conversation-v2-live-20260927";
-export const liveDirectory=(root:string)=>join(realpathSync(execFileSync("git",["-C",root,"rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim()),"calenote-benchmark-authorizations",AUTHORIZATION);
+export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification";
+export function liveDirectory(root:string,slot:CampaignSlot="legacy") {
+  if(!["legacy","diagnostic","repair","verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
+  // Four exclusive slots including the historical campaign, each capped at $0.50.
+  // Entire old allocation stays reserved: aggregate can never exceed $2.
+  return join(realpathSync(execFileSync("git",["-C",root,"rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim()),"calenote-benchmark-authorizations",
+    slot==="legacy"?AUTHORIZATION:`${AUTHORIZATION}-repair-${slot}`);
+}
+export function safeConversationDiagnostics(response:{status:number;body:string;oversized?:boolean}) {
+  if(response.oversized||response.body.length>20000||response.status!==200)return {issues:[],invariants:[]};
+  try {
+    const envelope=z.object({choices:z.array(z.object({message:z.object({content:z.string()})})).length(1)}).parse(JSON.parse(response.body));
+    const payload:unknown=JSON.parse(envelope.choices[0].message.content);
+    const parsed=ConversationModelSchema.safeParse(payload);
+    if(parsed.success)return {issues:[],invariants:[]};
+    const fields=["intent","title","titleState","targetIntent","dialogueAct","continuation","capability"];
+    const issues=parsed.error.issues.slice(0,8).map(issue=>({field:fields.includes(String(issue.path[0]))?String(issue.path[0]):"ROOT",code:issue.code}));
+    const p=z.record(z.string(),z.unknown()).safeParse(payload);
+    const invariants:string[]=[];
+    if(p.success) {
+      if((p.data.dialogueAct==="CAPABILITY")!==(p.data.capability!==null))invariants.push("CAPABILITY_ACT_MISMATCH");
+      if(["GREET","CAPABILITY","ABANDON"].includes(String(p.data.dialogueAct))&&p.data.intent!=="HELP")invariants.push("CONTROL_ACT_INTENT_MISMATCH");
+    }
+    return {issues,invariants};
+  }catch{return {issues:[{field:"ROOT",code:"INVALID_ENVELOPE_OR_JSON"}],invariants:[]};}
+}
 export async function verifyConversationEndpoint() {
   const get=async(url:string)=>{
     const response=await fetch(url,{redirect:"error",signal:AbortSignal.timeout(10000)});
@@ -72,12 +98,12 @@ export function conversationTransport(key:string):SemanticTransport {
     return {status:response.status,body:Buffer.concat(chunks).toString("utf8")};
   };
 }
-type Options={root:string;directory:string;runId:string;onProgress?:(safe:unknown)=>void}&
+type Options={root:string;directory:string;runId:string;slot?:CampaignSlot;onProgress?:(safe:unknown)=>void}&
   ({mode:"MOCK";transport:SemanticTransport}|{mode:"LIVE";apiKey:string});
 export async function runConversationLive(options:Options) {
   if(!/^[a-zA-Z0-9_-]{1,100}$/u.test(options.runId))throw new Error("INVALID_RUN_ID");
   if(resolve(options.root)!==process.cwd())throw new Error("ROOT_MISMATCH");
-  if(options.mode==="LIVE"&&resolve(options.directory)!==liveDirectory(process.cwd()))throw new Error("LIVE_DIRECTORY_FIXED");
+  if(options.mode==="LIVE"&&resolve(options.directory)!==liveDirectory(process.cwd(),options.slot))throw new Error("LIVE_DIRECTORY_FIXED");
   const preflight=preflightConversationLive(options.root), data=corpus(options.root), runtimeConfig=config(options.root);
   const transport=options.mode==="LIVE"?conversationTransport(options.apiKey):options.transport;
   await mkdir(options.directory,{recursive:true,mode:0o700});
@@ -86,7 +112,7 @@ export async function runConversationLive(options:Options) {
   let requests=0,retainedCostMicrounits=0,schemaPassed=0,modelAttempts=0,passed=0,temporalPassed=0,safetyFailures=0,total=0,stopped=false;
   const failures:{caseId:string;turn:number;categories:string[]}[]=[];
   try {
-    await append({event:"BEGIN",mode:options.mode,runId:options.runId,...preflight});
+    await append({event:"BEGIN",mode:options.mode,runId:options.runId,...preflight,slot:options.slot??"legacy",aggregateAuthorizationMicrounits:2000000});
     if(options.mode==="LIVE")await append({event:"ELIGIBILITY",...await verifyConversationEndpoint()});
     for(const scenario of data.cases){
       let currentTurn=0;
@@ -94,7 +120,10 @@ export async function runConversationLive(options:Options) {
         if(requests>=40 || retainedCostMicrounits+1303>500000) throw new Error("CAP_REACHED");
         requests++;retainedCostMicrounits+=1303;
         await append({event:"DISPATCH",caseId:scenario.id,turn:currentTurn+1,request:requests,reservedMicrounits:1303});
-        return transport(request,signal);
+        const response=await transport(request,signal);
+        const diagnostics=safeConversationDiagnostics(response);
+        if(diagnostics.issues.length)await append({event:"SCHEMA_DIAGNOSTICS",caseId:scenario.id,turn:currentTurn+1,...diagnostics});
+        return response;
       };
       const probe=stopped?null:await createConversationProbe(runtimeConfig,guarded,data.referenceNow);
       try{for(const [index,turn] of scenario.turns.entries()){

@@ -3,6 +3,24 @@
 Authorization: user-approved aggregate ceiling USD 0.50 on 2026-09-27.
 This is a synthetic evaluation, not production acceptance or deployment authority.
 
+## Repair authorization amendment — 2026-09-27
+
+User explicitly approved correction, safe schema diagnosis and new evaluation,
+then raised the aggregate ceiling to USD 2.00, inclusive of the original run.
+The legacy $0.50 slot/ledger is immutable and remains reserved in full.
+Three additional fixed slots (`diagnostic`, `repair`, `verification`) each
+allow at most 40 requests / $0.50, one exclusive ledger per slot in the shared
+Git directory. Thus all four allocations together cannot exceed $2.00, even
+with concurrent worktrees or missing usage after a crash. No automatic retries.
+Unused allocations are not permission to model-shop or change provider.
+
+Append a slot name to the live CLI command to use a new allocation. Never delete
+or reuse a consumed slot. Diagnostics store only canonical field names, Zod error
+codes and bounded invariant labels; never values, error messages or unknown keys.
+The transport forwards the original response unchanged into the real gateway.
+Corpus/scoring gates remain unchanged. A diagnostic pass alone cannot repair
+the previously observed intermittent contract defect.
+
 ## Frozen profile
 
 - Existing immutable V2 corpus: 22 cases / 37 turns, digest

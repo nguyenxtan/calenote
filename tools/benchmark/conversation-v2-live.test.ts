@@ -4,12 +4,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
-import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory } from "./conversation-v2-live";
+import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics } from "./conversation-v2-live";
 import { D1ReminderCommandStore } from "../../src/modules/reminders/infrastructure/d1/command-store";
 import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
 describe("bounded Conversation V2 live evaluation", () => {
+  it("reports schema reasons without leaking payload values or attacker-controlled field names",()=>{
+    const payload={intent:"CREATE_REMINDER",title:"private-sentinel-title",titleState:"RESOLVED",targetIntent:null,dialogueAct:"NEW_REQUEST",continuation:"NO",capability:"LUNAR"};
+    const response={status:200,body:JSON.stringify({choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]})};
+    expect(safeConversationDiagnostics(response)).toEqual({issues:[{field:"dialogueAct",code:"custom"}],invariants:["CAPABILITY_ACT_MISMATCH"]});
+    const leak={...payload,"private-sentinel-key":"private-sentinel-value"};
+    const diagnostics=safeConversationDiagnostics({...response,body:JSON.stringify({choices:[{message:{content:JSON.stringify(leak)},finish_reason:"stop"}]})});
+    expect(JSON.stringify(diagnostics)).not.toContain("private-sentinel");
+  });
+  it("partitions the increased aggregate authorization into three fixed new slots without changing the legacy fence",()=>{
+    const root=process.cwd();
+    expect(liveDirectory(root,"diagnostic")).not.toBe(liveDirectory(root));
+    expect(new Set([liveDirectory(root),liveDirectory(root,"diagnostic"),liveDirectory(root,"repair"),liveDirectory(root,"verification")]).size).toBe(4);
+    expect(()=>liveDirectory(root,"unbounded" as never)).toThrow("INVALID_CAMPAIGN_SLOT");
+  });
   it("uses the same authorization ledger across linked worktrees",()=>{
     const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
     expect(liveDirectory(process.cwd())).toBe(liveDirectory(join(common,"..")));
