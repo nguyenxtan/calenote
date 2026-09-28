@@ -1,20 +1,24 @@
 # LLM-led conversation understanding with validated reminder objects
 
 Date: 2026-09-28
-Status: **DESIGN_DIRECTION_APPROVED / WRITTEN_SPEC_PENDING_REVIEW**
+Status: **WRITTEN_SPEC_APPROVED / IMPLEMENTATION_PLAN_PENDING_REVIEW**
+Approval reference: owner approved the exact specification at
+`e8f9e75f436a672b23387eb0054047da217ade23` on 2026-09-28 for implementation planning only.
+Implementation plan: [LLM context contract implementation](../plans/2026-09-28-llm-context-contract-implementation.md).
 Inspected baseline: `6329b33264a2916f004953865f6483fafdfd7491`.
 Revision audit: `cafe6da1e26a19d140b7a231b8f1f291ed8c2fc4`; no later
 commits or tracked/untracked changes at the start of this documentation revision.
 Targeted closure checkpoint: `9d1b0abfd2e0cbadbcbb29dd6f64ef409d4f1c2a`;
 verified clean on `codex/llm-context-contract-design`, no intervening commits.
-Owner policy selections are recorded in §10.1; written-spec approval is pending.
+Owner policy selections are recorded in §10.1; the written spec is now approved
+at the reference above. Implementation and evaluation remain unauthorized.
 
 The user approved writing this design after requesting that the LLM understand
 the whole conversation instead of repeatedly extending phrase-specific parsing.
 This document is a proposed replacement contract, not an implementation or live
 acceptance claim. No provider calls, migration, deployment, or runtime changes
-are authorized by this document. Written-spec review precedes implementation
-planning; exact-SHA deployment authorization remains separate.
+are authorized by this document. The owner has separately authorized planning
+only; plan approval and exact-SHA deployment authorization remain separate.
 
 ## 1. Intended outcome
 
@@ -51,7 +55,7 @@ All new contracts, tables and examples below are proposed designs, not code.
 | Annual recurrence | Explicitly excluded §7/10 | Remains excluded; recognized intent is not executable capability |
 | Real-model evidence | Partial §9 | §9.1–9.3 specify layers, numbers and denominators. Existing live probe already calls `processBoundChatMessage` and real conversation service/D1 stores; it is not merely a pure-function runner. Its reply sink is a no-op and some decisions are reconstructed afterward: extend observation of actual outputs, not a parallel evaluator |
 | Compatibility/release | Partial §9 | §9.5 specifies mixed-version and in-flight safety |
-| Product choices | Unstated | §10.1 now records owner selections; written-spec approval remains pending |
+| Product choices | Unstated | §10.1 records owner selections; written-spec approval is recorded in the header |
 | Admin/batching/annual engine/integrations | Outside §10 | Remain outside; not dependencies |
 
 Inspected relevant sources: `conversation/{contracts,prompt,service,turn,
@@ -1132,9 +1136,10 @@ native app, long-term memory subsystem, snooze or completion-tracking additions.
 | Edited-preview confirmation (§5.1/5.1.1) | Bound reply or short token for ambiguous version; ordinary bare confirmation only for stable delivered preview with current SAVE_PREVIEW decision | Decision-type binding is required in addition to version; no non-save approval commits a reminder |
 | Output and evaluation envelope (§8/9.2/9.3) | Retain 1536 output tokens, 32 pilot/80 full executions, 192/480 calls and $0.50/$1.00 ceilings as proposed design/admission limits | Fit unproven; offline feasibility and separate explicit provider authorization remain mandatory; route, production budgets, retry=0 and no fallback unchanged |
 
-These four selections do not approve the revised written spec, implementation
-planning, execution, evaluation spending or deployment. WRITTEN_SPEC_APPROVAL
-remains PENDING. No additional product policy decision is requested here;
+These four selections alone did not approve the revised written spec or further
+work. The subsequent owner approval at `e8f9e75` approves the written spec and
+planning only, not execution, evaluation spending or deployment.
+No additional product policy decision is requested here;
 payload/token feasibility remains a future measured gate, not a fabricated PASS.
 
 Missing-year behavior and unsupported annual recurrence are already resolved by
@@ -1167,7 +1172,6 @@ work, not optional new product categories.
 - Mock results, real calls, dispatch outcomes and channel acceptance remain
   separately reported; no claim of implementation follows document checks (§8/9).
 
-Next gate: review this written spec. After approval, write the implementation
-plan with task boundaries, storage evolution, concrete contract limits, live
-profiles and execution method. This spec does not authorize implementation by
-itself. Deployment remains unchanged until that work passes its release gates.
+Next gate: owner review of the linked implementation plan and execution method.
+This spec does not authorize implementation by itself. Deployment remains
+unchanged until separately authorized work passes its release gates.
