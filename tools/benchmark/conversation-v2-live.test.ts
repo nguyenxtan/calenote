@@ -11,6 +11,12 @@ import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
 describe("bounded Conversation V2 live evaluation", () => {
+  it("does not reuse the closed boundary ledger for the authorized dialogue correction", () => {
+    const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
+    const fresh=liveDirectory(process.cwd(),"dialogue-verification");
+    expect(fresh).toBe(liveDirectory(join(common,".."),"dialogue-verification"));
+    expect(fresh).not.toBe(liveDirectory(process.cwd(),"boundary-verification"));
+  });
   it("fences the newly authorized boundary verification across worktrees and away from every consumed slot", () => {
     const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
     const fresh=liveDirectory(process.cwd(),"boundary-verification");

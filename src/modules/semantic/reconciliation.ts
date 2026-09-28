@@ -74,17 +74,20 @@ function foldedWords(text: string): string[] {
  * also valid reminder evidence. This grammar is intentionally independent of
  * model title text and only arbitrates an otherwise create-classified result.
  */
-function isExplicitListQuery(text: string | undefined): boolean {
+export function isExplicitListQuery(text: string | undefined): boolean {
   if (typeof text !== "string") return false;
   const words = foldedWords(text);
   const firstListVerb = words.findIndex((word, index) => word === "xem" || word === "co"
     || (word === "liet" && words[index + 1] === "ke"));
-  const hasListVerb = firstListVerb !== -1;
+  const hasListVerb = firstListVerb !== -1 && (words[firstListVerb] !== "co"
+    || words.slice(firstListVerb + 1).some(word => ["gi", "nao", "khong"].includes(word)));
   const hasListSubject = words.includes("lich")
+    || words.some((word, index) => word === "co" && (words[index + 1] === "gi"
+      || (words[index + 1] === "viec" && words[index + 2] === "gi")))
     || words.some((word, index) => word === "cac" && words[index + 1] === "viec")
     || words.some((word, index) => word === "nhac" && words[index + 1] === "viec");
   const hasReminderDirective = words.some((word, index) => word === "nhac" && (index < firstListVerb
-    || ["toi", "tui", "minh", "em", "anh", "chi", "cho"].includes(words[index + 1] ?? "")));
+    || (words[index - 1] !== "loi" && words[index + 1] !== "viec")));
   return hasListVerb && hasListSubject && !hasReminderDirective;
 }
 

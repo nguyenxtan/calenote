@@ -20,12 +20,18 @@ const sameDate = (left: DateFact, right: DateFact) => left.solarDate === right.s
 export function reconcileConversation(input: {
   model: ConversationModel; temporal: ConversationTemporalEvidence; previous: ConversationSnapshot | null;
   now: number; editRequested: boolean; newRequest?: boolean; abandonRequested?: boolean;
+  listRequested?: boolean; intentUncertain?: boolean; titleUnresolved?: boolean;
 }): ConversationDecision {
   const parsed = ConversationModelSchema.safeParse(input.model);
   if (!parsed.success || !Number.isSafeInteger(input.now)) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
   const model = parsed.data;
   const active = input.previous && ["CLARIFYING", "DRAFT_READY"].includes(input.previous.status)
     && input.previous.expiresAt > input.now ? input.previous : null;
+  // Application evidence, not a redundant model continuation label, owns a
+  // positive whole-utterance cancellation. It never cancels canonical reminders.
+  if (input.abandonRequested && active) return { kind: "ABANDON_PENDING" };
+  if (input.listRequested && model.intent === "CREATE_REMINDER") return { kind: "READ_ONLY_LIST" };
+  if (input.intentUncertain) return clarifyIntent(active?.request ?? blank());
   // Dialogue uncertainty is not permission to create or replace a pending
   // request, even if the separate semantic intent happens to say CREATE.
   if (model.dialogueAct === "AMBIGUOUS" && (model.intent === "CREATE_REMINDER" || model.intent === "AMBIGUOUS")) {
@@ -35,7 +41,6 @@ export function reconcileConversation(input: {
   if (model.dialogueAct === "CAPABILITY") return { kind: "LUNAR_HELP" };
   if (model.dialogueAct === "ABANDON") {
     if (!active) return { kind: "HELP" };
-    if (model.continuation === "YES" && input.abandonRequested === true) return { kind: "ABANDON_PENDING" };
     return clarifyIntent(active.request);
   }
   if (model.intent === "HELP") return { kind: "HELP" };
@@ -78,11 +83,11 @@ export function reconcileConversation(input: {
   Object.assign(request, { eventDate, reminderDate, reminderTime, count, relation });
   if (temporal.lunarInput) request.lunarInput = temporal.lunarInput;
   else if (temporal.eventDate.state === "RESOLVED" || temporal.reminderDate.state === "RESOLVED") delete request.lunarInput;
-  if (model.titleState === "RESOLVED") {
+  if (model.titleState === "RESOLVED" && !input.titleUnresolved) {
     if (request.title && request.title !== model.title && !edit) return conflict();
     request.title = model.title;
   }
-  if (model.titleState === "AMBIGUOUS") request.title = null;
+  if (model.titleState === "AMBIGUOUS" || input.titleUnresolved) request.title = null;
   const missing: MissingField[] = [];
   if (!request.title || model.titleState === "AMBIGUOUS") missing.push("title");
   // Evidence describes this turn; absence in a relation-only answer must not

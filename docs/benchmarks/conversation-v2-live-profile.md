@@ -84,6 +84,20 @@ change them after observing model output to manufacture a pass.
 
 ## Commands
 
+### 2026-09-28 dialogue-repair verification authorization
+
+After the failed boundary run, the user explicitly requested correction and
+continuation. One new exclusive `dialogue-verification` slot uses the unchanged
+corpus, quality gates, model/provider and 40-request / USD 0.50 / zero-retry
+limits. Admission verifies all seven closed historical ledgers, including the
+boundary ledger digest `2810b044607f2250cfcf9fe99ed8af10c8592eded1d5830eb802e5bfea3d3ad7`.
+Historical dispatch reservations total 171996 microunits; worst-case aggregate
+with this slot is 671996, below 2000000. No old allocation is reopened.
+
+```sh
+node --import ./tools/benchmark/register-conversation-loader.mjs tools/benchmark/run-conversation-v2-live.mjs --live RUN_ID dialogue-verification
+```
+
 ### 2026-09-28 boundary-repair verification authorization
 
 The user's continuation request authorizes one new `boundary-verification`

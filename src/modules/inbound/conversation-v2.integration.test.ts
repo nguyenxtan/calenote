@@ -57,6 +57,43 @@ async function harness() {
   return { ...h, send, process, count, dispatch, replies, seriesStore, runtimeStore, commandStore, service };
 }
 describe("guarded conversation V2 integration", () => {
+  it("preserves encrypted pending state on an explicit LIST despite stale CREATE semantics", async () => {
+    const h = await harness();
+    const stale = create({ title: "gọi mẹ" });
+    await h.send("mai nhắc gọi mẹ", stale);
+    const before = await h.db.prepare("SELECT * FROM conversation_contexts WHERE owner_id='one'").first();
+    expect((await h.send("mai tui có gì?", stale)).result.status).toBe("REMINDERS_LISTED");
+    expect(await h.db.prepare("SELECT * FROM conversation_contexts WHERE owner_id='one'").first()).toEqual(before);
+    expect(await h.count()).toBe(0);
+    expect(await h.db.prepare("SELECT count(*) n FROM command_drafts").first<number>("n")).toBe(0);
+  });
+  it("clarifies a no-evidence continuation then accepts a real time answer and confirms once", async () => {
+    const h = await harness();
+    const stale = create({ title: "gọi mẹ" });
+    await h.send("mai nhắc gọi mẹ", stale);
+    expect((await h.send("thế thôi", stale)).reply).toContain("tiếp tục");
+    expect(await h.count()).toBe(0);
+    expect((await h.send("9h", stale)).result.status).toBe("DRAFT_CREATED");
+    const confirmed = await h.send("có");
+    expect(confirmed.result.status).toBe("CONFIRMED");
+    await h.process(confirmed.message);
+    expect(await h.count()).toBe(1);
+  });
+  it.each(["NO", "UNCERTAIN"] as const)("explicit pending cancellation survives the model continuation %s", async continuation => {
+    const h = await harness();
+    await h.send("mai nhắc gọi mẹ", create({ title: "gọi mẹ" }));
+    expect((await h.send("bỏ yêu cầu này nhé", create({ intent: "HELP", title: null, titleState: "NOT_APPLICABLE",
+      dialogueAct: "ABANDON", continuation }))).result.status).toBe("CANCELLED");
+    expect(await h.db.prepare("SELECT status FROM conversation_contexts WHERE owner_id='one'").first("status")).toBe("CANCELLED");
+    expect(await h.count()).toBe(0);
+  });
+  it.each(["việc đó", "gọi mẹ"])("unresolved user referent cannot create a draft from model title %s", async title => {
+    const h = await harness();
+    expect((await h.send("mai 8h nhắc việc đó", create({ title }))).result.status).toBe("CLARIFICATION_REQUESTED");
+    expect(await h.db.prepare("SELECT count(*) n FROM command_drafts").first<number>("n")).toBe(0);
+    await h.send("có");
+    expect(await h.count()).toBe(0);
+  });
   it.each(["telegram", "zalo"] as const)("real %s composition uses V2 and does not wait for typing transport settlement", async provider => {
     const h = await harness();
     const encrypted = await h.keyring.encryptSensitive("inbound-message", "one-0", 1, "thi hết môn ngày 11/10/2026 ở Quang Trung");
@@ -310,7 +347,7 @@ describe("guarded conversation V2 integration", () => {
   });
   it("pending series can be abandoned without cancelling any already-confirmed reminder", async () => {
     const h = await harness();
-    await h.send("thi ngày 11/10/2026 lúc 12h, nhắc 3 ngày trước ngày thi");
+    expect((await h.send("thi hết môn ở Quang Trung ngày 11/10/2026 lúc 12h, nhắc 3 ngày trước ngày thi")).result.status).toBe("DRAFT_CREATED");
     expect((await h.send("hủy")).result.status).toBe("CANCELLED");
     await h.send("có");
     expect(await h.count()).toBe(0);
@@ -318,7 +355,7 @@ describe("guarded conversation V2 integration", () => {
   });
   it("edited proposal invalidates the old revision rather than silently confirming old dates", async () => {
     const h = await harness();
-    await h.send("thi ngày 11/10/2026 lúc 12h, nhắc 3 ngày trước ngày thi");
+    expect((await h.send("thi hết môn ở Quang Trung ngày 11/10/2026 lúc 12h, nhắc 3 ngày trước ngày thi")).result.status).toBe("DRAFT_CREATED");
     const original = await h.db.prepare("SELECT id,revision FROM reminder_series_proposals").first<{ id: string; revision: number }>();
     await h.send("đổi 13h", create({ dialogueAct: "EDIT" }));
     expect((await h.seriesStore.confirm(h.scope(2), original!.id, original!.revision)).status).toBe("STALE");
@@ -345,7 +382,7 @@ describe("guarded conversation V2 integration", () => {
   it("does not persist a confirmable proposal when the complete preview exceeds the provider reply bound", async () => {
     const h = await harness();
     const title = "a".repeat(1800);
-    const response = await h.send("thi ngày 11/11/2026 lúc 12h, nhắc 30 ngày trước ngày thi", create({ title }));
+    const response = await h.send(`thi ${title} ngày 11/11/2026 lúc 12h, nhắc 30 ngày trước ngày thi`, create({ title }));
     expect(response.reply).toContain("ngắn");
     expect(await h.db.prepare("SELECT count(*) n FROM reminder_series_proposals").first("n")).toBe(0);
     expect(await h.count()).toBe(0);

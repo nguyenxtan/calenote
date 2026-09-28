@@ -13,6 +13,54 @@ const evaluate = (text: string, overrides: Partial<ConversationModel> = {}) => e
   previous, receivedAt: now, sourceInboundId: "new", now }, lunarCalendar);
 
 describe("application-owned relationship guards", () => {
+  it.each(["gọi mẹ ở nhà", "gọi mẹ ngày mai", "ôn thi gọi mẹ", "chuẩn bị gọi mẹ", "ôn toán"])("event summaries cannot be grounded by incidental token overlap: %s", title => {
+    expect(evaluateConversationTurn({ text: "thi hết môn ngày 11/10/2026 lúc 9h ở Quang Trung", model: { ...model, title },
+      previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision)
+      .toMatchObject({ kind: "CLARIFY", field: "title" });
+  });
+  it.each(["ôn thi", "chuẩn bị thi hết môn", "ôn thi ở quang trung"])("permits bounded preparation of a grounded event: %s", title => {
+    expect(evaluateConversationTurn({ text: "thi hết môn ngày 11/10/2026 lúc 9h ở Quang Trung", model: { ...model, title },
+      previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision.kind).toBe("PROPOSE");
+  });
+  it.each([
+    ["mai có lịch họp lúc 9h, nhắc chuẩn bị báo cáo", "chuẩn bị báo cáo"],
+    ["mai nhắc gọi lúc 9h cho mẹ", "gọi cho mẹ"],
+    ["mai 9h nhắc gọi cho mẹ", "gọi mẹ"],
+  ])("preserves substantive task wording across incidental queries and schedule spans: %s", (text, title) => {
+    expect(evaluateConversationTurn({ text, model: { ...model, title, dialogueAct: "NEW_REQUEST", continuation: "NO" },
+      previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision).toMatchObject({ kind: "PROPOSE", request: { title } });
+  });
+  it.each(["mai 8h việc đó", "mai 8h"])("cannot manufacture a task in a verbless fragment: %s", text => {
+    expect(evaluateConversationTurn({ text, model, previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision.kind).toBe("CLARIFY");
+  });
+  it.each(["NO", "UNCERTAIN"] as const)("explicit cancellation does not depend on model continuation=%s", continuation => {
+    expect(evaluate("bỏ yêu cầu này nhé", { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", dialogueAct: "ABANDON", continuation }).decision)
+      .toEqual({ kind: "ABANDON_PENDING" });
+  });
+  it.each(["thế thôi", "vậy nhé", "ừm để xem đã", "cảm ơn nhiều"])("requires actual slot evidence before continuing a pending request: %s", text => {
+    expect(evaluate(text).decision).toMatchObject({ kind: "CLARIFY", field: "intent", request: { ...previous.request, missing: ["intent", "year"] } });
+  });
+  it.each(["mai tui có gì?", "hôm nay mình có việc gì?", "tuần này xem lịch", "liệt kê lịch ngày mai"])("keeps an explicit query read-only despite a stale CREATE label: %s", text => {
+    const before = structuredClone(previous);
+    expect(evaluate(text).decision).toEqual({ kind: "READ_ONLY_LIST" });
+    expect(previous).toEqual(before);
+  });
+  it.each(["việc đó", "cái ấy", "chuyện này", "làm việc đó"])("does not accept an unresolved reference as a resolved task: %s", title => {
+    const result = evaluateConversationTurn({ text: `mai 8h nhắc ${title}`, model: { ...model, title }, previous: null,
+      now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar);
+    expect(result.decision).toMatchObject({ kind: "CLARIFY", field: "title", request: { title: null } });
+  });
+  it.each(["mai 8h", "ngày 28/09/2026 lúc 10h", "9h"])("a temporal-only request without context clarifies intent: %s", text => {
+    expect(evaluateConversationTurn({ text, model: { ...model, title: null, titleState: "MISSING", dialogueAct: "NEW_REQUEST", continuation: "NO" },
+      previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision).toMatchObject({ kind: "CLARIFY", field: "intent" });
+  });
+  it("does not promote a model-invented title into a draft", () => {
+    expect(evaluateConversationTurn({ text: "mai 8h nhắc việc đó", model, previous: null,
+      now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision).toMatchObject({ kind: "CLARIFY", field: "title" });
+  });
+  it.each(["nhắc xem lịch ngày mai lúc 9h", "mai 9h nhắc kiểm tra xem có gì cần mua"])("does not steal a query phrase inside a reminder title: %s", text => {
+    expect(evaluate(text, { title: text.includes("kiểm tra") ? "kiểm tra xem có gì cần mua" : "xem lịch" }).decision.kind).not.toBe("READ_ONLY_LIST");
+  });
   it.each(["vậy đổi sang mai 9h nhắc gọi mẹ", "bạn sửa thành mai 9h nhắc gọi mẹ"])("never upgrades an unconfirmed edit into new-request authority: %s", text => {
     const prior: ConversationSnapshot = { ...previous, request: { ...previous.request, calendar: "GREGORIAN", lunarInput: undefined,
       reminderDate: { solarDate: "2026-09-26", calendar: "GREGORIAN", lunar: null, conversionVersion: null, sourceInboundId: "old" },
