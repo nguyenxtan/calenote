@@ -14,6 +14,15 @@
 
 **Status:** READY_FOR_OWNER_REVIEW; PLAN_OWNER_APPROVAL=PENDING; all tasks NOT_STARTED, offline feasibility and all evaluations NOT_RUN. Only this plan and spec approval metadata are authorized now.
 
+### Execution progress (2026-09-28; supersedes historical status above)
+
+- PLAN_OWNER_APPROVAL=APPROVED; approved plan reference `a2508f15b3180e7bd68beabe5cce4339c03edb78`.
+- Owner authorization `1dac4827-7d8f-4172-a2b1-8e2e91e78f03` supersedes the earlier `443a5a1f-2c25-44ee-86a8-b92f93c8eb3d` T0-only stop. Scope: T0–T10 sequential subagent implementation with independent reviews and conditional T11 pilot/full (USD0.50/USD1.00, combined USD1.50), not remote release.
+- T0: offline artifacts and measurements implemented; independent re-review accepted the factual BLOCKED evidence with Critical=0 / Important=0. Fit remains BLOCKED on unverified Gemini token/full-route framing evidence, not demonstrated model infeasibility. Final focused verification: 50 tests PASS; relevant regression: 307 tests PASS; typecheck/scoped lint/diff PASS. This is not feasibility acceptance or authorization to start T1. See [measured evidence](../../benchmarks/llm-context-contract-fit.md).
+- T1–T10: NOT_STARTED, blocked by T0 prerequisite. T11 evaluation: NOT_RUN. No application inference/counting calls, remote migrations, push/merge or deployment performed.
+- Routine per-task continuation approval is not required. Technical fit/test/review gates remain mandatory. Remote inspection/mutation and exact-master-SHA deployment remain separate authorization gates.
+- Ledger: `.superpowers/sdd/2026-09-28-llm-context-contract-implementation/progress.md` (plan-specific local recovery record).
+
 ## Global constraints
 
 - Follow AGENTS.md. Before future code work read relevant installed Next.js guides; before Worker config/Wrangler work load Workers best-practices/Wrangler skills. Preserve existing work and legacy tests.
