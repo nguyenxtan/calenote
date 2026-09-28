@@ -1,6 +1,36 @@
 # Conversation V2 evaluation evidence
 
-## Latest boundary verification — 2026-09-28: FAIL / UAT ACTIVATION BLOCKED
+## Dialogue verification — 2026-09-28: FAIL / UAT ACTIVATION BLOCKED
+
+Run `conversation-v2-dialogue-verification-20260928-01`, source
+`991669a4ba76639012b9a3de05e7282765bb3603`, preserves the frozen 22-case /
+37-turn corpus and every quality gate. All five prior failures passed, but a
+new guard-precedence failure blocks release: `malformed-island`, turn 1, was
+CREATE/MISSING/NEW_REQUEST/NO. Intent clarification ran before the malformed
+temporal guard and created clarification state instead of rejecting safely.
+Categories: DIALOGUE, RUNTIME_OUTCOME, STATE, PRESERVATION. No canonical
+reminder mutation was observed. This is not a passing safety result.
+
+- Correct outcomes: 36/37; required at least 36/37.
+- Schema: 36/36; temporal evidence: 37/37.
+- Safety-failing turns: 1; required 0. `liveAccepted=false`.
+- Actual cost: 4590 microunits (USD 0.004590); retained: 46908.
+- Eight-campaign cumulative actual: USD 0.018595; retained: 218904.
+- Metadata refreshed `2026-09-28T01:51:40.264Z`; same Flash Lite / Vertex EU,
+  ZDR, no fallback/retries, input/output USD 0.10 / 0.40 per million tokens.
+- Pre-run validation: focused 153/153, full check 96 files / 1858 tests;
+  independent review Critical 0 / Important 0. Local checks do not override
+  the failed live gate.
+
+Sealed ledger: `<shared-git-dir>/calenote-benchmark-authorizations/` +
+`conversation-v2-live-20260927-repair-dialogue-verification/authorization.jsonl`.
+SHA-256: `394cb5d80f648d7bf971e02a98a622ad7645358474a7d1e26bceadab0b7b25cc`.
+No master merge, remote migration, secret change, Worker upload or deployment.
+The subsequent correction moves deterministic invalid-evidence rejection ahead
+of every CREATE/AMBIGUOUS clarification path, without changing the scanner,
+corpus, prompt, model or scorer. Its live acceptance remains pending.
+
+## Historical boundary verification — 2026-09-28: FAIL
 
 Run `conversation-v2-boundary-verification-20260928-01`, source
 `f290a24de8155cdb508de3094e5cbfa843d8e2c5`, evaluated the unchanged synthetic

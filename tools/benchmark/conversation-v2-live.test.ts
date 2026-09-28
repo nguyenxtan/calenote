@@ -11,6 +11,12 @@ import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
 describe("bounded Conversation V2 live evaluation", () => {
+  it("fences the temporal-priority repair from all consumed dialogue verification authority", () => {
+    const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
+    const fresh=liveDirectory(process.cwd(),"temporal-priority-verification");
+    expect(fresh).toBe(liveDirectory(join(common,".."),"temporal-priority-verification"));
+    expect(fresh).not.toBe(liveDirectory(process.cwd(),"dialogue-verification"));
+  });
   it("does not reuse the closed boundary ledger for the authorized dialogue correction", () => {
     const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
     const fresh=liveDirectory(process.cwd(),"dialogue-verification");

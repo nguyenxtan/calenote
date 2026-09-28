@@ -14,9 +14,9 @@ import { ConversationModelSchema } from "../../src/modules/conversation/contract
 const CORPUS="src/modules/conversation/benchmark/conversation-v2.json";
 const CORPUS_DIGEST="5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382";
 export const AUTHORIZATION="conversation-v2-live-20260927";
-export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification"|"semantic-diagnostic"|"semantic-verification"|"boundary-verification"|"dialogue-verification";
+export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification"|"semantic-diagnostic"|"semantic-verification"|"boundary-verification"|"dialogue-verification"|"temporal-priority-verification";
 export function liveDirectory(root:string,slot:CampaignSlot="legacy") {
-  if(!["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification","boundary-verification","dialogue-verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
+  if(!["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification","boundary-verification","dialogue-verification","temporal-priority-verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
   // Single-use paths stay fixed across worktrees. New semantic slots also
   // require sealed historical reservations before admission (see below).
   return join(realpathSync(execFileSync("git",["-C",root,"rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim()),"calenote-benchmark-authorizations",
@@ -147,11 +147,17 @@ export async function runConversationLive(options:Options) {
   if(options.mode==="LIVE"&&resolve(options.directory)!==liveDirectory(process.cwd(),options.slot))throw new Error("LIVE_DIRECTORY_FIXED");
   if(options.mode==="LIVE"&&options.slot?.startsWith("semantic-"))verifySemanticRepairAllocation(options.root);
   if(options.mode==="LIVE"&&options.slot==="boundary-verification")verifyBoundaryRepairAllocation(options.root);
-  if(options.mode==="LIVE"&&options.slot==="dialogue-verification") {
+  if(options.mode==="LIVE"&&["dialogue-verification","temporal-priority-verification"].includes(options.slot??"")) {
     const spent=verifyBoundaryRepairAllocation(options.root)+verifyClosedCampaign(
       readFileSync(join(liveDirectory(options.root,"boundary-verification"),"authorization.jsonl"),"utf8"),
       "2810b044607f2250cfcf9fe99ed8af10c8592eded1d5830eb802e5bfea3d3ad7");
     if(spent!==171996||spent+500000>2000000)throw new Error("AGGREGATE_CAP_EXCEEDED");
+    if(options.slot==="temporal-priority-verification") {
+      const retained=spent+verifyClosedCampaign(
+        readFileSync(join(liveDirectory(options.root,"dialogue-verification"),"authorization.jsonl"),"utf8"),
+        "394cb5d80f648d7bf971e02a98a622ad7645358474a7d1e26bceadab0b7b25cc");
+      if(retained!==218904||retained+500000>2000000)throw new Error("AGGREGATE_CAP_EXCEEDED");
+    }
   }
   const preflight=preflightConversationLive(options.root), data=corpus(options.root), runtimeConfig=config(options.root);
   const transport=options.mode==="LIVE"?conversationTransport(options.apiKey):options.transport;

@@ -24,6 +24,18 @@ function decide(text: string, previous: ConversationSnapshot | null = null, over
 const continuation = { dialogueAct: "CONTINUE" as const, continuation: "YES" as const, title: null, titleState: "MISSING" as const };
 
 describe("deterministic conversation reconciliation", () => {
+  it.each(["calendar", "eventDate", "reminderDate", "time", "count", "relation"] as const)("ambiguous %s blocks clarification-state writes regardless of semantic uncertainty", dimension => {
+    for (const intent of ["CREATE_REMINDER", "AMBIGUOUS"] as const) {
+      for (const previous of [null, snapshot({ title: "gọi mẹ", missing: ["time"] })]) {
+        const temporal = extractConversationTemporalEvidence({ text: "mai 8h", receivedAt: now, sourceInboundId: "current", currentCalendar: "GREGORIAN" }, lunarCalendar);
+        temporal[dimension] = { state: "AMBIGUOUS", reason: "INVALID_OR_CONFLICTING_EVIDENCE" };
+        expect(reconcileConversation({ temporal, previous, now, editRequested: false, intentUncertain: true,
+          model: { ...model, intent, targetIntent: intent === "AMBIGUOUS" ? "CREATE_REMINDER" : null,
+            title: null, titleState: "MISSING", dialogueAct: "AMBIGUOUS", continuation: "UNCERTAIN" } }))
+          .toEqual({ kind: "SAFE_REJECT", code: "CONFLICT" });
+      }
+    }
+  });
   it.each([["LIST_REMINDERS","READ_ONLY_LIST"],["HELP","HELP"],["UNSUPPORTED","SAFE_REJECT"]] as const)("ambiguous dialogue cannot turn %s into a stored clarification", (intent,kind) => {
     expect(decide("yêu cầu",snapshot({title:"cũ",missing:["time"]}),{intent,title:null,titleState:"NOT_APPLICABLE",dialogueAct:"AMBIGUOUS",continuation:"UNCERTAIN"})).toMatchObject({kind});
   });

@@ -57,6 +57,15 @@ async function harness() {
   return { ...h, send, process, count, dispatch, replies, seriesStore, runtimeStore, commandStore, service };
 }
 describe("guarded conversation V2 integration", () => {
+  it.each([false, true])("malformed evidence never creates or rewrites encrypted clarification state (pending=%s)", async pending => {
+    const h = await harness();
+    if (pending) await h.send("mai nhắc gọi mẹ", create({ title: "gọi mẹ" }));
+    const before = await h.db.prepare("SELECT * FROM conversation_contexts WHERE owner_id='one'").first();
+    expect((await h.send("mai 8h; /:30", create({ title: null, titleState: "MISSING", dialogueAct: "NEW_REQUEST", continuation: "NO" }))).result.status).toBe("REJECTED");
+    expect(await h.db.prepare("SELECT * FROM conversation_contexts WHERE owner_id='one'").first()).toEqual(before);
+    expect(await h.count()).toBe(0);
+    expect(await h.db.prepare("SELECT count(*) n FROM command_drafts").first<number>("n")).toBe(0);
+  });
   it("preserves encrypted pending state on an explicit LIST despite stale CREATE semantics", async () => {
     const h = await harness();
     const stale = create({ title: "gọi mẹ" });

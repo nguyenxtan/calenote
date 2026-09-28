@@ -13,6 +13,11 @@ const evaluate = (text: string, overrides: Partial<ConversationModel> = {}) => e
   previous, receivedAt: now, sourceInboundId: "new", now }, lunarCalendar);
 
 describe("application-owned relationship guards", () => {
+  it.each(["mai 8h; /:30", "mai/9h", "mai 8h; ngày 9h"])("malformed evidence cannot open a clarification before temporal validation: %s", text => {
+    expect(evaluateConversationTurn({ text, model: { ...model, title: null, titleState: "MISSING", dialogueAct: "NEW_REQUEST", continuation: "NO" },
+      previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision)
+      .toEqual({ kind: "SAFE_REJECT", code: "CONFLICT" });
+  });
   it.each(["gọi mẹ ở nhà", "gọi mẹ ngày mai", "ôn thi gọi mẹ", "chuẩn bị gọi mẹ", "ôn toán"])("event summaries cannot be grounded by incidental token overlap: %s", title => {
     expect(evaluateConversationTurn({ text: "thi hết môn ngày 11/10/2026 lúc 9h ở Quang Trung", model: { ...model, title },
       previous: null, now, receivedAt: now, sourceInboundId: "new" }, lunarCalendar).decision)

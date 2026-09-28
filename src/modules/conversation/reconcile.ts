@@ -31,6 +31,15 @@ export function reconcileConversation(input: {
   // positive whole-utterance cancellation. It never cancels canonical reminders.
   if (input.abandonRequested && active) return { kind: "ABANDON_PENDING" };
   if (input.listRequested && model.intent === "CREATE_REMINDER") return { kind: "READ_ONLY_LIST" };
+  // Validate scheduling evidence before ANY branch that can persist a
+  // clarification, including semantic uncertainty. Asking intent is a state
+  // transition too; it cannot outrank malformed deterministic evidence.
+  const temporal = input.temporal;
+  if (model.intent === "CREATE_REMINDER" || model.intent === "AMBIGUOUS") {
+    if (temporal.unsupportedCadence) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
+    if ([temporal.calendar, temporal.eventDate, temporal.reminderDate, temporal.time, temporal.count, temporal.relation]
+      .some(fact => fact.state === "AMBIGUOUS")) return conflict();
+  }
   if (input.intentUncertain) return clarifyIntent(active?.request ?? blank());
   // Dialogue uncertainty is not permission to create or replace a pending
   // request, even if the separate semantic intent happens to say CREATE.
@@ -51,10 +60,6 @@ export function reconcileConversation(input: {
   if (model.intent === "AMBIGUOUS" || (active && model.continuation === "UNCERTAIN")) {
     return clarifyIntent(active?.request ?? request);
   }
-  const temporal = input.temporal;
-  if (temporal.unsupportedCadence) return { kind: "SAFE_REJECT", code: "UNAVAILABLE" };
-  if ([temporal.calendar, temporal.eventDate, temporal.reminderDate, temporal.time, temporal.count, temporal.relation]
-    .some(fact => fact.state === "AMBIGUOUS")) return conflict();
   const edit = model.dialogueAct === "EDIT" && input.editRequested;
   if (temporal.calendar.state === "RESOLVED") {
     if (continuing && temporal.calendar.value !== request.calendar && !edit) return conflict();

@@ -84,6 +84,22 @@ change them after observing model output to manufacture a pass.
 
 ## Commands
 
+### 2026-09-28 temporal-priority correction verification
+
+The continuing repair request is bounded to one new exclusive
+`temporal-priority-verification` slot after the dialogue run exposed a
+clarification-before-temporal-validation defect. All eight historical ledgers
+remain sealed, including dialogue digest
+`394cb5d80f648d7bf971e02a98a622ad7645358474a7d1e26bceadab0b7b25cc`.
+Admission retains 218904 microunits; with this slot's maximum 500000, aggregate
+worst case is 718904, below the unchanged 2000000 ceiling. Same 22 cases /
+37 turns, scorer, model, provider, no fallback, 40 requests and zero retries.
+No activation or deployment follows a failed safety gate.
+
+```sh
+node --import ./tools/benchmark/register-conversation-loader.mjs tools/benchmark/run-conversation-v2-live.mjs --live RUN_ID temporal-priority-verification
+```
+
 ### 2026-09-28 dialogue-repair verification authorization
 
 After the failed boundary run, the user explicitly requested correction and

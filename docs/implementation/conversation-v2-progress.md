@@ -1,6 +1,17 @@
 # Conversation V2 execution evidence
 
-## Latest checkpoint — 2026-09-28 live boundary verification FAILED
+## Latest checkpoint — 2026-09-28 dialogue verification FAILED; repair in verification
+
+Source `991669a4ba76639012b9a3de05e7282765bb3603`; run
+`conversation-v2-dialogue-verification-20260928-01`: all five prior failures
+passed. Outcomes 36/37, schema 36/36, temporal 37/37; one safety failure remains
+because intent clarification preceded malformed-temporal rejection. No
+canonical mutation. Cost USD 0.004590; cumulative USD 0.018595.
+No activation, master promotion or deployment. The subsequent structural
+priority correction is under fresh verification and independent review.
+Historical corpus/scoring and closed ledgers remain unchanged.
+
+## Previous checkpoint — 2026-09-28 live boundary verification FAILED
 
 Source `f290a24de8155cdb508de3094e5cbfa843d8e2c5`; run
 `conversation-v2-boundary-verification-20260928-01` executed all 37 turns with
