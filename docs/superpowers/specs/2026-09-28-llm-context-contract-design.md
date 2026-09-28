@@ -3,6 +3,8 @@
 Date: 2026-09-28
 Status: **DESIGN_DIRECTION_APPROVED / WRITTEN_SPEC_PENDING_REVIEW**
 Inspected baseline: `6329b33264a2916f004953865f6483fafdfd7491`.
+Revision audit: `cafe6da1e26a19d140b7a231b8f1f291ed8c2fc4`; no later
+commits or tracked/untracked changes at the start of this documentation revision.
 
 The user approved writing this design after requesting that the LLM understand
 the whole conversation instead of repeatedly extending phrase-specific parsing.
@@ -29,6 +31,33 @@ Observed UAT gaps include month-range queries, relation follow-ups, bare pending
 abandonment, a lunar-date question being treated as capability help, and generic
 rejection of annual recurrence. Calendar lunar display is also absent. These
 are acceptance inputs, not proof of any particular live provider response.
+
+### 1.1 Source audit and coverage before revision
+
+Code observations below refer to the local baseline, not a fresh live audit.
+All new contracts, tables and examples below are proposed designs, not code.
+
+| Requirement | Original coverage | Revision / source finding |
+| --- | --- | --- |
+| Responsibility and no alternate parser | Covered §2–3 | Retained; explicitly separate interpretation from execution validity |
+| Context input and provenance | Ambiguous §4.1/6 | §4.1/6.1 define wire input and references; current `conversation/prompt.ts` sends title/question/outcome codes, not complete facts or actual assistant turns |
+| Separate fields through delivery | Partial §4 | §4.2–4.4; current `PendingRequestSchema` lacks location/notes/eventTime |
+| State, controls and concurrency | Partial §5–6 | §5.1/6.2; preserve D1 CAS, claim and terminal-outcome fences; specify preview binding and recovery |
+| Monthly query | Partial §5 | §5.3; `semantic-query-store.ts` currently rejects >30-day ranges, filters three active statuses and limits to five rows |
+| Lunar lookup/display | Covered §7, detail missing | §7 uses existing `toSolar/toLunar`; Calendar currently renders only solar labels |
+| Annual recurrence | Explicitly excluded §7/10 | Remains excluded; recognized intent is not executable capability |
+| Real-model evidence | Partial §9 | §9.1–9.3 specify layers, numbers and denominators. Existing live probe already calls `processBoundChatMessage` and real conversation service/D1 stores; it is not merely a pure-function runner. Its reply sink is a no-op and some decisions are reconstructed afterward: extend observation of actual outputs, not a parallel evaluator |
+| Compatibility/release | Partial §9 | §9.5 specifies mixed-version and in-flight safety |
+| Product choices | Unstated | §10.1 lists proposed policies requiring owner approval |
+| Admin/batching/annual engine/integrations | Outside §10 | Remain outside; not dependencies |
+
+Inspected relevant sources: `conversation/{contracts,prompt,service,turn,
+reconcile,lunar-calendar}.ts`, D1 conversation context/runtime stores;
+`reminders/semantic-query.ts`, D1 semantic-query/series stores and their safety
+tests; `semantic/temporal-evidence.ts`, `conversation-order.ts`;
+`core-screens/CoreScreenExperience.tsx`; benchmark live/probe/offline runners;
+V2 design/release docs, V1 hybrid design and ADR 0004. Existing source tests are
+evidence of asserted boundaries, not test results from this documentation task.
 
 ## 2. Decision and explicit supersession
 
@@ -57,6 +86,16 @@ control, confirmation, storage and delivery remain application-owned.
 Existing scanner modules may remain for legacy paths/tests but must not veto or
 silently reinterpret the new conversational path. Invalid new-contract output
 must not fall back to a legacy parser with different semantics.
+
+Structural/evidence validation, allowed fields/operations, authorization,
+state/version checks, calendar arithmetic, recurrence expansion, product policy,
+confirmation and idempotency are retained; they are not competing language
+interpretation. Every rejection has a reason code. Valid JSON plus a matching
+quote can still be semantically wrong: never claim these checks prove meaning.
+The model cannot select another user's records, treat an assistant suggestion
+as user approval, or claim successful creation. Only a committed application
+result can cause a success acknowledgement. Do not request/store private
+chain-of-thought; enums, structured operands and evidence suffice.
 
 The earlier specs and benchmark results remain historical evidence. Before
 activation, current-state/runtime docs must identify which contract is active;
@@ -98,18 +137,58 @@ The provider returns a strict, versioned object with unknown fields rejected:
   suggestions. Backend recomputes required fields; a model saying complete
   never makes an incomplete request executable.
 
-Each change is `{ field, operation, value, evidence }` where `operation` is
-`SET | CLEAR`, value must match that field's discriminated type, and evidence
-references one or more provider-visible turn indexes with exact text spans.
-Unmentioned fields are **unchanged**, not cleared by null. CLEAR requires a
-current explicit removal request; it is not a way to omit inconvenient details.
-Reject duplicate operations for the same field and invalid combinations.
+Use domain-specific Zod discriminated unions, not JSON Patch or arbitrary paths.
+Wire version is `calenote-context-1`; every root key is required, unknown keys
+fail closed. `changes` is at most 13 entries; `uncertainties` at most 4 entries,
+each `{field, reason, alternatives}` with at most two typed alternatives.
+Reason is `MISSING | AMBIGUOUS | CONFLICT | UNSUPPORTED_COMBINATION`.
+Issue field is one of the 13 slots, `intent`, `queryRange` or `operation`.
+`controlEvidence` is a required array of at most three references (empty except
+when citing a dialogue act); it uses the same evidence union below.
 
-Provider references are local indexes only. The application maps them to its
-inbound provenance; the model never supplies database identifiers. Validate
-span offsets and exact substrings against the supplied text. A matching quote
-proves source presence, not interpretation correctness: ambiguity handling,
-live evaluation and the user-visible preview remain essential.
+Each change is `{field, operation, value, evidence}`. SET has a non-null value
+matching that field's type. CLEAR has literal null and current explicit-removal
+evidence. Omission from `changes` means KEEP; null never means both KEEP and
+delete. Title/date/time CLEAR makes the request incomplete; it does not delete
+an existing saved reminder. `notes` is one bounded text value: a SET must retain
+previous notes unless current evidence requests their replacement/removal.
+Duplicate fields reject the whole patch atomically.
+
+Evidence is one to three references per change, using one of these wire shapes:
+
+```json
+{"kind":"USER_QUOTE","turn":2,"quote":"Đổi sang 9h.","occurrence":1}
+```
+
+```json
+{"kind":"CONTEXT_FACT","ref":"f3"}
+```
+
+The application NFC-normalizes each role-labelled turn before sending it.
+`turn` is a zero-based index in that exact payload; `occurrence` is one-based
+among left-to-right non-overlapping exact substring matches. Match NFC text
+case-sensitively; no accent stripping, case folding, UTF-16 offsets or byte
+offsets on the wire. Repeated phrases require the explicit occurrence number.
+Reject empty/over-2000-code-point quotes, absent turns, non-user quotes and nonexistent
+occurrences. Store the derived code-point span internally with original turn
+identity and normalization version. Retain source text encrypted for the pending
+lifetime, not in logs. Surrogate pairs/combining accents require regression tests.
+
+`f3` is a per-payload alias for a validated reminder/query fact, not an internal
+ID. Each alias has explicit REMINDER/QUERY scope; query facts cannot supply
+reminder slots. The server holds the alias-to-field/provenance mapping bound to that call's
+context revision. A fact reference may preserve/reuse its value, not fabricate a
+changed value. SET replacement and CLEAR require current USER_QUOTE evidence;
+old quotes alone cannot undo a newer correction. Assistant proposals cannot be
+fact evidence. The backend, not the model, stamps `EXPLICIT_USER` or
+`DERIVED_POLICY(policyVersion, dependencies, referenceTime)` provenance.
+An inferred year is always derived even if the model emits a year: a year not
+explicitly present in evidence is omitted/null and resolved under §5.2.
+
+Evidence existence is not semantic entailment. Uncertain interpretations must
+carry alternatives; impossible/incompatible combinations clarify or reject.
+Do not try to prove all meaning with another Vietnamese regex parser. Preview,
+real-model evaluation and confirmation address residual interpretation risk.
 
 Supported semantic slots:
 
@@ -121,17 +200,46 @@ Supported semantic slots:
 | `eventDate`, `eventTime` | When the event itself occurs |
 | `reminderDate`, `reminderTime` | When a notification is requested |
 | `calendar` | GREGORIAN or explicitly requested LUNAR_VN |
-| `recurrence` | User's requested frequency, count/end and event relation |
+| `frequency` | ONCE, DAILY, WEEKLY, MONTHLY, YEARLY or UNKNOWN |
+| `occurrenceCount` | Number of notifications, not a lead offset |
+| `eventRelation` | BEFORE_EVENT, INCLUDING_EVENT or STARTING_ON |
+| `leadOffsetDays` | Explicit calendar-day offset for ONCE; never reused as count |
+| `endDate` | An explicitly requested finite end condition |
 
-Typed date expressions: `CIVIL_DATE` with nullable year, `RELATIVE_DAY` with
-integer day offset, and `WEEKDAY` with an explicit current/next-week or unresolved
-qualifier. Typed clock: hour/minute and AM/PM/24-hour/unknown qualifier. A stated
-`12h trưa` can normalize to 12:00; a missing clock is never manufactured.
+`timezone` is an application setting, not a writable model field. The 13
+allowed fields are exactly the table's individual slots. String bounds are
+title 1800, location 300, notes 2000 Unicode code points; budget checks may reject
+the combined payload earlier. Full meaningful details cannot be silently cut.
 
-List/query periods: `DAY`, `WEEK`, `MONTH`, `WEEKEND`, or explicit date bounds;
-relative period offset identifies this/next/previous period. Calendar questions
-specify a date expression and requested output calendar. Capability questions
-specify the capability, never masquerade as date queries.
+Date operands are strict discriminated unions (design notation):
+
+- `CIVIL_DATE {day, month, year, leapMonth}`: integer day 1–31, month 1–12,
+  year null or 1–9999; leapMonth null/boolean. Gregorian requires leapMonth null;
+  lunar execution requires explicit year and resolves ambiguous leap choice by
+  clarification. Calendar validity and supported horizons are separate checks.
+- `RELATIVE_DAY {offsetDays}`: integer -366–366, relative to source receipt.
+- `WEEKDAY {weekday, qualifier}`: ISO weekday 1–7 and qualifier
+  `THIS_WEEK | NEXT_WEEK | UNRESOLVED`; unresolved selection clarifies.
+- Clock `{hour, minute, qualifier}`: integer minute 0–59, hour 0–23 for `H24`,
+  1–12 for `AM | PM`, or 0–23 for `UNKNOWN`; UNKNOWN clarifies if ambiguous.
+  A stated `12h trưa` can normalize to 12:00; no missing clock is manufactured.
+
+Relative day/weekday operands operate on civil Gregorian days; switching a
+request to lunar does not make “tomorrow” a different day. Lunar year/month/day
+conversion applies to explicitly lunar CIVIL_DATE operands only.
+
+List query shape is `{kind: LIST, period, statusScope: DEFAULT}`; period may be
+null only to ask for range. Period is a discriminated union: `{kind: DAY, date}`,
+`{kind: WEEK|MONTH|WEEKEND, offset: -1|0|1}`, `{kind: REST_OF_MONTH}`,
+`{kind: NEXT_7_DAYS}`, `{kind: UPCOMING}`, or `{kind: DATE_BOUNDS, from, through}`.
+Calendar query is `{kind: CALENDAR_DATE, date, outputCalendar: LUNAR_VN|GREGORIAN}`.
+Capability query is `{kind: CAPABILITY, topic: LUNAR|FINITE_SERIES|ANNUAL}`.
+These are design type notations, not executable JSON. Calendar/capability
+queries never masquerade as scheduling changes. Every non-null query also has
+one to three `evidence` references grounding its operands; a reference to the
+pending query may reuse scope, but new range operands require current user
+evidence. Required but unresolved query operands are null with a targeted
+uncertainty, not invented defaults.
 
 Recurrence separates **frequency**, **occurrence count**, **event relation**,
 **lead offset**, and **end condition**. A one-time reminder two days before an
@@ -139,8 +247,28 @@ event is not a two-occurrence series. Frequency can describe DAILY, WEEKLY,
 MONTHLY or YEARLY intent even when execution support is absent; unsupported
 intent must survive interpretation so the application can explain it accurately.
 The executable subset in this release remains one-off and finite daily series.
+If no cadence is requested, the application defaults a new complete one-off
+request to ONCE/count1 with DERIVED_POLICY provenance. UNKNOWN or explicitly
+unsupported cadence never receives that default. Integers count/offset must be
+positive, with executable daily count 2–30 and lead offset at most 366 days;
+out-of-bound requests receive a limitation, not a clamped schedule.
 Qualifiers or units outside supported expression types produce a targeted
 unsupported/clarification outcome, never a guessed conversion.
+
+Proposal dispatch rules: LIST/CALENDAR/CAPABILITY require their matching `query`
+union and empty changes; non-query intents require query null. Read operations
+may contain uncertainty but never draft SET/CLEAR operations. HELP/UNSUPPORTED/
+ABANDON cannot carry executable changes. A multiple-action utterance is returned
+as AMBIGUOUS with `UNSUPPORTED_COMBINATION` and current evidence; ask which to
+handle first, preserve the existing draft and do not silently execute a subset.
+CREATE/EDIT proposals still require backend completeness checks and confirmation.
+
+Cross-field checks reject/clarify count/offset conflation, count versus end-date
+disagreement, competing event-relative and absolute schedules, timezone changes,
+unsupported cadence, lunar/solar conflicts and inaccessible context references.
+When DAILY has start+end but no count, backend derives inclusive count (2–30);
+with both count and end, they must agree. A relation-based daily series uses
+count, not lead offset; unsupported combinations are explained, not guessed.
 
 ### 4.2 Application pending request
 
@@ -155,6 +283,10 @@ become resolved pending facts; this does not mean the user has confirmed them.
 A current explicit edit can replace a pending slot; a conflict without an edit
 clarifies. Every schedule-affecting edit invalidates the older confirmation.
 Unexpected title/location/note loss must be surfaced rather than silently saved.
+Every material detail edit, not only schedule edits, creates a new preview
+revision; approval includes location and notes too. `contextRevision` changes
+for conversational bookkeeping; `draftRevision` changes only for draft content
+or validity. A read-only interruption must not masquerade as a draft edit.
 
 ### 4.3 Canonical confirmed object
 
@@ -163,12 +295,34 @@ calendar provenance, and encrypted task details. Preserve existing single-draft
 uniqueness and series/occurrence lineage. Never reconstruct confirmed data from
 a later model response. Scheduler/delivery consumes canonical records only.
 
-The existing title-only pending contract cannot retain all these fields. The
+The existing pending contract lacks separate location, notes and eventTime. The
 implementation must add versioned encrypted detail storage and carry it through
 draft, confirmation, query and web detail views. Existing keyring conventions
 and owner-scoped authenticated encryption remain mandatory. Any new migration
 must be additive and separately reviewed; do not rewrite 0007/0008 or silently
 pack structured metadata into the title string.
+
+### 4.4 Preservation example and complete data path
+
+Design example, fixed receipt date 2026-09-28 in Asia/Ho_Chi_Minh:
+
+| Exact user turn | Accepted pending fields after the turn | State / effect |
+| --- | --- | --- |
+| “Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ.” | title=đi thi; location=Quang Trung; notes=nhớ mang giấy tờ; eventDate=2026-10-11 (year derived); reminderTime missing | CLARIFYING; zero canonical reminders |
+| “Nhắc hai ngày liên tiếp trước hôm thi.” | Preserve above; frequency=DAILY; occurrenceCount=2; eventRelation=BEFORE_EVENT | Ask only time |
+| “8h.” | reminderTime=08:00; all other facts unchanged; derived occurrences 09/10,10/10 | AWAITING_CONFIRMATION at draft revision v; no canonical mutation |
+| “Đổi sang 9h.” | reminderTime=09:00 only; same two dates and details | New preview v+1; v cannot confirm |
+
+Model proposal → validated encrypted draft → preview displaying title, location,
+notes, event date separately from every notification date/time → confirmation of
+that version → transaction writes canonical reminder(s) plus encrypted versioned
+details → authenticated API decrypts only for the owner → web detail renders
+separate fields → outgoing reminder includes title, location, notes and relevant
+event date. No stage reconstructs missing fields by parsing the title again.
+Preserve safe output encoding and message-length limits; if the complete preview
+or reminder would exceed the channel limit, ask the user to shorten details
+before confirmation, not silently omit notes or send extra notifications.
+Legacy records expose absent detail fields as unknown/null, never inferred.
 
 ## 5. Deterministic resolution and merge
 
@@ -178,10 +332,11 @@ pack structured metadata into the title string.
 - Default new unrelated requests to Gregorian. Lunar scheduling requires
   explicit user evidence. Querying or displaying lunar dates does not activate
   lunar scheduling and does not change a pending request's calendar.
-- For Gregorian day/month without a year, preserve the existing documented
-  next-valid-future-date policy and expose the resulting year in the preview.
-  Invalid dates are not rolled over. Relative dates resolve against receipt
-  time, not processing delay. Missing date/time triggers clarification.
+- For Gregorian day/month without a year, preserve the existing code's policy:
+  current local year unless month/day is earlier than receipt's month/day, then
+  next year. This is NOT a search for the next leap year or future clock time.
+  Expose the derived year in the preview. Invalid dates are not rolled over.
+  Relative dates resolve against receipt time, not processing delay.
 - Lunar dates require explicit year and leap-month choice where ambiguous.
   Use the existing versioned `lunarCalendar.toSolar/toLunar` adapter, 1900–2100;
   reject unsupported or invalid dates, never ask the LLM to convert them.
@@ -195,12 +350,151 @@ pack structured metadata into the title string.
   ask one question if ambiguous. Do not convert offset into count by default.
 - A relation-only answer preserves existing title/date/time/count. Missing fields
   are computed after merge, not inferred from absence in the current message.
-- A clear contextual “bỏ” abandons only the current unconfirmed request. Model
-  suggestion plus grounded whole-utterance/context validation may close it;
-  negated, quoted or hypothetical abandonment cannot. It never cancels confirmed
-  reminders. Confirmation remains outside the model's output vocabulary.
+- A clear contextual “bỏ” abandons only the current unconfirmed request through
+  the scoped whole-utterance control in §5.1. Other model-proposed abandonment
+  asks for that explicit control; negated, quoted or hypothetical text cannot
+  close it. It never cancels confirmed reminders. Confirmation remains outside
+  the model's output vocabulary.
 - Side questions (calendar date, capabilities, list) do not extend pending TTL
   or erase the request. New unrelated intents cannot inherit old facts.
+
+### 5.1 State and control transitions
+
+State names here describe the new contract; map AWAITING_CONFIRMATION to the
+existing DRAFT_READY lifecycle where compatible. A query question is a separate
+small pending read operation, not a reminder draft. At most one active reminder
+request and one transient query question per owner/chat; no general task stack.
+
+| Prior state | Input/outcome | Result and allowed side effects |
+| --- | --- | --- |
+| NONE | New incomplete create | CLARIFYING; save encrypted pending facts only |
+| CLARIFYING | Valid answer | Merge only supplied slots; ask smallest remaining field or preview |
+| CLARIFYING | Conflicting answer without clear edit | Preserve accepted value, retain alternatives, targeted clarification |
+| AWAITING_CONFIRMATION | Correction, including “Có, nhưng đổi sang 9h” | Never confirm; invalidate old preview, resolve and display new version |
+| AWAITING_CONFIRMATION | Exact scoped confirmation | Transactional commit of visible version; COMPLETED |
+| Active reminder | Read-only question | Retain draft/revision/TTL; query independently; resume prior question only on an explicit continuation or applicable answer |
+| NONE | List without range | Pending query clarification; next range answer queries, not CREATE |
+| Active reminder | Unambiguous “Bỏ.” / scoped escape | CANCELLED; discard only unconfirmed state; durable terminal fence |
+| Any | “Đừng bỏ.” / quoted note | No abandonment; preserve draft or update grounded note |
+| Active reminder | Unrelated new create | Ask whether to replace pending request; do not copy its facts or silently replace it |
+| Any active | Expiry or invalid encrypted context | EXPIRED/INVALID; never reuse facts; explain restart, no canonical change |
+| Any | Unsupported/combined request | Explain exact limitation, preserve existing draft; no partial execution |
+| Any | Provider/config/budget/schema failure | No proposed changes accepted; preserve readable valid draft; specific recovery |
+
+**Controls.** Existing confirmation allowlist (`có`, `ok`, `1`, `xác nhận`)
+must match the complete normalized utterance, not a prefix. Case/NFC/outer-space
+normalization is permitted; mixed text always goes through interpretation.
+No LLM CONFIRMED field exists. A model saying ABANDON alone cannot delete state.
+Proposed scoped escape: complete standalone `bỏ`, `hủy`, `huỷ` (case/NFC/space
+normalization and one terminal period/exclamation permitted) with exactly one
+active unconfirmed request discards that request. Quotes, extra words and
+negations never match. This small explicit UI control vocabulary is not a second
+general language parser. Other abandonment paraphrases are interpreted by LLM
+and ask a scoped confirmation using the escape command, rather than trusting
+semantic output to perform deletion. Do not extend this to saved reminders.
+
+**Preview binding.** Persist a preview receipt containing draft/revision/hash,
+channel/chat and send outcome. Chat confirmation must follow that preview's
+inbound order, target the only applicable revision and have no accepted edit in
+between. If send outcome is uncertain, show the same preview again rather than
+confirm an unseen version. Web confirmation carries an authenticated opaque
+draft/revision token; a stale token is rejected. A bare confirmation in another
+chat cannot target this draft. An authorized web user can confirm the exact
+version shown there; transaction CAS makes concurrent web/chat confirmation one
+winner. A query-only interruption may resume the same preview if still valid.
+
+Arrival order alone cannot prove which edited preview a bare “có” refers to.
+After a replaced/edited preview, or when send/order evidence is uncertain, require
+a channel reply reference bound to that preview if supported, otherwise an
+application-generated short confirmation token shown with the preview. Validate
+token, owner/chat, revision and expiry together; the token is not authorization
+by itself and is not sent to the LLM. Bare confirmation remains available for a
+single stable, unambiguously delivered preview. This stricter edited-preview
+policy is proposed for owner approval; do not silently equate “latest” with
+“user-approved”. Cross-channel bare confirmation always fails this binding.
+
+**Loop recovery (proposed policy).** Count consecutive unresolved answers for
+the same question and unchanged accepted facts. At two such answers, show the
+retained facts and two clear choices or the missing field's acceptable value;
+do not repeat the same menu. At a third, keep the draft unmodified and offer
+scoped cancel/restart or web review. Never invent a value, erase the request or
+extend its TTL. Reset the counter only after actual progress. Model/provider
+failures are not treated as user clarification failures.
+
+### 5.2 Temporal examples and reference time
+
+Assume eventDate is already resolved to 2026-10-11, reminderTime explicit:
+
+| Interpretation | Backend-derived dates |
+| --- | --- |
+| ONCE, leadOffsetDays=2, BEFORE_EVENT | 2026-10-09 |
+| DAILY, occurrenceCount=2, BEFORE_EVENT, no offset | 2026-10-09 and 2026-10-10 |
+| DAILY, occurrenceCount=2, INCLUDING_EVENT | 2026-10-10 and 2026-10-11 |
+| DAILY, occurrenceCount=2, STARTING_ON, reminderDate=2026-10-08 | 2026-10-08 and 2026-10-09 |
+
+The LLM describes operands; it never supplies the resolved occurrence array.
+Daily BEFORE_EVENT uses E-count through E-1; INCLUDING_EVENT uses E-count+1
+through E; STARTING_ON uses S through S+count-1. An explicit change to E recomputes
+all dependent proposed occurrences and invalidates preview approval. Independent
+absolute reminder dates do not move with E; an incompatible mixture clarifies.
+
+Each temporal operand retains its source turn's trusted receipt instant and
+timezone. A fact resolved from “mai” before midnight keeps that date on a later
+turn after midnight. A NEW “mai” in the later turn uses that later receipt;
+if it conflicts, follow edit/conflict rules. Retry uses the original receipt,
+never the retry clock. Facts referenced from context retain original provenance.
+
+Missing date/time is clarified. Year inference follows §5 above and is tagged
+DERIVED_POLICY, not user-supplied. If inferred 29/02 is invalid in that year,
+ask for a year; do not search or normalize. Explicit past dates stay past and
+cannot schedule. At preview and confirmation recheck that every occurrence is
+future and within the existing 366-day horizon; do not skip past children or
+auto-roll an elapsed same-day time to tomorrow. Unknown event time must not be
+invented from reminderTime. Hour-offset reminders are outside this daily design.
+Default ONCE is not permission to invent a reminder date: an event date alone
+without a stated reminder date/relation requires targeted clarification. For an
+explicit same-event-day one-off, INCLUDING_EVENT resolves to E; BEFORE_EVENT
+requires its lead offset. STARTING_ON requires its stated reminder date.
+
+### 5.3 Read-only range semantics (proposed status policy)
+
+All boundaries use Asia/Ho_Chi_Minh and half-open intervals. The month containing
+the query turn is anchored to its receipt, not any old pending reminder's date.
+
+| Meaning | Range |
+| --- | --- |
+| “Tháng này” | Local month start to next month start, including earlier days |
+| “Từ giờ đến cuối tháng” | Receipt instant to next month start |
+| Today / tomorrow / explicit date | Corresponding midnight to next midnight |
+| This/next week | Monday midnight to following Monday |
+| This/next weekend | Saturday midnight to Monday within the selected week |
+| Next seven days | Today midnight through midnight seven days later |
+| Upcoming | Receipt through receipt +30 days, explicitly labelled 30 days |
+| Explicit inclusive date bounds | Start midnight to midnight after end date |
+
+Maximum query span 366 days; reject an oversized/reversed range with an explicit
+reason, not an empty list. The 30-day store guard must change for the successor
+so a 31-day month can execute. Both endpoints of explicit date queries remain
+within 366 calendar days of the query's receipt date.
+
+Recommend returning scheduled canonical reminders in `PENDING, CLAIMED,
+RETRYABLE, SENT, FAILED, UNCERTAIN`; exclude CANCELLED and unconfirmed drafts.
+Label each status; SENT is delivered, not a user-completed task. This broadens
+the current active-only query intentionally and needs owner approval (§10.1).
+Preserve current owner/workspace/**bound chat** query scope; do not widen to
+another connection merely because the owner is the same. Label that scope.
+
+Order ascending by scheduledAt then stable internal ID. Fetch six, display at
+most five, and say “5 kết quả đầu; còn kết quả khác” when the sixth exists;
+link to authenticated Calendar for more, explaining that web may show other
+owner-authorized channels. Do not claim an exact total without a count query.
+The web API's own result cap also requires a visible partial-result notice; a
+link alone is not a guarantee of a complete monthly result. No pagination or
+unbounded fetch is implied by that link.
+No new chat-pagination subsystem. A failed or unauthorized query is not “empty”.
+Query success cannot write reminders, proposals or extend pending TTL; only
+inbound completion, bounded query conversation state and content-free audit are
+allowed. No model call receives or invents database results.
 
 ## 6. Context, privacy and failures
 
@@ -226,6 +520,104 @@ execution capability are distinct internal reason codes with safe, useful user
 responses. Do not repeatedly ask the same satisfied slot or pretend success.
 Do not retry an uncertain paid call or switch model/parser silently.
 
+### 6.1 Explicit context input
+
+Internal state: authenticated owner/workspace/connection/chat IDs, inbound ID,
+receipt/order tuple `(receivedAt, rowid)`, claim marker, request ID,
+contextRevision/draftRevision, contract version, lifecycle, field provenance,
+pending reminder/query questions, preview receipt, model-attempt binding, expiry,
+capability version. None of those identifiers is provider-selected.
+
+Provider root keys are mandatory; nullable objects mean absent, arrays may be
+empty. Payload version is `calenote-context-input-1`:
+
+| Field | Contents and trust |
+| --- | --- |
+| `schemaVersion` | Runtime-owned literal |
+| `reference` | Runtime-owned current receipt's ISO instant, local date, timezone; not writable |
+| `turns` | Oldest-first relevant role-labelled `{role: USER or ASSISTANT, text}`; at most six USER turns including current and six ASSISTANT turns; all text untrusted as instructions |
+| `currentTurn` | Runtime index of current USER entry; exactly one current message |
+| `activeRequest` | Null or sanitized lifecycle, each of the 13 slots with state, value and local fact alias; accepted means backend-validated pending fact, NOT confirmed |
+| `facts` | Alias map to value, EXPLICIT_USER or DERIVED_POLICY provenance, source reference time and dependencies; no owner/request/inbound IDs |
+| `pendingQuestion` | Null or exact last locally composed question text, scope REMINDER/QUERY, field and reason; assistant text never evidence for user approval |
+| `ambiguities` | Unresolved field alternatives tied to evidence; bounded to four |
+| `capabilities` | Runtime-owned version and supported/unsupported operations, calendars and limits; content does not let a user enable features |
+
+Retain the actual assistant clarification/preview text and its kind in encrypted
+context, distinguishing sent, failed and uncertain delivery internally. Do not
+present a failed send as a question the user has seen. A full preview need not
+be sent to the LLM twice if its exact text is already a retained assistant turn.
+Server-owned policy and user text are separate structured fields; user text
+cannot override policy even if it impersonates a system message.
+
+No free-form model summary. The six USER-turn bound includes the incoming turn;
+up to five prior user turns and the corresponding assistant turns can be sent.
+The entire encrypted snapshot, facts, questions and turns remains <=16 KiB.
+Do not evict source evidence while it supports a pending fact. At overflow,
+refuse further semantic dispatch and explain shorten/restart while keeping the
+valid draft and local cancel controls available. No silent truncation.
+
+NONE is different from load failure: with no request, a short “9h” cannot borrow
+old facts; clarify the task/date. Corrupt, unavailable or expired context never
+falls back to guessed history. Use scoped restart only after explicit user
+choice where valid state can be preserved. Side queries retain the reminder
+until its existing expiry; latest QUERY question takes priority for a range-only
+answer. If a fragment could answer both scopes, ask which. Process restart
+loads the same encrypted accepted state; volatile uncommitted model output is
+not retained as fact. Completed/cancelled contexts cannot be resumed.
+
+### 6.2 Ordering, identities and recovery
+
+Reuse existing D1 transaction, `ownedInbound`, terminal-outcome order fences and
+revision compare-and-set patterns; no new coordination service or debounce.
+Proposed changes must add a pre-dispatch observation token covering context
+absence as well as presence, so a response started with NONE cannot recreate a
+request after a later abandon. A terminal generation/outcome fences old work.
+
+| Identity | Binding |
+| --- | --- |
+| Inbound | Existing unique provider message/dedupe identity and trusted ordering tuple |
+| Request / draft | Application-created identity under one owner and conversation |
+| Context / draft version | Exact pre-read revision and current visible proposal revision |
+| Model attempt | One durable inbound attempt, bound to context token + input/prompt/contract digest; never supplied by model |
+| Confirmation | Inbound dedupe key or authenticated web request key + exact preview revision/hash |
+| Canonical mutation | Existing unique source draft / series proposal and occurrence indexes, committed atomically |
+
+Duplicate inbound does not call the model or advance the request twice. Two
+nearby messages are not automatically combined: if the second finishes first,
+the first cannot overwrite it. If the second was interpreted without a required
+predecessor's accepted context, reject it as CONTEXT_STALE/CONTEXT_NOT_READY and
+ask a targeted resend; do not claim lossless burst handling. Arrival alone does
+not invalidate an earlier valid result: a later accepted outcome/correction or
+terminal state does. Recheck binding/expiry/ownership in the mutation transaction,
+not just before the provider call. A queued confirmation received before a
+preview cannot confirm that later preview.
+
+An accepted correction invalidates the prior preview. An accepted abandon writes
+a durable terminal outcome before acknowledging it. Delayed model results fail
+their context binding and cannot save, send a stale preview or resurrect state.
+Outbound selection rechecks current revision; once an external send is already
+in flight it cannot be recalled. Do not claim exactly-once external messaging.
+
+Canonical commit plus lost reply: read the existing result through the same
+authorized identity, report it if known, never repeat INSERTs or claim failure
+without checking. Duplicate confirmation is a no-op returning existing outcome.
+An uncertain outbound delivery is recorded UNCERTAIN; no blind resend of either
+reminder or paid inference. Known safe outbound retries retain delivery policy.
+
+| Failure reason | Recovery / state |
+| --- | --- |
+| BUDGET_EXHAUSTED / CONFIG_UNAVAILABLE | No dispatch; explain unavailable AI, retain draft, allow local controls |
+| PROVIDER_TIMEOUT / PROVIDER_FAILURE | No automatic retry/fallback; retain draft; user may submit a new turn |
+| SCHEMA_INVALID / EVIDENCE_INVALID | Reject complete patch; explain interpretation failure and request clarification |
+| CONFLICT / UNSUPPORTED_CAPABILITY | Show conflicting fields or exact capability limit; no substitute schedule |
+| CONTEXT_STALE / SUPERSEDED | Discard old result; do not emit an obsolete success or preview |
+| STORE_UNCERTAIN | Read back authorized revision/result; acknowledge only verified state |
+
+Do not promise unchanged pending state after a partial storage operation without
+read-back. Context/preview transitions should be transactional where coupled;
+canonical mutation, encrypted details, lineage and terminalization must be.
+
 ## 7. Calendar display and capability scope
 
 Add secondary Vietnamese lunar day labels to the Calendar grid and selected-day
@@ -234,6 +626,25 @@ show month on lunar month boundaries and distinguish leap months. Unsupported
 dates get an explicit unavailable label, not fabricated values. Test responsive
 layout and accessible names. This display does not alter event dates or enable
 lunar scheduling. No astronomical moon-phase feature.
+
+Use version `lunar-vn-utc7-ae2.1.19-v1` from the current artifact, not browser
+locale assumptions. Supported lunar years are 1900–2100; the artifact's solar
+coverage is 1900-01-31 through 2101-01-28 inclusive. Chat/web check actual adapter
+coverage, including boundary days, rather than clipping by Gregorian year.
+Calendar month navigation and “today” must use Vietnam civil dates even if the
+browser is in another timezone. Keep existing reminder markers/details visible.
+Each grid cell shows primary solar day and secondary lunar day; lunar day 1 and
+the first visible day show lunar day/month. Leap-month labels include “nhuận”.
+Selected-day detail shows full solar and lunar day/month/year and convention;
+accessible names contain both dates, selected state and reminder count.
+Outside coverage retain solar/reminder display and say lunar lookup unavailable.
+
+Parity fixtures use the existing 13 reference vectors in
+`tools/calendar/reference-vectors.json`, plus day before/after each reference
+date, all artifact month starts/ends, both coverage edges and one day outside.
+Include 2004-03-21 = lunar 1/2/2004 nhuận and 2004-04-18 = lunar 29/2/2004 nhuận.
+These are repository reference fixtures, not newly verified external astronomy
+claims. Chat and Calendar must produce identical results from the same adapter.
 
 “Hôm nay ngày mấy âm lịch?” is a read-only CALENDAR_QUERY resolved by code.
 “Có lưu âm lịch không?” is CAPABILITY_QUERY with an explanation of actual scope.
@@ -252,12 +663,23 @@ strict structured output, no fallback and existing timeout. No model shopping.
 Keep hard production limits: 50 owner calls/day, 500000 owner monthly cost
 microunits and 2000000 global daily cost microunits.
 
-The richer object must not be squeezed into the old 256-output-token limit
-without measurement. Implementation planning must provide explicit input/output
-byte/token caps and matching pre-dispatch worst-case cost reservation; verify
-them with offline serialization and a bounded live pilot. Raising output caps
-never raises owner/global budgets. No code path may dispatch beyond its reserved
-ceiling. Freeze tested caps in reviewed config before acceptance.
+Proposed contract limits, pending approval and later measurement: retain 1800
+characters for current provider input and 12000 input tokens for the entire
+prompt/schema/context; increase maximum output from 256 to 1536 tokens and
+bounded response body to 32 KiB. Context's 16 KiB is a separate tighter content
+limit, not a token estimate. A deterministic tokenizer or proven conservative
+upper bound must account for the entire wire request and schema overhead before
+dispatch. Oversized/truncated output rejects atomically; never accept half a
+patch. Offline worst-case serialization must fit; otherwise revise the design
+for owner review before live testing, not silently raise caps.
+
+Reserve the maximum input+output cost before dispatch using the revalidated
+route prices. At the existing ceilings ($0.10/$0.40 per million input/output
+tokens), the proposed token ceiling reserves at least 1815 microunits per call,
+rounded upward; include any documented additional billable overhead. Keep 30s
+per-call timeout and retry=0. No code path dispatches beyond its reservation.
+Output-cap changes require separate reviewed runtime config; this doc changes
+no settings. Owner/global limits above remain hard and unchanged.
 
 Content-free telemetry distinguishes: local fast path, pre-dispatch rejection
 category, reserved, dispatched, provider outcome/schema outcome, latency, usage,
@@ -265,6 +687,32 @@ and backend decision. Use application-generated correlation identifiers, never
 raw user identity/content. Dispatch does not imply success; model success does
 not imply correct reconciliation. Retain aggregate counters so provider usage
 can be checked without exposing conversation content or building an admin page.
+
+### 8.1 Invocation and trace contract
+
+| Case | Invocation policy |
+| --- | --- |
+| Natural new request, contextual answer, mixed correction, natural query | One semantic call after guards and budget admission |
+| Exact scoped confirm/abandon or standalone greeting/help | Local fast path; trace why bypassed |
+| Calendar grid, authorized explicit API range, arithmetic after validated operands | No model call |
+| Invalid auth/context, duplicate, disabled/unavailable config or no budget | No dispatch; categorical refusal |
+
+Events: `INBOUND_ACCEPTED`, `CONTEXT_LOADED`, `MODEL_REQUIRED` or
+`MODEL_BYPASSED(reason)`, `REQUEST_PREPARED`, `REQUEST_DISPATCHED`,
+`RESPONSE_RECEIVED`, `STRUCTURE_VALIDATED`, `PROVENANCE_DOMAIN_VALIDATED`,
+`TRANSITION_ACCEPTED` or `TRANSITION_REJECTED`, `SCHEDULE_RESOLVED`,
+`QUERY_EXECUTED`, `CONFIRMATION_VALIDATED`, `MUTATION_COMMITTED` or
+`MUTATION_IDEMPOTENT_SKIP`, `REPLY_SELECTED`, `REPLY_DISPATCHED`, and the outbound
+outcome. Emit only relevant events; failures must terminate with a reason.
+
+Correlate with random application attempt/trace IDs and safe revision numbers,
+not raw owner/chat/message IDs. Record source SHA, contract/prompt version,
+configured and observed model/provider when available, outcome/reason, timing,
+token/cost availability, context/draft version before/after and reservation ID
+through protected internal mapping. Do not log prompt, response, excerpts,
+names, ciphertext or chain-of-thought. Mark unknown usage/route as unknown, not
+zero/verified. Prepared, dispatched, response-valid and end-to-end correct are
+different counters. Provider timing does not prove visible typing animation.
 
 ## 9. Acceptance and release gates
 
@@ -289,22 +737,139 @@ Use structural tables/paraphrase families plus held-out conversations, not a
 finite registry of failed literals. Run focused tests, typecheck, full check,
 diff validation and independent review with Critical=0 / Important=0.
 
-Then run a new provenance-bound live evaluation of the **new contract** with
-actual model calls. Freeze pilot/full corpus and denominators before dispatch;
-bind source, prompt, schema, resolver, calendar, scorer and config digests.
-Include the full UAT failure families and held-out paraphrases across multiple
-turns. Required pilot gates: schema 100%, final object/operation correctness
->=95%, preservation of supplied required details 100%, and zero safety-critical
-failures. Full gates: schema >=99%, final object/operation correctness >=95%,
-required-detail preservation 100%, zero safety-critical failures, and all named
-UAT regression flows correct. Invalid schemas count as failed outcomes; do not
-exclude failed calls from denominators. Report category counts, latency and cost.
+### 9.1 Three verification layers
 
-Pilot/full sizes, per-profile call/cost caps and seed are frozen in the written
-implementation plan for approval before any paid call; retry count remains 0.
-Historical V2 37-turn evidence stays intact but does not admit this contract.
-Report separately: mock/offline results, live model results, deployed allocation,
-and actual user acceptance. None substitutes for another.
+1. Deterministic contract/domain/integration tests: schema/evidence, merge,
+   ordering, arithmetic/conversion, encryption, ownership, idempotency, API and
+   persistence compatibility; injected timeouts/budget/corruption failures.
+   Keep existing safety coverage. These tests do not call a provider.
+2. Real-LLM conversations through actual application construction: production
+   context builder, configured gateway, response validation, service transition,
+   schedule resolver, real D1 store implementations in isolated test persistence,
+   actual confirmation path and API read-back. Stub only external messaging and
+   use synthetic clock/identities/fixtures. Capture real selected reply text in a
+   test sink and inspect committed state after each turn. Do not replace context
+   with handwritten prompt fixtures or use a second pure evaluator as the oracle
+   for what the service did. Existing `conversation-v2-probe.ts` is a useful base,
+   not proof of this new path. No production credentials/data/notifications.
+3. Channel/UI acceptance after separate deployment approval: exact Worker/source
+   version, authorized test account, controlled reminders, Zalo visible responses,
+   Calendar parity and canonical read-back. Record typing visibility separately.
+
+Every critical script checks interpretation, patch, preserved fields, state after
+each turn, calculated dates, response meaning, canonical mutation/child counts
+and absence of unintended effects. Friendly wording alone is not a score.
+
+### 9.2 Proposed dataset and scoring (requires owner approval)
+
+- Pilot: 16 mandatory scripts R01–R16 once, plus two additional runs of each
+  of R02/R03/R05/R06/R07/R08/R11/R13: **32 conversation executions**.
+- Full after pilot PASS: 64 distinct scripts = the 16 regressions +16 development
+  paraphrase/abbreviation variants +32 held-out scripts never used to tune the
+  prompt. Run each once, plus two additional runs of the same eight critical
+  regressions: **80 conversation executions**. No best-of-three selection.
+- Each script has at most six user turns. Freeze exact text, expected model-call
+  turns, timestamps, fault schedule, expected per-turn field states, expected
+  mutation counts and scorer before dispatch. R04 has two independent branches
+  in its script, with an explicit state reset between comparisons. Fresh state
+  per execution; repeat count is planned sampling, not retry after failure.
+- Pilot requires 32/32 conversation executions correct and schema 100%. Full
+  requires >=76/80 executions correct, >=31/32 held-out scripts correct, schema
+  >=99%, and every mandatory regression/repetition correct. Both require 100%
+  preservation of explicitly supplied required details and zero observed safety
+  failures. Any mandatory failure fails the gate regardless of aggregate score.
+
+A conversation passes only if ALL expected per-turn outcomes, invariants and
+final effects pass. Denominator is all 32/80 planned executions, not only those
+that finish. Turn accuracy is correct planned turn outcomes / all manifest
+turns. Schema rate is valid outputs / all manifest turns requiring a healthy
+model call; an unexpected missing dispatch, timeout or malformed result is a
+failure there. Also report raw valid outputs / actual dispatches independently.
+Expected deterministic bypasses and explicitly injected refusal tests do not
+enter the schema denominator; their expected safe outcomes still enter turn and
+conversation scores. Freeze those categories before execution.
+
+Detail preservation is correct required field assertions / all required field
+assertions in the manifest, checked after every applicable turn and persistence
+stage. Count missing/unexecuted assertions as failures. Safety includes wrong
+owner access, pre-confirmation mutation, duplicate canonical mutation, stale
+confirmation, unsupported-schedule substitution or private-data leakage. A
+confirmed daily series legitimately creates N children under ONE authorized
+series transaction; expect exactly that N, not one reminder row.
+
+Record separate categories for semantic failure, safety failure, expected
+unsupported behavior, provider unavailability, and cost/time termination. Do not
+hide outages in successful-only metrics. Preserve stopped runs and mark remaining
+executions NOT_RUN, never PASS. A finite suite does not prove universal safety.
+
+### 9.3 Proposed live envelope, not authorization
+
+| Profile | Maximum dispatched calls | Maximum total reservation/spend | Maximum wall time |
+| --- | --- | --- | --- |
+| Pilot | 192 | USD 0.50 | 20 minutes |
+| Full | 480 | USD 1.00 | 45 minutes |
+
+Retry=0; no fallback; planned repetitions consume these caps. Combined new
+campaign ceiling USD1.50, not an increase to production budgets. Admission must
+verify the actual config/price ceiling fits each cap; retained worst-case
+reservations, not optimistic actual usage, guard uncertain calls. A new run or
+failed run cannot reset cumulative authorization. Stop before the next dispatch
+would exceed calls/cost/deadline; abort outstanding calls at deadline and retain
+their reservations. Stop immediately on a safety or mandatory regression failure,
+route mismatch, credential/isolation failure, or unexpected provider failure.
+
+Future explicit approval must name the immutable candidate, profiles, permitted
+non-production provider credential source and isolated persistence, these caps,
+cleanup and stop conditions. Synthetic per-scenario identities still exercise
+the unchanged runtime budget checks; an append-only campaign ledger additionally
+enforces the aggregate cap across isolated fixtures/repetitions. Do not rotate
+real users or credentials to evade limits. Clean up only explicitly identified
+synthetic local stores; preserve sanitized manifests/digests/outcomes/usage and
+authorization ledgers. No live runs are authorized or executed by this task.
+
+Bind evidence to source, prompt, input/output contract, context builder, calendar,
+resolver, storage/migrations, scorer, corpus, config and observed model/provider.
+Material changes require affected revalidation; frozen held-out data used to tune
+a fix must be replaced before the next held-out acceptance run. Historical V2
+37-turn evidence stays intact but does not admit this contract. Mock, live-model,
+deployed-version and human-channel evidence remain separate.
+
+### 9.4 Mandatory regression matrix
+
+Design fixtures below retain the user's Vietnamese wording. Unless noted,
+initial time is 2026-09-28 10:00 Asia/Ho_Chi_Minh, event E=2026-10-11 where
+preconditions supply it. All queries/clarifications/previews have zero canonical
+reminder mutations. Preseeded state is synthetic, owner-bound and explicit in
+the manifest; it is never injected instead of actual multi-turn context building
+for R02/R07/R08/R11. Additional test turns may confirm the shown version.
+
+| ID | Exact input / setup | Required state and effects |
+| --- | --- | --- |
+| R01 | “Có lịch nào ko?” then “Tháng này có lịch gì ko?” | Pending query range resolves to Sep1–Oct1; authorized query; no repeated range question; no create |
+| R02 | “Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.” → “Nhắc trước 2 ngày.” → “8h.” | Preserve exam/location/E/count2; relation BEFORE_EVENT; only time missing after turn2; preview Oct9/10 08:00, no commit |
+| R03 | Pending relation question; “Nhắc trước sự kiện.” | Set BEFORE_EVENT, keep count/E/title; ask only remaining field, never abandon menu |
+| R04 | “Nhắc một lần trước ngày thi 2 ngày.” versus “Nhắc 2 ngày liên tiếp trước ngày thi.”; E and 08:00 supplied in context | Separate scripts branches: one Oct9 versus Oct9/10; no count/offset conflation |
+| R05 | Unconfirmed request; “Bỏ.” | CANCELLED, no saved reminder cancellation, no repeated menu; a new request can start |
+| R06 | “Đừng bỏ.” then “Ghi chú là: đừng bỏ quên giấy tờ.” | No abandonment; note remains note; draft/details otherwise preserved |
+| R07 | Four-turn preservation example §4.4, ending “Đổi sang 9h.” | Only reminderTime changes; revision advances; old preview invalid |
+| R08 | After 08:00 preview: “Có, nhưng đổi sang 9h.” | No old-version commit; 09:00 preview needs fresh confirmation |
+| R09 | “Hôm nay là ngày mấy âm lịch?” | Actual canonical conversion for receipt's local date; read-only answer, not capability help |
+| R10 | “Ngày 15/6 âm lịch hằng năm, nhắc ngày giỗ người thân.” | Honest annual-unsupported explanation; no one-off downgrade; offer requires explicit acceptance, then year/time clarification |
+| R11 | Pending draft; “Tháng này có lịch gì?” then return to draft | Read-only result, no contamination/loss/TTL extension; resume exact valid facts/version |
+| R12 | “Mai 8h nhắc gọi mẹ” received Sep28 23:59, processed/retried Sep29 00:01 | Reminder Sep29 08:00; original receipt retained; no extra provider dispatch for replay |
+| R13 | Older interpretation delayed; later “bỏ” accepted | Durable cancellation prevents old response resurrecting draft or emitting old preview |
+| R14 | Same confirmation delivered twice; reply lost after commit | One canonical transaction and expected child count; read-back recovers truth, no duplicate send promise |
+| R15 | Malformed object, unsupported field, fabricated evidence, timeout, budget refusal (five deterministic injected variants) | Safe explicit failure, no patch/canonical mutation, no alternate parser; separate failure categories |
+| R16 | Same solar/lunar dates through chat and Calendar, §7 reference/boundary set | Converter/labels match; no model arithmetic; read-only |
+
+R15's five injected variants and R16's full UI/vector expansion belong to Layer1
+and Layer3 respectively. Their Layer2 scripts exercise healthy real-model
+interpretation plus one predeclared injected failure (R15), and one real lunar
+query plus a shared presentation projection (R16). Those narrowed live scripts
+do not replace the mandatory full deterministic/UI expansions. Record each
+layer's result separately; all expansions are required for final acceptance.
+
+### 9.5 Compatibility and release
 
 Release requires reviewed config and any additive storage migration, exact-head
 CI, fresh resource/rollback preflight, explicitly authorized remote mutations,
@@ -315,12 +880,72 @@ Rollback cannot undo D1 or cancel already confirmed reminders. Isolate new pendi
 context storage/version so older Workers cannot read it as V2; retain old
 canonical fields so previously reviewed delivery still works after rollback.
 
+Version input/output, encrypted pending payload and encrypted canonical detail
+payload independently. Add owner-scoped companion detail storage for drafts,
+reminders and series lineage, retaining legacy required fields and existing
+unique keys. Copy details in the SAME confirmation transaction; failure rolls
+back every child and canonical record. Older records remain valid without a
+detail row; newer APIs must explicitly version their strict response contract
+so old clients do not fail on unknown keys. No LLM-based backfill of legacy data.
+
+Before later cutover, quiesce/drain affected processing and verify no old Worker
+can accept successor writes. Do not use a mixed-version traffic split unless
+both versions enforce the shared fences. Enforce compatibility in storage as
+well as routing: new contexts must be isolated while legacy confirmation/claim
+paths are blocked from treating the same owner/chat as empty and starting an
+overlapping request. Preserve common terminal ordering evidence. A version-only
+JSON tag is not sufficient if old SQL can still confirm a legacy draft.
+
+In-flight attempts bind to their contract/context revision and fail stale after
+cutover. Do not convert old unconfirmed drafts implicitly; expire/restart with
+notice or finish them before activation. Confirmed reminders keep their stored
+schedule and lineage. Rollback requires a recorded compatible Worker version
+that honors new fences; an older historical Worker is not automatically safe.
+Older delivery may omit new optional details, which must be disclosed as a
+rollback limitation; it must not duplicate, reschedule or reinterpret reminders.
+
 ## 10. Explicit exclusions and next step
 
 No admin implementation, burst/debounce orchestration, Queue concurrency changes,
 general-purpose chatbot, unbounded/annual scheduler, new provider, silent budget
 increase or unrelated UI redesign. User-facing questions outside calendar/task
 assistance receive a concise scope explanation, not arbitrary model execution.
+No email/ICONIC integration, team/organization features, billing/subscriptions,
+native app, long-term memory subsystem, snooze or completion-tracking additions.
+
+### 10.1 Owner decisions proposed for approval
+
+| Decision | Recommendation | Tradeoff |
+| --- | --- | --- |
+| Monthly query status inclusion (§5.3) | Include delivered/failed/uncertain alongside active, exclude cancelled; label statuses | Matches a monthly schedule rather than only future work, but displays more historical entries |
+| Clarification recovery (§5.1) | Escalate locally after two no-progress answers; at three preserve and offer restart/web | Bounded loop and no extra inference solely for wording; some users may need to restate |
+| Edited-preview confirmation (§5.1) | Require bound reply reference or short scoped token when bare confirmation cannot identify a version | Prevents delayed “có” approving the wrong revision; adds a small interaction after edits |
+| Wire/output and live acceptance envelope (§8/9.2/9.3) | 1536 output tokens; 32 pilot/80 full executions with held-out and critical repeats; proposed $0.50/$1.00 caps | More meaningful coverage and larger objects, with bounded extra latency/cost; still requires separate live authorization and fit verification |
+
+Missing-year behavior and unsupported annual recurrence are already resolved by
+the inspected baseline/scope and are not reopened as owner blockers. Structured
+storage evolution and isolated context versions are necessary implementation
+work, not optional new product categories.
+
+### 10.2 Adversarial design review outcome
+
+- No second general language interpreter: typed validation can reject with a
+  reason but never replace meaning via V1/V2 fallback (§2/4.1).
+- Schema-valid invented facts remain a residual model risk; evidence existence
+  alone is not proof. No automatic canonical write; preview, consent and held-out
+  semantics are mandatory, and no universal correctness claim is made (§4/9).
+- Missing operations KEEP; CLEAR and replacement require current evidence;
+  separate slots and per-turn field assertions detect detail loss (§4).
+- Observation token, revisions and terminal outcomes prevent stale overwrite or
+  resurrection; external sends already in flight cannot be recalled (§6.2).
+- Mixed confirmation is never an exact control; it creates a new preview (§5.1).
+- Queries may record processing metadata but cannot change reminder data (§5.3).
+- Unsupported recurrence remains explicit and cannot become one-off success (§7).
+- Shared adapter plus coverage-edge/reference parity protects chat/web dates (§7).
+- Actual service replies/state/confirmation/API must be observed; a post-hoc pure
+  projection cannot stand in for application execution (§9.1).
+- Mock results, real calls, dispatch outcomes and channel acceptance remain
+  separately reported; no claim of implementation follows document checks (§8/9).
 
 Next gate: review this written spec. After approval, write the implementation
 plan with task boundaries, storage evolution, concrete contract limits, live

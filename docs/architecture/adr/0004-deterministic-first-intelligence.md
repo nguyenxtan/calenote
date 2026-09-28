@@ -1,5 +1,14 @@
 # ADR 0004: Deterministic-first optional intelligence
 
+## Scope notice — 2026-09-28
+
+The decision below describes the legacy deterministic-first path, not an
+instruction to add a competing parser to the proposed successor conversation
+contract. [LLM-led context design](../../superpowers/specs/2026-09-28-llm-context-contract-design.md)
+§2 proposes superseding raw-language parsing priority while retaining backend
+validation, authorization and mutation authority. Its written spec is pending
+owner review; no runtime or deployment change is implied by this notice.
+
 ## Context
 
 The core Vietnamese reminder workflow is useful without an LLM. Sending every
