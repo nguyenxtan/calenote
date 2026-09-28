@@ -13,7 +13,7 @@ const databases: SqliteD1Database[] = [];
 let reminderPublicSequence = 0;
 
 function database(): SqliteD1Database {
-  const value = new SqliteD1Database();
+  const value = new SqliteD1Database({ conversationV2: true });
   databases.push(value);
   return value;
 }

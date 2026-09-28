@@ -80,12 +80,15 @@ interface CommandMutationBase {
 }
 
 export interface CreateDraftMutation extends CommandMutationBase {
+  conversationFence?: { id: string; revision: number };
   draftId: string;
   encryptedTitle: EncryptedValue;
   titleKeyVersion: number;
   scheduledAt: number;
   timezone: string;
   expiresAt: number;
+  /** Optional V2 metadata encrypted against owner/chat/draft, not provider data. */
+  encryptedCalendarFacts?: EncryptedValue;
 }
 
 export interface ConfirmDraftMutation extends CommandMutationBase {
@@ -113,6 +116,10 @@ export interface ReminderCommandStore {
 }
 
 export interface ProcessBoundChatDependencies {
+  conversation?: {
+    handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult>;
+    ownsPendingDraft?(message: BoundChatMessage, context: BoundChatContext, draftId: string): Promise<boolean>;
+  };
   store: ReminderCommandStore;
   keyring: Pick<Keyring, "encryptSensitive" | "decryptSensitive">;
   reply(text: string): Promise<void>;
@@ -329,6 +336,20 @@ export async function processBoundChatMessage(
   }
 
   const normalized = normalizeWholeMessage(message.text);
+  if (dependencies.conversation && !normalized.startsWith("/connect")) {
+    // Confirmation remains canonical. Only an authenticated V2-owned draft
+    // may re-enter contextual dialogue; legacy drafts retain their drain guard.
+    const pending = await dependencies.store.findPendingDraft(message, context.chatIdentityId);
+    if (!pending) return dependencies.conversation.handle(message, context);
+    if (!CONFIRM_WORDS.has(normalized) && !CANCEL_WORDS.has(normalized)) {
+      try {
+        if (await dependencies.conversation.ownsPendingDraft?.(message, context, pending.id)) {
+          return dependencies.conversation.handle(message, context);
+        }
+      } catch { /* Unknown ownership must not bypass the legacy draft fence. */ }
+      return rejectWithReply(message, "Bạn còn một lời nhắc đang chờ. Gửi “có” để xác nhận hoặc “hủy” để bỏ trước nhé.", processingNow, dependencies, randomBytes);
+    }
+  }
   if (dependencies.semantic && (HELP_WORDS.has(normalized) || normalized.startsWith("/connect"))) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }

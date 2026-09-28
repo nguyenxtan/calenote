@@ -59,7 +59,7 @@ class SqliteD1Statement {
 export class SqliteD1Database {
   readonly sqlite = new DatabaseSync(":memory:");
 
-  constructor() {
+  constructor(options: { conversationV2?: boolean } = {}) {
     this.sqlite.exec(
       readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"),
     );
@@ -75,6 +75,13 @@ export class SqliteD1Database {
         "utf8",
       ),
     );
+    if (options.conversationV2) {
+      for (const migration of [
+        "0004_user_preferences", "0005_semantic_context_and_budget",
+        "0006_semantic_budget_dispatch_fence", "0007_conversation_context_v2",
+        "0008_finite_reminder_series",
+      ]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${migration}.sql`), "utf8"));
+    }
   }
 
   prepare(sql: string): D1PreparedStatement {

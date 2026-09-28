@@ -69,6 +69,11 @@ class SqliteD1Database {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    for (const migration of [
+      "0003_source_action_foundation", "0004_user_preferences",
+      "0005_semantic_context_and_budget", "0006_semantic_budget_dispatch_fence",
+      "0007_conversation_context_v2", "0008_finite_reminder_series",
+    ]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${migration}.sql`), "utf8"));
   }
 
   prepare(sql: string): D1PreparedStatement {

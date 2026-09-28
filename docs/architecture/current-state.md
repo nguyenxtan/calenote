@@ -34,6 +34,29 @@ plans are audit evidence only; they do not override this document.
 
 ## Worker runtime and persistence
 
+### Undeployed Conversation V2 branch — 2026-09-28
+
+The isolated `codex/conversation-v2-live-evaluation` package adds bounded encrypted
+dialogue context, finite daily series, explicit Vietnamese lunar dates, managed
+nonblocking typing and owner-scoped web series controls. The authorized release
+candidate explicitly enables V2 in HTTP series operations, Queue and scheduled
+composition; the underlying factories remain default-off. Bounded live evaluation passed 37/37 turns,
+schema 36/36, temporal 37/37 and zero safety failures at source `cfe5f1f`.
+They are **not deployed**; post-run error-copy/test-only changes are documented
+separately from the evaluated source. Fresh read-only Cloudflare preflight passed
+on 2026-09-28: active Worker `6e0596cc-0800-486d-b20d-894de3a90aea` at 100%,
+remote master `9018344f1f8b1e0adf4d7905d3e7e6550f9ee5ad`, migrations 0001–0006
+applied and 0007/0008 pending. The user authorized V2 activation, those two
+migrations and merge after test/CI success, but not deployment. The dedicated
+write credential is expired; no migration has been applied by this activation
+checkpoint. A new master SHA still needs explicit deployment approval.
+See [evaluation evidence](../benchmarks/conversation-v2-results.md),
+[implementation progress](../implementation/conversation-v2-progress.md) and
+[release gates](../runbooks/conversation-v2-release.md). The domain is intended
+for user UAT, but existing production-labelled resources are not thereby isolated.
+
+### Existing runtime
+
 `src/worker/index.ts` is the runtime composition root. It composes the HTTP
 router/controllers, D1 stores, encrypted keyring, provider adapters, Queue
 producer/consumer, and scheduled handler. Queue payloads carry opaque IDs, not

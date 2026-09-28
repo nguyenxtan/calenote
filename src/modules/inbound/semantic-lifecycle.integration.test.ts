@@ -92,8 +92,10 @@ async function harness(outcomes: SemanticAttemptResult[] = [create]) {
   let now = NOW + 1_000;
   const store = new D1InboundProcessorStore(db);
   const replies: string[] = [];
+  const feedbackTasks: Promise<unknown>[] = [];
+  raceCleanups.push(async () => { await Promise.all(feedbackTasks); });
   const semantic = { mode: "privacy" as "privacy" | "off", gateway: gateway as SemanticGateway, budgetStore, contextStore, paidFallbackEnabled: false };
-  const deps: ProcessInboundDependencies = { store, keyring, semantic: {
+  const deps: ProcessInboundDependencies = { store, keyring, feedbackLifetime: { waitUntil: task => { feedbackTasks.push(task); } }, semantic: {
     gateway: { prepare: (tier, input) => semantic.gateway.prepare(tier, input) }, budgetStore, contextStore,
     get mode() { return semantic.mode; }, get paidFallbackEnabled() { return semantic.paidFallbackEnabled; },
   }, now: () => now,

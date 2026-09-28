@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ConversationModelSchema, ConversationModelJsonSchema, type ConversationModel } from "../../../conversation/contracts";
+import { ConversationInputSchema, CONVERSATION_PROMPT } from "../../../conversation/prompt";
 import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema } from "../../../semantic/contracts";
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
@@ -68,8 +70,8 @@ function containsSensitiveInput(value: string): boolean {
     || /(?:^|\s)\/connect\b/iu.test(value);
 }
 
-function decodeResponse(response: { status: number; body: string; oversized?: boolean }, config: SemanticGatewayConfig,
-  maximum: number): SemanticAttemptResult {
+function decodeResponse<T>(response: { status: number; body: string; oversized?: boolean }, config: SemanticGatewayConfig,
+  maximum: number, output: z.ZodType<T>): SemanticAttemptResult<T> {
   if (response.status === 408) return { status: "FAILURE", category: "TIMEOUT" };
   if (response.status === 429) return { status: "FAILURE", category: "RATE_LIMITED" };
   if (response.status === 404) return { status: "FAILURE", category: "UNAVAILABLE" };
@@ -91,12 +93,35 @@ function decodeResponse(response: { status: number; body: string; oversized?: bo
   try { payload = JSON.parse(envelope.data.choices[0].message.content); } catch {
     return { status: "FAILURE", category: "INVALID_JSON", usage };
   }
-  const semantic = ModelSemanticInterpretationSchema.safeParse(payload);
+  const semantic = output.safeParse(payload);
   return semantic.success ? { status: "SUCCESS", interpretation: semantic.data, usage }
     : { status: "FAILURE", category: "SCHEMA_INVALID", usage };
 }
 
 export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transport: SemanticTransport): SemanticGateway {
+  return createContractGateway(rawConfig, transport, { input: SemanticInputSchema,
+    output: ModelSemanticInterpretationSchema, schema: ModelSemanticInterpretationJsonSchema,
+    prompt: CANONICAL_SEMANTIC_PROMPT, name: "model_semantic_interpretation", primaryOnly: false });
+}
+
+export function createConversationGateway(rawConfig: SemanticGatewayConfig, transport: SemanticTransport): SemanticGateway<ConversationModel, unknown> {
+  if (!rawConfig.primary?.requireZdr || rawConfig.freePrimary || rawConfig.paidFallback) {
+    throw new TypeError("Conversation requires a single ZDR primary route");
+  }
+  return createContractGateway(rawConfig, transport, { input: ConversationInputSchema,
+    output: ConversationModelSchema, schema: ConversationModelJsonSchema,
+    prompt: CONVERSATION_PROMPT, name: "conversation_semantic_interpretation", primaryOnly: true });
+}
+
+function sensitiveValue(value: unknown): boolean {
+  if (typeof value === "string") return containsSensitiveInput(value);
+  if (Array.isArray(value)) return value.some(sensitiveValue);
+  return value !== null && typeof value === "object" && Object.values(value).some(sensitiveValue);
+}
+
+function createContractGateway<T, Input extends { text: string }>(rawConfig: SemanticGatewayConfig,
+  transport: SemanticTransport, contract: { input: z.ZodType<Input>; output: z.ZodType<T>;
+    schema: typeof ModelSemanticInterpretationJsonSchema; prompt: string; name: string; primaryOnly: boolean }): SemanticGateway<T, unknown> {
   const parsed = configSchema.safeParse(rawConfig);
   if (!parsed.success || typeof transport !== "function"
     || (parsed.data.freePrimary && (parsed.data.freePrimary.promptPriceMicrounitsPerMillionTokens !== 0
@@ -107,11 +132,10 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
   const config = parsed.data;
   return {
     prepare(tier, rawInput) {
-      const parsedInput = SemanticInputSchema.safeParse(rawInput);
+      if (contract.primaryOnly && tier !== "PRIMARY") return { status: "FAILURE", category: "UNAVAILABLE" };
+      const parsedInput = contract.input.safeParse(rawInput);
       if (!parsedInput.success || parsedInput.data.text.length > config.maxInputChars
-        || containsSensitiveInput(parsedInput.data.text)
-        || (parsedInput.data.previousContext && "title" in parsedInput.data.previousContext
-          && containsSensitiveInput(parsedInput.data.previousContext.title ?? ""))) {
+        || sensitiveValue(parsedInput.data)) {
         return { status: "FAILURE", category: "INVALID_INPUT" };
       }
       const route = tier === "PRIMARY" ? config.primary : tier === "FREE_PRIMARY" ? config.freePrimary : config.paidFallback;
@@ -119,10 +143,10 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
       const request: SemanticJsonRequest = {
         model: route.model,
         stream: false,
-        messages: [{ role: "system", content: CANONICAL_SEMANTIC_PROMPT },
+        messages: [{ role: "system", content: contract.prompt },
           { role: "user", content: JSON.stringify(parsedInput.data) }],
         max_tokens: config.maxOutputTokens,
-        response_format: { type: "json_schema", json_schema: { name: "model_semantic_interpretation", strict: true, schema: structuredClone(ModelSemanticInterpretationJsonSchema) } },
+        response_format: { type: "json_schema", json_schema: { name: contract.name, strict: true, schema: structuredClone(contract.schema) } },
         provider: { only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny",
           ...(route.requireZdr ? { zdr: true } : {}), max_price: {
             prompt: route.promptPriceMicrounitsPerMillionTokens / 1_000_000,
@@ -147,7 +171,7 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
           const controller = new AbortController();
           let timer: ReturnType<typeof setTimeout> | undefined;
           try {
-            const timeout = new Promise<SemanticAttemptResult>((resolve) => {
+            const timeout = new Promise<SemanticAttemptResult<T>>((resolve) => {
               timer = setTimeout(() => {
                 controller.abort();
                 resolve({ status: "FAILURE", category: "TIMEOUT" });
@@ -155,7 +179,7 @@ export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transpor
             });
             return await Promise.race([
               Promise.resolve().then(() => transport(request, { signal: controller.signal }))
-                .then((response) => decodeResponse(response, config, maximumCostMicrounits)),
+                .then((response) => decodeResponse(response, config, maximumCostMicrounits, contract.output)),
               timeout,
             ]);
           } catch {

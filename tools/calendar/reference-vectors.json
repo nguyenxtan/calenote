@@ -1,0 +1,24 @@
+{
+  "accessedAt": "2026-09-25",
+  "sources": {
+    "rules": {"url":"https://www.xemamlich.uhm.vn/calrules.html","author":"Ho Ngoc Duc","publishedOrUpdated":"2008-08-18"},
+    "examples": {"url":"https://www.xemamlich.uhm.vn/calrules_en.html","author":"Ho Ngoc Duc","publishedOrUpdated":null},
+    "boundary1900": {"url":"https://www.xemamlich.uhm.vn/JavaScript/?yy=1900&mm=1","author":"Ho Ngoc Duc","publishedOrUpdated":null},
+    "boundary2100": {"url":"https://www.xemamlich.uhm.vn/JavaScript/?yy=2100&mm=2","author":"Ho Ngoc Duc","publishedOrUpdated":null}
+  },
+  "vectors": [
+    {"year":1900,"month":1,"day":1,"leap":false,"solarDate":"1900-01-31","source":"boundary1900"},
+    {"year":1984,"month":1,"day":1,"leap":false,"solarDate":"1984-02-02","source":"rules"},
+    {"year":1984,"month":2,"day":1,"leap":false,"solarDate":"1984-03-03","source":"examples"},
+    {"year":1984,"month":5,"day":1,"leap":false,"solarDate":"1984-05-30","source":"examples"},
+    {"year":1984,"month":11,"day":1,"leap":false,"solarDate":"1984-11-23","source":"examples"},
+    {"year":1985,"month":1,"day":1,"leap":false,"solarDate":"1985-01-21","source":"examples"},
+    {"year":1985,"month":2,"day":1,"leap":true,"solarDate":"1985-03-21","source":"examples"},
+    {"year":2004,"month":2,"day":1,"leap":true,"solarDate":"2004-03-21","source":"rules"},
+    {"year":2004,"month":2,"day":29,"leap":true,"solarDate":"2004-04-18","source":"rules"},
+    {"year":2007,"month":1,"day":1,"leap":false,"solarDate":"2007-02-17","source":"examples"},
+    {"year":2030,"month":1,"day":1,"leap":false,"solarDate":"2030-02-02","source":"examples"},
+    {"year":2053,"month":1,"day":1,"leap":false,"solarDate":"2053-02-18","source":"examples"},
+    {"year":2100,"month":1,"day":1,"leap":false,"solarDate":"2100-02-09","source":"boundary2100"}
+  ]
+}

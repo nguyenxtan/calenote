@@ -29,11 +29,14 @@ describe("TodayExperience", () => {
       return json({ data: { reminders: [{ ...reminder, scheduledAt, status: sent ? "SENT" : "PENDING" }] } });
     });
     vi.stubGlobal("fetch", fetcher);
-    render(<TodayExperience />);
+    // Finish session/data effects before simulating a later browser focus.
+    await act(async () => { render(<TodayExperience />); });
     await screen.findByText("1 lời nhắc còn lại");
+    expect(fetcher.mock.calls.filter(([path]) => path === "/api/reminders")).toHaveLength(1);
     sent = true;
     now.mockReturnValue(scheduledAt + 20_000);
-    fireEvent.focus(window);
+    await act(async () => { fireEvent.focus(window); });
+    expect(fetcher.mock.calls.filter(([path]) => path === "/api/reminders")).toHaveLength(2);
     await screen.findByText(/1 lời nhắc hôm nay đã gửi/);
     expect(screen.queryByRole("region", { name: "Lời nhắc cần kiểm tra" })).not.toBeInTheDocument();
     expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));

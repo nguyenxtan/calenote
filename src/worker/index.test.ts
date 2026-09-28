@@ -240,6 +240,15 @@ describe("awaited minute scheduler", () => {
     },
   );
 
+  it("runs bounded conversation cleanup without aborting dispatch on cleanup failure", async () => {
+    const worker = await workerModule();
+    const operations = { claimDueReminders: vi.fn(async () => {}), redriveInboundOrphans: vi.fn(async () => {}),
+      redriveLoginCodes: vi.fn(async () => {}), purgeConversationContexts: vi.fn(async () => { throw new Error("synthetic"); }) };
+    await worker.runScheduledWork({ scheduledTime: 1_800_000_000_000 } as ScheduledController, operations);
+    expect(operations.purgeConversationContexts).toHaveBeenCalledExactlyOnceWith(1_800_000_000_000, 100);
+    expect(operations.claimDueReminders).toHaveBeenCalledOnce();
+  });
+
   it("awaits all bounded lanes after starting them independently", async () => {
     const worker = await workerModule();
     expect(worker.runScheduledWork).toBeTypeOf("function");
