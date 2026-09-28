@@ -1,6 +1,8 @@
 # Conversation V2 release / UAT gate
 
-Current package is local and default-off. The user intends to review the full
+Current release candidate explicitly enables V2 at HTTP, Queue and scheduled
+entrypoints; underlying composition factories remain default-off for isolated
+tests and controlled callers. It is not deployed. The user intends to review the full
 package at `https://calenote.iconiclogs.com` as UAT. That does not create an
 isolated database: reviewed resources still have production names. Do not
 silently reuse credentials or relabel data isolation.
@@ -20,8 +22,8 @@ silently reuse credentials or relabel data isolation.
    baseline from active allocation, not latest uploaded version.
 5. Obtain explicit authority for remote changes. Apply only reviewed pending
    additive migrations to the verified database, then verify read-only.
-6. Activate `conversationV2` coherently in the HTTP and Queue/scheduled
-   composition through reviewed code. Defaults are deliberately false in
+6. Verify `conversationV2` is coherently enabled in the HTTP and Queue/scheduled
+   composition through reviewed code. Factory defaults are deliberately false in
    `createRuntimeOperations` and `createSeriesOperations`; there is **no**
    unreviewed environment-variable shortcut or admin switch.
 7. Require exact-head CI and normal reviewed promotion to master. Obtain explicit

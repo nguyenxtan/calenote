@@ -174,7 +174,8 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
-  const seriesOperationsFactory = options.seriesOperations ?? createSeriesOperations;
+  const seriesOperationsFactory = options.seriesOperations
+    ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;

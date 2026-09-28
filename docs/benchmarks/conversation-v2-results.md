@@ -37,13 +37,14 @@ temporal scanner, scorer, corpus or success-path behavior changed in this delta.
 Fresh local/CI verification is required for that release checkpoint; do not
 describe it as the exact source used by this live ledger.
 
-Release remains blocked, not deployed: read-only Cloudflare credential returned
-HTTP 401 / code 10000 for exact Calenote Worker deployment/secret-name endpoints
-and D1 database metadata. No write credential was substituted. Current active
-version, migration state and rollback baseline could not be refreshed.
-`GET /user/tokens/verify` subsequently returned HTTP 200 with token status
-`expired`, confirming the credential blocker without exposing its value.
-V2 remains default-off; no master merge, remote migration, secrets or upload.
+The earlier read-token expiry is resolved: 2026-09-28 read-only preflight and
+independent review passed (Critical 0 / Important 0). Active rollback baseline
+is `6e0596cc-0800-486d-b20d-894de3a90aea` at 100%; migrations 0007/0008 remain
+pending. The user has now authorized coherent V2 activation, these migrations
+and merge after validation, but no upload/deployment. The release candidate
+changes only explicit entrypoint composition, not this evaluated contract,
+corpus or sealed ledger. The dedicated write token is expired, so migration
+execution awaits secure renewal. A passing live result is not deployment evidence.
 
 ## Historical dialogue verification — 2026-09-28: FAIL
 

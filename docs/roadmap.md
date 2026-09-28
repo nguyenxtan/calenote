@@ -55,15 +55,18 @@ the semantic path. Its presence does not prove user-visible latency; the next
 design measures and reduces feedback delay without changing Queue batching or
 per-chat concurrency.
 
-**BOUNDED_LIVE_ACCEPTED — 2026-09-28; default-off, release preflight blocked:**
+**BOUNDED_LIVE_ACCEPTED — 2026-09-28; activation candidate, not deployed:**
 [Conversation V2, finite urgent reminders, and explicit lunar dates](./superpowers/specs/2026-09-25-conversation-v2-urgent-lunar-design.md)
 consolidates contextual greetings, clarification/edit/abandon behavior,
 encrypted short-lived conversation context, finite daily reminder series,
 explicit-opt-in Vietnamese lunar dates, and typing responsiveness. These are
 implemented in the isolated feature branch. Real-model evaluation at `cfe5f1f`
 passed all 37 turns with zero safety failures; no user-facing deployment yet.
-Cloudflare read access currently returns 401 and must be restored before cutover
-preflight. See the exact-source limits in
+Cloudflare read-only preflight now passes. Candidate entrypoints explicitly
+enable V2; remote migrations 0007/0008 and deployment remain pending. Migration
+and merge are authorized after validation, but the dedicated write credential
+needs renewal; deployment still requires the new exact master SHA approval.
+See the exact-source limits in
 [evaluation evidence](./benchmarks/conversation-v2-results.md) and
 [release gates](./runbooks/conversation-v2-release.md).
 The [implementation plan](./superpowers/plans/2026-09-25-conversation-v2-urgent-lunar.md)

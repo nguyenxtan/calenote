@@ -153,11 +153,11 @@ export default {
     return routeRequest(request, env, ctx);
   },
   async queue(batch: MessageBatch<unknown>, env, ctx) {
-    await handleQueueEvent(batch, () => createRuntimeOperations(env, {}, ctx));
+    await handleQueueEvent(batch, () => createRuntimeOperations(env, { conversationV2: true }, ctx));
   },
   async scheduled(controller, env, ctx) {
     void ctx;
-    const operations = await createRuntimeOperations(env);
+    const operations = await createRuntimeOperations(env, { conversationV2: true });
     await runScheduledWork(controller, operations);
   },
 } satisfies ExportedHandler<Env>;

@@ -4,9 +4,37 @@ Post-evaluation release checkpoint verification: focused service/series 49/49,
 fresh full check 96 files / 1872 tests, documentation test, typecheck, lint
 (existing warnings only), build, Worker types, dry-run and diff check PASS.
 Independent whole-slice and post-run review: Critical 0 / Important 0 / Minor 0.
-This does not override the expired-credential release preflight blocker below.
+This evidence precedes the separately authorized activation below.
 
-## Latest checkpoint — 2026-09-28 live evaluation PASS; release preflight blocked
+## Authorized activation — 2026-09-28 (not deployed)
+
+User authorized coherent V2 activation, migrations 0007/0008 and normal merge
+after tests/CI pass; upload/deploy requires separate approval of the new master SHA.
+Fresh read-only preflight and independent review passed, Critical 0 / Important 0.
+Worker rollback baseline: `6e0596cc-0800-486d-b20d-894de3a90aea` at 100%.
+Remote master: `9018344f1f8b1e0adf4d7905d3e7e6550f9ee5ad` (local master is stale).
+Production D1 has 0001–0006 only. The dedicated `calenote-cf-phase-a-write`
+credential verifies as expired; no write attempted and no other token substituted.
+
+TDD activation tests execute actual Worker entrypoints and router while
+intercepting the external-runtime composition boundary: RED 4 failed / 1 passed
+for missing Queue, scheduled and HTTP GET/POST capabilities. Minimal correction
+passes `{ conversationV2: true }` at all three entrypoints and preserves the
+Queue feedback lifetime. Factory defaults, model, provider, budgets, schema,
+semantic behavior and migration files remain unchanged. Test fixtures mirror
+the real Queue metadata and session expiration types. No provider call is made.
+Remote migration and deployment evidence will be recorded only after execution.
+
+Fresh activation verification: focused 7 files / 136 tests PASS; exact final
+entrypoint tests 5/5 PASS; `pnpm typecheck` PASS; full `pnpm check` 97 files /
+1877 tests PASS, documentation test PASS, typecheck/lint/build/Worker types/
+dry-run PASS. The same 146 pre-existing generated-bundle lint warnings remain,
+zero errors. `git diff --check` PASS. Independent activation review: Critical 0 /
+Important 0 / Minor 0. No new live model run was performed: the explicit opt-ins
+do not change the evaluated semantic contract. Exact-head remote CI is required
+before merge; migration execution and deployment remain separate pending gates.
+
+## Prior checkpoint — 2026-09-28 live evaluation PASS; read credential expired
 
 Run `conversation-v2-temporal-priority-verification-20260928-01`, evaluated
 source `cfe5f1fb24bb04951f4ecadad3224d1eb2a7d03c`: outcomes 37/37, schema
