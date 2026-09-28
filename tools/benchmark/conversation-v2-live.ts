@@ -14,9 +14,9 @@ import { ConversationModelSchema } from "../../src/modules/conversation/contract
 const CORPUS="src/modules/conversation/benchmark/conversation-v2.json";
 const CORPUS_DIGEST="5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382";
 export const AUTHORIZATION="conversation-v2-live-20260927";
-export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification"|"semantic-diagnostic"|"semantic-verification";
+export type CampaignSlot="legacy"|"diagnostic"|"repair"|"verification"|"semantic-diagnostic"|"semantic-verification"|"boundary-verification";
 export function liveDirectory(root:string,slot:CampaignSlot="legacy") {
-  if(!["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
+  if(!["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification","boundary-verification"].includes(slot))throw new Error("INVALID_CAMPAIGN_SLOT");
   // Single-use paths stay fixed across worktrees. New semantic slots also
   // require sealed historical reservations before admission (see below).
   return join(realpathSync(execFileSync("git",["-C",root,"rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim()),"calenote-benchmark-authorizations",
@@ -40,6 +40,19 @@ function verifySemanticRepairAllocation(root:string) {
   // New explicit continuation approval: two exclusive $0.50 slots plus ALL
   // retained historical reservations, not discounted provider-reported usage.
   if(spent!==71665||spent+2*500000>2000000)throw new Error("AGGREGATE_CAP_EXCEEDED");
+  return spent;
+}
+export function verifyBoundaryRepairAllocation(root:string) {
+  const earlier=verifySemanticRepairAllocation(root);
+  const closed: [CampaignSlot,string][]=[
+    ["semantic-diagnostic","b0353ad0a9cb968a370e26567961832b62b0d641d4e25fb355f8655354760978"],
+    ["semantic-verification","971852d0839e44af571ceb4efeb5fd9e4734518178f02caab7be86cbce66fa57"],
+  ];
+  const spent=closed.reduce((n,[slot,digest])=>n+verifyClosedCampaign(readFileSync(join(liveDirectory(root,slot),"authorization.jsonl"),"utf8"),digest),earlier);
+  // 2026-09-28 continuation: one new exclusive slot, retaining every previous
+  // dispatched reservation. All six older ledgers must be sealed and unchanged.
+  if(spent!==125088||spent+500000>2000000)throw new Error("AGGREGATE_CAP_EXCEEDED");
+  return spent;
 }
 export function safeOutcomeDiagnostics(raw:unknown,actual:Record<string,unknown>|null,expected:Record<string,unknown>) {
   const parsed=ConversationModelSchema.safeParse(raw);
@@ -133,6 +146,7 @@ export async function runConversationLive(options:Options) {
   if(resolve(options.root)!==process.cwd())throw new Error("ROOT_MISMATCH");
   if(options.mode==="LIVE"&&resolve(options.directory)!==liveDirectory(process.cwd(),options.slot))throw new Error("LIVE_DIRECTORY_FIXED");
   if(options.mode==="LIVE"&&options.slot?.startsWith("semantic-"))verifySemanticRepairAllocation(options.root);
+  if(options.mode==="LIVE"&&options.slot==="boundary-verification")verifyBoundaryRepairAllocation(options.root);
   const preflight=preflightConversationLive(options.root), data=corpus(options.root), runtimeConfig=config(options.root);
   const transport=options.mode==="LIVE"?conversationTransport(options.apiKey):options.transport;
   await mkdir(options.directory,{recursive:true,mode:0o700});

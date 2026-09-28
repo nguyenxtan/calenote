@@ -5,12 +5,26 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics, safeOutcomeDiagnostics, verifyClosedCampaign } from "./conversation-v2-live";
+import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics, safeOutcomeDiagnostics, verifyClosedCampaign, verifyBoundaryRepairAllocation } from "./conversation-v2-live";
 import { D1ReminderCommandStore } from "../../src/modules/reminders/infrastructure/d1/command-store";
 import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
 describe("bounded Conversation V2 live evaluation", () => {
+  it("fences the newly authorized boundary verification across worktrees and away from every consumed slot", () => {
+    const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
+    const fresh=liveDirectory(process.cwd(),"boundary-verification");
+    expect(fresh).toBe(liveDirectory(join(common,".."),"boundary-verification"));
+    for(const slot of ["legacy","diagnostic","repair","verification","semantic-diagnostic","semantic-verification"] as const)
+      expect(fresh).not.toBe(liveDirectory(process.cwd(),slot));
+  });
+  it("refuses the new allocation when historical evidence is missing without network access", async () => {
+    const root=await mkdtemp(join(tmpdir(),"calenote-boundary-allocation-"));
+    execFileSync("git",["init","--quiet",root]);
+    const fetcher=vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("NETWORK_FORBIDDEN"));
+    expect(()=>verifyBoundaryRepairAllocation(root)).toThrow(expect.objectContaining({code:"ENOENT"}));
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("reports mismatched field names and validated semantic labels without titles or arbitrary payloads", () => {
     const model={intent:"CREATE_REMINDER",title:"private-sentinel",titleState:"RESOLVED",targetIntent:null,dialogueAct:"CONTINUE",continuation:"YES",capability:null};
     const result=safeOutcomeDiagnostics(model,{title:"private-sentinel",calendar:"LUNAR_VN"},{title:"expected-sentinel",calendar:"GREGORIAN"});

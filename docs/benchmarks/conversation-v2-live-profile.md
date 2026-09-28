@@ -84,6 +84,23 @@ change them after observing model output to manufacture a pass.
 
 ## Commands
 
+### 2026-09-28 boundary-repair verification authorization
+
+The user's continuation request authorizes one new `boundary-verification`
+slot for the repaired context-transition and semantic-wire contract, retaining
+the original model, corpus, scoring gates and aggregate USD 2 ceiling.
+Admission requires all six preceding ledgers to be closed, digest-matched and
+unchanged. Their dispatched reservations total 125088 microunits; adding the
+new slot's maximum 500000 yields 625088, below 2000000. Provider-reported spend
+is not used to release uncertain reservations. No historical ledger is reused.
+The new slot remains exclusive across linked worktrees and run IDs. It permits
+at most 40 inference requests, zero retries, no alternate model or fallback.
+It does not authorize deployment; exact-master-SHA approval remains required.
+
+```sh
+node --import ./tools/benchmark/register-conversation-loader.mjs tools/benchmark/run-conversation-v2-live.mjs --live RUN_ID boundary-verification
+```
+
 From repository root, using installed Node and TypeScript:
 
 ```sh
