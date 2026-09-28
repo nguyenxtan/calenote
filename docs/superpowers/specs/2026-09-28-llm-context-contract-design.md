@@ -5,6 +5,9 @@ Status: **DESIGN_DIRECTION_APPROVED / WRITTEN_SPEC_PENDING_REVIEW**
 Inspected baseline: `6329b33264a2916f004953865f6483fafdfd7491`.
 Revision audit: `cafe6da1e26a19d140b7a231b8f1f291ed8c2fc4`; no later
 commits or tracked/untracked changes at the start of this documentation revision.
+Targeted closure checkpoint: `9d1b0abfd2e0cbadbcbb29dd6f64ef409d4f1c2a`;
+verified clean on `codex/llm-context-contract-design`, no intervening commits.
+Owner policy selections are recorded in §10.1; written-spec approval is pending.
 
 The user approved writing this design after requesting that the LLM understand
 the whole conversation instead of repeatedly extending phrase-specific parsing.
@@ -48,7 +51,7 @@ All new contracts, tables and examples below are proposed designs, not code.
 | Annual recurrence | Explicitly excluded §7/10 | Remains excluded; recognized intent is not executable capability |
 | Real-model evidence | Partial §9 | §9.1–9.3 specify layers, numbers and denominators. Existing live probe already calls `processBoundChatMessage` and real conversation service/D1 stores; it is not merely a pure-function runner. Its reply sink is a no-op and some decisions are reconstructed afterward: extend observation of actual outputs, not a parallel evaluator |
 | Compatibility/release | Partial §9 | §9.5 specifies mixed-version and in-flight safety |
-| Product choices | Unstated | §10.1 lists proposed policies requiring owner approval |
+| Product choices | Unstated | §10.1 now records owner selections; written-spec approval remains pending |
 | Admin/batching/annual engine/integrations | Outside §10 | Remain outside; not dependencies |
 
 Inspected relevant sources: `conversation/{contracts,prompt,service,turn,
@@ -104,8 +107,9 @@ V1/V2 test passes cannot select this contract for release.
 ## 3. Processing boundaries
 
 1. Existing inbound authentication, owner/chat binding, dedupe and durable claim.
-2. Explicit confirmation controls for the visible current revision; local
-   greeting/help fast paths only for unambiguous whole utterances.
+2. Load scoped application control state; resolve explicit controls bound to the
+   current pending decision and visible revision; local greeting/help fast paths
+   only for unambiguous whole utterances.
 3. Best-effort typing, without waiting for provider completion.
 4. Load and validate bounded encrypted context; construct a sanitized provider
    view containing known slots, their provenance and the actual pending question.
@@ -164,14 +168,17 @@ Evidence is one to three references per change, using one of these wire shapes:
 {"kind":"CONTEXT_FACT","ref":"f3"}
 ```
 
-The application NFC-normalizes each role-labelled turn before sending it.
+The application constructs the control-free semantic view (§6.1.1), then
+NFC-normalizes each role-labelled turn before sending it.
 `turn` is a zero-based index in that exact payload; `occurrence` is one-based
 among left-to-right non-overlapping exact substring matches. Match NFC text
 case-sensitively; no accent stripping, case folding, UTF-16 offsets or byte
 offsets on the wire. Repeated phrases require the explicit occurrence number.
 Reject empty/over-2000-code-point quotes, absent turns, non-user quotes and nonexistent
 occurrences. Store the derived code-point span internally with original turn
-identity and normalization version. Retain source text encrypted for the pending
+identity, view-to-source mapping and normalization version. Quotes must cover
+only unchanged USER source segments, never a control placeholder or a span
+crossing removed text. Retain source text encrypted for the pending
 lifetime, not in logs. Surrogate pairs/combining accents require regression tests.
 
 `f3` is a per-payload alias for a validated reminder/query fact, not an internal
@@ -213,7 +220,8 @@ the combined payload earlier. Full meaningful details cannot be silently cut.
 
 Date operands are strict discriminated unions (design notation):
 
-- `CIVIL_DATE {day, month, year, leapMonth}`: integer day 1–31, month 1–12,
+- `CIVIL_DATE {calendar, day, month, year, leapMonth}`: required source calendar
+  `GREGORIAN | LUNAR_VN`, integer day 1–31, month 1–12,
   year null or 1–9999; leapMonth null/boolean. Gregorian requires leapMonth null;
   lunar execution requires explicit year and resolves ambiguous leap choice by
   clarification. Calendar validity and supported horizons are separate checks.
@@ -227,6 +235,24 @@ Date operands are strict discriminated unions (design notation):
 Relative day/weekday operands operate on civil Gregorian days; switching a
 request to lunar does not make “tomorrow” a different day. Lunar year/month/day
 conversion applies to explicitly lunar CIVIL_DATE operands only.
+Every CIVIL_DATE declares its own source calendar, including query operands;
+it never inherits an unrelated pending reminder's calendar. Reminder operands
+must agree with their request's calendar slot or clarify the conflict. Query
+`outputCalendar` is separate: neither it nor the active draft chooses the input
+calendar. Relative/weekday operands always identify Gregorian civil days under
+the runtime reference policy. If the user names no calendar, use Gregorian default
+with policy provenance, not an inferred opposite of outputCalendar.
+
+CALENDAR_DATE supports both Gregorian-to-lunar and lunar-to-Gregorian lookup
+through the canonical converter. “Hôm nay là ngày mấy âm lịch?” uses
+RELATIVE_DAY(offsetDays=0), outputCalendar=LUNAR_VN. “Ngày 15/6/2027 âm lịch là
+ngày dương nào?” uses CIVIL_DATE(calendar=LUNAR_VN,day=15,month=6,year=2027,
+leapMonth=null), outputCalendar=GREGORIAN; clarify leap choice only if ambiguous.
+No converted value is stipulated here. Explicit Gregorian lookup with a lunar
+draft, or lunar lookup with a Gregorian draft, leaves that draft unchanged.
+LIST civil-date endpoints in this slice are Gregorian only; preserve an explicit
+lunar LIST request as unsupported, never relabel its dates. No new recurrence
+or date-expression type is introduced.
 
 List query shape is `{kind: LIST, period, statusScope: DEFAULT}`; period may be
 null only to ask for range. Period is a discriminated union: `{kind: DAY, date}`,
@@ -381,9 +407,10 @@ request and one transient query question per owner/chat; no general task stack.
 | Any | Unsupported/combined request | Explain exact limitation, preserve existing draft; no partial execution |
 | Any | Provider/config/budget/schema failure | No proposed changes accepted; preserve readable valid draft; specific recovery |
 
-**Controls.** Existing confirmation allowlist (`có`, `ok`, `1`, `xác nhận`)
-must match the complete normalized utterance, not a prefix. Case/NFC/outer-space
-normalization is permitted; mixed text always goes through interpretation.
+**Controls.** Decision type is checked before the existing confirmation
+allowlist (`có`, `ok`, `1`, `xác nhận`). Match the whole NFC/case/outer-space
+normalized utterance, allowing one terminal period/exclamation, never a prefix.
+Mixed text always goes through interpretation after §6.1.1 sanitization.
 No LLM CONFIRMED field exists. A model saying ABANDON alone cannot delete state.
 Proposed scoped escape: complete standalone `bỏ`, `hủy`, `huỷ` (case/NFC/space
 normalization and one terminal period/exclamation permitted) with exactly one
@@ -409,17 +436,71 @@ a channel reply reference bound to that preview if supported, otherwise an
 application-generated short confirmation token shown with the preview. Validate
 token, owner/chat, revision and expiry together; the token is not authorization
 by itself and is not sent to the LLM. Bare confirmation remains available for a
-single stable, unambiguously delivered preview. This stricter edited-preview
-policy is proposed for owner approval; do not silently equate “latest” with
+single stable, unambiguously delivered preview with current decision SAVE_PREVIEW.
+The owner selected this edited-preview policy; do not equate “latest” with
 “user-approved”. Cross-channel bare confirmation always fails this binding.
 
-**Loop recovery (proposed policy).** Count consecutive unresolved answers for
+**Loop recovery (owner-selected policy).** Count consecutive unresolved answers for
 the same question and unchanged accepted facts. At two such answers, show the
 retained facts and two clear choices or the missing field's acceptable value;
 do not repeat the same menu. At a third, keep the draft unmodified and offer
-scoped cancel/restart or web review. Never invent a value, erase the request or
+scoped cancel/restart. Offer web review only when an authorized screen actually
+renders this contract's relevant draft state; the existing title/schedule inbox
+is not proof of that capability. Otherwise recovery stays in chat. Never invent a value, erase the request or
 extend its TTL. Reset the counter only after actual progress. Model/provider
 failures are not treated as user clarification failures.
+
+#### 5.1.1 Pending decision: type as well as version
+
+Maintain at most one application-owned `pendingDecision`, not a workflow stack:
+`{kind, target, questionId, previewId?, draftRevision?, contextRevision,
+issuedAfterInbound, deliveryState, expiresAt, acceptedReplies}`. Target contains
+owner/chat binding and the relevant request/proposal identity; a replacement or
+alternative may hold one bounded encrypted candidate plus its source evidence.
+All of this counts against the existing context limit. IDs, reply tokens and
+authorization handles remain internal; the provider sees only semantic question
+kind/text/options, never authority to approve it.
+
+| Kind | Positive local reply when the current question is unambiguous | Authorized effect |
+| --- | --- | --- |
+| SAVE_PREVIEW | `có`, `ok`, `1`, `xác nhận`, or exact `xác nhận <token>` / bound reply under §5.1 | Commit only the identified valid preview through normal confirmation |
+| REPLACE_PENDING | `có`, `ok`, `1`, or exact `đồng ý <token>` / bound reply | Atomically invalidate A and adopt the evidenced candidate B as unconfirmed; collect fields or show B; no canonical write |
+| ACCEPT_ONE_TIME_ALTERNATIVE | Same non-save replies | Accept consideration of ONCE only; collect/preview it if no competing request, otherwise ask a separate REPLACE_PENDING question; no save |
+| RESUME_PENDING | Same non-save replies | Resume retained facts and reissue clarification/preview with a fresh decision; no save |
+| RESTART_PENDING | Same non-save replies | Discard only the identified unconfirmed request and ask for a fresh request; no saved-reminder cancellation |
+
+For each decision, exact `không` or `2` declines that decision and preserves any
+otherwise valid draft; it does not mean discard all state. The explicit `bỏ`/
+`hủy`/`huỷ` escape remains separately scoped to the unconfirmed request (or sole
+unaccepted offer when no request exists), never a saved reminder. If a current
+offer and retained request make the escape target ambiguous, ask which to drop;
+discard neither until scoped. Mixed replies
+such as “Có, nhưng đổi sang 9h” are not any local approval.
+
+Create a decision only after application validation; a model label cannot mint
+it. Its expiry is no later than its target's existing lifetime (a standalone
+offer uses the bounded conversation lifetime); showing a question never renews
+a draft. New questions, accepted edits, changed target/revision, abandonment,
+completion, expiry or uncertain delivery invalidate the previous decision and
+its handles. Even a non-approval clarification suspends bare save confirmation.
+Never search older decisions for one that matches a bare reply. A read-only
+interruption preserves the draft, but returning to it must explicitly reissue
+its question/preview and decision before accepting bare save approval.
+
+Bind every approval to the current decision type, owner/chat, delivered question,
+target and revision atomically. Where reference is uncertain require its bound
+reply/short token; stale tokens/replies never bypass a newer question. Replays
+return the recorded transition without applying it twice. Applying a non-save
+decision consumes it; only a subsequent, separately answered SAVE_PREVIEW may
+commit. Authenticated web save remains explicitly typed and revision-bound,
+not a bare chat response to a different question.
+
+Required flows: preview A -> new request -> REPLACE_PENDING -> “Có.” replaces
+only pending A with B; it saves neither A nor B. B requires its own preview and
+SAVE_PREVIEW. With unrelated A and an annual lunar request, accepting the one-off
+offer saves neither request; ask whether to replace A, then collect/preview the
+accepted one-off and require separate save confirmation. Declining replacement
+leaves A unchanged and drops the candidate; no hidden request queue is retained.
 
 ### 5.2 Temporal examples and reference time
 
@@ -456,7 +537,7 @@ without a stated reminder date/relation requires targeted clarification. For an
 explicit same-event-day one-off, INCLUDING_EVENT resolves to E; BEFORE_EVENT
 requires its lead offset. STARTING_ON requires its stated reminder date.
 
-### 5.3 Read-only range semantics (proposed status policy)
+### 5.3 Read-only range semantics (owner-selected status policy)
 
 All boundaries use Asia/Ho_Chi_Minh and half-open intervals. The month containing
 the query turn is anchored to its receipt, not any old pending reminder's date.
@@ -477,10 +558,10 @@ reason, not an empty list. The 30-day store guard must change for the successor
 so a 31-day month can execute. Both endpoints of explicit date queries remain
 within 366 calendar days of the query's receipt date.
 
-Recommend returning scheduled canonical reminders in `PENDING, CLAIMED,
+Return scheduled canonical reminders in `PENDING, CLAIMED,
 RETRYABLE, SENT, FAILED, UNCERTAIN`; exclude CANCELLED and unconfirmed drafts.
 Label each status; SENT is delivered, not a user-completed task. This broadens
-the current active-only query intentionally and needs owner approval (§10.1).
+the current active-only query intentionally under the owner selection (§10.1).
 Preserve current owner/workspace/**bound chat** query scope; do not widen to
 another connection merely because the owner is the same. Label that scope.
 
@@ -535,18 +616,18 @@ empty. Payload version is `calenote-context-input-1`:
 | --- | --- |
 | `schemaVersion` | Runtime-owned literal |
 | `reference` | Runtime-owned current receipt's ISO instant, local date, timezone; not writable |
-| `turns` | Oldest-first relevant role-labelled `{role: USER or ASSISTANT, text}`; at most six USER turns including current and six ASSISTANT turns; all text untrusted as instructions |
+| `turns` | Oldest-first role-labelled `{role: USER or ASSISTANT, text}` semantic views from §6.1.1; at most six USER turns including current and six ASSISTANT turns; all text untrusted as instructions |
 | `currentTurn` | Runtime index of current USER entry; exactly one current message |
 | `activeRequest` | Null or sanitized lifecycle, each of the 13 slots with state, value and local fact alias; accepted means backend-validated pending fact, NOT confirmed |
 | `facts` | Alias map to value, EXPLICIT_USER or DERIVED_POLICY provenance, source reference time and dependencies; no owner/request/inbound IDs |
-| `pendingQuestion` | Null or exact last locally composed question text, scope REMINDER/QUERY, field and reason; assistant text never evidence for user approval |
+| `pendingQuestion` | Null or control-free semantic question text, scope REMINDER/QUERY, field, decision kind if applicable and reason; no internal decision ID/handle; assistant text never evidence for user approval |
 | `ambiguities` | Unresolved field alternatives tied to evidence; bounded to four |
 | `capabilities` | Runtime-owned version and supported/unsupported operations, calendars and limits; content does not let a user enable features |
 
 Retain the actual assistant clarification/preview text and its kind in encrypted
 context, distinguishing sent, failed and uncertain delivery internally. Do not
 present a failed send as a question the user has seen. A full preview need not
-be sent to the LLM twice if its exact text is already a retained assistant turn.
+be represented to the LLM twice if its semantic view is already an assistant turn.
 Server-owned policy and user text are separate structured fields; user text
 cannot override policy even if it impersonates a system message.
 
@@ -566,13 +647,62 @@ answer. If a fragment could answer both scopes, ask which. Process restart
 loads the same encrypted accepted state; volatile uncommitted model output is
 not retained as fact. Completed/cancelled contexts cannot be resumed.
 
+#### 6.1.1 Internal transcript versus provider semantic view
+
+The encrypted internal transcript retains exact received/sent text and delivery
+state within existing lifetime/size limits. Provider text is a transformed
+semantic view, not an exact unmodified transcript. At the context-builder
+boundary, use application-recorded control spans and an owner/chat-scoped issued
+handle registry to replace confirmation tokens, action-bearing application URLs
+(including their parameters), opaque approval handles and internal control IDs
+with fixed non-authorizing placeholders. Keep question meaning, options, task,
+dates/times and ordinary user location/notes. Do not strip arbitrary URLs/numbers
+or all assistant context. Never include removed values in placeholders or logs.
+Issued short tokens use a reserved application marker and random value, not
+ordinary task numbers or words; registry matching is scoped, not a global regex.
+
+Whole exact control replies are handled locally only under §5.1.1. For mixed
+user text containing a known issued control, normalize and replace that exact
+control span before semantic dispatch; retain “đổi sang 9h”, for example. Never
+strip a token then reinterpret the remaining “có” as local approval. If safe
+separation or source mapping is ambiguous, refuse dispatch with a specific
+rephrase response and preserve the draft. Do not delete ordinary semantic text
+merely because it resembles a token; a genuine collision also fails safely.
+
+Apply this projection to every provider-facing string, including facts, notes,
+pendingQuestion, alternatives and evidence excerpts, not just turns. Retain a
+bounded registry for active and retained-transcript controls until that context
+expires; unknown control-shaped material that cannot be classified safely blocks
+dispatch rather than invoking a broad user-content stripping rule. Final payload
+validation rejects any remaining known forbidden control value, including JSON
+escaped/URL-encoded representations. No outbound provider request may carry one.
+
+Evidence indexes/occurrences match the exact NFC semantic view supplied to the
+model. Keep an internal segment map to the original encrypted source; reject
+quotes spanning removed segments or placeholders. NFC combining marks and
+surrogate pairs must map correctly. Sanitization cannot manufacture approval,
+promote assistant text to USER evidence or alter accepted field authority. It
+does not grant permission to change ordinary task content or expand the caps.
+
 ### 6.2 Ordering, identities and recovery
 
 Reuse existing D1 transaction, `ownedInbound`, terminal-outcome order fences and
 revision compare-and-set patterns; no new coordination service or debounce.
 Proposed changes must add a pre-dispatch observation token covering context
-absence as well as presence, so a response started with NONE cannot recreate a
-request after a later abandon. A terminal generation/outcome fences old work.
+absence as well as presence, so work started with NONE cannot overwrite a later
+accepted request/terminal outcome. R13 cancellation itself requires an existing
+persisted pending request: bind owner/chat + context ID/revision and, where
+present, source-linked proposal ID/revision; reuse `ownedInbound`, context CAS,
+`conversation_context_outcomes` and later terminal inbound ordering fences.
+An interpretation editing that request loses authority after its abandonment.
+
+First-ever interpretation still in flight with no persisted draft is NOT a
+supported targeted-abandon case in this slice. Reply truthfully that no pending
+draft can yet be identified/cancelled; do not say “đã bỏ”. Existing newer-terminal
+inbound fencing may supersede old work, but is not a cancellation receipt. R13
+does not prove targeted cancellation of that first in-flight request. No new
+batching/coordination subsystem is implied; the no-draft variant must verify
+truthful response and no canonical mutation, not fictitious draft cancellation.
 
 | Identity | Binding |
 | --- | --- |
@@ -652,7 +782,9 @@ claims. Chat and Calendar must produce identical results from the same adapter.
 Annual lunar requests are understood and retained but **not executable** in this
 slice. Explain that annual automation is unsupported and offer a one-off option;
 only if the user chooses that option, collect missing year/time and show a
-one-off preview. Never quietly replace annual intent with one occurrence.
+one-off preview through ACCEPT_ONE_TIME_ALTERNATIVE (§5.1.1). If another draft
+exists, separately resolve replacement first; accepting the offer never saves
+that draft or the alternative. Never replace annual intent with one occurrence.
 An annual scheduler requires a separate design for leap-month/missing-day
 policy, rolling materialization, cancellation and delivery lineage.
 
@@ -663,8 +795,8 @@ strict structured output, no fallback and existing timeout. No model shopping.
 Keep hard production limits: 50 owner calls/day, 500000 owner monthly cost
 microunits and 2000000 global daily cost microunits.
 
-Proposed contract limits, pending approval and later measurement: retain 1800
-characters for current provider input and 12000 input tokens for the entire
+Retained proposed design limits, selected for later feasibility measurement: 1800
+UTF-16 code units for current provider input and 12000 input tokens for the entire
 prompt/schema/context; increase maximum output from 256 to 1536 tokens and
 bounded response body to 32 KiB. Context's 16 KiB is a separate tighter content
 limit, not a token estimate. A deterministic tokenizer or proven conservative
@@ -714,6 +846,53 @@ names, ciphertext or chain-of-thought. Mark unknown usage/route as unknown, not
 zero/verified. Prepared, dispatched, response-valid and end-to-end correct are
 different counters. Provider timing does not prove visible typing animation.
 
+### 8.2 Size boundaries and deferred offline fit gate
+
+These are distinct gates, all required; passing one never overrides another.
+Count text after NFC normalization, before control redaction, without truncation
+or trimming task content to pass admission. Retain original encrypted source and
+the normalization/view mapping. A code point is one Unicode scalar; a UTF-16
+code unit is JavaScript string.length (a supplementary character counts as two).
+Combining sequences may contract under NFC; neither count means grapheme count.
+
+| Boundary | Limit / precedence |
+| --- | --- |
+| Inbound transport | Existing webhook body cap 32 KiB of raw request bytes, plus current channel validation; 1800/2000 are not transport body limits |
+| Retained user turn | 2000 NFC code points, preserving the existing context bound; longer text may be transport-admitted but is not appended to semantic context |
+| Current semantic-dispatch input | 1800 NFC UTF-16 code units, preserving the current gateway ceiling; also obey the retained-turn cap; check before and after projection so removal cannot bypass admission |
+| Retained context | Six USER turns and <=16 KiB UTF-8 serialized snapshot JSON before encryption, including facts, decision/candidate, internal transcript and mapping; encryption overhead is separately bounded by storage |
+| Serialized provider request | <=12000 total input tokens for prompt/schema/context, plus all constituent limits; measure JSON UTF-8 bytes as a separate diagnostic, not as an interchangeable token count |
+| Provider response | <=1536 output tokens AND <=32 KiB raw response body bytes; reject truncated/oversized/schema-invalid output atomically |
+
+Named boundary cases use NFC UTF-16 units for the current message:
+INPUT_1799 and INPUT_1800 pass that length gate only; all context/token/domain
+gates still apply. INPUT_1801 and INPUT_2000 may pass transport and the 2000-code-
+point retained-turn ceiling, but must not dispatch semantically. Return
+SEMANTIC_INPUT_TOO_LONG with a concise request to shorten/resend; do not append
+the rejected message to accepted semantic facts or damage/extend the valid draft.
+Text over 2000 code points also fails context-turn admission. These cases need
+NFC Vietnamese, decomposed accents and supplementary-character variants, not
+ASCII-only tests. Boundaries never silently truncate the current message.
+
+Deferred offline gate (NOT RUN in this documentation task): serialize ordinary
+complete create; multi-field correction; long title/location/notes preservation;
+one-to-three evidence references including escaping; up to four ambiguities with
+two alternatives; and maximum retained context plus full prompt/schema overhead.
+Measure request/response bytes and tokens or a proven conservative bound, and
+verify rejected oversized/truncated responses preserve prior state and produce
+useful recovery. Include control projection and internal mapping overhead.
+
+Independent slot maxima are not a promise that their simultaneous maximum JSON
+fits 1536 output tokens: copying long text plus evidence/alternatives competes
+for the same output budget. Cost arithmetic (1815 microunits reservation) proves
+neither serialization size nor token feasibility. Before live admission, prove
+ordinary required flows fit and define a conservative aggregate admission guard;
+reject over-budget cases with shorten/restart guidance, never clip fields. If
+required flows cannot fit, stop for a bounded spec amendment (compact evidence
+representation or a lower explicitly disclosed aggregate envelope), not a
+silent cap/budget increase. No tokenizer/serialization feasibility result is
+claimed here and no executable tests are changed by this task.
+
 ## 9. Acceptance and release gates
 
 TDD must cover the contract and lifecycle, not just the screenshot strings:
@@ -760,7 +939,7 @@ Every critical script checks interpretation, patch, preserved fields, state afte
 each turn, calculated dates, response meaning, canonical mutation/child counts
 and absence of unintended effects. Friendly wording alone is not a score.
 
-### 9.2 Proposed dataset and scoring (requires owner approval)
+### 9.2 Retained proposed dataset and scoring (not execution authority)
 
 - Pilot: 16 mandatory scripts R01–R16 once, plus two additional runs of each
   of R02/R03/R05/R06/R07/R08/R11/R13: **32 conversation executions**.
@@ -857,7 +1036,7 @@ for R02/R07/R08/R11. Additional test turns may confirm the shown version.
 | R10 | “Ngày 15/6 âm lịch hằng năm, nhắc ngày giỗ người thân.” | Honest annual-unsupported explanation; no one-off downgrade; offer requires explicit acceptance, then year/time clarification |
 | R11 | Pending draft; “Tháng này có lịch gì?” then return to draft | Read-only result, no contamination/loss/TTL extension; resume exact valid facts/version |
 | R12 | “Mai 8h nhắc gọi mẹ” received Sep28 23:59, processed/retried Sep29 00:01 | Reminder Sep29 08:00; original receipt retained; no extra provider dispatch for replay |
-| R13 | Older interpretation delayed; later “bỏ” accepted | Durable cancellation prevents old response resurrecting draft or emitting old preview |
+| R13 | Persisted pending request; older interpretation editing it delayed; later “bỏ” accepted | Owner/chat/context-revision cancellation fence prevents resurrection/old preview; first-in-flight/no-draft case is separate under §6.2 |
 | R14 | Same confirmation delivered twice; reply lost after commit | One canonical transaction and expected child count; read-back recovers truth, no duplicate send promise |
 | R15 | Malformed object, unsupported field, fabricated evidence, timeout, budget refusal (five deterministic injected variants) | Safe explicit failure, no patch/canonical mutation, no alternate parser; separate failure categories |
 | R16 | Same solar/lunar dates through chat and Calendar, §7 reference/boundary set | Converter/labels match; no model arithmetic; read-only |
@@ -868,6 +1047,37 @@ interpretation plus one predeclared injected failure (R15), and one real lunar
 query plus a shared presentation projection (R16). Those narrowed live scripts
 do not replace the mandatory full deterministic/UI expansions. Record each
 layer's result separately; all expansions are required for final acceptance.
+
+#### 9.4.1 Targeted closure variants, within the existing envelope
+
+These disclosed cases are development regressions, NOT held-out data. R01–R16
+and their original Vietnamese wording remain; do not replace them to make room.
+
+| Family | Layer1 deterministic variants | Layer2 application/real-model variant | Layer3 after authorized deployment |
+| --- | --- | --- | --- |
+| R08/R11/R14 | A save decision superseded by replacement; yes changes only pending state; stale/save tokens rejected; duplicate decisions idempotent | Show A -> new request -> replacement question -> “Có.” -> B still unconfirmed; mixed “Có, nhưng đổi sang 9h” stays correction | Visible question/token and resulting exact preview; no unintended A/B save |
+| R10/R11 | One-time offer while unrelated A exists; acceptance then separate replacement then separate save; declines preserve A | Annual request with A, accept offer, resolve replacement, collect/preview; never save on offer approval | Truthful annual limitation and distinct approval steps |
+| R05/R13 | Persisted-request abandon with delayed edit; separate no-draft/first-in-flight case returns no cancellation claim; verify actual fences | Original R13 uses real persisted context and delayed response | No stale preview after accepted persisted-draft cancellation; no false first-in-flight cancellation claim |
+| R09/R16 | Source/output calendars independently typed; both converter directions, opposite-calendar pending draft unchanged; relative receipt anchor | Explicit lunar-to-solar question and Gregorian lookup with unrelated lunar draft; original today-lunar fixture remains | Chat/Calendar parity, no invented conversion values |
+| R06/R07/R08/R15 | Issued token/action URL absent anywhere in serialized provider payload, including mixed input/facts; internal binding intact; Vietnamese NFC evidence/source map valid | A genuine time correction with semantic preview context after control removal | Token still usable for its intended decision; no token exposure in observable provider payload evidence |
+| R07/R15 | INPUT_1799/1800/1801/2000; full payload-fit matrix §8.2; preserve valid draft on refusal/truncation | Admitted ordinary/multi-field correction, not paid boundary probing | Honest shorten/recovery message, no unavailable web-review link |
+
+No extra live campaign: retain pilot 16 originals +16 critical repeats =32;
+full 16 originals +16 development variants +32 held-out +16 critical repeats =80.
+Allocate eight of the existing 16 full development slots: replacement decision;
+annual offer with unrelated draft; explicit lunar-to-solar; Gregorian query with
+lunar draft; lunar query with Gregorian draft; mixed token/time correction;
+resume decision; restart decision. The other eight remain development variants.
+These eight closure variants are mandatory within the full gate; failures cannot
+be hidden by the aggregate threshold. Keep each script <=6 user turns and use
+actual setup turns/state transitions, not fake context. Fixed test-only generated
+tokens may be substituted from the actual application-issued receipt by the
+runner; do not change words or branches in response to model quality. All calls
+remain counted. Layer1 covers combinatorial/negative expansions without paid
+calls; Layer3 covers channel/UI. Existing 192/480 call caps, $0.50/$1.00 caps,
+32/80 denominators and 32 held-out scripts are unchanged. Freeze exact manifests
+before separately authorized execution; if setup cannot fit, report that fit
+failure rather than silently increasing turns/calls or omitting required checks.
 
 ### 9.5 Compatibility and release
 
@@ -913,14 +1123,19 @@ assistance receive a concise scope explanation, not arbitrary model execution.
 No email/ICONIC integration, team/organization features, billing/subscriptions,
 native app, long-term memory subsystem, snooze or completion-tracking additions.
 
-### 10.1 Owner decisions proposed for approval
+### 10.1 Owner policy selections recorded
 
-| Decision | Recommendation | Tradeoff |
+| Decision | Selected policy | Limit on this selection |
 | --- | --- | --- |
-| Monthly query status inclusion (§5.3) | Include delivered/failed/uncertain alongside active, exclude cancelled; label statuses | Matches a monthly schedule rather than only future work, but displays more historical entries |
-| Clarification recovery (§5.1) | Escalate locally after two no-progress answers; at three preserve and offer restart/web | Bounded loop and no extra inference solely for wording; some users may need to restate |
-| Edited-preview confirmation (§5.1) | Require bound reply reference or short scoped token when bare confirmation cannot identify a version | Prevents delayed “có” approving the wrong revision; adds a small interaction after edits |
-| Wire/output and live acceptance envelope (§8/9.2/9.3) | 1536 output tokens; 32 pilot/80 full executions with held-out and critical repeats; proposed $0.50/$1.00 caps | More meaningful coverage and larger objects, with bounded extra latency/cost; still requires separate live authorization and fit verification |
+| Monthly query status inclusion (§5.3) | PENDING/CLAIMED/RETRYABLE/SENT/FAILED/UNCERTAIN; exclude CANCELLED/drafts; label statuses and partial results, retain authorized scope | SENT is delivery, not completion; no new pagination |
+| Clarification recovery (§5.1) | Two no-progress answers: summarize retained facts and ask a bounded useful question; third: preserve draft and offer explicit chat recovery | No TTL extension or counting provider/config failures; web review only if an actual authorized screen supports that state |
+| Edited-preview confirmation (§5.1/5.1.1) | Bound reply or short token for ambiguous version; ordinary bare confirmation only for stable delivered preview with current SAVE_PREVIEW decision | Decision-type binding is required in addition to version; no non-save approval commits a reminder |
+| Output and evaluation envelope (§8/9.2/9.3) | Retain 1536 output tokens, 32 pilot/80 full executions, 192/480 calls and $0.50/$1.00 ceilings as proposed design/admission limits | Fit unproven; offline feasibility and separate explicit provider authorization remain mandatory; route, production budgets, retry=0 and no fallback unchanged |
+
+These four selections do not approve the revised written spec, implementation
+planning, execution, evaluation spending or deployment. WRITTEN_SPEC_APPROVAL
+remains PENDING. No additional product policy decision is requested here;
+payload/token feasibility remains a future measured gate, not a fabricated PASS.
 
 Missing-year behavior and unsupported annual recurrence are already resolved by
 the inspected baseline/scope and are not reopened as owner blockers. Structured
@@ -939,6 +1154,11 @@ work, not optional new product categories.
 - Observation token, revisions and terminal outcomes prevent stale overwrite or
   resurrection; external sends already in flight cannot be recalled (§6.2).
 - Mixed confirmation is never an exact control; it creates a new preview (§5.1).
+- Current decision type prevents replacement/alternative/resume approval from
+  saving an older preview (§5.1.1); R13's no-draft limit is explicit (§6.2).
+- CIVIL_DATE source calendar is independent of output/draft calendars (§4.1).
+- Internal transcript is not the provider transcript; control-span projection
+  and view-to-source evidence mapping close the token leak (§6.1.1).
 - Queries may record processing metadata but cannot change reminder data (§5.3).
 - Unsupported recurrence remains explicit and cannot become one-off success (§7).
 - Shared adapter plus coverage-edge/reference parity protects chat/web dates (§7).
