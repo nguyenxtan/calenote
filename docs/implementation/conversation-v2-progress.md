@@ -1,6 +1,26 @@
 # Conversation V2 execution evidence
 
-## Latest checkpoint — 2026-09-28 dialogue verification FAILED; repair in verification
+Post-evaluation release checkpoint verification: focused service/series 49/49,
+fresh full check 96 files / 1872 tests, documentation test, typecheck, lint
+(existing warnings only), build, Worker types, dry-run and diff check PASS.
+Independent whole-slice and post-run review: Critical 0 / Important 0 / Minor 0.
+This does not override the expired-credential release preflight blocker below.
+
+## Latest checkpoint — 2026-09-28 live evaluation PASS; release preflight blocked
+
+Run `conversation-v2-temporal-priority-verification-20260928-01`, evaluated
+source `cfe5f1fb24bb04951f4ecadad3224d1eb2a7d03c`: outcomes 37/37, schema
+36/36, temporal evidence 37/37, safety failures 0, `liveAccepted=true`.
+Cost USD 0.004577; cumulative USD 0.023172. Same frozen corpus and gates.
+Whole-slice review Critical 0 / Important 0; one minor generic error-wording
+promise corrected afterward, with tests. Subsequent source delta is that copy
+correction plus test-only D1 setup isolation, not a second live-evaluated SHA.
+Read-only Cloudflare checks return 401/code10000; token verification confirms
+`expired`. Release preflight needs valid
+read access; no credential escalation, activation, remote migrations, master
+promotion or deployment. See benchmark results for sealed ledger and boundaries.
+
+## Historical checkpoint — 2026-09-28 dialogue verification FAILED
 
 Source `991669a4ba76639012b9a3de05e7282765bb3603`; run
 `conversation-v2-dialogue-verification-20260928-01`: all five prior failures

@@ -33,7 +33,7 @@ export interface ConversationServiceDependencies {
 const confirm = new Set(["có", "ok", "1", "xác nhận"]);
 const cancel = new Set(["hủy", "huỷ", "không", "2"]);
 const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
-const unavailable = "Mình chưa xử lý được yêu cầu này lúc này. Chưa có lời nhắc mới; thông tin đang chờ vẫn giữ nguyên, bạn thử lại sau nhé.";
+const unavailable = "Mình chưa xử lý được yêu cầu này lúc này. Chưa có lời nhắc mới; bạn kiểm tra đề xuất đang chờ rồi thử lại nhé.";
 const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 export function createConversationService(deps: ConversationServiceDependencies) {

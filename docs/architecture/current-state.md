@@ -34,14 +34,17 @@ plans are audit evidence only; they do not override this document.
 
 ## Worker runtime and persistence
 
-### Undeployed Conversation V2 branch — 2026-09-26
+### Undeployed Conversation V2 branch — 2026-09-28
 
-The isolated `codex/conversation-v2-urgent-lunar` package adds bounded encrypted
+The isolated `codex/conversation-v2-live-evaluation` package adds bounded encrypted
 dialogue context, finite daily series, explicit Vietnamese lunar dates, managed
 nonblocking typing and owner-scoped web series controls. These paths are
-default-off application capabilities. They are **not** a deployed or live-model
-accepted feature. New additive migrations 0007/0008 have only been tested locally.
-See [offline evidence](../benchmarks/conversation-v2-results.md),
+default-off application capabilities. Bounded live evaluation passed 37/37 turns,
+schema 36/36, temporal 37/37 and zero safety failures at source `cfe5f1f`.
+They are **not deployed**; post-run error-copy/test-only changes are documented
+separately from the evaluated source. Migrations 0007/0008 remain local-only;
+fresh production read-back is blocked by Cloudflare read-credential HTTP 401.
+See [evaluation evidence](../benchmarks/conversation-v2-results.md),
 [implementation progress](../implementation/conversation-v2-progress.md) and
 [release gates](../runbooks/conversation-v2-release.md). The domain is intended
 for user UAT, but existing production-labelled resources are not thereby isolated.

@@ -29,6 +29,18 @@ function fixture() {
   return { deps, dispatch, handle };
 }
 describe("conversation paid-call and semantic safety boundary", () => {
+  it.each(["null", "throw"])("does not promise unchanged pending state after proposal failure (%s)", async failure => {
+    const h = fixture();
+    h.deps.seriesStore.propose = vi.fn(async () => {
+      if (failure === "throw") throw new Error("synthetic proposal failure");
+      return null;
+    });
+    expect((await h.handle("nhắc gọi mẹ 3 ngày trước ngày thi 11/10/2026 lúc 9h")).status).toBe("REJECTED");
+    expect(h.deps.contextStore.save).toHaveBeenCalledOnce();
+    expect(h.deps.seriesStore.propose).toHaveBeenCalledOnce();
+    expect(h.deps.reply).not.toHaveBeenCalledWith(expect.stringContaining("vẫn giữ nguyên"));
+    expect(h.deps.commandStore.confirmDraft).not.toHaveBeenCalled();
+  });
   it.each(["mai 9h nhắc gọi mẹ", "nhắc gọi mẹ ngày 28/09/2026 lúc 9h"])("does not let a wrong CONTINUE label import lunar context into a complete request: %s", async text => {
     const h = fixture();
     h.deps.contextStore.load = async () => ({ id: "context", revision: 1, status: "CLARIFYING", createdAt: now - 1, expiresAt: now + 60000,

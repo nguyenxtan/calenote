@@ -1,6 +1,51 @@
 # Conversation V2 evaluation evidence
 
-## Dialogue verification — 2026-09-28: FAIL / UAT ACTIVATION BLOCKED
+## Latest temporal-priority verification — 2026-09-28: LIVE PASS / NOT DEPLOYED
+
+Run `conversation-v2-temporal-priority-verification-20260928-01` evaluated
+immutable source `cfe5f1fb24bb04951f4ecadad3224d1eb2a7d03c` through the real
+pinned gateway, service and encrypted ephemeral local D1. The unchanged
+22-case / 37-turn corpus passed all gates:
+
+| Gate | Observed | Required |
+| --- | --- | --- |
+| Correct final outcomes | 37/37 | At least 36/37 |
+| Schema validity | 36/36 model calls | 100% |
+| Temporal evidence | 37/37 | 100% |
+| Safety-failing turns | 0 | 0 |
+| Premature canonical mutation | 0 | 0 |
+| Actual cost | USD 0.004577 | At most USD 0.50 |
+| Retained reservations | 46908 microunits | At most 500000 |
+
+`liveAccepted=true`; no retries/fallback. Metadata refreshed at
+`2026-09-28T02:00:18.199Z`: Gemini 2.5 Flash Lite / `google-vertex/eu`, ZDR,
+input/output USD 0.10 / 0.40 per million tokens. The one greeting was local.
+Nine-campaign cumulative actual cost is USD 0.023172; retained reservations
+265812 microunits, below the aggregate USD 2 ceiling. Failed history is retained.
+
+Ledger: `<shared-git-dir>/calenote-benchmark-authorizations/` +
+`conversation-v2-live-20260927-repair-temporal-priority-verification/authorization.jsonl`.
+SHA-256: `ae4fb262eeda34b287e121cdd4d15e5600b7cae07240a34366d580b2ab33cf99`.
+Pre-run gates: focused 129/129, full check 96 files / 1870 tests;
+independent priority/allocation review Critical 0 / Important 0.
+
+Post-run delta is explicitly separate from evaluated provenance: generic
+unavailable-response wording no longer falsely promises unchanged pending state;
+regression tests cover failed proposal persistence; series D1 cold startup and
+migrations move into a fresh-per-test setup hook. No model, prompt, reconciliation,
+temporal scanner, scorer, corpus or success-path behavior changed in this delta.
+Fresh local/CI verification is required for that release checkpoint; do not
+describe it as the exact source used by this live ledger.
+
+Release remains blocked, not deployed: read-only Cloudflare credential returned
+HTTP 401 / code 10000 for exact Calenote Worker deployment/secret-name endpoints
+and D1 database metadata. No write credential was substituted. Current active
+version, migration state and rollback baseline could not be refreshed.
+`GET /user/tokens/verify` subsequently returned HTTP 200 with token status
+`expired`, confirming the credential blocker without exposing its value.
+V2 remains default-off; no master merge, remote migration, secrets or upload.
+
+## Historical dialogue verification — 2026-09-28: FAIL
 
 Run `conversation-v2-dialogue-verification-20260928-01`, source
 `991669a4ba76639012b9a3de05e7282765bb3603`, preserves the frozen 22-case /

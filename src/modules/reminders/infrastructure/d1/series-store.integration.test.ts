@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeContextHarness, NOW } from "@/modules/conversation/infrastructure/d1/test-support";
 import type { PendingRequest } from "@/modules/conversation/contracts";
 import { D1SeriesStore } from "./series-store";
@@ -11,7 +11,10 @@ import { parseQueueJob } from "@/worker/index";
 
 const dispose: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(dispose.splice(0).map(fn => fn())); });
-async function harness(count = 3) {
+let fixture: Awaited<ReturnType<typeof makeContextHarness>>;
+// Cold workerd startup/migrations are fixture preparation, not the business
+// operation's five-second deadline. Keep a separate fresh database per test.
+beforeEach(async () => {
   const h = await makeContextHarness();
   dispose.push(h.dispose);
   // Keep the trigger body together; D1 prepare accepts one complete statement.
@@ -20,6 +23,10 @@ async function harness(count = 3) {
     h.db.prepare("INSERT INTO workspaces (id,kind,owner_user_id,created_at,updated_at) VALUES ('space-one','PERSONAL','one',1,1)"),
     h.db.prepare("INSERT INTO memberships (workspace_id,user_id,role,created_at) VALUES ('space-one','one','OWNER',1)"),
   ]);
+  fixture = h;
+}, 20_000);
+async function harness(count = 3) {
+  const h = fixture;
   const request: PendingRequest = { ...h.initial.request, title: "ôn thi bí mật", eventDate: {
     solarDate: count > 3 ? "2026-11-11" : "2026-10-11", calendar: "GREGORIAN", lunar: null, conversionVersion: null, sourceInboundId: "one-0" },
     reminderTime: "12:00", count, relation: "BEFORE_EVENT", missing: [] };
