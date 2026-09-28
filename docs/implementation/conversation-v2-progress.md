@@ -1,6 +1,24 @@
 # Conversation V2 execution evidence
 
-## Latest checkpoint — 2026-09-27 boundary repair
+## Latest checkpoint — 2026-09-28 live boundary verification FAILED
+
+Source `f290a24de8155cdb508de3094e5cbfa843d8e2c5`; run
+`conversation-v2-boundary-verification-20260928-01` executed all 37 turns with
+36 real model calls. Correct outcomes 32/37, schema 36/36, temporal evidence
+37/37, safety-category failures 3; no premature canonical reminder mutation.
+Reported cost USD 0.004420, seven-campaign cumulative USD 0.014005.
+Remaining failures concern explicit abandonment continuation, ambiguous closure,
+LIST-vs-CREATE routing, ambiguous titles and uncertain intent. Full wire validity
+is now green but is not sufficient evidence of semantic correctness.
+
+Fresh pre-run validation: runner tests 16/16; full check 96 files / 1818 tests,
+typecheck/build/dry-run/diff check PASS. Independent allocation review has
+Critical 0 / Important 0. The actual failed live gate blocks activation and
+release; no master merge, remote migration, secret change or deployment.
+Historical runs and fixed corpus/scoring remain preserved. Details and ledger
+digest are in `docs/benchmarks/conversation-v2-results.md`.
+
+## Previous checkpoint — 2026-09-27 boundary repair
 
 Post-live-failure repair is independently reviewed offline: Critical 0 /
 Important 0, focused 181/181, full check 96 files / 1816 tests. Shared turn

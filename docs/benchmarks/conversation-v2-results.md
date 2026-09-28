@@ -1,5 +1,58 @@
 # Conversation V2 evaluation evidence
 
+## Latest boundary verification — 2026-09-28: FAIL / UAT ACTIVATION BLOCKED
+
+Run `conversation-v2-boundary-verification-20260928-01`, source
+`f290a24de8155cdb508de3094e5cbfa843d8e2c5`, evaluated the unchanged synthetic
+22-case / 37-turn corpus through the actual gateway, service and encrypted
+ephemeral local D1. All 37 turns executed, including the local-only greeting.
+Eligibility was refreshed at `2026-09-28T01:21:46.668Z`: Gemini 2.5 Flash Lite,
+`google-vertex/eu`, ZDR, strict output, no fallback or retries. Input/output
+prices remained USD 0.10 / 0.40 per million tokens.
+
+| Gate | Observed | Required |
+| --- | --- | --- |
+| Correct final outcomes | 32/37 | At least 36/37 |
+| Schema validity | 36/36 model calls | 100% |
+| Temporal evidence | 37/37 | 100% |
+| Turns failing safety gates | 3 | 0 |
+| Premature canonical reminder mutation | 0 observed | 0 |
+| Provider-reported cost, rounded up per call | 4420 microunits / USD 0.004420 | Within allocation |
+| Retained dispatch reservations | 46908 microunits | At most 500000 |
+
+Residual failures (safe labels only):
+
+- `abandon-pending`, turn 2: model HELP/ABANDON but continuation NO. The backend
+  requires YES in addition to its explicit-abandonment evidence, so it asks
+  clarification rather than closing the pending context. Categories:
+  DIALOGUE, RUNTIME_OUTCOME, STATE.
+- `ambiguous-abandonment`, turn 2: model CREATE/RESOLVED/CONTINUE/YES causes
+  missing-field clarification rather than intent clarification. DIALOGUE.
+- `read-only-list-suspends-context`, turn 2: model CREATE/CONTINUE/YES routes a
+  list question into creation reconciliation and changes pending context.
+  DIALOGUE, RUNTIME_OUTCOME, PRESERVATION.
+- `ambiguous-title`, turn 1: model marks title RESOLVED, leading to a draft
+  instead of clarification. DIALOGUE, RUNTIME_OUTCOME, STATE. This is an
+  incorrect draft, not an observed canonical reminder mutation.
+- `uncertain-intent`, turn 1: model CREATE/MISSING/NEW_REQUEST/NO asks for a
+  title instead of clarifying intent. DIALOGUE.
+
+The earlier calendar-reset and schema failures did not recur. Structural wire
+validity does not prove semantic intent/title/continuation correctness; remaining
+failures must not be hidden by changing corpus expectations or acceptance gates.
+No alternate model or additional live run was attempted after this failure.
+
+Sealed ledger:
+`<shared-git-dir>/calenote-benchmark-authorizations/conversation-v2-live-20260927-repair-boundary-verification/authorization.jsonl`.
+SHA-256: `2810b044607f2250cfcf9fe99ed8af10c8592eded1d5830eb802e5bfea3d3ad7`.
+Cumulative seven-campaign reported cost is USD 0.014005; conservative retained
+reservations total 171996 microunits, below the aggregate USD 2 ceiling.
+
+Pre-run gates: 16/16 runner tests, full check 96 files / 1818 tests, typecheck,
+build, Worker types, dry-run and diff check PASS; allocation review Critical 0 /
+Important 0 / Minor 0. These local results do not override the failed live gate.
+No remote D1 changes, secrets, master merge, Worker upload or deployment.
+
 ## Post-failure boundary repair — 2026-09-27: OFFLINE PASS / LIVE NOT RE-EVALUATED
 
 The repair after `351ad01` addresses the three failures below without altering
