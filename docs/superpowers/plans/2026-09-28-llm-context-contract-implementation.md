@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript 6.0.3, Zod 4.5.4, Next.js 16.3.4/React 19.2.8, Cloudflare Workers/D1/Queues, existing keyring encryption, Vitest 4.1.11, Miniflare and node:sqlite test stores, pnpm 11.19.0/Node >=22. Canonical lunar artifact is already local; no runtime astronomy dependency is added.
 
-**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md` (S below). Original approved content at `e8f9e75f436a672b23387eb0054047da217ade23`; this post-T3 amendment is proposed written content pending owner review, not an already-accepted implementation contract.
+**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md` (S below). Original approved content at `e8f9e75f436a672b23387eb0054047da217ade23`; owner approved the post-T3 amendment at `fb5331378d71e9f8eb8e63bc0447bd62f129fc50`. Implementation acceptance remains a separate measured/reviewed gate.
 
 **Inspected baseline:** same HEAD, clean `codex/llm-context-contract-design`, worktree `/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2`; no intervening commits. Spec's earlier runtime audit names `6329b33264a2916f004953865f6483fafdfd7491`; source was inspected again at this planning HEAD. No live state is inferred from either SHA.
 
@@ -48,6 +48,26 @@
 
 ### Current task acceptance
 
+- Controlling owner authorization `6dd6ddd5-b02d-48f3-9285-3c5cc06940f4` approves
+  the amendment and T1A -> T2A -> T0A as ONE TDD/review/commit bundle, then
+  automatic T4–T10 continuation when accepted. It supersedes the historical
+  documentation-only stop below. No per-subtask owner approvals or independent
+  reviewers; one consolidated amendment review, with scoped fixes/re-review.
+  Strong independent review remains mandatory for T4, T7, T10 and whole branch.
+  No push, PR, merge, remote migration, Cloudflare change, customer data access
+  or deployment. T11 prerequisites and caps remain unchanged.
+- Bundle dependency allocation: owner now requires CO-A–F and effective-directive
+  selection before T4. Pull forward only reusable pure `guidance.ts`/tests from
+  T5, consuming real T3 results. T5 retains decision/lifecycle integration;
+  T7 retains actual inbound dispatch-count proof. Do not equate a pure/injected
+  test with the not-yet-built full service. Ordinary T0A fit failure blocks T4.
+- T1A/T2A/T0A LOCAL_IMPLEMENTATION_ACCEPTED as one bundle: 605 combined tests,
+  typecheck/scoped lint/diff PASS; independent consolidated review and scoped
+  correction re-review Critical=0 / Important=0 / Minor=0. Scope-aware unresolved
+  uncertainties precede factual handoff; terminal binding IDs are protected.
+  Local fit PASS (ordinary guidance171, max400CP563 output tokens); full-route
+  B remains UNVERIFIED. T3 algorithms unchanged. T4 may proceed dormant only.
+- Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,
   local commit, then STOP BEFORE T4. Verified clean start at accepted T3
@@ -126,10 +146,10 @@ Paths below are repository-relative. Existing paths were inspected; paths explic
 
 Dependency graph: T0 local engineering A -> T1 -> T2 -> T3 -> T4 -> T5 -> T6 -> T7 -> T8 -> T9 -> T10; T0 route admission B plus T10/whole-branch acceptance -> conditional T11 evaluation. This conservative order prevents competing interpretations of shared contracts. After T1, T3's pure arithmetic and T2 projection could be independently implemented; after T8, Calendar presentation and delivery tests could be split. Prefer sequential reviewed commits initially; never concurrently edit shared contracts/store/service.
 
-**Current amended dependency:** accepted T0–T3 -> owner review of amended spec/
-plan -> T1A -> T2A -> T0A remeasurement + relevant T3 regression -> T4 -> T5–T10.
-T1A/T2A/T0A are scoped follow-ups, not reopening completed tasks. Each has a
-fresh independent acceptance gate. None starts during this documentation turn.
+**Current amended dependency:** accepted T0–T3 -> approved written amendment ->
+accepted T1A/T2A/T0A bundle + relevant T3 regression -> T4 -> T5–T10.
+T1A/T2A/T0A are scoped follow-ups, not reopening completed tasks. Their single
+consolidated independent acceptance gate passed after one scoped fix round.
 T3 behavior/acceptance stays valid; no new schedule/query policy is introduced.
 Route B and all remote/activation gates remain separate and unresolved.
 
@@ -223,9 +243,9 @@ only when A passes. B remains separately unresolved until established.
 - [ ] Successor SQL keeps authenticated owner/workspace/bound-chat and terminal ordering checks; includes six selected statuses, excludes CANCELLED/drafts, orders scheduledAt/id, fetches6/displays5 with exact partial notice. Zero reminder/proposal writes and no pending TTL extension; failures are not empty. Test same-owner other-chat exclusion and early-month SENT results.
 - [ ] Review pure functions and real scoped D1 query assertions; rerun static checks; commit `feat(conversation): resolve structured schedules and scoped calendar queries`.
 
-### T1A — Scoped output-contract amendment (NOT_STARTED)
+### T1A — Scoped output-contract amendment (ACCEPTED_IN_BUNDLE)
 
-**Depends:** owner review of this amended spec/plan. **Modify:** C `contracts.ts`,
+**Depends:** owner approval received at fb53313; consolidated bundle gate above. **Modify:** C `contracts.ts`,
 `contracts.test.ts`, `prompt.ts`, `prompt.test.ts`, `wire.ts`; T0 specimen builders
 in `tools/benchmark/context-contract-fit.test.ts` only for changed canonical
 keys. Preserve legacy active contracts. Do not redo T1 state/storage design.
@@ -251,7 +271,7 @@ passed. No repair of raw/truncated JSON.
 - [ ] Implement shared field definitions, section parser and exact strict JSON Schema parity. Update canonical prompt from “No replies”/application owns all questions to one-call untrusted guidance with backend-only facts and execution. Add §4.5 prose constraints, typed next issue, no CoT, null factual-surface reply, no arbitrary IDs or calendar arithmetic.
 - [ ] Rerun focused checks, `pnpm typecheck`, scoped lint and `git diff --check`; independent contract review, then selective local commit. Intermediate dependent test fixtures may receive only mechanical version/new-key adaptation; no T3 algorithm change. No T4 until T2A/T0A also pass.
 
-### T2A — Independent evidence and guidance privacy (NOT_STARTED)
+### T2A — Independent evidence and guidance privacy (ACCEPTED_IN_BUNDLE)
 
 **Depends:** T1A. **Modify:** C `evidence.ts`/`.test.ts`, `projection.ts`/`.test.ts`,
 `context.ts`/`.test.ts`; C `state.test.ts` for selected-text codec regression only
@@ -267,7 +287,7 @@ not semantic truth or directive compatibility. T5 owns those separate gates.
 - [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/context.test.ts src/modules/conversation/context-contract/projection.test.ts src/modules/conversation/context-contract/evidence.test.ts src/modules/conversation/context-contract/state.test.ts`; verify RED then implement narrow separation. Valid core survives guidance rejection; invalid core retains existing refusal semantics.
 - [ ] Rerun the above plus T3 focused command, `pnpm typecheck`, scoped lint and `git diff --check`. Verify immutable source anchors, same-value conflict rules, expiry and query scope unchanged. Independent privacy/evidence review and local commit; do not label T5 selection implemented here.
 
-### T0A — Amended-envelope measurement revision (NOT_STARTED)
+### T0A — Amended-envelope measurement revision (LOCAL_FIT_ACCEPTED_IN_BUNDLE)
 
 **Depends:** T1A/T2A. **Modify:** `tools/benchmark/context-contract-fit.test.ts`,
 `tools/benchmark/snapshot-identity-view.test.ts` only if a changed retained-text

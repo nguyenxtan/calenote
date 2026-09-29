@@ -1,0 +1,7309 @@
+{
+  "revision": "conversation-guidance-v2",
+  "contractVersion": "calenote-context-2",
+  "methodVersion": "pinned-local-tokenizer-offline-1",
+  "routeAdmission": "UNVERIFIED",
+  "applicationLlmCalls": 0,
+  "providerCountingCalls": 0,
+  "promptSha256": "f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8",
+  "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+  "corpusSha256": "1f988bc6024eacbc6196bdf6e04e93024152a71ec36d1686c0abbcdb2024cd55",
+  "sources": {
+    "contracts": "1fe11ead0051cec833e1fa0855ef2c9f12a95a43ff5d245b7d41b28007a9de75",
+    "prompt": "4b3ca421ce692f90fe5c8ee0209cf8895580543ac50a12d937f7156840194f95",
+    "wire": "0fc1a234e300db65076cf6090875c871034ca1691737e69e0efd940cf8440f17",
+    "admission": "5abde7777194a7c850ecd7357847164c84faa2cff81092a2ab442b469d1f5aee",
+    "guidance": "50f6e90ffa549f45fd312c2b45757111195fc70208780fd3f5a525ecd19a5ed9",
+    "projection": "6b76d5961e8a6fe69125ff1428020879077c5f304a0910df700050e91feb4067",
+    "evidence": "39a6c3a4ba5b88775e8b155c4bb1a3a424f122c3d6fe274e1658c9c2dfe318d6"
+  },
+  "tooling": {
+    "tools/benchmark/local-tokenizer.ts": "2fc6268461a0f5f752dc9d702570d4a8eb28690a14c4889dd0a40b482f9e537b",
+    "tools/benchmark/tokenizer/measure.py": "3d0d0272586964d1e3d7350dd3bf9534e72d31c67364f49fcf3fdf729608ec60",
+    "tools/benchmark/tokenizer/requirements.txt": "54f3fd178cd47f95f6c6f418697d498dc11e2816110b675df78ddfc50a63a097"
+  },
+  "evidence": {
+    "phase": "OFFLINE_MEASUREMENT",
+    "provenance": {
+      "sdk": "2.25.0",
+      "python": "3.12.14",
+      "model": "gemini-2.5-flash-lite",
+      "tokenizer": "gemma3",
+      "artifactUrl": "https://raw.githubusercontent.com/google/gemma_pytorch/014acb7ac4563a5f77c76d7ff98f31b568c16508/tokenizer/gemma3_cleaned_262144_v2.spiece.model",
+      "artifactSha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c",
+      "artifactBytes": 4689074,
+      "sdkSourcesSha256": {
+        "_local_tokenizer_loader.py": "eff7d8520c4656655cd42d3a7e981093fbd9cee8017db255c58df5112174df3c",
+        "local_tokenizer.py": "f7cf0985af5b1630b45e1ae151720c13976b8b832f9d482e6f885c3cc60cd1ef"
+      },
+      "normalizer": {
+        "name": "identity",
+        "addDummyPrefix": false,
+        "removeExtraWhitespaces": false,
+        "escapeWhitespaces": true
+      },
+      "packages": {
+        "shellingham": "1.5.4",
+        "numpy": "2.5.3",
+        "google-genai": "2.25.0",
+        "torchvision": "0.29.0",
+        "click": "8.5.0",
+        "packaging": "26.3",
+        "networkx": "3.7",
+        "protobuf": "7.36.2",
+        "charset-normalizer": "3.5.1",
+        "Pygments": "2.21.0",
+        "google-auth": "2.59.0",
+        "requests": "2.34.2",
+        "hf-xet": "1.6.0",
+        "rich": "15.0.0",
+        "websockets": "16.1.1",
+        "filelock": "4.0.6",
+        "pydantic_core": "2.46.5",
+        "sentencepiece": "0.2.2",
+        "torch": "2.14.0",
+        "tokenizers": "0.23.2",
+        "tenacity": "9.1.4",
+        "httpcore": "1.0.9",
+        "sympy": "1.14.0",
+        "transformers": "5.17.0",
+        "safetensors": "0.8.0",
+        "tqdm": "4.70.1",
+        "setuptools": "84.0.0",
+        "urllib3": "2.8.0",
+        "h11": "0.16.0",
+        "pydantic": "2.13.5",
+        "sniffio": "1.3.1",
+        "pycparser": "3.0",
+        "pyasn1": "0.6.4",
+        "mdurl": "0.1.2",
+        "mpmath": "1.3.0",
+        "PyYAML": "6.0.3",
+        "fsspec": "2026.9.0",
+        "cffi": "2.1.1",
+        "certifi": "2026.7.22",
+        "Jinja2": "3.1.6",
+        "annotated-types": "0.8.0",
+        "regex": "2026.9.29",
+        "markdown-it-py": "4.2.0",
+        "annotated-doc": "0.0.5",
+        "MarkupSafe": "3.0.3",
+        "cryptography": "50.0.1",
+        "typing-inspection": "0.4.4",
+        "distro": "1.9.0",
+        "httpx": "0.28.1",
+        "typing_extensions": "4.16.0",
+        "pyasn1_modules": "0.4.2",
+        "typer": "0.27.2",
+        "pillow": "12.3.0",
+        "anyio": "4.15.1",
+        "huggingface_hub": "1.33.0",
+        "idna": "3.20"
+      },
+      "networkGuardActive": true,
+      "networkAttemptsAfterSelfCheck": []
+    },
+    "rows": [
+      {
+        "case": "simple_create",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 177,
+        "applicationTextTokens": 2202,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7216,
+        "sdkTextProjectionTokens": 2202,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 191,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "two_turn_start",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 176,
+        "applicationTextTokens": 2201,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7215,
+        "sdkTextProjectionTokens": 2201,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 156,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "two_turn_complete",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 594,
+        "applicationTextTokens": 2619,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7679,
+        "sdkTextProjectionTokens": 2619,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 110,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "exam_turn_1",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 188,
+        "applicationTextTokens": 2213,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7227,
+        "sdkTextProjectionTokens": 2213,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 260,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "exam_turn_2",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 796,
+        "applicationTextTokens": 2821,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7890,
+        "sdkTextProjectionTokens": 2821,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 173,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "exam_turn_3",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1022,
+        "applicationTextTokens": 3047,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8131,
+        "sdkTextProjectionTokens": 3047,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 111,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "exam_turn_4",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1145,
+        "applicationTextTokens": 3170,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8266,
+        "sdkTextProjectionTokens": 3170,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 114,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "multi_field_correction",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 806,
+        "applicationTextTokens": 2831,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7900,
+        "sdkTextProjectionTokens": 2831,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 195,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "maximum_title",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 5901,
+        "applicationTextTokens": 7926,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 12978,
+        "sdkTextProjectionTokens": 7926,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 1887,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "maximum_location",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1401,
+        "applicationTextTokens": 3426,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8478,
+        "sdkTextProjectionTokens": 3426,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 387,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "maximum_notes",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 6501,
+        "applicationTextTokens": 8526,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 13578,
+        "sdkTextProjectionTokens": 8526,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 2087,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "long_title_900",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 3201,
+        "applicationTextTokens": 5226,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 10278,
+        "sdkTextProjectionTokens": 5226,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 987,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "long_title_600",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 2301,
+        "applicationTextTokens": 4326,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9378,
+        "sdkTextProjectionTokens": 4326,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 687,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "long_notes_900",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 3201,
+        "applicationTextTokens": 5226,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 10278,
+        "sdkTextProjectionTokens": 5226,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 987,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "long_notes_600",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 2301,
+        "applicationTextTokens": 4326,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9378,
+        "sdkTextProjectionTokens": 4326,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 687,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "long_combined",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 12973,
+        "applicationTextTokens": 14998,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 20068,
+        "sdkTextProjectionTokens": 14998,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 4240,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "escaped_refs_1",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 192,
+        "applicationTextTokens": 2217,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7234,
+        "sdkTextProjectionTokens": 2217,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 125,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "escaped_refs_2",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 192,
+        "applicationTextTokens": 2217,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7234,
+        "sdkTextProjectionTokens": 2217,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 147,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "escaped_refs_3",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 192,
+        "applicationTextTokens": 2217,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7234,
+        "sdkTextProjectionTokens": 2217,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 169,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "four_uncertainties_candidate",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1166,
+        "applicationTextTokens": 3191,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8306,
+        "sdkTextProjectionTokens": 3191,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 405,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "six_user_six_assistant",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1221,
+        "applicationTextTokens": 3246,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8347,
+        "sdkTextProjectionTokens": 3246,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 62,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "snapshot_16384",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1356,
+        "applicationTextTokens": 3381,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8482,
+        "sdkTextProjectionTokens": 3381,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 63,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "snapshot_16385",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1356,
+        "applicationTextTokens": 3381,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8482,
+        "sdkTextProjectionTokens": 3381,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 63,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "control_projection_literal",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 796,
+        "applicationTextTokens": 2821,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7890,
+        "sdkTextProjectionTokens": 2821,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 114,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_null",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 176,
+        "applicationTextTokens": 2201,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7215,
+        "sdkTextProjectionTokens": 2201,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 162,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_ordinary",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 176,
+        "applicationTextTokens": 2201,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7215,
+        "sdkTextProjectionTokens": 2201,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 171,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_max_400",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 176,
+        "applicationTextTokens": 2201,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7215,
+        "sdkTextProjectionTokens": 2201,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 563,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_max_supplementary_400",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 176,
+        "applicationTextTokens": 2201,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7215,
+        "sdkTextProjectionTokens": 2201,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 563,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_escaped_unicode",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 192,
+        "applicationTextTokens": 2217,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7234,
+        "sdkTextProjectionTokens": 2217,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 190,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_ambiguity",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1166,
+        "applicationTextTokens": 3191,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8306,
+        "sdkTextProjectionTokens": 3191,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 433,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_multi_field_correction",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 806,
+        "applicationTextTokens": 2831,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7900,
+        "sdkTextProjectionTokens": 2831,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 215,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "guidance_retained_selected",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1247,
+        "applicationTextTokens": 3272,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8373,
+        "sdkTextProjectionTokens": 3272,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 80,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1799_NFC",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1969,
+        "applicationTextTokens": 3994,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9008,
+        "sdkTextProjectionTokens": 3994,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1799_DECOMPOSED",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1969,
+        "applicationTextTokens": 3994,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9008,
+        "sdkTextProjectionTokens": 3994,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1799_SUPPLEMENTARY",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1070,
+        "applicationTextTokens": 3095,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8109,
+        "sdkTextProjectionTokens": 3095,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1800_NFC",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1970,
+        "applicationTextTokens": 3995,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9009,
+        "sdkTextProjectionTokens": 3995,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1800_DECOMPOSED",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1970,
+        "applicationTextTokens": 3995,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9009,
+        "sdkTextProjectionTokens": 3995,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1800_SUPPLEMENTARY",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1070,
+        "applicationTextTokens": 3095,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8109,
+        "sdkTextProjectionTokens": 3095,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1801_NFC",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1971,
+        "applicationTextTokens": 3996,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9010,
+        "sdkTextProjectionTokens": 3996,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1801_DECOMPOSED",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1971,
+        "applicationTextTokens": 3996,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9010,
+        "sdkTextProjectionTokens": 3996,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_1801_SUPPLEMENTARY",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1071,
+        "applicationTextTokens": 3096,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8110,
+        "sdkTextProjectionTokens": 3096,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_2000_NFC",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 2170,
+        "applicationTextTokens": 4195,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9209,
+        "sdkTextProjectionTokens": 4195,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_2000_DECOMPOSED",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 2170,
+        "applicationTextTokens": 4195,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 9209,
+        "sdkTextProjectionTokens": 4195,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "INPUT_2000_SUPPLEMENTARY",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1170,
+        "applicationTextTokens": 3195,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8209,
+        "sdkTextProjectionTokens": 3195,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": null,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "encoded_snapshot_16384",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1356,
+        "applicationTextTokens": 3381,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8482,
+        "sdkTextProjectionTokens": 3381,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 63,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "encoded_snapshot_16385",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 1356,
+        "applicationTextTokens": 3381,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 8482,
+        "sdkTextProjectionTokens": 3381,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 63,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "oversized_output",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 177,
+        "applicationTextTokens": 2202,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7216,
+        "sdkTextProjectionTokens": 2202,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 16186,
+        "routeFramingTokens": "UNKNOWN"
+      },
+      {
+        "case": "truncated_output",
+        "schemaUnchanged": true,
+        "schemaSha256": "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+        "promptTokens": 2025,
+        "inputJsonTextTokens": 177,
+        "applicationTextTokens": 2202,
+        "rawSchemaDiagnosticTokens": 4904,
+        "rawJsonDiagnosticTokens": 7216,
+        "sdkTextProjectionTokens": 2202,
+        "sdkFullStructuredTokens": null,
+        "unsupportedSchema": [
+          {
+            "path": [
+              "properties",
+              "schemaVersion",
+              "const"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "intent",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "dialogueAct",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "changes",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "query",
+              "anyOf",
+              0,
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "uncertainties",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "controlEvidence",
+              "items",
+              "$ref"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "properties",
+              "conversationDirective",
+              "oneOf"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "$schema"
+            ],
+            "type": "extra_forbidden"
+          },
+          {
+            "path": [
+              "definitions"
+            ],
+            "type": "extra_forbidden"
+          }
+        ],
+        "outputTextTokens": 16185,
+        "routeFramingTokens": "UNKNOWN"
+      }
+    ]
+  },
+  "finalizedStateMeasurements": [
+    {
+      "case": "simple_create",
+      "historicalExpanded": 3851,
+      "finalizedExpanded": 4835,
+      "finalizedEncoded": 4732,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "89e6a9d6822f5f3975881d326303ef6ba48e206d8e19a9d96b35e3d85782d0b3"
+    },
+    {
+      "case": "two_turn_start",
+      "historicalExpanded": 3857,
+      "finalizedExpanded": 4841,
+      "finalizedEncoded": 4738,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7082172ea2f189069633e0881f56a38fae210c79c4dff9850b5a3e9944c146f9"
+    },
+    {
+      "case": "two_turn_complete",
+      "historicalExpanded": 6135,
+      "finalizedExpanded": 7369,
+      "finalizedEncoded": 7069,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "09a13cc001bbbe096a4d65df0afb4f27dd2c6a7ad371618bf453739092de335b"
+    },
+    {
+      "case": "exam_turn_1",
+      "historicalExpanded": 3923,
+      "finalizedExpanded": 4907,
+      "finalizedEncoded": 4759,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "75560dd8f250861ce39e3333c3e04a8695208b447a669db76d421209f306ebbc"
+    },
+    {
+      "case": "exam_turn_2",
+      "historicalExpanded": 7677,
+      "finalizedExpanded": 8911,
+      "finalizedEncoded": 8419,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "e7c6ae2b9c1b606211b24e97a77994ee7e7bf41c4f6533eb1f25b1f24fc121de"
+    },
+    {
+      "case": "exam_turn_3",
+      "historicalExpanded": 10424,
+      "finalizedExpanded": 11760,
+      "finalizedEncoded": 10892,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "00333c7ab5de0cf4eea3bf5eeb6d5b8cd13fabc9324a02c02bf41c638365ac4a"
+    },
+    {
+      "case": "exam_turn_4",
+      "historicalExpanded": 11977,
+      "finalizedExpanded": 13415,
+      "finalizedEncoded": 12348,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "d37802fd49c6fc99908431af675f8ff1b963dd84110484f06853a0fd324e253c"
+    },
+    {
+      "case": "multi_field_correction",
+      "historicalExpanded": 7741,
+      "finalizedExpanded": 8975,
+      "finalizedEncoded": 8451,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7b0a01eb275cb06147fa77f0e02f3f5dfec1dd5b6ff33c24053e5f064760d247"
+    },
+    {
+      "case": "maximum_title",
+      "historicalExpanded": 32410,
+      "finalizedExpanded": 33644,
+      "finalizedEncoded": 11813,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "a57fc281c8e3e5239e23e308fbf515a631dc7c6ec10d20666744fb5f57a5c1fc"
+    },
+    {
+      "case": "maximum_location",
+      "historicalExpanded": 9910,
+      "finalizedExpanded": 11144,
+      "finalizedEncoded": 7313,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "321a83be03722c4da0deeb53ce16566c1303d4b15769a89313d905334d9f0a6b"
+    },
+    {
+      "case": "maximum_notes",
+      "historicalExpanded": 35410,
+      "finalizedExpanded": 36644,
+      "finalizedEncoded": 12413,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "58707f1208411e2c54cdab13b78b067c5c5659d707c0b6208961bfaea812f11a"
+    },
+    {
+      "case": "long_title_900",
+      "historicalExpanded": 18904,
+      "finalizedExpanded": 20138,
+      "finalizedEncoded": 9107,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "0a24280f8ad9e3a4490453a5b2538a95b0d9990a36c18170fd6a7e8f28aa8c33"
+    },
+    {
+      "case": "long_title_600",
+      "historicalExpanded": 14404,
+      "finalizedExpanded": 15638,
+      "finalizedEncoded": 8207,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "80376404be4f7e810c49b81dcfef323912ca077922aabcc4c1f04688cfe880cc"
+    },
+    {
+      "case": "long_notes_900",
+      "historicalExpanded": 18904,
+      "finalizedExpanded": 20138,
+      "finalizedEncoded": 9107,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "a32389601c2e96198d21f8dd9016fd691a3bf3873012b76ed5c0e34864f3e71e"
+    },
+    {
+      "case": "long_notes_600",
+      "historicalExpanded": 14404,
+      "finalizedExpanded": 15638,
+      "finalizedEncoded": 8207,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "f9779652e07b5c427625a1ac59e4d94797076ff4e42f71b0b61d5bdfa26bf604"
+    },
+    {
+      "case": "long_combined",
+      "historicalExpanded": 69802,
+      "finalizedExpanded": 71240,
+      "finalizedEncoded": 21571,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "ecab5f5e56f692743617d24cf3033c5ce34bbfe40730fb2e5934412460e70d82"
+    },
+    {
+      "case": "escaped_refs_1",
+      "historicalExpanded": 3965,
+      "finalizedExpanded": 4949,
+      "finalizedEncoded": 4780,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "07026ca03a2da537942eee0466134b195d2f201c62089e2f5e5977aa428352bc"
+    },
+    {
+      "case": "escaped_refs_2",
+      "historicalExpanded": 3965,
+      "finalizedExpanded": 4949,
+      "finalizedEncoded": 4780,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "07026ca03a2da537942eee0466134b195d2f201c62089e2f5e5977aa428352bc"
+    },
+    {
+      "case": "escaped_refs_3",
+      "historicalExpanded": 3965,
+      "finalizedExpanded": 4949,
+      "finalizedEncoded": 4780,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "07026ca03a2da537942eee0466134b195d2f201c62089e2f5e5977aa428352bc"
+    },
+    {
+      "case": "four_uncertainties_candidate",
+      "historicalExpanded": 11332,
+      "finalizedExpanded": 12964,
+      "finalizedEncoded": 12215,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "0c6a28b4f5a0c0ed884051e7f24f7ca335e41c27f880983bf67267c0e6ea888e"
+    },
+    {
+      "case": "six_user_six_assistant",
+      "historicalExpanded": 14202,
+      "finalizedExpanded": 15895,
+      "finalizedEncoded": 14416,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "2bd75e9ef04b0d11211a6a0ff924bdfdd0dfc75735e4d372c8fda5614d75a3f8"
+    },
+    {
+      "case": "snapshot_16384",
+      "historicalExpanded": 16384,
+      "finalizedExpanded": 18125,
+      "finalizedEncoded": 15499,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "763b745666e194a8c8a82fa9dfb820c9b86853f8342fa7e56126c69507b026c0"
+    },
+    {
+      "case": "snapshot_16385",
+      "historicalExpanded": 16385,
+      "finalizedExpanded": 18128,
+      "finalizedEncoded": 15500,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "6a882c4dddd79b3a73b9c7dc6c0adf411f475d3508c4179b535a27a19684e0b7"
+    },
+    {
+      "case": "control_projection_literal",
+      "historicalExpanded": 7761,
+      "finalizedExpanded": 8995,
+      "finalizedEncoded": 8536,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "8442ce3e5c81694b6bdbbf4e85e51b175b61c8bb550b55654da53580d8336273"
+    },
+    {
+      "case": "guidance_null",
+      "historicalExpanded": 3857,
+      "finalizedExpanded": 4841,
+      "finalizedEncoded": 4738,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7082172ea2f189069633e0881f56a38fae210c79c4dff9850b5a3e9944c146f9"
+    },
+    {
+      "case": "guidance_ordinary",
+      "historicalExpanded": 3857,
+      "finalizedExpanded": 4841,
+      "finalizedEncoded": 4738,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7082172ea2f189069633e0881f56a38fae210c79c4dff9850b5a3e9944c146f9"
+    },
+    {
+      "case": "guidance_max_400",
+      "historicalExpanded": 3857,
+      "finalizedExpanded": 4841,
+      "finalizedEncoded": 4738,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7082172ea2f189069633e0881f56a38fae210c79c4dff9850b5a3e9944c146f9"
+    },
+    {
+      "case": "guidance_max_supplementary_400",
+      "historicalExpanded": 3857,
+      "finalizedExpanded": 4841,
+      "finalizedEncoded": 4738,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7082172ea2f189069633e0881f56a38fae210c79c4dff9850b5a3e9944c146f9"
+    },
+    {
+      "case": "guidance_escaped_unicode",
+      "historicalExpanded": 3965,
+      "finalizedExpanded": 4949,
+      "finalizedEncoded": 4780,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "07026ca03a2da537942eee0466134b195d2f201c62089e2f5e5977aa428352bc"
+    },
+    {
+      "case": "guidance_ambiguity",
+      "historicalExpanded": 11332,
+      "finalizedExpanded": 12964,
+      "finalizedEncoded": 12215,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "0c6a28b4f5a0c0ed884051e7f24f7ca335e41c27f880983bf67267c0e6ea888e"
+    },
+    {
+      "case": "guidance_multi_field_correction",
+      "historicalExpanded": 7741,
+      "finalizedExpanded": 8975,
+      "finalizedEncoded": 8451,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "7b0a01eb275cb06147fa77f0e02f3f5dfec1dd5b6ff33c24053e5f064760d247"
+    },
+    {
+      "case": "guidance_retained_selected",
+      "historicalExpanded": 14426,
+      "finalizedExpanded": 16119,
+      "finalizedEncoded": 14424,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "sha256": "ab92cdc886bdbee09c116679257f4590df2d78c5f38613b61fe78173379430ff"
+    }
+  ],
+  "specimens": [
+    {
+      "name": "simple_create",
+      "sha256": "e37e811daa1911b80e6821191b256a22d6c564cd304ee3883f0ad71e060015b8",
+      "wireSha256": "079b5980a2bc963c8293948e8ee59d18dc633380f4ba44250aebaaacb6ea6e35",
+      "outputSha256": "48cd63921365e5672fdfd10da043ef2fc38a994f9b0fecd6a5be0148469fa849",
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        }
+      ],
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 535,
+        "request": 29393,
+        "framing": 316,
+        "output": 713
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "two_turn_start",
+      "sha256": "ff800247c8f87e067ed3e51df6d9fe16bcf357bb4c70f8cc9bdbfbb3ad75d97b",
+      "wireSha256": "11452e4f8283e9b1045407e842bbd1d2b27538215cb57d253e92f3a76b76aa6e",
+      "outputSha256": "4c2622f656b73c1c93f26fda51cf60a50214e0999cb49ee2a7ff7748a8a367f0",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 538,
+        "request": 29396,
+        "framing": 316,
+        "output": 615
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "two_turn_complete",
+      "sha256": "956662ac1b3320ce5c8ff513d78368431acd00b20f640d688e3c3949f24bed6a",
+      "wireSha256": "c0a4840d93b338a38da107ce247df27d764aaefc5bc13cbeed26abbb2a9b0684",
+      "outputSha256": "8003c65eddae66db51526cc6c33d51f7895415df48d309bed1e84690adaee5d8",
+      "current": {
+        "utf16Units": 2,
+        "codePoints": 2
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 2,
+          "codePoints": 2
+        }
+      ],
+      "bytes": {
+        "snapshot": 6115,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 1991,
+        "request": 31091,
+        "framing": 558,
+        "output": 411
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "exam_turn_1",
+      "sha256": "39e92aaa412203e752d22a9f80d4180fcb9be43b3bb96dbae3a6c43d6a5a424a",
+      "wireSha256": "e6d594453874cfd3493d23cea35fe9acb7c70e87186d0a1d00214863cebe95a4",
+      "outputSha256": "d40554a4ef306012a9322c4305290a41cf05dfb3da30156f3fcbc1dfd2c07db6",
+      "current": {
+        "utf16Units": 50,
+        "codePoints": 50
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        }
+      ],
+      "bytes": {
+        "snapshot": 3910,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 571,
+        "request": 29429,
+        "framing": 316,
+        "output": 968
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "exam_turn_2",
+      "sha256": "25ba421c27c86455094c9c9392b77c655e08f8b2f41870c7532d8dd66d225041",
+      "wireSha256": "abd95cccaf2e50b6243c34ab93bf9932a2760be8c412ca4166b8274dee43255f",
+      "outputSha256": "fb8ba8dba70bf016c9c57fed0717f83f36fdbe2017b0e3b6bcf9365340df0fa3",
+      "current": {
+        "utf16Units": 38,
+        "codePoints": 38
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        }
+      ],
+      "bytes": {
+        "snapshot": 7578,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 2566,
+        "request": 31750,
+        "framing": 642,
+        "output": 698
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "exam_turn_3",
+      "sha256": "dd788c9276862db1297312bd4d7ecea2ad480f19c1ed942ae1d508f8aee34bdb",
+      "wireSha256": "97da0d66f78609757af7f4d1d72159c0814e7c3da1260f4275ce3b766d9010e6",
+      "outputSha256": "edae4682366c63e5c1d4976215651ee5abd5cc9aa455e6f9ce545143e6a9d402",
+      "current": {
+        "utf16Units": 3,
+        "codePoints": 3
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        }
+      ],
+      "bytes": {
+        "snapshot": 10284,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 3221,
+        "request": 32513,
+        "framing": 750,
+        "output": 412
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "exam_turn_4",
+      "sha256": "30858888e1f78035c59dc87b70634014989937897dd5845414b0914f87c56dec",
+      "wireSha256": "56fb03529444b79df71943c6ab22f5de761ad6aa13a72852184cc9c0d3f8b17b",
+      "outputSha256": "a8a3f22b1e945446a61995f8c66242b1222fb5a3cc712ed9b420fd3344e6a495",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 11784,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 3585,
+        "request": 32937,
+        "framing": 810,
+        "output": 420
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "multi_field_correction",
+      "sha256": "0c129a43c4df95f2125fc620c0d7a0bbdb6318176ff620577980addf548cfa28",
+      "wireSha256": "ad0fc283058aca507ff305038d996594a714afba407f22a9a7efc805d7742bbc",
+      "outputSha256": "e8862d69c9503644d8e42ba0e65809f2983b2482cfe7896d5e038c699d3c5390",
+      "current": {
+        "utf16Units": 62,
+        "codePoints": 62
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 62,
+          "codePoints": 62
+        }
+      ],
+      "bytes": {
+        "snapshot": 7610,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 2598,
+        "request": 31782,
+        "framing": 642,
+        "output": 750
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "maximum_title",
+      "sha256": "8eb286148e413e5534bcbe2650a35450a61f10e8655d3f97036997e8052ead97",
+      "wireSha256": "812fb58ba7bd8f8291420ce0e4a70c79095861bd70cd5f3162c878a5b5dfd4f4",
+      "outputSha256": "2fd06af83e054e4e931600b9b6ab823f9ec1f41fa9785039a4242b49d29cd48c",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1800,
+          "codePoints": 1800
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 27005,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 17908,
+        "request": 46968,
+        "framing": 518,
+        "output": 5743
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "maximum_location",
+      "sha256": "9ab6455d5ff6718e3d92a62a3b5398fe67ce30745ff8413584f01a37c8d5d43d",
+      "wireSha256": "3986989343cafa83f81a607ede5f23966016dd79dbf8ce01ecdbed858e9930b8",
+      "outputSha256": "7c2fd9324ce531a751bda438baf39aaebc4aba9f3a99bf6528983870fed4a9d9",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 300,
+          "codePoints": 300
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 9005,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4411,
+        "request": 33471,
+        "framing": 518,
+        "output": 1246
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "maximum_notes",
+      "sha256": "e095472c47ae52d1b3378fee228a7de0f5f2d0d977a1099082faaead4306f11d",
+      "wireSha256": "80cbd70ce8022273bb6c44a87f15cceaaa9e39f1ab8224f75cd91b367091731a",
+      "outputSha256": "c6c25547b971ed7ba889813f198e28b102911da6481e32ef5d92fde7b089e5a8",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 2000,
+          "codePoints": 2000
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 29405,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 19708,
+        "request": 48768,
+        "framing": 518,
+        "output": 6343
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "long_title_900",
+      "sha256": "711db69c1773e9db8782ffb33948d2b562c5c5457a4eb5562f8d971a6590693c",
+      "wireSha256": "d03ccb51ead0ec9ffd35c24b98490fd41ce66af7434de07cee2404bfa9cff530",
+      "outputSha256": "5313638a36d523d469c6a2da9687a50c7707a4432153d165cd1667ccd6aae7b3",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 900,
+          "codePoints": 900
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 16199,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 9808,
+        "request": 38868,
+        "framing": 518,
+        "output": 3043
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "long_title_600",
+      "sha256": "be07425061f586fcaf379344ba80a8a44be9b3b9f6fb4e5a324c35c3a353697e",
+      "wireSha256": "76387a66255f83e5e50a6b3b05f93a271a32c7b4348d5f5cbb395a3c33e65ed4",
+      "outputSha256": "150e17850516da8378052703612b8254aab4ffe9587b7fa3de9d6d626b04d4e9",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 600,
+          "codePoints": 600
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 12599,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 7108,
+        "request": 36168,
+        "framing": 518,
+        "output": 2143
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "long_notes_900",
+      "sha256": "de820e633bed1bad8e455db8cedbe5871aae4c1b78e70a20a1e1e6244061e896",
+      "wireSha256": "f18ddab58a6e7506b5b6db6d142ecc728a08a979498dc00c0902531e81cc2929",
+      "outputSha256": "497b9ce02241ffa89fd9ebcfe61e1c386e415abac28b9f7912b8cbe29b00f7f1",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 900,
+          "codePoints": 900
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 16199,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 9808,
+        "request": 38868,
+        "framing": 518,
+        "output": 3043
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "long_notes_600",
+      "sha256": "0fc8f154152f32d491bd3bf1065a649b49d632a80f26a0b97a37a9f8785f9b21",
+      "wireSha256": "57d8d36fc391a6631a470410bcd84802a37990e4f0d8bbe5e0a955babd81e5f8",
+      "outputSha256": "9434cea668d7830dd06817e066fac5a5bb78fd2af55f4704cd27162667dd0cc2",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 600,
+          "codePoints": 600
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 12599,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 7108,
+        "request": 36168,
+        "framing": 518,
+        "output": 2143
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "long_combined",
+      "sha256": "8cffaf2fe8bb28883dad5d3e6247aa496079404ae81c7ba942bb91e811c2c8ed",
+      "wireSha256": "ed1288cb19656a59494c886109abf53f4d2b7cf107791bf528272819c9fe3863",
+      "outputSha256": "ee90f3e1f86d5fa17745d5681085deb68b1d6e5fe70e9484bd09caa7020a3516",
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1800,
+          "codePoints": 1800
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 300,
+          "codePoints": 300
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 2000,
+          "codePoints": 2000
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 11,
+          "codePoints": 11
+        }
+      ],
+      "bytes": {
+        "snapshot": 57421,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 39147,
+        "request": 68303,
+        "framing": 614,
+        "output": 12838
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "escaped_refs_1",
+      "sha256": "e76e69f8be6352a648f7243ba183294b1c6d6bfd124f9bff1cc5e4d1d315b124",
+      "wireSha256": "ac5d3dc6ae76bc2875b700c65615f1856b41c4fb1c0ef6d92d53b4bc42a34933",
+      "outputSha256": "57f884a23fca3553efbaddafce9508020e64c1ce2139a09872f7ff07decf8d04",
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 56,
+          "codePoints": 56
+        }
+      ],
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 592,
+        "request": 29457,
+        "framing": 323,
+        "output": 477
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "escaped_refs_2",
+      "sha256": "e242835c41a5af10e122886f4b20d2092d9dc52c54dcadd233bbe3024dfe9f02",
+      "wireSha256": "ac5d3dc6ae76bc2875b700c65615f1856b41c4fb1c0ef6d92d53b4bc42a34933",
+      "outputSha256": "9aa17891355f5b1a5cb3ef94ed4a5ff2d617bd99fa5356eaaba045462f4e8db1",
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 56,
+          "codePoints": 56
+        }
+      ],
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 592,
+        "request": 29457,
+        "framing": 323,
+        "output": 556
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "escaped_refs_3",
+      "sha256": "8de935139b7bf252cd0d85c104bbaa113eaef5796b88d6bae974da682b86a693",
+      "wireSha256": "ac5d3dc6ae76bc2875b700c65615f1856b41c4fb1c0ef6d92d53b4bc42a34933",
+      "outputSha256": "5a3fed1fcc2c9d4e5e2d36574f2d4bf8cb437f2901bc2f9fb8f4a53fb0faf206",
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 56,
+          "codePoints": 56
+        }
+      ],
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 592,
+        "request": 29457,
+        "framing": 323,
+        "output": 635
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "four_uncertainties_candidate",
+      "sha256": "c864fbc3b0d17254d76a671e543822dda4269227b63ca4e13bc429d14de60982",
+      "wireSha256": "3d8e1795d1e480fc2729367bdd344b0d2edd625f4e59dadbb6f1542f58832f36",
+      "outputSha256": "0e81f2c2ee8b8e33d6c9804f9166a6b559165d2a59b62fed16e6050e092aea13",
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        }
+      ],
+      "bytes": {
+        "snapshot": 11198,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 3886,
+        "request": 33306,
+        "framing": 878,
+        "output": 1470
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "six_user_six_assistant",
+      "sha256": "0607be0a0f8fc47852cd8c6375b86bf0d6aa047764f392df250a7e0eda77a8fc",
+      "wireSha256": "b400f82772e2891307a544f90cc2304fb57c18b61a983de38080e969af8ae146",
+      "outputSha256": "3c9d9b379e51566923ffb3e5a79f2fa69d4ecd96083cdbb9c776aab219164a1a",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 21,
+          "codePoints": 21
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 13871,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 3889,
+        "request": 33281,
+        "framing": 850,
+        "output": 249
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "snapshot_16384",
+      "sha256": "3087f6a2a60c78f6ea41e382d28d77ac0832a5a558137c7186f0e829c740d065",
+      "wireSha256": "991d76083992221f99c6287fad03896c95b1df464bb086ff805fd05eaca26f35",
+      "outputSha256": "abc41a4c5386d63e9804135aa5d2a9c9a0c92ba31bbcf65ebf1a07b5e5855178",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 1096,
+          "codePoints": 1096
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 14978,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4964,
+        "request": 34356,
+        "framing": 850,
+        "output": 251
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "snapshot_16385",
+      "sha256": "b6a6d2e74b56f17ec94293cb55d0f5d0b679c9ce221747aae025d9534a277fa1",
+      "wireSha256": "991d76083992221f99c6287fad03896c95b1df464bb086ff805fd05eaca26f35",
+      "outputSha256": "abc41a4c5386d63e9804135aa5d2a9c9a0c92ba31bbcf65ebf1a07b5e5855178",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 1096,
+          "codePoints": 1096
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 14979,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4964,
+        "request": 34356,
+        "framing": 850,
+        "output": 251
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "control_projection_literal",
+      "sha256": "5caeb0e551ca42ca409aa8e1b3a984f42451fab14649ab9a2964f2a1595edc7b",
+      "wireSha256": "6a97e7df208030531615c28284c5f06ddb2f92a9ed5330c779e3deaebf282f5b",
+      "outputSha256": "d0018e58c6b26d3f5431c5d39a838e5fe636c52d061427cedc3a88539cc23c85",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 7706,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 2543,
+        "request": 31727,
+        "framing": 642,
+        "output": 420
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_null",
+      "sha256": "8380632d1162f40ad52002a0153b1a53d01113a89cac8ad2848b3d6afc68d88f",
+      "wireSha256": "11452e4f8283e9b1045407e842bbd1d2b27538215cb57d253e92f3a76b76aa6e",
+      "outputSha256": "eef5f55bbdfd3af99c55f5c4028f602cc5463c62f91b35fb71f64717f14451b8",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 538,
+        "request": 29396,
+        "framing": 316,
+        "output": 636
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_ordinary",
+      "sha256": "1f4d488ce84b85241cd282c6ff56cf9ce00233dae864bfe57dcdf36e76a95665",
+      "wireSha256": "11452e4f8283e9b1045407e842bbd1d2b27538215cb57d253e92f3a76b76aa6e",
+      "outputSha256": "fc5244a1eee9072767bf797e7b8ea87ceebf2d600b2771b330b0e7d36839eb43",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 538,
+        "request": 29396,
+        "framing": 316,
+        "output": 689
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_max_400",
+      "sha256": "b42b0a13e4a7f0cb3408d4626135f7b226e7ff57560d0285130dcc3d86bd4527",
+      "wireSha256": "11452e4f8283e9b1045407e842bbd1d2b27538215cb57d253e92f3a76b76aa6e",
+      "outputSha256": "49627c5b6b420c456d44b85a24503640c0df98f78758810de7c3709a38d5bd7d",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 538,
+        "request": 29396,
+        "framing": 316,
+        "output": 1843
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_max_supplementary_400",
+      "sha256": "c49018e2ed70786e42bd54fd98fa29a7a2f02544dd15f10dea6c53d2e1b94fe4",
+      "wireSha256": "11452e4f8283e9b1045407e842bbd1d2b27538215cb57d253e92f3a76b76aa6e",
+      "outputSha256": "625395f090a702adcc803ea24fbb545f718129f777a1437314577a0f3def4ff6",
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 22,
+          "codePoints": 22
+        }
+      ],
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 538,
+        "request": 29396,
+        "framing": 316,
+        "output": 2243
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_escaped_unicode",
+      "sha256": "2d8ee4cab4b27c0d89818daa1f0c516e290c88268187b6ed08eb8a36b3ce7bb1",
+      "wireSha256": "ac5d3dc6ae76bc2875b700c65615f1856b41c4fb1c0ef6d92d53b4bc42a34933",
+      "outputSha256": "1ec86d5a6cbcd6d55a2802ba9ad189d4f648f7c83c367bc0e2a4fad9694c5e13",
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 56,
+          "codePoints": 56
+        }
+      ],
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 592,
+        "request": 29457,
+        "framing": 323,
+        "output": 729
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_ambiguity",
+      "sha256": "8dc02e8f5da64f39afb8f8ee92307fb465bec4075b1b00f1fe8428205ebd4ba6",
+      "wireSha256": "3d8e1795d1e480fc2729367bdd344b0d2edd625f4e59dadbb6f1542f58832f36",
+      "outputSha256": "b489388ad5e8f202fc7e56e29011876807f50b2de354d35d328349bb16304eaf",
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        }
+      ],
+      "bytes": {
+        "snapshot": 11198,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 3886,
+        "request": 33306,
+        "framing": 878,
+        "output": 1592
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_multi_field_correction",
+      "sha256": "cee2650f8504338ce24e96942d6f644e26db691699e19c4d35f877a58da609f5",
+      "wireSha256": "ad0fc283058aca507ff305038d996594a714afba407f22a9a7efc805d7742bbc",
+      "outputSha256": "95c42ed761194d8873b08879928b22fb67d644b5137ab4ca70d2a4e9db304a9c",
+      "current": {
+        "utf16Units": 62,
+        "codePoints": 62
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 62,
+          "codePoints": 62
+        }
+      ],
+      "bytes": {
+        "snapshot": 7610,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 2598,
+        "request": 31782,
+        "framing": 642,
+        "output": 855
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "guidance_retained_selected",
+      "sha256": "3aa1a943af81464d4bab52bdde94c41b65454518c0a6cb1d9e3e6326eac31fad",
+      "wireSha256": "9fff76d17f19a815069125c76236e7e2a6bc1422c215ab51424fc9a68f2a096f",
+      "outputSha256": "96e470a73a291d4eba506f1f6a74838722f921c26d67702efa0a128b5d21c435",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 47,
+          "codePoints": 47
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 13983,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4001,
+        "request": 33393,
+        "framing": 850,
+        "output": 336
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1799_NFC",
+      "sha256": "e745210ea8c6ef1b14f606c989edce18f29ac74fc8bc755c9cf76e2a0e056f6d",
+      "wireSha256": "99463de52c4de2701818e7e5528b345ecb358caf6f1d31a07cc347a0ee638ecc",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 1799
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1799,
+          "codePoints": 1799
+        }
+      ],
+      "bytes": {
+        "snapshot": 9255,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5908,
+        "request": 34766,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1799_DECOMPOSED",
+      "sha256": "d10e0e56893527492c18c1ebe59f12795feaa17b700c3179d50c90dc5ad9f8ad",
+      "wireSha256": "99463de52c4de2701818e7e5528b345ecb358caf6f1d31a07cc347a0ee638ecc",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 1799
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1799,
+          "codePoints": 1799
+        }
+      ],
+      "bytes": {
+        "snapshot": 18256,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5908,
+        "request": 34766,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1799_SUPPLEMENTARY",
+      "sha256": "3910b880715c073b1a6349c8c207ceceabf21ae0f4ddb359250ca7d570cfa2a1",
+      "wireSha256": "0c6a515874a66da1a1f47917e8d3912239db7eb3baf91c6e1c42093e7d82a1e5",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 900
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1799,
+          "codePoints": 900
+        }
+      ],
+      "bytes": {
+        "snapshot": 7453,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4110,
+        "request": 32968,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1800_NFC",
+      "sha256": "9d9840e89d805347dacce25a3547730fde86ac39d4642bdd89119ed0b25527db",
+      "wireSha256": "22396e4f7bf3637fb1ef259bc855825ea8a9708173903480c744b1118a39ed0d",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 1800
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1800,
+          "codePoints": 1800
+        }
+      ],
+      "bytes": {
+        "snapshot": 9258,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5911,
+        "request": 34769,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1800_DECOMPOSED",
+      "sha256": "3538ef02291d3751a95080b2b59cd63a576b6284fc8f5a9d13ec49177151921d",
+      "wireSha256": "22396e4f7bf3637fb1ef259bc855825ea8a9708173903480c744b1118a39ed0d",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 1800
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1800,
+          "codePoints": 1800
+        }
+      ],
+      "bytes": {
+        "snapshot": 18264,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5911,
+        "request": 34769,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1800_SUPPLEMENTARY",
+      "sha256": "413f77d56df9d7edf41783c014f908f5841748913b4ebb522d8c9eced15c10eb",
+      "wireSha256": "293e2e5c372f9d22b6a9c9e9344afd5411be7b23db80ff7a6a8f80e987cf5ea2",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 900
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1800,
+          "codePoints": 900
+        }
+      ],
+      "bytes": {
+        "snapshot": 7454,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4111,
+        "request": 32969,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1801_NFC",
+      "sha256": "8c57fac01757b5145c1927b233f307bdef6503ebf4e9531248f0497ccd77a254",
+      "wireSha256": "882fff314501fcc0faf6aec8cbd3c0727b8b141f7eb46d46808c562afc629abb",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 1801
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1801,
+          "codePoints": 1801
+        }
+      ],
+      "bytes": {
+        "snapshot": 9261,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5914,
+        "request": 34772,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1801_DECOMPOSED",
+      "sha256": "8d948ec1bad6b4460137e2f1b53ccaa63aba5bf04b7dba661fe114943aba9282",
+      "wireSha256": "882fff314501fcc0faf6aec8cbd3c0727b8b141f7eb46d46808c562afc629abb",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 1801
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1801,
+          "codePoints": 1801
+        }
+      ],
+      "bytes": {
+        "snapshot": 18272,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 5914,
+        "request": 34772,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_1801_SUPPLEMENTARY",
+      "sha256": "79faa18fe3475e619645bbef749983bc07336f3e7a28ed283f2cb0b46185b676",
+      "wireSha256": "49c40b15cede6737d12233218de4f3a803614ab7331b4084c9698409ae42f08a",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 901
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 1801,
+          "codePoints": 901
+        }
+      ],
+      "bytes": {
+        "snapshot": 7457,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4114,
+        "request": 32972,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_2000_NFC",
+      "sha256": "06059366b8f737071794ee8248bfd649a5e8c72f17930139e31bb61752dd4e70",
+      "wireSha256": "d642507b46dc05593ac57569c2cf6c2caa17ffa28cc369873983b7cdaa8d6b0a",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 2000
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 2000,
+          "codePoints": 2000
+        }
+      ],
+      "bytes": {
+        "snapshot": 9858,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 6511,
+        "request": 35369,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_2000_DECOMPOSED",
+      "sha256": "4c7e653e7759065cd4367a01723d3d0572ef9b4a5688d08e1ae302bfa9f52d03",
+      "wireSha256": "d642507b46dc05593ac57569c2cf6c2caa17ffa28cc369873983b7cdaa8d6b0a",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 2000
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 2000,
+          "codePoints": 2000
+        }
+      ],
+      "bytes": {
+        "snapshot": 19864,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 6511,
+        "request": 35369,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "INPUT_2000_SUPPLEMENTARY",
+      "sha256": "8a501caf491a886564da7899ffedd30d2ae50e7d328aa9922963bcf46b51e5eb",
+      "wireSha256": "eb63d7ad529917e5221f24a723305bbfb4ad5b9dae3abc3fff193acc71fe08bd",
+      "outputSha256": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 1000
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 2000,
+          "codePoints": 1000
+        }
+      ],
+      "bytes": {
+        "snapshot": 7858,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4511,
+        "request": 33369,
+        "framing": 316,
+        "output": null
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "encoded_snapshot_16384",
+      "sha256": "38f3afb25a895be17be5c7e4f62206e40770f1862887f73f2478bc4d1e0fe075",
+      "wireSha256": "991d76083992221f99c6287fad03896c95b1df464bb086ff805fd05eaca26f35",
+      "outputSha256": "abc41a4c5386d63e9804135aa5d2a9c9a0c92ba31bbcf65ebf1a07b5e5855178",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 1096,
+          "codePoints": 1096
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 16384,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4964,
+        "request": 34356,
+        "framing": 850,
+        "output": 251
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "encoded_snapshot_16385",
+      "sha256": "9ea3da61b83aaffb653f1c055fd0e78194aed4594c46d9e7788c227d91e23a0e",
+      "wireSha256": "991d76083992221f99c6287fad03896c95b1df464bb086ff805fd05eaca26f35",
+      "outputSha256": "abc41a4c5386d63e9804135aa5d2a9c9a0c92ba31bbcf65ebf1a07b5e5855178",
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "turns": [
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 1096,
+          "codePoints": 1096
+        },
+        {
+          "role": "USER",
+          "utf16Units": 50,
+          "codePoints": 50
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 38,
+          "codePoints": 38
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 3,
+          "codePoints": 3
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 13,
+          "codePoints": 13
+        },
+        {
+          "role": "ASSISTANT",
+          "utf16Units": 31,
+          "codePoints": 31
+        },
+        {
+          "role": "USER",
+          "utf16Units": 12,
+          "codePoints": 12
+        }
+      ],
+      "bytes": {
+        "snapshot": 16385,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 4964,
+        "request": 34356,
+        "framing": 850,
+        "output": 251
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "oversized_output",
+      "sha256": "f86fdfb489b4e4bd3a839e89fc08442402e5c3225f93342e2a41d0a613b3baaa",
+      "wireSha256": "079b5980a2bc963c8293948e8ee59d18dc633380f4ba44250aebaaacb6ea6e35",
+      "outputSha256": "9a4d489a44edc6b09d2135d28a5925280a542aaa8548c199eb331602ffd2cf03",
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        }
+      ],
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 535,
+        "request": 29393,
+        "framing": 316,
+        "output": 48702
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "OUTPUT_JSON_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    },
+    {
+      "name": "truncated_output",
+      "sha256": "a721abbc78b76f7ad2e7be2f10c2622176dc7a8cb1fc1fee2633beec71e07e31",
+      "wireSha256": "079b5980a2bc963c8293948e8ee59d18dc633380f4ba44250aebaaacb6ea6e35",
+      "outputSha256": "558036dbeade00b4f1026df9a0fe3cd1f959d21c2db8c6e2586d39bfa0322050",
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "utf16Units": 18,
+          "codePoints": 18
+        }
+      ],
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 8950,
+        "schema": 19592,
+        "input": 535,
+        "request": 29393,
+        "framing": 316,
+        "output": 48701
+      },
+      "tokenMethod": "gemini-2.5-flash-lite:UNVERIFIED",
+      "inputTokens": null,
+      "outputTokens": null,
+      "serverFramingTokens": null,
+      "admitted": false,
+      "reasons": [
+        "OUTPUT_JSON_TOO_LARGE",
+        "OUTPUT_JSON_INVALID",
+        "TOKEN_BOUND_UNVERIFIED"
+      ]
+    }
+  ]
+}

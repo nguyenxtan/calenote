@@ -29,7 +29,7 @@ export function patch(state: ContextSnapshotV1 | null, values: Record<string, un
   if (built.status !== "READY") throw new Error(built.reason);
   const evidence = [{ kind: "USER_QUOTE" as const, turn: built.input.currentTurn, quote: text, occurrence: 1 }];
   const query = options.query ? { ...options.query, evidence } : null;
-  const result = validateEvidence({ schemaVersion: "calenote-context-1", intent: query ? ({ LIST: "LIST_REMINDERS", CALENDAR_DATE: "CALENDAR_QUERY", CAPABILITY: "CAPABILITY_QUERY" } as const)[query.kind] : "CREATE_REMINDER", dialogueAct: options.act ?? (state ? "CONTINUE" : "NEW_REQUEST"), continuation: state ? "YES" : "NO", changes: Object.entries(values).map(([field, value]) => ({ field, operation: value === null ? "CLEAR" : "SET", value, evidence })) as FieldChange[], query, uncertainties: options.uncertainties ?? [], controlEvidence: [] }, built);
+  const result = validateEvidence({ schemaVersion: "calenote-context-2", intent: query ? ({ LIST: "LIST_REMINDERS", CALENDAR_DATE: "CALENDAR_QUERY", CAPABILITY: "CAPABILITY_QUERY" } as const)[query.kind] : "CREATE_REMINDER", dialogueAct: options.act ?? (state ? "CONTINUE" : "NEW_REQUEST"), continuation: state ? "YES" : "NO", changes: Object.entries(values).map(([field, value]) => ({ field, operation: value === null ? "CLEAR" : "SET", value, evidence })) as FieldChange[], query, uncertainties: options.uncertainties ?? [], controlEvidence: [] }, built);
   expect(result.status, JSON.stringify(result)).toBe("VALID");
   if (result.status !== "VALID") throw new Error(result.reason);
   return result.patch;

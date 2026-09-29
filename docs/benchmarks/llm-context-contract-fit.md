@@ -1,5 +1,78 @@
 # LLM context contract: offline feasibility evidence
 
+## Conversation guidance revision — 2026-09-29
+
+Revision `conversation-guidance-v2` measures the complete canonical
+`calenote-context-2` output contract and its unchanged input/state envelope.
+This is implementation evidence awaiting the single amendment-bundle review,
+not provider-route admission or live acceptance. Historical sections and the
+original `llm-context-contract-local-measurements.json` remain unchanged.
+
+Machine evidence:
+[conversation-guidance-v2 measurements](llm-context-contract-conversation-guidance-v2-measurements.json).
+It includes source, tooling, prompt, full schema, corpus, individual wire/output
+and finalized encoded-state digests. Reproduce without provisioning or network:
+
+```sh
+CONTEXT_FIT_LOCAL_TOKENS=1 CONTEXT_FIT_AMENDMENT_REPORT=1 pnpm exec vitest run tools/benchmark/context-contract-fit.test.ts tools/benchmark/snapshot-identity-view.test.ts src/modules/conversation/context-contract
+```
+
+The existing pinned SDK/tokenizer/cache ran under the unchanged OS network deny
+and audit guard. No application credentials were inherited, no API client was
+created, no provider/counting endpoint was called, and post-self-check network
+attempts were zero. Method revision: `pinned-local-tokenizer-offline-1`.
+
+| Canonical component | Bytes | Local text tokens |
+| --- | ---: | ---: |
+| Prompt | 8,950 | 2,025 |
+| Complete strict schema | 19,592 | 4,904 diagnostic only |
+| Ordinary-guidance input JSON | 538 | 176 |
+| Ordinary-guidance complete wire | 29,396 | 7,215 diagnostic only |
+
+| Output/context specimen | Known input tokens | Output tokens | Output bytes | Final encoded context bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Null missing-time reply | 2,201 | 162 | 636 | 4,738 |
+| Ordinary eligible question | 2,201 | 171 | 689 | 4,738 |
+| Exactly 400 NFC BMP code points | 2,201 | 563 | 1,843 | 4,738 |
+| Exactly 400 supplementary code points | 2,201 | 563 | 2,243 | 4,738 |
+| Escaping and Unicode | 2,217 | 190 | 729 | 4,780 |
+| Four uncertainties with guidance | 3,191 | 433 | 1,592 | 12,215 |
+| Three-field correction with guidance | 2,831 | 215 | 855 | 8,451 |
+| Six turns retaining selected assistant wording | 3,272 | 80 | 336 | 14,424 |
+
+The 11 unchanged required ordinary fixtures remain below the 12,000 known-input
+and 1,536 output-token ceilings. Their largest known input/output is 5,226/987
+tokens (900-code-point title/notes); finalized encoded state remains 9,107 bytes.
+Original six-user/six-assistant state is 14,416 bytes; selected-wording variant
+is 14,424, below 16,384. No semantic field or evidence was removed, clipped or
+reclassified. Maximum title/notes and combined-detail negatives remain measured;
+passing ordinary cases does not imply every combination of maxima fits.
+
+For the identical two-turn-start semantic core, historical output was 140 tokens
+and 543 bytes. The amended missing-field directive plus null reply is 162 tokens
+and 636 bytes: +22 tokens/+93 bytes. Ordinary prose adds another 9 tokens/53 bytes;
+the 400-code-point BMP proposal adds 401 tokens/1,207 bytes over null. Backend-only
+specimens use null, with no unused factual prose budget.
+
+Prompt SHA-256: `f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8`.
+Schema SHA-256: `8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d`.
+Corpus SHA-256: `1f988bc6024eacbc6196bdf6e04e93024152a71ec36d1686c0abbcdb2024cd55`.
+
+Local engineering fit A: PASS for this revision; independent acceptance pending.
+Full structured SDK count remains null because the full unchanged strict schema
+uses unsupported keywords. Route framing and endpoint behavior remain UNKNOWN;
+B is UNVERIFIED and live dispatch admission remains BLOCKED. Schema diagnostic
+tokens are not secretly added to, or substituted for, an actual route count.
+Application LLM calls = 0; provider counting calls = 0; production changed = NO.
+
+CO-A–F exercise section parsing, source evidence, real T3 merge/resolution and
+pure reply selection. Model text is never used for factual preview/query/control
+or mutation/delivery results; these return a backend-composition handoff. The
+selected-text codec/projection regression checks history isolation and forbids
+assistant evidence. T4/T5/T7 must still implement receipt persistence, complete
+factual reply composition, actual inbound one/zero dispatch assertions and no
+second wording dispatch. This local bundle does not claim those integrations.
+
 ## Current amendment evidence — 2026-09-29
 
 ### T1 finalized-state remeasurement and acceptance

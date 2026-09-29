@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildContextInput, type ReadyContext } from "./context";
 import { chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
-import { isValidatedPatch, validateEvidence } from "./evidence";
+import { isValidatedPatch, validateEvidence, validateGuidancePrivacy } from "./evidence";
+import { parseInterpretationSections } from "./contracts";
 import { decodeContextSnapshot, type ContextSnapshotV1 } from "./state";
 
 function build(text: string, state: ContextSnapshotV1 | null = null, receivedAt = message().receivedAt): ReadyContext {
@@ -11,8 +12,40 @@ function build(text: string, state: ContextSnapshotV1 | null = null, receivedAt 
   return result;
 }
 const quote = (quote: string, turn = 0, occurrence = 1) => ({ kind: "USER_QUOTE", quote, turn, occurrence });
-const proposal = (value: unknown, evidence: unknown[], field = "notes", dialogueAct = "EDIT") => ({ schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct, continuation: "YES", changes: [{ field, operation: "SET", value, evidence }], query: null, uncertainties: [], controlEvidence: [] });
+const proposal = (value: unknown, evidence: unknown[], field = "notes", dialogueAct = "EDIT") => ({ schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct, continuation: "YES", changes: [{ field, operation: "SET", value, evidence }], query: null, uncertainties: [], controlEvidence: [] });
 describe("atomic source evidence", () => {
+  it("invalid_directive_does_not_erase_grounded_patch", () => {
+    const built = build("nhắc thi");
+    const raw = { ...proposal("thi", [quote("thi")], "title", "NEW_REQUEST"), schemaVersion: "calenote-context-2", conversationDirective: { kind: "SAVE" }, replyProposal: { text: "Đã lưu lịch cho bạn." } };
+    const parsed = parseInterpretationSections(raw);
+    expect(parsed.status).toBe("PARSED");
+    if (parsed.status !== "PARSED") throw new Error("sections refused");
+    const checked = validateEvidence(parsed.value.semantic, built);
+    expect(checked.status).toBe("VALID");
+    if (checked.status === "VALID") {
+      expect(checked.patch.resolvedChanges[0]).toMatchObject({ field: "title", value: "thi" });
+      expect(checked.patch.proposal).not.toHaveProperty("replyProposal");
+      expect(checked.patch.proposal).not.toHaveProperty("conversationDirective");
+    }
+    expect(parsed.value.fullSchemaValid).toBe(false);
+  });
+  it("reply_controls_rejected_not_redacted_for_send_and_all_guidance_strings_checked", () => {
+    const built = build("nhắc thi");
+    for (const text of ["CN-AbC123", "CN%2DAbC123", "\\u0043N-AbC123", "https://example.test/action", "owner-id-abc", "550e8400-e29b-41d4-a716-446655440000", "sk-SENTINELcredential", "[CONTROL]"]) {
+      for (const raw of [{ replyProposal: { text } }, { conversationDirective: { extra: { text } } }]) {
+        const before = JSON.stringify(raw);
+        expect(validateGuidancePrivacy(raw, built)).toEqual({ status: "REFUSED", reason: "GUIDANCE_PRIVACY" });
+        expect(JSON.stringify(raw)).toBe(before);
+      }
+    }
+    expect(validateGuidancePrivacy({ replyProposal: { text: "Bạn muốn được nhắc lúc mấy giờ?" } }, built)).toEqual({ status: "VALID" });
+  });
+  it("opaque_decision_and_receipt_ids_are_private_even_without_identifier_syntax", () => {
+    const state = snapshot();
+    state.pendingDecision = { decisionId: "opaquePrivate", kind: "RESUME_PENDING", target: { ownerId: "owner", chatIdentityId: "identity", chatId: "chat", requestId: "request", proposalId: null }, questionId: "opaqueQuestion", previewId: null, draftRevision: 1, contextRevision: 1, issuedAfterInbound: { receivedAt: state.createdAt, rowid: 1 }, deliveryState: "SENT", expiresAt: state.draftExpiresAt!, acceptedReplies: ["có"], replyReference: "opaqueReceipt", tokenHandle: null, candidate: null };
+    const built = build("tiếp tục", state);
+    for (const text of ["opaquePrivate", "opaqueQuestion", "opaqueReceipt", "opaque%50rivate", "opaque\\u0050rivate"]) expect(validateGuidancePrivacy({ replyProposal: { text } }, built)).toEqual({ status: "REFUSED", reason: "GUIDANCE_PRIVACY" });
+  });
   it("exact_fact_anchor_survives_incidental_current_quotes_in_any_order", () => {
     const state = withNotes(), built = build("giữ như cũ", state);
     const fact = { kind: "CONTEXT_FACT", ref: "f1" }, current = quote("giữ như cũ", 1);
@@ -100,7 +133,7 @@ describe("atomic source evidence", () => {
       decisionId: "d", kind: "REPLACE_PENDING", target: { ownerId: "owner", chatIdentityId: "identity", chatId: "chat", requestId: "request", proposalId: "candidate" }, questionId: "question", previewId: null,
       draftRevision: 1, contextRevision: 1, issuedAfterInbound: { receivedAt: state.createdAt, rowid: 1 }, deliveryState: "SENT", expiresAt: state.draftExpiresAt!, acceptedReplies: ["có"], replyReference: null, tokenHandle: null,
       candidate: { proposalId: "candidate", proposalRevision: 1, createdAt: state.createdAt, expiresAt: state.draftExpiresAt!, sourceEvidence: [source], evidenceIndex: [{ field: "title", evidence: [source] }], proposal: {
-        schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [{ field: "title", operation: "SET", value: "mai", evidence }], query: null,
+        schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [{ field: "title", operation: "SET", value: "mai", evidence }], query: null,
         uncertainties: [{ field: "title", reason: "AMBIGUOUS", alternatives: [{ value: "mai", evidence }] }], controlEvidence: [],
       } },
     };

@@ -26,7 +26,7 @@ function alternativePatch(state: ContextSnapshotV1, field: "frequency" | "occurr
   expect(built.status).toBe("READY"); if (built.status !== "READY") throw new Error(built.reason);
   const fact = built.input.facts.find(f => f.scope === "REMINDER" && f.field === field)!;
   const result = validateEvidence({
-    schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: editDependency ? "EDIT" : "CONTINUE", continuation: "YES",
+    schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: editDependency ? "EDIT" : "CONTINUE", continuation: "YES",
     changes: editDependency ? [{ field: "endDate", operation: "SET", value: { kind: "RELATIVE_DAY", offsetDays: 4 }, evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }] }] : [],
     query: null, controlEvidence: [], uncertainties: [{ field, reason: "AMBIGUOUS", alternatives: [{ value: fact.value, evidence: [{ kind: "CONTEXT_FACT", ref: fact.alias }] }] }],
   }, built);
@@ -41,7 +41,7 @@ function factEchoPatch(state: ContextSnapshotV1, field: "frequency" | "occurrenc
   expect(built.status).toBe("READY"); if (built.status !== "READY") throw new Error(built.reason);
   const fact = built.input.facts.find(f => f.scope === "REMINDER" && f.field === field)!;
   const result = validateEvidence({
-    schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: act, continuation: "YES",
+    schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: act, continuation: "YES",
     changes: [{ field, operation: "SET", value: fact.value, evidence: [{ kind: "CONTEXT_FACT", ref: fact.alias },
       ...(current ? [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }] : [])] }],
     query: null, controlEvidence: [], uncertainties: uncertain ? [{ field, reason: "MISSING", alternatives: [] }] : [],
@@ -184,7 +184,7 @@ describe("evidenced merge", () => {
     state.controlRegistry = [{ handle: "CN-AbC123", kind: "TOKEN", ownerId: "owner", chatIdentityId: "identity", chatId: "chat", decisionId: "d", contextRevision: 1, draftRevision: 1, expiresAt: "2026-09-28T03:10:00.000Z" }];
     const msg = message("giữ ghi chú"), built = buildContextInput({ message: msg, context: chat, snapshot: state, observation: observation(state, msg) });
     expect(built.status).toBe("READY"); if (built.status !== "READY") return;
-    const validated = validateEvidence({ schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: "CONTINUE", continuation: "YES", changes: [{ field: "notes", operation: "SET", value: "mang [CONTROL] giấy tờ", evidence: [{ kind: "CONTEXT_FACT", ref: "f1" }] }], query: null, uncertainties: [], controlEvidence: [] }, built);
+    const validated = validateEvidence({ schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "CONTINUE", continuation: "YES", changes: [{ field: "notes", operation: "SET", value: "mang [CONTROL] giấy tờ", evidence: [{ kind: "CONTEXT_FACT", ref: "f1" }] }], query: null, uncertainties: [], controlEvidence: [] }, built);
     expect(validated.status).toBe("VALID"); if (validated.status !== "VALID") return;
     const merged = mergePatch(state, validated.patch);
     expect(merged).toMatchObject({ status: "MERGED", changedFields: [], candidate: { draftRevision: 1, slots: { notes: { value: "mang CN-AbC123 giấy tờ", resolution: { referenceTime: "2026-09-28T03:00:00.000Z" } } } } });

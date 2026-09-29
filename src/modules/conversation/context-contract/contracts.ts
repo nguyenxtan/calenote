@@ -66,8 +66,8 @@ export const UncertaintySchema = z.union([
   z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
   z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(DialogueActSchema)).max(2) }),
 ]);
-export const ConversationInterpretationSchema = z.strictObject({
-  schemaVersion: z.literal("calenote-context-1"), intent: IntentSchema, dialogueAct: DialogueActSchema,
+export const SemanticPatchProposalSchema = z.strictObject({
+  schemaVersion: z.literal("calenote-context-2"), intent: IntentSchema, dialogueAct: DialogueActSchema,
   continuation: z.enum(["YES", "NO", "UNCERTAIN"]), changes: z.array(FieldChangeSchema).max(13),
   query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintySchema).max(4), controlEvidence: z.array(EvidenceRefSchema).max(3),
 }).superRefine((v, ctx) => {
@@ -81,7 +81,44 @@ export const ConversationInterpretationSchema = z.strictObject({
   if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
   if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || !v.controlEvidence.some(e => e.kind === "USER_QUOTE"))) fail("Combined actions must be ambiguous and grounded without executable changes");
 });
+export type SemanticPatchProposal = z.infer<typeof SemanticPatchProposalSchema>;
+export const ConversationDirectiveSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("ASK_FOR_FIELD"), field: IssueFieldSchema }),
+  z.strictObject({ kind: z.literal("ASK_FOR_DISAMBIGUATION"), field: IssueFieldSchema, reason: z.enum(["AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]) }),
+  z.strictObject({ kind: z.literal("EXPLAIN_UNSUPPORTED"), issue: z.enum(["CAPABILITY", "REQUEST_COMBINATION", "DOMAIN_LIMIT", "ASSISTANT_SCOPE"]) }),
+  z.strictObject({ kind: z.literal("HELP"), topic: z.enum(["GENERAL", "REMINDERS", "LUNAR", "FINITE_SERIES"]) }),
+  z.strictObject({ kind: z.literal("PRESENT_PREVIEW") }),
+  z.strictObject({ kind: z.literal("ANSWER_QUERY"), queryKind: z.enum(["LIST", "CALENDAR_DATE", "CAPABILITY"]) }),
+]);
+export type ConversationDirective = z.infer<typeof ConversationDirectiveSchema>;
+export const ReplyProposalSchema = z.strictObject({ text: nfcText(400) }).nullable();
+export type ReplyProposal = z.infer<typeof ReplyProposalSchema>;
+export const ConversationInterpretationSchema = SemanticPatchProposalSchema.safeExtend({ conversationDirective: ConversationDirectiveSchema, replyProposal: ReplyProposalSchema });
 export type ConversationInterpretation = z.infer<typeof ConversationInterpretationSchema>;
+export type ParsedInterpretation = {
+  semantic: SemanticPatchProposal;
+  directive: { status: "VALID"; value: ConversationDirective } | { status: "INVALID" };
+  reply: { status: "VALID"; value: ReplyProposal } | { status: "INVALID"; reason: "REPLY_INVALID" | "REPLY_TOO_LONG" };
+  fullSchemaValid: boolean;
+};
+export type InterpretationSections = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: ParsedInterpretation };
+/** Accept a fully decoded JSON object only. The transport still owns raw-body
+ * byte/finish-reason checks. Quarantine exactly the two guidance properties. */
+export function parseInterpretationSections(raw: unknown): InterpretationSections {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+  const { conversationDirective, replyProposal, ...core } = raw as Record<string, unknown>;
+  const semantic = SemanticPatchProposalSchema.safeParse(core);
+  if (!semantic.success) return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
+  const directive = ConversationDirectiveSchema.safeParse(conversationDirective);
+  const reply = ReplyProposalSchema.safeParse(replyProposal);
+  const text = replyProposal && typeof replyProposal === "object" && "text" in replyProposal ? replyProposal.text : null;
+  return { status: "PARSED", value: {
+    semantic: semantic.data,
+    directive: directive.success ? { status: "VALID", value: directive.data } : { status: "INVALID" },
+    reply: reply.success ? { status: "VALID", value: reply.data } : { status: "INVALID", reason: typeof text === "string" && [...text].length > 400 ? "REPLY_TOO_LONG" : "REPLY_INVALID" },
+    fullSchemaValid: ConversationInterpretationSchema.safeParse(raw).success,
+  } };
+}
 const factAlias = z.string().regex(/^f[1-9][0-9]*$/u).max(16);
 const provenance = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("EXPLICIT_USER") }),

@@ -1,7 +1,7 @@
 import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./context";
-import { ConversationInterpretationSchema, FieldChangeSchema, QueryOperandSchema, UncertaintySchema, SLOT_NAMES, type ConversationInterpretation, type EvidenceRef, type FieldChange, type QueryOperand, type ContextInput } from "./contracts";
+import { SemanticPatchProposalSchema, FieldChangeSchema, QueryOperandSchema, UncertaintySchema, SLOT_NAMES, type SemanticPatchProposal, type EvidenceRef, type FieldChange, type QueryOperand, type ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
-import { containsForbiddenControl } from "./projection";
+import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -14,11 +14,11 @@ export interface ValidatedFieldEvidence {
 export type ValidatedPatch = {
   readonly [validatedPatchBrand]: true;
   /** The validated provider representation, never the operands to persist. */
-  readonly proposal: ConversationInterpretation;
+  readonly proposal: SemanticPatchProposal;
   /** Backend values restore exact accepted facts only after alias validation. */
   readonly resolvedChanges: readonly FieldChange[];
   readonly resolvedQuery: QueryOperand | null;
-  readonly resolvedUncertainties: ConversationInterpretation["uncertainties"];
+  readonly resolvedUncertainties: SemanticPatchProposal["uncertainties"];
   readonly queryReferenceTime: string | null;
   readonly changeEvidence: readonly ValidatedFieldEvidence[];
   readonly queryEvidence: readonly SourceEvidence[];
@@ -75,7 +75,7 @@ function selectReferenceTime(facts: readonly BoundContextFact[], quotes: readonl
 export function validateEvidence(proposal: unknown, built: ReadyContext): EvidenceValidation {
   const internal = evidenceContextFor(built);
   if (!internal) return { status: "REFUSED", reason: "CONTEXT_NOT_BUILT" };
-  const parsed = ConversationInterpretationSchema.safeParse(proposal);
+  const parsed = SemanticPatchProposalSchema.safeParse(proposal);
   if (!parsed.success) return { status: "REFUSED", reason: "PROPOSAL_SCHEMA_INVALID" };
   if (containsForbiddenControl(parsed.data, internal.handles)) return { status: "REFUSED", reason: "CONTROL_IN_PROPOSAL" };
   const value = parsed.data;
@@ -186,4 +186,24 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
     issuedPatches.add(patch);
     return { status: "VALID", patch };
   } catch (error) { return { status: "REFUSED", reason: error instanceof EvidenceFailure ? error.message : "EVIDENCE_INVALID" }; }
+}
+
+export type GuidancePrivacyValidation = { status: "VALID" } | { status: "REFUSED"; reason: "GUIDANCE_PRIVACY" | "CONTEXT_NOT_BUILT" };
+/** Privacy only: never a semantic/directive approval or a redacted sendable reply. */
+export function validateGuidancePrivacy(proposal: unknown, built: ReadyContext): GuidancePrivacyValidation {
+  const internal = evidenceContextFor(built);
+  if (!internal) return { status: "REFUSED", reason: "CONTEXT_NOT_BUILT" };
+  const state = built.candidateSnapshot, decision = state.pendingDecision;
+  const protectedValues = [
+    ...internal.handles, ...Object.values(built.observation.scope), built.observation.inbound.id, built.observation.inbound.claimMarker, state.id, state.requestId,
+    state.inbound.id, state.inbound.claimMarker, decision?.decisionId, decision?.questionId, decision?.previewId, decision?.replyReference, decision?.tokenHandle, decision?.target.proposalId,
+    decision?.candidate?.proposalId, state.previewReceipt?.previewId, state.previewReceipt?.replyReference, state.previewReceipt?.draftHash,
+    state.pendingReminderQuestion?.questionId, state.pendingQueryQuestion?.questionId,
+    ...state.transcript.flatMap(t => [t.id, t.messageRef]), ...state.controlRegistry.map(c => c.decisionId),
+    ...(state.modelAttemptBinding ? Object.values(state.modelAttemptBinding).filter(v => typeof v === "string") : []),
+    ...[built.observation.lastTerminalOutcome, state.lastTerminalOutcome].flatMap(terminal => terminal ? [terminal.outcomeId, terminal.contextId, terminal.inboundId] : []),
+  ].filter((s): s is string => typeof s === "string" && s.length > 0);
+  const object = proposal && typeof proposal === "object" ? proposal as Record<string, unknown> : {};
+  return containsForbiddenGuidanceMaterial([object.conversationDirective, object.replyProposal], protectedValues)
+    ? { status: "REFUSED", reason: "GUIDANCE_PRIVACY" } : { status: "VALID" };
 }

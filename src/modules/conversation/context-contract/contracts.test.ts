@@ -1,11 +1,44 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { ContextInputSchema, ConversationInterpretationSchema, FieldChangeSchema, InterpretationJsonSchema, SLOT_NAMES, UncertaintySchema, type FieldChange } from "./contracts";
+import { ContextInputSchema, ConversationInterpretationSchema, FieldChangeSchema, InterpretationJsonSchema, SLOT_NAMES, UncertaintySchema, parseInterpretationSections, type FieldChange } from "./contracts";
 
 const ref = { kind: "USER_QUOTE", turn: 0, quote: "ngày mai", occurrence: 1 };
-const proposal = { schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [] };
+const proposal = { schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null };
 const values = { title: "thi", location: "trường", notes: "giấy tờ", eventDate: { kind: "RELATIVE_DAY", offsetDays: 1 }, eventTime: { hour: 8, minute: 0, qualifier: "H24" }, reminderDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 1, month: 10, year: null, leapMonth: null }, reminderTime: { hour: 9, minute: 0, qualifier: "H24" }, calendar: "GREGORIAN", frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT", leadOffsetDays: 2, endDate: { kind: "WEEKDAY", weekday: 1, qualifier: "NEXT_WEEK" } };
 const set = (field: keyof typeof values) => ({ field, operation: "SET", value: values[field], evidence: [ref] });
 const accepts = (overrides: object) => ConversationInterpretationSchema.safeParse({ ...proposal, ...overrides }).success;
+
+const amended = { ...proposal, schemaVersion: "calenote-context-2", conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null };
+describe("independent guidance sections", () => {
+  it("guidance_fields_required_and_unknown_keys_rejected", () => {
+    expect(ConversationInterpretationSchema.safeParse(amended).success).toBe(true);
+    for (const key of ["conversationDirective", "replyProposal"]) {
+      const value: Record<string, unknown> = { ...amended }; delete value[key];
+      expect(ConversationInterpretationSchema.safeParse(value).success).toBe(false);
+      expect(parseInterpretationSections(value)).toMatchObject({ status: "PARSED", value: { fullSchemaValid: false } });
+    }
+    expect(parseInterpretationSections({ ...amended, ownerId: "invented" }).status).toBe("REFUSED");
+  });
+  it("six_directives_have_no_authority", () => {
+    for (const conversationDirective of [{ kind: "ASK_FOR_FIELD", field: "reminderTime" }, { kind: "ASK_FOR_DISAMBIGUATION", field: "frequency", reason: "AMBIGUOUS" }, { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" }, { kind: "HELP", topic: "GENERAL" }, { kind: "PRESENT_PREVIEW" }, { kind: "ANSWER_QUERY", queryKind: "LIST" }]) {
+      expect(ConversationInterpretationSchema.safeParse({ ...amended, conversationDirective }).success).toBe(true);
+      for (const extra of [{ confirmed: true }, { ownerId: "owner" }, { token: "CN-abc" }, { occurrences: [] }]) expect(ConversationInterpretationSchema.safeParse({ ...amended, conversationDirective: { ...conversationDirective, ...extra } }).success).toBe(false);
+    }
+    expect(ConversationInterpretationSchema.safeParse({ ...amended, conversationDirective: { kind: "CONFIRMED" } }).success).toBe(false);
+  });
+  it("reply_400_401_unicode_boundary", () => {
+    for (const text of ["ế".repeat(400), "😀".repeat(400)]) expect(ConversationInterpretationSchema.safeParse({ ...amended, replyProposal: { text } }).success).toBe(true);
+    for (const text of ["ế".repeat(401), "😀".repeat(401), " ", "e\u0301", "\ud800"]) expect(ConversationInterpretationSchema.safeParse({ ...amended, replyProposal: { text } }).success).toBe(false);
+  });
+  it("bad_guidance_preserves_valid_core_without_schema_score_laundering", () => {
+    const raw = { ...amended, changes: [set("title")], conversationDirective: { kind: "SAVE" }, replyProposal: { text: "😀".repeat(401) } };
+    const result = parseInterpretationSections(raw);
+    expect(result).toMatchObject({ status: "PARSED", value: { fullSchemaValid: false, semantic: { changes: [set("title")] }, directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } } });
+    if (result.status === "PARSED") expect(Object.keys(result.value.semantic)).not.toContain("replyProposal");
+  });
+  it("invalid_core_not_rescued_by_guidance", () => {
+    for (const raw of [{ ...amended, changes: [set("title"), set("title")] }, { ...amended, changes: [{ ...set("title"), ownerId: "bad" }] }, { ...amended, schemaVersion: "calenote-context-1" }, JSON.stringify(amended).slice(0, -1), null, []]) expect(parseInterpretationSections(raw).status).toBe("REFUSED");
+  });
+});
 
 describe("strict successor proposals", () => {
   it("all_root_keys_required", () => {

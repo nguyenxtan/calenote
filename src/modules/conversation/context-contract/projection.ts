@@ -179,3 +179,15 @@ export function containsForbiddenControl(value: unknown, handles: readonly strin
   }
   return value !== null && typeof value === "object" && Object.values(value).some(v => containsForbiddenControl(v, handles));
 }
+
+/** Output-only privacy guard. Reuses the bounded T2 escaped-control detector;
+ * rejects contaminated guidance rather than converting it into sendable text. */
+export function containsForbiddenGuidanceMaterial(value: unknown, protectedValues: readonly string[] = []): boolean {
+  if (typeof value === "string") {
+    const units = decodedUnits(value);
+    if (!units || containsForbiddenControl(value, protectedValues)) return true;
+    const decoded = units.map(u => u.char).join("");
+    return /\[CONTROL\]|https?:|www\.|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|(?:owner|chat|context|request|decision|preview|inbound|workspace|connection|user|message)[-_](?:id[-_])?[a-z0-9_-]+|\b(?:sk|api[-_]?key|secret|bearer)[-_ :][a-z0-9_-]+/iu.test(decoded);
+  }
+  return value !== null && typeof value === "object" && Object.entries(value).some(([key, item]) => containsForbiddenGuidanceMaterial(key, protectedValues) || containsForbiddenGuidanceMaterial(item, protectedValues));
+}

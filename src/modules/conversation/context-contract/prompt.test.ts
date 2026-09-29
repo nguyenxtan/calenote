@@ -17,7 +17,7 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(request.messages[0].content).not.toContain(input.turns[0].text);
   expect(request.messages[1].role).toBe("user");
   expect(JSON.parse(request.messages[1].content)).toEqual(input);
-  expect(request.response_format).toEqual({ type: "json_schema", json_schema: { name: "calenote_context_1", strict: true, schema: InterpretationJsonSchema } });
+  expect(request.response_format).toEqual({ type: "json_schema", json_schema: { name: "calenote_context_2", strict: true, schema: InterpretationJsonSchema } });
   expect(request.max_tokens).toBe(1536);
   expect(request.stream).toBe(false);
   expect(JSON.stringify(input)).toBe(before);

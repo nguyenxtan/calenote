@@ -32,7 +32,18 @@ not product semantics or numeric limits. Historical T0 at
 `e44b9a415b87b7471085bc683d20e55c0360d9e8` remains BLOCKED.
 Remote migrations, push/merge, activation and deployment remain unauthorized.
 
-### Post-T3 conversation-ownership amendment (2026-09-29)
+### Current amendment approval (2026-09-29)
+
+Owner request `6dd6ddd5-b02d-48f3-9285-3c5cc06940f4` approves this written
+amendment at `fb5331378d71e9f8eb8e63bc0447bd62f129fc50` and supersedes the
+documentation-only stop below. Execute T1A/T2A/T0A as one reviewed bundle,
+then T4–T10 if accepted. Preserve valid semantic facts when guidance fails;
+model prose is eligible only for matching conversational guidance, never
+backend factual/transactional surfaces. Ordinary envelope failure is a stop
+gate, not permission to raise limits. No provider calls before T11 prerequisites;
+no push, PR, merge, remote migration, activation or deployment is authorized.
+
+### Historical post-T3 conversation-ownership amendment (2026-09-29)
 
 Owner request `42c83974-4755-4a90-87fa-4f43ce227e96` authorizes this targeted
 documentation amendment and a local documentation commit only. Verified start:
@@ -1498,8 +1509,7 @@ work, not optional new product categories.
 - Mock results, real calls, dispatch outcomes and channel acceptance remain
   separately reported; no claim of implementation follows document checks (§8/9).
 
-Next gate: OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN. Execution method previously
-approved remains sequential subagent implementation with independent review;
-do not redispatch T4 or implement scoped amendments until this new review gate
-is cleared. Deployment remains unchanged until separately authorized work
-passes its release gates.
+Next gate: AMENDED_LOCAL_FIT_AND_INDEPENDENT_BUNDLE_REVIEW. Owner approval
+has cleared the prior written-spec review gate, not implementation acceptance.
+Continue to T4 only after the bundle passes. Deployment remains unchanged until
+separately authorized work passes its release gates.

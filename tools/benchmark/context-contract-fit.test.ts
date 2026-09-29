@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { measureEnvelope, preflightEnvelopeTransition } from "../../src/modules/conversation/context-contract/admission";
-import { ContextInputSchema, ConversationInterpretationSchema, InterpretationJsonSchema, SLOT_NAMES, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { ContextInputSchema, ConversationInterpretationSchema, InterpretationJsonSchema, SLOT_NAMES, parseInterpretationSections, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
 import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
@@ -17,9 +17,9 @@ const input = ContextInputSchema.parse({
   activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [],
   capabilities: { version: "context-capabilities-1", supported: ["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } },
 });
-const output = { schemaVersion: "calenote-context-1", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [
+const output = { schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [
   { field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "gọi mẹ", occurrence: 1 }] },
-], query: null, uncertainties: [], controlEvidence: [] };
+], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "PRESENT_PREVIEW" }, replyProposal: null };
 
 const utf8 = (value: string) => Buffer.byteLength(value, "utf8");
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -87,6 +87,7 @@ function snapshotSample(value: ContextInput, originals = value.turns.map(t => t.
 }
 type Specimen = { name: string; input: ContextInput; snapshot: string; output: string; expectedReasons: string[]; schemaValid: boolean };
 const specimens: Specimen[] = [];
+let finalizedStateMeasurements: unknown[] = [];
 function add(name: string, value: ContextInput, out: unknown, expectedReasons: string[] = [], snapshot = JSON.stringify(snapshotSample(value))) {
   ContextInputSchema.parse(value);
   const valid = ConversationInterpretationSchema.parse(out);
@@ -152,7 +153,36 @@ projectedSnapshot.transcript[2].sourceMap.segments = [
 ];
 add("control_projection_literal", projectedInput, proposal([change("reminderTime", clock9, 2, "Đổi sang 9h.")], { dialogueAct: "EDIT", continuation: "YES" }), [], JSON.stringify(projectedSnapshot));
 
+// Amendment specimens retain the complete original semantic fields/evidence.
+const guidanceCases = ["guidance_null", "guidance_ordinary", "guidance_max_400", "guidance_max_supplementary_400", "guidance_escaped_unicode", "guidance_ambiguity", "guidance_multi_field_correction", "guidance_retained_selected"];
+for (const [name, base, conversationDirective, replyProposal] of [
+  ["guidance_null", "two_turn_start", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, null],
+  ["guidance_ordinary", "two_turn_start", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "Bạn muốn được nhắc lúc mấy giờ?" }],
+  ["guidance_max_400", "two_turn_start", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "ế".repeat(400) }],
+  ["guidance_max_supplementary_400", "two_turn_start", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "😀".repeat(400) }],
+  ["guidance_escaped_unicode", "escaped_refs_3", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: 'Bạn muốn nhắc vào "buổi sáng" hay buổi chiều? 😀' }],
+  ["guidance_ambiguity", "four_uncertainties_candidate", { kind: "ASK_FOR_DISAMBIGUATION", field: "eventDate", reason: "AMBIGUOUS" }, { text: "Bạn muốn chọn ngày nào trong hai ngày vừa nhắc đến?" }],
+  ["guidance_multi_field_correction", "multi_field_correction", { kind: "ASK_FOR_FIELD", field: "eventRelation" }, { text: "Bạn muốn được nhắc trước hay trong ngày diễn ra sự kiện?" }],
+] as const) {
+  const original = specimens.find(s => s.name === base)!;
+  add(name, original.input, { ...JSON.parse(original.output), conversationDirective, replyProposal }, original.expectedReasons, original.snapshot);
+}
+const retainedSelected = structuredClone(twelveInput);
+for (const t of retainedSelected.turns) if (t.role === "ASSISTANT") t.text = "Bạn muốn mình làm rõ điều gì trong yêu cầu này?";
+add("guidance_retained_selected", retainedSelected, proposal([], { dialogueAct: "CONTINUE", continuation: "YES", conversationDirective: { kind: "ASK_FOR_FIELD", field: "operation" }, replyProposal: { text: "Bạn muốn mình làm rõ điều gì trong yêu cầu này?" } }));
+
 describe("full specimen measurements", () => {
+  it("amended_corpus_accounts_for_guidance_without_displacing_semantic_fields", () => {
+    for (const name of guidanceCases) {
+      const sample = specimens.find(s => s.name === name);
+      expect(sample, name).toBeDefined();
+      const decoded = JSON.parse(sample!.output);
+      expect(Object.keys(decoded)).toEqual(expect.arrayContaining(["conversationDirective", "replyProposal", "changes", "uncertainties", "controlEvidence"]));
+      expect(ConversationInterpretationSchema.safeParse(decoded).success).toBe(true);
+    }
+    expect(JSON.parse(specimens.find(s => s.name === "guidance_max_400")!.output).replyProposal.text).toHaveLength(400);
+    expect(JSON.parse(specimens.find(s => s.name === "guidance_multi_field_correction")!.output).changes).toHaveLength(3);
+  });
   it("finalized_application_state_is_strict_lossless_and_ordinary_flows_fit", () => {
     // Keep the original T0 byte specimens and classifications above as history.
     // T1 measurement adds every finalized mandatory binding to those same data;
@@ -163,7 +193,7 @@ describe("full specimen measurements", () => {
       const oldCandidate = legacy.pendingDecision.candidate;
       const sourceEvidence = (turnId: string, quote: string, sourceSpan: { start: number; end: number }, viewSpan = sourceSpan) => ({ kind: "USER_QUOTE", sourceTurnId: turnId, sourceMapTurnId: turnId, quote, occurrence: 1, sourceSpan, viewSpan, normalizationVersion: "nfc-codepoint-v1" });
       const candidate = oldCandidate ? {
-        proposalId: "synthetic-proposal", proposalRevision: 1, proposal: oldCandidate.proposal,
+        proposalId: "synthetic-proposal", proposalRevision: 1, proposal: (() => { const parsed = parseInterpretationSections(oldCandidate.proposal); if (parsed.status !== "PARSED") throw new Error(parsed.reason); return parsed.value.semantic; })(),
         sourceEvidence: [sourceEvidence(oldCandidate.sourceTurnId, oldCandidate.sourceText, oldCandidate.sourceSpan)],
         evidenceIndex: oldCandidate.evidenceIndex.map((e: { field: string; sourceTurnId: string; sourceSpan: { start: number; end: number }; viewSpan: { start: number; end: number } }) => ({ field: e.field, evidence: [sourceEvidence(e.sourceTurnId, [...oldCandidate.sourceText].slice(e.viewSpan.start, e.viewSpan.end).join(""), e.sourceSpan, e.viewSpan)] })),
         createdAt: at, expiresAt: legacy.draftExpiresAt,
@@ -175,7 +205,7 @@ describe("full specimen measurements", () => {
         pendingDecision: { ...legacy.pendingDecision, decisionId: "synthetic-decision", kind: candidate ? "REPLACE_PENDING" : "RESUME_PENDING", target: { ...legacy.pendingDecision.target, requestId: legacy.requestId, chatIdentityId: fullScope.chatIdentityId, proposalId: candidate?.proposalId ?? null }, replyReference: null, tokenHandle: "CN-SYNTHETIC-TOKEN", candidate },
         previewReceipt: { ...legacy.previewReceipt, requestId: legacy.requestId, chatIdentityId: fullScope.chatIdentityId, channel: "ZALO", replyReference: "synthetic-preview-message" },
         controlRegistry: legacy.controlRegistry.map((c: object) => ({ ...c, kind: "TOKEN", chatIdentityId: fullScope.chatIdentityId, contextRevision: 4, draftRevision: 3 })),
-        modelAttemptBinding: { ...legacy.modelAttemptBinding, attemptId: "synthetic-attempt", observationId: "synthetic-observation", claimMarker: "synthetic-claim", inputDigest: "b".repeat(64), promptDigest: "c".repeat(64), contractDigest: "d".repeat(64), contractVersion: "calenote-context-1", status: "ACCEPTED" },
+        modelAttemptBinding: { ...legacy.modelAttemptBinding, attemptId: "synthetic-attempt", observationId: "synthetic-observation", claimMarker: "synthetic-claim", inputDigest: "b".repeat(64), promptDigest: "c".repeat(64), contractDigest: "d".repeat(64), contractVersion: "calenote-context-2", status: "ACCEPTED" },
       });
       const encoded = encodeContextSnapshot(logical);
       const measurement = measureEnvelope(s.input, encoded, s.output);
@@ -187,6 +217,7 @@ describe("full specimen measurements", () => {
       return { case: s.name, historicalExpanded: utf8(s.snapshot), finalizedExpanded: utf8(JSON.stringify(logical)), finalizedEncoded: utf8(encoded), reasons: measurement.reasons, sha256: digest(encoded) };
     });
     if (process.env.CONTEXT_FIT_REPORT === "1") console.log(JSON.stringify({ finalizedStateMeasurements: rows }));
+    finalizedStateMeasurements = rows;
   });
   it("required_900_codepoint_fields_fit_lossless_identity_view_storage", () => {
     for (const name of ["long_title_900", "long_notes_900"]) {
@@ -220,11 +251,22 @@ describe("full specimen measurements", () => {
       { name: "oversized_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized },
       { name: "truncated_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized.slice(0, -1) }];
     const evidence = measureLocalTokens(samples);
+    if (process.env.CONTEXT_FIT_AMENDMENT_REPORT === "1") {
+      writeFileSync("docs/benchmarks/llm-context-contract-conversation-guidance-v2-measurements.json", JSON.stringify({
+        revision: "conversation-guidance-v2", contractVersion: "calenote-context-2", methodVersion: "pinned-local-tokenizer-offline-1", routeAdmission: "UNVERIFIED", applicationLlmCalls: 0, providerCountingCalls: 0,
+        promptSha256: digest(CONTEXT_CONTRACT_PROMPT), schemaSha256: digest(JSON.stringify(InterpretationJsonSchema)), corpusSha256: digest(JSON.stringify(samples)),
+        sources: Object.fromEntries(["contracts", "prompt", "wire", "admission", "guidance", "projection", "evidence"].map(name => [name, digest(readFileSync(`src/modules/conversation/context-contract/${name}.ts`, "utf8"))])),
+        tooling: Object.fromEntries(["tools/benchmark/local-tokenizer.ts", "tools/benchmark/tokenizer/measure.py", "tools/benchmark/tokenizer/requirements.txt"].map(path => [path, digest(readFileSync(path, "utf8"))])),
+        evidence, finalizedStateMeasurements,
+        specimens: samples.map(s => ({ name: s.name, sha256: digest(JSON.stringify(s)), wireSha256: digest(JSON.stringify(serializeContextRequest(s.input))), outputSha256: "output" in s ? digest(s.output) : null, ...measureEnvelope(s.input, encodeIdentityViews(s.snapshot), "output" in s ? s.output : undefined) })),
+      }, null, 2) + "\n");
+    }
     expect(evidence.phase).toBe("OFFLINE_MEASUREMENT");
     expect(evidence.provenance.networkGuardActive).toBe(true);
     expect(evidence.provenance.networkAttemptsAfterSelfCheck).toEqual([]);
     for (const row of evidence.rows) {
       expect(row.applicationTextTokens).toBe(row.sdkTextProjectionTokens);
+      expect(row.schemaSha256).toBe(digest(JSON.stringify(InterpretationJsonSchema)));
       expect(row.sdkFullStructuredTokens).toBeNull();
       expect(row.unsupportedSchema.length).toBeGreaterThan(0);
       expect(row.routeFramingTokens).toBe("UNKNOWN");
@@ -237,6 +279,12 @@ describe("full specimen measurements", () => {
     for (const row of normal) {
       expect(row.applicationTextTokens).toBeLessThan(12000);
       expect(row.outputTextTokens).toBeLessThanOrEqual(1536);
+    }
+    const amended = evidence.rows.filter(row => guidanceCases.includes(row.case));
+    expect(amended).toHaveLength(8);
+    for (const row of amended) {
+      expect(row.applicationTextTokens, row.case).toBeLessThanOrEqual(12000);
+      expect(row.outputTextTokens, row.case).toBeLessThanOrEqual(1536);
     }
     if (process.env.CONTEXT_FIT_REPORT === "1") console.log(JSON.stringify({ localTokenEvidence: evidence, encodedSnapshotBytes: samples.map(s => {
       const encoded = encodeIdentityViews(s.snapshot);

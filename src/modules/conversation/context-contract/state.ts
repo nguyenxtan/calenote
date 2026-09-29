@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { ConversationScope } from "../contracts";
-import { CalendarSchema, contextFactSchema, ConversationInterpretationSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, UncertaintySchema } from "./contracts";
+import { CalendarSchema, contextFactSchema, SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, UncertaintySchema } from "./contracts";
 
 const id = z.string().min(1).max(512);
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
@@ -70,7 +70,7 @@ const queryQuestion = z.strictObject({ ...questionFields, scope: z.literal("QUER
 const target = z.strictObject({ ownerId: id, chatIdentityId: id, chatId: id, requestId: id.nullable(), proposalId: id.nullable() }).refine(t => t.requestId !== null || t.proposalId !== null, "Decision has no target");
 export const PreviewReceiptSchema = z.strictObject({ previewId: id, requestId: id, draftRevision: revision, draftHash: hash, ownerId: id, chatIdentityId: id, chatId: id, channel: z.enum(["ZALO", "TELEGRAM", "WEB"]), issuedAfterOrder: InboundOrderSchema, expiresAt: instant, deliveryState: delivery, replyReference: id.nullable() });
 export type PreviewReceipt = z.infer<typeof PreviewReceiptSchema>;
-const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: ConversationInterpretationSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(13), createdAt: instant, expiresAt: instant });
+const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: SemanticPatchProposalSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(13), createdAt: instant, expiresAt: instant });
 export const PendingDecisionSchema = z.strictObject({ decisionId: id, kind: decisionKind, target, questionId: id, previewId: id.nullable(), draftRevision: revision.nullable(), contextRevision: revision, issuedAfterInbound: InboundOrderSchema, deliveryState: delivery, expiresAt: instant, acceptedReplies: z.array(z.enum(["có", "ok", "1", "xác nhận"])).min(1).max(4), replyReference: id.nullable(), tokenHandle: id.nullable(), candidate: candidate.nullable() }).superRefine((d, ctx) => {
   if (new Set(d.acceptedReplies).size !== d.acceptedReplies.length || (d.kind !== "SAVE_PREVIEW" && d.acceptedReplies.includes("xác nhận"))) ctx.addIssue({ code: "custom", message: "Invalid decision replies" });
   if (d.kind === "SAVE_PREVIEW" && (d.previewId === null || d.draftRevision === null || d.target.requestId === null || d.candidate !== null)) ctx.addIssue({ code: "custom", message: "Save requires a preview and draft binding" });
@@ -88,7 +88,7 @@ export type ContextObservation = DeepReadonly<z.infer<typeof ContextObservationB
 /** Only supplied after existing chat/session authentication. T4 rechecks owner
  * and expiry transactionally; these are never provider operands. */
 export type ControlAuthority = { kind: "CHAT"; scope: ConversationScope } | { kind: "WEB"; principal: SessionPrincipal; chat: ContextScope };
-const attempt = z.strictObject({ attemptId: id, observationId: id, contextRevision: revision.nullable(), sourceInboundId: id, claimMarker: id, inputDigest: hash, promptDigest: hash, contractDigest: hash, contractVersion: z.literal("calenote-context-1"), status: z.enum(["PREPARED", "DISPATCHED", "RECEIVED", "REJECTED", "ACCEPTED", "UNCERTAIN"]) });
+const attempt = z.strictObject({ attemptId: id, observationId: id, contextRevision: revision.nullable(), sourceInboundId: id, claimMarker: id, inputDigest: hash, promptDigest: hash, contractDigest: hash, contractVersion: z.literal("calenote-context-2"), status: z.enum(["PREPARED", "DISPATCHED", "RECEIVED", "REJECTED", "ACCEPTED", "UNCERTAIN"]) });
 const control = z.strictObject({ handle: id, kind: z.enum(["TOKEN", "ACTION_URL", "OPAQUE_HANDLE", "CONTROL_ID"]), ownerId: id, chatIdentityId: id, chatId: id, decisionId: id, contextRevision: revision, draftRevision: revision.nullable(), expiresAt: instant });
 
 export const ContextSnapshotV1Schema = z.strictObject({
