@@ -11,7 +11,51 @@ import { ContextSnapshotV1Schema, encodeContextSnapshot } from "../../state";
 import { contextContractEncryptionIdentity } from "../../store";
 const fixtures: Awaited<ReturnType<typeof fixture>>[] = [];
 async function setup(){ const f=await fixture();fixtures.push(f);return f; }
+async function preparedSave(){
+ const f=await setup();await addConfirmationToken(f);
+ f.snapshot.pendingDecision!.deliveryState="UNCERTAIN";f.snapshot.pendingDecision!.replyReference=null;
+ f.snapshot.previewReceipt!.deliveryState="UNCERTAIN";f.snapshot.previewReceipt!.replyReference=null;
+ const outbound=f.snapshot.transcript.at(-1)!;outbound.deliveryState="UNCERTAIN";outbound.messageRef=null;
+ return f;
+}
+const preparedReceipt={contextId:"context",contextRevision:1,draftRevision:1,outboundId:"preview",decisionId:"decision",deliveryState:"SENT",messageRef:"actual-delivery"} as const;
 afterEach(()=>{for(const f of fixtures.splice(0)) f.close();});
+it.each(["CHAT","WEB"] as const)("prepared_preview_only_confirms_on_%s_after_exact_sent_receipt",async channel=>{
+ const f=await preparedSave();expect((await f.save()).result.status).toBe("APPLIED");
+ const chatAuthority={kind:"CHAT",scope:f.scope(1)} as const;
+ const webAuthority={kind:"WEB",principal:{userId:"owner",sessionId:"session",expiresAt:now+1000000},chat:f.snapshot.scope} as const;
+ expect(await f.store.confirm(chatAuthority,f.proof)).toEqual({status:"REJECTED"});
+ expect(await f.store.confirm(webAuthority,f.proof)).toEqual({status:"REJECTED"});
+ expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+ expect(await f.store.recordDelivery(f.scope(),{...preparedReceipt,decisionId:"wrong"})).toBe("STALE");
+ expect(await f.store.recordDelivery(f.scope(),{...preparedReceipt,outboundId:"wrong"})).toBe("STALE");
+ expect(await f.store.recordDelivery(f.scope(),preparedReceipt)).toBe("RECORDED");
+ expect(await f.store.recordDelivery(f.scope(),preparedReceipt)).toBe("RECORDED");
+ expect(await f.store.observe(f.scope(1))).toMatchObject({snapshot:{contextRevision:1,draftRevision:1,draftExpiresAt:f.snapshot.draftExpiresAt,pendingDecision:{decisionId:"decision",deliveryState:"SENT"},previewReceipt:{deliveryState:"SENT"}}});
+ expect(await f.store.confirm(channel==="CHAT"?chatAuthority:webAuthority,f.proof)).toMatchObject({status:"COMMITTED",childCount:2});
+ expect(await f.store.recordDelivery(f.scope(),preparedReceipt)).toBe("STALE");
+ expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(2);
+});
+it.each(["FAILED","UNCERTAIN"] as const)("prepared_preview_%s_receipt_clears_authority_without_resurrection",async deliveryState=>{
+ const f=await preparedSave();expect((await f.save()).result.status).toBe("APPLIED");
+ const receipt={...preparedReceipt,deliveryState,messageRef:null};
+ expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("RECORDED");
+ expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("STALE");
+ expect(await f.store.recordDelivery(f.scope(),preparedReceipt)).toBe("STALE");
+ expect(await f.store.recordDelivery(f.scope(),{...preparedReceipt,decisionId:null})).toBe(deliveryState==="UNCERTAIN"?"RECORDED":"STALE");
+ expect(await f.store.observe(f.scope(1))).toMatchObject({snapshot:{pendingDecision:null,draftExpiresAt:f.snapshot.draftExpiresAt}});
+ expect(await f.store.confirm({kind:"CHAT",scope:f.scope(1)},f.proof)).toEqual({status:"REJECTED"});
+ expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
+it("prepared_preview_receipt_after_newer_transition_cannot_restore_decision",async()=>{
+ const f=await preparedSave();expect((await f.save()).result.status).toBe("APPLIED");
+ const observed=await f.store.observe(f.scope(1));if(!("observation"in observed)||!observed.snapshot)throw new Error("fixture");
+ const next={...observed.snapshot,inbound:{...observed.observation.inbound},contextRevision:2,lifecycle:"CLARIFYING",pendingDecision:null,previewReceipt:null} as const;
+ expect(await f.store.apply(f.scope(1),observed.observation,{...f.transition,expectedContextRevision:1,expectedDraftRevision:1,snapshot:next,preview:null})).toMatchObject({status:"APPLIED"});
+ expect(await f.store.recordDelivery(f.scope(),preparedReceipt)).toBe("STALE");
+ expect(await f.store.observe(f.scope(2))).toMatchObject({snapshot:{contextRevision:2,pendingDecision:null}});
+ expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
 it.each(["timestamp","rowid"] as const)("preview_issue_order_%s_rejects_admission_and_corrupt_persisted_metadata",async variant=>{
  const f=await setup();await addConfirmationToken(f);const original=structuredClone(f.snapshot.previewReceipt!);
  const order=variant==="timestamp"?{receivedAt:new Date(now+10).toISOString(),rowid:11}:{receivedAt:f.snapshot.inbound.receivedAt,rowid:2};

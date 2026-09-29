@@ -119,7 +119,16 @@ export const ContextSnapshotV1Schema = z.strictObject({
     if (["COMPLETED", "CANCELLED", "EXPIRED", "INVALID"].includes(s.lifecycle)) fail("Terminal context cannot retain approval authority");
     if (Date.parse(d.issuedAfterInbound.receivedAt) > latest || (d.issuedAfterInbound.receivedAt === s.inbound.receivedAt && d.issuedAfterInbound.rowid > s.inbound.rowid) || Date.parse(d.expiresAt) <= Date.parse(d.issuedAfterInbound.receivedAt)) fail("Invalid decision issue order/lifetime");
     if (!ownerMatches(d.target) || d.contextRevision !== s.contextRevision || d.draftRevision !== s.draftRevision || d.target.requestId !== s.requestId || Date.parse(d.expiresAt) > boundExpiry) fail("Decision binding mismatch");
-    if (d.kind === "SAVE_PREVIEW" && (!preview || d.previewId !== preview.previewId || d.deliveryState !== "SENT" || preview.deliveryState !== "SENT")) fail("Save decision needs a delivered preview");
+    if (d.kind === "SAVE_PREVIEW") {
+      const outbound = s.transcript.filter(t => t.role === "ASSISTANT").at(-1);
+      // Persist-before-send retains an inert prepared decision. Confirmation
+      // still requires SENT; only the exact delivery receipt can enable it.
+      if (!preview || d.previewId !== preview.previewId || !["SENT", "UNCERTAIN"].includes(d.deliveryState)
+        || preview.deliveryState !== d.deliveryState || !outbound || outbound.kind !== "PREVIEW"
+        || outbound.id !== preview.previewId || outbound.deliveryState !== d.deliveryState
+        || (d.deliveryState === "UNCERTAIN" && (d.replyReference !== null || preview.replyReference !== null || outbound.messageRef !== null)))
+        fail("Save decision needs a matching delivered or inert prepared preview");
+    }
     d.candidate?.sourceEvidence.forEach(checkEvidence); d.candidate?.evidenceIndex.forEach(e => e.evidence.forEach(checkEvidence));
   }
   if (new Set(s.controlRegistry.map(c => c.handle)).size !== s.controlRegistry.length) fail("Duplicate issued handle");

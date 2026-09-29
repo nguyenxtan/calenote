@@ -76,6 +76,13 @@
   closed. Migration 0009 exists locally only; no runtime activation or remote
   migration. Test file concurrency is bounded to two; no assertion/timeouts were
   weakened. T5 may proceed locally; full-route B remains UNVERIFIED.
+- T4 delivery integration correction accepted: prepared UNCERTAIN preview,
+  decision and selected outbound may persist consistently, but only actual SENT
+  receipt enables confirmation. No new fields or looser confirmation guards.
+  Focused74 and fit66 tests PASS; hash-verified isolated source full check PASS
+  (114 files/2254 tests,1 opt-in skip), all remaining gates PASS. Independent
+  scoped review Critical=0/Important=0. Unfinished untracked T5 RED files were
+  preserved outside that isolated T4 validation; T5 is not yet accepted.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,

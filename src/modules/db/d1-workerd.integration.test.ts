@@ -59,6 +59,25 @@ async function contextContractRuntime() {
 }
 
 describe("context contract transactions on real workerd", () => {
+  it.each(["CHAT","WEB"] as const)("prepared preview remains inert until actual SENT receipt, then %s may confirm",async channel=>{
+    const f=await contextContractRuntime();await addConfirmationToken(f);
+    f.snapshot.pendingDecision!.deliveryState="UNCERTAIN";f.snapshot.pendingDecision!.replyReference=null;
+    f.snapshot.previewReceipt!.deliveryState="UNCERTAIN";f.snapshot.previewReceipt!.replyReference=null;
+    const outbound=f.snapshot.transcript.at(-1)!;outbound.deliveryState="UNCERTAIN";outbound.messageRef=null;
+    expect((await f.save()).result.status).toBe("APPLIED");
+    const chatAuthority={kind:"CHAT",scope:f.scope(1)} as const;
+    const webAuthority={kind:"WEB",principal:{userId:"owner",sessionId:"session",expiresAt:contextNow+1000000},chat:f.snapshot.scope} as const;
+    expect(await f.store.confirm(chatAuthority,f.proof)).toEqual({status:"REJECTED"});
+    expect(await f.store.confirm(webAuthority,f.proof)).toEqual({status:"REJECTED"});
+    expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+    const receipt={contextId:"context",contextRevision:1,draftRevision:1,outboundId:"preview",decisionId:"decision",deliveryState:"SENT",messageRef:"actual-delivery"} as const;
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("RECORDED");
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("RECORDED");
+    expect(await f.store.confirm(channel==="CHAT"?chatAuthority:webAuthority,f.proof)).toMatchObject({status:"COMMITTED",childCount:2});
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("STALE");
+    expect(await f.db.prepare("SELECT count(*) n FROM reminder_context_details").first("n")).toBe(2);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+  },20000);
   it.each([
     {name:"earlier timestamp",receivedAt:contextNow-1,sourceRowid:1,committed:false},
     {name:"same timestamp earlier rowid",receivedAt:contextNow,sourceRowid:20,committed:false},

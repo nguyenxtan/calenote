@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { confirmationFixture } from "./confirmation-test-support";
 import { SLOT_NAMES } from "./contracts";
 import { CanonicalDetailsV1Schema, ContextObservationBindingSchema, ContextSnapshotV1Schema, decodeContextSnapshot, encodeContextSnapshot, type ContextObservation, type ContextSlots, type ContextSnapshotV1, type ControlAuthority } from "./state";
 
@@ -20,6 +21,24 @@ function snapshot() {
 const details = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung", notes: "giấy tờ", eventDate: "2026-10-11", eventTime: "08:00", calendarProvenance: { calendar: "GREGORIAN", sourceDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 11, month: 10, year: null, leapMonth: null }, provenance: { kind: "DERIVED_POLICY", policyVersion: "year-1", dependencies: ["eventDate"], referenceTime: at } }, resolutionVersion: "resolution-1" };
 
 describe("internal application state", () => {
+  it("prepared_save_decision_is_inert_and_matches_its_current_outbound",async()=>{
+    const f=await confirmationFixture(),s=f.snapshot,outbound=s.transcript.at(-1)!;
+    s.pendingDecision!.deliveryState="UNCERTAIN";s.pendingDecision!.replyReference=null;
+    s.previewReceipt!.deliveryState="UNCERTAIN";s.previewReceipt!.replyReference=null;
+    outbound.deliveryState="UNCERTAIN";outbound.messageRef=null;
+    expect(ContextSnapshotV1Schema.safeParse(s).success).toBe(true);
+    expect(decodeContextSnapshot(encodeContextSnapshot(s))).toEqual(s);
+    for(const field of ["pendingDecision","previewReceipt"] as const){
+      const mismatched=structuredClone(s);mismatched[field]!.deliveryState="SENT";
+      expect(ContextSnapshotV1Schema.safeParse(mismatched).success).toBe(false);
+    }
+    const wrongOutbound=structuredClone(s);wrongOutbound.transcript.at(-1)!.id="other-preview";
+    expect(ContextSnapshotV1Schema.safeParse(wrongOutbound).success).toBe(false);
+    const sentOutbound=structuredClone(s);sentOutbound.transcript.at(-1)!.deliveryState="SENT";
+    expect(ContextSnapshotV1Schema.safeParse(sentOutbound).success).toBe(false);
+    const failed=structuredClone(s);failed.pendingDecision!.deliveryState="FAILED";failed.previewReceipt!.deliveryState="FAILED";failed.transcript.at(-1)!.deliveryState="FAILED";
+    expect(ContextSnapshotV1Schema.safeParse(failed).success).toBe(false);
+  });
   it("observation_is_store_opaque_and_chat_web_authority_stays_separate", () => {
     expectTypeOf<ReturnType<typeof ContextObservationBindingSchema.parse>>().not.toExtend<ContextObservation>();
     expectTypeOf<ContextSlots["title"]["value"]>().toEqualTypeOf<string | null>();
