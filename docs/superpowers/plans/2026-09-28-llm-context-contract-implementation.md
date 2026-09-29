@@ -14,7 +14,7 @@
 
 **Status:** READY_FOR_OWNER_REVIEW; PLAN_OWNER_APPROVAL=PENDING; all tasks NOT_STARTED, offline feasibility and all evaluations NOT_RUN. Only this plan and spec approval metadata are authorized now.
 
-### Execution progress (2026-09-28; supersedes historical status above)
+### Execution progress (historical checkpoint 2026-09-28)
 
 - PLAN_OWNER_APPROVAL=APPROVED; approved plan reference `a2508f15b3180e7bd68beabe5cce4339c03edb78`.
 - Owner authorization `1dac4827-7d8f-4172-a2b1-8e2e91e78f03` supersedes the earlier `443a5a1f-2c25-44ee-86a8-b92f93c8eb3d` T0-only stop. Scope: T0–T10 sequential subagent implementation with independent reviews and conditional T11 pilot/full (USD0.50/USD1.00, combined USD1.50), not remote release.
@@ -22,6 +22,29 @@
 - T1–T10: NOT_STARTED, blocked by T0 prerequisite. T11 evaluation: NOT_RUN. No application inference/counting calls, remote migrations, push/merge or deployment performed.
 - Routine per-task continuation approval is not required. Technical fit/test/review gates remain mandatory. Remote inspection/mutation and exact-master-SHA deployment remain separate authorization gates.
 - Ledger: `.superpowers/sdd/2026-09-28-llm-context-contract-implementation/progress.md` (plan-specific local recovery record).
+
+### Current methodology and dependency amendment (2026-09-29)
+
+- Owner amendment `6af13f1c-4203-4fec-a724-c147d6a793ec` retains the preceding
+  checkpoint as `HISTORICAL_T0_RESULT=BLOCKED_AT_E44B9A4`. Baseline was freshly
+  verified clean on `codex/llm-context-contract-design` at `e44b9a415b87b7471085bc683d20e55c0360d9e8`.
+- T0 is now two dimensions per S §8.2.1: local engineering feasibility A and
+  provider-route/live admission B. A must pass measurements and independent
+  review before T1; B alone cannot block dormant T1–T10 work. B still blocks real
+  successor dispatch and activation. Never equate A PASS with full T0 fit.
+- Isolated pinned development-only tokenizer provisioning is authorized; no
+  runtime dependency changes, credentials, inference/counting calls or model
+  weights. Measurements run network-blocked after verified bootstrap/cache.
+- T0 local engineering A=PASS after independent acceptance (Critical=0,
+  Important=0, Minor=1); 57 focused tests, three offline Python tests and fresh
+  complete unit regression (99 files / 1,933 passed / one skipped), typecheck and
+  diff check PASS. T1–T10 are eligible and NOT_STARTED at this checkpoint.
+  Full-route token bound B remains UNVERIFIED, live dispatch BLOCKED.
+  Existing conditional
+  T11 caps/approval remain, subject to verified actual-route admission and all
+  local gates. Push/merge, remote migrations and deploy remain unauthorized.
+- No per-task owner reapproval is required. Preserve all task boundaries,
+  test-first implementation and independent review. Keep the plan ledger.
 
 ## Global constraints
 
@@ -62,7 +85,7 @@ Paths below are repository-relative. Existing paths were inspected; paths explic
 | Acceptance | `tools/benchmark/conversation-v2-probe.ts`, existing budget/ledger patterns | separate context-contract probe, manifest/scorer/runner (T10) |
 | Release | Worker capability parameters, `worker/index.ts`, reviewed config/runbooks | dormant/compatible then activated exact version, no new flag system (T11) |
 
-Dependency graph: T0 -> T1 -> T2 -> T3 -> T4 -> T5 -> T6 -> T7 -> T8 -> T9 -> T10 -> T11. This conservative order prevents competing interpretations of shared contracts. After T1, T3's pure arithmetic and T2 projection could be independently implemented; after T8, Calendar presentation and delivery tests could be split. Prefer sequential reviewed commits initially; never concurrently edit shared contracts/store/service.
+Dependency graph: T0 local engineering A -> T1 -> T2 -> T3 -> T4 -> T5 -> T6 -> T7 -> T8 -> T9 -> T10; T0 route admission B plus T10/whole-branch acceptance -> conditional T11 evaluation. This conservative order prevents competing interpretations of shared contracts. After T1, T3's pure arithmetic and T2 projection could be independently implemented; after T8, Calendar presentation and delivery tests could be split. Prefer sequential reviewed commits initially; never concurrently edit shared contracts/store/service.
 
 ### Interface ownership
 
@@ -91,6 +114,16 @@ All commands below are future commands run from the verified worktree. New-path 
 
 ### T0 — Offline feasibility before dependent implementation
 
+**Current amendment:** Apply S §8.2.1 and the 2026-09-29 owner amendment above.
+The original checklist below is historical evidence of the combined gate;
+its prohibition on provisioning and its full-framing dependency are superseded
+only as explicitly described here. Reuse the existing probe/canonical artifacts.
+Complete isolated pinned local tokenizer provenance, network-blocked measurement
+and scoped counts; investigate original 18,904-byte specimens without changing
+their required/negative classification to pass. Independently review A. Commit
+useful tooling/evidence and targeted methodology update; start T1 automatically
+only when A passes. B remains separately unresolved until established.
+
 **Purpose / dependencies:** First task after plan/execution approval; none. Prove ordinary flows fit, or stop with measured bounded amendment. Do not activate code, install a dependency or acquire credentials just to run this probe.
 
 **Create:** C `contracts.ts`, `prompt.ts`, `wire.ts`, `admission.ts` as minimal isolated contract/serialization artifacts; `tools/benchmark/context-contract-fit.test.ts`; evidence `docs/benchmarks/llm-context-contract-fit.md`. No composition imports yet. T1 promotes these same artifacts, avoiding a second mock schema.
@@ -107,7 +140,7 @@ All commands below are future commands run from the verified worktree. New-path 
 
 ### T1 — Final versioned contracts and application state
 
-**Depends:** T0 PASS. **Deliverable:** strict provider/application types without changing active legacy schemas.
+**Depends:** T0 local engineering A PASS with independent review. B may remain pending. **Deliverable:** strict provider/application types without changing active legacy schemas.
 
 **Create:** C `state.ts`, `contracts.test.ts`, `state.test.ts`, `prompt.test.ts`. **Modify:** T0 C `contracts.ts`, `prompt.ts`, `wire.ts`, `admission.ts` only as needed to finalize measured artifacts; materially changed bytes rerun T0.
 
@@ -179,7 +212,14 @@ Name the new tables `command_draft_context_details` (draft_id PK/FK), `reminder_
 
 ### T6 — Bounded successor provider gateway and observations
 
-**Depends:** T5 and T0 fit still valid. **Modify:** `src/modules/intelligence/infrastructure/openrouter/semantic-gateway.ts`, `config.ts` and their existing `.test.ts` files; `src/modules/intelligence/semantic-gateway.ts` only for categorical types needed by successor. **Create:** C `observability.ts`/`.test.ts`. **Consumes:** canonical T1 wire and T2 context, T0 token method; **produces:** T6 factory/config/events. No active composition switch.
+**Method amendment:** Consume the typed admission boundary, not local Python as
+runtime enforcement. While actual-route proof is missing, preparation for real
+dispatch must refuse. Test-only admission observations exercise injected fake
+transports only and cannot select real networking. Report
+LOCAL_IMPLEMENTATION_ACCEPTED / LIVE_ADMISSION_PENDING when appropriate; do not
+reserve the historical per-call amount from an unverified full-token premise.
+
+**Depends:** T5 and T0 local engineering A still valid; B may remain pending for local implementation only. **Modify:** `src/modules/intelligence/infrastructure/openrouter/semantic-gateway.ts`, `config.ts` and their existing `.test.ts` files; `src/modules/intelligence/semantic-gateway.ts` only for categorical types needed by successor. **Create:** C `observability.ts`/`.test.ts`. **Consumes:** canonical T1 wire and T2 context, typed route-admission boundary with measured local scope kept separate; **produces:** T6 factory/config/events. No active composition switch.
 
 - [ ] RED `context_gateway_uses_exact_prompt_schema_and_route`, `full_request_bound_checked_before_prepare_ready`, `legacy_gateway_defaults_unchanged`, `prepared_is_not_dispatched`, `no_control_or_secret_in_body`.
 - [ ] Run `pnpm exec vitest run src/modules/intelligence/infrastructure/openrouter/semantic-gateway.test.ts src/modules/intelligence/infrastructure/openrouter/config.test.ts src/modules/conversation/context-contract/observability.test.ts` with fake transport only.
@@ -316,9 +356,9 @@ Fixed initial receipt: 2026-09-28 10:00 Asia/Ho_Chi_Minh unless specified; E=202
 
 ## Gate summary, risks and execution recommendation
 
-1. **Now:** owner reviews this plan and execution method. Documentation checks alone prove neither fit nor implementation.
-2. **Local:** approved T0 measurement then accepted T1–T10, independent Critical=0/Important=0 at boundaries. Keep successor dormant and no provider calls.
-3. **Provider:** explicit bounded authorization, fresh official compatibility/prices, pilot then full, immutable provenance, all stops/caps retained. Currently NOT_RUN.
+1. **Authorization:** plan/execution method approved; targeted methodology amendment recorded above. Documentation checks alone prove neither fit nor implementation.
+2. **Local:** accepted T0 local engineering A then T1–T10, independent Critical=0/Important=0 at boundaries. Keep successor dormant; isolated fake transports only until actual-route admission is established.
+3. **Provider:** separately verified route admission B, conditional bounded owner authorization, fresh official compatibility/prices, pilot then full, immutable provenance, all stops/caps retained. Currently NOT_RUN.
 4. **Remote:** separate inspection/migration/merge permissions, compatible rollback, exact-head checks and exact-master-SHA deploy approval.
 5. **Channel:** actual Zalo/Calendar/UAT evidence after deployment, human review. Currently NOT_RUN.
 

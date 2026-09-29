@@ -1,5 +1,241 @@
 # LLM context contract: offline feasibility evidence
 
+## Current amendment evidence — 2026-09-29
+
+Baseline and unchanged HEAD for this work: `e44b9a415b87b7471085bc683d20e55c0360d9e8`.
+The owner's isolated-tooling/method amendment separates local engineering from
+provider-route admission. The historical report below remains intact; its
+BLOCKED result is not retroactively changed.
+
+```text
+HISTORICAL_T0_RESULT = BLOCKED_AT_E44B9A4
+ISOLATED_TOKENIZER = PROVISIONED
+LOCAL_TOKEN_COUNTING_SCOPE = EXACT_SUPPLIED_TEXT_AND_SDK_TEXT_PROJECTION
+T0_LOCAL_ENGINEERING_GATE = PASS
+LOCAL_CHECKS = PASS
+FULL_ROUTE_TOKEN_BOUND = UNVERIFIED
+LIVE_DISPATCH_ADMISSION = BLOCKED
+APPLICATION_LLM_CALLS = 0
+PROVIDER_COUNTING_CALLS = 0
+PRODUCTION_CHANGED = NO
+PUSH_OR_DEPLOY = NO
+```
+
+Independent acceptance on 2026-09-29 returned Critical=0, Important=0, Minor=1.
+The minor test-strength observation concerns checking the original schema string
+rather than the parsed object supplied to the SDK; inspection confirmed that the
+complete schema is supplied unchanged. It does not invalidate these measurements.
+Fresh complete unit regression: 99 files, 1,933 passed, one skipped; typecheck and
+diff check passed. Five existing Node experimental localStorage warnings were
+observed in the jsdom environment, not measurement or provider failures.
+No `T0_FIT=PASS` or full-route feasibility is claimed.
+T1/T4 must remeasure the actual complete state and implement the
+storage representation proven here; the 900-CP sample has only 185 spare bytes.
+
+### Tool provenance and counting scope
+
+Official `google-genai[local-tokenizer]==2.25.0`, SentencePiece 0.2.2 and protobuf
+7.36.2 run under isolated Python 3.12.14. All 56 installed dependencies are
+exactly pinned in `tools/benchmark/tokenizer/requirements.in`; its generated
+`requirements.txt` includes distribution SHA-256 hashes and was reinstalled
+using `uv pip sync --require-hashes --reinstall`. Lock SHA-256:
+`54f3fd178cd47f95f6c6f418697d498dc11e2816110b675df78ddfc50a63a097`.
+SDK wheel SHA-256:
+`2e8f3a5f76ed00d5ffc3153f6089bc7d3511054eed53ad9cfc6095a7dc59b028`
+from [PyPI 2.25.0 distribution metadata](https://pypi.org/pypi/google-genai/2.25.0/json).
+
+The installed official loader explicitly maps `gemini-2.5-flash-lite -> gemma3`.
+Artifact: `gemma3_cleaned_262144_v2.spiece.model`, 4,689,074 bytes, at Google
+commit `014acb7ac4563a5f77c76d7ff98f31b568c16508`; expected and actual SHA-256
+`1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c`.
+The [official pinned artifact](https://raw.githubusercontent.com/google/gemma_pytorch/014acb7ac4563a5f77c76d7ff98f31b568c16508/tokenizer/gemma3_cleaned_262144_v2.spiece.model)
+is a tokenizer, not full model weights. Installed implementation/loader SHA-256
+and all package versions are in the machine-readable evidence.
+
+Plan-owned ignored directories: `artifacts/context-contract-tokenizer/venv`,
+`cache` and `uv-cache`. No application dependency/lockfile changes.
+Bootstrap downloaded the official SDK/dependencies from PyPI/files.pythonhosted.org
+and that one Google artifact from raw.githubusercontent.com. This was authorized
+bootstrap networking, not inference or provider counting. The supported extra
+also installs Torch/Transformers for other model families; no weights or
+HuggingFace tokenizer are loaded for the selected gemma3 mapping.
+
+Measurement ran in a fresh Python subprocess under macOS
+`sandbox-exec -p '(version 1)(allow default)(deny network*)'`, covering imports
+and counting. The bridge inherits no application credentials/environment. An
+additional audit hook denies DNS/connect/sendto/bind during artifact load and
+counting, with an intentional loopback-connect refusal self-test; subsequent
+counting-phase network attempts were zero. urllib3's import-time IPv6 bind probe
+is separate and denied by the OS sandbox. The tool verifies the cached hash
+before SDK loading, creates no API client and never calls authenticated endpoints.
+
+Four distinct quantities are retained:
+
+1. Actual known application text: exact canonical prompt and exact input JSON
+   content counted separately, summed once. Prompt = 7,306 bytes / 1,663 tokens.
+   The SDK structured **text-only** call with system_instruction and user content
+   gives the same result. Roles add no local text tokens in this implementation.
+2. Raw serialized wire JSON diagnostic: the complete unchanged application JSON
+   serialization counted as one text string. Full schema alone = 18,126 bytes /
+   4,587 diagnostic text tokens. Neither diagnostic proves provider input count,
+   and neither schema diagnostic is added again to the reported text projection.
+3. Complete SDK structured projection: **UNKNOWN for every canonical specimen**.
+   Supplying the full schema unchanged to `types.Schema` raises extra_forbidden
+   for root `$schema`, root `definitions`, and `$ref` at each of the eight root
+   properties (schemaVersion, intent, dialogueAct, continuation, changes, query,
+   uncertainties, controlEvidence). No keyword is pruned or rewritten.
+4. Provider/OpenRouter transformation, endpoint strict-schema support, wrapper
+   and framing token accounting: **UNKNOWN**, never assumed zero.
+
+Inspected SDK accumulator counts text parts/system instruction and, for a
+supported Schema object, format, description, enum strings, required names,
+property names, nested properties/items and example text. Type/title/default/
+property_ordering are carried but contribute no token text. Union branches,
+refs/definitions and numeric/cardinality/additional-property constraints are
+not fully represented in this counting implementation; accepted-but-untraversed
+fields must not be mistaken for accounted overhead. It ignores generation
+options other than response_schema (max output tokens, MIME/config/HTTP fields
+do not establish token overhead). No media is present. The artifact normalizer
+is identity, add_dummy_prefix=false, remove_extra_whitespaces=false,
+escape_whitespaces=true. Application NFC normalization is distinct; retained
+original source remains unchanged.
+
+### Original 18,904-byte specimen and lossless representation
+
+The original T0 review package used `long_title_900` and `long_notes_900` as
+ordinary admitted-size examples, with empty expected rejection reasons.
+The later metadata correction changed them to rejection samples. The approved
+plan requires long fields admitted independently; this amendment therefore
+preserves their **ordinary required** classification and does not inherit that
+reclassification. Spec §4.1/§6 requires content, provenance and mapping
+preservation, but does not require storing identical source/view strings twice.
+
+The only representation change is a versioned `identity-view-v1` JSON envelope:
+inside each transcript turn, replace semanticView with viewFromSource=true
+**only when it is exactly equal to text**. Decoder recreates that key at the same
+position. Transformed NFC/control views stay separate. No value, source quote,
+fact, decision, candidate, map, identity or expiry is removed or normalized.
+All 40 samples roundtrip to byte-identical original canonical JSON. Malformed
+marker values, collisions, absent sources, object-valued views and unknown
+versions reject. This is a testable development representation boundary, not
+completed persistence. The byte gate applies to the complete encoded JSON
+**before encryption**, including envelope metadata; expanded JSON is diagnostic.
+
+Required 900-CP title/notes: 18,904 expanded -> **16,199 encoded bytes**; expected
+output **971 local text tokens**; known input text **4,864 tokens**. No contract,
+schema, content, evidence or numeric limit was changed. The original 18,904-byte
+result remains historical evidence. The max title/notes and combined independent
+maxima remain aggregate negative cases; these were already negative originally.
+
+### Updated specimen matrix
+
+Input and output schema validity is true for all first 24 specimens; all retained
+details and byte-identical decode checks pass. Current Unicode units and prompt/
+schema/input/request/framing/output bytes remain the historical table's values
+except for the explicitly named encoded snapshot bytes below. Complete numeric
+rows, per-row encoded hashes, Unicode counts, schema validity and reasons are in
+[local measurement data](llm-context-contract-local-measurements.json).
+Every row still refuses actual dispatch with TOKEN_BOUND_UNVERIFIED.
+
+| Specimen | Encoded snapshot B | Request JSON B | Known text tokens / SDK text projection | Raw JSON diagnostic tokens | Output JSON B / text tokens | Known local limitation |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| simple_create | 3874 | 26279 | 1840 | 6533 | 641 / 175 | No known byte rejection |
+| two_turn_start | 3877 | 26282 | 1839 | 6532 | 543 / 140 | No known byte rejection |
+| two_turn_complete | 6115 | 27977 | 2258 | 6995 | 339 / 94 | No known byte rejection |
+| exam_turn_1 | 3910 | 26315 | 1851 | 6544 | 896 / 244 | No known byte rejection |
+| exam_turn_2 | 7578 | 28636 | 2462 | 7204 | 626 / 157 | No known byte rejection |
+| exam_turn_3 | 10284 | 29399 | 2690 | 7444 | 340 / 95 | No known byte rejection |
+| exam_turn_4 | 11784 | 29823 | 2815 | 7579 | 348 / 98 | No known byte rejection |
+| multi_field_correction | 7610 | 28668 | 2472 | 7214 | 678 / 179 | No known byte rejection |
+| maximum_title | 27005 | 43854 | 7564 | 12294 | 5671 / 1871 | CONTEXT_SNAPSHOT_TOO_LARGE; expected output >1536 |
+| maximum_location | 9005 | 30357 | 3064 | 7794 | 1174 / 371 | No known byte rejection |
+| maximum_notes | 29405 | 45654 | 8164 | 12894 | 6271 / 2071 | CONTEXT_SNAPSHOT_TOO_LARGE; expected output >1536 |
+| long_title_900 | 16199 | 35754 | 4864 | 9594 | 2971 / 971 | No known byte rejection |
+| long_title_600 | 12599 | 33054 | 3964 | 8694 | 2071 / 671 | No known byte rejection |
+| long_notes_900 | 16199 | 35754 | 4864 | 9594 | 2971 / 971 | No known byte rejection |
+| long_notes_600 | 12599 | 33054 | 3964 | 8694 | 2071 / 671 | No known byte rejection |
+| long_combined | 57421 | 65189 | 14638 | 19382 | 12766 / 4224 | CONTEXT_SNAPSHOT_TOO_LARGE; expected output >1536 |
+| escaped_refs_1 | 3931 | 26343 | 1855 | 6551 | 405 / 109 | No known byte rejection |
+| escaped_refs_2 | 3931 | 26343 | 1855 | 6551 | 484 / 131 | No known byte rejection |
+| escaped_refs_3 | 3931 | 26343 | 1855 | 6551 | 563 / 153 | No known byte rejection |
+| four_uncertainties_candidate | 11126 | 30192 | 2832 | 7620 | 1398 / 389 | No known byte rejection |
+| six_user_six_assistant | 13871 | 30167 | 2889 | 7661 | 177 / 46 | No known byte rejection |
+| snapshot_16384 | 14978 | 31242 | 3024 | 7796 | 179 / 47 | No known byte rejection |
+| snapshot_16385 | 14979 | 31242 | 3024 | 7796 | 179 / 47 | No known byte rejection |
+| control_projection_literal | 7706 | 28613 | 2462 | 7204 | 348 / 98 | No known byte rejection |
+
+Both historical snapshot_16384/16385 rows measure the **old expanded** boundary;
+they encode smaller. New independent encoded-boundary rows below exercise the
+current representation at exactly 16,384 and 16,385. No boundary was moved.
+Raw JSON diagnostic >12,000 is not evidence of actual route overflow. For the
+combined-max specimen, actual supplied text alone is 14,638 tokens and the
+snapshot/output gates also fail. Output sizes are synthetic expected objects;
+they are not observed LLM behavior or semantic-accuracy evidence.
+
+| Additional case | Current UTF16/CP | Encoded snapshot B | Known text tokens | Raw JSON diagnostic tokens | Output text tokens | Known rejection |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| INPUT_1799_NFC | 1799/1799 | 9255 | 3632 | 8325 | N/A | No known byte rejection |
+| INPUT_1799_DECOMPOSED | 1799/1799 | 18256 | 3632 | 8325 | N/A | CONTEXT_SNAPSHOT_TOO_LARGE |
+| INPUT_1799_SUPPLEMENTARY | 1799/900 | 7453 | 2733 | 7426 | N/A | No known byte rejection |
+| INPUT_1800_NFC | 1800/1800 | 9258 | 3633 | 8326 | N/A | No known byte rejection |
+| INPUT_1800_DECOMPOSED | 1800/1800 | 18264 | 3633 | 8326 | N/A | CONTEXT_SNAPSHOT_TOO_LARGE |
+| INPUT_1800_SUPPLEMENTARY | 1800/900 | 7454 | 2733 | 7426 | N/A | No known byte rejection |
+| INPUT_1801_NFC | 1801/1801 | 9261 | 3634 | 8327 | N/A | SEMANTIC_INPUT_TOO_LONG |
+| INPUT_1801_DECOMPOSED | 1801/1801 | 18272 | 3634 | 8327 | N/A | SEMANTIC_INPUT_TOO_LONG, CONTEXT_SNAPSHOT_TOO_LARGE |
+| INPUT_1801_SUPPLEMENTARY | 1801/901 | 7457 | 2734 | 7427 | N/A | SEMANTIC_INPUT_TOO_LONG |
+| INPUT_2000_NFC | 2000/2000 | 9858 | 3833 | 8526 | N/A | SEMANTIC_INPUT_TOO_LONG |
+| INPUT_2000_DECOMPOSED | 2000/2000 | 19864 | 3833 | 8526 | N/A | SEMANTIC_INPUT_TOO_LONG, CONTEXT_SNAPSHOT_TOO_LARGE |
+| INPUT_2000_SUPPLEMENTARY | 2000/1000 | 7858 | 2833 | 7526 | N/A | SEMANTIC_INPUT_TOO_LONG |
+| encoded_snapshot_16384 | 12/12 | 16384 | 3024 | 7796 | 47 | No known byte rejection |
+| encoded_snapshot_16385 | 12/12 | 16385 | 3024 | 7796 | 47 | CONTEXT_SNAPSHOT_TOO_LARGE |
+| oversized_output | 18/18 | 3874 | 1840 | 6533 | 16170 | OUTPUT_JSON_TOO_LARGE |
+| truncated_output | 18/18 | 3874 | 1840 | 6533 | 16170 | OUTPUT_JSON_TOO_LARGE, OUTPUT_JSON_INVALID |
+
+Decomposed 1799/1800 pass their **length gate only**, as expressly stated in
+spec §8.2; unchanged original plus different NFC view can still exceed snapshot
+capacity. These boundary negatives are not reclassified ordinary flows.
+N/A output means no expected proposal is specified for that input-boundary
+specimen. The large output is strict-schema-valid; truncated output is invalid.
+Raw HTTP response 33,600 bytes still rejects at the later transport boundary
+even when extracted JSON is only 641 bytes; that unchanged distinction remains.
+
+### Refusal and limitations of proof
+
+The dormant typed `preflightEnvelopeTransition` is pure and has no model,
+persistence or canonical-mutation capability. On a 16,385-byte candidate it
+returns REFUSE / CONTEXT_SNAPSHOT_TOO_LARGE / SHORTEN_OR_RESTART plus the
+byte-identical prior valid snapshot, including all expiry fields. Truncated and
+oversized output return no partial patch and keep that prior snapshot. It never
+returns an admission while route proof is missing. This establishes the local
+preflight refusal plan, not D1 atomicity, encryption overhead, CAS, rollback or
+storage read-back. T4/T6 must integrate and test those actual boundaries.
+
+### Verification
+
+RED: two Python assertions for absent measurement scope, two codec assertions
+for absent lossless elision/malformed-reference refusal, then two transition
+assertions for missing context-overflow/output-invalid recovery. All failed for
+the intended behavior before implementation. Final focused tests: **57/57**.
+Relevant conversation regression plus probes: **12 files / 314 tests PASS**.
+Python bridge tests: **3/3 PASS under OS network denial**. Typecheck, scoped
+ESLint and diff checks are reported in the amendment implementer report.
+The optional tokenizer test is explicitly skipped unless
+CONTEXT_FIT_LOCAL_TOKENS=1; the evidence run enabled it.
+The original canonical prompt/schema/wire are unchanged.
+
+Reproduce using [tool instructions](../../tools/benchmark/tokenizer/README.md).
+Full numeric/verification output is kept locally in
+`artifacts/context-contract-tokenizer/verification.log`.
+No full repository, live, staging, production or channel acceptance is claimed.
+
+---
+
+## Historical e44b9a4 report — preserved, not current methodology
+
+Everything below records the original gate and measurements before the owner's
+method amendment. Its unresolved combined gate and no-install statements are
+historical, not descriptions of the newly provisioned tool.
+
 Date: 2026-09-28. Baseline: `a2508f15b3180e7bd68beabe5cce4339c03edb78` on
 `codex/llm-context-contract-design`, worktree `.worktrees/product-experience-v2`.
 Specification: `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md`

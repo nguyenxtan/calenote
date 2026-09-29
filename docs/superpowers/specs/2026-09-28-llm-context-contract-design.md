@@ -1,7 +1,7 @@
 # LLM-led conversation understanding with validated reminder objects
 
 Date: 2026-09-28
-Status: **WRITTEN_SPEC_APPROVED / IMPLEMENTATION_PLAN_PENDING_REVIEW**
+Historical status (2026-09-28 planning): **WRITTEN_SPEC_APPROVED / IMPLEMENTATION_PLAN_PENDING_REVIEW**
 Approval reference: owner approved the exact specification at
 `e8f9e75f436a672b23387eb0054047da217ade23` on 2026-09-28 for implementation planning only.
 Implementation plan: [LLM context contract implementation](../plans/2026-09-28-llm-context-contract-implementation.md).
@@ -19,6 +19,18 @@ This document is a proposed replacement contract, not an implementation or live
 acceptance claim. No provider calls, migration, deployment, or runtime changes
 are authorized by this document. The owner has separately authorized planning
 only; plan approval and exact-SHA deployment authorization remain separate.
+
+### Current execution and methodology authorization (2026-09-29)
+
+Owner authorization `1dac4827-7d8f-4172-a2b1-8e2e91e78f03` approved plan
+`a2508f15b3180e7bd68beabe5cce4339c03edb78`, local T0–T10 execution and a
+conditional bounded T11 campaign. Amendment
+`6af13f1c-4203-4fec-a724-c147d6a793ec` splits feasibility as specified in
+§8.2.1 and permits isolated development-only tokenizer provisioning. These
+supersede the historical planning-only statements for execution authority,
+not product semantics or numeric limits. Historical T0 at
+`e44b9a415b87b7471085bc683d20e55c0360d9e8` remains BLOCKED.
+Remote migrations, push/merge, activation and deployment remain unauthorized.
 
 ## 1. Intended outcome
 
@@ -850,7 +862,7 @@ names, ciphertext or chain-of-thought. Mark unknown usage/route as unknown, not
 zero/verified. Prepared, dispatched, response-valid and end-to-end correct are
 different counters. Provider timing does not prove visible typing animation.
 
-### 8.2 Size boundaries and deferred offline fit gate
+### 8.2 Size boundaries and offline fit gate
 
 These are distinct gates, all required; passing one never overrides another.
 Count text after NFC normalization, before control redaction, without truncation
@@ -896,6 +908,51 @@ required flows cannot fit, stop for a bounded spec amendment (compact evidence
 representation or a lower explicitly disclosed aggregate envelope), not a
 silent cap/budget increase. No tokenizer/serialization feasibility result is
 claimed here and no executable tests are changed by this task.
+
+#### 8.2.1 Owner-approved split feasibility methodology (2026-09-29)
+
+The preceding combined gate is retained as historical methodology. The owner
+explicitly replaces its dependency rule with two separately reported dimensions:
+
+**A — Local engineering feasibility.** Verify strict contracts, lossless
+serialization, Unicode/byte limits, retained-context capacity, representative
+synthetic output sizes, applicable local token counts and known prompt/schema
+content overhead, explicit aggregate refusal and independent evidence review.
+No known unresolved required ordinary-flow violation of an enforceable local
+boundary may remain. Independent maxima are still not promises of aggregate
+fit; classify each overflow against the original spec/manifest, never by the
+desired test result. Refusal preserves the prior accepted state, details and
+expiry without dispatch or mutation. Local probe proof is distinct from later
+real-store transactional proof.
+
+Provision pinned official Google local-tokenizer tooling and its hash-verified
+referenced artifact only in a plan-owned ignored virtual environment/cache.
+No runtime dependencies, global Python changes, credentials, API client,
+inference or provider counting calls. Record bootstrap downloads separately;
+warm and verify the cache, then block network during synthetic measurement.
+Report actual application text, raw serialized JSON diagnostic text and the
+SDK-supported structured counting projection separately. Inspect ignored or
+unsupported schema/config fields; never silently prune the canonical schema.
+None of these measurements alone establishes the transformed provider count.
+
+**B — Provider-route admission and live validation.** Establish actual
+OpenRouter/provider transformation, strict-schema compatibility, applicable
+framing/accounting and a defensible pre-dispatch reservation/admission method,
+then observe actual usage and application-path acceptance under authorized
+evaluation. Unknown external transformation/framing remains UNKNOWN. Local
+Python tooling is not a Worker admission implementation; runtime enforcement
+must be valid for the deployed architecture. Missing or unverified route
+admission fails closed before any real successor dispatch. Test-only admission
+observations can exercise fake transports only, never select a network path.
+
+After A and its independent review PASS, dormant T1–T10 implementation proceeds
+automatically even if B remains unresolved. B still blocks affected real network
+dispatch and release activation. Do not report `T0_FIT=PASS` for A alone; use
+`T0_LOCAL_ENGINEERING_GATE` and `FULL_ROUTE_TOKEN_BOUND` independently.
+All original limits, model/route/privacy/no-fallback policy, evaluation ceilings,
+product exclusions and release authorizations remain unchanged. T0 authorizes
+no early calibration campaign. If B remains unresolved after useful local work,
+report one consolidated specific external-method request without executing it.
 
 ## 9. Acceptance and release gates
 

@@ -2,10 +2,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { measureEnvelope } from "../../src/modules/conversation/context-contract/admission";
+import { measureEnvelope, preflightEnvelopeTransition } from "../../src/modules/conversation/context-contract/admission";
 import { ContextInputSchema, ConversationInterpretationSchema, InterpretationJsonSchema, SLOT_NAMES, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
+import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
+import { measureLocalTokens } from "./local-tokenizer";
 
 const input = ContextInputSchema.parse({
   schemaVersion: "calenote-context-input-1",
@@ -150,6 +152,64 @@ projectedSnapshot.transcript[2].sourceMap.segments = [
 add("control_projection_literal", projectedInput, proposal([change("reminderTime", clock9, 2, "Đổi sang 9h.")], { dialogueAct: "EDIT", continuation: "YES" }), [], JSON.stringify(projectedSnapshot));
 
 describe("full specimen measurements", () => {
+  it("required_900_codepoint_fields_fit_lossless_identity_view_storage", () => {
+    for (const name of ["long_title_900", "long_notes_900"]) {
+      const s = specimens.find(s => s.name === name)!;
+      expect(utf8(s.snapshot)).toBe(18904); // Historical expanded representation.
+      const encoded = encodeIdentityViews(s.snapshot);
+      expect(utf8(encoded)).toBeLessThanOrEqual(16384);
+      expect(decodeIdentityViews(encoded)).toBe(s.snapshot);
+      expect(measureEnvelope(s.input, encoded, s.output).reasons).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
+    }
+  });
+  it("all_specimens_roundtrip_without_fact_source_mapping_or_expiry_loss", () => {
+    for (const s of specimens) expect(decodeIdentityViews(encodeIdentityViews(s.snapshot))).toBe(s.snapshot);
+  });
+  it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("measures_known_text_and_full_schema_support_without_authorizing_a_route", () => {
+    const unicodeSamples = [1799, 1800, 1801, 2000].flatMap(units => ["NFC", "DECOMPOSED", "SUPPLEMENTARY"].map(variant => {
+      const raw = variant === "NFC" ? "ế".repeat(units) : variant === "DECOMPOSED" ? "e\u0302\u0301".repeat(units) : "😀".repeat(Math.floor(units / 2)) + (units % 2 ? "ế" : "");
+      const input = sampleInput([raw]);
+      const snapshot = JSON.stringify(snapshotSample(input, [raw]));
+      return { name: `INPUT_${units}_${variant}`, input, snapshot };
+    }));
+    const long = "ế".repeat(2000);
+    const oversized = JSON.stringify(proposal([{ field: "notes", operation: "SET", value: long, evidence: [quote(0, long), quote(0, long), quote(0, long)] }], { uncertainties: [{ field: "notes", reason: "AMBIGUOUS", alternatives: [{ value: long, evidence: [quote(0, long)] }, { value: long, evidence: [quote(0, long)] }] }] }));
+    const encodedBoundary = JSON.parse(encodeIdentityViews(specimens.find(s => s.name === "snapshot_16384")!.snapshot));
+    encodedBoundary.snapshot.requestId += "x".repeat(16384 - utf8(JSON.stringify(encodedBoundary)));
+    const exactEncoded = JSON.stringify(encodedBoundary);
+    encodedBoundary.snapshot.requestId += "x";
+    const samples = [...specimens, ...unicodeSamples,
+      { name: "encoded_snapshot_16384", input: boundaryInput, snapshot: decodeIdentityViews(exactEncoded), output: JSON.stringify(proposal([])) },
+      { name: "encoded_snapshot_16385", input: boundaryInput, snapshot: decodeIdentityViews(JSON.stringify(encodedBoundary)), output: JSON.stringify(proposal([])) },
+      { name: "oversized_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized },
+      { name: "truncated_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized.slice(0, -1) }];
+    const evidence = measureLocalTokens(samples);
+    expect(evidence.phase).toBe("OFFLINE_MEASUREMENT");
+    expect(evidence.provenance.networkGuardActive).toBe(true);
+    expect(evidence.provenance.networkAttemptsAfterSelfCheck).toEqual([]);
+    for (const row of evidence.rows) {
+      expect(row.applicationTextTokens).toBe(row.sdkTextProjectionTokens);
+      expect(row.sdkFullStructuredTokens).toBeNull();
+      expect(row.unsupportedSchema.length).toBeGreaterThan(0);
+      expect(row.routeFramingTokens).toBe("UNKNOWN");
+      const s = samples.find(s => s.name === row.case)!;
+      expect(decodeIdentityViews(encodeIdentityViews(s.snapshot))).toBe(s.snapshot);
+      expect(measureEnvelope(s.input, encodeIdentityViews(s.snapshot), "output" in s ? s.output : undefined).admitted).toBe(false);
+    }
+    const normal = evidence.rows.filter(row => ["simple_create", "two_turn_start", "two_turn_complete", "exam_turn_1", "exam_turn_2", "exam_turn_3", "exam_turn_4", "multi_field_correction", "long_title_900", "long_notes_900", "maximum_location"].includes(row.case));
+    expect(normal).toHaveLength(11);
+    for (const row of normal) {
+      expect(row.applicationTextTokens).toBeLessThan(12000);
+      expect(row.outputTextTokens).toBeLessThanOrEqual(1536);
+    }
+    if (process.env.CONTEXT_FIT_REPORT === "1") console.log(JSON.stringify({ localTokenEvidence: evidence, encodedSnapshotBytes: samples.map(s => {
+      const encoded = encodeIdentityViews(s.snapshot);
+      const m = measureEnvelope(s.input, encoded, "output" in s ? s.output : undefined);
+      let outputSchemaValid: boolean | null = null;
+      if ("output" in s) { try { outputSchemaValid = ConversationInterpretationSchema.safeParse(JSON.parse(s.output)).success; } catch { outputSchemaValid = false; } }
+      return { case: s.name, expanded: utf8(s.snapshot), encoded: utf8(encoded), encodedSha256: digest(encoded), inputSchemaValid: ContextInputSchema.safeParse(s.input).success, outputSchemaValid, current: m.current, bytes: m.bytes, reasons: m.reasons, lossless: decodeIdentityViews(encoded) === s.snapshot };
+    }) }));
+  });
   it("retained_snapshot_slots_include_grounded_evidence_and_resolution_metadata", () => {
     for (const s of specimens) {
       const snapshot = JSON.parse(s.snapshot);
@@ -232,6 +292,34 @@ describe("full specimen measurements", () => {
 });
 
 describe("independent admission boundaries", () => {
+  it("encoded_snapshot_boundary_and_overflow_refusal_keep_prior_state_and_expiry", () => {
+    const prior = specimens.find(s => s.name === "exam_turn_4")!;
+    const previous = encodeIdentityViews(prior.snapshot);
+    const candidate = JSON.parse(encodeIdentityViews(specimens.find(s => s.name === "snapshot_16384")!.snapshot));
+    candidate.snapshot.requestId += "x".repeat(16384 - utf8(JSON.stringify(candidate)));
+    const exact = JSON.stringify(candidate);
+    candidate.snapshot.requestId += "x";
+    const overflow = JSON.stringify(candidate);
+    expect(utf8(exact)).toBe(16384);
+    expect(utf8(overflow)).toBe(16385);
+    expect(measureEnvelope(prior.input, exact).reasons).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
+    const refusal = preflightEnvelopeTransition(previous, prior.input, overflow);
+    expect(refusal).toEqual({ action: "REFUSE", reason: "CONTEXT_SNAPSHOT_TOO_LARGE", recovery: "SHORTEN_OR_RESTART", retainedSnapshotJson: previous });
+    expect(decodeIdentityViews(refusal.retainedSnapshotJson)).toBe(prior.snapshot);
+    // A pure plan cannot call a model, perform a canonical write, extend expiry
+    // or apply a proposal. This proves preflight, not a database transaction.
+    expect(JSON.parse(decodeIdentityViews(refusal.retainedSnapshotJson)).idleExpiresAt).toBe("2026-09-28T03:30:00.000Z");
+  });
+  it("oversized_or_truncated_proposals_produce_no_partial_transition", () => {
+    const s = specimens.find(s => s.name === "exam_turn_4")!;
+    const previous = encodeIdentityViews(s.snapshot);
+    for (const [out, reason] of [[s.output.slice(0, -1), "OUTPUT_JSON_INVALID"], ['{"padding":"' + "x".repeat(32768) + '"}', "OUTPUT_JSON_TOO_LARGE"]]) {
+      const refusal = preflightEnvelopeTransition(previous, s.input, previous, out);
+      expect(refusal.reason).toBe(reason);
+      expect(refusal.retainedSnapshotJson).toBe(previous);
+      expect(Object.keys(refusal).sort()).toEqual(["action", "reason", "recovery", "retainedSnapshotJson"]);
+    }
+  });
   for (const units of [1799, 1800, 1801, 2000]) for (const variant of ["NFC", "DECOMPOSED", "SUPPLEMENTARY"]) {
     it(`INPUT_${units}_${variant}`, () => {
       const raw = variant === "NFC" ? "ế".repeat(units) : variant === "DECOMPOSED" ? "e\u0302\u0301".repeat(units) : "😀".repeat(Math.floor(units / 2)) + (units % 2 ? "ế" : "");

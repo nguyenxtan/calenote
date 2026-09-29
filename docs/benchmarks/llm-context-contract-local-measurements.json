@@ -1,0 +1,1581 @@
+{
+  "baseline": "e44b9a415b87b7471085bc683d20e55c0360d9e8",
+  "scope": "Synthetic T0 specimens; local text tokens and lossless identity-view snapshot experiment; no route or live acceptance",
+  "provenance": {
+    "sdk": "2.25.0",
+    "python": "3.12.14",
+    "model": "gemini-2.5-flash-lite",
+    "tokenizer": "gemma3",
+    "artifactUrl": "https://raw.githubusercontent.com/google/gemma_pytorch/014acb7ac4563a5f77c76d7ff98f31b568c16508/tokenizer/gemma3_cleaned_262144_v2.spiece.model",
+    "artifactSha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c",
+    "artifactBytes": 4689074,
+    "sdkSourcesSha256": {
+      "_local_tokenizer_loader.py": "eff7d8520c4656655cd42d3a7e981093fbd9cee8017db255c58df5112174df3c",
+      "local_tokenizer.py": "f7cf0985af5b1630b45e1ae151720c13976b8b832f9d482e6f885c3cc60cd1ef"
+    },
+    "normalizer": {
+      "name": "identity",
+      "addDummyPrefix": false,
+      "removeExtraWhitespaces": false,
+      "escapeWhitespaces": true
+    },
+    "packages": {
+      "shellingham": "1.5.4",
+      "numpy": "2.5.3",
+      "google-genai": "2.25.0",
+      "torchvision": "0.29.0",
+      "click": "8.5.0",
+      "packaging": "26.3",
+      "networkx": "3.7",
+      "protobuf": "7.36.2",
+      "charset-normalizer": "3.5.1",
+      "Pygments": "2.21.0",
+      "google-auth": "2.59.0",
+      "requests": "2.34.2",
+      "hf-xet": "1.6.0",
+      "rich": "15.0.0",
+      "websockets": "16.1.1",
+      "filelock": "4.0.6",
+      "pydantic_core": "2.46.5",
+      "sentencepiece": "0.2.2",
+      "torch": "2.14.0",
+      "tokenizers": "0.23.2",
+      "tenacity": "9.1.4",
+      "httpcore": "1.0.9",
+      "sympy": "1.14.0",
+      "transformers": "5.17.0",
+      "safetensors": "0.8.0",
+      "tqdm": "4.70.1",
+      "setuptools": "84.0.0",
+      "urllib3": "2.8.0",
+      "h11": "0.16.0",
+      "pydantic": "2.13.5",
+      "sniffio": "1.3.1",
+      "pycparser": "3.0",
+      "pyasn1": "0.6.4",
+      "mdurl": "0.1.2",
+      "mpmath": "1.3.0",
+      "PyYAML": "6.0.3",
+      "fsspec": "2026.9.0",
+      "cffi": "2.1.1",
+      "certifi": "2026.7.22",
+      "Jinja2": "3.1.6",
+      "annotated-types": "0.8.0",
+      "regex": "2026.9.29",
+      "markdown-it-py": "4.2.0",
+      "annotated-doc": "0.0.5",
+      "MarkupSafe": "3.0.3",
+      "cryptography": "50.0.1",
+      "typing-inspection": "0.4.4",
+      "distro": "1.9.0",
+      "httpx": "0.28.1",
+      "typing_extensions": "4.16.0",
+      "pyasn1_modules": "0.4.2",
+      "typer": "0.27.2",
+      "pillow": "12.3.0",
+      "anyio": "4.15.1",
+      "huggingface_hub": "1.33.0",
+      "idna": "3.20"
+    },
+    "networkGuardActive": true,
+    "networkAttemptsAfterSelfCheck": []
+  },
+  "canonicalSchemaSha256": "f18296b585a346dab57ec7a8f3dd8681d565784c29e8cd8b94348be17a6b3db2",
+  "unsupportedFullSchema": [
+    {
+      "path": [
+        "properties",
+        "schemaVersion",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "intent",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "dialogueAct",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "continuation",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "changes",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "query",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "uncertainties",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "properties",
+        "controlEvidence",
+        "$ref"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "$schema"
+      ],
+      "type": "extra_forbidden"
+    },
+    {
+      "path": [
+        "definitions"
+      ],
+      "type": "extra_forbidden"
+    }
+  ],
+  "rows": [
+    {
+      "case": "simple_create",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 177,
+      "applicationTextTokens": 1840,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6533,
+      "sdkTextProjectionTokens": 1840,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 175,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3851,
+      "encoded": 3874,
+      "encodedSha256": "c36f5c04ecd60d2f99ceb9ddb40d32668fbfcb890556423c1d649b826137f09a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 535,
+        "request": 26279,
+        "framing": 312,
+        "output": 641
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "two_turn_start",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 176,
+      "applicationTextTokens": 1839,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6532,
+      "sdkTextProjectionTokens": 1839,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 140,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3857,
+      "encoded": 3877,
+      "encodedSha256": "b1cfd54a7e09fad3b6c3cfe6ca7f1b50a53f0f1b073dca6efc13e182e71615e5",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "bytes": {
+        "snapshot": 3877,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 538,
+        "request": 26282,
+        "framing": 312,
+        "output": 543
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "two_turn_complete",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 595,
+      "applicationTextTokens": 2258,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6995,
+      "sdkTextProjectionTokens": 2258,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 94,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 6135,
+      "encoded": 6115,
+      "encodedSha256": "8f85e71880532d4ac6271af398e6c25c2f07060043608127fef932c0c30e6838",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 2,
+        "codePoints": 2
+      },
+      "bytes": {
+        "snapshot": 6115,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 1991,
+        "request": 27977,
+        "framing": 554,
+        "output": 339
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "exam_turn_1",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 188,
+      "applicationTextTokens": 1851,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6544,
+      "sdkTextProjectionTokens": 1851,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 244,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3923,
+      "encoded": 3910,
+      "encodedSha256": "83213c1ae09416b21ffde6290d5cf22cf4bc7bce50c78e0581d602e1cc0e21ac",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 50,
+        "codePoints": 50
+      },
+      "bytes": {
+        "snapshot": 3910,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 571,
+        "request": 26315,
+        "framing": 312,
+        "output": 896
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "exam_turn_2",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 799,
+      "applicationTextTokens": 2462,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7204,
+      "sdkTextProjectionTokens": 2462,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 157,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 7677,
+      "encoded": 7578,
+      "encodedSha256": "c73aab07af1fffa5582b0bf422970c06efcba4997956f91125a080c044ede388",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 38,
+        "codePoints": 38
+      },
+      "bytes": {
+        "snapshot": 7578,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 2566,
+        "request": 28636,
+        "framing": 638,
+        "output": 626
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "exam_turn_3",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1027,
+      "applicationTextTokens": 2690,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7444,
+      "sdkTextProjectionTokens": 2690,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 95,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 10424,
+      "encoded": 10284,
+      "encodedSha256": "bc6b34944228406b183bd536033a03f8e30d436eaf21fbe3f20ea226efb4c8f1",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 3,
+        "codePoints": 3
+      },
+      "bytes": {
+        "snapshot": 10284,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 3221,
+        "request": 29399,
+        "framing": 746,
+        "output": 340
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "exam_turn_4",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1152,
+      "applicationTextTokens": 2815,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7579,
+      "sdkTextProjectionTokens": 2815,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 98,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11977,
+      "encoded": 11784,
+      "encodedSha256": "53391f2e5a1ba267c21312e3e2eb1da71eacb8d40ce7d30c947e54c6a7cc95f6",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 11784,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 3585,
+        "request": 29823,
+        "framing": 806,
+        "output": 348
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "multi_field_correction",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 809,
+      "applicationTextTokens": 2472,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7214,
+      "sdkTextProjectionTokens": 2472,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 179,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 7741,
+      "encoded": 7610,
+      "encodedSha256": "c36fbc0b514ce715c586a2987f160465f61b4b40d6c72c8d62d90c32a4a54ead",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 62,
+        "codePoints": 62
+      },
+      "bytes": {
+        "snapshot": 7610,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 2598,
+        "request": 28668,
+        "framing": 638,
+        "output": 678
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "maximum_title",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 5901,
+      "applicationTextTokens": 7564,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 12294,
+      "sdkTextProjectionTokens": 7564,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 1871,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 32410,
+      "encoded": 27005,
+      "encodedSha256": "3c39ddf704d9df9c290b7f8f4488ad77a7211ef6297c5c3c4a1ffeb6cc0621f5",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 27005,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 17908,
+        "request": 43854,
+        "framing": 514,
+        "output": 5671
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "maximum_location",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1401,
+      "applicationTextTokens": 3064,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7794,
+      "sdkTextProjectionTokens": 3064,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 371,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 9910,
+      "encoded": 9005,
+      "encodedSha256": "d3fa59a2661daf62a342cf056c0ab7a5775dc596e7efeb82c5b8884b532eadbc",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 9005,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4411,
+        "request": 30357,
+        "framing": 514,
+        "output": 1174
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "maximum_notes",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 6501,
+      "applicationTextTokens": 8164,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 12894,
+      "sdkTextProjectionTokens": 8164,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 2071,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 35410,
+      "encoded": 29405,
+      "encodedSha256": "526d1edadb31320307fef50f8304c88e02f1ed156fa6db903b35ba5197cf3a6f",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 29405,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 19708,
+        "request": 45654,
+        "framing": 514,
+        "output": 6271
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "long_title_900",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 3201,
+      "applicationTextTokens": 4864,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 9594,
+      "sdkTextProjectionTokens": 4864,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 971,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 18904,
+      "encoded": 16199,
+      "encodedSha256": "df0997f00de070bcbc9950991788a80ba48a662f35af72d76b6c882922b7cb72",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 16199,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 9808,
+        "request": 35754,
+        "framing": 514,
+        "output": 2971
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "long_title_600",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 2301,
+      "applicationTextTokens": 3964,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8694,
+      "sdkTextProjectionTokens": 3964,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 671,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14404,
+      "encoded": 12599,
+      "encodedSha256": "c6f740b6ad0c31d825d54f16e1cc53fd6ac868309a4cc4fffc2de1629c48a0e6",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 12599,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 7108,
+        "request": 33054,
+        "framing": 514,
+        "output": 2071
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "long_notes_900",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 3201,
+      "applicationTextTokens": 4864,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 9594,
+      "sdkTextProjectionTokens": 4864,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 971,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 18904,
+      "encoded": 16199,
+      "encodedSha256": "f1818b7707a3f8d89bf65fd7bbc322bc1f5441db77ebee031c857f48927f3ceb",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 16199,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 9808,
+        "request": 35754,
+        "framing": 514,
+        "output": 2971
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "long_notes_600",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 2301,
+      "applicationTextTokens": 3964,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8694,
+      "sdkTextProjectionTokens": 3964,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 671,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14404,
+      "encoded": 12599,
+      "encodedSha256": "21e1f2838b0e5c83d8ecf39411a02b4e692db5037beb3b63c5789d6baae40d30",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 12599,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 7108,
+        "request": 33054,
+        "framing": 514,
+        "output": 2071
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "long_combined",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 12975,
+      "applicationTextTokens": 14638,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 19382,
+      "sdkTextProjectionTokens": 14638,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 4224,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 69802,
+      "encoded": 57421,
+      "encodedSha256": "9ea873c5732f788d9b7828a411b147414e1eccfd92df65eb83740df3f50c3aa0",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 11,
+        "codePoints": 11
+      },
+      "bytes": {
+        "snapshot": 57421,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 39147,
+        "request": 65189,
+        "framing": 610,
+        "output": 12766
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "escaped_refs_1",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 192,
+      "applicationTextTokens": 1855,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6551,
+      "sdkTextProjectionTokens": 1855,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 109,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3965,
+      "encoded": 3931,
+      "encodedSha256": "5021f9cf56979b1d6bcd0e108931aec6be913b1f4fa670d16e77758d23053d40",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 592,
+        "request": 26343,
+        "framing": 319,
+        "output": 405
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "escaped_refs_2",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 192,
+      "applicationTextTokens": 1855,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6551,
+      "sdkTextProjectionTokens": 1855,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 131,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3965,
+      "encoded": 3931,
+      "encodedSha256": "5021f9cf56979b1d6bcd0e108931aec6be913b1f4fa670d16e77758d23053d40",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 592,
+        "request": 26343,
+        "framing": 319,
+        "output": 484
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "escaped_refs_3",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 192,
+      "applicationTextTokens": 1855,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6551,
+      "sdkTextProjectionTokens": 1855,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 153,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3965,
+      "encoded": 3931,
+      "encodedSha256": "5021f9cf56979b1d6bcd0e108931aec6be913b1f4fa670d16e77758d23053d40",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 56,
+        "codePoints": 56
+      },
+      "bytes": {
+        "snapshot": 3931,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 592,
+        "request": 26343,
+        "framing": 319,
+        "output": 563
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "four_uncertainties_candidate",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1169,
+      "applicationTextTokens": 2832,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7620,
+      "sdkTextProjectionTokens": 2832,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 389,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11260,
+      "encoded": 11126,
+      "encodedSha256": "896336a34b7ea924cdb893e2304c398b875715a80819418876964d0d12525a0b",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "bytes": {
+        "snapshot": 11126,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 3886,
+        "request": 30192,
+        "framing": 874,
+        "output": 1398
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "six_user_six_assistant",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1226,
+      "applicationTextTokens": 2889,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7661,
+      "sdkTextProjectionTokens": 2889,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 46,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14202,
+      "encoded": 13871,
+      "encodedSha256": "f1771ff4e5c05e12495dff3b7665991c58ee53ea30fe4b3ebaf62c8b99492c85",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 13871,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 3889,
+        "request": 30167,
+        "framing": 846,
+        "output": 177
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "snapshot_16384",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1361,
+      "applicationTextTokens": 3024,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7796,
+      "sdkTextProjectionTokens": 3024,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 47,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 16384,
+      "encoded": 14978,
+      "encodedSha256": "6ef82d1652aee26fdf9676c485207b6d3603b2fbe999b12ffa4fc9f4cf0888cf",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 14978,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4964,
+        "request": 31242,
+        "framing": 846,
+        "output": 179
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "snapshot_16385",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1361,
+      "applicationTextTokens": 3024,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7796,
+      "sdkTextProjectionTokens": 3024,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 47,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 16385,
+      "encoded": 14979,
+      "encodedSha256": "93088e88625ba91f3b3a87a84b31604dd75cb379f7c0b4fbe99e4a126462a0ba",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 14979,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4964,
+        "request": 31242,
+        "framing": 846,
+        "output": 179
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "control_projection_literal",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 799,
+      "applicationTextTokens": 2462,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7204,
+      "sdkTextProjectionTokens": 2462,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 98,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 7761,
+      "encoded": 7706,
+      "encodedSha256": "8b0afa699102d8cec998a2be612a86bcf57ac95449c23cb945b577428ee8e9f9",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 22,
+        "codePoints": 22
+      },
+      "bytes": {
+        "snapshot": 7706,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 2543,
+        "request": 28613,
+        "framing": 638,
+        "output": 348
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1799_NFC",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1969,
+      "applicationTextTokens": 3632,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8325,
+      "sdkTextProjectionTokens": 3632,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14605,
+      "encoded": 9255,
+      "encodedSha256": "7be2fb32b471a2571e568cee059214ab6d1c6f19ab582cbf5ee98bb854fe5e12",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 1799
+      },
+      "bytes": {
+        "snapshot": 9255,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5908,
+        "request": 31652,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1799_DECOMPOSED",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1969,
+      "applicationTextTokens": 3632,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8325,
+      "sdkTextProjectionTokens": 3632,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 18213,
+      "encoded": 18256,
+      "encodedSha256": "1d92c44374a918d91b1dbfe6c0cf71feb1d548381fc00bfc1f0f596be51c0d5a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 1799
+      },
+      "bytes": {
+        "snapshot": 18256,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5908,
+        "request": 31652,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1799_SUPPLEMENTARY",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1070,
+      "applicationTextTokens": 2733,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7426,
+      "sdkTextProjectionTokens": 2733,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11005,
+      "encoded": 7453,
+      "encodedSha256": "1e49d75c1c39f7dafebe67ba5ab9c72d0c969ffd85f29af57edcabc190b6520d",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1799,
+        "codePoints": 900
+      },
+      "bytes": {
+        "snapshot": 7453,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4110,
+        "request": 29854,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1800_NFC",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1970,
+      "applicationTextTokens": 3633,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8326,
+      "sdkTextProjectionTokens": 3633,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14611,
+      "encoded": 9258,
+      "encodedSha256": "628cefc71b3df8e50a9381b305301a61678951e7e9fdb7781655f8c43ea81305",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 1800
+      },
+      "bytes": {
+        "snapshot": 9258,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5911,
+        "request": 31655,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1800_DECOMPOSED",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1970,
+      "applicationTextTokens": 3633,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8326,
+      "sdkTextProjectionTokens": 3633,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 18221,
+      "encoded": 18264,
+      "encodedSha256": "b561b602dceb6a647b7b4137b63a18302ca934ae2821252d97ff4b9b9b225aff",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 1800
+      },
+      "bytes": {
+        "snapshot": 18264,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5911,
+        "request": 31655,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1800_SUPPLEMENTARY",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1070,
+      "applicationTextTokens": 2733,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7426,
+      "sdkTextProjectionTokens": 2733,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11007,
+      "encoded": 7454,
+      "encodedSha256": "a5e3bd1416f7ce0e789c2a14bffd608e928fdbd6dbbdc013bf57df9d99fe4472",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1800,
+        "codePoints": 900
+      },
+      "bytes": {
+        "snapshot": 7454,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4111,
+        "request": 29855,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1801_NFC",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1971,
+      "applicationTextTokens": 3634,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8327,
+      "sdkTextProjectionTokens": 3634,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 14617,
+      "encoded": 9261,
+      "encodedSha256": "679e0d5d3e7f1b7c21db8a9ac61e1318ee1c9716e718ae587f05f760db602c1a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 1801
+      },
+      "bytes": {
+        "snapshot": 9261,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5914,
+        "request": 31658,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1801_DECOMPOSED",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1971,
+      "applicationTextTokens": 3634,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8327,
+      "sdkTextProjectionTokens": 3634,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 18229,
+      "encoded": 18272,
+      "encodedSha256": "c9c19ddf6e90b332cffe89131b78ac72a44b665ce0005643df3035fc356623fb",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 1801
+      },
+      "bytes": {
+        "snapshot": 18272,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 5914,
+        "request": 31658,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_1801_SUPPLEMENTARY",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1071,
+      "applicationTextTokens": 2734,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7427,
+      "sdkTextProjectionTokens": 2734,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11013,
+      "encoded": 7457,
+      "encodedSha256": "a66f0f1efd283bfe10ca57bac683f48a13cd50a90733a5422b895b52dd4f8e51",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 1801,
+        "codePoints": 901
+      },
+      "bytes": {
+        "snapshot": 7457,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4114,
+        "request": 29858,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_2000_NFC",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 2170,
+      "applicationTextTokens": 3833,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8526,
+      "sdkTextProjectionTokens": 3833,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 15811,
+      "encoded": 9858,
+      "encodedSha256": "3b0209865db3b92c3d2e7235b8225da9f694b70a204fdfb5f40b0622973fd88f",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 2000
+      },
+      "bytes": {
+        "snapshot": 9858,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 6511,
+        "request": 32255,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_2000_DECOMPOSED",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 2170,
+      "applicationTextTokens": 3833,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 8526,
+      "sdkTextProjectionTokens": 3833,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 19821,
+      "encoded": 19864,
+      "encodedSha256": "b041324c803f56c7b5dacaaae59abc204f1b40e28382389d3d77bbb28d1ba774",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 2000
+      },
+      "bytes": {
+        "snapshot": 19864,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 6511,
+        "request": 32255,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "INPUT_2000_SUPPLEMENTARY",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1170,
+      "applicationTextTokens": 2833,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7526,
+      "sdkTextProjectionTokens": 2833,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": null,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 11811,
+      "encoded": 7858,
+      "encodedSha256": "66077ed3a059a31b59ea3d1b1f609c2fefeeee45214b35e04aafaf2571767418",
+      "inputSchemaValid": true,
+      "outputSchemaValid": null,
+      "current": {
+        "utf16Units": 2000,
+        "codePoints": 1000
+      },
+      "bytes": {
+        "snapshot": 7858,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4511,
+        "request": 30255,
+        "framing": 312,
+        "output": null
+      },
+      "reasons": [
+        "SEMANTIC_INPUT_TOO_LONG",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "encoded_snapshot_16384",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1361,
+      "applicationTextTokens": 3024,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7796,
+      "sdkTextProjectionTokens": 3024,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 47,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 17790,
+      "encoded": 16384,
+      "encodedSha256": "0b12bfaa14335f7127eee365faffa2e05ec21c22fc8d83380d9daadd7b75ff9a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 16384,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4964,
+        "request": 31242,
+        "framing": 846,
+        "output": 179
+      },
+      "reasons": [
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "encoded_snapshot_16385",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 1361,
+      "applicationTextTokens": 3024,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 7796,
+      "sdkTextProjectionTokens": 3024,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 47,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 17791,
+      "encoded": 16385,
+      "encodedSha256": "3ed5b95a3ae82b30629ec32482feb611845c19268d785540384f91d0cb269f39",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 12,
+        "codePoints": 12
+      },
+      "bytes": {
+        "snapshot": 16385,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 4964,
+        "request": 31242,
+        "framing": 846,
+        "output": 179
+      },
+      "reasons": [
+        "CONTEXT_SNAPSHOT_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "oversized_output",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 177,
+      "applicationTextTokens": 1840,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6533,
+      "sdkTextProjectionTokens": 1840,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 16170,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3851,
+      "encoded": 3874,
+      "encodedSha256": "c36f5c04ecd60d2f99ceb9ddb40d32668fbfcb890556423c1d649b826137f09a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": true,
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 535,
+        "request": 26279,
+        "framing": 312,
+        "output": 48630
+      },
+      "reasons": [
+        "OUTPUT_JSON_TOO_LARGE",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    },
+    {
+      "case": "truncated_output",
+      "promptTokens": 1663,
+      "inputJsonTextTokens": 177,
+      "applicationTextTokens": 1840,
+      "rawSchemaDiagnosticTokens": 4587,
+      "rawJsonDiagnosticTokens": 6533,
+      "sdkTextProjectionTokens": 1840,
+      "sdkFullStructuredTokens": null,
+      "outputTextTokens": 16170,
+      "routeFramingTokens": "UNKNOWN",
+      "expanded": 3851,
+      "encoded": 3874,
+      "encodedSha256": "c36f5c04ecd60d2f99ceb9ddb40d32668fbfcb890556423c1d649b826137f09a",
+      "inputSchemaValid": true,
+      "outputSchemaValid": false,
+      "current": {
+        "utf16Units": 18,
+        "codePoints": 18
+      },
+      "bytes": {
+        "snapshot": 3874,
+        "prompt": 7306,
+        "schema": 18126,
+        "input": 535,
+        "request": 26279,
+        "framing": 312,
+        "output": 48629
+      },
+      "reasons": [
+        "OUTPUT_JSON_TOO_LARGE",
+        "OUTPUT_JSON_INVALID",
+        "TOKEN_BOUND_UNVERIFIED"
+      ],
+      "lossless": true,
+      "schemaUnchanged": true
+    }
+  ]
+}

@@ -14,6 +14,22 @@ export interface EnvelopeMeasurement {
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 const counts = (text: string) => { const nfc = text.normalize("NFC"); return { utf16Units: nfc.length, codePoints: [...nfc].length }; };
 
+export interface RefusedEnvelopeTransition {
+  action: "REFUSE";
+  reason: string;
+  recovery: "SHORTEN_OR_RESTART" | "REPHRASE" | "ADMISSION_UNAVAILABLE";
+  retainedSnapshotJson: string;
+}
+/** Pure preflight plan; no storage/transport capability. Actual CAS and recovery
+ * remain later integration work. Missing route proof always refuses dispatch. */
+export function preflightEnvelopeTransition(previousSnapshotJson: string, input: ContextInput, candidateSnapshotJson: string, outputJson?: string): RefusedEnvelopeTransition {
+  const measurement = measureEnvelope(input, candidateSnapshotJson, outputJson);
+  const reason = measurement.reasons[0] ?? "TOKEN_BOUND_UNVERIFIED";
+  const recovery = reason === "TOKEN_BOUND_UNVERIFIED" ? "ADMISSION_UNAVAILABLE"
+    : reason.endsWith("TOO_LARGE") || reason.endsWith("TOO_LONG") || reason === "CONTEXT_TURN_COUNT_EXCEEDED" ? "SHORTEN_OR_RESTART" : "REPHRASE";
+  return { action: "REFUSE", reason, recovery, retainedSnapshotJson: previousSnapshotJson };
+}
+
 /** Offline only. snapshotJson is the full pre-encryption source snapshot, not a
  * model summary. outputJson is extracted model JSON, NOT raw provider HTTP body.
  * Transport bytes/finish reason require future gateway checks. Without proof of
