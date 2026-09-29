@@ -8,6 +8,7 @@ import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
 import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
 import { measureLocalTokens } from "./local-tokenizer";
+import { ContextSnapshotV1Schema, decodeContextSnapshot, encodeContextSnapshot } from "../../src/modules/conversation/context-contract/state";
 
 const input = ContextInputSchema.parse({
   schemaVersion: "calenote-context-input-1",
@@ -152,6 +153,41 @@ projectedSnapshot.transcript[2].sourceMap.segments = [
 add("control_projection_literal", projectedInput, proposal([change("reminderTime", clock9, 2, "Đổi sang 9h.")], { dialogueAct: "EDIT", continuation: "YES" }), [], JSON.stringify(projectedSnapshot));
 
 describe("full specimen measurements", () => {
+  it("finalized_application_state_is_strict_lossless_and_ordinary_flows_fit", () => {
+    // Keep the original T0 byte specimens and classifications above as history.
+    // T1 measurement adds every finalized mandatory binding to those same data;
+    // this strict runtime schema, not a benchmark state type, is the authority.
+    const rows = specimens.map(s => {
+      const legacy = JSON.parse(s.snapshot);
+      const fullScope = { ...legacy.scope, chatIdentityId: "synthetic-chat-identity" };
+      const oldCandidate = legacy.pendingDecision.candidate;
+      const sourceEvidence = (turnId: string, quote: string, sourceSpan: { start: number; end: number }, viewSpan = sourceSpan) => ({ kind: "USER_QUOTE", sourceTurnId: turnId, sourceMapTurnId: turnId, quote, occurrence: 1, sourceSpan, viewSpan, normalizationVersion: "nfc-codepoint-v1" });
+      const candidate = oldCandidate ? {
+        proposalId: "synthetic-proposal", proposalRevision: 1, proposal: oldCandidate.proposal,
+        sourceEvidence: [sourceEvidence(oldCandidate.sourceTurnId, oldCandidate.sourceText, oldCandidate.sourceSpan)],
+        evidenceIndex: oldCandidate.evidenceIndex.map((e: { field: string; sourceTurnId: string; sourceSpan: { start: number; end: number }; viewSpan: { start: number; end: number } }) => ({ field: e.field, evidence: [sourceEvidence(e.sourceTurnId, [...oldCandidate.sourceText].slice(e.viewSpan.start, e.viewSpan.end).join(""), e.sourceSpan, e.viewSpan)] })),
+        createdAt: at, expiresAt: legacy.draftExpiresAt,
+      } : null;
+      const logical = ContextSnapshotV1Schema.parse({ ...legacy,
+        id: "synthetic-context", scope: fullScope, draftCreatedAt: at, lastTerminalOutcome: null,
+        pendingReminderQuestion: legacy.pendingReminderQuestion ? { ...legacy.pendingReminderQuestion, questionId: "synthetic-question", noProgressCount: 0, deliveryState: "SENT", issuedAfterOrder: { receivedAt: at, rowid: 7 } } : null,
+        transcript: legacy.transcript.map((t: object) => ({ ...t, messageRef: "synthetic-message", controlSpans: [] })),
+        pendingDecision: { ...legacy.pendingDecision, decisionId: "synthetic-decision", kind: candidate ? "REPLACE_PENDING" : "RESUME_PENDING", target: { ...legacy.pendingDecision.target, requestId: legacy.requestId, chatIdentityId: fullScope.chatIdentityId, proposalId: candidate?.proposalId ?? null }, replyReference: null, tokenHandle: "CN-SYNTHETIC-TOKEN", candidate },
+        previewReceipt: { ...legacy.previewReceipt, requestId: legacy.requestId, chatIdentityId: fullScope.chatIdentityId, channel: "ZALO", replyReference: "synthetic-preview-message" },
+        controlRegistry: legacy.controlRegistry.map((c: object) => ({ ...c, kind: "TOKEN", chatIdentityId: fullScope.chatIdentityId, contextRevision: 4, draftRevision: 3 })),
+        modelAttemptBinding: { ...legacy.modelAttemptBinding, attemptId: "synthetic-attempt", observationId: "synthetic-observation", claimMarker: "synthetic-claim", inputDigest: "b".repeat(64), promptDigest: "c".repeat(64), contractDigest: "d".repeat(64), contractVersion: "calenote-context-1", status: "ACCEPTED" },
+      });
+      const encoded = encodeContextSnapshot(logical);
+      const measurement = measureEnvelope(s.input, encoded, s.output);
+      if (utf8(encoded) <= 16384) expect(decodeContextSnapshot(encoded), s.name).toEqual(logical);
+      else expect(() => decodeContextSnapshot(encoded)).toThrow("storage limit");
+      expect(measurement.admitted).toBe(false);
+      // Historical size negatives may now fit; do not manufacture failures.
+      if (!["maximum_title", "maximum_notes", "long_combined", "snapshot_16384", "snapshot_16385"].includes(s.name)) expect(measurement.reasons, s.name).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
+      return { case: s.name, historicalExpanded: utf8(s.snapshot), finalizedExpanded: utf8(JSON.stringify(logical)), finalizedEncoded: utf8(encoded), reasons: measurement.reasons, sha256: digest(encoded) };
+    });
+    if (process.env.CONTEXT_FIT_REPORT === "1") console.log(JSON.stringify({ finalizedStateMeasurements: rows }));
+  });
   it("required_900_codepoint_fields_fit_lossless_identity_view_storage", () => {
     for (const name of ["long_title_900", "long_notes_900"]) {
       const s = specimens.find(s => s.name === name)!;

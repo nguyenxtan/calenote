@@ -23,7 +23,7 @@ export const EvidenceRefSchema = z.discriminatedUnion("kind", [
 ]);
 export type EvidenceRef = z.infer<typeof EvidenceRefSchema>;
 const evidence = z.array(EvidenceRefSchema).min(1).max(3);
-const values = {
+export const SlotValueSchemas = {
   title: text1800, location: nfcText(300), notes: text2000,
   eventDate: DateOperandSchema, eventTime: ClockOperandSchema,
   reminderDate: DateOperandSchema, reminderTime: ClockOperandSchema,
@@ -31,6 +31,7 @@ const values = {
   occurrenceCount: positive, eventRelation: z.enum(["BEFORE_EVENT", "INCLUDING_EVENT", "STARTING_ON"]),
   leadOffsetDays: positive, endDate: DateOperandSchema,
 };
+const values = SlotValueSchemas;
 // The generic helper preserves the field/value association in inferred TS types.
 function setBranch<K extends keyof typeof values>(field: K) {
   return z.strictObject({ field: z.literal(field), operation: z.literal("SET"), value: values[field], evidence });
@@ -57,9 +58,10 @@ export const DialogueActSchema = z.enum(["NEW_REQUEST", "CONTINUE", "EDIT", "ABA
 export const IssueFieldSchema = z.enum([...SLOT_NAMES, "intent", "queryRange", "operation"]);
 const reason = z.enum(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]);
 // Typed possible values with grounding; never free-form model prose.
-const alternative = (value: z.ZodType) => z.strictObject({ value, evidence });
+const alternative = <T extends z.ZodType>(value: T) => z.strictObject({ value, evidence });
+function slotUncertainty<K extends keyof typeof values>(field: K) { return z.strictObject({ field: z.literal(field), reason, alternatives: z.array(z.strictObject({ value: values[field], evidence })).max(2) }); }
 export const UncertaintySchema = z.union([
-  ...SLOT_NAMES.map(field => z.strictObject({ field: z.literal(field), reason, alternatives: z.array(alternative(values[field])).max(2) })),
+  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"),
   z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
   z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
   z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(DialogueActSchema)).max(2) }),
@@ -76,7 +78,8 @@ export const ConversationInterpretationSchema = z.strictObject({
   if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("Query/intent ownership mismatch");
   if ((["HELP", "UNSUPPORTED"].includes(v.intent) || v.dialogueAct === "ABANDON_PENDING") && v.changes.length) fail("Non-mutating proposal cannot carry changes");
   if (v.changes.some(c => c.operation === "CLEAR" && !c.evidence.some(e => e.kind === "USER_QUOTE"))) fail("CLEAR requires user evidence");
-  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && v.uncertainties.length === 0) fail("Unresolved query requires targeted uncertainty");
+  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
+  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || !v.controlEvidence.some(e => e.kind === "USER_QUOTE"))) fail("Combined actions must be ambiguous and grounded without executable changes");
 });
 export type ConversationInterpretation = z.infer<typeof ConversationInterpretationSchema>;
 const factAlias = z.string().regex(/^f[1-9][0-9]*$/u).max(16);
@@ -84,8 +87,20 @@ const provenance = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("EXPLICIT_USER") }),
   z.strictObject({ kind: z.literal("DERIVED_POLICY"), policyVersion: nfcText(128), dependencies: z.array(factAlias).max(13), referenceTime: z.iso.datetime() }),
 ]);
-const factValue = z.union([...Object.values(values), QueryOperandSchema]);
-const slot = (value: z.ZodType) => z.strictObject({ state: z.enum(["MISSING", "PROPOSED", "RESOLVED", "CONFLICT"]), value: value.nullable(), fact: factAlias.nullable() });
+/** Same field/scope discriminants in semantic input and encrypted state. Extra
+ * metadata belongs only to the internal instance; it never enters the wire. */
+export function contextFactSchema<M extends z.ZodRawShape>(metadata: M) {
+  const common = { alias: factAlias, provenance, sourceReferenceTime: z.iso.datetime(), dependencies: z.array(factAlias).max(13), ...metadata };
+  const reminder = <K extends keyof typeof values>(field: K) => z.strictObject({ ...common, scope: z.literal("REMINDER"), field: z.literal(field), value: values[field] });
+  return z.union([
+    reminder("title"), reminder("location"), reminder("notes"), reminder("eventDate"), reminder("eventTime"), reminder("reminderDate"), reminder("reminderTime"), reminder("calendar"), reminder("frequency"), reminder("occurrenceCount"), reminder("eventRelation"), reminder("leadOffsetDays"), reminder("endDate"),
+    z.strictObject({ ...common, scope: z.literal("QUERY"), field: z.literal("queryRange"), value: QueryOperandSchema }),
+  ]);
+}
+const slot = <T extends z.ZodType>(value: T) => z.strictObject({ state: z.enum(["MISSING", "PROPOSED", "RESOLVED", "CONFLICT"]), value: value.nullable(), fact: factAlias.nullable() }).refine(s => {
+  const v = "value" in s ? s.value : undefined;
+  return s.state === "MISSING" ? v === null && s.fact === null : s.state !== "RESOLVED" || (v !== null && s.fact !== null);
+}, "Slot state/value/fact mismatch");
 export const ContextInputSchema = z.strictObject({
   schemaVersion: z.literal("calenote-context-input-1"),
   reference: z.strictObject({ instant: z.iso.datetime(), localDate: z.iso.date(), timezone: z.literal("Asia/Ho_Chi_Minh") }),
@@ -93,7 +108,7 @@ export const ContextInputSchema = z.strictObject({
   activeRequest: z.strictObject({ lifecycle: z.enum(["CLARIFYING", "AWAITING_CONFIRMATION"]), slots: z.strictObject({
     title: slot(values.title), location: slot(values.location), notes: slot(values.notes), eventDate: slot(values.eventDate), eventTime: slot(values.eventTime), reminderDate: slot(values.reminderDate), reminderTime: slot(values.reminderTime), calendar: slot(values.calendar), frequency: slot(values.frequency), occurrenceCount: slot(values.occurrenceCount), eventRelation: slot(values.eventRelation), leadOffsetDays: slot(values.leadOffsetDays), endDate: slot(values.endDate),
   }) }).nullable(),
-  facts: z.array(z.strictObject({ alias: factAlias, scope: z.enum(["REMINDER", "QUERY"]), field: IssueFieldSchema, value: factValue, provenance, sourceReferenceTime: z.iso.datetime(), dependencies: z.array(factAlias).max(13) })).max(26),
+  facts: z.array(contextFactSchema({})).max(26),
   pendingQuestion: z.strictObject({ text: nfcText(2000), scope: z.enum(["REMINDER", "QUERY"]), field: IssueFieldSchema, decisionKind: z.enum(["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"]).nullable(), reason }).nullable(),
   ambiguities: z.array(UncertaintySchema).max(4),
   capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(5), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),

@@ -2,6 +2,45 @@
 
 ## Current amendment evidence — 2026-09-29
 
+### T1 finalized-state remeasurement and acceptance
+
+After the local T0 gate, T1 finalized the actual strict application state rather
+than treating the literal T0 snapshot as production state. A runtime-safe
+`calenote-context-storage-1` envelope interns repeated strings losslessly, with
+strict reference/shape and resource validation. All logical content, source
+maps, scope/order/claim, attempt digests, decision bindings and expiry survive.
+The following complete pre-encryption sizes supersede the storage experiment for
+future T2/T4 integration, without changing the historical measurements below.
+
+| Original specimen | Final logical bytes | Final encoded bytes |
+| --- | ---: | ---: |
+| simple_create | 4835 | 4732 |
+| two_turn_complete | 7369 | 7069 |
+| exam_turn_4 | 13415 | 12348 |
+| multi_field_correction | 8975 | 8451 |
+| long_title_900 / long_notes_900 | 20138 | 9107 |
+| maximum_location | 11144 | 7313 |
+| maximum_title | 33644 | 11813 |
+| maximum_notes | 36644 | 12413 |
+| long_combined | 71240 | 21571 (storage refusal) |
+| four_uncertainties_candidate | 12964 | 12215 |
+| six_user_six_assistant | 15895 | 14416 |
+| control_projection_literal | 8995 | 8536 |
+
+Independent T1 acceptance: Critical=0 / Important=0. Verification: 87 focused
+T1/T0 tests with offline-tokenizer enabled, 319 relevant regression tests,
+1,963 full-suite tests passed and one opt-in case separately verified;
+typecheck/scoped lint/diff PASS. Exact 16,384/16,385 encoded boundaries and
+malicious expansion refusals are tested. The five existing Node localStorage
+experimental warnings remain disclosed; this is not full `pnpm check` evidence.
+Title/notes maxima now fit storage but their synthetic outputs remain above the
+1,536-token limit. No classification is forced to fail just because it failed
+the earlier representation. Full route remains UNVERIFIED, dispatch BLOCKED.
+Prompt/schema digests remain unchanged. Runtime code never imports tokenizer
+tooling. Persistence atomicity and semantic evidence validation remain T4/T2.
+
+### Accepted T0 amendment checkpoint
+
 Baseline and unchanged HEAD for this work: `e44b9a415b87b7471085bc683d20e55c0360d9e8`.
 The owner's isolated-tooling/method amendment separates local engineering from
 provider-route admission. The historical report below remains intact; its

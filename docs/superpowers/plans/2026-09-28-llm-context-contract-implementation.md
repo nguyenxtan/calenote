@@ -38,13 +38,25 @@
 - T0 local engineering A=PASS after independent acceptance (Critical=0,
   Important=0, Minor=1); 57 focused tests, three offline Python tests and fresh
   complete unit regression (99 files / 1,933 passed / one skipped), typecheck and
-  diff check PASS. T1–T10 are eligible and NOT_STARTED at this checkpoint.
+  diff check PASS. T1 accepted below; T2–T10 continue sequentially.
   Full-route token bound B remains UNVERIFIED, live dispatch BLOCKED.
   Existing conditional
   T11 caps/approval remain, subject to verified actual-route admission and all
   local gates. Push/merge, remote migrations and deploy remain unauthorized.
 - No per-task owner reapproval is required. Preserve all task boundaries,
   test-first implementation and independent review. Keep the plan ledger.
+
+### Current task acceptance
+
+- T1 LOCAL_IMPLEMENTATION_ACCEPTED: strict finalized contracts/application state
+  and lossless runtime storage codec, independent Critical=0 / Important=0.
+  T1/T0 87 tests PASS (offline tokenizer enabled); relevant regression 319 PASS;
+  complete unit suite 102 files / 1,963 passed / one separately verified opt-in
+  skipped. Typecheck, scoped lint and diff PASS. Five existing Node experimental
+  localStorage warnings disclosed. No full `pnpm check` claim for T1.
+  Final ordinary 900-CP state is 9,107 encoded bytes, exact roundtrip; complete
+  six USER/six ASSISTANT state is 14,416 bytes. See benchmark evidence below.
+  T2 not yet accepted; all real-dispatch/release restrictions remain.
 
 ## Global constraints
 
