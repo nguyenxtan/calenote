@@ -56,7 +56,14 @@
   localStorage warnings disclosed. No full `pnpm check` claim for T1.
   Final ordinary 900-CP state is 9,107 encoded bytes, exact roundtrip; complete
   six USER/six ASSISTANT state is 14,416 bytes. See benchmark evidence below.
-  T2 not yet accepted; all real-dispatch/release restrictions remain.
+  All real-dispatch/release restrictions remain.
+- T2 LOCAL_IMPLEMENTATION_ACCEPTED: scoped context projection, stable Unicode
+  source maps and evidenced backend-resolved operands; independent Critical=0 /
+  Important=0 / Minor=0 after two structural fix rounds. Final T2/T1/T0 suite
+  158 PASS (71 T2; offline tokenizer enabled), relevant regression 390 PASS;
+  typecheck, scoped lint and tracked/new-file whitespace checks PASS. No full
+  build/check or live-route acceptance claim. T3 consumes resolved operands and
+  their retained source-time authority, not projected proposal placeholders.
 
 ## Global constraints
 
