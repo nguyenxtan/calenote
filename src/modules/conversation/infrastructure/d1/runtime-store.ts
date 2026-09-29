@@ -1,3 +1,4 @@
+import { legacyContractGuard } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import type { ConversationScope } from "../../contracts";
 import { ownedInbound, auth } from "./context-store";
 
@@ -15,7 +16,7 @@ export class D1ConversationRuntimeStore implements ConversationRuntimeStore {
       JOIN command_draft_calendar_facts f ON f.draft_id = d.id
       WHERE d.id = ? AND d.status = 'PENDING' AND d.expires_at > ?
         AND c.owner_id = ? AND c.chat_identity_id = ? AND c.status = 'DRAFT_READY'
-        AND c.expires_at > ? AND EXISTS (${ownedInbound})`)
+        AND c.expires_at > ? AND EXISTS (${ownedInbound}) ${await legacyContractGuard(this.db, "c")}`)
       .bind(draftId, scope.now, scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope)).first());
   }
   async claimAttempt(scope: ConversationScope): Promise<boolean> {

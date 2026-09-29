@@ -1,3 +1,4 @@
+import { legacyContractGuard } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { z } from "zod";
 import { PendingRequestSchema, type ConversationScope, type PendingRequest } from "@/modules/conversation/contracts";
 import { D1ConversationStore, ownedInbound, auth as inboundAuth } from "@/modules/conversation/infrastructure/d1/context-store";
@@ -44,11 +45,11 @@ export class D1SeriesStore implements SeriesStore {
       .bind(principal.sessionId, principal.userId, now).first();
     if (!session) return [];
     type ViewRow = ProposalRow & { chat_identity_id: string; public_id?: string; series_id?: string; series_state?: "ACTIVE" | "CANCELLED"; series_revision?: number };
-    const pending = (await this.db.prepare(`SELECT p.* FROM reminder_series_proposals p WHERE p.owner_id=? AND p.status='PENDING' AND p.expires_at>?
+    const pending = (await this.db.prepare(`SELECT p.* FROM reminder_series_proposals p WHERE p.owner_id=? ${await legacyContractGuard(this.db, "p")} AND p.status='PENDING' AND p.expires_at>?
       AND (p.action='CANCEL' OR EXISTS (SELECT 1 FROM conversation_contexts c WHERE c.id=p.context_id AND c.revision=p.context_revision AND c.status='DRAFT_READY' AND c.expires_at>?))
       ORDER BY p.created_at DESC,p.id LIMIT 10`).bind(principal.userId, now, now).all<ViewRow>()).results;
     const active = (await this.db.prepare(`SELECT p.*,s.public_id,s.id series_id,s.status series_state,s.revision series_revision
-      FROM reminder_series s JOIN reminder_series_proposals p ON p.id=s.proposal_id WHERE s.owner_id=? ORDER BY s.created_at DESC,s.id LIMIT 10`)
+      FROM reminder_series s JOIN reminder_series_proposals p ON p.id=s.proposal_id WHERE s.owner_id=? ${await legacyContractGuard(this.db, "p")} ORDER BY s.created_at DESC,s.id LIMIT 10`)
       .bind(principal.userId).all<ViewRow>()).results;
     const result: PublicSeriesView[] = [];
     for (const row of [...pending, ...active]) {
@@ -91,7 +92,7 @@ export class D1SeriesStore implements SeriesStore {
       return await this.proposeCancellation({ ownerId: principal.userId, chatIdentityId: row.chat_identity_id,
         sourceInboundId: row.source_inbound_id, claimMarker: `web:${principal.sessionId}`, webSessionId: principal.sessionId, now }, row.id) ? "PROPOSED" : "STALE";
     }
-    const row = await this.db.prepare("SELECT * FROM reminder_series_proposals WHERE id=? AND revision=? AND owner_id=?")
+    const row = await this.db.prepare(`SELECT * FROM reminder_series_proposals WHERE id=? AND revision=? AND owner_id=?${await legacyContractGuard(this.db, "reminder_series_proposals")}`)
       .bind(decision.publicId, decision.revision, principal.userId).first<ProposalRow & { chat_identity_id: string }>();
     if (!row) return "STALE";
     const scope: MutationScope = { ownerId: principal.userId, chatIdentityId: row.chat_identity_id, sourceInboundId: row.source_inbound_id,
@@ -103,7 +104,7 @@ export class D1SeriesStore implements SeriesStore {
 
   async findPending(scope: ConversationScope): ReturnType<SeriesStore["findPending"]> {
     const row = await this.db.prepare(`SELECT id,revision,action FROM reminder_series_proposals
-      WHERE owner_id = ? AND chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?
+      WHERE owner_id = ? AND chat_identity_id = ? ${await legacyContractGuard(this.db, "reminder_series_proposals")} AND status = 'PENDING' AND expires_at > ?
         AND EXISTS (${ownedInbound}) AND ${afterSource}
         AND (action = 'CANCEL' OR EXISTS (SELECT 1 FROM conversation_contexts c
           WHERE c.id = context_id AND c.revision = context_revision AND c.status = 'DRAFT_READY' AND c.expires_at > ?))`)
@@ -122,7 +123,7 @@ export class D1SeriesStore implements SeriesStore {
   private async read(scope: MutationScope, id: string, revision: number): Promise<ProposalRow | null> {
     if (!Number.isSafeInteger(revision) || revision < 1 || !Number.isSafeInteger(scope.now)) return null;
     return this.db.prepare(`SELECT * FROM reminder_series_proposals WHERE id = ? AND revision = ?
-      AND owner_id = ? AND chat_identity_id = ? AND EXISTS (${authority(scope)})`)
+      AND owner_id = ? AND chat_identity_id = ? ${await legacyContractGuard(this.db, "reminder_series_proposals")} AND EXISTS (${authority(scope)})`)
       .bind(id, revision, scope.ownerId, scope.chatIdentityId, ...auth(scope)).first<ProposalRow>();
   }
   private async decrypt(scope: ConversationScope, row: ProposalRow): Promise<unknown> {

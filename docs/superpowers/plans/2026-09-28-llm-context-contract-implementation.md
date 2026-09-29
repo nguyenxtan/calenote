@@ -67,6 +67,15 @@
   uncertainties precede factual handoff; terminal binding IDs are protected.
   Local fit PASS (ordinary guidance171, max400CP563 output tokens); full-route
   B remains UNVERIFIED. T3 algorithms unchanged. T4 may proceed dormant only.
+- T4 LOCAL_IMPLEMENTATION_ACCEPTED: 64 focused tests; final canonical `pnpm check`
+  passed 114 files / 2246 tests with one intentional opt-in skip, including
+  architecture/typecheck/lint/build/Worker types/dry-run; diff check PASS.
+  Independent storage/security review and scoped correction review: Critical=0,
+  Important=0; pre-existing verification warning noise remains a documented Minor.
+  Non-save approval after edits and preview-order atomic fencing regressions are
+  closed. Migration 0009 exists locally only; no runtime activation or remote
+  migration. Test file concurrency is bounded to two; no assertion/timeouts were
+  weakened. T5 may proceed locally; full-route B remains UNVERIFIED.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,

@@ -9,7 +9,7 @@ import type {
   ResolveDraftMutation,
 } from "../../command-service";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
-import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { hasContextContract, legacyContractGuard, newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { ownedInbound, auth } from "@/modules/conversation/infrastructure/d1/context-store";
 
 interface ContextRow {
@@ -61,7 +61,7 @@ function pendingDraft(row: DraftRow): PendingDraft {
 
 function expectedMutationConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return /(?:NOT NULL constraint failed:\s*(?:command_drafts\.chat_identity_id|reminders\.(?:workspace_id|chat_identity_id)|audit_events\.id)|UNIQUE constraint failed:\s*(?:command_drafts\.(?:chat_identity_id|source_inbound_id|resolution_inbound_id)|reminders\.source_draft_id))/iu.test(error.message);
+  return /(?:CONTEXT_CONTRACT_FENCE|NOT NULL constraint failed:\s*(?:command_drafts\.chat_identity_id|reminders\.(?:workspace_id|chat_identity_id)|audit_events\.id)|UNIQUE constraint failed:\s*(?:command_drafts\.(?:chat_identity_id|source_inbound_id|resolution_inbound_id)|reminders\.source_draft_id))/iu.test(error.message);
 }
 
 export class D1ReminderCommandStore implements ReminderCommandStore {
@@ -119,7 +119,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
          FROM command_drafts draft
          JOIN inbound_updates source ON source.id = draft.source_inbound_id
          JOIN inbound_updates current ON current.id = ?
-         WHERE draft.chat_identity_id = ? AND draft.status = 'PENDING'
+         WHERE draft.chat_identity_id = ? AND draft.status = 'PENDING' ${await legacyContractGuard(this.database, "draft")}
            AND current.connection_id = ?
            AND current.provider_user_id = ? AND current.private_chat_id = ?
            AND current.state = 'PROCESSING' AND current.transition_marker = ?
@@ -142,7 +142,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     return row ? pendingDraft(row) : null;
   }
 
-  private boundIdentityExpression(enforceConversationOrder = false): string {
+  private async boundIdentityExpression(enforceConversationOrder = false): Promise<string> {
+    const successor = await hasContextContract(this.database);
     return `SELECT ci.id
             FROM inbound_updates current
             JOIN bot_connections c
@@ -159,7 +160,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
             WHERE current.id = ? AND current.connection_id = ?
               AND current.provider_user_id = ? AND current.private_chat_id = ?
               AND current.state = 'PROCESSING' AND current.transition_marker = ?
-              ${enforceConversationOrder ? `AND NOT ${newerConversationOutcomeSql("current")}` : ""}`;
+              ${enforceConversationOrder || successor ? `AND NOT ${newerConversationOutcomeSql("current", successor)}` : ""}`;
   }
 
   private ownershipBindings(message: BoundChatMessage): unknown[] {
@@ -185,7 +186,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   }
 
   async createDraft(input: CreateDraftMutation): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder) + (input.conversationFence ? `
+    const identitySql = await this.boundIdentityExpression(input.enforceConversationOrder) + (input.conversationFence ? `
       AND EXISTS (${ownedInbound}) AND EXISTS (SELECT 1 FROM conversation_contexts v2
         WHERE v2.id = ? AND v2.revision = ? AND v2.status = 'DRAFT_READY' AND v2.last_inbound_id = ?
           AND v2.chat_identity_id = ci.id AND v2.owner_id = c.user_id AND v2.expires_at > ?)` : "");
@@ -335,7 +336,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   }
 
   async confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
+    const identitySql = await this.boundIdentityExpression(input.enforceConversationOrder);
     const ownership = this.ownershipBindings(input.message);
     const statements = [
       this.database
@@ -486,7 +487,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     action: string,
     inboundState: "PROCESSED" | "REJECTED",
   ): Promise<MutationResult> {
-    const identitySql = this.boundIdentityExpression(input.enforceConversationOrder);
+    const identitySql = await this.boundIdentityExpression(input.enforceConversationOrder);
     const ownership = this.ownershipBindings(input.message);
     const timeGuard = draftStatus === "EXPIRED"
       ? "AND (expires_at <= ? OR scheduled_at <= ?)"

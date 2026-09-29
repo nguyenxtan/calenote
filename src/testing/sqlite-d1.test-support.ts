@@ -59,7 +59,7 @@ class SqliteD1Statement {
 export class SqliteD1Database {
   readonly sqlite = new DatabaseSync(":memory:");
 
-  constructor(options: { conversationV2?: boolean } = {}) {
+  constructor(options: { conversationV2?: boolean; contextContract?: boolean } = {}) {
     this.sqlite.exec(
       readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"),
     );
@@ -75,13 +75,14 @@ export class SqliteD1Database {
         "utf8",
       ),
     );
-    if (options.conversationV2) {
+    if (options.conversationV2 || options.contextContract) {
       for (const migration of [
         "0004_user_preferences", "0005_semantic_context_and_budget",
         "0006_semantic_budget_dispatch_fence", "0007_conversation_context_v2",
         "0008_finite_reminder_series",
       ]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${migration}.sql`), "utf8"));
     }
+    if (options.contextContract) this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0009_llm_context_contract.sql"), "utf8"));
   }
 
   prepare(sql: string): D1PreparedStatement {
@@ -104,6 +105,13 @@ export class SqliteD1Database {
   close(): void {
     this.sqlite.close();
   }
+}
+
+/** Repository migration statements, preserving complete trigger BEGIN/END
+ * bodies. Used by real D1 tests as well as SQLite; never splits trigger SQL at
+ * the internal INSERT/UPDATE semicolons. */
+export function migrationStatements(source: string): string[] {
+  return source.split(/;\s*(?=CREATE|ALTER|DROP|--|$)/u).map(sql => sql.trim()).filter(Boolean);
 }
 
 export function deterministicRandomBytes(): (length: number) => Uint8Array {
