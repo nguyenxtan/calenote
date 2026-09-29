@@ -48,6 +48,14 @@
 
 ### Current task acceptance
 
+- Latest owner boundary (2026-09-29): finish the already-running T3 under this
+  approved plan, independently review, fix findings and commit; then STOP BEFORE
+  T4. The proposed ConversationDirective/replyProposal responsibility amendment
+  is for owner review only, not implemented or designed in this checkpoint.
+  NEXT_GATE=OWNER_REVIEW_OF_CONVERSATION_OWNERSHIP_AMENDMENT. This supersedes
+  automatic T4-T10 dispatch; their text below remains the prior approved plan,
+  not fresh continuation authority. Provider calls, push and remote changes
+  remain prohibited.
 - T1 LOCAL_IMPLEMENTATION_ACCEPTED: strict finalized contracts/application state
   and lossless runtime storage codec, independent Critical=0 / Important=0.
   T1/T0 87 tests PASS (offline tokenizer enabled); relevant regression 319 PASS;
@@ -64,6 +72,16 @@
   typecheck, scoped lint and tracked/new-file whitespace checks PASS. No full
   build/check or live-route acceptance claim. T3 consumes resolved operands and
   their retained source-time authority, not projected proposal placeholders.
+- T3 LOCAL_IMPLEMENTATION_ACCEPTED: deterministic evidenced merge, schedule/
+  calendar/query resolution, complete detail rendering and separate scoped
+  read-only D1 query. Independent Critical=0 / Important=0 / Minor=0 after two
+  structural fix rounds. Final T3 suite 117 PASS; T0/context 263 PASS with the
+  offline tokenizer enabled; conversation regression 495 PASS. Typecheck,
+  scoped lint and whitespace checks PASS. Derived-policy conflicts retain
+  their exact fact authority without invented quotes; fact-only echoes cannot
+  clear a pending conflict. No full `pnpm check`, live-model, active runtime,
+  persistence/confirmation transaction or UI acceptance is claimed for T3.
+  T4 NOT_STARTED; stop at the owner-review gate above.
 
 ## Global constraints
 
