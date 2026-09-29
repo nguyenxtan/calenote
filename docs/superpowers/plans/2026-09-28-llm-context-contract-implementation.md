@@ -83,6 +83,14 @@
   (114 files/2254 tests,1 opt-in skip), all remaining gates PASS. Independent
   scoped review Critical=0/Important=0. Unfinished untracked T5 RED files were
   preserved outside that isolated T4 validation; T5 is not yet accepted.
+- T5 LOCAL_IMPLEMENTATION_ACCEPTED: 349 context tests PASS; fresh canonical
+  check passed 117 files / 2317 tests with one opt-in skip, including all
+  downstream static/build/Worker dry-run gates. Independent task and scoped
+  correction review Critical=0/Important=0; pre-existing warnings remain Minor.
+  Replacement adoption preserves revision binding: bare approval cannot save a
+  replaced preview; exact current token or delivered reply reference is required.
+  T4 confirmation guards remain unchanged. T6 may proceed dormant only; actual
+  full-route admission remains UNVERIFIED, no provider or remote actions.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,
