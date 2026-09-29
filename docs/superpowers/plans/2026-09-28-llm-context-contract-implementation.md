@@ -4,15 +4,15 @@
 
 **Goal:** Make Vietnamese reminder conversations preserve intent and details through evidenced model patches, deterministic resolution, explicit decisions, encrypted confirmation, and truthful delivery.
 
-**Architecture:** One LLM interprets conversation into typed untrusted operands and changes. Application-owned context, validation, calendar arithmetic, decision binding, transactions and delivery remain authoritative. A separately versioned successor is developed dormant; V2 remains active until all acceptance and release gates permit activation.
+**Architecture:** One LLM call proposes typed semantic changes and conversational guidance together. Application-owned context, validation, merge/calendar resolution, effective directive, reply eligibility, decision binding, transactions and delivery remain authoritative. A separately versioned successor is developed dormant; V2 remains active until all acceptance and release gates permit activation.
 
 **Tech Stack:** TypeScript 6.0.3, Zod 4.5.4, Next.js 16.3.4/React 19.2.8, Cloudflare Workers/D1/Queues, existing keyring encryption, Vitest 4.1.11, Miniflare and node:sqlite test stores, pnpm 11.19.0/Node >=22. Canonical lunar artifact is already local; no runtime astronomy dependency is added.
 
-**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md`, exact approved content at `e8f9e75f436a672b23387eb0054047da217ade23` (S below).
+**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md` (S below). Original approved content at `e8f9e75f436a672b23387eb0054047da217ade23`; this post-T3 amendment is proposed written content pending owner review, not an already-accepted implementation contract.
 
 **Inspected baseline:** same HEAD, clean `codex/llm-context-contract-design`, worktree `/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2`; no intervening commits. Spec's earlier runtime audit names `6329b33264a2916f004953865f6483fafdfd7491`; source was inspected again at this planning HEAD. No live state is inferred from either SHA.
 
-**Status:** READY_FOR_OWNER_REVIEW; PLAN_OWNER_APPROVAL=PENDING; all tasks NOT_STARTED, offline feasibility and all evaluations NOT_RUN. Only this plan and spec approval metadata are authorized now.
+**Historical initial status:** READY_FOR_OWNER_REVIEW; at initial planning all tasks were NOT_STARTED. Current acceptance and the post-T3 owner-review gate below supersede this historical state.
 
 ### Execution progress (historical checkpoint 2026-09-28)
 
@@ -48,14 +48,15 @@
 
 ### Current task acceptance
 
-- Latest owner boundary (2026-09-29): finish the already-running T3 under this
-  approved plan, independently review, fix findings and commit; then STOP BEFORE
-  T4. The proposed ConversationDirective/replyProposal responsibility amendment
-  is for owner review only, not implemented or designed in this checkpoint.
-  NEXT_GATE=OWNER_REVIEW_OF_CONVERSATION_OWNERSHIP_AMENDMENT. This supersedes
-  automatic T4-T10 dispatch; their text below remains the prior approved plan,
-  not fresh continuation authority. Provider calls, push and remote changes
-  remain prohibited.
+- Latest owner boundary (2026-09-29), attachment
+  `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,
+  local commit, then STOP BEFORE T4. Verified clean start at accepted T3
+  `37d0f7ba7221dd1f7641ca5078e95d50004890e4`; source, reports and review inspected.
+  NEXT_GATE=OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN. Conversation ownership
+  direction is approved, written amendment awaits owner review. No runtime or
+  executable test edits, scoped amendment implementation, provider calls,
+  migration, push or deploy in this turn. Historical acceptance below remains
+  for the old interface, not proof of the amended envelope or reply safety.
 - T1 LOCAL_IMPLEMENTATION_ACCEPTED: strict finalized contracts/application state
   and lossless runtime storage codec, independent Critical=0 / Important=0.
   T1/T0 87 tests PASS (offline tokenizer enabled); relevant regression 319 PASS;
@@ -86,7 +87,7 @@
 ## Global constraints
 
 - Follow AGENTS.md. Before future code work read relevant installed Next.js guides; before Worker config/Wrangler work load Workers best-practices/Wrangler skills. Preserve existing work and legacy tests.
-- No second general-language parser on the successor path, model-authored replies/tools/IDs/SQL/confirmation, parser fallback, provider fallback, or model shopping.
+- No second general-language parser, model tools/IDs/SQL/confirmation, parser/provider fallback or model shopping. Bounded model guidance is allowed only by S §4.5; backend owns factual/transactional text. One eligible semantic call, no extra wording/repair call.
 - Keep `AI_MODE=privacy`, `google/gemini-2.5-flash-lite`, `google-vertex/eu`, ZDR, deny data collection, required strict structured output, 30s timeout, retry=0. Historical prices are NOT newly verified.
 - Production hard budgets remain 50 owner calls/day, 500000 owner monthly microunits, 2000000 global daily microunits. Evaluation caps do not alter these.
 - S §8.2: current input 1800 NFC UTF-16 units; retained user turn 2000 NFC code points; six USER and at most six ASSISTANT turns; snapshot <=16384 serialized UTF-8 bytes before encryption; complete input <=12000 tokens; output <=1536 tokens and raw response <=32768 bytes. Webhook raw transport cap remains 32768 bytes.
@@ -104,6 +105,7 @@
 3. A successful reminder insert followed by failed detail storage or lost response must not leave partial children or duplicate confirmation (T4/T7).
 4. An old Worker/old strict web client can remain in flight after a new version is ready (T4/T8/T11).
 5. Calendar source/output calendar, browser timezone and receipt-time midnight may disagree without obvious UI failure (T3/T9).
+6. A valid patch plus bad guidance must retain facts without enabling preview/save; a matching directive does not prove prose semantics. T1A/T2A and T5/T7/T10 test independent validation, actual reply selection and transactional-claim rejection, not only JSON.
 
 ## Implementation map and dependency order
 
@@ -115,7 +117,7 @@ Paths below are repository-relative. Existing paths were inspected; paths explic
 | Scoped context/evidence | existing ConversationScope, keyring, encrypted context/outcome patterns | C `state.ts`, `context.ts`, `projection.ts`, `evidence.ts` (T1/T2) |
 | Structured arithmetic | `conversation/lunar-calendar.ts`, `semantic/validation.ts`, finite series arithmetic | C `resolve.ts`, `query.ts`, `merge.ts` (T3) |
 | Durable state/confirmation | D1 context, command and series stores; common order fences | C `store.ts`, `infrastructure/d1/store.ts`, `confirmation.ts`; additive migration (T4) |
-| Question/control authority | existing whole-message controls and reply send boundary | C `decisions.ts`, `responses.ts` (T5) |
+| Question/control authority | existing whole-message controls and reply send boundary | C `decisions.ts`, `responses.ts`, `guidance.ts` (T5); effective directive and selective guidance, backend factual text |
 | Runtime path | `reminders/command-service.ts`, `inbound/processor.ts`, `worker/composition-root.ts` | C `service.ts`, `observability.ts`; successor gateway/config factory (T6/T7) |
 | Authenticated web | strict `contracts/api/reminders.ts`, Worker routes, `lib/client-api.ts` | explicit V2 API contracts/routes and preview service (T8) |
 | Calendar/details/delivery | `CoreScreenExperience.tsx`, lunar adapter, reminder delivery | shared lunar presentation, complete preview/detail rendering (T9) |
@@ -124,20 +126,29 @@ Paths below are repository-relative. Existing paths were inspected; paths explic
 
 Dependency graph: T0 local engineering A -> T1 -> T2 -> T3 -> T4 -> T5 -> T6 -> T7 -> T8 -> T9 -> T10; T0 route admission B plus T10/whole-branch acceptance -> conditional T11 evaluation. This conservative order prevents competing interpretations of shared contracts. After T1, T3's pure arithmetic and T2 projection could be independently implemented; after T8, Calendar presentation and delivery tests could be split. Prefer sequential reviewed commits initially; never concurrently edit shared contracts/store/service.
 
+**Current amended dependency:** accepted T0–T3 -> owner review of amended spec/
+plan -> T1A -> T2A -> T0A remeasurement + relevant T3 regression -> T4 -> T5–T10.
+T1A/T2A/T0A are scoped follow-ups, not reopening completed tasks. Each has a
+fresh independent acceptance gate. None starts during this documentation turn.
+T3 behavior/acceptance stays valid; no new schedule/query policy is introduced.
+Route B and all remote/activation gates remain separate and unresolved.
+
 ### Interface ownership
 
-All new public symbols below have an owning task. They are proposed signatures, not claims of existing APIs.
+All new public symbols below have an owning task. T1–T3 implementations exist;
+their accepted evidence is above. Amended/future signatures are planned, not
+claims that guidance, persistence, gateway or active composition already exists.
 
-- **T0/T1 `contracts.ts`:** `ConversationInterpretation`, `ContextInput`, `FieldChange`, `EvidenceRef`, `DateOperand`, `QueryOperand`, matching strict Zod schemas and `InterpretationJsonSchema`. Wire literals `calenote-context-1` and `calenote-context-input-1`; all S §4.1 keys required, exactly 13 slot names, <=13 unique changes, <=4 uncertainties/two alternatives, 1–3 evidence refs where required. No CONFIRMED output.
+- **T0/T1 `contracts.ts`:** `ConversationInterpretation`, `ContextInput`, `FieldChange`, `EvidenceRef`, `DateOperand`, `QueryOperand`, matching strict Zod schemas and `InterpretationJsonSchema`. T1A amends output literal to `calenote-context-2` (accepted historical output is `calenote-context-1`); input remains `calenote-context-input-1`. All S §4.1 keys required, exactly 13 slot names, <=13 unique changes, <=4 uncertainties/two alternatives, 1–3 evidence refs where required. Add strict `ConversationDirective`, nullable `ReplyProposal` (400 NFC code points), and semantic-core `SemanticPatchProposal` validation per §4.5. No CONFIRMED output or execution action.
 - **T0 `wire.ts`:** `serializeContextRequest(input: ContextInput): {messages, response_format, stream:false, max_tokens:1536}` using the one canonical prompt/schema; route/auth supplied separately by gateway. **`admission.ts`:** `measureEnvelope(input: ContextInput, snapshotJson: string, outputJson?: string): EnvelopeMeasurement`; returns NFC units/code points, bytes by component, token upper bound/method ID and admitted/reason. Do not call a provider here.
 - **T1 `state.ts`:** `ContextSnapshotV1` (payload version `calenote-context-state-1`) holds existing scope identity, contextRevision, draftRevision, lifecycle, 13 typed slots/provenance, reminder/query questions, exact encrypted transcript entries with receipt/delivery state, one decision/candidate, preview receipt, bounded control registry/maps, created/expiry instants. `Slot<T>` has state MISSING/PROPOSED/RESOLVED/CONFLICT, value or null, evidence and EXPLICIT_USER/DERIVED_POLICY provenance. A resolved pending fact is not confirmed. `CanonicalDetailsV1` (version `calenote-reminder-details-1`) holds separate location, notes, eventDate/eventTime, calendar provenance and resolution version; title retains its existing separate encrypted column.
 - **T1 state types:** `ContextObservation` is an opaque store-issued presence/absence observation bound to owner/chat, inbound order/claim, context revision and last accepted terminal outcome. `PendingDecision` has the five S §5.1.1 kinds and all specified bindings. `PreviewReceipt` carries previewId, draftRevision/hash, owner/chat, issued-after order, expiry and SENT/FAILED/UNCERTAIN status. `ControlAuthority` is CHAT with authenticated ConversationScope or WEB with validated SessionPrincipal and owner-bound chat; never provider input.
-- **T2:** `buildContextInput({message, context, snapshot, observation}): ContextBuildResult` consumes existing `BoundChatMessage`/`BoundChatContext` and T1 state; returns READY `{input, evidenceIndex, sourceMap, observation}` or REFUSED `{reason}`. `validateEvidence(proposal, built): EvidenceValidation` yields fully scoped `ValidatedPatch` or one reason; no partial list. `projectSemanticView` is internal to this builder. `ValidatedPatch` is module-created, not cast from untrusted JSON.
-- **T3:** `mergePatch(previous: ContextSnapshotV1|null, patch: ValidatedPatch): MergeResult` returns a candidate plus changes/uncertainties or rejection; no IO. `resolveRequest(candidate, now, calendar: LunarCalendarAdapter): RequestResolution` returns CLARIFY `{fields,reasons}`, UNSUPPORTED `{capability}`, or READY `{resolvedSlots, occurrences: SeriesOccurrence[], details}`. Occurrences are backend-created. `resolveQuery(query: QueryOperand, receipt: number, calendar): QueryResolution` returns RANGE `{start,end,label,scopeLabel}`, CALENDAR_DATE `{solar,lunar,convention}`, CAPABILITY or CLARIFY/REJECTED. `query.ts` exports successor query/result types including status and `hasMore`. `src/modules/reminders/detail-presentation.ts` owns `renderReminderDetails(title, details, schedule): RenderResult`, COMPLETE `{text}` or TOO_LONG/INVALID; T4/T5/T9 reuse it for full channel-fit checks.
+- **T2:** `buildContextInput({message, context, snapshot, observation}): ContextBuildResult` consumes existing `BoundChatMessage`/`BoundChatContext` and T1 state; returns READY `{input, evidenceIndex, sourceMap, observation}` or REFUSED `{reason}`. After T2A, `validateEvidence(proposal: SemanticPatchProposal, built): EvidenceValidation` yields fully scoped `ValidatedPatch` or one reason; no partial changes. Its brand covers semantic operands only, not directive/reply approval. `projectSemanticView` remains internal to this builder; T2A adds `validateGuidancePrivacy(proposal, built)` with categorical pass/refusal, never returning a redacted sendable replacement.
+- **T3:** `mergePatch(previous: ContextSnapshotV1|null, patch: ValidatedPatch): MergeResult` returns a candidate plus changes/uncertainties or rejection; no IO. `resolveRequest(candidate, now, calendar: LunarCalendarAdapter): RequestResolution` returns CLARIFY `{fields,reasons}`, UNSUPPORTED `{capability}`, or READY `{resolvedSlots, resolvedFacts, occurrences: SeriesOccurrence[], details}`. Preserve accepted `resolvedSlots`/`resolvedFacts` together. Occurrences are backend-created. `resolveQuery(query: QueryOperand, receipt: number, calendar): QueryResolution` returns RANGE `{start,end,label,scopeLabel}`, CALENDAR_DATE `{solar,lunar,convention}`, CAPABILITY or CLARIFY/REJECTED. `query.ts` exports successor query/result types including status and `hasMore`. `src/modules/reminders/detail-presentation.ts` owns `renderReminderDetails(title, details, schedule): RenderResult`, COMPLETE `{text}` or TOO_LONG/INVALID; T4/T5/T9 reuse it for full channel-fit checks. No guidance field changes these accepted behaviors.
 - **T4 `store.ts`:** `ContextContractStore.observe(scope): Promise<{observation,snapshot}|{failure}>`; `apply(scope, observation, transition: StoredTransition): Promise<AppliedTransition>`; `confirm(authority, proof: DecisionProof): Promise<ConfirmationResult>`; `readOutcome(authority, operationKey): Promise<ConfirmationResult|null>`; `recordDelivery(scope, receipt): Promise<'RECORDED'|'STALE'>`; `purgeExpired(now, limit): Promise<number>`. Observe distinguishes absent/invalid/expired/unavailable. AppliedTransition distinguishes APPLIED/IDEMPOTENT/STALE/INVALID/UNCERTAIN. ConfirmationResult is COMMITTED/IDEMPOTENT with canonical public IDs/child count, or STALE/EXPIRED/REJECTED/UNCERTAIN, never success on unknown state.
 - **T4:** `StoredTransition` contains expected versions, new encrypted-state candidate, proposed canonical preview data if READY, terminal operation if any and inbound outcome. `DecisionProof` contains application decisionId/kind/target/revision/hash, bound reply/token proof and operation dedupe key; no model-created field is authority. `confirmation.ts` validates future occurrences/detail equality against preview before constructing the transaction.
-- **T5:** `selectControl(text, decision, authority): ControlSelection` returns NONE, scoped decision action, DECLINE, ABANDON or AMBIGUOUS_TARGET; no prefix matching. `transitionConversation({snapshot, interpretation, merge, resolution, control, now}): StoredTransition|ReplyOnly` is pure; not every input branch supplies a model. `composeContextReply(outcome): ReplyPlan` returns complete text plus typed question/preview/control spans and bounded render failure; `ReplyPlan` contains no model prose. `ReplyReceipt` is SENT with message ref when available, FAILED or UNCERTAIN; unavailable provider receipt must not be promoted to SENT.
-- **T6:** `createContextContractGateway(config, transport): SemanticGateway<ConversationInterpretation,ContextInput>` preserves the prepare/one-shot-dispatch contract. `parseContextContractRuntimeConfig(env)` is separate from unchanged V1/V2 parser defaults. `ContextObservationEvent` is a content-free event union; `observeContextEvent(event):void` never accepts arbitrary payloads.
+- **T5:** `selectControl(text, decision, authority): ControlSelection` returns NONE, scoped decision action, DECLINE, ABANDON or AMBIGUOUS_TARGET; no prefix matching. `transitionConversation({snapshot, interpretation, merge, resolution, control, now}): StoredTransition|ReplyOnly` is pure; not every input branch supplies a model. `computeEffectiveDirective(applicationOutcome): EffectiveDirective`, `validateDirective(modelDirective, effectiveDirective): DirectiveValidation`, and `selectGuidance({effectiveDirective, directiveValidation, replyProposal, privacyValidation}): GuidanceSelection` live in `guidance.ts`; they consume S §4.5 and return MODEL_GUIDANCE `{text}` or BACKEND `{reason}`. `composeContextReply(outcome, guidance): ReplyPlan` includes actual selected complete text, source, typed question/preview/control spans or bounded render failure. Model prose is possible only on eligible guidance surfaces, never confirmation or factual results. `ReplyReceipt` is SENT with message ref when available, FAILED or UNCERTAIN; unavailable provider receipt must not be promoted to SENT.
+- **T6:** `createContextContractGateway(config, transport): SemanticGateway<ParsedInterpretation,ContextInput>` preserves prepare/one-shot dispatch. Wire response is still the one strict `ConversationInterpretation` schema; the application return type carries T1A independently parsed sections, never casts malformed guidance to that wire type. Envelope/core failure is gateway refusal; valid core plus bad guidance reaches T5 fallback with fullSchemaValid=false. `parseContextContractRuntimeConfig(env)` stays separate from unchanged V1/V2 defaults. `ContextObservationEvent` is a content-free union; `observeContextEvent(event):void` never accepts arbitrary payloads.
 - **T7:** `createContextContractService(deps)` implements existing `conversation.handle(message,context)` and `ownsPendingDraft` integration plus explicit contract ownership routing. Dependencies are T4 store, T6 gateway, existing SemanticBudgetStore/keyring/calendar, successor scoped query function, clock, `reply(ReplyPlan):Promise<ReplyReceipt>`, feedback and event sink. Production and live harness use this same factory, not a benchmark-only reconciliation path.
 - **T8:** `ReminderDetailsResponseV2`, `ReminderListResponseV2`, `PreviewResponseV1` and `PreviewDecisionRequestV1` are strict public schemas. `ContextApiOperations` lists owner-authorized detailed reminders and previews and decides an authenticated revision-bound preview through T4; it does not reuse a chat inbound identity as web auth.
 - **T9:** `calendarDayPresentation(solarDate:string)` returns lunar label/full accessible text or unavailable using existing adapter; delivery and web consume T3's detail projection so confirmation cannot admit unsendable details.
@@ -212,9 +223,68 @@ only when A passes. B remains separately unresolved until established.
 - [ ] Successor SQL keeps authenticated owner/workspace/bound-chat and terminal ordering checks; includes six selected statuses, excludes CANCELLED/drafts, orders scheduledAt/id, fetches6/displays5 with exact partial notice. Zero reminder/proposal writes and no pending TTL extension; failures are not empty. Test same-owner other-chat exclusion and early-month SENT results.
 - [ ] Review pure functions and real scoped D1 query assertions; rerun static checks; commit `feat(conversation): resolve structured schedules and scoped calendar queries`.
 
+### T1A — Scoped output-contract amendment (NOT_STARTED)
+
+**Depends:** owner review of this amended spec/plan. **Modify:** C `contracts.ts`,
+`contracts.test.ts`, `prompt.ts`, `prompt.test.ts`, `wire.ts`; T0 specimen builders
+in `tools/benchmark/context-contract-fit.test.ts` only for changed canonical
+keys. Preserve legacy active contracts. Do not redo T1 state/storage design.
+
+**Interface:** strict `ConversationInterpretation` version `calenote-context-2`
+adds exactly the six-kind directive and nullable 400-code-point reply from S
+§4.5. Export strict semantic-core `SemanticPatchProposalSchema` from the same
+field definitions; it is not another provider schema. Add
+`parseInterpretationSections(raw: unknown): InterpretationSections`, where
+`InterpretationSections` is REFUSED `{reason}` or PARSED `{value: ParsedInterpretation}`.
+`ParsedInterpretation` contains `semantic: SemanticPatchProposal`,
+`directive: {status:'VALID', value:ConversationDirective} | {status:'INVALID'}`,
+`reply: {status:'VALID', value:ReplyProposal} | {status:'INVALID', reason}`,
+and `fullSchemaValid:boolean`. Only the two guidance properties may be
+quarantined; all other root/core failures reject atomically. The core contains
+the amended version and every old semantic root key, no guidance or new
+authority. T2 receives `semantic`, T5 receives separate section results; the
+gateway returns ParsedInterpretation rather than pretending all wire fields
+passed. No repair of raw/truncated JSON.
+
+- [ ] RED: `guidance_fields_required_and_unknown_keys_rejected`, `six_directives_have_no_authority`, `reply_400_401_unicode_boundary`, `bad_guidance_preserves_valid_core`, `invalid_core_not_rescued_by_guidance`. Assert schema-invalid full response remains schema-invalid despite core recovery. Null reply is schema-valid; omitted reply is not.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/contracts.test.ts src/modules/conversation/context-contract/prompt.test.ts tools/benchmark/context-contract-fit.test.ts`; record meaningful RED before implementation.
+- [ ] Implement shared field definitions, section parser and exact strict JSON Schema parity. Update canonical prompt from “No replies”/application owns all questions to one-call untrusted guidance with backend-only facts and execution. Add §4.5 prose constraints, typed next issue, no CoT, null factual-surface reply, no arbitrary IDs or calendar arithmetic.
+- [ ] Rerun focused checks, `pnpm typecheck`, scoped lint and `git diff --check`; independent contract review, then selective local commit. Intermediate dependent test fixtures may receive only mechanical version/new-key adaptation; no T3 algorithm change. No T4 until T2A/T0A also pass.
+
+### T2A — Independent evidence and guidance privacy (NOT_STARTED)
+
+**Depends:** T1A. **Modify:** C `evidence.ts`/`.test.ts`, `projection.ts`/`.test.ts`,
+`context.ts`/`.test.ts`; C `state.test.ts` for selected-text codec regression only
+if needed. The existing encrypted state/transcript shape is sufficient unless
+a measured interface requirement proves otherwise; do not add raw proposal state.
+
+**Interface:** `validateEvidence` consumes only parsed semantic core and produces
+the existing branded resolved patch. `validateGuidancePrivacy` checks every new
+string against T2 protected material/projection rules; pass is privacy-only,
+not semantic truth or directive compatibility. T5 owns those separate gates.
+
+- [ ] RED: `invalid_directive_does_not_erase_grounded_patch`, `reply_controls_rejected_not_redacted_for_send`, `all_guidance_strings_checked`, `selected_assistant_view_never_becomes_user_evidence`, `discarded_reply_not_retained`. Test NFC/JSON/percent-escaped controls and internal IDs; sentinel credential material must never appear in retained/logged/sent output.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/context.test.ts src/modules/conversation/context-contract/projection.test.ts src/modules/conversation/context-contract/evidence.test.ts src/modules/conversation/context-contract/state.test.ts`; verify RED then implement narrow separation. Valid core survives guidance rejection; invalid core retains existing refusal semantics.
+- [ ] Rerun the above plus T3 focused command, `pnpm typecheck`, scoped lint and `git diff --check`. Verify immutable source anchors, same-value conflict rules, expiry and query scope unchanged. Independent privacy/evidence review and local commit; do not label T5 selection implemented here.
+
+### T0A — Amended-envelope measurement revision (NOT_STARTED)
+
+**Depends:** T1A/T2A. **Modify:** `tools/benchmark/context-contract-fit.test.ts`,
+`tools/benchmark/snapshot-identity-view.test.ts` only if a changed retained-text
+specimen requires it; C `wire.ts`/`admission.ts` only if canonical shape accounting
+requires it; `docs/benchmarks/llm-context-contract-fit.md` and a new versioned
+measurement artifact alongside `llm-context-contract-local-measurements.json`.
+Preserve the original artifact and historical required/negative classifications.
+
+- [ ] Add RED accounting assertions for both new fields and full prompt/schema digests, then update exact canonical serialization specimens per S §8.2.2. No reduced mock schema or semantic fact removal.
+- [ ] Run `CONTEXT_FIT_LOCAL_TOKENS=1 pnpm exec vitest run tools/benchmark/context-contract-fit.test.ts tools/benchmark/snapshot-identity-view.test.ts src/modules/conversation/context-contract` using the existing pinned network-blocked local tooling. Include ordinary/null/max guidance, escaping, patch-plus-prose, selected transcript/control maps, long details and six-turn capacity. No provider/counting call or dependency bootstrap is authorized by this step.
+- [ ] Record revision `conversation-guidance-v2`, source/prompt/schema/wire/specimen/tokenizer digests, measured bytes/local tokens and separate A/B status. Output cap stays1536, input12000, context16384; budgets unchanged. Ordinary-flow failure stops this gate with exact measurements and smallest remedy; no quiet reclassification/clipping.
+- [ ] Rerun schema/prompt checks, T3 focused regression, `pnpm typecheck`, scoped lint and `git diff --check`; independent feasibility review then local commit. Require local A Critical=0/Important=0 before T4. B remains UNVERIFIED unless separately established; this does not authorize real calls.
+
 ### T4 — Additive encrypted persistence, shared fences and atomic confirmation
 
-**Depends:** T3. This is a security/transaction review boundary, not a deployment task.
+**Depends:** accepted T3 and reviewed T1A/T2A/T0A after owner approval. NOT_STARTED.
+This is a security/transaction review boundary, not a deployment task.
 
 **Create:** `migrations/0009_llm_context_contract.sql` (number recheck before future creation; stop for naming collision, never rewrite existing migration); C `store.ts`, `confirmation.ts`, `confirmation.test.ts`, `infrastructure/d1/store.ts`, `infrastructure/d1/store.integration.test.ts`, `infrastructure/d1/compatibility.integration.test.ts`.
 
@@ -234,18 +304,21 @@ Name the new tables `command_draft_context_details` (draft_id PK/FK), `reminder_
 - [ ] Confirm exact preview hash/revision/decision type, delivery/order, future schedule and channel fit; commit canonical rows, all details, lineage, decision consumption and terminal outcome atomically. Encrypt before batch. Preserve D1 statement/binding bounds (existing grouped insert pattern <96 bindings); test N=1,2,30 with real workerd and injected final-detail failure.
 - [ ] Exercise concurrent web/chat confirmation, duplicate key, lost reply after commit, no-op CAS, permit rollback/cleanup, expiry, corrupt ciphertext, inactive ownership/session, delayed edit after persisted cancellation and terminal metadata after payload purge. Separate first-in-flight/no-draft test: no cancellation claim, zero canonical writes; normal newer-terminal fencing is not a cancellation receipt.
 - [ ] Delivery-receipt recording is a narrow CAS on the exact previously selected outbound/decision revision, not a replay of a now-terminal inbound mutation. Test receipt arrival after inbound completion, after a newer edit, and twice: only the still-applicable receipt changes visibility metadata; no receipt resurrects a decision, extends expiry or creates a reminder. Shared outcome/order checks remain authoritative.
+- [ ] Persist actual selected assistant text/kind and receipt in existing encrypted transcript, whether source is eligible model guidance or backend fallback. Add `selected_reply_roundtrips_encrypted`, `rejected_reply_not_history`, `reply_receipt_not_mutation_authority`, `assistant_projection_still_removes_controls`; enforce existing context size/TTL without evicting facts. Raw model directive/reply is not reminder state and cannot set decision proofs. Existing failed/uncertain send semantics remain.
 - [ ] Run legacy context/command/series safety suites plus full `pnpm check`, diff check and independent storage/security review. Validate old-code SQL against migrated fixture as well as new store. No remote migration. Commit `feat(conversation): persist versioned context and details atomically`.
 
-### T5 — Pending decisions, local controls and honest replies
+### T5 — Pending decisions, effective directives and selective natural guidance
 
-**Depends:** T4. **Create:** C `decisions.ts`, `responses.ts`, `decisions.test.ts`, `responses.test.ts`. **Consumes:** T1 decision/receipt types, T3 resolutions, T4 StoredTransition/proof. **Produces:** T5 transition/reply/control interfaces; no autonomous persistence.
+**Depends:** T4 and amended T1A/T2A interfaces. **Create:** C `decisions.ts`, `responses.ts`, `guidance.ts`, `decisions.test.ts`, `responses.test.ts`, `guidance.test.ts`. **Consumes:** T1 decision/receipt types, T3 resolutions, T4 StoredTransition/proof, independently validated guidance/privacy. **Produces:** T5 transition/reply/control interfaces; no autonomous persistence.
 
 - [ ] RED tests `replacement_yes_never_saves_A_or_B`, `one_time_offer_yes_is_not_save`, `query_return_requires_reissued_decision`, `decline_is_not_abandon`, `third_nonprogress_preserves_draft`.
-- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/decisions.test.ts src/modules/conversation/context-contract/responses.test.ts`.
+- [ ] RED CO-A/B/C/D and `unsupported_guidance_cannot_enable_capability`, `absent_oversize_reply_falls_back_preserving_facts`, `model_query_preview_success_text_discarded`, `matching_kind_wrong_field_rejected`, `reply_lint_is_not_semantic_proof`. Use table variants for six kinds, backend missing/alternative/READY/query/unsupported/control/failure states, and output claim/control obfuscation, not input phrase parsing.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/decisions.test.ts src/modules/conversation/context-contract/responses.test.ts src/modules/conversation/context-contract/guidance.test.ts`.
+- [ ] Implement `computeEffectiveDirective`, exact typed compatibility, privacy/length/plaintext/output-lint eligibility, and model-or-fallback selection per S §4.5. Preserve valid semantic facts on bad guidance. Backend-only outcomes cannot select raw prose regardless of model kind. Compose exact dates, alternative values, capability facts, controls and query/mutation/delivery outcomes from application data. Unknown mapping fails closed. No new LLM/parser or arbitrary-language truth claim.
 - [ ] Implement one current decision, all five kinds, exact whole NFC/case/outer-space controls with at most one terminal period/exclamation. Separate SAVE “xác nhận <token>” from non-save “đồng ý <token>”; mixed “Có, nhưng đổi sang 9h” returns NONE for local control. Scope tokens/replies to current question/target/revision/expiry. Unknown/uncertain reference requires scoped proof, never search history.
 - [ ] Test positive/negative/escape transitions for each kind. REPLACE adopts only encrypted candidate B; alternative acceptance with A asks separate replacement; RESUME reissues question; RESTART discards identified unconfirmed state only. “không”/“2” preserves otherwise valid draft; explicit “Bỏ.” only one known target, ambiguous offer+draft asks which. Model ABANDON_PENDING asks for local escape, cannot delete. “Đừng bỏ.” and quoted notes never match.
 - [ ] Record failed/uncertain preview sends, invalidate previous handles on edit/new question, reject stale edited-preview bare yes/cross-chat yes. Query retains draft revision/TTL but suspends bare save until question reissued. Provider/config failures do not advance no-progress counter; actual progress resets it; second no-progress summarizes, third offers chat recovery. No web-review link for CLARIFYING state because this plan does not add that editor.
-- [ ] Replies name verified known facts and one missing issue; annual limitation with explicit one-off offer, true monthly scope/status/partial result, specific budget/context/size failures. Never claim mutation from a model label or unknown storage outcome. Review all decision transitions then commit `feat(conversation): bind approvals to pending decision type and revision`.
+- [ ] Model may naturally phrase one missing/ambiguous issue; backend composes known-fact recap, annual limitation/one-off decision controls, monthly scope/status/partial result and specific budget/context/size failures. Test optional prose dropped before authoritative details when combined output exceeds2000 UTF-16; never clip facts. Review all decision and guidance transitions then commit `feat(conversation): validate guidance against application-owned decisions`.
 
 ### T6 — Bounded successor provider gateway and observations
 
@@ -259,6 +332,7 @@ reserve the historical per-call amount from an unverified full-token premise.
 **Depends:** T5 and T0 local engineering A still valid; B may remain pending for local implementation only. **Modify:** `src/modules/intelligence/infrastructure/openrouter/semantic-gateway.ts`, `config.ts` and their existing `.test.ts` files; `src/modules/intelligence/semantic-gateway.ts` only for categorical types needed by successor. **Create:** C `observability.ts`/`.test.ts`. **Consumes:** canonical T1 wire and T2 context, typed route-admission boundary with measured local scope kept separate; **produces:** T6 factory/config/events. No active composition switch.
 
 - [ ] RED `context_gateway_uses_exact_prompt_schema_and_route`, `full_request_bound_checked_before_prepare_ready`, `legacy_gateway_defaults_unchanged`, `prepared_is_not_dispatched`, `no_control_or_secret_in_body`.
+- [ ] Assert one response carries semantic core+uncertainties+directive+reply using amended canonical schema. Apply T1A section parser without generic gateway prematurely discarding valid core for guidance-only defects; preserve fullSchemaValid=false metric. Test `guidance_failure_never_redispatches`, `truncated_json_never_salvaged`, and separate categorical patch/directive/reply observations; no extra wording gateway.
 - [ ] Run `pnpm exec vitest run src/modules/intelligence/infrastructure/openrouter/semantic-gateway.test.ts src/modules/intelligence/infrastructure/openrouter/config.test.ts src/modules/conversation/context-contract/observability.test.ts` with fake transport only.
 - [ ] Remove generic helper's universal `Input extends {text:string}` assumption by supplying contract-specific input admission; preserve legacy exported factories. New factory consumes ContextInput, exact canonical wire, new config 12000/1536/32768, 1800 current-turn admission, primary-only pinned ZDR route and 30s retry0. No broad change to legacy output defaults or generic privacy parser to enable it implicitly.
 - [ ] Test tools/functions/function_call/tool_choice/fallback absent, stream false, exact max_price, Authorization outside JSON, bounded streamed response reading, finish_reason truncation rejected, invalid aliases/fields atomic, dispatch callable once. Recomputed maximum-cost reservation includes validated full input/output bound and documented billable overhead; historical ceilings yield ceil(1814.4)=1815 microunits minimum, not price verification.
@@ -268,12 +342,13 @@ reserve the historical per-call amount from an unverified full-token premise.
 
 **Depends:** T6. **Create:** C `service.ts`, `service.test.ts`; `src/modules/inbound/context-contract.integration.test.ts`. **Modify:** `src/modules/reminders/command-service.ts`/`.test.ts`, `src/modules/inbound/processor.ts`/`.test.ts`, `src/worker/composition-root.ts`/`.test.ts`, `src/modules/conversation/processing-feedback.ts`/`.test.ts` only as integration requires.
 
-**Interfaces:** T7 factory above; extend existing capability injection with optional literal `contextContract:'calenote-context-1'`. Omitted keeps V2. Test/harness injection may select successor; deployed `worker/index.ts` stays unchanged until T11. Typed reply receipts adapt real provider SendReceipt; no inferred delivery success from swallowed exceptions.
+**Interfaces:** T7 factory above; extend existing capability injection with optional literal `contextContract:'calenote-context-2'` to bind the amended output contract. Omitted keeps V2. Test/harness injection may select successor; deployed `worker/index.ts` stays unchanged until T11. Typed reply receipts adapt real provider SendReceipt; no inferred delivery success from swallowed exceptions.
 
 - [ ] RED integration tests `all_successor_natural_turns_use_one_gateway`, `successor_confirmation_cannot_fall_into_legacy`, `reply_captured_after_fenced_transition`, plus full R02/R07/R08/R11/R13/R14 sequences.
 - [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/service.test.ts src/modules/inbound/context-contract.integration.test.ts src/modules/reminders/command-service.test.ts src/worker/composition-root.test.ts src/modules/conversation/processing-feedback.test.ts`.
 - [ ] Authenticate/bind/dedupe first; dispatch exact successor-owned controls before legacy confirm branch. Drain real legacy drafts using existing guarded path, never migrate/reinterpret them. Invalid successor context/config never routes to old parser. Side queries and natural continuations get one actual gateway call after context/admission; local greeting/help/controls get explicit bypass observation.
-- [ ] Start best-effort typing before waiting for LLM; failures affect no business state. Claim durable attempt bound to observation/prompt/contract/input digest, reserve budget before dispatch, mark dispatched once, retain uncertain reservation, validate/evidence/merge/resolve then transaction. Recheck revision before reply selection; record actual send outcome. No second wording call.
+- [ ] Start best-effort typing before waiting for LLM; failures affect no business state. Claim durable attempt bound to observation/prompt/contract/input digest, reserve budget before dispatch, mark dispatched once, retain uncertain reservation. Context -> one call -> envelope/core/evidence validation -> T3 merge/resolve -> effective directive -> guidance validation/selection -> fenced state transition -> actual send/receipt. Query data comes from authorized read, never another model call. Recheck revision before transition and outbound selection; do not send a precomputed stale reply. No second wording call.
+- [ ] Actual-service tests CO-A–F plus missing/oversized reply and unsupported guidance capture selected text, accepted facts, privacy-safe reasons and dispatch count. Bad guidance preserves grounded state; mixed correction is not local confirmation. Backend remains authoritative for preview/query/control/mutation text and T3 semantics; persist only actual selected reply and receipt. Existing deterministic bypasses stay zero-call.
 - [ ] Use real D1 stores in integration for two owners/chats, duplicate inbound, provider timeout, out-of-order accepted turn, queued confirmation before preview, pre/post-midnight receipt, side query/no TTL extension, legacy drain, restart and corruption. Assert zero canonical mutation on every clarify/preview/query; exact child counts only after separate confirmation. Inject uncertain storage/send; authorized read-back recovers without duplicate INSERT or blind retry.
 - [ ] Full check, independent end-to-end/security review, commit `feat(conversation): compose evidenced context through real inbound path`. Keep deployed capability unchanged.
 
@@ -288,6 +363,7 @@ reserve the historical per-call amount from an unverified full-token premise.
 `GET /api/v2/conversation-previews` -> `{data:{schemaVersion:'conversation-previews-1',previews:[publicId,draftRevision,previewHash,expiresAt,title,details,occurrences,decisionToken],hasMore}}` for authorized complete previews only, bounded10+sentinel. No raw context/evidence/internal IDs. `POST /api/v2/conversation-previews/decision` accepts strict `{schemaVersion,publicId,draftRevision,previewHash,decisionToken,action:'SAVE_PREVIEW'|'DECLINE',idempotencyKey}`; same-origin and live session checks precede T4 confirm. Token is not authentication. These schemas are new, not optional extra keys on old strict responses.
 
 - [ ] RED `real_route_response_parses_with_client_schema`, `old_client_shape_unchanged`, `forged_cross_user_preview_rejected`, `web_and_chat_confirmation_one_winner`, `legacy_details_null`.
+- [ ] Add `untrusted_guidance_absent_from_canonical_api`; expose only application-accepted state, never raw directive/reply as reminder fields. No transcript endpoint or incomplete-draft web editor is introduced by this amendment. Existing authorized surfaces may display actual selected guidance only if their reviewed contract explicitly carries it.
 - [ ] Run `pnpm exec vitest run src/contracts/api/reminders-v2.test.ts src/contracts/api/conversation-previews.test.ts src/modules/reminders/details-api-service.test.ts src/worker/routes/context-contract-api.integration.test.ts src/worker/routes/api-contract.test.ts src/modules/reminders/infrastructure/d1/api-store.test.ts`.
 - [ ] Implement authenticated operations/strict schemas, bounded list/detail decryption, real route integration wired to stores. Test expired session, CSRF, stale revision/token, altered hash, unsupported action, owner without bound connection, no cross-chat approval via bare controls and read-only GET. Dormant-compatible release can expose detailed read APIs for legacy records; successor preview list is empty and successor decision POST unavailable until explicit capability activation. There is no automatic fallback on arbitrary API errors.
 - [ ] Verify 100/101 result notice metadata, separate location/notes/event time, encoded hostile text and corrupt details safe error rather than legacy fallback. No incomplete-context web editor/recovery claim. Review then commit `feat(api): expose versioned reminder details and bound previews`.
@@ -301,6 +377,7 @@ reserve the historical per-call amount from an unverified full-token premise.
 **Interfaces:** T9 presentation functions, T8 strict endpoints. RenderResult is COMPLETE `{text}` or TOO_LONG/INVALID, never shortened silently. Outbound channel maximum stays 2000 UTF-16 units including prefix and full details. Preview includes every occurrence, separate event date/time, source calendar and decision instructions; if not representable ask shortening before confirm, not multiple notifications.
 
 - [ ] RED `calendar_and_chat_share_lunar_conversion`, `browser_timezone_does_not_move_vietnam_today`, `details_survive_confirmation_api_delivery`, `oversize_preview_cannot_confirm`.
+- [ ] Test `selected_guidance_not_canonical_details`: on any surface carrying selected guidance, render as escaped assistant text, not HTML, schedule, confirmation or canonical detail. No raw model proposal exposed; preview/calendar/detail/delivery remain backend-owned. Do not invent a new UI/API surface solely to display prose.
 - [ ] Run `pnpm exec vitest run src/modules/conversation/calendar-presentation.test.ts src/modules/reminders/detail-presentation.test.ts src/features/core-screens/CoreScreenExperience.test.tsx src/features/core-screens/ContextPreviewPanel.test.tsx src/features/core-screens/context-contract-ui.integration.test.tsx src/modules/reminders/delivery.test.ts`.
 - [ ] Calendar uses Vietnam civil year/month/day for navigation/today, existing lunar artifact/version; primary solar, secondary lunar day, day/month on lunar day1/first visible cell, “nhuận”, full selected-day convention. Retain markers/details; outside coverage solar remains and lunar says unavailable. Test 13 reference vectors ±1day, all artifact month boundaries, coverage1900-01-31..2101-01-28 ±1, leap examples2004-03-21/2004-04-18.
 - [ ] Consume actual Worker route responses via strict client schemas in UI integration, not frontend-only fixture agreement. Show OWNER list partial notice and explicit distinction from chat scope; render title/location/notes/event/notification times and complete preview, stale errors and double-click protection. Test keyboard selection, accessible dual-date/count names, narrow layout and loading/error states.
@@ -316,9 +393,10 @@ reserve the historical per-call amount from an unverified full-token premise.
 **Interfaces/data:** T10 probe and scorer above. Manifest holds exact texts/receipt/order/setup/user-turn count/expected call or bypass/fault schedule/field-state and mutation assertions. Real service builds every multi-turn context. Synthetic preseed allowed only for declared single-turn preconditions; not a substitute for R02/R07/R08/R11 or closure setup. The eight closure scripts must fit <=6 real user turns; if not, fail manifest admission, not silently expand caps.
 
 - [ ] RED `probe_records_selected_reply_not_reconstructed_decision`, `all_planned_assertions_in_denominator`, `pilot_full_cross_resume_rejected`, `campaign_caps_enforced_before_dispatch`, `preflight_and_offline_tests_zero_network`.
+- [ ] Add S §9.4.2 CO-A–F plus unsupported/null/oversized/control-contaminated reply tests through actual selection/service/store path. Assert actual selected reply source/meaning, independent patch/directive/reply categories, facts retained despite mismatch, one eligible dispatch/zero wording calls, backend-only factual/transaction text. An observed false save/capability claim fails guidance acceptance even when no mutation occurred; do not score fluent prose alone.
 - [ ] Run `pnpm exec vitest run tools/benchmark/context-contract.test.ts tools/benchmark/context-contract-live.test.ts`. Offline transport fixtures exercise the exact service/context/gateway/validation/store/confirmation/API path; only messaging/provider transport replaced. Capture selected ReplyPlan/actual sink receipts and per-turn state/read-back; never call evaluateConversationTurn afterward to pretend it was the service decision.
-- [ ] Freeze original16, development16 (eight mandatory closure variants plus eight declared paraphrases), heldout32 and repetitions. Pilot16+16=32; full16+16+32+16=80. Repeats are two extra executions of R02/R03/R05/R06/R07/R08/R11/R13, not best-of selection; maximum6 user turns each, including setup. R04's two comparisons have explicit reset within its script; R15/R16 layer-specific expansions follow S §9.4.
-- [ ] Implement score: pilot32/32 and schema100%; full>=76/80, heldout>=31/32, schema>=99%; all mandatory originals/repetitions/eight closure variants pass, detail assertions100%, safety0. Turn denominator all planned turns; healthy-call schema denominator all planned healthy model turns incl missing/timeout; separately raw valid/actual dispatched; expected bypass/injected refusal excluded only from schema. Unexecuted assertions fail; unexecuted scripts NOT_RUN do not shrink denominator.
+- [ ] Freeze original16, development16 (eight mandatory closure variants, two mandatory natural-guidance variants per S §9.4.2, six other paraphrases), heldout32 and repetitions. Pilot16+16=32; full16+16+32+16=80. Repeats are two extra executions of R02/R03/R05/R06/R07/R08/R11/R13, not best-of selection; maximum6 user turns each, including setup. R04's two comparisons have explicit reset within its script; R15/R16 layer-specific expansions follow S §9.4. CO-B/C/D fault injections stay offline; do not spend calls eliciting bad output or relabel disclosed fixtures held-out. If CO-F needs clarifying turns, freeze them; fail manifest admission if six cannot suffice.
+- [ ] Implement score: pilot32/32 and schema100%; full>=76/80, heldout>=31/32, schema>=99%; all mandatory originals/repetitions/eight closure/two guidance variants pass, detail assertions100%, safety0. Turn denominator all planned turns; healthy-call schema denominator all planned healthy model turns incl missing/timeout; separately raw valid/actual dispatched; expected bypass/injected refusal excluded only from schema. Full-schema failure stays failure even when valid core survives via fallback. Unexecuted assertions fail; unexecuted scripts NOT_RUN do not shrink denominator.
 - [ ] Append-only campaign ledger binds source/prompt/contracts/context/calendar/resolver/storage/migrations/scorer/corpus/config/route. Pilot<=192 calls/$0.50/20m, full<=480/$1/45m, total new campaign<=USD1.50, retry0/no fallback. Reserve worst-case before each dispatch; abort at deadline/stop and retain uncertain reservations; new run IDs never erase prior authorization/spend. Test crash/resume, corrupt provenance, cross-profile state and missing reservation; cleanup only runner-owned synthetic directory, never original ledgers.
 - [ ] Bind cumulative existing authorized/spent amounts at later approval, not guessed zero. Implement future CLI `node --experimental-strip-types --import ./tools/benchmark/register-conversation-loader.mjs tools/benchmark/run-context-contract-live.mjs --preflight` as guaranteed no-network/no-secret-read admission; live execution requires separately validated authorization file, immutable source/profile and explicit enable flag. Default CLI never runs inference. Unit-test every reject path.
 - [ ] Full local check, independent harness/security review, commit `test(conversation): add actual-path context contract acceptance harness`. Record Layer1 evidence only; Layer2/3 NOT_RUN. STOP for explicit evaluation authorization.
@@ -372,6 +450,23 @@ Fixed initial receipt: 2026-09-28 10:00 Asia/Ho_Chi_Minh unless specified; E=202
 | Persisted cancellation vs first-ever inference in flight | T4/T7 separate race tests; no false cancellation receipt |
 | Unknown/expired/corrupt/no context; two/three no-progress answers | T2/T4/T5/T7 lifecycle/loop tests; no fake web recovery |
 
+### Conversation-ownership acceptance mapping (development, not held-out)
+
+Exact Vietnamese input/wording fixtures remain in S §4.5.3/9.4.2; R01–R16 above
+are unchanged. No executable fixture was edited by this documentation amendment.
+
+| Case | Owning tasks / assertion |
+| --- | --- |
+| CO-A missing time, matching directive | T1A/T5/T7/T10: eligible natural question; only reminderTime requested |
+| CO-B wrong eventDate question | T2A/T5/T7/T10: discard prose, effective reminderTime fallback, retain facts |
+| CO-C incomplete premature preview | T5/T7/T10: no preview authority/save; backend clarification |
+| CO-D “Đã lưu lịch cho bạn.” | T5/T7/T10: forbidden output not selected, zero save; transactional paraphrases and obfuscation tested, no universal lint claim |
+| CO-E “Có, nhưng đổi sang 9h.” | T5/T7/T10 plus original R08: one dispatch, old preview invalid, new backend preview, no implicit confirm |
+| CO-F three exact progressive turns | T3 regression/T5/T7/T10: retained details, offset/count and approximate-clock clarification when needed, application occurrences/preview; never force Oct9/10 without grounds |
+| Null/missing/oversized/invalid guidance, invalid semantic core | T1A/T2A/T5/T6/T7/T10: independent validity, factual fallback, no schema-score laundering or second call |
+| Selected versus proposed text | T2A/T4/T7/T8/T9/T10: selected encrypted receipt/history only; sanitized next context, not canonical facts or raw API authority |
+| Canonical preview/query/controls/mutation/delivery | T4/T5/T7/T8/T9/T10: backend composition only, no model rows or success authority |
+
 ## Specification coverage
 
 | Approved section | Owning tasks |
@@ -379,6 +474,7 @@ Fixed initial receipt: 2026-09-28 10:00 Asia/Ho_Chi_Minh unless specified; E=202
 | §1–3 responsibility/supersession/actual processing | T1,T6,T7,T11 |
 | §4.1 schema/evidence/typed calendars | T0,T1,T2,T3 |
 | §4.2–4.4 slots/confirmed object/preservation | T1,T3,T4,T7,T8,T9 |
+| §4.5 directive/reply/effective selection and progressive semantics | T1A,T2A,T5,T7; T4 selected history; T6 one gateway; T8/T9 accepted surfaces |
 | §5/5.2 merge/time/count/reference | T3,T4,T7 |
 | §5.1/5.1.1 lifecycle/decisions/controls/recovery | T1,T4,T5,T7,T8 |
 | §5.3 query scope/status/partial results | T3,T7,T8,T9 |
@@ -386,19 +482,33 @@ Fixed initial receipt: 2026-09-28 10:00 Asia/Ho_Chi_Minh unless specified; E=202
 | §6.2 concurrency/uncertain results/no-draft limitation | T4,T5,T7,T8 |
 | §7 lunar UI/capability/annual exclusion | T3,T5,T7,T9 |
 | §8/8.1/8.2 route/bounds/events/fit | T0,T2,T6,T7,T10 |
+| §8.2.2 revised canonical-envelope measurements | T1A,T2A,T0A; route B unchanged |
 | §9.1 three evidence layers | T1–T9 Layer1; T10 tooling/T11 authorized Layer2 and Layer3 |
 | §9.2–9.4.1 scoring/manifests/closure | T10, fixture ownership above |
+| §9.4.2 conversation-ownership regressions | T1A/T2A/T5–T10; original fixtures preserved |
 | §9.5 migration/compatibility/release | T4,T8,T11 |
 | §10 policies/exclusions | Global constraints, T5/T10/T11 gate boundaries |
 
 ## Gate summary, risks and execution recommendation
 
-1. **Authorization:** plan/execution method approved; targeted methodology amendment recorded above. Documentation checks alone prove neither fit nor implementation.
-2. **Local:** accepted T0 local engineering A then T1–T10, independent Critical=0/Important=0 at boundaries. Keep successor dormant; isolated fake transports only until actual-route admission is established.
+1. **Authorization:** prior plan/execution method approved; current documentation-only amendment awaits OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN. No T4/implementation continuation in this turn. Documentation checks prove neither amended fit nor implementation.
+2. **Local:** historical T0 A and T1–T3 accepted; scoped T1A/T2A/T0A precede T4–T10 after owner review, independent Critical=0/Important=0 at boundaries. Keep successor dormant; isolated fake transports only until actual-route admission is established.
 3. **Provider:** separately verified route admission B, conditional bounded owner authorization, fresh official compatibility/prices, pilot then full, immutable provenance, all stops/caps retained. Currently NOT_RUN.
 4. **Remote:** separate inspection/migration/merge permissions, compatible rollback, exact-head checks and exact-master-SHA deploy approval.
 5. **Channel:** actual Zalo/Calendar/UAT evidence after deployment, human review. Currently NOT_RUN.
 
-Actual unresolved execution facts: Gemini-compatible local token bound/framing evidence and1536 fit; complete long-detail/channel fit and tested old-client upgrade response; D1 batch/trigger compatibility on workerd; channel reply-reference/send-receipt certainty; availability of a compatible rollback version; whether mandatory setup fits six-turn manifests; future endpoint metadata/prices/credential eligibility. Each has a blocking owner above. No new product-policy question is needed now. If approved behavior genuinely contradicts a required boundary, stop that dependency with sections/measurements and smallest amendment, not a broad redesign.
+Actual unresolved execution facts: amended1536 envelope/local measurements and
+full-route framing; complete preview/control/channel fit and old-client upgrade
+response; D1 batch/trigger compatibility on workerd; channel receipt certainty;
+compatible rollback; six-turn manifest fit; endpoint metadata/prices/credential
+eligibility. Free natural prose cannot receive a universal semantic safety proof
+from structural checks/lint; S §4.5.2 constrains selection and requires actual
+reply acceptance, not a second language parser. Review this residual-risk boundary
+alongside the written amendment. If a required guarantee cannot be met, stop that
+dependency with evidence and the smallest policy correction, not a broad redesign.
 
-Recommend **subagent-driven, sequential per task with a fresh independent reviewer at each boundary**, then whole-branch review. Context/persistence/confirmation are tightly coupled and mistakes can save the wrong reminder; review isolation is worth extra context cost. Limited parallel work only at declared independent boundaries, never shared contract writers. No implementation agents are dispatched during planning. Wait for explicit plan and execution-method approval.
+Preserve the approved **subagent-driven, sequential per task with a fresh
+independent reviewer at each boundary**, then whole-branch review. No agents
+or tasks are dispatched during this documentation amendment. Stop at
+OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN; do not ask to reselect the execution
+method or treat the older automatic-continuation approval as clearing this gate.

@@ -32,6 +32,24 @@ not product semantics or numeric limits. Historical T0 at
 `e44b9a415b87b7471085bc683d20e55c0360d9e8` remains BLOCKED.
 Remote migrations, push/merge, activation and deployment remain unauthorized.
 
+### Post-T3 conversation-ownership amendment (2026-09-29)
+
+Owner request `42c83974-4755-4a90-87fa-4f43ce227e96` authorizes this targeted
+documentation amendment and a local documentation commit only. Verified start:
+clean `codex/llm-context-contract-design` at
+`37d0f7ba7221dd1f7641ca5078e95d50004890e4`. T3 is accepted; its recorded
+117 focused / 263 T0-context / 495 regression passes and independent
+Critical=0 / Important=0 are historical local evidence, inspected rather than
+rerun for this documentation task. T0 local A and T1/T2 acceptance are preserved;
+the changed output contract requires scoped amendments and renewed measurements,
+not retroactive acceptance of new fields. Route admission B remains unverified.
+
+Direction approved: **LLM owns conversational guidance; backend owns truth and
+execution.** The written amendment and corresponding plan await owner review.
+No runtime/test edits, amendment implementation, T4 dispatch, provider call,
+migration, push or deploy is authorized now. This boundary supersedes automatic
+continuation language above. Next gate: OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN.
+
 ## 1. Intended outcome
 
 Users describe a task naturally, answer follow-up questions naturally, and do
@@ -80,8 +98,10 @@ evidence of asserted boundaries, not test results from this documentation task.
 
 ## 2. Decision and explicit supersession
 
-**Selected:** one bounded LLM interpretation produces a typed semantic patch;
-backend validates, merges, computes, presents, and executes approved operations.
+**Selected:** one bounded LLM interpretation produces a typed semantic patch,
+uncertainties, a proposed conversation directive and natural guidance. Backend
+validates, merges, computes the effective directive, selects eligible guidance,
+composes factual/transactional surfaces and executes approved operations.
 
 Alternatives rejected:
 
@@ -98,6 +118,7 @@ upon implementation and acceptance, not retroactively in deployed V2:
 | Provider exposes only semantic labels/title, no temporal operands | Provider may describe user-stated temporal expressions, calendar choice, recurrence intent, and relations as untrusted structured operands |
 | Raw-text TemporalEvidence extraction must precede and approve all understanding | The LLM owns natural-language interpretation; a deterministic resolver evaluates structured operands, not a competing general language parser |
 | Model cannot propose changes to resolved temporal slots | Model may propose an evidenced edit; backend checks scope/conflicts and issues a new draft revision before execution |
+| No model reply prose; deterministic composer owns every clarification | Bounded model guidance is an untrusted proposal selected only under §4.5; backend missing fields, facts, decisions and execution remain authoritative |
 
 Scheduling authority does **not** move to the LLM. Epochs, timezone selection,
 calendar conversion, date arithmetic, query bounds, occurrence expansion, access
@@ -129,15 +150,20 @@ V1/V2 test passes cannot select this contract for release.
 3. Best-effort typing, without waiting for provider completion.
 4. Load and validate bounded encrypted context; construct a sanitized provider
    view containing known slots, their provenance and the actual pending question.
-5. One bounded LLM call classifies intent and returns structured changes.
+5. One bounded LLM call returns semantic changes, uncertainties, proposed
+   directive and reply together.
 6. Strict-schema validation, evidence checks, deterministic merge and resolution.
-7. Clarify, read-only answer/list, or render an exact draft preview.
+7. Compute the effective directive from post-merge state; independently validate
+   the model directive and reply eligibility. Select guidance or safe fallback;
+   backend composes read-only results and exact draft previews. Recheck state
+   binding before accepting the transition and sending the selected reply.
 8. Explicit deterministic confirmation; transactional, idempotent mutation.
 
-No second model call for wording. No model-authored tools, SQL, reply prose,
-internal IDs, ownership fields or confirmation decision. The local composer
-uses verified known facts and the unresolved issue, rather than repeating a
-generic question. All substantive mixed messages retain their substantive intent.
+No second model call for wording. No model-authored tools, SQL, internal IDs,
+ownership fields or confirmation decision. Guidance eligibility is not semantic
+patch validity or execution permission. Fallback uses verified known facts and
+the actual unresolved issue, not a generic question. All substantive mixed
+messages retain their substantive intent.
 
 ## 4. Three separate objects
 
@@ -156,15 +182,25 @@ The provider returns a strict, versioned object with unknown fields rejected:
 - `uncertainties`: bounded field-specific alternatives or missing-information
   suggestions. Backend recomputes required fields; a model saying complete
   never makes an incomplete request executable.
+- `conversationDirective`: the strict untrusted union in §4.5.
+- `replyProposal`: the bounded nullable guidance object in §4.5.
 
 Use domain-specific Zod discriminated unions, not JSON Patch or arbitrary paths.
-Wire version is `calenote-context-1`; every root key is required, unknown keys
+Amended wire version is `calenote-context-2`; every root key is required, unknown keys
 fail closed. `changes` is at most 13 entries; `uncertainties` at most 4 entries,
 each `{field, reason, alternatives}` with at most two typed alternatives.
 Reason is `MISSING | AMBIGUOUS | CONFLICT | UNSUPPORTED_COMBINATION`.
 Issue field is one of the 13 slots, `intent`, `queryRange` or `operation`.
 `controlEvidence` is a required array of at most three references (empty except
 when citing a dialogue act); it uses the same evidence union below.
+
+The accepted T1 implementation still emits `calenote-context-1`. Version 2 is a
+planned successor output revision, not an already-implemented compatibility
+alias. Input/state/detail versions stay unchanged unless their actual shapes
+change; guidance is not a new reminder slot or an authoritative state field.
+Full strict output schema remains the sole provider schema. §4.5 defines a
+narrow independent validation boundary for malformed guidance, not permissive
+parsing of semantic fields or recovery of truncated JSON.
 
 Each change is `{field, operation, value, evidence}`. SET has a non-null value
 matching that field's type. CLEAR has literal null and current explicit-removal
@@ -366,6 +402,170 @@ or reminder would exceed the channel limit, ask the user to shorten details
 before confirmation, not silently omit notes or send extra notifications.
 Legacy records expose absent detail fields as unknown/null, never inferred.
 
+### 4.5 Conversation guidance and post-merge reply selection
+
+Design notation (strict objects, no unknown keys):
+
+```ts
+type ConversationDirective =
+  | { kind: 'ASK_FOR_FIELD'; field: IssueField }
+  | { kind: 'ASK_FOR_DISAMBIGUATION'; field: IssueField;
+      reason: 'AMBIGUOUS' | 'CONFLICT' | 'UNSUPPORTED_COMBINATION' }
+  | { kind: 'EXPLAIN_UNSUPPORTED'; issue:
+      'CAPABILITY' | 'REQUEST_COMBINATION' | 'DOMAIN_LIMIT' | 'ASSISTANT_SCOPE' }
+  | { kind: 'HELP'; topic: 'GENERAL' | 'REMINDERS' | 'LUNAR' | 'FINITE_SERIES' }
+  | { kind: 'PRESENT_PREVIEW' }
+  | { kind: 'ANSWER_QUERY'; queryKind: 'LIST' | 'CALENDAR_DATE' | 'CAPABILITY' };
+type ReplyProposal = { text: string } | null;
+type EffectiveDirective = ConversationDirective
+  | { kind: 'BACKEND_ONLY'; reason:
+      'CONTROL' | 'RECOVERY' | 'FAILURE' | 'MUTATION' | 'DELIVERY' };
+```
+
+`IssueField` is the existing closed 13-slot plus intent/queryRange/operation
+enum. No arbitrary field path, executable action, ID, option token, resolved
+date, occurrence array or database row is added to the directive. It describes
+the next question/action, never completeness, consent or persistence authority.
+The six model kinds cover guidance plus handoff to backend surfaces; controls,
+storage and delivery outcomes have no model kind.
+
+`replyProposal.text` is nonblank NFC plain text, at most **400 Unicode code
+points** (and therefore at most 800 UTF-16 units), no clipping. Null requests
+fallback. Prompt asks for concise wording in the user's language/context, only
+the next missing/ambiguous issue, no chain-of-thought, factual schedule recap,
+capability invention, success claim, commitment to save, confirmation instruction
+or control material. It must use null for PRESENT_PREVIEW and ANSWER_QUERY.
+The entire response still obeys 1536 tokens/32768 raw bytes and context limits.
+
+#### 4.5.1 Three independent validation results
+
+1. Validate complete JSON, size, version and root-key allowlist. Truncation,
+   malformed JSON, unknown root keys or unsupported version reject the whole
+   response. Never salvage a prefix or retry with another contract.
+2. Validate the semantic core (all existing interpretation fields) strictly and
+   run T2 evidence validation. No unknown semantic fields, fabricated references
+   or partial change arrays are admitted. A branded `ValidatedPatch` carries
+   only validated semantic facts/operands, not approved guidance.
+3. Independently validate `conversationDirective` structure, then compatibility
+   with the effective directive; independently check reply structure/privacy/
+   eligibility. Missing, extra-key, oversized or invalid guidance subobjects
+   cannot invalidate an otherwise valid semantic core. Record full-output
+   schema failure separately even when that core is retained; never report such
+   an output as schema-valid. An invalid core cannot be rescued by valid prose.
+
+Implementation splits validation at these two named root properties only.
+It must not strip unknown keys globally or use a relaxed alternate provider
+schema. Root keys for guidance remain mandatory on the wire; absent keys take
+the defensive fallback path, not successful schema acceptance.
+
+Compute `effectiveDirective` **after** validated merge, resolution, scope and
+current decision checks. T3's resolved slots and resolved facts remain a pair.
+Controls/failures/recovery have BACKEND_ONLY precedence. A current unsupported
+capability selects its typed explanation; unresolved alternatives/conflicts
+select disambiguation; otherwise select one genuinely missing field from T3's
+stable order, not the model's order. Query clarification uses its own scope;
+authorized resolved query selects ANSWER_QUERY (failure/unauthorized is never
+an empty answer). READY selects PRESENT_PREVIEW only after application validity,
+future-time, completeness, detail-fit and pending-decision checks; READY alone
+does not mint confirmation authority. Pure semantic HELP uses the approved topic.
+Unknown T3 reason/field mapping fails to backend failure wording, not a guess.
+
+Compatibility requires exact kind and typed field/reason/topic/query-kind match
+to that application selection. An unrelated model question, premature preview
+or unsupported topic yields DIRECTIVE_MISMATCH. Preserve valid grounded patch
+facts and their conflict/expiry rules, discard proposed wording, and compose
+the effective question locally. Never roll back valid facts merely to make the
+reply agree; never use a directive to clear uncertainty. Categorical telemetry
+separates semanticPatchValidation, directiveValidation and replyEligibility,
+without text, evidence, secrets or raw proposed field values.
+
+#### 4.5.2 Eligible prose versus backend-only surfaces
+
+Model prose may be selected only for a matching ASK_FOR_FIELD,
+ASK_FOR_DISAMBIGUATION, EXPLAIN_UNSUPPORTED or HELP. It is optional guidance,
+not a factual recap or an alternative decision UI. Backend-only composition is
+mandatory for canonical previews, exact resolved dates/times, query rows/calendar
+answers, capability facts, alternatives with factual values, confirmation/
+replacement/one-off acceptance instructions and tokens, mutation outcomes and
+delivery outcomes. On those surfaces discard model prose, even if its directive
+matches. Never pass database results to a second wording call.
+
+Selection requires bounded plain text with no markup, URLs, reserved controls,
+known scoped handles, internal identifiers or secret material. Reuse T2's
+Unicode/escaped-form control detection; reject rather than redact-and-send a
+contaminated proposed reply. Credentials are never provided to the model or
+logged for comparison. All provider strings and subsequent retained assistant
+views still pass §6.1.1; a model reply never becomes USER evidence.
+
+A conservative, versioned **output safety lint**, distinct from input meaning
+interpretation, rejects transactional/control language and concrete schedule
+claims before selection. For the current Vietnamese/English surface, reject
+whole normalized words `đã`, `lưu`, `tạo`, `gửi`, `xong`, `saved`, `save`,
+`created`, `create`, `sent`, `send`, `done`, `success`, `confirmed`, `confirm`,
+and phrases `thành công`, `xác nhận`; reject digit-bearing schedule/fact text.
+Normalize NFC/case/whitespace and reject invisible formatting/encoded material
+that cannot be classified safely. This deliberately rejects some innocent
+guidance (e.g. help about creating reminders); fallback is preferable. It is
+not a Vietnamese parser, semantic classifier or a list of failed user inputs.
+Do not expand it into a parallel conversational understanding system.
+
+Thus “Đã lưu lịch cho bạn.” is ineligible even with a matching ASK directive.
+The application composes the true next question with zero canonical mutation.
+Schema, matching directives and lexical lint **do not prove arbitrary prose is
+truthful**: paraphrased/implicit claims and wrong-field questions remain residual
+model-quality risks. The prompt prohibition is normative, not a formal semantic
+guarantee. Actual-path adversarial/held-out reply review must reject an observed
+false save/capability claim; do not label lint passage a proof of safe meaning.
+If acceptance exposes that defect, stop the affected guidance release for a
+bounded policy correction; do not add another LLM judge/wording call or silently
+weaken the requirement. Owner review explicitly includes this trade-off between
+free natural wording and non-universal deterministic language checks.
+
+Absent/blank/oversized/invalid/forbidden reply, directive mismatch, unsupported
+language safety coverage, output no-progress recovery, or backend-only surface
+selects concise deterministic wording for the effective action. Stable reasons:
+REPLY_ABSENT, REPLY_INVALID, REPLY_TOO_LONG, REPLY_FORBIDDEN,
+DIRECTIVE_INVALID, DIRECTIVE_MISMATCH, BACKEND_SURFACE. Never clip user facts
+to accommodate prose. Entire outgoing message including backend facts/controls
+must fit 2000 UTF-16 units; omit optional model guidance before composition if
+needed, not canonical details. Complete-detail overflow remains existing
+shorten/restart behavior, not success.
+
+Persist only the **actually selected** assistant text, its application-owned
+kind and actual delivery receipt in encrypted context under existing TTL/byte
+caps. Rejected proposals are not conversation history or canonical reminder
+state. Keep failed/uncertain delivery distinguished from seen text; later
+provider views apply the same control sanitization. No free-form model summary,
+extra long-term history or new persistence authority is introduced.
+
+#### 4.5.3 Progressive guidance fixture and unchanged schedule semantics
+
+Preserve the owner fixture exactly:
+
+1. User: “11/10 tui thi ở Quang Trung, nhắc tui trước đó nha.”
+   Guidance example: “Ông muốn mình nhắc trước ngày thi bao nhiêu ngày?”
+2. User: “2 ngày.”
+   Product wording example: “Được. Vậy tui sẽ nhắc vào 9 và 10/10. Hai ngày đó ông muốn mình nhắc lúc mấy giờ?”
+3. User: “sáng, khoảng 8h.”
+   Product wording example: “Tuyệt! Mình sẽ tạo nhắc lúc 8:00 ngày 9/10 và 10/10 cho kỳ thi ở Quang Trung.”
+
+These are UX intent examples, not required emitted strings or executable
+schedules. Direct reconciliation with accepted T3: “2 ngày” alone does not
+establish DAILY/count2. Without grounded finite-series context, clarify ONCE
+leadOffsetDays=2 versus DAILY/count2; never silently convert an offset to count.
+The illustrative pair of dates is available only after the latter is established.
+“khoảng” must not silently gain exactness: retain an uncertainty and ask whether
+08:00 is intended if the bounded clock cannot faithfully represent it. Additional
+clarification may be necessary; three turns are not a forced completeness gate.
+
+The date-bearing clauses above must be backend-composed from validated facts,
+not copied from replyProposal. The final “Mình sẽ tạo” is replaced by a backend
+preview explicitly marked “Chưa lưu” with application-generated confirmation
+instructions. With established DAILY/count2/BEFORE_EVENT and explicit 08:00,
+it shows event 11/10/2026 and notifications 09/10 and 10/10 at 08:00. Only later
+scoped “Có.” for that actual delivered preview may commit. No year, count,
+exact clock, confirmation or schedule rule in accepted T3 is superseded.
+
 ## 5. Deterministic resolution and merge
 
 - Use trusted inbound reference time and the user's supported timezone, never
@@ -421,7 +621,8 @@ request and one transient query question per owner/chat; no general task stack.
 | Active reminder | Unrelated new create | Ask whether to replace pending request; do not copy its facts or silently replace it |
 | Any active | Expiry or invalid encrypted context | EXPIRED/INVALID; never reuse facts; explain restart, no canonical change |
 | Any | Unsupported/combined request | Explain exact limitation, preserve existing draft; no partial execution |
-| Any | Provider/config/budget/schema failure | No proposed changes accepted; preserve readable valid draft; specific recovery |
+| Any | Provider/config/budget/semantic-core schema failure | No proposed changes accepted; preserve readable valid draft; specific recovery |
+| Any | Valid semantic core; invalid/mismatched directive or ineligible reply | Preserve accepted facts under normal merge rules; backend-selected fallback; no new execution authority (§4.5) |
 
 **Controls.** Decision type is checked before the existing confirmation
 allowlist (`có`, `ok`, `1`, `xác nhận`). Match the whole NFC/case/outer-space
@@ -755,7 +956,7 @@ reminder or paid inference. Known safe outbound retries retain delivery policy.
 | --- | --- |
 | BUDGET_EXHAUSTED / CONFIG_UNAVAILABLE | No dispatch; explain unavailable AI, retain draft, allow local controls |
 | PROVIDER_TIMEOUT / PROVIDER_FAILURE | No automatic retry/fallback; retain draft; user may submit a new turn |
-| SCHEMA_INVALID / EVIDENCE_INVALID | Reject complete patch; explain interpretation failure and request clarification |
+| SCHEMA_INVALID / EVIDENCE_INVALID | Reject semantic patch when envelope/core/evidence invalid; guidance-only invalidity follows independent fallback in §4.5 |
 | CONFLICT / UNSUPPORTED_CAPABILITY | Show conflicting fields or exact capability limit; no substitute schedule |
 | CONTEXT_STALE / SUPERSEDED | Discard old result; do not emit an obsolete success or preview |
 | STORE_UNCERTAIN | Read back authorized revision/result; acknowledge only verified state |
@@ -853,6 +1054,14 @@ Events: `INBOUND_ACCEPTED`, `CONTEXT_LOADED`, `MODEL_REQUIRED` or
 `MUTATION_IDEMPOTENT_SKIP`, `REPLY_SELECTED`, `REPLY_DISPATCHED`, and the outbound
 outcome. Emit only relevant events; failures must terminate with a reason.
 
+Amended selection adds `EFFECTIVE_DIRECTIVE_COMPUTED`, `DIRECTIVE_VALIDATED`
+and `REPLY_ELIGIBILITY_EVALUATED` before `REPLY_SELECTED`; record only enum
+kinds/reasons and selection source MODEL_GUIDANCE/BACKEND. No proposed or
+selected text enters telemetry. Patch acceptance and full-schema validity have
+separate counters. Exactly one dispatch for an eligible healthy semantic turn;
+zero repair/wording calls after mismatch, query or storage outcome. Existing
+scoped controls, standalone greeting/help and other §8.1 bypasses remain local.
+
 Correlate with random application attempt/trace IDs and safe revision numbers,
 not raw owner/chat/message IDs. Record source SHA, contract/prompt version,
 configured and observed model/provider when available, outcome/reason, timing,
@@ -878,7 +1087,7 @@ Combining sequences may contract under NFC; neither count means grapheme count.
 | Current semantic-dispatch input | 1800 NFC UTF-16 code units, preserving the current gateway ceiling; also obey the retained-turn cap; check before and after projection so removal cannot bypass admission |
 | Retained context | Six USER turns and <=16 KiB UTF-8 serialized snapshot JSON before encryption, including facts, decision/candidate, internal transcript and mapping; encryption overhead is separately bounded by storage |
 | Serialized provider request | <=12000 total input tokens for prompt/schema/context, plus all constituent limits; measure JSON UTF-8 bytes as a separate diagnostic, not as an interchangeable token count |
-| Provider response | <=1536 output tokens AND <=32 KiB raw response body bytes; reject truncated/oversized/schema-invalid output atomically |
+| Provider response | <=1536 output tokens AND <=32 KiB raw response body bytes; reject truncated/oversized/envelope-or-core-invalid output atomically; guidance-only invalidity is isolated under §4.5 and still fails the full-schema metric |
 
 Named boundary cases use NFC UTF-16 units for the current message:
 INPUT_1799 and INPUT_1800 pass that length gate only; all context/token/domain
@@ -953,6 +1162,26 @@ All original limits, model/route/privacy/no-fallback policy, evaluation ceilings
 product exclusions and release authorizations remain unchanged. T0 authorizes
 no early calibration campaign. If B remains unresolved after useful local work,
 report one consolidated specific external-method request without executing it.
+
+#### 8.2.2 Scoped amendment measurement revision (planned, not run)
+
+Preserve historical T0/T1 specimens, classifications and local A/B reports.
+After owner review, amend the canonical serializer/output specimen to include
+`conversationDirective` and `replyProposal`; use output version
+`calenote-context-2` with fresh prompt/schema/wire/corpus digests and a distinct
+measurement revision. Rerun only affected schema parity, complete serialization/
+byte counts, network-blocked pinned local tokenizer, output-envelope and prompt
+checks. Include null reply, ordinary concise reply, 400-code-point reply,
+escaping/Unicode, multi-field patch plus guidance, retained actual assistant
+text plus maps, existing long-detail and six-turn specimens. No reduced schema.
+
+All existing 1536/12000 token, 16384 context byte, turn, budget and channel limits
+remain. Additional prose cannot displace required facts. Do not change a required
+ordinary case into an expected rejection to report fit. Ordinary-flow overflow
+blocks the scoped amendment: report exact components/bytes/local tokens and the
+smallest bounded remedy for review, not a silent cap increase or fact clipping.
+Unknown full-route framing remains unknown; no provider/counting endpoint is
+authorized. Current historical A evidence does not measure this new envelope.
 
 ## 9. Acceptance and release gates
 
@@ -1140,6 +1369,46 @@ calls; Layer3 covers channel/UI. Existing 192/480 call caps, $0.50/$1.00 caps,
 before separately authorized execution; if setup cannot fit, report that fit
 failure rather than silently increasing turns/calls or omitting required checks.
 
+#### 9.4.2 Conversation-ownership development acceptance
+
+Keep R01–R16 and closure cases verbatim. New disclosed cases below are not
+held-out and add no paid calls or live authorization in this documentation task.
+All run through real post-merge selection with fake transport in Layer1; T10
+captures the selected reply, state, dispatch count and mutation count, not a
+post-hoc reconstruction. Assert semantics rather than exact friendly prose.
+
+| ID | Input / injected proposal | Required observation |
+| --- | --- | --- |
+| CO-A | Event/date/relation/count known; no reminder time; ASK_FOR_FIELD(reminderTime) and eligible natural question | Model guidance may be selected; only time asked; facts preserved; one semantic dispatch, zero mutation |
+| CO-B | Only reminderTime missing; ASK_FOR_FIELD(eventDate) | DIRECTIVE_MISMATCH; discard reply; backend time question; valid patch facts survive |
+| CO-C | Missing fields; PRESENT_PREVIEW with complete-sounding prose | No preview authority, no save; effective clarification and fallback |
+| CO-D | `replyProposal.text = “Đã lưu lịch cho bạn.”` before confirmation, including with correct ASK directive | REPLY_FORBIDDEN; not selected; backend question; zero mutation; test transactional paraphrases/Unicode variants and disclose lint limits |
+| CO-E | “Có, nhưng đổi sang 9h.” after preview | One semantic dispatch; grounded correction; old preview invalid; new backend preview; not confirmation |
+| CO-F | “11/10 tui thi ở Quang Trung, nhắc tui trước đó nha.” → “2 ngày.” → “sáng, khoảng 8h.” | Preserve event/title/location; ask only missing/ambiguous information under §4.5.3; no invented count/exactness; backend derives occurrences after explicit clarification; no forced three-turn preview |
+
+Additional mandatory Layer1 cases: all six directive kinds and typed mismatch
+fields; unsupported capability without invented support; null/absent/blank/
+401-code-point/unknown-key reply; invalid directive with valid core; invalid
+core with persuasive reply; valid patch plus known/escaped forbidden controls;
+stale post-call binding; actual selected text/receipt encrypted and sanitized
+next turn; model prose never used for query rows, canonical preview, control,
+mutation or delivery results. Exactly one eligible dispatch, zero wording calls;
+every deterministic bypass remains zero. CO-D's fixed reject is not evidence of
+universal natural-language safety; review actual selected paraphrases too.
+
+Use two of the eight still-unallocated full-development slots for CO-A/F
+progressive guidance and eligible unsupported guidance; retain eight mandatory
+closure slots and six other development variants. CO-E remains covered by R08.
+CO-B/C/D and malformed/oversized proposals are deterministic injections, not
+paid prompt attempts to elicit invalid replies; their full expansions remain
+mandatory Layer1. Freeze progressive scripts within six turns, including
+required disambiguation; if that cannot fit, report a manifest-fit blocker.
+32/80 executions, 32 held-out, 192/480 calls and existing caps remain unchanged.
+Score full schema separately from accepted semantic core; safe fallback does not
+erase a schema/semantic failure. An observed false save/capability claim in the
+selected assistant output fails the guidance acceptance gate, even with zero
+database writes. Backend-only factual output must match actual application data.
+
 ### 9.5 Compatibility and release
 
 Release requires reviewed config and any additive storage migration, exact-head
@@ -1229,6 +1498,8 @@ work, not optional new product categories.
 - Mock results, real calls, dispatch outcomes and channel acceptance remain
   separately reported; no claim of implementation follows document checks (§8/9).
 
-Next gate: owner review of the linked implementation plan and execution method.
-This spec does not authorize implementation by itself. Deployment remains
-unchanged until separately authorized work passes its release gates.
+Next gate: OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN. Execution method previously
+approved remains sequential subagent implementation with independent review;
+do not redispatch T4 or implement scoped amendments until this new review gate
+is cleared. Deployment remains unchanged until separately authorized work
+passes its release gates.
