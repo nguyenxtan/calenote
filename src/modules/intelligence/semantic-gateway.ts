@@ -42,7 +42,7 @@ export function semanticReferenceWallClock(referenceTime: number): Pick<Semantic
 }
 export type SemanticTier = "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK";
 export type SemanticFailureCategory = "UNAVAILABLE" | "TIMEOUT" | "RATE_LIMITED" | "PROVIDER_FAILURE"
-  | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT";
+  | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT" | "ROUTE_ADMISSION_UNVERIFIED";
 export interface SemanticUsage {
   costMicrounits: number | null;
   promptTokens?: number;

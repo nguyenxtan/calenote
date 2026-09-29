@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ContextInputSchema, InterpretationJsonSchema, parseInterpretationSections, type ContextInput, type ParsedInterpretation } from "../../../conversation/context-contract/contracts";
+import { serializeContextRequest } from "../../../conversation/context-contract/wire";
+import { containsForbiddenControl } from "../../../conversation/context-contract/projection";
 import { ConversationModelSchema, ConversationModelJsonSchema, type ConversationModel } from "../../../conversation/contracts";
 import { ConversationInputSchema, CONVERSATION_PROMPT } from "../../../conversation/prompt";
 import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema } from "../../../semantic/contracts";
@@ -29,7 +32,7 @@ export interface SemanticJsonRequest {
   stream: false;
   messages: Array<{ role: "system" | "user"; content: string }>;
   max_tokens: number;
-  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema } };
+  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
     zdr?: true; max_price: { prompt: number; completion: number } };
 }
@@ -71,7 +74,7 @@ function containsSensitiveInput(value: string): boolean {
 }
 
 function decodeResponse<T>(response: { status: number; body: string; oversized?: boolean }, config: SemanticGatewayConfig,
-  maximum: number, output: z.ZodType<T>): SemanticAttemptResult<T> {
+  maximum: number, output: z.ZodType<T>, enforceTokenBounds = false): SemanticAttemptResult<T> {
   if (response.status === 408) return { status: "FAILURE", category: "TIMEOUT" };
   if (response.status === 429) return { status: "FAILURE", category: "RATE_LIMITED" };
   if (response.status === 404) return { status: "FAILURE", category: "UNAVAILABLE" };
@@ -88,6 +91,13 @@ function decodeResponse<T>(response: { status: number; body: string; oversized?:
   }
   const envelope = envelopeSchema.safeParse(body);
   if (!envelope.success) return { status: "FAILURE", category: "SCHEMA_INVALID" };
+  if (enforceTokenBounds) {
+    // Assess each numeric bound independently: unknown accounting in one field
+    // cannot erase a known overflow in the other. safeUsage stays separate.
+    const reported = z.object({ prompt_tokens: z.unknown().optional(), completion_tokens: z.unknown().optional() }).safeParse(envelope.data.usage);
+    if (reported.success && (typeof reported.data.prompt_tokens === "number" && reported.data.prompt_tokens > config.maxInputTokens
+      || typeof reported.data.completion_tokens === "number" && reported.data.completion_tokens > config.maxOutputTokens)) return { status: "FAILURE", category: "SCHEMA_INVALID" };
+  }
   const usage = safeUsage(envelope.data.usage, config, maximum);
   let payload: unknown;
   try { payload = JSON.parse(envelope.data.choices[0].message.content); } catch {
@@ -100,6 +110,7 @@ function decodeResponse<T>(response: { status: number; body: string; oversized?:
 
 export function createSemanticGateway(rawConfig: SemanticGatewayConfig, transport: SemanticTransport): SemanticGateway {
   return createContractGateway(rawConfig, transport, { input: SemanticInputSchema,
+    admitInput: (input, config) => input.text.length <= config.maxInputChars,
     output: ModelSemanticInterpretationSchema, schema: ModelSemanticInterpretationJsonSchema,
     prompt: CANONICAL_SEMANTIC_PROMPT, name: "model_semantic_interpretation", primaryOnly: false });
 }
@@ -109,6 +120,7 @@ export function createConversationGateway(rawConfig: SemanticGatewayConfig, tran
     throw new TypeError("Conversation requires a single ZDR primary route");
   }
   return createContractGateway(rawConfig, transport, { input: ConversationInputSchema,
+    admitInput: (input, config) => input.text.length <= config.maxInputChars,
     output: ConversationModelSchema, schema: ConversationModelJsonSchema,
     prompt: CONVERSATION_PROMPT, name: "conversation_semantic_interpretation", primaryOnly: true });
 }
@@ -119,8 +131,9 @@ function sensitiveValue(value: unknown): boolean {
   return value !== null && typeof value === "object" && Object.values(value).some(sensitiveValue);
 }
 
-function createContractGateway<T, Input extends { text: string }>(rawConfig: SemanticGatewayConfig,
+function createContractGateway<T, Input>(rawConfig: SemanticGatewayConfig,
   transport: SemanticTransport, contract: { input: z.ZodType<Input>; output: z.ZodType<T>;
+    admitInput: (input: Input, config: SemanticGatewayConfig) => boolean;
     schema: typeof ModelSemanticInterpretationJsonSchema; prompt: string; name: string; primaryOnly: boolean }): SemanticGateway<T, unknown> {
   const parsed = configSchema.safeParse(rawConfig);
   if (!parsed.success || typeof transport !== "function"
@@ -134,7 +147,7 @@ function createContractGateway<T, Input extends { text: string }>(rawConfig: Sem
     prepare(tier, rawInput) {
       if (contract.primaryOnly && tier !== "PRIMARY") return { status: "FAILURE", category: "UNAVAILABLE" };
       const parsedInput = contract.input.safeParse(rawInput);
-      if (!parsedInput.success || parsedInput.data.text.length > config.maxInputChars
+      if (!parsedInput.success || !contract.admitInput(parsedInput.data, config)
         || sensitiveValue(parsedInput.data)) {
         return { status: "FAILURE", category: "INVALID_INPUT" };
       }
@@ -191,4 +204,80 @@ function createContractGateway<T, Input extends { text: string }>(rawConfig: Sem
       };
     },
   };
+}
+
+/** No VERIFIED variant exists until B supplies a reviewed Worker-valid method.
+ * Configuration readiness is separate from authority to dispatch. */
+export type ContextRouteAdmission = { status: "UNVERIFIED" };
+/** Declarative synthetic exchanges, not an executable transport. Request JSON
+ * binds the synthetic count to the entire canonical wire including the route.
+ * This is never evidence of provider framing, compatibility or current prices. */
+export interface ContextOfflineTransport {
+  kind: "OFFLINE_FIXTURE";
+  exchanges: Array<{
+    requestJson: string;
+    admission: { fullInputTokens: number; billableOverheadMicrounits: number };
+    response: { status: number; body: string; oversized?: boolean };
+  }>;
+}
+const offlineSchema = z.strictObject({ kind: z.literal("OFFLINE_FIXTURE"), exchanges: z.array(z.strictObject({
+  requestJson: z.string().max(262144),
+  admission: z.strictObject({ fullInputTokens: z.number(), billableOverheadMicrounits: z.number() }),
+  response: z.strictObject({ status: z.number().int(), body: z.string().max(131072), oversized: z.boolean().optional() }),
+})).max(1000) });
+const contextSectionsSchema = z.unknown().transform((raw, ctx): ParsedInterpretation => {
+  const parsed = parseInterpretationSections(raw);
+  if (parsed.status === "PARSED") return parsed.value;
+  ctx.addIssue({ code: "custom", message: "Invalid context semantic envelope or core" });
+  return z.NEVER;
+});
+
+/** Dormant successor factory. Callable transports ALWAYS refuse while B is
+ * unverified, including functions decorated with forged offline properties.
+ * Offline scripts are copied plain data and have no callback/network capability.
+ * T7 still owns original-source/snapshot admission, evidence, budgets and events. */
+export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
+  transport: SemanticTransport | ContextOfflineTransport): SemanticGateway<ParsedInterpretation, ContextInput> {
+  const config = configSchema.parse(rawConfig);
+  const route = config.primary;
+  if (!route || route.model !== "google/gemini-2.5-flash-lite" || route.provider !== "google-vertex/eu" || !route.requireZdr
+    || route.promptPriceMicrounitsPerMillionTokens !== 100000 || route.completionPriceMicrounitsPerMillionTokens !== 400000
+    || config.freePrimary || config.paidFallback || config.maxInputTokens !== 12000 || config.maxOutputTokens !== 1536
+    || config.maxResponseBytes !== 32768 || config.timeoutMs !== 30000) throw new TypeError("Invalid context gateway configuration");
+  const offline = typeof transport === "function" ? null : offlineSchema.safeParse(transport);
+  let cursor = 0;
+  return { prepare(tier, rawInput) {
+    if (tier !== "PRIMARY") return { status: "FAILURE", category: "UNAVAILABLE" };
+    const input = ContextInputSchema.safeParse(rawInput);
+    if (!input.success || input.data.turns[input.data.currentTurn].text.length > config.maxInputChars
+      || input.data.turns.some(t => t.role === "USER" && [...t.text].length > 2000)
+      || sensitiveValue(input.data) || containsForbiddenControl(input.data, [])) return { status: "FAILURE", category: "INVALID_INPUT" };
+    // Fail before exposing a reservation amount. No env flag/caller assertion
+    // can convert local token measurements into full-route admission.
+    if (!offline?.success) return { status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" };
+    const wire = serializeContextRequest(input.data);
+    const request: SemanticJsonRequest = { model: route.model, ...wire,
+      response_format: { ...wire.response_format, json_schema: { ...wire.response_format.json_schema, strict: true } }, provider: {
+      only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,
+      max_price: { prompt: 0.1, completion: 0.4 },
+    } };
+    const fixture = offline.data.exchanges[cursor];
+    if (!fixture || fixture.requestJson !== JSON.stringify(request)) return { status: "FAILURE", category: "INVALID_INPUT" };
+    const { fullInputTokens, billableOverheadMicrounits } = fixture.admission;
+    if (!Number.isSafeInteger(fullInputTokens) || fullInputTokens <= 0 || fullInputTokens > config.maxInputTokens
+      || !Number.isSafeInteger(billableOverheadMicrounits) || billableOverheadMicrounits < 0
+      || billableOverheadMicrounits > 2_000_000) return { status: "FAILURE", category: "INVALID_INPUT" };
+    const numerator = BigInt(config.maxInputTokens) * BigInt(route.promptPriceMicrounitsPerMillionTokens)
+      + BigInt(config.maxOutputTokens) * BigInt(route.completionPriceMicrounitsPerMillionTokens);
+    const maximumCostMicrounits = Number((numerator + 999999n) / 1000000n) + billableOverheadMicrounits;
+    cursor++;
+    let dispatched = false;
+    return { status: "READY", model: route.model, provider: route.provider, maximumCostMicrounits,
+      async dispatch() {
+        if (dispatched) return { status: "FAILURE", category: "UNAVAILABLE" };
+        dispatched = true;
+        return decodeResponse(fixture.response, config, maximumCostMicrounits, contextSectionsSchema, true);
+      },
+    };
+  } };
 }

@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
+import * as gateways from "./semantic-gateway";
+import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
+import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
+import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
 const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
@@ -15,7 +19,147 @@ const success = { status: 200, body: JSON.stringify({ choices: [{ message: { con
 
 afterEach(() => vi.useRealTimers());
 
+const contextInput = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-1",
+  reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" },
+  turns: [{ role: "USER", text: "nhắc gọi mẹ" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [],
+  capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
+const contextConfig = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
+    promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+const contextOutput = { schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO",
+  changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "gọi mẹ", occurrence: 1 }] }],
+  query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }], controlEvidence: [],
+  conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
+const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
+  messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify(value) }],
+  response_format: { type: "json_schema", json_schema: { name: "calenote_context_2", strict: true, schema: InterpretationJsonSchema } },
+  stream: false, max_tokens: 1536,
+  provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
+const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
+  choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: finish }] }) });
+const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
+  admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
+function contextGateway(exchanges = [exchange()], cfg = contextConfig) {
+  expect(gateways).toHaveProperty("createContextContractGateway", expect.any(Function));
+  return gateways.createContextContractGateway(cfg, { kind: "OFFLINE_FIXTURE", exchanges });
+}
+
+describe("dormant successor context gateway", () => {
+  it("context_gateway_uses_exact_prompt_schema_and_route", async () => {
+    const attempt = contextGateway().prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(attempt.maximumCostMicrounits).toBe(1815);
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true,
+      semantic: { changes: contextOutput.changes, uncertainties: contextOutput.uncertainties },
+      directive: { status: "VALID", value: contextOutput.conversationDirective }, reply: { status: "VALID", value: contextOutput.replyProposal } }, usage: { costMicrounits: null } });
+  });
+  it("prepared_is_not_dispatched_and_dispatch_is_one_shot", async () => {
+    const attempt = contextGateway([{ ...exchange(), response: { status: 429, body: "" } }]).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "RATE_LIMITED" });
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "UNAVAILABLE" });
+  });
+  it("real_route_refuses_even_with_forged_fixture_admission_and_never_calls_transport", () => {
+    expect(gateways).toHaveProperty("createContextContractGateway", expect.any(Function));
+    const network = vi.fn(async () => contextResponse());
+    Object.assign(network, { kind: "OFFLINE_FIXTURE", exchanges: [exchange()] });
+    expect(gateways.createContextContractGateway(contextConfig, network).prepare("PRIMARY", contextInput))
+      .toEqual({ status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" });
+    expect(network).not.toHaveBeenCalled();
+  });
+  it.each([12001, -1, NaN, 1.5])("full_request_bound_checked_before_prepare_ready %s", (fullInputTokens) => {
+    expect(contextGateway([{ ...exchange(), admission: { fullInputTokens, billableOverheadMicrounits: 0 } }]).prepare("PRIMARY", contextInput).status).toBe("FAILURE");
+  });
+  it("exact_request_binding_and_billable_overhead_are_required", () => {
+    expect(contextGateway([{ ...exchange(), requestJson: JSON.stringify({ ...contextRequest(), tools: [] }) }]).prepare("PRIMARY", contextInput).status).toBe("FAILURE");
+    expect(contextGateway([{ ...exchange(), admission: { fullInputTokens: 12000, billableOverheadMicrounits: 23 } }]).prepare("PRIMARY", contextInput))
+      .toMatchObject({ status: "READY", maximumCostMicrounits: 1838 });
+  });
+  it.each(["CN-scoped-control", "%43%4e-secret", "authorization: bearer secret", "password=secret", "/connect code"])("no_control_or_secret_in_body %s", text => {
+    const value = { ...contextInput, turns: [{ role: "USER" as const, text }] };
+    expect(contextGateway([exchange(value)]).prepare("PRIMARY", value)).toEqual({ status: "FAILURE", category: "INVALID_INPUT" });
+  });
+  it.each([1800, 1801])("NFC_UTF16_current_gate %s", size => {
+    const value = { ...contextInput, turns: [{ role: "USER" as const, text: "😀".repeat(899) + "ế".repeat(size - 1798) }] };
+    expect(contextGateway([exchange(value)]).prepare("PRIMARY", value).status).toBe(size === 1800 ? "READY" : "FAILURE");
+  });
+  it("guidance_failure_never_redispatches", async () => {
+    const raw = { ...contextOutput, conversationDirective: { kind: "SAVE" }, replyProposal: { text: "😀".repeat(401) } };
+    const attempt = contextGateway([{ ...exchange(), response: contextResponse(raw) }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false,
+      semantic: { changes: contextOutput.changes }, directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } } });
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it.each([
+    contextResponse(contextOutput, "length"), { status: 200, body: '{"choices":[' },
+    { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(contextOutput).slice(0, -1) }, finish_reason: "stop" }] }) },
+    contextResponse({ ...contextOutput, schemaVersion: "calenote-context-1" }),
+    contextResponse({ ...contextOutput, changes: [...contextOutput.changes, ...contextOutput.changes] }),
+    contextResponse({ ...contextOutput, ownerId: "secret" }),
+    { ...contextResponse(), oversized: true }, { status: 200, body: "ế".repeat(10923) },
+  ])("truncated_json_never_salvaged_and_invalid_core_atomic %#", async response => {
+    const attempt = contextGateway([{ ...exchange(), response }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it("offline_script_supports_distinct_turns_and_copies_fixture_state", async () => {
+    const second = { ...contextInput, turns: [{ role: "USER" as const, text: "mai" }] };
+    const script = [exchange(), exchange(second)]; const gateway = contextGateway(script);
+    script[0].response.body = "corrupted";
+    for (const value of [contextInput, second]) {
+      const attempt = gateway.prepare("PRIMARY", value);
+      if (attempt.status !== "READY") throw new Error("not ready");
+      expect((await attempt.dispatch()).status).toBe("SUCCESS");
+    }
+    expect(gateway.prepare("PRIMARY", second).status).toBe("FAILURE");
+  });
+  it.each([{ completion_tokens: 1537 }, { prompt_tokens: 12001 }])("reported_token_overflow_rejects_context_output %j", usage => {
+    const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+    const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    return expect(attempt.dispatch()).resolves.toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+  });
+  it.each([null, "unknown", {}, false].flatMap(unknown => [
+    { prompt_tokens: 12001, completion_tokens: unknown }, { prompt_tokens: unknown, completion_tokens: 1537 },
+  ]))("unknown_sibling_cannot_hide_known_token_overflow %j", async usage => {
+    const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+    const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+  });
+  it("unknown_usage_without_known_overflow_remains_unknown", async () => {
+    for (const usage of [{ prompt_tokens: 12000, completion_tokens: null }, { prompt_tokens: null, completion_tokens: 1536 }]) {
+      const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+      const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+      if (attempt.status !== "READY") throw new Error("not ready");
+      expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", usage: { costMicrounits: null } });
+    }
+  });
+  it.each([{ maxOutputTokens: 256 }, { maxInputTokens: 12001 }, { maxResponseBytes: 32769 }, { timeoutMs: 1 },
+    { primary: { ...contextConfig.primary, model: "other/model" } }, { primary: { ...contextConfig.primary, requireZdr: false } },
+    { primary: { ...contextConfig.primary, promptPriceMicrounitsPerMillionTokens: 99999 } },
+  ])("successor_rejects_route_or_wire_changes_before_any_preparation %j", override => {
+    expect(() => contextGateway([exchange()], { ...contextConfig, ...override })).toThrow("Invalid context gateway configuration");
+  });
+  it("bounded_stream_reader_cancels_above_32768_without_content_length", async () => {
+    const cancel = vi.fn(); const response = new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new Uint8Array(32768)); controller.enqueue(new Uint8Array(1));
+    }, cancel }));
+    expect(await readBoundedSemanticResponse(response, 32768)).toEqual({ body: "", oversized: true });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});
+
 describe("injected strict semantic gateway", () => {
+  it("legacy_malformed_usage_does_not_change_semantic_success", async () => {
+    const body = JSON.parse(success.body); body.usage = { cost: 0.001, prompt_tokens: 12001, completion_tokens: null };
+    const attempt = createSemanticGateway(config, async () => ({ status: 200, body: JSON.stringify(body) })).prepare("FREE_PRIMARY", input);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", usage: { costMicrounits: null } });
+  });
   it("derives the authoritative Vietnamese wall clock instead of sending an epoch to the model", () => {
     expect(semanticReferenceWallClock(Date.parse("2026-09-16T09:00:00+07:00"))).toEqual({
       referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",

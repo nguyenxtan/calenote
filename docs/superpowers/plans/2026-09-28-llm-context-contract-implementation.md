@@ -91,6 +91,15 @@
   replaced preview; exact current token or delivered reply reference is required.
   T4 confirmation guards remain unchanged. T6 may proceed dormant only; actual
   full-route admission remains UNVERIFIED, no provider or remote actions.
+- T6 LOCAL_IMPLEMENTATION_ACCEPTED / LIVE_ADMISSION_PENDING: final focused146
+  and relevant regression606 tests PASS; typecheck/scoped lint/diff PASS.
+  Before the narrow token-counter correction, full2377 tests+1skip and local
+  tokenizer/regression856 passed; these are not post-fix full-suite claims.
+  Independent review and scoped correction review Critical=0/Important=0.
+  Known token overflow cannot be hidden by a malformed sibling usage field.
+  Exact canonical successor wire and section parsing remain dormant; real
+  callable transport refuses admission, copied declarative fixtures only.
+  T7 may proceed locally; full-route proof B remains UNVERIFIED.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,
