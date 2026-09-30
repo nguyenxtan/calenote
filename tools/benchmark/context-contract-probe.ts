@@ -17,6 +17,8 @@ import { decodeContextSnapshot, encodeContextSnapshot, type ContextSnapshotV1 } 
 import { isDeepStrictEqual } from "node:util";
 import { persistedD1Blob } from "../../src/modules/db/persisted-blob";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import type { ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
+import type { SemanticGateway } from "../../src/modules/intelligence/semantic-gateway";
 import type { ReplyPlan, ReplyReceipt } from "../../src/modules/conversation/context-contract/responses";
 import type { ContextObservationEvent } from "../../src/modules/conversation/context-contract/observability";
 import type { ContextObservation, PlannedContextCase } from "./context-contract";
@@ -29,7 +31,8 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
   completionPriceMicrounitsPerMillionTokens: 400000, reservationTtlMs: 300000 };
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
-export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean; }
+export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
+  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
   if (!/^[0-9a-f]{40}$/u.test(config.sourceSha) || !Number.isSafeInteger(config.referenceNow)) throw new TypeError("INVALID_PROBE_CONFIG");
@@ -60,6 +63,12 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     const service = createContextContractService({ store, runtimeStore: new D1ContextRuntimeStore(db),
       gateway: { prepare(tier, input) {
         inputs.push(structuredClone(input));
+        if (config.liveGateway) {
+          const prepared = config.liveGateway.prepare(tier, input), hold = delayed;
+          if (!hold || prepared.status !== "READY") return prepared;
+          delayed = null;
+          return { ...prepared, dispatch: async () => { hold.signalStarted(); await hold.waiting; return prepared.dispatch(); } };
+        }
         const proposed = fixture(input, index);
         const wire = serializeContextRequest(input);
         const request = { model: gatewayConfig.primary!.model, ...wire, provider: {
@@ -78,8 +87,10 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
         if (!hold || prepared.status !== "READY") return prepared;
         delayed = null;
         return { ...prepared, dispatch: async () => { hold.signalStarted(); await hold.waiting; return prepared.dispatch(); } };
-      } }, budgetStore: new D1SemanticBudgetStore(db, config.budgetRefusal ? { ...budgetLimits, ownerDailyFallbackLimit: 0 } : budgetLimits), keyring, calendar: lunarCalendar,
-      channel: "TELEGRAM", sourceSha: config.sourceSha, mode: "OFFLINE_FIXTURE", now: () => now,
+      } }, budgetStore: new D1SemanticBudgetStore(db, { ...budgetLimits,
+        ...(config.liveGateway ? { reservationInputTokenExposure: 1048576 } : {}),
+        ...(config.budgetRefusal ? { ownerDailyFallbackLimit: 0 } : {}) }), keyring, calendar: lunarCalendar,
+      channel: "TELEGRAM", sourceSha: config.sourceSha, mode: config.liveGateway ? "LIVE" : "OFFLINE_FIXTURE", now: () => now,
       list: query => { queryRange = query.range; return new D1SemanticReminderQueryStore(db).listContext(query); }, observe: event => events.push(event),
       reply: async plan => { selected = plan; delivery = deliveryFault ? { status: deliveryFault } : { status: "SENT", messageRef: `synthetic-receipt-${index}` }; sends.push({ plan, receipt: delivery }); return delivery; } });
     const scope = (id: string, claimMarker: string) => ({ ownerId: "owner", chatIdentityId: "identity", sourceInboundId: id, claimMarker, now });
@@ -126,7 +137,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           location: r.details?.location ?? null, notes: r.details?.notes ?? null, eventDate: r.details?.eventDate ?? null,
           eventTime: r.details?.eventTime ?? null, calendar: r.details?.calendarProvenance.calendar ?? null }));
         const occurrences = previews.previews[0]?.occurrences.map(occurrence => new Date(occurrence.scheduledAt + 7 * 3600000).toISOString().slice(0, 16).replace("T", " ")) ?? [];
-        return { status: result.status, dispatches, actualDispatches: dispatches, mutations: after - before, fields,
+        return { status: result.status, dispatches, actualDispatches: config.syntheticFaultControl ? 0 : dispatches, mutations: after - before, fields,
           source: ready?.source, kind: ready?.kind, selectedText: ready?.text,
           delivery: actualEvents.some(e => e.event === "REPLY_DISPATCHED") ? currentDelivery()?.status : undefined,
           decisionKind: snapshot?.pendingDecision?.kind ?? null, apiPreviews: previews.previews.length, detailFields, previewFields, canonicalReminders,
@@ -204,12 +215,20 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
  * script. A declared R04 branch reset allocates a new service and synthetic D1.
  * The fixture callback supplies proposed wire data only; observed decisions
  * always come from service outputs and read-back. */
+export interface LiveProbeCampaignHooks {
+  gateway: SemanticGateway<ParsedInterpretation, ContextInput>;
+  onTurn(script: PlannedContextCase, turnIndex: number, actual: ContextObservation["turns"][number]): Promise<void>;
+}
 export async function runContextFixtureCampaign(planned: readonly PlannedContextCase[], config: ProbeConfig,
-  fixture: (input: ContextInput, executionId: string, turnIndex: number) => unknown): Promise<ContextObservation[]> {
+  fixture: (input: ContextInput, executionId: string, turnIndex: number) => unknown, live?: LiveProbeCampaignHooks): Promise<ContextObservation[]> {
   const observations: ContextObservation[] = [];
   for (const script of planned) {
     let turnIndex = 0;
-    let probe = await createContextContractProbe(config, input => {
+    // Declared injected-refusal controls remain Layer1. They cannot receive a
+    // provider response, enter route admission or inflate actual HTTP counters.
+    const syntheticControl = !!live && script.turns.every(t => t.model === "INJECTED_REFUSAL");
+    const probeConfig = { ...config, ...(live && !syntheticControl ? { liveGateway: live.gateway } : {}), syntheticFaultControl: syntheticControl };
+    let probe = await createContextContractProbe(probeConfig, input => {
       const declared = script.turns[turnIndex];
       if (declared.fault === "TIMEOUT" || declared.fault === "INVALID_JSON" || declared.fault === "SCHEMA_INVALID") return { fixtureFault: declared.fault };
       return fixture(input, script.executionId, turnIndex);
@@ -220,7 +239,7 @@ export async function runContextFixtureCampaign(planned: readonly PlannedContext
       for (const [index, turn] of script.turns.entries()) {
         if (turn.resetBefore) {
           probe.dispose();
-          probe = await createContextContractProbe(config, input => {
+          probe = await createContextContractProbe(probeConfig, input => {
             const declared = script.turns[turnIndex];
             if (declared.fault === "TIMEOUT" || declared.fault === "INVALID_JSON" || declared.fault === "SCHEMA_INVALID") return { fixtureFault: declared.fault };
             return fixture(input, script.executionId, turnIndex);
@@ -240,6 +259,7 @@ export async function runContextFixtureCampaign(planned: readonly PlannedContext
           turns.at(-1)!.assertions!.controlRedacted = !JSON.stringify(probe.inputs.at(-1)).includes(issuedToken)
             && !turns.at(-1)!.selectedText?.includes(issuedToken);
         }
+        if (!turn.deferResponse) await live?.onTurn(script, index, turns[index]);
         for (const action of turn.actionsAfter ?? []) {
           if (action.kind === "REPLAY_LAST") actions.push(await probe.replayLastInbound(action.at));
           else {
@@ -247,6 +267,7 @@ export async function runContextFixtureCampaign(planned: readonly PlannedContext
             const pending = held;
             actions.push(await probe.releaseDeferredTurn(pending, action.at));
             turns[heldIndex] = await pending.pending;
+            await live?.onTurn(script, heldIndex, turns[heldIndex]);
             held = null;
           }
         }

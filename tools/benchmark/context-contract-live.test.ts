@@ -4,6 +4,59 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { admitFutureLiveIntent, appendCampaignEvent, computeContextSourceFreeze, finishCampaignCall, markCampaignDispatched, preflightContextCampaign, readCampaignLedger, reserveCampaignCall } from "./context-contract-live";
+import * as live from "./context-contract-live";
+
+it("known actual charges release financial exposure while uncertain dispatches stop the observable campaign", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-observable-ledger-"));
+  try {
+    const begin = { event: "BEGIN" as const, runId: "one", sourceSha: "a".repeat(40), profile: "PILOT" as const,
+      provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 0, observableAdmission: true };
+    appendCampaignEvent(dir, begin);
+    const reserve = (n: number) => reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: begin.provenanceDigest,
+      reservationId: `r${n}`, maximumMicrounits: 105472, now: n, startedAt: 0 });
+    expect(reserve(1).status).toBe("RESERVED"); markCampaignDispatched(dir, { runId: "one", reservationId: "r1", at: 1 });
+    finishCampaignCall(dir, { runId: "one", reservationId: "r1", at: 1, observedMicrounits: 1000 });
+    expect(live).toHaveProperty("settleCampaignCanary", expect.any(Function));
+    live.settleCampaignCanary(dir, { runId: "one", at: 1, accepted: true });
+    for (let n = 2; n <= 8; n++) {
+      expect(reserve(n).status).toBe("RESERVED"); markCampaignDispatched(dir, { runId: "one", reservationId: `r${n}`, at: n });
+      finishCampaignCall(dir, { runId: "one", reservationId: `r${n}`, at: n, observedMicrounits: n === 8 ? null : 1000 });
+    }
+    expect(() => reserve(9)).toThrow(/STOPPED|UNKNOWN/u);
+    expect(readCampaignLedger(dir).at(-1)).toMatchObject({ event: "STOP", reason: "UNKNOWN_USAGE" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+it.each(["in-flight", "failed"])("observable canary %s cannot authorize a second call or restart", state => {
+  const dir = mkdtempSync(join(tmpdir(), "context-observable-ledger-"));
+  try {
+    const digest = "b".repeat(64);
+    appendCampaignEvent(dir, { event: "BEGIN", runId: "one", sourceSha: "a".repeat(40), profile: "PILOT", provenanceDigest: digest,
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 0, observableAdmission: true });
+    const r = { runId: "one", profile: "PILOT" as const, provenanceDigest: digest, reservationId: "r1", maximumMicrounits: 105472, now: 1, startedAt: 0 };
+    reserveCampaignCall(dir, r); markCampaignDispatched(dir, { runId: "one", reservationId: "r1", at: 1 });
+    if (state === "failed") {
+      finishCampaignCall(dir, { runId: "one", reservationId: "r1", at: 2, observedMicrounits: 1000 });
+      expect(live).toHaveProperty("settleCampaignCanary", expect.any(Function));
+      live.settleCampaignCanary(dir, { runId: "one", at: 2, accepted: false });
+    }
+    expect(() => reserveCampaignCall(dir, { ...r, reservationId: "r2", now: 3 })).toThrow(/CANARY|STOPPED/u);
+    expect(readCampaignLedger(dir).at(-1)?.event).toBe("STOP");
+    expect(() => appendCampaignEvent(dir, { event: "BEGIN", runId: "new", sourceSha: "a".repeat(40), profile: "FULL", provenanceDigest: digest,
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 4 })).toThrow(/ALREADY_STARTED/u);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+it("observed financial overflow is recorded exactly and stops instead of losing actual spend", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-observable-ledger-"));
+  try {
+    const digest = "b".repeat(64);
+    appendCampaignEvent(dir, { event: "BEGIN", runId: "one", sourceSha: "a".repeat(40), profile: "PILOT", provenanceDigest: digest,
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 0, observableAdmission: true });
+    reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: digest, reservationId: "r1", maximumMicrounits: 105472, now: 1, startedAt: 0 });
+    markCampaignDispatched(dir, { runId: "one", reservationId: "r1", at: 1 });
+    expect(finishCampaignCall(dir, { runId: "one", reservationId: "r1", at: 2, observedMicrounits: 105473 })).toMatchObject({ observedMicrounits: 105473 });
+    expect(readCampaignLedger(dir).at(-1)).toMatchObject({ event: "STOP", reason: "RESERVATION_EXCEEDED" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 it("default preflight reads neither credential nor network and refuses unverified route", () => {
   let reads = 0, requests = 0;
@@ -105,19 +158,20 @@ it("one campaign cannot authorize over the combined USD 1.50 ceiling or bypass g
       reservationId: "r1", maximumMicrounits: 1, at: 1 })).toThrow(/USE_GUARDED_CAMPAIGN_TRANSITION/u);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
-it("future live intent requires an explicit matching authorization file and still blocks unverified Route B", () => {
+it("observable live intent requires explicit source-bound authority and a fixed campaign root", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-contract-authorization-"));
   try {
     const preflight = preflightContextCampaign({ root: process.cwd() });
     const authorizationPath = join(dir, "authorization.json");
-    const authorization = { version: "context-contract-live-1", sourceSha: preflight.sourceSha, provenanceDigest: preflight.provenanceDigest,
+    const authorization = { version: "context-contract-live-2", method: "OBSERVABLE_CANARY", campaignRoot: dir, pilotLedgerHash: null,
+      sourceSha: preflight.sourceSha, provenanceDigest: preflight.provenanceDigest,
       profile: "PILOT", runId: "bounded-run", approvedAt: 1, expiresAt: 1000,
       cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0 };
     writeFileSync(authorizationPath, JSON.stringify(authorization));
     const input = { root: process.cwd(), enableLive: true, authorizationPath, profile: "PILOT" as const, runId: "bounded-run", now: 2 };
     expect(() => admitFutureLiveIntent({ ...input, enableLive: false })).toThrow(/EXPLICIT_ENABLE_REQUIRED/u);
     expect(() => admitFutureLiveIntent({ ...input, profile: "FULL" })).toThrow(/AUTHORIZATION_MISMATCH/u);
-    expect(() => admitFutureLiveIntent(input)).toThrow(/ROUTE_ADMISSION_UNVERIFIED/u);
+    expect(admitFutureLiveIntent(input)).toMatchObject({ campaignRoot: dir, method: "OBSERVABLE_CANARY" });
     writeFileSync(authorizationPath, JSON.stringify({ ...authorization, sourceSha: "a".repeat(40) }));
     expect(() => admitFutureLiveIntent(input)).toThrow(/AUTHORIZATION_MISMATCH/u);
   } finally { rmSync(dir, { recursive: true, force: true }); }

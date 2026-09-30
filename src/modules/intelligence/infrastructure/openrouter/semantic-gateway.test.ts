@@ -39,6 +39,109 @@ const contextResponse = (payload: unknown = contextOutput, finish = "stop") => (
   choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: finish }] }) });
 const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
   admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
+
+describe("observable successor route", () => {
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
+    id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(payload).body),
+    usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
+  }) });
+  it("reserves full financial exposure and emits unchanged canonical request exactly once", async () => {
+    const requests: SemanticJsonRequest[] = [];
+    const gateway = gateways.createContextContractGateway(contextConfig, async request => { requests.push(request); return response(); }, admission);
+    const attempt = gateway.prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") return;
+    expect(attempt.maximumCostMicrounits).toBe(105472);
+    expect(requests).toHaveLength(0);
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true },
+      usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
+      providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
+    expect(requests).toEqual([contextRequest()]);
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+    expect(requests).toHaveLength(1);
+  });
+  it.each([
+    { usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } },
+    { usage: { cost: .001, prompt_tokens: null, completion_tokens: 1537 } },
+    { usage: { cost: .001, prompt_tokens: 12000 } }, { usage: { prompt_tokens: 100, completion_tokens: 100 } },
+    { usage: { cost: .001, prompt_tokens: 1.5, completion_tokens: 100 } },
+    { usage: { cost: .105473, prompt_tokens: 100, completion_tokens: 100 } },
+    { model: "other/model" }, { model: undefined }, { provider: "Google AI Studio" },
+    { provider: undefined }, { choices: [{ message: { content: "{}" }, finish_reason: "length" }] },
+  ])("rejects observable limit/route/unknown violations before acceptance %j", async override => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response(override), admission).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status === "READY") expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it("retains known cost on token overflow", async () => {
+    for (const wire of [response({ usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } })]) {
+      const attempt = gateways.createContextContractGateway(contextConfig, async () => wire, admission).prepare("PRIMARY", contextInput);
+      expect(attempt.status).toBe("READY");
+      if (attempt.status === "READY") expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", usage: { costMicrounits: 1000 } });
+    }
+  });
+  it("preserves valid core while quarantining bad guidance for production backend fallback", async () => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response({}, { ...contextOutput, conversationDirective: { kind: "SAVE" } }), admission)
+      .prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false, directive: { status: "INVALID" },
+      semantic: { changes: contextOutput.changes } }, usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
+  });
+  it("reports actual known charge even when it exceeds the financial reservation", async () => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response({ usage: { cost: .105473, prompt_tokens: 100, completion_tokens: 100 } }), admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", usage: { costMicrounits: 105473 } });
+  });
+  it("aborts a stalled real transport at the original deadline without retry", async () => {
+    vi.useFakeTimers(); let signal: AbortSignal | undefined, calls = 0;
+    const attempt = gateways.createContextContractGateway(contextConfig, async (_request, options) => {
+      calls++; signal = options.signal; return new Promise(() => {});
+    }, admission).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") return;
+    const pending = attempt.dispatch(); await vi.advanceTimersByTimeAsync(30000);
+    expect(await pending).toMatchObject({ status: "FAILURE", category: "TIMEOUT" });
+    expect(signal?.aborted).toBe(true); expect(calls).toBe(1);
+  });
+  it("HTTP factory separates credential headers from the exact canonical body", async () => {
+    expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
+    let seen: { url: string; init: RequestInit } | undefined;
+    const transport = gateways.createContextHttpTransport("synthetic-test-secret", async (url, init) => {
+      seen = { url, init }; return new Response(response().body, { headers: { "content-type": "application/json" } });
+    });
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", rawResponseBytes: new TextEncoder().encode(response().body).byteLength });
+    expect(seen?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
+    expect(seen?.init.body).toBe(JSON.stringify(contextRequest()));
+    expect(seen?.init.body).not.toContain("synthetic-test-secret");
+  });
+  it("raw byte evidence measures original HTTP chunks, including BOM, not decoded text or Content-Length", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(new Uint8Array([239, 187, 191, 123, 125]),
+      { headers: { "content-type": "application/json", "content-length": "1" } }));
+    expect(await transport(contextRequest(), { signal: new AbortController().signal })).toMatchObject({ body: "{}", rawResponseBytes: 5 });
+  });
+  it("HTTP reader cancels oversized or stalled bodies and rejects non-JSON/invalid UTF8", async () => {
+    expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
+    const cancel = vi.fn();
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(32769)); }, cancel,
+    }), { headers: { "content-type": "application/json" } }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.oversized).toBe(true); expect(cancel).toHaveBeenCalledOnce();
+    const invalid = gateways.createContextHttpTransport("synthetic", async () => new Response(new Uint8Array([255]), { headers: { "content-type": "application/json" } }));
+    await expect(invalid(contextRequest(), { signal: new AbortController().signal })).rejects.toThrow();
+    const html = gateways.createContextHttpTransport("synthetic", async () => new Response("{}", { headers: { "content-type": "text/html" } }));
+    await expect(html(contextRequest(), { signal: new AbortController().signal })).rejects.toThrow();
+    const abort = new AbortController(), stalledCancel = vi.fn();
+    const stalled = gateways.createContextHttpTransport("synthetic", async () => new Response(new ReadableStream({ cancel: stalledCancel }), { headers: { "content-type": "application/json" } }));
+    const pending = stalled(contextRequest(), { signal: abort.signal });
+    await Promise.resolve(); abort.abort();
+    await expect(pending).rejects.toThrow(); expect(stalledCancel).toHaveBeenCalledOnce();
+  });
+});
 function contextGateway(exchanges = [exchange()], cfg = contextConfig) {
   expect(gateways).toHaveProperty("createContextContractGateway", expect.any(Function));
   return gateways.createContextContractGateway(cfg, { kind: "OFFLINE_FIXTURE", exchanges });

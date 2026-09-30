@@ -16,6 +16,22 @@ function environment(): Env {
 }
 
 describe("Worker composition root", () => {
+  it("keeps observable HTTP gateway wiring dormant behind the explicit successor capability", async () => {
+    const gateway = await import("@/modules/intelligence/infrastructure/openrouter/semantic-gateway");
+    const factory = vi.spyOn(gateway, "createContextContractGateway");
+    const root = await import("./composition-root");
+    const env = { ...environment(), AI_MODE: "privacy", OPENROUTER_API_KEY: "test-only-key", OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
+      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu", AI_MAX_PRIVACY_PRICE: "0.4" } as Env;
+    try {
+      await root.createRuntimeOperations(env); expect(factory).not.toHaveBeenCalled();
+      await root.createRuntimeOperations(env, { contextContract: "calenote-context-2", sourceSha: "a".repeat(40) });
+      expect(factory).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxInputTokens: 12000, maxOutputTokens: 1536 }), expect.any(Function),
+        { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+      const source = await readFile(resolve(process.cwd(), "src/worker/composition-root.ts"), "utf8");
+      expect(source).toContain("createContextHttpTransport(contextPolicy.apiKey)");
+      expect(source).toContain("reservationInputTokenExposure: 1048576");
+    } finally { factory.mockRestore(); }
+  });
   it.each([undefined, "unknown", "g".repeat(40)])("successor capability refuses missing or invalid source SHA %s", async sourceSha => {
     const root = await import("./composition-root");
     await expect(root.createRuntimeOperations(environment(), { contextContract: "calenote-context-2", sourceSha })).rejects.toThrow("Source SHA required");

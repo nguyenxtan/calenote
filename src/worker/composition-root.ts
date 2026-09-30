@@ -50,7 +50,7 @@ import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { createContextContractGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway, createContextHttpTransport } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { parseContextContractRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
 import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 import { D1ContextRuntimeStore } from "@/modules/conversation/context-contract/runtime-store";
@@ -397,12 +397,13 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const contextContract = capabilities.contextContract ? {
     store: new D1ContextContractStore(env.DB, keyring), runtimeStore: new D1ContextRuntimeStore(env.DB), calendar: lunarCalendar,
     sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
-    // B is unverified. This dormant callable route cannot dispatch; a later
-    // reviewed route proof must supply its real transport, never fake admission.
-    gateway: contextPolicy?.status === "READY" ? createContextContractGateway(contextPolicy.config, async () => { throw new Error("Route admission unverified"); })
+    // Dormant until the reviewed capability is enabled after full live PASS.
+    gateway: contextPolicy?.status === "READY" ? createContextContractGateway(contextPolicy.config, createContextHttpTransport(contextPolicy.apiKey),
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
       : { prepare: () => ({ status: "FAILURE" as const, category: "UNAVAILABLE" as const }) },
     budgetStore: new D1SemanticBudgetStore(env.DB, { ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
-      maxInputTokens: 12000, maxOutputTokens: 1536, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 }),
+      maxInputTokens: 12000, maxOutputTokens: 1536, reservationInputTokenExposure: 1048576,
+      promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 }),
     list: (input: import("@/modules/conversation/context-contract/query").ContextReminderQuery) => new D1SemanticReminderQueryStore(env.DB).listContext(input),
   } : undefined;
   // A capability is an explicit application composition choice, never an

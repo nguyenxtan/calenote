@@ -20,7 +20,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: [...configDefaults.exclude, "docs/**/*.test.mjs"],
+    exclude: [...configDefaults.exclude, "docs/**/*.test.mjs", ".superpowers/**"],
     css: true,
   },
 });

@@ -48,6 +48,18 @@
 
 ### Current task acceptance
 
+- Owner observable-admission amendment (2026-09-30), S §8.2.4, supersedes
+  the private-transform/token-bound methodological stop for T11. T10 accepted
+  at `8f521abd0f60574eedb314f6dc1d125b3d0402a1`, local C0/I0; historical
+  pending status below is retained. Complete production gateway/transport and
+  isolated runner with TDD and independent review before inference. First
+  pilot semantic request is the only route canary, stream=false; no additional
+  calibration/debug request. Freeze canonical digests and source, reserve
+  conservatively, dispatch one then gate the next on exact schema, usage,
+  bounded bytes, selected model/provider and real application evidence. Any
+  failure stops with actual spend and sanitized request ID; no cap or schema
+  weakening. Passing canary counts as case1, then existing pilot/full/release
+  authorization continues. No private upstream-body equivalence is claimed.
 - Current controlling owner authorization (2026-09-30),
   `31ddd6df-b74c-41ab-87f1-4e71284e935e`, supersedes earlier T10-only/external
   stop permissions, while preserving technical gates. Complete the narrow

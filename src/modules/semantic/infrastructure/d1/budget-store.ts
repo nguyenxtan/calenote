@@ -5,10 +5,11 @@ export class D1SemanticBudgetStore implements SemanticBudgetStore {
   private readonly maximumCost: number;
 
   constructor(private readonly database: D1Database, limits: SemanticBudgetLimits) {
-    const numerator = limits.maxInputTokens * limits.promptPriceMicrounitsPerMillionTokens
+    const numerator = (limits.reservationInputTokenExposure ?? limits.maxInputTokens) * limits.promptPriceMicrounitsPerMillionTokens
       + limits.maxOutputTokens * limits.completionPriceMicrounitsPerMillionTokens;
     if (Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 0)
       || limits.maxInputTokens === 0 || limits.maxOutputTokens === 0
+      || (limits.reservationInputTokenExposure !== undefined && limits.reservationInputTokenExposure < limits.maxInputTokens)
       || limits.reservationTtlMs === 0 || limits.reservationTtlMs > 900_000
       || !Number.isSafeInteger(numerator) || numerator <= 0) {
       throw new TypeError("Invalid semantic budget configuration");

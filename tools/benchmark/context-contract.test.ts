@@ -3,7 +3,49 @@ import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type ContextManifest, type ContextObservation } from "./context-contract";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
+import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { frozenContextProposal, validateContextFixtureCoverage } from "./context-contract-fixtures";
+
+it.each(["directive", "reply"])("production observable service retains valid core and backend fallback for bad %s", async section => {
+  const cfg = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+    primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+  const gateway = createContextContractGateway(cfg, async request => {
+    const input = JSON.parse(request.messages[1].content), proposal = frozenContextProposal(input, "R14", 0) as object;
+    return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ ...proposal,
+        ...(section === "directive" ? { conversationDirective: { kind: "SAVE" } } : { replyProposal: { text: "x".repeat(401) } }) }) } }] }) };
+  }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+  const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z"), liveGateway: gateway },
+    () => { throw new Error("NO_OFFLINE_SUBSTITUTION"); });
+  try {
+    const result = await probe.turn("Mai 8h nhắc gọi mẹ ở nhà, ghi chú hỏi thăm sức khỏe.", "2026-09-28T03:00:00Z");
+    expect(result).toMatchObject({ status: "DRAFT_CREATED", source: "BACKEND", actualDispatches: 1, mutations: 0, fullSchemaValid: false,
+      fields: { title: "gọi mẹ" } });
+  } finally { probe.dispose(); }
+});
+
+it("live probe uses the production callable gateway and financial reservation without fixture substitution", async () => {
+  let calls = 0;
+  const cfg = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+    primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+  const gateway = createContextContractGateway(cfg, async request => {
+    calls++; const input = JSON.parse(request.messages[1].content);
+    return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-offline-test",
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify(frozenContextProposal(input, "R14", 0)) } }],
+      usage: { cost: .001, prompt_tokens: 1000, completion_tokens: 300 } }) };
+  }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+  const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z"), liveGateway: gateway }, () => { throw new Error("LIVE_USED_OFFLINE_PROPOSAL"); });
+  try {
+    const draft = await probe.turn("Mai 8h nhắc gọi mẹ ở nhà, ghi chú hỏi thăm sức khỏe.", "2026-09-28T03:00:00Z");
+    expect(draft).toMatchObject({ status: "DRAFT_CREATED", actualDispatches: 1, mutations: 0, fullSchemaValid: true });
+    expect(probe.events.find(e => e.event === "BUDGET_RESERVED")).toMatchObject({ maximumCostMicrounits: 105472 });
+    expect(probe.events.find(e => e.event === "REQUEST_DISPATCHED")).toMatchObject({ mode: "LIVE" });
+    const confirmed = await probe.turn(`Xác nhận ${probe.issuedControlToken()}`, "2026-09-28T03:01:00Z");
+    expect(confirmed).toMatchObject({ status: "CONFIRMED", dispatches: 0, mutations: 1, childCount: 1 });
+    expect(confirmed.canonicalReminders?.[0]).toMatchObject({ location: "ở nhà", notes: "hỏi thăm sức khỏe" });
+    expect(calls).toBe(1);
+  } finally { probe.dispose(); }
+});
 import regressions from "../../src/modules/conversation/context-contract/benchmark/regressions.json";
 import development from "../../src/modules/conversation/context-contract/benchmark/development.json";
 import heldout from "../../src/modules/conversation/context-contract/benchmark/heldout.json";

@@ -17,12 +17,12 @@ const directive = z.enum(["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UN
 const schema = z.discriminatedUnion("event", [
   event("INBOUND_ACCEPTED", {}), event("CONTEXT_LOADED", { presence: z.enum(["PRESENT", "ABSENT", "INVALID", "EXPIRED", "UNAVAILABLE"]) }),
   event("MODEL_REQUIRED", {}), event("MODEL_BYPASSED", { reason }), event("REQUEST_REJECTED", { reason }),
-  event("REQUEST_PREPARED", { configuredModel: z.literal("google/gemini-2.5-flash-lite"), configuredProvider: z.literal("google-vertex/eu"), routeAdmission: z.enum(["UNVERIFIED", "OFFLINE_FIXTURE"]) }),
+  event("REQUEST_PREPARED", { configuredModel: z.literal("google/gemini-2.5-flash-lite"), configuredProvider: z.literal("google-vertex/eu"), routeAdmission: z.enum(["UNVERIFIED", "OFFLINE_FIXTURE", "OBSERVABLE_CANARY"]) }),
   // Protected reservation IDs/owner mappings belong to the budget store. The
   // trace ID links that protected mapping without exposing identifiers here.
   event("BUDGET_RESERVED", { maximumCostMicrounits: safeCount }), event("REQUEST_DISPATCHED", {}),
   event("RESPONSE_RECEIVED", { outcome: z.enum(["SUCCESS", "FAILURE"]), latencyMs: safeCount,
-    observedModel: z.enum(["UNKNOWN", "google/gemini-2.5-flash-lite"]), observedProvider: z.enum(["UNKNOWN", "google-vertex/eu"]),
+    observedModel: z.enum(["UNKNOWN", "google/gemini-2.5-flash-lite"]), observedProvider: z.enum(["UNKNOWN", "Google", "google-vertex", "google-vertex/eu"]),
     promptTokens: safeCount.nullable(), completionTokens: safeCount.nullable(), costMicrounits: safeCount.nullable(), reason: reason.optional() }),
   event("STRUCTURE_VALIDATED", { fullSchemaValid: z.boolean(), semanticPatchValidation: z.enum(["VALID", "INVALID"]),
     directiveValidation: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]), replyEligibility: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]) }),

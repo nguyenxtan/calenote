@@ -141,7 +141,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           try { void Promise.resolve(deps.processingFeedback?.()).catch(() => {}); } catch { /* best effort */ }
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
-          emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: "google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : "UNVERIFIED" });
+          emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: "google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
           const inputDigest = await digest(built.input), promptDigest = await digest(CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
           const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, contractVersion: "calenote-context-2", promptVersion: "calenote-context-2" });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
@@ -157,7 +157,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const result = await attempt.dispatch().catch(() => ({ status: "FAILURE", category: "PROVIDER_FAILURE" } as const));
           const usage = "usage" in result ? result.usage : undefined;
           try { await deps.budgetStore.finalizeUsage({ ...budget, actualCostMicrounits: usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* Dispatched reservation retains ceiling. */ }
-          emit({ event: "RESPONSE_RECEIVED", outcome: result.status, latencyMs: Math.round(performance.now() - started), observedModel: "UNKNOWN", observedProvider: "UNKNOWN",
+          const providerEvidence = "providerEvidence" in result ? result.providerEvidence : undefined;
+          emit({ event: "RESPONSE_RECEIVED", outcome: result.status, latencyMs: Math.round(performance.now() - started), observedModel: providerEvidence?.model ?? "UNKNOWN", observedProvider: providerEvidence?.provider ?? "UNKNOWN",
             promptTokens: usage?.promptTokens ?? null, completionTokens: usage?.completionTokens ?? null, costMicrounits: usage?.costMicrounits ?? null, ...(result.status === "FAILURE" ? { reason: result.category } : {}) });
           if (result.status !== "SUCCESS") return finish("PROVIDER");
           const parsed = result.interpretation;

@@ -45,19 +45,31 @@ export type SemanticFailureCategory = "UNAVAILABLE" | "TIMEOUT" | "RATE_LIMITED"
   | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT" | "ROUTE_ADMISSION_UNVERIFIED";
 export interface SemanticUsage {
   costMicrounits: number | null;
+  /** Validated provider-reported USD, not the rounded accounting amount. */
+  reportedCostUsd?: number;
   promptTokens?: number;
   completionTokens?: number;
+}
+export interface SemanticProviderEvidence {
+  model: "google/gemini-2.5-flash-lite";
+  provider: "Google" | "google-vertex" | "google-vertex/eu";
+  location: "eu" | "UNEXPOSED";
+  generationId: string | null;
 }
 export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   status: "SUCCESS";
   interpretation: T;
   usage: SemanticUsage;
-} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage };
+  providerEvidence?: SemanticProviderEvidence;
+  /** Actual HTTP chunks consumed; on an early cancelled read this is a prefix. */
+  rawResponseBytes?: number;
+} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number };
 export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;
   provider: string;
   maximumCostMicrounits: number;
+  routeAdmission?: "OBSERVABLE_CANARY";
   /** One shot. No adapter retry or hidden provider fallback is permitted. */
   dispatch(): Promise<SemanticAttemptResult<T>>;
 } | { status: "FAILURE"; category: SemanticFailureCategory };

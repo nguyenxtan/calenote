@@ -1227,6 +1227,48 @@ establish provider-route admission B or imply live acceptance. External access,
 release and controlled UAT may occur only at the explicitly gated stages of that
 authorization; no unrelated product expansion is included.
 
+#### 8.2.4 Owner-approved observable route admission (2026-09-30)
+
+The owner replaces private upstream-transformation introspection as the T11
+admission prerequisite with observable contract preservation. Preserve the
+preceding UNVERIFIED reports as historical methodology, not provider failures.
+Do not claim knowledge of unexposed OpenRouter internals. No separate sacrificial
+or calibration request and no streaming debug request are permitted.
+
+Before dispatch, bind the exact canonical prompt/schema digests and production-
+shaped request: stream=false, response_format=json_schema, strict=true,
+provider.only=[google-vertex/eu], require_parameters=true, zdr=true,
+data_collection=deny, allow_fallbacks=false, approved model/prices, output1536,
+retry0 and complete application/campaign budget reservations. The first actual
+eligible pilot semantic request is the route canary and counts as pilot case1.
+Exactly one application LLM call and one provider inference HTTP request occur;
+no next inference is allowed until its observable admission result is settled.
+
+Require a successful structured response, exact canonical output validation,
+prompt_tokens<=12000, completion_tokens<=1536, raw response<=32768 bytes,
+actual selected model and provider/route where exposed, no retry/fallback,
+unchanged request privacy controls, and actual application semantic/evidence
+acceptance. Retain sanitized generation/request ID, actual spend/usage and the
+outbound digest chain without prompts, credentials or raw user content in logs.
+Missing usage or any failed assertion stops the pilot immediately. An invalid
+response cannot authorize preview, persistence or canonical mutation. Unknown
+private routing details remain explicitly unexposed, never invented.
+
+Only a passing first request sets T11_ROUTE_ADMISSION=PASS. That same request
+remains in the planned pilot denominator. Validate the same observable limits
+on subsequent requests; a canary is not universal future-input token proof.
+Budget reservation must conservatively cover dispatch uncertainty, not assume
+observed usage before the response. Keep the 12000 application input ceiling,
+1536 output ceiling, strict full schema/context, response/privacy/route limits
+and pilot192/USD0.50/20min, full480/USD1.00/45min, combinedUSD1.50 unchanged.
+No funds, model/provider rescue, prompt/heldout tuning or retries are permitted.
+
+The evidence chain is canonical outbound request -> require_parameters routing
+-> actual provider dispatch -> reported usage -> strict structured response ->
+canonical validator -> application-path acceptance. Owner authorizes automatic
+canary -> passing pilot -> passing full -> previously gated release pipeline,
+with every genuine failure remaining a stop before later stages.
+
 ## 9. Acceptance and release gates
 
 TDD must cover the contract and lifecycle, not just the screenshot strings:
