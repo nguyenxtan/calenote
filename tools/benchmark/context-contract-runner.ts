@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import type { ContextInput, ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
-import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence } from "../../src/modules/intelligence/semantic-gateway";
+import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
@@ -14,7 +14,7 @@ const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 15
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
-interface ResponseEvidence { call: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; }
+interface ResponseEvidence { call: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
@@ -65,7 +65,7 @@ export async function executeObservableCampaign(input: ObservableExecution) {
       const result = parsed.status === "SUCCESS" && !parsed.interpretation.fullSchemaValid
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes } : parsed;
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null });
-      responses.push({ call: applicationLlmCalls, status: result.status, ...(result.status === "FAILURE" ? { category: result.category } : {}),
+      responses.push({ call: applicationLlmCalls, status: result.status, ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
       writeFileSync(join(input.directory, "responses.json"), JSON.stringify(responses), { mode: 0o600 });

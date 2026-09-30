@@ -42,6 +42,118 @@ const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contex
 
 describe("observable successor route", () => {
   const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  it.each([
+    ["x-request-id", "req-53594e5448455449435f43524544454e5449414c", "SYNTHETIC_CREDENTIAL"],
+    ["traceparent", "00-53594e5448455449435f534543524554-0123456789abcdef-01", "SYNTHETIC_SECRET"],
+    ["traceparent", "00-0123456789abcdef0123456789abcdef-53594e54484b4559-01", "SYNTHKEY"],
+    ["traceparent", "00-53594e5448455449435f43524544454e-5449414c00000000-01", "SYNTHETIC_CREDENTIAL"],
+    ["cf-ray", "53594e54484b4559-SIN", "SYNTHKEY"],
+    ["x-request-id", "req-6e68e1baaf632067e1bb8d69206de1bab9", "synthetic"],
+    ["traceparent", "00-6e68e1baaf632067e1bb8d69206de1ba-b900000000000000-01", "synthetic"],
+  ])("denies reversible known-sensitive payloads in %s before transport return", async (header, value, credential) => {
+    const transport = gateways.createContextHttpTransport(credential, async () => new Response('{"error":{"code":400}}', { status: 400,
+      headers: { "content-type": "application/json", [header]: value } }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.failureDiagnostics).toBeDefined();
+    expect(result.failureDiagnostics?.requestId).toBeUndefined(); expect(result.failureDiagnostics?.traceId).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(value);
+  });
+  it("preserves format-valid unrelated request and trace IDs", async () => {
+    const transport = gateways.createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response('{"error":{"code":400}}', { status: 400,
+      headers: { "content-type": "application/json", "x-request-id": "req-0123456789abcdef", "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01" } }));
+    expect((await transport(contextRequest(), { signal: new AbortController().signal })).failureDiagnostics)
+      .toMatchObject({ requestId: "req-0123456789abcdef", traceId: "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01" });
+  });
+  it.each(["param", "path", "details", "message"])("projects safe root and nested %s causes through the same bounded rules", async shape => {
+    const structuralPath = "response_format.json_schema.schema.properties.changes.items";
+    const root = shape === "message" ? { message: 'Invalid JSON payload received. Unknown name "const" at "generation_config.response_schema": Cannot find field.' }
+      : shape === "details" ? { details: [{ param: structuralPath, message: "SYNTHETIC_PRIVATE_PROSE" }] } : { [shape]: structuralPath };
+    for (const error of [{ code: 400, ...root }, { code: 400, metadata: root }, { code: 400, metadata: { raw: JSON.stringify({ error: root }) } }]) {
+      const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(JSON.stringify({ error }), { status: 400, headers: { "content-type": "application/json" } }));
+      const result = await transport(contextRequest(), { signal: new AbortController().signal });
+      const encoded = JSON.stringify(result.failureDiagnostics?.errorMetadataSanitized ?? null);
+      expect(encoded).toContain(shape === "message" ? "generation_config.response_schema" : structuralPath);
+      expect(encoded).not.toContain("SYNTHETIC_PRIVATE_PROSE");
+      if (shape === "message") expect(encoded).toContain("Unsupported schema construct: const");
+    }
+  });
+  it.each([
+    ["normal JSON", JSON.stringify({ error: { code: 400, message: "Invalid schema for response_format", metadata: { provider_name: "Google", raw: JSON.stringify({ error: { code: "invalid_argument", message: "Invalid schema for response_format", param: "response_format.json_schema.schema.properties.changes.items" } }) } } }), "application/json", "JSON"],
+    ["malformed JSON", '{"error":', "application/json", "MALFORMED_JSON"],
+    ["non JSON", "SYNTHETIC_PRIVATE_BODY", "text/html", "NON_JSON"],
+    ["missing headers", "SYNTHETIC_PRIVATE_BODY", "", "NON_JSON"],
+    ["missing body", null, "application/json", "EMPTY"],
+    ["oversized", "x".repeat(32769), "application/json", "OVERSIZED"],
+  ])("retains bounded sanitized %s HTTP400 evidence through actual boundary", async (_name, body, media, bodyState) => {
+    const transport = gateways.createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(body, { status: 400, headers: media ? { "content-type": media } : {} }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", failureDiagnostics: { version: "provider-failure-1", httpStatus: 400, bodyState } });
+    const encoded = JSON.stringify(result);
+    expect(encoded).not.toContain("SYNTHETIC_PRIVATE_BODY");
+    expect(new TextEncoder().encode(encoded).byteLength).toBeLessThan(4400);
+    if (_name === "normal JSON") {
+      expect(encoded).toContain("invalid_argument");
+      expect(encoded).toContain("response_format.json_schema.schema.properties.changes.items");
+    }
+  });
+  it("redacts synthetic secrets, request echoes and arbitrary Unicode prose in every projected position, reads body and explicit headers once", async () => {
+    const sentinels = ["SYNTHETIC_CREDENTIAL", "SYNTHETIC_OWNER_ID", "SYNTHETIC_CHAT_ID", "SYNTHETIC_SECRET", "nhắc gọi mẹ", "私密文本"];
+    const body = JSON.stringify({ error: { code: "SYNTHETIC_SECRET", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL nhắc gọi mẹ 私密文本", metadata: {
+      code: "SYNTHETIC_OWNER_ID", param: "SYNTHETIC_CHAT_ID", errors: [{ message: "nhắc gọi mẹ", type: "私密文本" }],
+      raw: JSON.stringify({ error: { message: "api_key=SYNTHETIC_SECRET", code: "invalid_argument", param: "response_format.json_schema" } }),
+    } }, id: "gen-SYNTHETIC_OWNER_ID" });
+    const response = new Response(body, { status: 400, headers: { "content-type": "application/json", "x-request-id": "req-0123456789abcdef", "cf-ray": "0123456789abcdef-SIN", "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01", "x-generation-id": "gen-SYNTHETIC_SECRET", "x-owner": "SYNTHETIC_OWNER_ID" } });
+    const getReader = vi.spyOn(response.body!, "getReader"), headers = vi.spyOn(response.headers, "get");
+    const transport = gateways.createContextHttpTransport(sentinels[0], async () => response);
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result).toHaveProperty("failureDiagnostics");
+    const encoded = JSON.stringify(result);
+    for (const sentinel of sentinels) expect(encoded).not.toContain(sentinel);
+    expect(encoded).toContain("req-0123456789abcdef"); expect(encoded).toContain("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01");
+    expect(encoded).toContain("invalid_argument");
+    expect(getReader).toHaveBeenCalledOnce();
+    const names = headers.mock.calls.map(([name]) => name);
+    expect(new Set(names).size).toBe(names.length); expect(names).not.toContain("x-owner");
+  });
+  it("retains synthetic nested Google unsupported construct and structural path with independent known cost", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic-credential", async () => new Response(JSON.stringify({
+      error: { code: 400, message: "Provider returned error", metadata: { provider_name: "Google", raw: JSON.stringify({ error: {
+        code: "INVALID_ARGUMENT", message: 'Invalid JSON payload received. Unknown name "const" at "generation_config.response_schema": Cannot find field.' } }) } },
+      usage: { cost: .105473, prompt_tokens: 12001, completion_tokens: 100 },
+    }), { status: 400, headers: { "content-type": "application/json" } }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    const result = await attempt.dispatch(), encoded = JSON.stringify(result);
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 105473, reportedCostUsd: .105473, promptTokens: 12001 } });
+    expect(encoded).toContain("Unsupported schema construct: const"); expect(encoded).toContain("generation_config.response_schema");
+  });
+  it.each(["read-error", "invalid-utf8", "invalid-length", "hostile-metadata", "unsafe-headers", "known-echo"])("contains %s failure safely without another body read", async mode => {
+    let reads = 0;
+    const sensitive = "req-0123456789abcdef";
+    const metadata = { errors: Array.from({ length: 40 }, () => ({ param: "response_format.json_schema.schema.properties.changes.items", message: "Invalid schema" })) };
+    const headers = { "content-type": "application/json", "x-request-id": mode === "unsafe-headers" ? "Authorization: Bearer SYNTHETIC_PRIVATE" : sensitive,
+      "cf-ray": mode === "unsafe-headers" ? "SYNTHETIC_PRIVATE" : "0123456789abcdef-SIN", ...(mode === "invalid-length" ? { "content-length": "invalid" } : {}) };
+    const body = mode === "read-error" ? new ReadableStream<Uint8Array>({ pull(controller) { reads++; controller.error(new Error("SYNTHETIC_PRIVATE")); } })
+      : mode === "invalid-utf8" ? new Uint8Array([255]) : JSON.stringify({ error: { code: 400, message: "SYNTHETIC_PRIVATE", metadata } });
+    const transport = gateways.createContextHttpTransport(mode === "known-echo" ? sensitive : "synthetic", async () => new Response(body, { status: 400, headers }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.failureDiagnostics).toBeDefined();
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE");
+    expect(new TextEncoder().encode(JSON.stringify(result.failureDiagnostics)).byteLength).toBeLessThanOrEqual(4096);
+    if (mode === "read-error") { expect(reads).toBe(1); expect(result.failureDiagnostics?.bodyState).toBe("READ_ERROR"); }
+    if (mode === "invalid-utf8") expect(result.failureDiagnostics?.bodyState).toBe("INVALID_UTF8");
+    if (mode === "invalid-length") expect(result.failureDiagnostics?.bodyState).toBe("INVALID_LENGTH");
+    if (mode === "known-echo" || mode === "unsafe-headers") expect(result.failureDiagnostics?.requestId).toBeUndefined();
+  });
+  it("retains known HTTP failure cost when sibling token accounting is unknown", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(JSON.stringify({ error: { code: 400 },
+      usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } }), { status: 400, headers: { "content-type": "application/json" } }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
+  });
   const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
     id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(payload).body),
     usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,

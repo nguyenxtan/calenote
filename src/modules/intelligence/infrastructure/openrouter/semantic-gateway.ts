@@ -7,6 +7,8 @@ import { ConversationInputSchema, CONVERSATION_PROMPT } from "../../../conversat
 import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchema } from "../../../semantic/contracts";
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
+import { projectProviderFailure } from "./failure-diagnostics";
+import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 
 const routeSchema = z.object({
   model: z.string().max(160).regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/u)
@@ -42,6 +44,7 @@ export type SemanticTransport = (request: SemanticJsonRequest, options: { signal
   body: string;
   oversized?: boolean;
   rawResponseBytes?: number;
+  failureDiagnostics?: SemanticFailureDiagnostics;
 }>;
 
 const envelopeSchema = z.object({
@@ -220,17 +223,49 @@ export function createContextHttpTransport(apiKey: string,
   return async (request, { signal }) => {
     const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal,
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
-    if (response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
+    const media = response.headers.get("content-type"), failed = response.status !== 200;
+    const sensitive = [apiKey, ...request.messages.map(message => message.content)];
+    // Known conversation and identifier echoes are denied even when they happen
+    // to match a safe diagnostic grammar. Never return the request itself.
+    try {
+      const user = JSON.parse(request.messages[1].content) as { turns?: Array<{ text?: string }> };
+      for (const turn of user.turns ?? []) if (typeof turn.text === "string") sensitive.push(turn.text);
+    } catch { /* No request diagnostics. */ }
+    const failure = async (length: number, state?: SemanticFailureDiagnostics["bodyState"], bytes?: Uint8Array, oversized = false) => {
+      const failureDiagnostics = await projectProviderFailure({ status: response.status, length, media, state, bytes, headers: response.headers, sensitive });
+      // Preserve independently observable numeric accounting without returning
+      // provider prose or the raw error body beyond this HTTP boundary.
+      let body = "";
+      if (bytes && failureDiagnostics.bodyState === "JSON") {
+        try {
+          const raw = JSON.parse(new TextDecoder().decode(bytes));
+          const usage = z.object({ cost: z.unknown().optional(), prompt_tokens: z.unknown().optional(), completion_tokens: z.unknown().optional() }).safeParse(raw?.usage);
+          if (usage.success) {
+            const numeric: Record<string, number> = {};
+            for (const key of ["cost", "prompt_tokens", "completion_tokens"] as const) {
+              const value = usage.data[key];
+              if (typeof value === "number" && Number.isFinite(value) && value >= 0 && (key === "cost" || Number.isSafeInteger(value))) numeric[key] = value;
+            }
+            body = JSON.stringify({ usage: numeric });
+          }
+        } catch { /* Unknown cost remains unknown. */ }
+      }
+      return { status: response.status, body, rawResponseBytes: length, ...(oversized ? { oversized: true } : {}), failureDiagnostics };
+    };
+    if (!failed && media?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
       await response.body?.cancel().catch(() => undefined); throw new Error("Invalid provider media type");
     }
     const declared = response.headers.get("content-length");
     if (declared !== null && (!/^\d+$/u.test(declared) || !Number.isSafeInteger(Number(declared)))) {
-      await response.body?.cancel().catch(() => undefined); throw new Error("Invalid provider length");
+      await response.body?.cancel().catch(() => undefined);
+      if (failed) return failure(0, "INVALID_LENGTH");
+      throw new Error("Invalid provider length");
     }
     if (declared !== null && Number(declared) > 32768) {
-      await response.body?.cancel().catch(() => undefined); return { status: response.status, body: "", oversized: true, rawResponseBytes: 0 };
+      await response.body?.cancel().catch(() => undefined);
+      return failed ? failure(0, "OVERSIZED", undefined, true) : { status: response.status, body: "", oversized: true, rawResponseBytes: 0 };
     }
-    if (!response.body) return { status: response.status, body: "", rawResponseBytes: 0 };
+    if (!response.body) return failed ? failure(0, "EMPTY") : { status: response.status, body: "", rawResponseBytes: 0 };
     const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
     const abort = () => { void reader.cancel().catch(() => undefined); };
     signal.addEventListener("abort", abort, { once: true });
@@ -241,17 +276,31 @@ export function createContextHttpTransport(apiKey: string,
         if (signal.aborted) throw new Error("Provider aborted");
         if (next.done) break;
         length += next.value.byteLength;
-        if (length > 32768) { await reader.cancel().catch(() => undefined); return { status: response.status, body: "", oversized: true, rawResponseBytes: length }; }
+        if (length > 32768) { await reader.cancel().catch(() => undefined); return failed ? failure(length, "OVERSIZED", undefined, true) : { status: response.status, body: "", oversized: true, rawResponseBytes: length }; }
         chunks.push(next.value);
       }
       const bytes = new Uint8Array(length); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-      return { status: response.status, body: new TextDecoder("utf-8", { fatal: true }).decode(bytes), rawResponseBytes: length };
+      return failed ? failure(length, undefined, bytes) : { status: response.status, body: new TextDecoder("utf-8", { fatal: true }).decode(bytes), rawResponseBytes: length };
+    } catch {
+      await reader.cancel().catch(() => undefined);
+      if (failed && !signal.aborted) return failure(length, "READ_ERROR");
+      throw new Error("Provider body unavailable");
     } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
   };
 }
 function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): SemanticAttemptResult<ParsedInterpretation> {
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
+  if (response.status !== 200 && response.failureDiagnostics) {
+    let rawUsage: unknown;
+    try { rawUsage = JSON.parse(response.body).usage; } catch { /* Unknown accounting. */ }
+    const cost = z.object({ cost: z.number().finite().nonnegative() }).safeParse(rawUsage);
+    const amount = cost.success ? Math.ceil(cost.data.cost * 1000000) : null;
+    const tokens = z.object({ prompt_tokens: z.number().int().nonnegative(), completion_tokens: z.number().int().nonnegative() }).safeParse(rawUsage);
+    return { status: "FAILURE", category: response.status === 408 ? "TIMEOUT" : response.status === 429 ? "RATE_LIMITED" : "PROVIDER_FAILURE",
+      usage: { costMicrounits: amount !== null && Number.isSafeInteger(amount) ? amount : null,
+        ...(cost.success ? { reportedCostUsd: cost.data.cost } : {}), ...(tokens.success ? { promptTokens: tokens.data.prompt_tokens, completionTokens: tokens.data.completion_tokens } : {}) }, failureDiagnostics: response.failureDiagnostics };
+  }
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes)
     return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null } };
   let raw: unknown;

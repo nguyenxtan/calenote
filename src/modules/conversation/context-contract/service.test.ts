@@ -6,6 +6,29 @@ import { setup, harness, proposal, complete, type Proposal } from "./service-tes
 import { D1ContextContractStore } from "./infrastructure/d1/store";
 import { createContextContractService } from "./service";
 import { chat, message } from "./context-test-fixtures";
+import { createContextContractGateway, createContextHttpTransport } from "../../intelligence/infrastructure/openrouter/semantic-gateway";
+it("provider diagnostics never enter actual service errors, telemetry, replies or persisted conversation state", async () => {
+  const h = await harness([]);
+  const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+    primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+  const gateway = createContextContractGateway(config, createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(JSON.stringify({
+    error: { code: "invalid_argument", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL SYNTHETIC_OWNER_ID", metadata: { param: "response_format.json_schema" } },
+  }), { status: 400, headers: { "content-type": "application/json" } })), { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+  h.deps.gateway = { prepare(tier, input) {
+    const p = gateway.prepare(tier, input);
+    // Fixture budget reserves its approved offline price; only the HTTP boundary
+    // is synthetic. Actual failure selection/persistence/telemetry stays real.
+    return p.status === "READY" ? { ...p, maximumCostMicrounits: 1815 } : p;
+  } };
+  const result = await h.turn(0), state = await h.read(1);
+  expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
+  expect(h.events.filter(e => e.event === "RESPONSE_RECEIVED")).toMatchObject([{ outcome: "FAILURE", reason: "PROVIDER_FAILURE" }]);
+  for (const value of [result, h.events, h.replies, state]) {
+    const encoded = JSON.stringify(value);
+    for (const sentinel of ["SYNTHETIC_CREDENTIAL", "SYNTHETIC_OWNER_ID", "failureDiagnostics", "invalid_argument", "response_format"]) expect(encoded).not.toContain(sentinel);
+  }
+  expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
 it("all_successor_natural_turns_use_one_gateway and reply_captured_after_fenced_transition", async () => {
   const h = await harness([proposal(complete)]);
   const result = await h.turn(0);

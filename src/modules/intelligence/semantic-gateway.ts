@@ -56,6 +56,21 @@ export interface SemanticProviderEvidence {
   location: "eu" | "UNEXPOSED";
   generationId: string | null;
 }
+/** Diagnostic-only projection; never conversation state or application response. */
+export interface SemanticFailureDiagnostics {
+  version: "provider-failure-1";
+  httpStatus: number;
+  responseBytes: number;
+  contentType: "application/json" | "text/plain" | "text/html" | "OTHER" | "MISSING";
+  bodyState: "JSON" | "MALFORMED_JSON" | "NON_JSON" | "EMPTY" | "OVERSIZED" | "READ_ERROR" | "INVALID_UTF8" | "INVALID_LENGTH";
+  bodyDigest?: string;
+  errorCode?: string | number;
+  errorMessageSanitized?: string;
+  errorMetadataSanitized?: unknown;
+  requestId?: string;
+  traceId?: string;
+  upstreamProvider?: string;
+}
 export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   status: "SUCCESS";
   interpretation: T;
@@ -63,7 +78,7 @@ export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   providerEvidence?: SemanticProviderEvidence;
   /** Actual HTTP chunks consumed; on an early cancelled read this is a prefix. */
   rawResponseBytes?: number;
-} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number };
+} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics };
 export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;

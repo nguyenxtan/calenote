@@ -9,6 +9,50 @@ import { readCampaignLedger } from "./context-contract-live";
 import { preflightContextCampaign, admitFutureLiveIntent } from "./context-contract-live";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
+import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+
+it("runner artifacts exclude reversible known credential and user-text header echoes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-runner-encoded-privacy-"));
+  try {
+    let echoed: string[] = [];
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "test",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: createContextHttpTransport("SYNTHETIC_CREDENTIAL", async (_url, init) => {
+        const request = JSON.parse(String(init.body)), user = JSON.parse(request.messages[1].content).turns[0].text;
+        const hex = Buffer.from(user, "utf8").toString("hex");
+        echoed = ["req-53594e5448455449435f43524544454e5449414c", hex];
+        return new Response('{"error":{"code":400}}', { status: 400, headers: { "content-type": "application/json",
+          "x-request-id": echoed[0], "traceparent": `00-${hex.slice(0, 32).padEnd(32, "0")}-${hex.slice(32).padEnd(16, "0")}-01` } });
+      }) });
+    expect(result.status).toBe("STOP"); expect(result.applicationLlmCalls).toBe(1);
+    for (const file of ["responses.json", "report.json"]) {
+      const artifact = readFileSync(join(directory, file), "utf8");
+      for (const value of echoed) expect(artifact).not.toContain(value);
+      expect(JSON.parse(artifact)[0]?.failureDiagnostics?.traceId ?? JSON.parse(artifact).responses?.[0]?.failureDiagnostics?.traceId).toBeUndefined();
+      expect(artifact).not.toContain("SYNTHETIC_CREDENTIAL");
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+it("persists only sanitized HTTP failure diagnostics and stops after one synthetic transport call", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-runner-diagnostics-")); let calls = 0;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "test",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: createContextHttpTransport("SYNTHETIC_CREDENTIAL", async (_url, init) => {
+        calls++; const request = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ error: { code: 400, message: request.messages[1].content,
+          metadata: { raw: JSON.stringify({ error: { code: "invalid_argument", param: "response_format.json_schema", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL SYNTHETIC_OWNER_ID" } }) } } }), { status: 400, headers: { "content-type": "application/json" } });
+      }) });
+    expect(calls).toBe(1); expect(result.status).toBe("STOP");
+    expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 } });
+    for (const file of ["responses.json", "report.json"]) {
+      const artifact = readFileSync(join(directory, file), "utf8");
+      expect(artifact).toContain("invalid_argument");
+      for (const sentinel of ["SYNTHETIC_CREDENTIAL", "SYNTHETIC_OWNER_ID", "calenote-context-input-1", "turns", "Authorization"]) expect(artifact).not.toContain(sentinel);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases and synthetic R15 without faking HTTP", async profile => {
   const directory = mkdtempSync(join(tmpdir(), "context-runner-")); let calls = 0;
