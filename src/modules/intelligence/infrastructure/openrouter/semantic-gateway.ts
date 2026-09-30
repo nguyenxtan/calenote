@@ -232,7 +232,8 @@ export function createContextHttpTransport(apiKey: string,
       for (const turn of user.turns ?? []) if (typeof turn.text === "string") sensitive.push(turn.text);
     } catch { /* No request diagnostics. */ }
     const failure = async (length: number, state?: SemanticFailureDiagnostics["bodyState"], bytes?: Uint8Array, oversized = false) => {
-      const failureDiagnostics = await projectProviderFailure({ status: response.status, length, media, state, bytes, headers: response.headers, sensitive });
+      const failureDiagnostics = await projectProviderFailure({ status: response.status, length, media, state, bytes, headers: response.headers, sensitive,
+        schema: request.response_format.json_schema.schema });
       // Preserve independently observable numeric accounting without returning
       // provider prose or the raw error body beyond this HTTP boundary.
       let body = "";
