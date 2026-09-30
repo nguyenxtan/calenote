@@ -3,6 +3,8 @@ import {
   AmbiguousMutationError,
   ApiResponseError,
   apiRequest,
+  loadDetailedReminders,
+  loadConversationPreviews,
 } from "./client-api";
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -13,6 +15,19 @@ function json(body: unknown, status = 200, headers: HeadersInit = {}): Response 
 }
 
 describe("apiRequest", () => {
+  it("parses a strict versioned owner list and rejects unreviewed success fields", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ data: { schemaVersion: "reminders-2", reminders: [], hasMore: false, scope: "OWNER" } })));
+    await expect(loadDetailedReminders()).resolves.toEqual({ schemaVersion: "reminders-2", reminders: [], hasMore: false, scope: "OWNER" });
+    vi.stubGlobal("fetch", vi.fn(async () => json({ data: { schemaVersion: "reminders-2", reminders: [], hasMore: false, scope: "OWNER", transcript: "private" } })));
+    await expect(loadDetailedReminders()).rejects.toThrow();
+    vi.stubGlobal("fetch", vi.fn(async () => json({ data: { schemaVersion: "conversation-previews-1", previews: [], hasMore: false } })));
+    await expect(loadConversationPreviews()).resolves.toEqual({ schemaVersion: "conversation-previews-1", previews: [], hasMore: false });
+  });
+
+  it("preserves explicit old-client upgrade guidance from the API envelope", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ error: { code: "CLIENT_UPGRADE_REQUIRED", message: "Tải lại ứng dụng để xem đầy đủ." } }, 409)));
+    await expect(apiRequest("/api/reminders", { authenticated: true })).rejects.toMatchObject({ code: "CLIENT_UPGRADE_REQUIRED", status: 409 });
+  });
   it("uses a same-origin no-store credentialed request and unwraps data", async () => {
     const fetcher = vi.fn(async () => json({ data: { accepted: true } }, 202));
     vi.stubGlobal("fetch", fetcher);

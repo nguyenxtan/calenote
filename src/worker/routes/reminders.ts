@@ -11,6 +11,11 @@ import { InvalidRequestError } from "./connections";
 const CREATE_BODY_BYTES = 16 * 1_024;
 const EMPTY_BODY_BYTES = 1_024;
 const BODY_TIMEOUT_MS = 5_000;
+export class ClientUpgradeRequiredError extends Error {
+  readonly code = "CLIENT_UPGRADE_REQUIRED";
+  readonly status = 409;
+  constructor() { super("Phiên bản ứng dụng cũ không thể hiển thị đầy đủ nhắc hẹn này. Vui lòng tải lại hoặc cập nhật ứng dụng."); }
+}
 const createSchema = z.object({
   title: z.string(),
   scheduledAt: z.number(),
@@ -41,6 +46,7 @@ export async function handleListReminders(
   const operations = await createOperations();
   const principal = await operations.requireUser(credentials);
   const reminders = await operations.listReminders(principal.userId);
+  if (reminders.some(reminder => reminder.title.length > 500)) throw new ClientUpgradeRequiredError();
   return jsonResponse(RemindersResponseSchema.parse({ data: { reminders } }), { headers: authenticatedHeaders() });
 }
 

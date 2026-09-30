@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildContextInput } from "./context";
 import { at, chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
 import { serializeContextRequest } from "./wire";
-import { encodeContextSnapshot } from "./state";
+import { ContextSnapshotV1Schema, encodeContextSnapshot } from "./state";
 
 describe("bounded private context", () => {
   it("controls_absent_in_every_provider_string", () => {
@@ -23,6 +23,18 @@ describe("bounded private context", () => {
       expect(result.measurement.admitted).toBe(false);
       expect(result.measurement.reasons).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
     }
+  });
+  it("never projects an internal web decline receipt into provider input", () => {
+    const base = snapshot(), msg = message();
+    const retained = structuredClone(base);
+    retained.webDeclineReceipt = { publicId: "A".repeat(22), operationKey: "a".repeat(64), proofHash: "b".repeat(64),
+      settledRevision: retained.contextRevision, settledAt: retained.inbound.receivedAt };
+    const parsed = ContextSnapshotV1Schema.safeParse(retained);
+    expect(parsed.success, parsed.success ? "" : JSON.stringify(parsed.error.issues)).toBe(true);
+    const ordinary = buildContextInput({ message: msg, context: chat, snapshot: base, observation: observation(base, msg) });
+    const afterDecline = buildContextInput({ message: msg, context: chat, snapshot: retained, observation: observation(retained, msg) });
+    expect(ordinary.status).toBe("READY"); expect(afterDecline.status, JSON.stringify(afterDecline)).toBe("READY");
+    if (ordinary.status === "READY" && afterDecline.status === "READY") expect(afterDecline.input).toEqual(ordinary.input);
   });
   it.each([1799, 1800, 1801, 2000])("INPUT_%i_obeys_preprojection_length_and_preserves_state", n => {
     const state = snapshot(), prior = encodeContextSnapshot(state), msg = message("ế".repeat(n));

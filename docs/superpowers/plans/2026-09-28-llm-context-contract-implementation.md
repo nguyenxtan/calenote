@@ -111,6 +111,19 @@
   Existing generated-artifact warnings are disclosed, not new source errors.
   Successor remains dormant; worker entrypoint/configuration/migrations unchanged,
   no provider or remote actions. T8 may proceed locally; route B is UNVERIFIED.
+- T8 LOCAL_IMPLEMENTATION_ACCEPTED: prescribed focused48 and additional116
+  context/store/service regressions PASS; fresh complete check124files2472tests
+  PASS with one opt-in skip, all downstream gates PASS. Independent API/security
+  review Critical=0/Important=0/Minor=2: narrow evidence wording corrected;
+  inherited generated-artifact warnings deferred. Strict OWNER details and
+  bounded complete previews use live WEB authority/shared T4 CAS. WEB DECLINE
+  retains request/facts/expiry with a bounded encrypted application-only receipt
+  (backward-compatible optional field, never provider input); replay horizon
+  ends at expiry/replacement/next settlement. Stable opaque context handles are
+  references, not proof; revision/hash/token/expiry remain separately validated.
+  Historical detail reads retain owner/session scope after connection suspension,
+  while mutations still require ACTIVE_BOUND. No migration/config/entrypoint,
+  provider or remote action; successor dormant. T9 may proceed locally, BUNVERIFIED.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,

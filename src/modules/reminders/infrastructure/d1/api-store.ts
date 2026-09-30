@@ -5,6 +5,7 @@ import type {
   OwnedReminderRow,
   ReminderApiStore,
 } from "../../api-service";
+import type { DetailedReminderRow } from "../../details-api-service";
 
 function guardedReminderFailure(error: unknown): boolean {
   return error instanceof Error
@@ -13,6 +14,25 @@ function guardedReminderFailure(error: unknown): boolean {
 
 export class D1ReminderApiStore implements ReminderApiStore {
   constructor(private readonly database: D1Database) {}
+
+  async listOwnedDetailed(userId: string, limit: number): Promise<DetailedReminderRow[]> {
+    const result = await this.database.prepare(
+      `SELECT r.id, r.public_id, r.title_ciphertext, r.title_iv, r.title_key_version,
+              r.scheduled_at, r.timezone, r.status, w.owner_user_id owner_id,
+              r.chat_identity_id, w.id workspace_id, ci.connection_id, ci.private_chat_id,
+              EXISTS(SELECT 1 FROM reminder_context_details d WHERE d.reminder_id=r.id) has_context_details
+       FROM memberships m
+       JOIN workspaces w ON w.id=m.workspace_id AND w.kind='PERSONAL' AND w.owner_user_id=m.user_id
+       JOIN reminders r ON r.workspace_id=w.id
+       LEFT JOIN chat_identities ci ON ci.id=r.chat_identity_id
+       WHERE m.user_id=? AND m.role='OWNER'
+       ORDER BY CASE WHEN r.status IN ('PENDING','CLAIMED','RETRYABLE') THEN 0 ELSE 1 END,
+         CASE WHEN r.status IN ('PENDING','CLAIMED','RETRYABLE') THEN r.scheduled_at END ASC,
+         CASE WHEN r.status NOT IN ('PENDING','CLAIMED','RETRYABLE') THEN r.updated_at END DESC,
+         r.public_id ASC LIMIT ?`,
+    ).bind(userId, limit).all<DetailedReminderRow>();
+    return result.results;
+  }
 
   async listOwned(userId: string, limit: number): Promise<OwnedReminderRow[]> {
     const result = await this.database

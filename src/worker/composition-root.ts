@@ -25,6 +25,8 @@ import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/co
 import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
 import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
 import { cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
+import { listDetailedReminders } from "@/modules/reminders/details-api-service";
+import { PreviewUnavailableError } from "./routes/conversation-previews";
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
@@ -197,6 +199,19 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
     listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
+  };
+}
+
+export async function createContextApiOperations(env: Env): Promise<import("./routes/operations").ContextApiOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessions = new D1SessionStore(env.DB);
+  const reminderStore = new D1ReminderApiStore(env.DB);
+  const contextStore = new D1ContextContractStore(env.DB, keyring);
+  return {
+    requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
+    listDetailedReminders: principal => listDetailedReminders(principal, { store: reminderStore, contextStore, keyring }),
+    listPreviews: () => Promise.resolve({ previews: [], hasMore: false }),
+    decidePreview: () => { throw new PreviewUnavailableError(); },
   };
 }
 

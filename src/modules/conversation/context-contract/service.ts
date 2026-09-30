@@ -124,7 +124,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
             transition = await terminalOverflow(prior, observed.observation.inbound, restart, proof);
           } else if (capacity && prior && (control.kind === "DECLINE" || control.kind === "AMBIGUOUS_TARGET" || recovery)) {
             emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
-            transition = await transitionConversation({ snapshot: prior, received: { ...structuredClone(prior), inbound: observed.observation.inbound, modelAttemptBinding: null },
+            transition = await transitionConversation({ snapshot: prior, received: { ...structuredClone(prior), inbound: observed.observation.inbound, modelAttemptBinding: null, webDeclineReceipt: null },
               ...(recovery ? { previewRecoveryText: message.text } : { localControlText: message.text }), control, authority, now: scope.now, channel: deps.channel });
           } else { emit({ event: "REQUEST_REJECTED", reason: "INVALID_INPUT" }); return finish(built.reason.includes("EXPIRED") ? "EXPIRED" : built.reason.includes("LARGE") || built.reason.includes("LONG") || built.reason.includes("COUNT") ? "SIZE" : "CONTEXT"); }
         } else if (local) {
@@ -228,6 +228,7 @@ async function terminalOverflow(prior: ContextSnapshotV1, inbound: ContextSnapsh
 async function localTransition(prior: ContextSnapshotV1 | null, received: ContextSnapshotV1, reply: ReadyReplyPlan): Promise<ConversationTransition> {
   const snapshot = structuredClone(received);
   snapshot.contextRevision = (prior?.contextRevision ?? 0) + 1;
+  snapshot.webDeclineReceipt = null;
   snapshot.pendingDecision = null; snapshot.previewReceipt = null;
   snapshot.pendingReminderQuestion = null; snapshot.pendingQueryQuestion = null;
   snapshot.lifecycle = snapshot.requestId ? "CLARIFYING" : "NONE";

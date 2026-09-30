@@ -1,5 +1,14 @@
 import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
 import type { SessionCredentials, SessionPrincipal } from "@/modules/auth/session";
+import type { ReminderListResponseV2 } from "@/contracts/api/reminders-v2";
+import type { PublicPreviewV1, PreviewDecisionRequestV1 } from "@/contracts/api/conversation-previews";
+import type { ConfirmationResult } from "@/modules/conversation/context-contract/store";
+export interface ContextApiOperations {
+  requireUser(credentials: SessionCredentials): Promise<SessionPrincipal>;
+  listDetailedReminders(principal: SessionPrincipal): Promise<ReminderListResponseV2["data"]>;
+  listPreviews(principal: SessionPrincipal): Promise<{ previews: PublicPreviewV1[]; hasMore: boolean }>;
+  decidePreview(principal: SessionPrincipal, request: PreviewDecisionRequestV1): Promise<ConfirmationResult | { status: "DECLINED" | "ALREADY_DECLINED" }>;
+}
 import type { PublicSeriesView, SeriesDecisionRequest } from "@/contracts/api/reminder-series";
 export interface SeriesOperations {
   requireUser(credentials: SessionCredentials): Promise<SessionPrincipal>;

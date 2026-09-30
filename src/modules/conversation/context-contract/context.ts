@@ -215,7 +215,7 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
       },
     } : pendingDecision;
     const candidateSnapshot = ContextSnapshotV1Schema.parse(state ? {
-      ...state, inbound, transcript: retainedTranscript, modelAttemptBinding: null,
+      ...state, inbound, transcript: retainedTranscript, modelAttemptBinding: null, webDeclineReceipt: null,
       facts: remapRefs(state.facts, "INTERNAL"),
       ambiguities: remapRefs(state.ambiguities, "INTERNAL"),
       pendingDecision: refreshedDecision,

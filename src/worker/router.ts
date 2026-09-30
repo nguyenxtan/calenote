@@ -29,6 +29,7 @@ import {
   createOnboardingOperations,
   createPreferencesOperations,
   createRemindersOperations,
+  createContextApiOperations,
   ServiceUnavailableError,
 } from "./composition-root";
 import { resolveRuntimeOriginPolicy } from "./origin-policy";
@@ -51,9 +52,12 @@ import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
 import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
+import { ClientUpgradeRequiredError } from "./routes/reminders";
+import { handleListRemindersV2 } from "./routes/reminders-v2";
+import { handleConversationPreviews, PreviewUnavailableError } from "./routes/conversation-previews";
 import { handleSeries } from "./routes/reminder-series";
 import { createSeriesOperations } from "./composition-root";
-import type { SeriesOperations } from "./routes/operations";
+import type { SeriesOperations, ContextApiOperations } from "./routes/operations";
 import type {
   AuthOperations,
   ActionsOperations,
@@ -75,6 +79,7 @@ export interface RouterOptions {
   actionsOperations?: (env: Env) => Promise<ActionsOperations>;
   connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
   remindersOperations?: (env: Env) => Promise<RemindersOperations>;
+  contextApiOperations?: (env: Env) => Promise<ContextApiOperations>;
   onboardingOperations?: (env: Env) => Promise<OnboardingOperations>;
   preferencesOperations?: (env: Env) => Promise<PreferencesOperations>;
   activityOperations?: (env: Env) => Promise<ActivityOperations>;
@@ -136,6 +141,8 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   }
   if (
     error instanceof InvalidReminderError ||
+    error instanceof ClientUpgradeRequiredError ||
+    error instanceof PreviewUnavailableError ||
     error instanceof ReminderChannelUnavailableError ||
     error instanceof ReminderNotFoundError ||
     error instanceof ReminderNotCancellableError
@@ -180,6 +187,7 @@ export function createRouter(options: RouterOptions = {}) {
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
+  const contextApiOperationsFactory = options.contextApiOperations ?? createContextApiOperations;
   const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
@@ -242,6 +250,13 @@ export function createRouter(options: RouterOptions = {}) {
       }
       if (request.method === "GET" && pathname === "/api/reminders") {
         return await handleListReminders(request, () => remindersOperationsFactory(env));
+      }
+      if (request.method === "GET" && pathname === "/api/v2/reminders") {
+        return await handleListRemindersV2(request, () => contextApiOperationsFactory(env));
+      }
+      if ((request.method === "GET" && pathname === "/api/v2/conversation-previews")
+        || (request.method === "POST" && pathname === "/api/v2/conversation-previews/decision")) {
+        return await handleConversationPreviews(request, appOrigin!, () => contextApiOperationsFactory(env));
       }
       if (["GET", "POST"].includes(request.method) && pathname === "/api/reminder-series") {
         return await handleSeries(request, appOrigin!, () => seriesOperationsFactory(env));
@@ -307,6 +322,8 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")
         || pathname === "/api/reminders"
+        || pathname === "/api/v2/reminders"
+        || pathname.startsWith("/api/v2/conversation-previews")
         || pathname.startsWith("/api/reminders/")
         || pathname === "/api/actions"
         || pathname.startsWith("/api/actions/")

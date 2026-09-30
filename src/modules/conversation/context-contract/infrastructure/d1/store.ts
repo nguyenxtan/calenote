@@ -10,6 +10,9 @@ import type { AppliedTransition, CanonicalPreview, ConfirmationResult, ContextCo
 import { CONTEXT_DETAIL_MAX_BYTES, contextContractEncryptionIdentity as identity } from "../../store";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 import { newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { base64UrlToBytes, bytesToBase64Url } from "@/modules/security/encoding";
+import type { SessionPrincipal } from "@/modules/auth/session";
+import type { PublicPreviewV1, PreviewDecisionRequestV1 } from "@/contracts/api/conversation-previews";
 
 const active = "status IN ('CLARIFYING','DRAFT_READY')";
 const permitted = "EXISTS(SELECT 1 FROM conversation_contract_write_permits WHERE marker=?)";
@@ -17,6 +20,7 @@ const resultSchema = z.strictObject({ reminderPublicIds: z.array(z.string().min(
 type Row = { id:string; owner_id:string; chat_identity_id:string; contract_version:number; revision:number; status:string; created_at:number; updated_at:number; expires_at:number; last_inbound_id:string; claim_marker:string; payload_ciphertext:unknown; payload_iv:unknown; key_version:number };
 type Auth = { authority:ControlAuthority; now:number; owner:string; chat:string };
 type ObservationRecord = { row:Row|null; snapshot:ContextSnapshotV1|null; history:number; scope:ConversationScope; binding:string };
+type WebRow = Row & { workspace_id:string; connection_id:string; private_chat_id:string };
 const freeze = <T>(v:T):T => { if(v && typeof v==="object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const bytes = (s:string)=>new TextEncoder().encode(s).length;
 function authQuery(a:Auth, mutate:boolean) {
@@ -40,6 +44,98 @@ export class D1ContextContractStore implements ContextContractStore {
   return {authority,now:authority.kind==="CHAT"?authority.scope.now:this.clock(),owner:authority.kind==="CHAT"?authority.scope.ownerId:authority.principal.userId,chat:authority.kind==="CHAT"?authority.scope.chatIdentityId:authority.chat.chatIdentityId};
  }
  private statement(sql:string,args:unknown[]=[]){return this.db.prepare(sql).bind(...args);}
+ private webAuthority(principal:SessionPrincipal,row:WebRow):Extract<ControlAuthority,{kind:"WEB"}> {return {kind:"WEB",principal,chat:{ownerId:principal.userId,chatIdentityId:row.chat_identity_id,workspaceId:row.workspace_id,connectionId:row.connection_id,chatId:row.private_chat_id}};}
+ private async webRows(principal:SessionPrincipal,limit:number,activeOnly:boolean):Promise<WebRow[]> {
+  const now=this.clock();
+  if(principal.expiresAt<=now)return [];
+  return (await this.statement(`SELECT c.*,w.id workspace_id,ci.connection_id,ci.private_chat_id
+    FROM conversation_contexts c
+    JOIN chat_identities ci ON ci.id=c.chat_identity_id
+    JOIN bot_connections b ON b.id=ci.connection_id AND b.user_id=c.owner_id AND b.state='ACTIVE_BOUND'
+    JOIN workspaces w ON w.owner_user_id=c.owner_id AND w.kind='PERSONAL'
+    JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.owner_id AND m.role='OWNER'
+    JOIN sessions s ON s.user_id=c.owner_id AND s.id=? AND s.revoked_at IS NULL AND s.expires_at>? AND s.expires_at=?
+    WHERE c.owner_id=? AND c.contract_version=2 ${activeOnly?`AND ${active} AND c.expires_at>?`:""}
+    ORDER BY c.updated_at DESC,c.id ASC LIMIT ?`,
+   [principal.sessionId,now,principal.expiresAt,principal.userId,...(activeOnly?[now]:[]),Math.min(limit,11)]).all<WebRow>()).results;
+ }
+ private async publicPreviewId(row:WebRow):Promise<string> {
+  const digest=await this.keyring.fingerprintToken(JSON.stringify(["calenote-public-context-preview-1",row.owner_id,row.chat_identity_id,row.id]));
+  const bytes=base64UrlToBytes(digest);if(!bytes||bytes.length!==32)throw new Error("INVALID_PUBLIC_PREVIEW_ID");
+  return bytesToBase64Url(bytes.slice(0,16));
+ }
+ private async webPreview(principal:SessionPrincipal,row:WebRow):Promise<PublicPreviewV1|null> {
+  const authority=this.webAuthority(principal,row),s=await this.decryptState(row,authority.chat);
+  const d=s.pendingDecision,p=s.previewReceipt;
+  if(s.lifecycle!=="AWAITING_CONFIRMATION"||d?.kind!=="SAVE_PREVIEW"||d.tokenHandle===null||!p||d.deliveryState!=="SENT"||p.deliveryState!=="SENT")return null;
+  const preview=await this.loadPreview(s);
+  if(!preview)return null;
+  const proof:DecisionProof={operationKey:"preview-admission",contextId:s.id,contextRevision:s.contextRevision,decisionId:d.decisionId,kind:"SAVE_PREVIEW",
+   requestId:d.target.requestId,proposalId:d.target.proposalId,draftRevision:d.draftRevision,draftHash:p.draftHash,response:{kind:"TOKEN",handle:d.tokenHandle}};
+  if(!await validateConfirmation(s,preview,proof,authority,this.clock()))return null;
+  return {publicId:await this.publicPreviewId(row),draftRevision:d.draftRevision!,previewHash:p.draftHash,expiresAt:Math.min(Date.parse(d.expiresAt),Date.parse(p.expiresAt)),
+   title:preview.title,details:preview.details,occurrences:preview.occurrences,decisionToken:d.tokenHandle};
+ }
+ async listWebPreviews(principal:SessionPrincipal,limit=11):Promise<{previews:PublicPreviewV1[];hasMore:boolean}> {
+  const rows=await this.webRows(principal,limit,true),previews:PublicPreviewV1[]=[];
+  for(const row of rows){const preview=await this.webPreview(principal,row);if(preview)previews.push(preview);}
+  return {previews:previews.slice(0,10),hasMore:previews.length>10||rows.length>10};
+ }
+ async decideWebPreview(principal:SessionPrincipal,request:PreviewDecisionRequestV1):Promise<ConfirmationResult|{status:"DECLINED"|"ALREADY_DECLINED"}> {
+  const operationKey=await digest(["web-preview-decision-1",request]);
+  const activeRows=await this.webRows(principal,11,true);
+  const rows=[...activeRows,...(await this.webRows(principal,11,false)).filter(row=>!activeRows.some(active=>active.id===row.id))];
+  for(const row of rows){
+   if(await this.publicPreviewId(row)!==request.publicId)continue;
+   const authority=this.webAuthority(principal,row);
+   if(request.action==="DECLINE"){
+    const prior=await this.readWebDecline(authority,row,operationKey,request);if(prior)return prior;
+   }else{const prior=await this.readOutcome(authority,operationKey);if(prior)return prior;}
+   if(!["CLARIFYING","DRAFT_READY"].includes(row.status)||row.expires_at<=this.clock())return {status:"STALE"};
+   const publicPreview=await this.webPreview(principal,row);
+   if(!publicPreview||publicPreview.draftRevision!==request.draftRevision||publicPreview.previewHash!==request.previewHash
+    ||publicPreview.decisionToken!==request.decisionToken)return {status:"STALE"};
+   const snapshot=await this.decryptState(row,authority.chat),decision=snapshot.pendingDecision!,receipt=snapshot.previewReceipt!;
+   if(request.action==="DECLINE")return this.declineWebPreview(authority,row,snapshot,request,operationKey);
+   return this.confirm(authority,{operationKey,contextId:snapshot.id,contextRevision:snapshot.contextRevision,decisionId:decision.decisionId,
+    kind:"SAVE_PREVIEW",requestId:decision.target.requestId,proposalId:decision.target.proposalId,draftRevision:decision.draftRevision,
+    draftHash:receipt.draftHash,response:{kind:"TOKEN",handle:request.decisionToken}});
+  }
+  return {status:"STALE"};
+ }
+ private async readWebDecline(authority:Extract<ControlAuthority,{kind:"WEB"}>,row:WebRow,key:string,request:PreviewDecisionRequestV1):Promise<{status:"ALREADY_DECLINED"|"STALE"}|null>{
+  const current=await this.readRow(this.authority(authority),row.id);
+  if(!current||!["CLARIFYING","DRAFT_READY"].includes(current.status)||current.expires_at<=this.clock())return null;
+  const snapshot=await this.decryptState(current,authority.chat),receipt=snapshot.webDeclineReceipt;
+  if(!receipt)return null;
+  return receipt.publicId===request.publicId&&receipt.operationKey===key&&receipt.proofHash===await digest(["web-decline-proof",request])
+   &&receipt.settledRevision===current.revision?{status:"ALREADY_DECLINED"}:{status:"STALE"};
+ }
+ private async declineWebPreview(authority:Extract<ControlAuthority,{kind:"WEB"}>,row:WebRow,s:ContextSnapshotV1,request:PreviewDecisionRequestV1,key:string):Promise<{status:"DECLINED"|"ALREADY_DECLINED"|"STALE"|"UNCERTAIN"}> {
+  const a=this.authority(authority),prior=await this.readWebDecline(authority,row,key,request);if(prior)return prior;
+  const next:ContextSnapshotV1=structuredClone(s);next.contextRevision++;next.lifecycle="CLARIFYING";next.pendingDecision=null;next.previewReceipt=null;
+  next.webDeclineReceipt={publicId:request.publicId,operationKey:key,proofHash:await digest(["web-decline-proof",request]),settledRevision:next.contextRevision,settledAt:new Date(a.now).toISOString()};
+  let encrypted:Awaited<ReturnType<Keyring["encryptSensitive"]>>;
+  try{const encoded=encodeContextSnapshot(next);if(bytes(encoded)>16384)return {status:"STALE"};encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(next.scope,next.id),1,encoded);}
+  catch{return {status:"STALE"};}
+  const marker=randomOpaqueId(),cas=this.rowCas(row);
+  const statements=[this.permit(a,s.id,marker,"APPLY",cas.sql+" AND EXISTS(SELECT 1 FROM conversation_contract_ownership WHERE context_id=? AND chat_identity_id=? AND owner_id=?)",
+   [...cas.args,a.now,s.id,a.chat,a.owner]),
+   this.statement(`UPDATE conversation_contexts SET revision=?,status='CLARIFYING',updated_at=?,payload_ciphertext=?,payload_iv=?,write_marker=? WHERE id=? AND ${permitted}`,
+    [next.contextRevision,a.now,encrypted.ciphertext,encrypted.iv,marker,s.id,marker]),
+   this.statement(`UPDATE command_drafts SET status='CANCELLED',updated_at=?,write_marker=? WHERE chat_identity_id=? AND contract_version=2 AND status='PENDING' AND ${permitted}`,
+    [a.now,marker,a.chat,marker]),
+   this.statement(`UPDATE reminder_series_proposals SET status='INVALID',transaction_marker=? WHERE chat_identity_id=? AND contract_version=2 AND status='PENDING' AND ${permitted}`,
+    [marker,a.chat,marker]),
+   this.release(marker)];
+  try{
+   const result=await this.db.batch(statements);
+   if(result[0].meta.changes===1)return {status:"DECLINED"};
+   return await this.readWebDecline(authority,row,key,request)??{status:"STALE"};
+  }catch{
+   try{return await this.readWebDecline(authority,row,key,request)??{status:"UNCERTAIN"};}catch{return {status:"UNCERTAIN"};}
+  }
+ }
  private expiry(s:ContextSnapshotV1){return Math.min(Date.parse(s.idleExpiresAt),Date.parse(s.absoluteExpiresAt),s.draftExpiresAt?Date.parse(s.draftExpiresAt):Infinity);}
  private async decryptState(row:Row,scope:{ownerId:string;chatIdentityId:string}) {
   const snapshot=decodeContextSnapshot(await this.keyring.decryptSensitive("context-contract-state",identity(scope,row.id),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)}));
@@ -100,6 +196,7 @@ export class D1ContextContractStore implements ContextContractStore {
    if(await this.history(scope.chatIdentityId)!==observed.history)return {status:"STALE"};
    const parsed=ContextSnapshotV1Schema.safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
    const s=parsed.data, prior=observed.snapshot;
+   if(prior?.webDeclineReceipt)s.webDeclineReceipt=null;
    if(!validPreviewOrder(s))return {status:"INVALID"};
    if(t.expectedContextRevision!==(prior?.contextRevision??null)||t.expectedDraftRevision!==(prior?.draftRevision??null))return {status:"STALE"};
    if(s.contextRevision!==(prior?.contextRevision??0)+1 || (prior&&s.id!==prior.id)
@@ -185,8 +282,20 @@ export class D1ContextContractStore implements ContextContractStore {
  }
  async readReminderDetails(authority:ControlAuthority,id:string):Promise<import("../../state").CanonicalDetailsV1|null>{
   const a=this.authority(authority),auth=authQuery(a,false);
-  const row=await this.statement(`SELECT r.id,d.* FROM reminders r JOIN workspaces w ON w.id=r.workspace_id LEFT JOIN reminder_context_details d ON d.reminder_id=r.id
-   WHERE r.public_id=? AND r.chat_identity_id=? AND w.owner_user_id=? AND EXISTS(${auth.sql})`,[id,a.chat,a.owner,...auth.args])
+  const web=authority.kind==="WEB";
+  const sql=web?`SELECT r.id,d.* FROM reminders r
+   JOIN workspaces w ON w.id=r.workspace_id AND w.kind='PERSONAL'
+   JOIN memberships m ON m.workspace_id=w.id AND m.user_id=w.owner_user_id AND m.role='OWNER'
+   JOIN chat_identities ci ON ci.id=r.chat_identity_id
+   JOIN bot_connections c ON c.id=ci.connection_id AND c.user_id=w.owner_user_id
+   JOIN sessions s ON s.user_id=w.owner_user_id AND s.id=? AND s.revoked_at IS NULL AND s.expires_at>? AND s.expires_at=?
+   LEFT JOIN reminder_context_details d ON d.reminder_id=r.id
+   WHERE r.public_id=? AND r.chat_identity_id=? AND w.id=? AND w.owner_user_id=? AND c.id=? AND ci.private_chat_id=?`
+   :`SELECT r.id,d.* FROM reminders r JOIN workspaces w ON w.id=r.workspace_id LEFT JOIN reminder_context_details d ON d.reminder_id=r.id
+   WHERE r.public_id=? AND r.chat_identity_id=? AND w.owner_user_id=? AND EXISTS(${auth.sql})`;
+  const args=web?[authority.principal.sessionId,a.now,authority.principal.expiresAt,id,a.chat,authority.chat.workspaceId,a.owner,authority.chat.connectionId,authority.chat.chatId]
+   :[id,a.chat,a.owner,...auth.args];
+  const row=await this.statement(sql,args)
    .first<{id:string;reminder_id:string|null;owner_id:string;chat_identity_id:string;encryption_entity_id:string;payload_version:string;payload_ciphertext:unknown;payload_iv:unknown;key_version:number}>();
   if(!row||row.reminder_id===null)return null;
   if(row.owner_id!==a.owner||row.chat_identity_id!==a.chat||row.encryption_entity_id!==row.id||row.payload_version!=="calenote-reminder-details-1")throw new Error("INVALID_CONTEXT_DETAILS");
