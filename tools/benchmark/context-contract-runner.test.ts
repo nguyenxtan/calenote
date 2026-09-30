@@ -10,6 +10,7 @@ import { preflightContextCampaign, admitFutureLiveIntent } from "./context-contr
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { encodeGoogleLiteEuContext } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
 it("runner artifacts exclude reversible known credential and user-text header echoes", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-runner-encoded-privacy-"));
@@ -47,8 +48,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
-      providerWireSchemaDigest: "1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-defs-1" });
+      providerWireSchemaDigest: "34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-flat-2" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");
@@ -68,7 +69,7 @@ it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases
       transport: async request => {
         const item = healthy[calls++]; const context = JSON.parse(request.messages[1].content) as ContextInput;
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-mock-${calls}`,
-          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(frozenContextProposal(context, item.id, item.index)) } }],
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, item.id, item.index))) } }],
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 } }) };
       } });
     expect(result.status).toBe("PASS"); expect(result.score?.gate).toBe("PASS");
@@ -94,9 +95,9 @@ it.each(["next-fails", "deadline", "application-fails", "counter-fails", "guidan
         if (mode === "deadline") clock = 1200100;
         return { status: 200, body: JSON.stringify({ model: calls > 1 ? "wrong" : "google/gemini-2.5-flash-lite", provider: "Google",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(
-            mode === "application-fails" ? { ...(proposal as object), query: { ...((proposal as { query: object }).query),
-              evidence: [{ kind: "USER_QUOTE", turn: context.currentTurn, quote: "not present in receipt", occurrence: 1 }] } }
-              : mode === "guidance-fails" ? { ...(proposal as object), conversationDirective: { kind: "SAVE" } } : proposal) } }] }) };
+            mode === "application-fails" ? encodeGoogleLiteEuContext({ ...(proposal as object), query: { ...((proposal as { query: object }).query),
+              evidence: [{ kind: "USER_QUOTE", turn: context.currentTurn, quote: "not present in receipt", occurrence: 1 }] } })
+              : mode === "guidance-fails" ? { ...(encodeGoogleLiteEuContext(proposal) as object), conversationDirective: { kind: "SAVE" } } : encodeGoogleLiteEuContext(proposal)) } }] }) };
       } });
     expect(result.status).toBe("STOP"); expect(calls).toBe(mode === "next-fails" ? 2 : 1);
     expect(result.routeAdmission).toBe(mode === "next-fails" ? "PASS" : "STOP");

@@ -4,13 +4,14 @@ import { spawnSync } from "node:child_process";
 import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type ContextManifest, type ContextObservation } from "./context-contract";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { encodeGoogleLiteEuContext } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import { frozenContextProposal, validateContextFixtureCoverage } from "./context-contract-fixtures";
 
 it.each(["directive", "reply"])("production observable service retains valid core and backend fallback for bad %s", async section => {
   const cfg = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
     primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
   const gateway = createContextContractGateway(cfg, async request => {
-    const input = JSON.parse(request.messages[1].content), proposal = frozenContextProposal(input, "R14", 0) as object;
+    const input = JSON.parse(request.messages[1].content), proposal = encodeGoogleLiteEuContext(frozenContextProposal(input, "R14", 0)) as object;
     return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
       choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ ...proposal,
         ...(section === "directive" ? { conversationDirective: { kind: "SAVE" } } : { replyProposal: { text: "x".repeat(401) } }) }) } }] }) };
@@ -31,7 +32,7 @@ it("live probe uses the production callable gateway and financial reservation wi
   const gateway = createContextContractGateway(cfg, async request => {
     calls++; const input = JSON.parse(request.messages[1].content);
     return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-offline-test",
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify(frozenContextProposal(input, "R14", 0)) } }],
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(input, "R14", 0))) } }],
       usage: { cost: .001, prompt_tokens: 1000, completion_tokens: 300 } }) };
   }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z"), liveGateway: gateway }, () => { throw new Error("LIVE_USED_OFFLINE_PROPOSAL"); });

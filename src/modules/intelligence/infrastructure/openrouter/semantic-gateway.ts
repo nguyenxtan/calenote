@@ -8,7 +8,7 @@ import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchem
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
 import { projectProviderFailure } from "./failure-diagnostics";
-import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
+import { googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 
 const routeSchema = z.object({
@@ -324,7 +324,7 @@ function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport
   if (!observed.success) return fail("SCHEMA_INVALID");
   const evidence = { model: observed.data.model, provider: observed.data.provider,
     location: observed.data.location ?? "UNEXPOSED" as const, generationId: observed.data.id ?? null };
-  const parsed = decodeResponse(response, config, maximum, contextSectionsSchema, true);
+  const parsed = decodeResponse(response, config, maximum, providerContextSectionsSchema, true);
   // Runtime retains independently valid core and quarantines bad guidance (T5).
   // Strict campaign full-schema admission is a separate evaluation gate.
   if (parsed.status !== "SUCCESS") return { ...fail(parsed.category), providerEvidence: evidence };
@@ -350,6 +350,12 @@ const contextSectionsSchema = z.unknown().transform((raw, ctx): ParsedInterpreta
   const parsed = parseInterpretationSections(raw);
   if (parsed.status === "PARSED") return parsed.value;
   ctx.addIssue({ code: "custom", message: "Invalid context semantic envelope or core" });
+  return z.NEVER;
+});
+const providerContextSectionsSchema = z.unknown().transform((raw, ctx): ParsedInterpretation => {
+  const parsed = parseGoogleLiteEuContextSections(raw);
+  if (parsed.status === "PARSED") return parsed.value;
+  ctx.addIssue({ code: "custom", message: "Invalid provider context semantic envelope or core" });
   return z.NEVER;
 });
 
@@ -386,7 +392,7 @@ export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
     if (observable && typeof transport === "function") {
       const providerRequest: SemanticJsonRequest = { ...request, response_format: { ...request.response_format,
         json_schema: { ...request.response_format.json_schema,
-          schema: googleLiteEuProviderWireSchema(request.response_format.json_schema.schema).schema } } };
+          schema: googleLiteEuContextWireSchema().schema } } };
       let dispatched = false;
       return { status: "READY", model: route.model, provider: route.provider, routeAdmission: "OBSERVABLE_CANARY", maximumCostMicrounits: CONTEXT_FINANCIAL_RESERVATION_MICROUNITS,
         async dispatch() {

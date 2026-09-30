@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
-import { googleLiteEuProviderWireSchema } from "../../src/modules/intelligence/infrastructure/openrouter/provider-wire-schema";
+import { googleLiteEuContextWireSchema } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
@@ -39,14 +39,14 @@ export async function executeObservableCampaign(input: ObservableExecution) {
   const httpCount = () => input.httpRequestCount?.() ?? providerHttpRequests;
   const responses: ResponseEvidence[] = [];
   const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
-  const providerWire = googleLiteEuProviderWireSchema(InterpretationJsonSchema);
+  const providerWire = googleLiteEuContextWireSchema();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
   const schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   const actual = createContextContractGateway(config, async (request, options) => {
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8"
       || canonicalSchemaDigest !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446"
+    if (providerWireSchemaDigest !== "34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();

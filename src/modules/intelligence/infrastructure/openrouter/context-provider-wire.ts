@@ -1,0 +1,186 @@
+import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterpretationSections, type InterpretationSections } from "../../../conversation/context-contract/contracts";
+import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
+
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-flat-2" as const;
+type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
+function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
+const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
+const equal = (a: unknown, b: unknown) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+const unique = (values: Schema[]) => [...new Map(values.map(value => [JSON.stringify(stable(value)), value])).values()];
+const union = (values: Schema[]): Schema => { const options = unique(values); return options.length === 1 ? options[0] : { anyOf: options }; };
+function at(root: Schema, pointer: string): Schema {
+  requireShape(pointer.startsWith("#/"));
+  let node: unknown = root;
+  for (const token of decodeURIComponent(pointer).slice(2).split("/")) {
+    const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+    requireShape(node && typeof node === "object" && Object.hasOwn(node, key)); node = (node as Record<string, unknown>)[key];
+  }
+  requireShape(node && typeof node === "object" && !Array.isArray(node)); return node as Schema;
+}
+function deref(node: Schema, root: Schema): Schema {
+  const seen = new Set<string>();
+  while (node.$ref) { requireShape(Object.keys(node).length === 1 && !seen.has(node.$ref)); seen.add(node.$ref); node = at(root, node.$ref); }
+  return node;
+}
+function taggedPlan(node: Schema, root: Schema) {
+  const keyword = node.anyOf ? "anyOf" : node.oneOf ? "oneOf" : null;
+  if (!keyword) return null;
+  const branches = node[keyword]!.map(branch => deref(branch, root));
+  if (!branches.every(branch => branch.type === "object" && branch.additionalProperties === false)) return null;
+  requireShape(Object.keys(node).length === 1);
+  const tags = branches.map(branch => {
+    requireShape(branch.properties && branch.required && equal([...branch.required].sort(), Object.keys(branch.properties).sort()));
+    return Object.fromEntries(Object.entries(branch.properties).flatMap(([key, child]) => {
+      const predicate = deref(child, root), values = Object.hasOwn(predicate, "const") ? [predicate.const] : predicate.enum;
+      return values && branch.required!.includes(key) ? [[key, values]] : [];
+    })) as Record<string, unknown[]>;
+  });
+  if (!tags.every(tag => Object.keys(tag).length > 0)) return null;
+  for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) requireShape(Object.entries(tags[i]).some(([key, values]) => tags[j][key] && !values.some(value => tags[j][key].some(other => equal(value, other)))));
+  return { keyword, branches, tags, keys: [...new Set(branches.flatMap(branch => Object.keys(branch.properties!)))] };
+}
+function mapSchemas(node: Schema, transform: (child: Schema) => Schema): Schema {
+  const output = structuredClone(node);
+  for (const key of ["properties", "$defs"] as const) if (node[key]) output[key] = Object.fromEntries(Object.entries(node[key]).map(([name, child]) => [name, transform(child)]));
+  for (const key of ["anyOf", "oneOf", "allOf"] as const) if (node[key]) output[key] = node[key].map(transform);
+  if (node.items) output.items = transform(node.items);
+  return output;
+}
+const original = googleLiteEuProviderWireSchema(InterpretationJsonSchema).schema as Schema;
+function flatten(node: Schema): Schema {
+  const plan = taggedPlan(node, original);
+  if (!plan) return mapSchemas(node, flatten);
+  const properties = Object.fromEntries(plan.keys.map(key => [key, union(plan.branches.map(branch => Object.hasOwn(branch.properties!, key) ? flatten(branch.properties![key]) : { type: "null" }))]));
+  return { type: "object", properties, required: [...plan.keys], additionalProperties: false,
+    description: "Provider wire tagged union: keep the canonical discriminator and all active canonical values. All listed keys are required. Properties inactive for the selected original branch must be null; active nullable values remain active. The application validates the original branch after decoding." };
+}
+function hoistArrays(root: Schema): Schema {
+  function visit(node: Schema): Schema {
+    if (node.anyOf && Object.keys(node).length === 1 && node.anyOf.length > 1) {
+      const arrays = node.anyOf.map(branch => deref(branch, root));
+      if (arrays.every(array => array.type === "array" && array.items)) {
+        const shells = arrays.map(array => { const shell = structuredClone(array); delete shell.items; return shell; });
+        if (shells.every(shell => equal(shell, shells[0]))) {
+          const objects = arrays.map(array => deref(array.items!, root));
+          if (objects.every(item => item.type === "object" && item.additionalProperties === false && item.required && item.properties)) {
+            const keys = Object.keys(objects[0].properties!), objectShells = objects.map(item => { const shell = structuredClone(item); delete shell.properties; return shell; });
+            if (objects.every(item => equal(Object.keys(item.properties!).sort(), [...keys].sort()) && equal([...item.required!].sort(), [...keys].sort())) && objectShells.every(shell => equal(shell, objectShells[0]))) {
+              return { ...structuredClone(shells[0]), items: { ...structuredClone(objectShells[0]), properties: Object.fromEntries(keys.map(key => [key, union(objects.map(item => item.properties![key]))])) } };
+            }
+          }
+        }
+      }
+    }
+    return mapSchemas(node, visit);
+  }
+  return visit(root);
+}
+function prune(root: Schema): Schema {
+  const output = structuredClone(root), reached = new Set<string>();
+  function visit(node: Schema) {
+    if (node.$ref) {
+      const tokens = decodeURIComponent(node.$ref).slice(2).split("/").map(token => token.replaceAll("~1", "/").replaceAll("~0", "~"));
+      requireShape(node.$ref.startsWith("#/$defs/") && tokens.length === 2 && output.$defs && Object.hasOwn(output.$defs, tokens[1]));
+      if (!reached.has(tokens[1])) { reached.add(tokens[1]); visit(output.$defs[tokens[1]]); }
+    }
+    for (const child of Object.values(node.properties ?? {})) visit(child);
+    for (const children of [node.anyOf, node.oneOf, node.allOf]) for (const child of children ?? []) visit(child);
+    if (node.items) visit(node.items);
+  }
+  visit(output);
+  for (const key of Object.keys(output.$defs!)) if (!reached.has(key)) delete output.$defs![key];
+  return output;
+}
+function omitAnnotations(node: Schema): Schema {
+  const output = mapSchemas(node, omitAnnotations);
+  for (const key of ["minimum", "maximum", "minItems", "maxItems", "minLength", "maxLength", "pattern"]) delete output[key];
+  return output;
+}
+function simpleScalar(node: Schema, root: Schema) {
+  node = deref(node, root);
+  if (!node.type || !["string", "integer", "number", "boolean"].includes(node.type) || Object.keys(node).some(key => !["type", "const", "enum"].includes(key)) || Object.hasOwn(node, "const") && node.enum) return null;
+  const values = Object.hasOwn(node, "const") ? [node.const] : node.enum;
+  if (values && (!values.length || !values.every(value => predicate({ type: node.type }, value, root)))) return null;
+  return { node, base: Object.keys(node).length === 1, values };
+}
+function normalizeScalars(root: Schema): Schema {
+  function visit(node: Schema): Schema {
+    if (node.anyOf && Object.keys(node).length === 1) {
+      const classes = node.anyOf.map(branch => simpleScalar(branch, root)), keep = new Set(node.anyOf.map((_, index) => index));
+      classes.forEach((item, index) => {
+        if (!item) return;
+        const duplicate = classes.some((other, earlier) => earlier < index && keep.has(earlier) && other && equal(item.node, other.node));
+        const covered = !item.base && classes.some((other, witness) => witness !== index && keep.has(witness) && other?.base && item.values?.every(value => predicate(other.node, value, root)));
+        if (duplicate || covered) keep.delete(index);
+      });
+      if (keep.size !== node.anyOf.length) return { anyOf: [...keep].map(index => structuredClone(node.anyOf![index])) };
+    }
+    return mapSchemas(node, visit);
+  }
+  return visit(root);
+}
+const providerSchema = normalizeScalars(omitAnnotations(prune(hoistArrays(flatten(original)))));
+/** Versioned context representation. Canonical prompt/schema and the namespace-only adapter remain unchanged. */
+export function googleLiteEuContextWireSchema() {
+  return { version: GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION, schema: structuredClone(providerSchema) as typeof InterpretationJsonSchema };
+}
+function predicate(raw: Schema, value: unknown, root: Schema): boolean {
+  const node = deref(raw, root);
+  if (node.anyOf && !node.anyOf.some(branch => predicate(branch, value, root))) return false;
+  if (node.oneOf && node.oneOf.filter(branch => predicate(branch, value, root)).length !== 1) return false;
+  if (Object.hasOwn(node, "const") && !equal(value, node.const)) return false;
+  if (node.enum && !node.enum.some(item => equal(value, item))) return false;
+  if (node.type === "null") return value === null;
+  if (node.type === "boolean") return typeof value === "boolean";
+  if (node.type === "integer" || node.type === "number") return typeof value === "number" && Number.isFinite(value) && (node.type !== "integer" || Number.isInteger(value)) && (node.minimum === undefined || value >= Number(node.minimum)) && (node.maximum === undefined || value <= Number(node.maximum));
+  if (node.type === "string") return typeof value === "string" && (node.minLength === undefined || [...value].length >= Number(node.minLength)) && (node.maxLength === undefined || [...value].length <= Number(node.maxLength)) && (node.pattern === undefined || new RegExp(String(node.pattern), "u").test(value));
+  if (node.type === "array") return Array.isArray(value) && (node.minItems === undefined || value.length >= Number(node.minItems)) && (node.maxItems === undefined || value.length <= Number(node.maxItems)) && value.every(item => predicate(node.items!, item, root));
+  if (node.type === "object") return !!value && typeof value === "object" && !Array.isArray(value) && node.required!.every(key => Object.hasOwn(value, key)) && Object.keys(value).every(key => Object.hasOwn(node.properties!, key)) && Object.entries(value).every(([key, child]) => predicate(node.properties![key], child, root));
+  return true;
+}
+function codec(raw: Schema, value: unknown, direction: "encode" | "decode"): unknown {
+  const node = deref(raw, original), plan = taggedPlan(node, original);
+  if (plan) {
+    requireShape(value && typeof value === "object" && !Array.isArray(value));
+    const object = value as Record<string, unknown>, matches = plan.tags.flatMap((tag, index) => Object.entries(tag).every(([key, values]) => values.some(option => equal(object[key], option))) ? [index] : []);
+    requireShape(matches.length === 1); const branch = plan.branches[matches[0]];
+    if (direction === "decode") {
+      requireShape(equal(Object.keys(object).sort(), [...plan.keys].sort()));
+      for (const key of plan.keys) if (!Object.hasOwn(branch.properties!, key)) requireShape(object[key] === null);
+    } else requireShape(predicate(branch, value, original));
+    const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction)]));
+    if (direction === "encode") { for (const key of plan.keys) if (!Object.hasOwn(result, key)) result[key] = null; }
+    else requireShape(predicate(branch, result, original));
+    return result;
+  }
+  if (node.anyOf || node.oneOf) {
+    const results: unknown[] = [];
+    for (const branch of node.anyOf ?? node.oneOf!) try { const result = codec(branch, value, direction); if (predicate(branch, direction === "encode" ? value : result, original)) results.push(result); } catch { /* Another canonical union branch may match. */ }
+    requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
+  }
+  if (node.type === "array") { requireShape(Array.isArray(value) && (node.minItems === undefined || value.length >= Number(node.minItems)) && (node.maxItems === undefined || value.length <= Number(node.maxItems))); return value.map(item => codec(node.items!, item, direction)); }
+  if (node.type === "object") {
+    requireShape(value && typeof value === "object" && !Array.isArray(value) && equal(Object.keys(value).sort(), [...node.required!].sort()));
+    return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction)]));
+  }
+  requireShape(predicate(node, value, original)); return structuredClone(value);
+}
+export function encodeGoogleLiteEuContext(canonical: unknown): unknown {
+  requireShape(ConversationInterpretationSchema.safeParse(canonical).success); return codec(original, canonical, "encode");
+}
+/** Core is atomic; guidance is decoded independently and remains quarantinable. */
+export function parseGoogleLiteEuContextSections(raw: unknown): InterpretationSections {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+  const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]), coreKeys = original.required!.filter(key => !guidance.has(key));
+  try {
+    requireShape(coreKeys.every(key => Object.hasOwn(object, key)) && Object.keys(object).every(key => Object.hasOwn(original.properties!, key)));
+    const decoded = Object.fromEntries(coreKeys.map(key => [key, codec(original.properties![key], object[key], "decode")]));
+    try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode"); }
+    catch { decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
+    // Reply has no flattened tagged union. Retaining an invalid original reply
+    // preserves the canonical parser's REPLY_TOO_LONG vs REPLY_INVALID reason.
+    try { decoded.replyProposal = codec(original.properties!.replyProposal, object.replyProposal, "decode"); }
+    catch { decoded.replyProposal = object.replyProposal; }
+    return parseInterpretationSections(decoded);
+  } catch { return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
+}

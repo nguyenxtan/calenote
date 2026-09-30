@@ -5,7 +5,8 @@ import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gate
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
 import * as gateways from "./semantic-gateway";
-import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
+import { ContextInputSchema, InterpretationJsonSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { encodeGoogleLiteEuContext } from "./context-provider-wire";
 import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
 
@@ -155,8 +156,18 @@ describe("observable successor route", () => {
     if (attempt.status !== "READY") throw new Error("prepare failed");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
   });
+  const providerPayload = (payload: unknown) => {
+    const parsed = parseInterpretationSections(payload);
+    if (parsed.status !== "PARSED") return payload;
+    const raw = payload as Record<string, unknown>;
+    const encoded = encodeGoogleLiteEuContext({ ...raw, conversationDirective: parsed.value.directive.status === "VALID" ? raw.conversationDirective : contextOutput.conversationDirective,
+      replyProposal: parsed.value.reply.status === "VALID" ? raw.replyProposal : null }) as Record<string, unknown>;
+    if (parsed.value.directive.status === "INVALID") encoded.conversationDirective = raw.conversationDirective;
+    if (parsed.value.reply.status === "INVALID") encoded.replyProposal = raw.replyProposal;
+    return encoded;
+  };
   const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
-    id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(payload).body),
+    id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(providerPayload(payload)).body),
     usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
   }) });
   it("reserves full financial exposure and emits versioned provider schema exactly once", async () => {
@@ -171,7 +182,7 @@ describe("observable successor route", () => {
       usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
       providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
     expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex"))
-      .toBe("1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446");
+      .toBe("34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9");
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_2", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
@@ -235,7 +246,7 @@ describe("observable successor route", () => {
     expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
     const emitted = JSON.parse(String(seen?.init.body));
     expect(createHash("sha256").update(JSON.stringify(emitted.response_format.json_schema.schema)).digest("hex"))
-      .toBe("1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446");
+      .toBe("34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9");
     expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_2", strict: true, schema: expect.any(Object) } } });
     expect(seen?.init.body).not.toContain("synthetic-test-secret");
