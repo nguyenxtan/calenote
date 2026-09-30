@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import type { ContextInput, ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
+import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
+import { googleLiteEuProviderWireSchema } from "../../src/modules/intelligence/infrastructure/openrouter/provider-wire-schema";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
@@ -14,7 +15,8 @@ const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 15
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
-interface ResponseEvidence { call: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; }
+interface ResponseEvidence { call: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics;
+  canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
@@ -36,10 +38,16 @@ export async function executeObservableCampaign(input: ObservableExecution) {
   let outboundDigest: string | null = null, httpStatus: number | null = null;
   const httpCount = () => input.httpRequestCount?.() ?? providerHttpRequests;
   const responses: ResponseEvidence[] = [];
+  const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
+  const providerWire = googleLiteEuProviderWireSchema(InterpretationJsonSchema);
+  const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
+  const schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   const actual = createContextContractGateway(config, async (request, options) => {
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8"
-      || digest(JSON.stringify(request.response_format.json_schema.schema)) !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
+      || canonicalSchemaDigest !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== "1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446"
+      || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
@@ -65,7 +73,7 @@ export async function executeObservableCampaign(input: ObservableExecution) {
       const result = parsed.status === "SUCCESS" && !parsed.interpretation.fullSchemaValid
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes } : parsed;
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null });
-      responses.push({ call: applicationLlmCalls, status: result.status, ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
+      responses.push({ call: applicationLlmCalls, status: result.status, ...schemaProof, ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
       writeFileSync(join(input.directory, "responses.json"), JSON.stringify(responses), { mode: 0o600 });

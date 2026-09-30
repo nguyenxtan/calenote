@@ -8,6 +8,7 @@ import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchem
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
 import { projectProviderFailure } from "./failure-diagnostics";
+import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 
 const routeSchema = z.object({
@@ -383,6 +384,9 @@ export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
       max_price: { prompt: 0.1, completion: 0.4 },
     } };
     if (observable && typeof transport === "function") {
+      const providerRequest: SemanticJsonRequest = { ...request, response_format: { ...request.response_format,
+        json_schema: { ...request.response_format.json_schema,
+          schema: googleLiteEuProviderWireSchema(request.response_format.json_schema.schema).schema } } };
       let dispatched = false;
       return { status: "READY", model: route.model, provider: route.provider, routeAdmission: "OBSERVABLE_CANARY", maximumCostMicrounits: CONTEXT_FINANCIAL_RESERVATION_MICROUNITS,
         async dispatch() {
@@ -391,7 +395,7 @@ export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
           const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
           try {
             return await Promise.race([
-              Promise.resolve().then(() => transport(structuredClone(request), { signal: controller.signal })).then(response => ({
+              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(response => ({
                 ...decodeObservableResponse(response, config), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               })),

@@ -45,7 +45,10 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
           metadata: { raw: JSON.stringify({ error: { code: "invalid_argument", param: "response_format.json_schema", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL SYNTHETIC_OWNER_ID" } }) } } }), { status: 400, headers: { "content-type": "application/json" } });
       }) });
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
-    expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 } });
+    expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
+      canonicalSchemaDigest: "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
+      providerWireSchemaDigest: "1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-defs-1" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

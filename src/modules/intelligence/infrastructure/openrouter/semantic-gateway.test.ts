@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
@@ -158,7 +159,7 @@ describe("observable successor route", () => {
     id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(payload).body),
     usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
   }) });
-  it("reserves full financial exposure and emits unchanged canonical request exactly once", async () => {
+  it("reserves full financial exposure and emits versioned provider schema exactly once", async () => {
     const requests: SemanticJsonRequest[] = [];
     const gateway = gateways.createContextContractGateway(contextConfig, async request => { requests.push(request); return response(); }, admission);
     const attempt = gateway.prepare("PRIMARY", contextInput);
@@ -169,7 +170,12 @@ describe("observable successor route", () => {
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true },
       usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
       providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
-    expect(requests).toEqual([contextRequest()]);
+    expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex"))
+      .toBe("1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446");
+    expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
+      name: "calenote_context_2", strict: true, schema: expect.any(Object) } } }]);
+    expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
+      .toBe("8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
     expect(requests).toHaveLength(1);
   });
@@ -216,7 +222,7 @@ describe("observable successor route", () => {
     expect(await pending).toMatchObject({ status: "FAILURE", category: "TIMEOUT" });
     expect(signal?.aborted).toBe(true); expect(calls).toBe(1);
   });
-  it("HTTP factory separates credential headers from the exact canonical body", async () => {
+  it("HTTP factory separates credential headers and emits the adapted provider body", async () => {
     expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
     let seen: { url: string; init: RequestInit } | undefined;
     const transport = gateways.createContextHttpTransport("synthetic-test-secret", async (url, init) => {
@@ -227,7 +233,11 @@ describe("observable successor route", () => {
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", rawResponseBytes: new TextEncoder().encode(response().body).byteLength });
     expect(seen?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
-    expect(seen?.init.body).toBe(JSON.stringify(contextRequest()));
+    const emitted = JSON.parse(String(seen?.init.body));
+    expect(createHash("sha256").update(JSON.stringify(emitted.response_format.json_schema.schema)).digest("hex"))
+      .toBe("1ccd317a66f7de068d6f4e29a38346a880898a8445b1dad256a34c23bc1d0446");
+    expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
+      name: "calenote_context_2", strict: true, schema: expect.any(Object) } } });
     expect(seen?.init.body).not.toContain("synthetic-test-secret");
   });
   it("raw byte evidence measures original HTTP chunks, including BOM, not decoded text or Content-Length", async () => {
