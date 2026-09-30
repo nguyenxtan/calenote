@@ -1194,6 +1194,39 @@ smallest bounded remedy for review, not a silent cap increase or fact clipping.
 Unknown full-route framing remains unknown; no provider/counting endpoint is
 authorized. Current historical A evidence does not measure this new envelope.
 
+#### 8.2.3 Owner-authorized lossless storage-fit correction (2026-09-30)
+
+Owner authorization `31ddd6df-b74c-41ab-87f1-4e71284e935e` closes the
+required-flow representation decision, not the measured fit gate. The ordinary
+D02 five-USER closure was independently measured at 16,808 encoded bytes after
+required model-attempt binding, exceeding 16,384 by 424. Its valid facts,
+evidence and preview intent must not be weakened or relabeled as a rejection.
+
+T10 may implement a narrowly versioned, lossless internal persisted encoding
+(compact keys, shared metadata or canonical references). The explicit typed
+logical contract and provider-facing contract remain unchanged. Decoding must
+restore the complete logical state, exact source text and mappings, evidence,
+provenance, decisions, controls, revisions, delivery and scope bindings. Preserve
+authenticated encryption and owner/chat isolation, bounded decoding, strict
+corrupt/unknown-version refusal and required legacy compatibility. No remote
+data migration follows implicitly from a new internal encoding.
+
+The ceiling remains 16,384 serialized UTF-8 bytes before encryption, with six
+USER and at most six ASSISTANT turns. Target at most 15,360 bytes for the
+demonstrated D02 case where achievable without broader redesign. No clipping,
+fact/evidence eviction, required-turn trimming, limit increase, changed fixture
+meaning or denominator reduction is authorized. Measure exact production-format
+before/after totals, component attribution, bytes saved and remaining headroom;
+test logical/encrypted round-trip and affected T0–T10 behavior. If a correct
+bounded lossless remedy cannot fit, stop and retain the evidence.
+
+After complete T10 validation and a fresh independent GPT-6.1 Sol Medium review
+with Critical=0/Important=0, the owner conditionally authorizes T11 under its
+unchanged pilot/full/combined ceilings and failed-gate stops. This does not
+establish provider-route admission B or imply live acceptance. External access,
+release and controlled UAT may occur only at the explicitly gated stages of that
+authorization; no unrelated product expansion is included.
+
 ## 9. Acceptance and release gates
 
 TDD must cover the contract and lifecycle, not just the screenshot strings:

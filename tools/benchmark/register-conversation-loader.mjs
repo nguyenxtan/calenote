@@ -8,7 +8,7 @@ registerHooks({
     if(context.parentURL?.includes("/node_modules/"))return nextResolve(specifier,context);
     if(specifier.endsWith(".json")) return nextResolve(specifier,{...context,importAttributes:{type:"json"}});
     if (specifier.startsWith("@/")) return nextResolve(pathToFileURL(resolve("src", specifier.slice(2)) + ".ts").href, context);
-    if (specifier.startsWith(".") && extname(specifier) === "") {
+    if (specifier.startsWith(".") && ["", ".test-support"].includes(extname(specifier))) {
       try { return nextResolve(specifier + ".ts", context); }
       catch (error) { if (error.code !== "ERR_MODULE_NOT_FOUND") throw error; }
     }

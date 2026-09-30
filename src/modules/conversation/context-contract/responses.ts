@@ -1,7 +1,7 @@
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 import type { IssueFieldSchema } from "./contracts";
 import type { z } from "zod";
-import type { GuidanceSelection } from "./guidance";
+import { isEligibleGuidanceText, type GuidanceSelection } from "./guidance";
 import { CONTEXT_QUERY_PARTIAL, CONTEXT_QUERY_SCOPE, CONTEXT_STATUS_LABELS, type ContextQueryResult, type QueryResolution } from "./query";
 import type { CanonicalPreview, ConfirmationResult } from "./store";
 import type { PendingDecision, TranscriptEntry } from "./state";
@@ -94,13 +94,23 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
         ASSISTANT_SCOPE: "Mình hỗ trợ lịch và lời nhắc cá nhân. Yêu cầu này nằm ngoài phạm vi hiện tại.",
         REQUEST_COMBINATION: "Hãy chọn từng yêu cầu để xử lý; chưa thực hiện một phần của yêu cầu kết hợp này.",
       };
-      add(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần hoặc mỗi ngày hữu hạn từ 2 đến 30 lần."); break;
+      add(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần hoặc mỗi ngày hữu hạn từ 2 đến 30 lần.");
+      // The capability fact stays backend-owned. Already validated guidance
+      // may add a natural next step, but never replace that factual surface.
+      if (guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text) && [...parts.map(p => p.text), guidance.text].join("\n").length <= 2000) {
+        add(guidance.text, "QUESTION"); source = "MODEL_GUIDANCE";
+      }
+      break;
     }
     case "RECOVERY":
       kind = "RECOVERY"; facts(outcome.facts); add(outcome.count === 2 ? `Thông tin đang giữ ở trên. ${outcome.question}` : "Bản nháp vẫn được giữ nguyên và không gia hạn. Bạn có thể trả lời Bỏ để hủy yêu cầu chưa lưu, hoặc đồng ý bắt đầu lại.", "QUESTION");
       if (outcome.count === 3 && outcome.token) add(`Đồng ý ${outcome.token}`, "CONTROL", outcome.token); break;
     case "FAILURE": add(failures[outcome.reason]); break;
-    case "NOTICE": add(notices[outcome.notice]); break;
+    case "NOTICE":
+      if (outcome.notice === "HELP" && guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text)) {
+        add(guidance.text, "QUESTION"); source = "MODEL_GUIDANCE";
+      } else add(notices[outcome.notice]);
+      break;
     case "MUTATION": add(outcome.result.status === "COMMITTED" || outcome.result.status === "IDEMPOTENT" ? `Đã lưu ${outcome.result.childCount} lời nhắc.` : outcome.result.status === "UNCERTAIN" ? "Chưa xác định được kết quả lưu. Cần kiểm tra lại trước khi thử tiếp." : "Chưa lưu lời nhắc. Hãy xem lại bản nháp hiện tại."); break;
     case "QUERY": {
       kind = "QUERY_RESULT";

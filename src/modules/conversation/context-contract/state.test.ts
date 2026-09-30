@@ -96,7 +96,7 @@ describe("lossless runtime snapshot representation", () => {
   it("roundtrips_sources_transformed_views_and_reserved_looking_strings", () => {
     const state = snapshot();
     const encoded = encodeContextSnapshot(state);
-    expect(JSON.parse(encoded).encoding).toBe("calenote-context-storage-1");
+    expect(JSON.parse(encoded).encoding).toBe("calenote-context-storage-2");
     expect(decodeContextSnapshot(encoded)).toEqual(state);
     expect(JSON.stringify(state)).toContain("nhắc tôi");
     const transformed = { ...state, transcript: [{ ...state.transcript[0], text: "e\u0301😀CN-x", semanticView: "é😀[CONTROL]", controlSpans: [{ start: 3, end: 7, handle: "CN-x" }], sourceMap: { normalizationVersion: "nfc-codepoint-v1", sourceCodePoints: 7, viewCodePoints: 11, segments: [
@@ -111,6 +111,50 @@ describe("lossless runtime snapshot representation", () => {
     expect(decodeContextSnapshot(good)).toEqual(snapshot());
     for (const bad of [{ encoding: "calenote-context-storage-1", strings: [], snapshot: { $s: 0 } }, { ...JSON.parse(good), extra: true }, { encoding: "other", strings: [], snapshot: {} }]) expect(() => decodeContextSnapshot(JSON.stringify(bad))).toThrow();
     expect(() => decodeContextSnapshot(" ".repeat(16385) + good)).toThrow();
+  });
+  it("reads legacy persisted payloads without migrating them and refuses compact key collisions", () => {
+    const state = snapshot();
+    const legacy = JSON.stringify({ encoding: "calenote-context-storage-1", strings: [], snapshot: state });
+    expect(decodeContextSnapshot(legacy)).toEqual(state);
+    expect(JSON.parse(legacy).encoding).toBe("calenote-context-storage-1");
+    const good = JSON.parse(encodeContextSnapshot(state));
+    for (const key of ["$kzz", "normalizationVersion", "schemaVersion"]) {
+      const bad = structuredClone(good);
+      bad.snapshot[key] = "collision";
+      expect(() => decodeContextSnapshot(JSON.stringify(bad))).toThrow();
+    }
+  });
+  it("compact decoder rejects depth bombs, reference collisions and unknown dictionary indices", () => {
+    let nested: unknown = null;
+    for (let i = 0; i < 34; i++) nested = [nested];
+    const envelope = (snapshot: unknown, strings: string[] = []) => JSON.stringify({ encoding: "calenote-context-storage-2", strings, snapshot });
+    expect(() => decodeContextSnapshot(envelope(nested))).toThrow("Excessive encoded structure");
+    for (const invalid of [{ $kzz: 1 }, { $s: 0, $k0: 1 }, { $s: 0.5 }, { $s: -1 }, { $s: 4 }]) expect(() => decodeContextSnapshot(envelope(invalid, ["text"]))).toThrow();
+    expect(() => decodeContextSnapshot(envelope(Array.from({ length: 1000 }, () => ({ $s: 0 })), ["x".repeat(5000)]))).toThrow("Excessive decoded text");
+  });
+  it("duplicate JSON member names cannot hide a corrupt version or compact field", () => {
+    const encoded = encodeContextSnapshot(snapshot());
+    const duplicateVersion = encoded.replace('{"encoding":', '{"encoding":"unrecognized","encoding":');
+    expect(() => decodeContextSnapshot(duplicateVersion)).toThrow("Noncanonical encoded JSON");
+    const duplicateKey = encoded.replace('"$k1a":', '"$k1a":"corrupt","$k1a":');
+    expect(duplicateKey).not.toBe(encoded);
+    expect(() => decodeContextSnapshot(duplicateKey)).toThrow("Noncanonical encoded JSON");
+  });
+  it("retains six USER and six ASSISTANT original Unicode texts and complete maps losslessly", () => {
+    const base = snapshot();
+    const texts = ["e\u0301😀 répété répété", "ế".repeat(1800), "Địa điểm " + "ế".repeat(290), "🧾 ghi chú " + "ế".repeat(900), "Giữ nguyên.", "Đổi lúc 9h."];
+    const turns = texts.flatMap((text, i) => [
+      { ...base.transcript[0], id: `user-${i}`, text, semanticView: text.normalize("NFC"), sourceMap: { normalizationVersion: "nfc-codepoint-v1", sourceCodePoints: [...text].length, viewCodePoints: [...text.normalize("NFC")].length, segments: i === 0 ? [
+        { sourceStart: 0, sourceEnd: 2, viewStart: 0, viewEnd: 1, kind: "NFC_COMPOSITION_RUN", sourceStride: 2, viewStride: 1 },
+        { sourceStart: 2, sourceEnd: [...text].length, viewStart: 1, viewEnd: [...text.normalize("NFC")].length, kind: "UNCHANGED", sourceStride: 1, viewStride: 1 },
+      ] : [{ sourceStart: 0, sourceEnd: [...text].length, viewStart: 0, viewEnd: [...text].length, kind: "UNCHANGED", sourceStride: 1, viewStride: 1 }] } },
+      { ...base.transcript[0], id: `assistant-${i}`, role: "ASSISTANT", kind: "CLARIFICATION", deliveryState: "SENT" },
+    ]);
+    const state = ContextSnapshotV1Schema.parse({ ...base, transcript: turns });
+    const decoded = decodeContextSnapshot(encodeContextSnapshot(state));
+    expect(decoded).toEqual(state);
+    expect(decoded.transcript.filter(t => t.role === "USER").map(t => t.text)).toEqual(texts);
+    expect(decoded.transcript[0].sourceMap.segments[0]).toEqual({ sourceStart: 0, sourceEnd: 2, viewStart: 0, viewEnd: 1, kind: "NFC_COMPOSITION_RUN", sourceStride: 2, viewStride: 1 });
   });
   it("decoder_rejects_unreferenced_strings_noncanonical_refs_and_expansion_bombs", () => {
     const good = JSON.parse(encodeContextSnapshot(snapshot()));

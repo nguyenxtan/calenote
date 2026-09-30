@@ -147,7 +147,13 @@ export type CanonicalDetailsV1 = z.infer<typeof CanonicalDetailsV1Schema>;
 // including identity source/views, are interned only when this reduces bytes.
 // Strict logical schemas contain no $s object keys, so reference nodes cannot
 // collide with user text or domain objects. Count this entire envelope at 16KiB.
-const storageVersion = "calenote-context-storage-1";
+const legacyStorageVersion = "calenote-context-storage-1";
+const storageVersion = "calenote-context-storage-2";
+// Persisted dictionary: append only; reordering/removal requires a new version.
+// This changes JSON member names only, never any logical value or scope binding.
+const storageKeys = ["normalizationVersion", "sourceTurnId", "sourceMapTurnId", "sourceSpan", "viewSpan", "proposalRevision", "deliveryState", "receivedAt", "semanticView", "sourceMap", "sourceCodePoints", "viewCodePoints", "sourceStart", "sourceEnd", "viewStart", "viewEnd", "sourceStride", "viewStride", "evidence", "provenance", "resolution", "dependencies", "referenceTime", "contextRevision", "draftRevision", "chatIdentityId", "ownerId", "chatId", "requestId", "decisionId", "expiresAt", "sourceReferenceTime", "evidenceSlot", "pendingReminderQuestion", "pendingQueryQuestion", "pendingDecision", "previewReceipt", "controlRegistry", "modelAttemptBinding", "lastTerminalOutcome", "createdAt", "idleExpiresAt", "absoluteExpiresAt", "draftCreatedAt", "draftExpiresAt", "capabilityVersion", "schemaVersion", "issuedAfterOrder", "issuedAfterInbound", "replyReference", "claimMarker", "sourceInboundId", "contractVersion", "questionId", "previewId", "draftHash", "acceptedReplies", "tokenHandle", "proposalId", "evidenceIndex"] as const;
+const compactKeys = new Map<string, string>(storageKeys.map((key, i) => [key, `$k${i.toString(36)}`]));
+const expandedKeys = new Map([...compactKeys].map(([key, compact]) => [compact, key]));
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export function encodeContextSnapshot(value: unknown): string {
@@ -157,14 +163,19 @@ export function encodeContextSnapshot(value: unknown): string {
   count(state as Json);
   const strings: string[] = [], refs = new Map<string, number>();
   for (const [text, n] of counts) if (n > 1 && (n - 1) * bytes(JSON.stringify(text)) > n * 16 + 2) { refs.set(text, strings.length); strings.push(text); }
-  const encode = (v: Json): Json => typeof v === "string" && refs.has(v) ? { $s: refs.get(v)! } : Array.isArray(v) ? v.map(encode) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, value]) => [k, encode(value)])) : v;
+  const encode = (v: Json): Json => typeof v === "string" && refs.has(v) ? { $s: refs.get(v)! } : Array.isArray(v) ? v.map(encode) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, value]) => [compactKeys.get(k) ?? k, encode(value)])) : v;
   // Candidate encoding does not admit storage: measure the full string before
   // accepting a transition. Oversize never truncates fields.
   return JSON.stringify({ encoding: storageVersion, strings, snapshot: encode(state as Json) });
 }
 export function decodeContextSnapshot(encoded: string): ContextSnapshotV1 {
   if (bytes(encoded) > 16384) throw new Error("Context snapshot exceeds storage limit");
-  const envelope = z.strictObject({ encoding: z.literal(storageVersion), strings: z.array(z.string()).max(512), snapshot: z.unknown() }).parse(JSON.parse(encoded));
+  const parsed: unknown = JSON.parse(encoded);
+  // Both persisted encoders write canonical JSON.stringify payloads. Refuse
+  // ambiguous duplicate members (and alternate encodings) before expansion;
+  // JSON.parse alone would silently discard a preceding corrupt member.
+  if (JSON.stringify(parsed) !== encoded) throw new Error("Noncanonical encoded JSON");
+  const envelope = z.strictObject({ encoding: z.enum([legacyStorageVersion, storageVersion]), strings: z.array(z.string()).max(512), snapshot: z.unknown() }).parse(parsed);
   if (new Set(envelope.strings).size !== envelope.strings.length) throw new Error("Duplicate string table entries");
   const used = new Set<number>();
   let nodes = 0, expandedBytes = 0;
@@ -181,7 +192,15 @@ export function decodeContextSnapshot(encoded: string): ContextSnapshotV1 {
     if (typeof v === "string") { expandedBytes += bytes(v); if (expandedBytes > 4 * 1024 * 1024) throw new Error("Excessive decoded text"); return v; }
     if (v === null || typeof v === "boolean" || typeof v === "number") return v;
     if (Array.isArray(v)) return v.map(x => decode(x, depth + 1));
-    if (typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, value]) => [k, decode(value, depth + 1)]));
+    if (typeof v === "object") {
+      const entries: Array<[string, Json]> = [], keys = new Set<string>();
+      for (const [key, value] of Object.entries(v)) {
+        const expanded = envelope.encoding === storageVersion ? expandedKeys.get(key) ?? key : key;
+        if ((key.startsWith("$") && !expandedKeys.has(key)) || keys.has(expanded)) throw new Error("Invalid/colliding encoded key");
+        keys.add(expanded); entries.push([expanded, decode(value, depth + 1)]);
+      }
+      return Object.fromEntries(entries);
+    }
     throw new Error("Invalid encoded value");
   };
   const decoded = decode(envelope.snapshot, 0);

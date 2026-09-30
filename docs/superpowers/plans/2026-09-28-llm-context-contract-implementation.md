@@ -48,6 +48,24 @@
 
 ### Current task acceptance
 
+- Current controlling owner authorization (2026-09-30),
+  `31ddd6df-b74c-41ab-87f1-4e71284e935e`, supersedes earlier T10-only/external
+  stop permissions, while preserving technical gates. Complete the narrow
+  lossless snapshot-fit amendment S §8.2.3 and all unfinished T10 harness work;
+  fresh T10 review Critical=0/Important=0 precedes its commit. Implementation
+  and review agents use GPT-6.1 Sol Medium. Retain existing work and artifacts.
+  T4–T9 acceptance below is unchanged; T10 is currently NOT_ACCEPTED.
+  After T10 acceptance continue T11 automatically, with actual-route admission,
+  official provider preflight and isolated synthetic actual-service pilot/full
+  under existing USD0.50/USD1.00/combinedUSD1.50,192/480calls,20/45minutes,
+  retry0/no-fallback limits. Only full live PASS permits compatibility/release
+  preflight, exact reviewed additive migration, reviewed push/PR/CI/merge and
+  deployment of the exact reviewed resulting master SHA under this conditional
+  owner authorization. No gate is inferred from a prior phase's green result.
+  Preserve compatible immutable rollback and controlled-account UAT; stop at
+  failed acceptance, credentials/billing/privacy/budget, incompatible migration,
+  red CI, unsafe rollback or deployment/runtime mismatch. No routine per-stage
+  approval is requested; no current external action has occurred.
 - Controlling owner authorization `6dd6ddd5-b02d-48f3-9285-3c5cc06940f4` approves
   the amendment and T1A -> T2A -> T0A as ONE TDD/review/commit bundle, then
   automatic T4–T10 continuation when accepted. It supersedes the historical

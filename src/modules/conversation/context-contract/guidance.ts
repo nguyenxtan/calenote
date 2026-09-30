@@ -101,7 +101,7 @@ export function validateDirective(model: ParsedInterpretation["directive"], effe
 
 export const OUTPUT_SAFETY_LINT_VERSION = "conversation-guidance-lint-1";
 const forbiddenWords = new Set(["đã", "lưu", "tạo", "gửi", "xong", "saved", "save", "created", "create", "sent", "send", "done", "success", "confirmed", "confirm"]);
-function eligibleText(text: string): boolean {
+export function isEligibleGuidanceText(text: string): boolean {
   // Fixed approved output guard; never applied to input meaning or facts.
   if (containsForbiddenGuidanceMaterial(text) || /[\p{N}\p{Cf}\p{Cc}<>`*_\[\]{}\\%&]/u.test(text)) return false;
   const normalized = text.normalize("NFC").toLocaleLowerCase("vi").replace(/\s+/gu, " ");
@@ -130,6 +130,6 @@ export function selectGuidance(input: { effectiveDirective: EffectiveDirective; 
   if (input.replyProposal.value === null) return backend("REPLY_ABSENT");
   const parsed = ReplyProposalSchema.safeParse(input.replyProposal.value);
   if (!parsed.success || parsed.data === null) return backend("REPLY_INVALID");
-  if (input.privacyValidation.status !== "VALID" || !["vi", "en"].includes(input.language) || !eligibleText(parsed.data.text)) return backend("REPLY_FORBIDDEN");
+  if (input.privacyValidation.status !== "VALID" || !["vi", "en"].includes(input.language) || !isEligibleGuidanceText(parsed.data.text)) return backend("REPLY_FORBIDDEN");
   return { source: "MODEL_GUIDANCE", text: parsed.data.text };
 }
