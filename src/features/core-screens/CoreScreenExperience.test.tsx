@@ -20,10 +20,13 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
     void init;
     const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
     if (path === "/api/session") return json({ data: { user } });
-    if (path === "/api/reminders") return json({ data: { reminders: [reminder] } });
+    const override = extra(path);
+    if (override) return override;
+    if (path === "/api/v2/reminders") return json({ data: { schemaVersion: "reminders-2", reminders: [{ ...reminder, details: null }], hasMore: false, scope: "OWNER" } });
+    if (path === "/api/v2/conversation-previews") return json({ data: { schemaVersion: "conversation-previews-1", previews: [], hasMore: false } });
     if (path === "/api/actions") return json({ data: { actions: [action] } });
-    if (path === "/api/reminder-series") return extra(path) ?? json({ data: { series: [] } });
-    return extra(path) ?? json({ error: { code: "NOT_FOUND", message: "Không tìm thấy." } }, 404);
+    if (path === "/api/reminder-series") return json({ data: { series: [] } });
+    return json({ error: { code: "NOT_FOUND", message: "Không tìm thấy." } }, 404);
   });
   vi.stubGlobal("fetch", fetcher);
   return fetcher;
@@ -54,8 +57,60 @@ describe("CoreScreenExperience", () => {
     expect(screen.queryByText("Gửi báo giá")).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Lịch" })).toBeVisible();
     expect(screen.getByText("14:00")).toBeVisible();
+    const selectedDay = screen.getByRole("button", { name: /Dương lịch 2026-09-10, Âm lịch.*1 lời nhắc, đã chọn/ });
+    expect(selectedDay).toBeVisible();
+    const nextDay = screen.getByRole("button", { name: /Dương lịch 2026-09-11, Âm lịch.*0 lời nhắc/ });
+    nextDay.focus();
+    await interaction.keyboard("{Enter}");
+    expect(nextDay).toHaveAttribute("aria-pressed", "true");
     await interaction.click(screen.getByRole("button", { name: "Tháng sau" }));
     expect(screen.getByRole("button", { name: "Hôm nay" })).toBeVisible();
+  });
+
+  it("shows OWNER partial scope and complete companion fields from strict V2 response", async () => {
+    const details = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung", notes: "Mang giấy tờ", eventDate: "2026-09-11", eventTime: "13:30", calendarProvenance: { calendar: "GREGORIAN", sourceDate: null, provenance: { kind: "EXPLICIT_USER" } }, resolutionVersion: "context-resolution-1" };
+    installFetch(path => path === "/api/v2/reminders" ? json({ data: { schemaVersion: "reminders-2", reminders: [{ ...reminder, details }], hasMore: true, scope: "OWNER" } }) : undefined);
+    render(<CoreScreenExperience screen="calendar" />);
+    expect(await screen.findByText("Gửi báo giá")).toBeVisible();
+    await userEvent.click(screen.getByText("Gửi báo giá"));
+    expect(screen.getByText(/Quang Trung/)).toBeVisible();
+    expect(screen.getByText(/Mang giấy tờ/)).toBeVisible();
+    expect(screen.getByText(/2026-09-11 13:30/)).toBeVisible();
+    expect(screen.getByText(/chủ tài khoản/)).toBeVisible();
+    expect(screen.getByText(/chỉ hiển thị một phần/)).toBeVisible();
+  });
+
+  it("shows full solar and lunar years near lunar new year even after month navigation", async () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse("2026-02-16T05:00:00Z"));
+    installFetch();
+    render(<CoreScreenExperience screen="calendar" />);
+    await screen.findByRole("heading", { name: "Lịch" });
+    expect(screen.getByRole("heading", { name: /16 tháng 2.*2026/ })).toBeVisible();
+    expect(screen.getByText(/Âm lịch 29\/12\/2025/)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Tháng sau" }));
+    expect(screen.getByRole("heading", { name: /16 tháng 2.*2026/ })).toBeVisible();
+  });
+
+  it("keeps dual-date grid and reminder detail controls operable at a 375px viewport", async () => {
+    const originalWidth = window.innerWidth;
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+      window.dispatchEvent(new Event("resize"));
+      installFetch();
+      render(<CoreScreenExperience screen="calendar" />);
+      await screen.findByRole("heading", { name: "Lịch" });
+      expect(screen.getAllByRole("button", { name: /Dương lịch 2026-09-\d+, Âm lịch/ })).toHaveLength(30);
+      expect(screen.getByRole("heading", { name: /10 tháng 9.*2026/ })).toBeVisible();
+      await userEvent.click(screen.getByText("Gửi báo giá"));
+      expect(screen.getByRole("region", { name: "Chi tiết lời nhắc" })).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Đóng chi tiết" }));
+      expect(screen.queryByRole("region", { name: "Chi tiết lời nhắc" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Tháng sau" }));
+      expect(screen.getByRole("button", { name: "Hôm nay" })).toBeVisible();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+      window.dispatchEvent(new Event("resize"));
+    }
   });
 
   it("approves an Inbox ActionCandidate through its decision endpoint only", async () => {

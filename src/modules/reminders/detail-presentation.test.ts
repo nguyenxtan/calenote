@@ -35,4 +35,26 @@ describe("complete reminder detail projection", () => {
     expect(renderReminderDetails("đi thi", { ...details, eventTime: "13:30" }, schedule, remaining).status).toBe("COMPLETE");
     expect(renderReminderDetails("đi thi", { ...details, eventTime: "13:30" }, schedule, remaining + 1).status).toBe("TOO_LONG");
   });
+  it("budgets the entire 30-occurrence lunar companion plus confirmation control allowance without clipping", () => {
+    const occurrences = Array.from({ length: 30 }, (_, index) => {
+      const scheduledAt = schedule[0].scheduledAt + index * 86_400_000;
+      return { index, scheduledAt, localDate: new Date(scheduledAt).toISOString().slice(0, 10) };
+    });
+    const lunar: CanonicalDetailsV1 = { ...details, eventTime: "13:30", calendarProvenance: {
+      calendar: "LUNAR_VN", sourceDate: { kind: "CIVIL_DATE", calendar: "LUNAR_VN", day: 1, month: 9, year: 2026, leapMonth: false },
+      provenance: { kind: "EXPLICIT_USER" },
+    } };
+    const base = renderReminderDetails("đi thi <b>", lunar, occurrences);
+    expect(base.status).toBe("COMPLETE");
+    if (base.status !== "COMPLETE") return;
+    expect(base.text).toContain("Ngày âm lịch nguồn: 1/9/2026");
+    expect(base.text).toContain("Sự kiện: 2026-10-11 13:30");
+    expect(base.text).toContain("2026-11-07 08:00");
+    expect(base.text.match(/2026-\d{2}-\d{2} 08:00/g)).toHaveLength(30);
+    const controlAllowance = 2000 - DELIVERY_PREFIX.length - base.text.length;
+    expect(renderReminderDetails("đi thi <b>", lunar, occurrences, controlAllowance)).toEqual(base);
+    expect(renderReminderDetails("đi thi <b>", lunar, occurrences, controlAllowance + 1)).toEqual({
+      status: "TOO_LONG", units: 2001, limit: 2000,
+    });
+  });
 });

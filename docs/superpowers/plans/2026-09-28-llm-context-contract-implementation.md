@@ -124,6 +124,18 @@
   Historical detail reads retain owner/session scope after connection suspension,
   while mutations still require ACTIVE_BOUND. No migration/config/entrypoint,
   provider or remote action; successor dormant. T9 may proceed locally, BUNVERIFIED.
+- T9 LOCAL_IMPLEMENTATION_ACCEPTED: final focused57 and fresh full127files/
+  2492tests PASS with one opt-in skip, all downstream gates PASS. Independent
+  Calendar/API/delivery review and two scoped correction rounds closed all
+  findings, Critical=0/Important=0/Minor=0. Per-version uncertain controls remain
+  blocked; partial0009 schema fails closed; strict API uncertainty/unavailability
+  stays distinct. Complete details use shared confirmation/delivery rendering.
+  Real isolated Chrome375x812 local built-artifact evidence verifies dual-date
+  seven-column grid and reachable preview/detail controls, including hidden/
+  overflow negative controls. This is not live auth/browser UAT/deployed evidence.
+  Six Node localStorage and146 inherited generated-artifact warnings disclosed;
+  task-scoped lint clean. Source/config/migration activation unchanged, zero
+  provider/remote actions. T10 may proceed locally; route B remains UNVERIFIED.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,
