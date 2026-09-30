@@ -1,5 +1,6 @@
 import type { ControlAuthority, PendingDecision } from "./state";
 import type { DecisionProof } from "./store";
+import { requiresBoundPreviewConfirmation } from "./preview-control";
 
 export type ControlSelection = { kind: "NONE" } | { kind: "AMBIGUOUS_TARGET" }
   | { kind: "ABANDON"; requestId: string | null; proposalId: string | null }
@@ -36,7 +37,7 @@ export function selectControl(text: string, decision: PendingDecision | null, au
   if (decision.tokenHandle && normalized === normalize(`${prefix} ${decision.tokenHandle}`)) response = { kind: "TOKEN", handle: decision.tokenHandle };
   else if (decision.acceptedReplies.some(reply => reply === normalized)) {
     if (context.replyReference && context.replyReference === decision.replyReference) response = { kind: "REPLY", reference: context.replyReference };
-    else if (decision.kind !== "SAVE_PREVIEW" || (decision.draftRevision ?? 1) === 1) response = { kind: "BARE", text };
+    else if (decision.kind !== "SAVE_PREVIEW" || !requiresBoundPreviewConfirmation(context.snapshot)) response = { kind: "BARE", text };
   }
   return response ? { kind: "APPROVE", decisionId: decision.decisionId, decisionKind: decision.kind, response } : none;
 }

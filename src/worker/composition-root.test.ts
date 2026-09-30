@@ -16,6 +16,10 @@ function environment(): Env {
 }
 
 describe("Worker composition root", () => {
+  it.each([undefined, "unknown", "g".repeat(40)])("successor capability refuses missing or invalid source SHA %s", async sourceSha => {
+    const root = await import("./composition-root");
+    await expect(root.createRuntimeOperations(environment(), { contextContract: "calenote-context-2", sourceSha })).rejects.toThrow("Source SHA required");
+  });
   // The complete composition path performs several Web Crypto keyring setups;
   // under the parallel Worker suite it needs an explicit integration budget.
   it("constructs runtime, route capability, and webhook operation boundaries", async () => {

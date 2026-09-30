@@ -5,6 +5,7 @@ import { resolveRequest } from "./resolve";
 import { lunarCalendar } from "../lunar-calendar";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 import { SlotValueSchemas } from "./contracts";
+import { requiresBoundPreviewConfirmation } from "./preview-control";
 export const CanonicalPreviewSchema = z.strictObject({ schemaVersion: z.literal("calenote-context-preview-1"),
   title: SlotValueSchemas.title, details: CanonicalDetailsV1Schema,
   occurrences: z.array(z.strictObject({ index: z.number().int().min(0).max(29), scheduledAt: z.number().int().nonnegative(), localDate: z.iso.date() })).min(1).max(30),
@@ -56,7 +57,7 @@ export function validDecision(snapshot: ContextSnapshotV1, proof: DecisionProof,
   const response = proof.response;
   if (response.kind === "TOKEN") return response.handle === d.tokenHandle && snapshot.controlRegistry.some(c => c.handle === response.handle && c.decisionId === d.decisionId && c.contextRevision === d.contextRevision && c.draftRevision === d.draftRevision && Date.parse(c.expiresAt) > now);
   if (response.kind === "REPLY") return authority.kind === "CHAT" && response.reference === d.replyReference && d.replyReference !== null;
-  if (authority.kind !== "CHAT" || (d.kind === "SAVE_PREVIEW" && (d.draftRevision ?? 1) > 1)) return false;
+  if (authority.kind !== "CHAT" || (d.kind === "SAVE_PREVIEW" && requiresBoundPreviewConfirmation(snapshot))) return false;
   const normalized = response.text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
   return d.acceptedReplies.some(reply => reply === normalized);
 }

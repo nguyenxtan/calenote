@@ -294,6 +294,8 @@ export class D1ContextContractStore implements ContextContractStore {
    if(!outbound||outbound.role!=="ASSISTANT"||s.transcript.filter(t=>t.role==="ASSISTANT").at(-1)?.id!==outbound.id)return "STALE";
    if(outbound.deliveryState!=="UNCERTAIN")return outbound.deliveryState===receipt.deliveryState&&outbound.messageRef===receipt.messageRef?"RECORDED":"STALE";
    outbound.deliveryState=receipt.deliveryState;outbound.messageRef=receipt.messageRef;
+   if(s.pendingReminderQuestion?.questionId===receipt.outboundId)s.pendingReminderQuestion.deliveryState=receipt.deliveryState;
+   if(s.pendingQueryQuestion?.questionId===receipt.outboundId)s.pendingQueryQuestion.deliveryState=receipt.deliveryState;
    if(s.previewReceipt?.previewId===receipt.outboundId){s.previewReceipt.deliveryState=receipt.deliveryState;s.previewReceipt.replyReference=receipt.messageRef;}
    if(s.pendingDecision&&(s.pendingDecision.previewId===receipt.outboundId||s.pendingDecision.questionId===receipt.outboundId)){
     if(receipt.deliveryState!=="SENT")s.pendingDecision=null;

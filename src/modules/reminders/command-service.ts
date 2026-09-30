@@ -119,6 +119,7 @@ export interface ProcessBoundChatDependencies {
   conversation?: {
     handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult>;
     ownsPendingDraft?(message: BoundChatMessage, context: BoundChatContext, draftId: string): Promise<boolean>;
+    ownsContext?(message: BoundChatMessage, context: BoundChatContext): Promise<boolean>;
   };
   store: ReminderCommandStore;
   keyring: Pick<Keyring, "encryptSensitive" | "decryptSensitive">;
@@ -337,6 +338,7 @@ export async function processBoundChatMessage(
 
   const normalized = normalizeWholeMessage(message.text);
   if (dependencies.conversation && !normalized.startsWith("/connect")) {
+    if (await dependencies.conversation.ownsContext?.(message, context)) return dependencies.conversation.handle(message, context);
     // Confirmation remains canonical. Only an authenticated V2-owned draft
     // may re-enter contextual dialogue; legacy drafts retain their drain guard.
     const pending = await dependencies.store.findPendingDraft(message, context.chatIdentityId);

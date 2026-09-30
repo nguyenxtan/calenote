@@ -100,6 +100,17 @@
   Exact canonical successor wire and section parsing remain dormant; real
   callable transport refuses admission, copied declarative fixtures only.
   T7 may proceed locally; full-route proof B remains UNVERIFIED.
+- T7 LOCAL_IMPLEMENTATION_ACCEPTED: final focused 189 tests PASS; fresh complete
+  check passed 120 files / 2456 tests with one intentional opt-in skip and all
+  architecture/static/build/Worker types/local dry-run gates. Independent actual
+  service/security review found three Important issues; scoped TDD correction
+  and same-reviewer re-review closed all three, Critical=0/Important=0. Numeric
+  clarification is semantic, local decline remains available at context capacity,
+  and explicit uncertain-preview recovery requires a separate bound confirmation.
+  Bare SAVE requires positive complete delivery history; pruning fails closed.
+  Existing generated-artifact warnings are disclosed, not new source errors.
+  Successor remains dormant; worker entrypoint/configuration/migrations unchanged,
+  no provider or remote actions. T8 may proceed locally; route B is UNVERIFIED.
 - Historical owner boundary, superseded by the authorization above:
 - Latest owner boundary (2026-09-29), attachment
   `42c83974-4755-4a90-87fa-4f43ce227e96`: targeted documentation amendment only,

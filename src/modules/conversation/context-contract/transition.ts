@@ -8,7 +8,9 @@ import { selectControl } from "./decisions";
 import { computeEffectiveDirective, selectGuidance, type GuidanceSelection } from "./guidance";
 import { composeContextReply, formatPendingFact, type ReplyOutcome, type ReadyReplyPlan, type FailureReason } from "./responses";
 import { resolveQuery, type ContextQueryResult, type QueryResolution } from "./query";
-import { digest, previewHash, validDecision } from "./confirmation";
+import { digest, previewHash } from "./confirmation";
+import { createControlProof } from "./control-proof";
+import { isPreviewRecoveryResponse, SAVE_APPROVAL_REPLIES } from "./preview-control";
 import { projectSemanticView } from "./projection";
 import { lunarCalendar } from "../lunar-calendar";
 import { SLOT_NAMES, SemanticPatchProposalSchema, type EvidenceRef, type FieldChange } from "./contracts";
@@ -17,6 +19,10 @@ export interface TransitionInput {
   snapshot: ContextSnapshotV1 | null;
   /** T2's current retained transcript, including the actual inbound control. */
   received?: ContextSnapshotV1;
+  /** Exact non-semantic settlement at context capacity; never source evidence. */
+  localControlText?: string;
+  /** User-driven re-presentation of an unconfirmed preview, not auto resend. */
+  previewRecoveryText?: string;
   interpretation?: ValidatedPatch;
   merge?: MergeResult;
   resolution?: RequestResolution;
@@ -150,8 +156,11 @@ export async function transitionConversation(input: TransitionInput): Promise<Co
   if (input.failure) { clearDecision(s); outcome = { kind: "FAILURE", reason: input.failure }; }
   else if (control.kind !== "NONE") {
     if (!prior || !input.authority || input.authority.kind !== "CHAT") return fail("STALE");
-    const inbound = s.transcript.find(t => t.id === s.inbound.id && t.role === "USER");
+    const inbound = s.transcript.find(t => t.id === s.inbound.id && t.role === "USER")
+      ?? (input.localControlText !== undefined && ["DECLINE", "AMBIGUOUS_TARGET"].includes(control.kind) ? { text: input.localControlText } : undefined);
     if (!inbound || input.authority.scope.sourceInboundId !== s.inbound.id || input.authority.scope.claimMarker !== s.inbound.claimMarker) return fail("STALE");
+    if (Date.parse(s.inbound.receivedAt) < Date.parse(prior.inbound.receivedAt)
+      || (Date.parse(s.inbound.receivedAt) === Date.parse(prior.inbound.receivedAt) && s.inbound.rowid <= prior.inbound.rowid)) return fail("STALE");
     const selected = selectControl(inbound.text, prior.pendingDecision, input.authority, { snapshot: prior, now: input.now, replyReference: control.kind === "APPROVE" && control.response.kind === "REPLY" ? control.response.reference : null });
     if (!equal(selected, control)) return fail("STALE");
     if (control.kind === "AMBIGUOUS_TARGET") { suspendOffer(); outcome = { kind: "NOTICE", notice: "AMBIGUOUS_TARGET" }; }
@@ -160,8 +169,8 @@ export async function transitionConversation(input: TransitionInput): Promise<Co
     else {
       const d = prior.pendingDecision!;
       if (Date.parse(s.inbound.receivedAt) < Date.parse(d.issuedAfterInbound.receivedAt) || (Date.parse(s.inbound.receivedAt) === Date.parse(d.issuedAfterInbound.receivedAt) && s.inbound.rowid <= d.issuedAfterInbound.rowid)) return fail("STALE");
-      proof = { operationKey: `operation-${seed}`, contextId: prior.id, contextRevision: prior.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId, draftRevision: d.draftRevision, draftHash: prior.previewReceipt?.draftHash ?? null, response: control.response };
-      if (!validDecision(prior, proof, input.authority, input.now)) return fail("STALE");
+      proof = await createControlProof(prior, s.inbound, inbound.text, control, input.authority, input.now) ?? undefined;
+      if (!proof) return fail("STALE");
       if (d.kind === "SAVE_PREVIEW") return { ...replyOnly({ kind: "NOTICE", notice: "CHECKING" }), confirmationProof: proof };
       clearDecision(s);
       if (d.kind === "RESTART_PENDING") { terminal = "CANCELLED"; s.lifecycle = "CANCELLED"; outcome = { kind: "NOTICE", notice: "RESTARTED" }; }
@@ -206,6 +215,12 @@ export async function transitionConversation(input: TransitionInput): Promise<Co
         else if (patch.proposal.intent === "UNSUPPORTED") outcome = { kind: "UNSUPPORTED", capability: "ASSISTANT_SCOPE" };
       }
     }
+  } else if (input.previewRecoveryText !== undefined) {
+    if (!prior || !input.authority || input.authority.kind !== "CHAT" || !isPreviewRecoveryResponse(prior, input.previewRecoveryText)
+      || input.authority.scope.sourceInboundId !== s.inbound.id || input.authority.scope.claimMarker !== s.inbound.claimMarker
+      || Date.parse(s.inbound.receivedAt) < Date.parse(prior.inbound.receivedAt)
+      || (Date.parse(s.inbound.receivedAt) === Date.parse(prior.inbound.receivedAt) && s.inbound.rowid <= prior.inbound.rowid)) return fail("STALE");
+    clearDecision(s); // Resolve the retained facts; issue a fresh inert receipt.
   } else { clearDecision(s); outcome = { kind: "NOTICE", notice: "RESUME" }; }
 
   if (!outcome) {
@@ -228,7 +243,7 @@ export async function transitionConversation(input: TransitionInput): Promise<Co
         const suffix = `\nXác nhận ${token}\nTrả lời 2 để từ chối.`;
         preview = { schemaVersion: "calenote-context-preview-1", title: s.slots.title.value!, details: resolution.details, occurrences: resolution.occurrences, prefix: "Bản nháp chưa lưu:\n", suffix };
         issue("SAVE_PREVIEW"); s.lifecycle = "AWAITING_CONFIRMATION"; s.pendingReminderQuestion = null; s.pendingQueryQuestion = null;
-        s.pendingDecision!.previewId = outboundId; s.pendingDecision!.acceptedReplies = ["có", "ok", "1", "xác nhận"];
+        s.pendingDecision!.previewId = outboundId; s.pendingDecision!.acceptedReplies = [...SAVE_APPROVAL_REPLIES];
         s.pendingDecision!.target.proposalId = resolution.occurrences.length > 1 ? proposalId : null;
         s.previewReceipt = { previewId: outboundId, requestId: s.requestId!, draftRevision: s.draftRevision!, draftHash: await previewHash(preview), ownerId: s.scope.ownerId, chatIdentityId: s.scope.chatIdentityId, chatId: s.scope.chatId, channel: input.channel, issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid }, expiresAt: expiry(s), deliveryState: "UNCERTAIN", replyReference: null };
         outcome = { kind: "PREVIEW", preview, token };

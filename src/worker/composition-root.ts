@@ -48,6 +48,12 @@ import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { parseContextContractRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
+import { D1ContextRuntimeStore } from "@/modules/conversation/context-contract/runtime-store";
+import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
+import { observeContextEvent } from "@/modules/conversation/context-contract/observability";
 import { D1ConversationStore } from "@/modules/conversation/infrastructure/d1/context-store";
 import { D1ConversationRuntimeStore } from "@/modules/conversation/infrastructure/d1/runtime-store";
 import { D1SeriesStore } from "@/modules/reminders/infrastructure/d1/series-store";
@@ -363,7 +369,8 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
 
-export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
+export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean; contextContract?: "calenote-context-2"; sourceSha?: string } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
+  if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
@@ -371,6 +378,18 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
   const semantic = await createSemanticCapability(env, keyring);
+  const contextPolicy = capabilities.contextContract ? parseContextContractRuntimeConfig(env) : undefined;
+  const contextContract = capabilities.contextContract ? {
+    store: new D1ContextContractStore(env.DB, keyring), runtimeStore: new D1ContextRuntimeStore(env.DB), calendar: lunarCalendar,
+    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
+    // B is unverified. This dormant callable route cannot dispatch; a later
+    // reviewed route proof must supply its real transport, never fake admission.
+    gateway: contextPolicy?.status === "READY" ? createContextContractGateway(contextPolicy.config, async () => { throw new Error("Route admission unverified"); })
+      : { prepare: () => ({ status: "FAILURE" as const, category: "UNAVAILABLE" as const }) },
+    budgetStore: new D1SemanticBudgetStore(env.DB, { ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
+      maxInputTokens: 12000, maxOutputTokens: 1536, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 }),
+    list: (input: import("@/modules/conversation/context-contract/query").ContextReminderQuery) => new D1SemanticReminderQueryStore(env.DB).listContext(input),
+  } : undefined;
   // A capability is an explicit application composition choice, never an
   // unreviewed environment switch. Existing deployments remain V1 by default.
   const contexts = capabilities.conversationV2 ? new D1ConversationStore(env.DB, keyring) : undefined;
@@ -388,6 +407,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       store: inboundStore,
       keyring,
       semantic,
+      contextContract,
       feedbackLifetime,
       observeTiming: timing => console.log(JSON.stringify({ operation: "conversation_timing", ...timing })),
       observeFeedback: (outcome, elapsedMs) => console.log(JSON.stringify({ operation: "processing_feedback", outcome, elapsedMs })),

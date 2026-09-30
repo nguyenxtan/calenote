@@ -334,7 +334,8 @@ describe("exact scoped decision controls", () => {
   it.each(["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"] as const)("accepts only the current delivered %s", async kind => {
     const { snapshot, authority } = await confirmationFixture();
     const decision = { ...snapshot.pendingDecision!, kind, acceptedReplies: kind === "SAVE_PREVIEW" ? ["có", "ok", "1", "xác nhận"] as const : ["có", "ok", "1"] as const };
-    for (const text of [" Có. ", "OK!", "1"]) expect(selectControl(text, { ...decision, acceptedReplies: [...decision.acceptedReplies] }, authority)).toMatchObject({ kind: "APPROVE", decisionKind: kind });
+    for (const text of [" Có. ", "OK!", "1"]) expect(selectControl(text, { ...decision, acceptedReplies: [...decision.acceptedReplies] }, authority, { snapshot })).toMatchObject({ kind: "APPROVE", decisionKind: kind });
+    if (kind === "SAVE_PREVIEW") expect(selectControl("Có", { ...decision, acceptedReplies: [...decision.acceptedReplies] }, authority)).toEqual({ kind: "NONE" });
     for (const text of ["Có, nhưng đổi sang 9h", "có!!", "Đừng bỏ.", '"bỏ"', "ghi chú bỏ", "có\u200b"]) expect(selectControl(text, { ...decision, acceptedReplies: [...decision.acceptedReplies] }, authority)).toEqual({ kind: "NONE" });
     expect(selectControl("Có", { ...decision, acceptedReplies: [...decision.acceptedReplies], deliveryState: "UNCERTAIN" }, authority)).toEqual({ kind: "NONE" });
     if (authority.kind !== "CHAT") throw new Error("fixture");
