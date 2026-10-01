@@ -200,7 +200,9 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     const branch = plan.branches[matches[0]];
     if (direction === "decode") {
       requireWireKeys(object, plan.keys, plan.keys, path);
-      for (const key of plan.keys) if (!Object.hasOwn(branch.properties!, key) && object[key] !== null) throw new WireShapeFailure([...path, key], "null");
+      // Known inactive keys are transport padding. Check their presence, but
+      // never read or traverse their values; only the selected branch supplies
+      // canonical fields. Its active values still pass codec and validation.
     } else requireShape(predicate(branch, value, original));
     const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction, [...path, key])]));
     if (direction === "encode") { for (const key of plan.keys) if (!Object.hasOwn(result, key)) result[key] = null; }

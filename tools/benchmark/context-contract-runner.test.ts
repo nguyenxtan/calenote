@@ -13,7 +13,7 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContext, parseGoogleLiteEuContextSections } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
-it("persists actual per-turn R01 reads and mutations even when a later pilot call stops", async () => {
+it("discards inactive padding through R01 and persists actual reads/mutations before a later pilot stop", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-r01-turn-evidence-")); let calls = 0;
   try {
     const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "turn-evidence",
@@ -22,8 +22,12 @@ it("persists actual per-turn R01 reads and mutations even when a later pilot cal
         const index = calls++;
         if (index >= 2) return { status: 400, body: '{"error":{"code":400}}' };
         const context = JSON.parse(request.messages[1].content) as ContextInput;
+        const wire = encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", index)) as { query: Record<string, unknown>; conversationDirective: Record<string, unknown> };
+        wire.query.date = { calendar: "GREGORIAN", kind: "CONTEXT_FACT", ref: "f999" };
+        wire.conversationDirective.topic = "PRIVATE_INACTIVE_PADDING_SENTINEL";
+        if (wire.query.period) (wire.query.period as Record<string, unknown>).date = { calendar: "GREGORIAN" };
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-r01-${index}`, usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
-          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", index))) } }] }) };
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(wire) } }] }) };
       } });
     expect(result).toMatchObject({ status: "STOP", score: null, applicationLlmCalls: 3, providerHttpRequests: 3 });
     const text = readFileSync(join(directory, "application-evidence.json"), "utf8");
@@ -35,6 +39,8 @@ it("persists actual per-turn R01 reads and mutations even when a later pilot cal
     expect(text.length).toBeLessThan(3000);
     for (const privateText of ["Có lịch nào ko?", "Tháng này có lịch gì ko?", "selectedText", "replyProposal", "evidence", "quote", "SYNTHETIC_CREDENTIAL"]) expect(text).not.toContain(privateText);
     expect(JSON.parse(readFileSync(join(directory, "report.json"), "utf8")).applicationEvidence).toEqual(turns);
+    for (const response of result.responses.slice(0, 2)) expect(response).not.toHaveProperty("canonicalValidationDiagnostics");
+    expect(readFileSync(join(directory, "responses.json"), "utf8")).not.toContain("PRIVATE_INACTIVE_PADDING_SENTINEL");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -52,7 +58,7 @@ it.each([
   expect(diagnostics).toMatchObject({ issues: [expect.objectContaining({ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
 });
 
-it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "guidance-padding", "core", "wire-padding", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
+it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "core", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
   const directory = mkdtempSync(join(tmpdir(), "context-canonical-diagnostics-"));
   const sentinel = "PRIVATE_MODEL_KEY_AND_VALUE_SENTINEL";
   try {
@@ -70,8 +76,6 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
         else if (mode === "missing") delete wire.intent;
         else if (mode === "unexpected-key") wire[sentinel] = sentinel;
         else if (mode === "nested-evidence") ((wire.query as { evidence: Array<Record<string, unknown>> }).evidence[0]).occurrence = sentinel;
-        else if (mode === "guidance-padding") (wire.conversationDirective as Record<string, unknown>).queryKind = sentinel;
-        else if (mode === "wire-padding") (wire.query as Record<string, unknown>).date = sentinel;
         else wire.intent = sentinel;
         return { status: 200, ...(mode === "oversized" ? { oversized: true } : {}), body: mode === "oversized" ? sentinel.repeat(4000) : JSON.stringify({ model: request.model, provider: "Google", id: "gen-canonical-test",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mode === "primitive" ? 42 : wire) } }] }) };
@@ -82,10 +86,6 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
     expect(artifact).not.toContain(sentinel);
     expect(artifact.length).toBeLessThan(14000);
     if (mode !== "oversized") expect(artifact).toMatch(/payloadSha256/);
-    if (mode === "wire-padding") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ state: "WIRE_DECODE_FAILED",
-      validation: { issues: [expect.objectContaining({ path: ["query", "date"], expected: "null", actualType: "string" })] } });
-    if (mode === "guidance-padding") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ state: "VALIDATION_FAILED",
-      wireValidation: { issues: [expect.objectContaining({ path: ["conversationDirective", "queryKind"], expected: "null", actualType: "string" })] } });
     if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["intent"], classification: "missing" })] } });
     if (mode === "unexpected-key") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ classification: "extra", extraKeyCount: 1 })], unknownTopLevelKeyCount: 1 } });
     if (mode === "primitive") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: [], expected: "object", actualType: "number" })] } });

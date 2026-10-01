@@ -116,7 +116,6 @@ it("retains active nullable date values and rejects missing envelope/core keys",
 });
 it.each([
   ["unknown directive", (raw: Record<string, unknown>) => { raw.conversationDirective = { kind: "SAVE" }; }, { directive: { status: "INVALID" }, reply: { status: "VALID", value: null } }],
-  ["non-null inactive directive", (raw: Record<string, unknown>) => { (raw.conversationDirective as Record<string, unknown>).field = "title"; }, { directive: { status: "INVALID" }, reply: { status: "VALID", value: null } }],
   ["missing directive padding", (raw: Record<string, unknown>) => { delete (raw.conversationDirective as Record<string, unknown>).field; }, { directive: { status: "INVALID" }, reply: { status: "VALID", value: null } }],
   ["overlong reply", (raw: Record<string, unknown>) => { raw.replyProposal = { text: "x".repeat(401) }; }, { directive: { status: "VALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } }],
   ["missing guidance", (raw: Record<string, unknown>) => { delete raw.conversationDirective; delete raw.replyProposal; }, { directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_INVALID" } }],
@@ -132,8 +131,14 @@ it.each([
   ["duplicate field", (raw: Record<string, unknown>) => { (raw.changes as unknown[]).push(structuredClone((raw.changes as unknown[])[0])); }],
   ["unknown root", (raw: Record<string, unknown>) => { raw.extra = null; }],
   ["missing core", (raw: Record<string, unknown>) => { delete raw.intent; }],
-  ["inactive evidence non-null", (raw: Record<string, unknown>) => { (((raw.changes as Array<Record<string, unknown>>)[0].evidence as Array<Record<string, unknown>>)[0]).ref = "f1"; }],
 ] as const)("rejects invalid core atomically: %s", async (_label, mutate) => {
   const raw = wireFixture({ ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] }) as Record<string, unknown>; mutate(raw);
   expect(await dispatch(raw)).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+});
+it("discards inactive evidence and guidance at the HTTP boundary without changing semantic authority", async () => {
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
+  const raw = wireFixture(canonical) as Record<string, unknown>;
+  (raw.conversationDirective as Record<string, unknown>).field = "title";
+  (((raw.changes as Array<Record<string, unknown>>)[0].evidence as Array<Record<string, unknown>>)[0]).ref = "f999";
+  expect(await dispatch(raw)).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes: canonical.changes }, directive: { status: "VALID", value: minimal.conversationDirective }, fullSchemaValid: true } });
 });

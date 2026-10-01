@@ -145,16 +145,87 @@ const activeValues: Record<string, unknown> = { ref: "f1", turn: 0, quote: "synt
 const calendarWire = encoded.find(f => f.name === "query/calendar/1")!.wire as { query: { date: unknown } };
 const listWire = encoded.find(f => f.name === "period/MONTH/6")!.wire as { query: { period: unknown } };
 Object.assign(activeValues, { date: calendarWire.query.date, from: calendarWire.query.date, through: calendarWire.query.date, period: listWire.query.period });
-const mutations = encoded.flatMap(fixture => inactivePaths(fixture.wire).map(path => ({ name: `${fixture.name}:${path.join(".")}`, wire: replace(fixture.wire, path, activeValues[String(path.at(-1))]) })));
+const mutations = encoded.flatMap(fixture => inactivePaths(fixture.wire).map(path => ({ name: `${fixture.name}:${path.join(".")}`, path, canonical: fixture.canonical, wire: replace(fixture.wire, path, activeValues[String(path.at(-1))]) })));
 
 it.each(encoded)("public wire schema admits and decoder reconstructs $name", ({ canonical, wire }) => {
   expect(ConversationInterpretationSchema.safeParse(canonical).success).toBe(true);
   expect(validator.safeParse(wire).success).toBe(true);
   expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
 });
-it.each(mutations)("public wire schema rejects inactive active-shaped padding $name", ({ wire }) => {
+it.each(mutations)("generation schema rejects padding while decoder discards inactive active-shaped values $name", ({ canonical, wire }) => {
   expect(validator.safeParse(wire).success).toBe(false);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
+});
+it("discards the observed inactive query date.calendar without treating it as a date operand", () => {
+  const fixture = encoded.find(item => item.name === "period/MONTH/6")!;
+  const wire = replace(fixture.wire, ["query", "period", "date"], { calendar: "GREGORIAN" });
+  expect(validator.safeParse(wire).success).toBe(false);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(fixture.canonical));
+});
+const boundedNoise = [false, 42, "CONFIRM_SAVE", [], { kind: "CONTEXT_FACT", ref: "f999", confirmation: true, title: "inactive", count: 999 }, { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 1, month: 10, year: 2026, leapMonth: null }];
+const noiseCases = encoded.filter(fixture => inactivePaths(fixture.wire).length).flatMap(fixture => boundedNoise.map((noise, index) => ({ ...fixture, name: `${fixture.name}/noise-${index}`, padded: inactivePaths(fixture.wire).reduce((wire, path) => replace(wire, path, noise), fixture.wire) })));
+it.each(noiseCases)("projects every inactive key to zero canonical/evidence/control authority $name", ({ canonical, padded }) => {
+  expect(parseGoogleLiteEuContextSections(padded)).toEqual(parseInterpretationSections(canonical));
+});
+it.each(encoded.filter(fixture => inactivePaths(fixture.wire).length))("never reads or traverses inactive values $name", ({ canonical, wire }) => {
+  const raw = structuredClone(wire);
+  for (const path of inactivePaths(wire)) {
+    let node = raw as Record<string | number, unknown>;
+    for (const key of path.slice(0, -1)) node = node[key] as Record<string | number, unknown>;
+    Object.defineProperty(node, path.at(-1)!, { enumerable: true, get() { throw new Error("INACTIVE_VALUE_READ"); } });
+  }
+  expect(parseGoogleLiteEuContextSections(raw)).toEqual(parseInterpretationSections(canonical));
+});
+function activePaths(value: unknown, path: (string | number)[] = []): (string | number)[][] {
+  if (Array.isArray(value)) return value.flatMap((child, index) => activePaths(child, [...path, index]));
+  if (!value || typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  return [...(typeof object.kind === "string" || typeof object.operation === "string" ? Object.keys(object).map(key => [...path, key]) : []), ...Object.entries(object).flatMap(([key, child]) => activePaths(child, [...path, key]))];
+}
+const malformedActive = encoded.flatMap(fixture => activePaths(fixture.canonical).filter(path => path[0] !== "uncertainties").map(path => ({ name: `${fixture.name}:${path.join(".")}`, path, wire: replace(fixture.wire, path, []) })));
+it.each(malformedActive)("keeps active branch fields and discriminators strict $name", ({ wire, path }) => {
   const parsed = parseGoogleLiteEuContextSections(wire);
+  expect(parsed.status === "REFUSED" || !parsed.value.fullSchemaValid).toBe(true);
+  const missing = structuredClone(wire);
+  let node = missing as Record<string | number, unknown>;
+  for (const key of path.slice(0, -1)) node = node[key] as Record<string | number, unknown>;
+  delete node[path.at(-1)!];
+  const absent = parseGoogleLiteEuContextSections(missing);
+  expect(absent.status === "REFUSED" || !absent.value.fullSchemaValid).toBe(true);
+});
+it.each([
+  { fixture: "period/MONTH/6", path: ["query", "period"], switchTo: { kind: "DAY", date: { calendar: "GREGORIAN" } } },
+  { fixture: "period/MONTH/6", path: ["query"], switchTo: { kind: "CALENDAR_DATE", date: { calendar: "GREGORIAN" }, outputCalendar: "GREGORIAN" } },
+  { fixture: "query/calendar/1", path: ["query", "date"], switchTo: { kind: "CIVIL_DATE", calendar: "INVALID", day: 1, month: 1, year: 2026, leapMonth: null } },
+  { fixture: "evidence/fact", path: ["controlEvidence", 0], switchTo: { kind: "USER_QUOTE", turn: 0, quote: 42, occurrence: 1 } },
+  { fixture: "minimal", path: ["conversationDirective"], switchTo: { kind: "ASK_FOR_FIELD", field: "CONFIRM_SAVE" } },
+] as const)("switching discriminator immediately activates strict validation $fixture/$path", ({ fixture, path, switchTo }) => {
+  const raw = structuredClone(encoded.find(item => item.name === fixture)!.wire);
+  let node = raw as Record<string | number, unknown>;
+  for (const key of path) node = node[key] as Record<string | number, unknown>;
+  const { kind, ...payload } = switchTo;
+  Object.assign(node, payload);
+  // The malformed payload is ignored under the original discriminator.
+  expect(parseGoogleLiteEuContextSections(raw)).toEqual(parseInterpretationSections(encoded.find(item => item.name === fixture)!.canonical));
+  node.kind = kind;
+  const parsed = parseGoogleLiteEuContextSections(raw);
+  expect(parsed.status === "REFUSED" || !parsed.value.fullSchemaValid).toBe(true);
+});
+it.each(mutations)("keeps required inactive key presence strict $name", ({ wire, path }) => {
+  const raw = structuredClone(wire);
+  let node = raw as Record<string | number, unknown>;
+  for (const key of path.slice(0, -1)) node = node[key] as Record<string | number, unknown>;
+  delete node[path.at(-1)!];
+  const parsed = parseGoogleLiteEuContextSections(raw);
+  expect(parsed.status === "REFUSED" || !parsed.value.fullSchemaValid).toBe(true);
+});
+it.each(encoded.filter(fixture => inactivePaths(fixture.wire).length))("rejects unknown keys beside inactive padding $name", ({ wire }) => {
+  const path = inactivePaths(wire)[0].slice(0, -1);
+  const raw = structuredClone(wire);
+  let node = raw as Record<string | number, unknown>;
+  for (const key of path) node = node[key] as Record<string | number, unknown>;
+  node.unrecognizedAuthority = { confirmation: true };
+  const parsed = parseGoogleLiteEuContextSections(raw);
   expect(parsed.status === "REFUSED" || !parsed.value.fullSchemaValid).toBe(true);
 });
 it.each(Object.entries(values))("producer retains SET/CLEAR and field/value association for %s", (field, value) => {

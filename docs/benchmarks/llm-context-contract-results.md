@@ -1,5 +1,39 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 inactive provider-wire padding policy — 2026-10-01
+
+Owner authority `26b5a178-f64e-4be9-b917-e91d2c417aac` approves treating
+known inactive padding as transport noise. After exact fixed-shape key and
+discriminator checks, the decoder projects only the selected branch's active
+properties. It never reads or traverses inactive values. Required inactive
+keys must still be present, unknown keys still reject, and active values,
+including active null semantics, remain strictly validated. This applies to
+query periods, query operands, typed dates, evidence and directives everywhere
+they appear, including change values. Field/operation change branches have no
+inactive top-level properties; SET/CLEAR value constraints remain active.
+
+The public wire generation schema still requires null padding and rejects
+populated inactive values. Decoder admission of that noise is therefore
+separate from generation-schema validity. `fullSchemaValid` describes the
+projected canonical interpretation, as before. The fixed uncertainty envelope
+and JSON alternatives are unchanged and have no inactive wire padding; their
+complete canonical objects still undergo canonical/evidence validation.
+
+The generic codec replaces the inactive-null rejection with discriminator
+projection. The observed inactive `query.period.date.calendar` regression,
+599 active-shaped inactive mutations, 438 bounded-noise equivalence cases and
+73 unreadable-value cases establish 1111 inactive-padding controls. Strict
+controls cover 903 malformed/missing active fields, five discriminator switches,
+599 missing inactive keys and 73 unknown-key refusals. The synthetic R01 runner
+also exercises noise through clarification and an authorized month read with
+zero reminder mutations. These local results do not establish live acceptance.
+
+Canonical validator, canonical prompt, wire-6 schema/version and its 11,853-byte
+complexity boundary are unchanged. Schema SHA256 remains
+`e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06`.
+Independent review, full-check evidence and subsequent live/release disposition
+are recorded separately; this policy amendment does not claim those gates pass.
+
 ## T11 pilot authorization amendment — 2026-10-01
 
 Owner authority `24f2bfbf-fe14-4c5b-80ba-67f84f2a0a63` increases the PILOT
