@@ -21,6 +21,14 @@ function inlineRefs(value: unknown): unknown {
   return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs").map(([key, child]) => [key, inlineRefs(child)]));
 }
 const validator = z.fromJSONSchema(inlineRefs(publicSchema) as Parameters<typeof z.fromJSONSchema>[0]);
+it("standalone inactive null uses a finite enum and rejects every non-null JSON type", () => {
+  const schema = inlineRefs(publicSchema) as { properties: { conversationDirective: { anyOf: Array<{ properties: Record<string, unknown> }> } } };
+  const branch = schema.properties.conversationDirective.anyOf.find(item => JSON.stringify(item.properties.kind).includes('"HELP"'))!;
+  expect(branch.properties.field).toEqual({ enum: [null] });
+  const inactive = z.fromJSONSchema(branch.properties.field as Parameters<typeof z.fromJSONSchema>[0]);
+  expect(inactive.safeParse(null).success).toBe(true);
+  for (const value of [false, 0, "", [], {}]) expect(inactive.safeParse(value).success).toBe(false);
+});
 const evidence = [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }];
 const base = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: evidence, conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const dates = [
