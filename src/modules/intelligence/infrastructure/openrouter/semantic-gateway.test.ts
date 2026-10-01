@@ -182,7 +182,7 @@ describe("observable successor route", () => {
       usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
       providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
     expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex"))
-      .toBe("34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9");
+      .toBe("e933c07e8d1358026e797e61cf61d5a9f5e674dd1a31b51a4c6f6fc5feec3c89");
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_2", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
@@ -246,7 +246,7 @@ describe("observable successor route", () => {
     expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
     const emitted = JSON.parse(String(seen?.init.body));
     expect(createHash("sha256").update(JSON.stringify(emitted.response_format.json_schema.schema)).digest("hex"))
-      .toBe("34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9");
+      .toBe("e933c07e8d1358026e797e61cf61d5a9f5e674dd1a31b51a4c6f6fc5feec3c89");
     expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_2", strict: true, schema: expect.any(Object) } } });
     expect(seen?.init.body).not.toContain("synthetic-test-secret");

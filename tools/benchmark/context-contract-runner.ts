@@ -18,6 +18,8 @@ const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 15
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
+interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
+  listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
@@ -55,6 +57,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   let outboundDigest: string | null = null, httpStatus: number | null = null;
   const httpCount = () => input.httpRequestCount?.() ?? providerHttpRequests;
   const responses: ResponseEvidence[] = [];
+  const applicationEvidence: ApplicationTurnEvidence[] = [];
   const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
   const providerWire = googleLiteEuContextWireSchema();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
@@ -64,7 +67,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8"
       || canonicalSchemaDigest !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9"
+    if (providerWireSchemaDigest !== "e933c07e8d1358026e797e61cf61d5a9f5e674dd1a31b51a4c6f6fc5feec3c89"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
@@ -111,6 +114,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
         const proof = scoreContextCampaign([single], [{ id: script.executionId, turns: [observed], actions: [] }]);
         const accepted = proof.passedTurns === 1 && proof.detailPassed === proof.detailPlanned && proof.safetyFailures === 0
           && (turn.model !== "HEALTHY" || observed.actualDispatches === 1);
+        // Explicit projection of trusted application observations only. Persist
+        // each completed turn before an oracle stop can discard aggregate score.
+        // No proposal, selected text, receipt, business value or reply enters it.
+        applicationEvidence.push({ fixtureId: script.executionId, turnIndex: index, status: observed.status,
+          fullSchemaValid: observed.fullSchemaValid === true, pendingField: observed.pendingField ?? null,
+          listStoreReads: observed.listStoreReads ?? null, mutations: observed.mutations,
+          queryRange: observed.queryRange ? { start: observed.queryRange.start, end: observed.queryRange.end } : null,
+          oracle: accepted ? "PASS" : "FAIL" });
+        writeFileSync(join(input.directory, "application-evidence.json"), JSON.stringify(applicationEvidence), { mode: 0o600 });
         if (replayOnly && index === 0) {
           offlineSeedExecutions++;
           if (!accepted || observed.fullSchemaValid !== true || observed.pendingField !== "queryRange" || applicationLlmCalls !== 0 || httpCount() !== 0) { seedFailure = { oracle: "FAIL", status: observed.status, fullSchemaValid: observed.fullSchemaValid === true, dispatches: observed.dispatches, proof }; stop("OFFLINE_SEED_ORACLE_FAILED"); throw new Error("OFFLINE_SEED_ORACLE_FAILED"); }
@@ -145,7 +157,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const finalLedger = readCampaignLedger(input.directory);
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
-    actualProviderCalls: httpCount(), responses, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
+    actualProviderCalls: httpCount(), responses, applicationEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
     syntheticFaultTurnsCompleted, providerReportedUsdTotal: responses.reduce((sum, r) => sum + (r.usage?.reportedCostUsd ?? 0), 0),
     retainedMicrounits: finalLedger.filter(r => r.event === "RESERVE").reduce((sum, reservation) => {
       const finish = finalLedger.find(r => r.event === "FINISH" && r.reservationId === reservation.reservationId);

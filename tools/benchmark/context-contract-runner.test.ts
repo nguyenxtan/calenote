@@ -13,6 +13,31 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContext, parseGoogleLiteEuContextSections } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
+it("persists actual per-turn R01 reads and mutations even when a later pilot call stops", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-r01-turn-evidence-")); let calls = 0;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "turn-evidence",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async request => {
+        const index = calls++;
+        if (index >= 2) return { status: 400, body: '{"error":{"code":400}}' };
+        const context = JSON.parse(request.messages[1].content) as ContextInput;
+        return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-r01-${index}`, usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", index))) } }] }) };
+      } });
+    expect(result).toMatchObject({ status: "STOP", score: null, applicationLlmCalls: 3, providerHttpRequests: 3 });
+    const text = readFileSync(join(directory, "application-evidence.json"), "utf8");
+    const turns = JSON.parse(text);
+    expect(turns.slice(0, 2)).toEqual([
+      { fixtureId: "R01", turnIndex: 0, status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", listStoreReads: 0, mutations: 0, queryRange: null, oracle: "PASS" },
+      { fixtureId: "R01", turnIndex: 1, status: "REMINDERS_LISTED", fullSchemaValid: true, pendingField: null, listStoreReads: 1, mutations: 0, queryRange: { start: Date.parse("2026-08-31T17:00:00Z"), end: Date.parse("2026-09-30T17:00:00Z") }, oracle: "PASS" },
+    ]);
+    expect(text.length).toBeLessThan(3000);
+    for (const privateText of ["Có lịch nào ko?", "Tháng này có lịch gì ko?", "selectedText", "replyProposal", "evidence", "quote", "SYNTHETIC_CREDENTIAL"]) expect(text).not.toContain(privateText);
+    expect(JSON.parse(readFileSync(join(directory, "report.json"), "utf8")).applicationEvidence).toEqual(turns);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.each([
   ["title", "INVALID", "operation"], ["location", "INVALID", "operation"], ["notes", undefined, "operation"],
   ["INVALID", "SET", "field"], [undefined, "SET", "field"], ["title", "CLEAR_BAD", "operation"],
@@ -197,8 +222,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
-      providerWireSchemaDigest: "34a2db96789c895f297b935d760f80a3ff5c4746ef8cc4e98feafcc7a88655b9",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-flat-2" });
+      providerWireSchemaDigest: "e933c07e8d1358026e797e61cf61d5a9f5e674dd1a31b51a4c6f6fc5feec3c89",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-correlated-3" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

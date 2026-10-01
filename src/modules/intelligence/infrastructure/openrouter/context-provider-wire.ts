@@ -2,7 +2,7 @@ import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterp
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
-export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-flat-2" as const;
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-correlated-3" as const;
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
 const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
@@ -51,30 +51,12 @@ const original = googleLiteEuProviderWireSchema(InterpretationJsonSchema).schema
 function flatten(node: Schema): Schema {
   const plan = taggedPlan(node, original);
   if (!plan) return mapSchemas(node, flatten);
-  const properties = Object.fromEntries(plan.keys.map(key => [key, union(plan.branches.map(branch => Object.hasOwn(branch.properties!, key) ? flatten(branch.properties![key]) : { type: "null" }))]));
-  return { type: "object", properties, required: [...plan.keys], additionalProperties: false,
-    description: "Provider wire tagged union: keep the canonical discriminator and all active canonical values. All listed keys are required. Properties inactive for the selected original branch must be null; active nullable values remain active. The application validates the original branch after decoding." };
-}
-function hoistArrays(root: Schema): Schema {
-  function visit(node: Schema): Schema {
-    if (node.anyOf && Object.keys(node).length === 1 && node.anyOf.length > 1) {
-      const arrays = node.anyOf.map(branch => deref(branch, root));
-      if (arrays.every(array => array.type === "array" && array.items)) {
-        const shells = arrays.map(array => { const shell = structuredClone(array); delete shell.items; return shell; });
-        if (shells.every(shell => equal(shell, shells[0]))) {
-          const objects = arrays.map(array => deref(array.items!, root));
-          if (objects.every(item => item.type === "object" && item.additionalProperties === false && item.required && item.properties)) {
-            const keys = Object.keys(objects[0].properties!), objectShells = objects.map(item => { const shell = structuredClone(item); delete shell.properties; return shell; });
-            if (objects.every(item => equal(Object.keys(item.properties!).sort(), [...keys].sort()) && equal([...item.required!].sort(), [...keys].sort())) && objectShells.every(shell => equal(shell, objectShells[0]))) {
-              return { ...structuredClone(shells[0]), items: { ...structuredClone(objectShells[0]), properties: Object.fromEntries(keys.map(key => [key, union(objects.map(item => item.properties![key]))])) } };
-            }
-          }
-        }
-      }
-    }
-    return mapSchemas(node, visit);
-  }
-  return visit(root);
+  // Keep the discriminator, payload and inactive nulls in the SAME branch.
+  // Independently unioning properties admits their Cartesian product; likewise
+  // moving alternatives across arrays loses the uncertainty field association.
+  return { anyOf: plan.branches.map(branch => ({ type: "object",
+    properties: Object.fromEntries(plan.keys.map(key => [key, Object.hasOwn(branch.properties!, key) ? flatten(branch.properties![key]) : { type: "null" }])),
+    required: [...plan.keys], additionalProperties: false })) };
 }
 function prune(root: Schema): Schema {
   const output = structuredClone(root), reached = new Set<string>();
@@ -120,7 +102,30 @@ function normalizeScalars(root: Schema): Schema {
   }
   return visit(root);
 }
-const providerSchema = normalizeScalars(omitAnnotations(prune(hoistArrays(flatten(original)))));
+/** Merge only branches that differ in one finite scalar discriminant. The
+ * shared payload remains correlated; no array/item or property cross-product. */
+function coalesceBranches(root: Schema): Schema {
+  function visit(raw: Schema): Schema {
+    const node = mapSchemas(raw, visit);
+    if (!node.anyOf || Object.keys(node).length !== 1) return node;
+    const branches = unique(node.anyOf);
+    for (let i = 0; i < branches.length; i++) for (let j = i + 1; j < branches.length; j++) {
+      const left = branches[i], right = branches[j];
+      if (left.type !== "object" || right.type !== "object" || !left.properties || !right.properties) continue;
+      const leftShell = { ...left, properties: undefined }, rightShell = { ...right, properties: undefined };
+      if (!equal(leftShell, rightShell) || !equal(Object.keys(left.properties), Object.keys(right.properties))) continue;
+      const changed = Object.keys(left.properties).filter(key => !equal(left.properties![key], right.properties![key]));
+      if (changed.length !== 1) continue;
+      const key = changed[0], a = simpleScalar(left.properties[key], root), b = simpleScalar(right.properties[key], root);
+      if (!a?.values || !b?.values || a.node.type !== b.node.type) continue;
+      left.properties[key] = { type: a.node.type, enum: [...new Set([...a.values, ...b.values])] };
+      branches.splice(j--, 1);
+    }
+    return union(branches);
+  }
+  return visit(root);
+}
+const providerSchema = coalesceBranches(normalizeScalars(omitAnnotations(prune(flatten(original)))));
 /** Versioned context representation. Canonical prompt/schema and the namespace-only adapter remain unchanged. */
 export function googleLiteEuContextWireSchema() {
   return { version: GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION, schema: structuredClone(providerSchema) as typeof InterpretationJsonSchema };
