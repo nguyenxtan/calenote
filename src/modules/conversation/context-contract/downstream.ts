@@ -1,6 +1,23 @@
 import { z } from "zod";
 import { IssueFieldSchema } from "./contracts";
 
+// Diagnostic-only lexical measurements, never evidence or semantic authority.
+export const QuoteClassificationSchema = z.strictObject({
+  classification: z.enum(["EXACT_WRONG_SOURCE", "NORMALIZATION_VARIANT", "FORMATTING_VARIANT", "PARAPHRASED_QUOTE", "UNRELATED_QUOTE", "SOURCE_MAP_DEFECT", "UNKNOWN"]),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
+  exactMatchIntendedUser: z.boolean(), exactMatchOtherUser: z.boolean(), exactMatchAssistant: z.boolean(),
+  nfcMatch: z.boolean(), caseFoldedMatch: z.boolean(), whitespaceNormalizedMatch: z.boolean(), punctuationNormalizedMatch: z.boolean(),
+  strictSubstringAfterNormalization: z.boolean(),
+  longestCommonContiguousSpanLength: z.number().int().min(0).max(2000),
+  tokenOverlapRatio: z.number().min(0).max(1),
+  tokenOverlapBucket: z.enum(["NONE", "LOW", "MEDIUM", "HIGH"]),
+  editDistanceBucket: z.enum(["EXACT", "NEAR", "PARAPHRASE_LIKE", "UNRELATED", "NOT_MEASURED"]),
+  sourceMapStatus: z.enum(["VALID", "INVALID", "UNAVAILABLE"]),
+  retainedUserBindingValid: z.boolean(), removedControlSpanNearby: z.boolean(), sourceChangedUnderNfc: z.boolean(),
+  normalizationOnlyDifference: z.boolean(), similarityMeasured: z.boolean(), semanticParaphraseConfirmed: z.literal(false),
+});
+export type QuoteClassification = z.infer<typeof QuoteClassificationSchema>;
+
 export const EvidenceFailureDiagnosticSchema = z.strictObject({
   field: IssueFieldSchema,
   path: z.array(z.union([z.enum(["changes", "query", "uncertainties", "alternatives", "evidence", "controlEvidence"]), z.number().int().min(0).max(31)])).max(6),
@@ -16,6 +33,7 @@ export const EvidenceFailureDiagnosticSchema = z.strictObject({
   quoteSha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
   sourceViewSha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
   sourceMapStatus: z.enum(["NOT_CHECKED", "VALID", "INVALID", "REMOVED_CONTROL_SPAN", "NORMALIZATION_BOUNDARY"]),
+  quoteClassification: QuoteClassificationSchema.optional(),
   reason: z.enum(["SOURCE_ALIAS_UNKNOWN", "SOURCE_SCOPE_MISMATCH", "SOURCE_ROLE_NOT_USER", "QUOTE_NOT_FOUND", "QUOTE_OCCURRENCE_OUT_OF_RANGE", "QUOTE_NORMALIZATION_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", "QUOTE_REMOVED_CONTROL_SPAN", "EVIDENCE_TARGET_MISMATCH"]),
 });
 export type EvidenceFailureDiagnostic = z.infer<typeof EvidenceFailureDiagnosticSchema>;

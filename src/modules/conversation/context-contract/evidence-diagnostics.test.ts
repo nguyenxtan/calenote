@@ -19,6 +19,11 @@ function check(raw: unknown, context: ReadyContext) {
   return { result, trace, diagnostic: trace.find(d => d.stage === "EVIDENCE")?.evidenceFailure };
 }
 describe("sanitized exact evidence failure tracing", () => {
+  it("adds diagnostic-only formatting classification without accepting a normalized quote", () => {
+    const checked = check(proposal(quote("nhắc hai ngày")), build("nhắc  hai ngày"));
+    expect(checked.result).toEqual({ status: "REFUSED", reason: "EVIDENCE_QUOTE_NOT_FOUND" });
+    expect(checked.diagnostic).toMatchObject({ quoteClassification: { classification: "FORMATTING_VARIANT", whitespaceNormalizedMatch: true, sourceMapStatus: "VALID" } });
+  });
   it.each([
     ["gọi mẹ 😀 gọi mẹ 😀", "gọi mẹ 😀", 3, 2, "QUOTE_OCCURRENCE_OUT_OF_RANGE"],
     ["gọi mẹ", "call mom", 1, 0, "QUOTE_NOT_FOUND"],

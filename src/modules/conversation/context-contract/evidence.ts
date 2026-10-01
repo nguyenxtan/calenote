@@ -5,6 +5,7 @@ import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./p
 import { verifyListRangeEvidence } from "./list-range-evidence";
 import { observeDownstream, evidenceReason, type DownstreamObserver, type EvidenceFailureDiagnostic } from "./downstream";
 import { createHash } from "node:crypto";
+import { classifyQuoteMismatch } from "./quote-classification";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -110,6 +111,7 @@ export function validateEvidence(proposal: unknown, built: ReadyContext, observe
         quoteSha256: ref.kind === "USER_QUOTE" ? hash(ref.quote) : null,
         sourceViewSha256: turn ? hash(turn.semanticView) : null,
         sourceMapStatus, reason: code === "QUOTE_NOT_FOUND" && matchCount > 0 ? "QUOTE_OCCURRENCE_OUT_OF_RANGE" : code,
+        ...(ref.kind === "USER_QUOTE" ? { quoteClassification: classifyQuoteMismatch(ref.quote, ref.turn, built.evidenceIndex, built.candidateSnapshot.transcript) } : {}),
       };
     } catch { /* Telemetry must not change the public rejection or authority. */ }
     return fail(reason);

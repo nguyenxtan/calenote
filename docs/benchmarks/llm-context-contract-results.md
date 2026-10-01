@@ -1,5 +1,34 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 diagnostic-only quote mismatch classification — 2026-10-01
+
+Owner authority `20e30843-66ef-4fea-a22c-b67e6364c0a0` permits only
+classification telemetry and at most one new R02 diagnostic request if the
+previous transient payload is unavailable. The prior process exited and its
+artifacts contain only structural diagnostics, never raw provider content.
+Its HTTP200/canonical-PASS/evidence-FAIL remains historical evidence.
+
+Failure telemetry now compares the quote transiently against the already
+scoped call-local USER/ASSISTANT views. It emits exact-match flags, NFC,
+Unicode-lowercase (not full Unicode case folding), whitespace/punctuation
+comparison flags, strict normalized-substring flag, longest contiguous span
+length, token overlap ratio/bucket and substring edit-distance bucket.
+Similarity operands are limited to 2000 code points and rolling rows (at most
+four million cells); ineligible long sources are NOT_MEASURED, not truncated.
+The source map is checked independently against the approved projection and
+retained USER identity/text even when normal quote matching already failed.
+Control proximity is a diagnostic 16-code-point vicinity of a common span of
+at least three code points, not proof of the cause or permission to accept.
+
+Output is closed numeric/boolean/enum data only. Exact wrong-source and
+formatting/normalization/map findings can be HIGH confidence. Lexical
+PARAPHRASED_QUOTE/UNRELATED_QUOTE labels are LOW confidence heuristics and
+always carry `semanticParaphraseConfirmed=false`; they cannot confirm semantic
+paraphrase or motivate fuzzy acceptance. All evidence/canonical validators,
+provider wire schema, prompt, fixture and routing remain unchanged. No new
+live acceptance, campaign replacement, production repair or deployment is
+implied by this diagnostic implementation.
+
 ## T11 exact evidence failure diagnostics — 2026-10-01
 
 Owner authority `1393cde0-f2d8-4ddb-b30a-09490ded20f1` authorizes
