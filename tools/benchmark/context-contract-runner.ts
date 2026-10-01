@@ -1,6 +1,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
@@ -19,6 +20,7 @@ const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
+  downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
@@ -119,6 +121,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
         // No proposal, selected text, receipt, business value or reply enters it.
         applicationEvidence.push({ fixtureId: script.executionId, turnIndex: index, status: observed.status,
           fullSchemaValid: observed.fullSchemaValid === true, pendingField: observed.pendingField ?? null,
+          downstreamDiagnostics: DownstreamTraceSchema.parse(observed.downstreamDiagnostics ?? []),
           listStoreReads: observed.listStoreReads ?? null, mutations: observed.mutations,
           queryRange: observed.queryRange ? { start: observed.queryRange.start, end: observed.queryRange.end } : null,
           oracle: accepted ? "PASS" : "FAIL" });

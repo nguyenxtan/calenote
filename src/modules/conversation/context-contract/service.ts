@@ -30,6 +30,7 @@ import { isPreviewRecoveryResponse } from "./preview-control";
 import { SLOT_NAMES } from "./contracts";
 import { SlotsSchema, encodeContextSnapshot } from "./state";
 import type { DecisionProof } from "./store";
+import { evidenceReason, type DownstreamDiagnostic } from "./downstream";
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStore; runtimeStore: ContextRuntimeStore;
@@ -62,6 +63,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
       type EventFields = ContextObservationEvent extends infer E ? E extends ContextObservationEvent ? Omit<E, "traceId" | "sourceSha" | "contractVersion" | "promptVersion" | "mode"> : never : never;
       const emit = (event: EventFields) => { try { deps.observe?.({ traceId, sourceSha: deps.sourceSha, mode: deps.mode,
         contractVersion: "calenote-context-2", promptVersion: "calenote-context-2", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+      let downstreamCount = 0;
+      const downstream = (diagnostic: DownstreamDiagnostic) => { if (downstreamCount++ < 24) emit({ event: "POST_CANONICAL_STAGE", diagnostic }); };
       const send = async (plan: ReadyReplyPlan, expected?: { contextId: string; contextRevision: number }): Promise<ReplyReceipt | null> => {
         if (!await deps.runtimeStore.canSend({ ...scope, now: deps.now() }, expected)) { emit({ event: "TRANSITION_REJECTED", reason: "STALE" }); return null; }
         emit({ event: "REPLY_SELECTED", source: plan.source }); emit({ event: "REPLY_DISPATCHED" });
@@ -72,9 +75,10 @@ export function createContextContractService(deps: ContextContractServiceDepende
         return receipt;
       };
       const finish = async (reason: FailureReason): Promise<ProcessBoundChatResult> => {
+        if (downstreamCount > 0) downstream({ stage: "TRANSITION", result: "REJECTED", reason: evidenceReason(reason, "TRANSITION_REJECTED"), transition: "REPLY_ONLY" });
         if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
         const reply = composeContextReply({ kind: "FAILURE", reason });
-        if (reply.status === "READY") await send(reply);
+        if (reply.status === "READY") { if (downstreamCount > 0) downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: reply.source }); await send(reply); }
         return { status: "REJECTED" };
       };
       const confirm = async (proof: DecisionProof): Promise<ProcessBoundChatResult> => {
@@ -160,15 +164,21 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const providerEvidence = "providerEvidence" in result ? result.providerEvidence : undefined;
           emit({ event: "RESPONSE_RECEIVED", outcome: result.status, latencyMs: Math.round(performance.now() - started), observedModel: providerEvidence?.model ?? "UNKNOWN", observedProvider: providerEvidence?.provider ?? "UNKNOWN",
             promptTokens: usage?.promptTokens ?? null, completionTokens: usage?.completionTokens ?? null, costMicrounits: usage?.costMicrounits ?? null, ...(result.status === "FAILURE" ? { reason: result.category } : {}) });
-          if (result.status !== "SUCCESS") return finish("PROVIDER");
+          if (result.status !== "SUCCESS") { if (result.category === "SCHEMA_INVALID") downstream({ stage: "CANONICAL", result: "REJECTED", reason: "SCHEMA_INVALID" }); return finish("PROVIDER"); }
           const parsed = result.interpretation;
+          downstream({ stage: "CANONICAL", result: parsed.fullSchemaValid ? "PASS" : "QUARANTINED_GUIDANCE", reason: parsed.fullSchemaValid ? "NONE" : "SCHEMA_INVALID" });
           emit({ event: "STRUCTURE_VALIDATED", fullSchemaValid: parsed.fullSchemaValid, semanticPatchValidation: "VALID", directiveValidation: parsed.directive.status, replyEligibility: parsed.reply.status });
-          const evidence = validateEvidence(parsed.semantic, built);
+          const evidence = validateEvidence(parsed.semantic, built, downstream);
           emit({ event: "PROVENANCE_DOMAIN_VALIDATED", result: evidence.status === "VALID" ? "VALID" : "INVALID", ...(evidence.status !== "VALID" ? { reason: "EVIDENCE_INVALID" as const } : {}) });
           if (evidence.status !== "VALID") return finish("SEMANTIC");
           const merge = mergePatch(prior, evidence.patch);
+          downstream({ stage: "MERGE", result: merge.status === "MERGED" ? "PASS" : "REJECTED", reason: merge.status === "MERGED" ? "NONE" : evidenceReason(merge.reason, "PATCH_REJECTED") });
           const resolution = merge.status === "MERGED" ? resolveRequest(merge.candidate, deps.now(), deps.calendar) : undefined;
           const queryResolution = merge.status === "MERGED" && merge.query ? resolveQuery(merge.query, Date.parse(merge.queryReferenceTime ?? new Date(message.receivedAt).toISOString()), deps.calendar) : undefined;
+          downstream({ stage: "QUERY_RESOLUTION", result: !queryResolution ? "NOT_APPLICABLE" : queryResolution.status === "REJECTED" ? "REJECTED" : queryResolution.status === "CLARIFY" ? "CLARIFY" : "PASS",
+            reason: queryResolution && "reason" in queryResolution ? evidenceReason(queryResolution.reason, "RESOLUTION_REJECTED") : "NONE" });
+          const ambiguousQueryRange = merge.status === "MERGED" && merge.uncertainties.some(u => u.field === "queryRange" && u.reason === "AMBIGUOUS");
+          downstream({ stage: "QUERY_RANGE", result: merge.status === "MERGED" && merge.query?.kind === "LIST" ? ambiguousQueryRange ? "AMBIGUOUS" : merge.query.period ? "PASS" : "UNSPECIFIED" : "NOT_APPLICABLE", reason: ambiguousQueryRange ? "QUERY_RANGE_AMBIGUOUS" : queryResolution?.status === "CLARIFY" && queryResolution.reason === "MISSING_RANGE" ? "MISSING_RANGE" : "NONE" });
           let queryResult: ContextQueryResult | undefined;
           const queryTitles = new Map<string, string>();
           if (queryResolution?.status === "RANGE") {
@@ -182,6 +192,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
           if (merge.status === "MERGED" && !merge.query && resolution) emit({ event: "SCHEDULE_RESOLVED", result: resolution.status });
           const effective = computeEffectiveDirective({ semantic: evidence.patch, merge, resolution, queryResolution, queryResult });
           const directiveValidation = validateDirective(parsed.directive, effective);
+          downstream({ stage: "DIRECTIVE", result: effective.kind === "BACKEND_ONLY" && effective.reason === "FAILURE" ? "REJECTED" : effective.kind === "ASK_FOR_FIELD" || effective.kind === "ASK_FOR_DISAMBIGUATION" ? "CLARIFY" : "PASS", reason: directiveValidation.status === "VALID" ? "NONE" : directiveValidation.reason, directive: effective.kind,
+            ...("field" in effective ? { field: effective.field } : {}) });
           const guidance = selectGuidance({ effectiveDirective: effective, directiveValidation, replyProposal: parsed.reply,
             privacyValidation: validateGuidancePrivacy({ conversationDirective: parsed.directive.status === "VALID" ? parsed.directive.value : null,
               replyProposal: parsed.reply.status === "VALID" ? parsed.reply.value : null }, built), language: "vi" });
@@ -189,6 +201,9 @@ export function createContextContractService(deps: ContextContractServiceDepende
           emit({ event: "DIRECTIVE_VALIDATED", result: directiveValidation.status === "VALID" ? "MATCH" : directiveValidation.reason });
           emit({ event: "REPLY_ELIGIBILITY_EVALUATED", result: guidance.source === "MODEL_GUIDANCE" ? "ELIGIBLE" : guidance.reason });
           transition = await transitionConversation({ snapshot: prior, interpretation: evidence.patch, merge, resolution, queryResolution, queryResult, queryTitles, guidance, control, authority, now: deps.now(), channel: deps.channel });
+          const transitionRejected = "kind" in transition && !transition.confirmationProof || effective.kind === "BACKEND_ONLY" && effective.reason === "FAILURE";
+          downstream({ stage: "TRANSITION", result: transitionRejected ? "REJECTED" : transition.reply.kind === "CLARIFICATION" ? "CLARIFY" : "PASS", reason: "kind" in transition && transition.reason ? evidenceReason(transition.reason, "TRANSITION_REJECTED") : transitionRejected ? "TRANSITION_REJECTED" : "NONE", transition: "kind" in transition ? transition.confirmationProof ? "CONFIRMATION" : "REPLY_ONLY" : "STORED" });
+          downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: transition.reply.source, replyKind: transition.reply.kind });
           if (!("kind" in transition)) transition.snapshot.modelAttemptBinding = { attemptId: traceId, observationId: bindingDigest, contextRevision: prior?.contextRevision ?? null,
             sourceInboundId: message.id, claimMarker: message.claimMarker, inputDigest, promptDigest, contractDigest, contractVersion: "calenote-context-2", status: "ACCEPTED" };
           if (!("kind" in transition) && new TextEncoder().encode(encodeContextSnapshot(transition.snapshot)).length > 16384) return finish("SIZE");

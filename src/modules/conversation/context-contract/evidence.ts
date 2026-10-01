@@ -3,6 +3,7 @@ import { SemanticPatchProposalSchema, FieldChangeSchema, QueryOperandSchema, Unc
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 import { verifyListRangeEvidence } from "./list-range-evidence";
+import { observeDownstream, evidenceReason, type DownstreamObserver } from "./downstream";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -73,12 +74,17 @@ function selectReferenceTime(facts: readonly BoundContextFact[], quotes: readonl
 
 /** Whole-patch authority validation. This proves exact source/scope and edit
  * freshness, not general natural-language entailment or user confirmation. */
-export function validateEvidence(proposal: unknown, built: ReadyContext): EvidenceValidation {
+export function validateEvidence(proposal: unknown, built: ReadyContext, observe?: DownstreamObserver): EvidenceValidation {
+  const refused = (reason: string): EvidenceValidation => {
+    observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason) });
+    observeDownstream(observe, { stage: "PATCH", result: "REJECTED", reason: "PATCH_REJECTED" });
+    return { status: "REFUSED", reason };
+  };
   const internal = evidenceContextFor(built);
-  if (!internal) return { status: "REFUSED", reason: "CONTEXT_NOT_BUILT" };
+  if (!internal) return refused("CONTEXT_NOT_BUILT");
   const parsed = SemanticPatchProposalSchema.safeParse(proposal);
-  if (!parsed.success) return { status: "REFUSED", reason: "PROPOSAL_SCHEMA_INVALID" };
-  if (containsForbiddenControl(parsed.data, internal.handles)) return { status: "REFUSED", reason: "CONTROL_IN_PROPOSAL" };
+  if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
+  if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
   const quoteSource = (ref: Extract<EvidenceRef, { kind: "USER_QUOTE" }>): SourceEvidence => {
     const turn = built.evidenceIndex[ref.turn];
@@ -102,7 +108,7 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
     if ([...turn.text].slice(sourceStart, sourceEnd).join("").normalize("NFC") !== ref.quote) return fail("EVIDENCE_SOURCE_MISMATCH");
     return { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: ref.quote, occurrence: ref.occurrence, sourceSpan: { start: sourceStart, end: sourceEnd }, viewSpan: { start, end }, normalizationVersion: "nfc-codepoint-v1" };
   };
-  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: string, requested: unknown, editsExistingOperand = false): ResolvedEvidence => {
+  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: string, requested: unknown, editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
     const quotes: SourceEvidence[] = [];
     const factBindings: BoundContextFact[] = [];
     for (const ref of refs) {
@@ -141,7 +147,11 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
       if (object.kind === "CIVIL_DATE" && typeof object.year === "number" && !refs.some(e => e.kind === "CONTEXT_FACT") && !distinct.some(s => new RegExp(`(?:^|[^0-9])${object.year}(?:$|[^0-9])`, "u").test(s.quote))) fail("YEAR_NOT_EXPLICIT");
       Object.values(object).forEach(checkYear);
     };
-    checkYear(requested);
+    // LIST range authority belongs to its deterministic verifier after exact
+    // quote/fact identity validation above. An ungrounded optional year must
+    // reach that verifier so it can discard the range while retaining intent.
+    // Reminder and calendar operands keep the existing explicit-year gate.
+    if (!listRangeCandidate) checkYear(requested);
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue };
   };
   try {
@@ -155,14 +165,16 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
       resolvedChanges.push(resolved);
       return evidenceMetadata(evidence);
     });
-    const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query) : null;
+    const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, false, value.query.kind === "LIST") : null;
     if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
+    if (resolvedQuery?.kind !== "LIST" || !resolvedQuery.period) observeDownstream(observe, { stage: "LIST_RANGE", result: resolvedQuery?.kind === "LIST" ? "UNSPECIFIED" : "NOT_APPLICABLE", reason: "NONE" });
     let rangeIssue: SemanticPatchProposal["uncertainties"][number] | null = null;
     if (resolvedQuery?.kind === "LIST" && resolvedQuery.period) {
       const inherited = value.query!.evidence.some(e => e.kind === "CONTEXT_FACT");
       const scopedContinuation = built.input.pendingQuestion?.scope === "QUERY" && built.input.pendingQuestion.field === "queryRange" && value.continuation === "YES" && ["CONTINUE", "EDIT"].includes(value.dialogueAct);
       const support = inherited && !scopedContinuation ? "UNSUPPORTED" : verifyListRangeEvidence({ candidateRange: resolvedQuery.period, evidence: query!.sources, turns: built.evidenceIndex, currentTurnId: built.evidenceIndex[built.input.currentTurn].id, referenceTime: query!.referenceTime });
+      observeDownstream(observe, { stage: "LIST_RANGE", result: support, reason: "NONE", candidateRange: resolvedQuery.period.kind, field: "queryRange" });
       if (support !== "SUPPORTED") {
         resolvedQuery = { ...resolvedQuery, period: null };
         rangeIssue = { field: "queryRange", reason: support === "AMBIGUOUS" ? "AMBIGUOUS" : "MISSING", alternatives: [] };
@@ -197,8 +209,10 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
       candidateSnapshot: built.candidateSnapshot,
     });
     issuedPatches.add(patch);
+    observeDownstream(observe, { stage: "EVIDENCE", result: "PASS", reason: "NONE" });
+    observeDownstream(observe, { stage: "PATCH", result: "PASS", reason: "NONE" });
     return { status: "VALID", patch };
-  } catch (error) { return { status: "REFUSED", reason: error instanceof EvidenceFailure ? error.message : "EVIDENCE_INVALID" }; }
+  } catch (error) { return refused(error instanceof EvidenceFailure ? error.message : "EVIDENCE_INVALID"); }
 }
 
 export type GuidancePrivacyValidation = { status: "VALID" } | { status: "REFUSED"; reason: "GUIDANCE_PRIVACY" | "CONTEXT_NOT_BUILT" };

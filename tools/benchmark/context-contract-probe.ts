@@ -161,6 +161,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           snapshotEncodedBytes: snapshot ? Buffer.byteLength(encodeContextSnapshot(snapshot)) : null,
           snapshotLogicalBytes: snapshot ? Buffer.byteLength(JSON.stringify(snapshot)) : null,
           fullSchemaValid: structural?.event === "STRUCTURE_VALIDATED" ? structural.fullSchemaValid : false,
+          downstreamDiagnostics: actualEvents.filter(e => e.event === "POST_CANONICAL_STAGE").map(e => e.diagnostic),
           rawSchemaValid: structural?.event === "STRUCTURE_VALIDATED" ? structural.fullSchemaValid : false,
           assertions: { persistedSelectedText: !ready || snapshot?.transcript.at(-1)?.text === ready.text || ["CONFIRMED", "REJECTED", "CANCELLED"].includes(result.status),
             completeLogicalRoundTrip: !snapshot || isDeepStrictEqual(decodeContextSnapshot(encodeContextSnapshot(snapshot)), snapshot),

@@ -32,11 +32,14 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
     expect(result).toMatchObject({ status: "STOP", score: null, applicationLlmCalls: 3, providerHttpRequests: 3 });
     const text = readFileSync(join(directory, "application-evidence.json"), "utf8");
     const turns = JSON.parse(text);
-    expect(turns.slice(0, 2)).toEqual([
+    expect(turns.slice(0, 2)).toMatchObject([
       { fixtureId: "R01", turnIndex: 0, status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", listStoreReads: 0, mutations: 0, queryRange: null, oracle: "PASS" },
       { fixtureId: "R01", turnIndex: 1, status: "REMINDERS_LISTED", fullSchemaValid: true, pendingField: null, listStoreReads: 1, mutations: 0, queryRange: { start: Date.parse("2026-08-31T17:00:00Z"), end: Date.parse("2026-09-30T17:00:00Z") }, oracle: "PASS" },
     ]);
-    expect(text.length).toBeLessThan(3000);
+    expect(turns[0].downstreamDiagnostics.map((d: { stage: string }) => d.stage)).toEqual(["CANONICAL", "LIST_RANGE", "EVIDENCE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]);
+    expect(turns[0].downstreamDiagnostics).toContainEqual({ stage: "QUERY_RESOLUTION", result: "CLARIFY", reason: "MISSING_RANGE" });
+    expect(turns[1].downstreamDiagnostics).toContainEqual({ stage: "LIST_RANGE", result: "SUPPORTED", reason: "NONE", candidateRange: "MONTH", field: "queryRange" });
+    expect(text.length).toBeLessThan(8000);
     for (const privateText of ["Có lịch nào ko?", "Tháng này có lịch gì ko?", "selectedText", "replyProposal", "evidence", "quote", "SYNTHETIC_CREDENTIAL"]) expect(text).not.toContain(privateText);
     expect(JSON.parse(readFileSync(join(directory, "report.json"), "utf8")).applicationEvidence).toEqual(turns);
     for (const response of result.responses.slice(0, 2)) expect(response).not.toHaveProperty("canonicalValidationDiagnostics");

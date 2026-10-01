@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import type { DownstreamDiagnostic } from "../../src/modules/conversation/context-contract/downstream";
 
 export type CampaignProfile = "PILOT" | "FULL";
 export type ContextCaseGroup = "ORIGINAL" | "DEVELOPMENT" | "HELDOUT";
@@ -38,6 +39,7 @@ export interface ContextObservation {
     source?: "BACKEND" | "MODEL_GUIDANCE"; kind?: string; decisionKind?: string | null;
     selectedText?: string; delivery?: "SENT" | "FAILED" | "UNCERTAIN"; apiPreviews?: number;
     detailFields?: Record<string, unknown>; fullSchemaValid?: boolean; rawSchemaValid?: boolean; listStoreReads?: number; snapshotDigest?: string | null;
+    downstreamDiagnostics?: DownstreamDiagnostic[];
     previewFields?: Record<string, unknown>; canonicalReminders?: Array<Record<string, unknown>>;
     coreValidity?: string; directiveValidity?: string; replyValidity?: string; effectiveDirective?: string;
     directiveMatch?: string; replyEligibility?: string;

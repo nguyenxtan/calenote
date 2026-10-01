@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DownstreamDiagnosticSchema } from "./downstream";
 
 const safeCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const reason = z.enum(["AUTH_INVALID", "CONTEXT_INVALID", "DUPLICATE", "DISABLED", "UNAVAILABLE", "BUDGET_EXHAUSTED",
@@ -15,6 +16,7 @@ const base = { traceId: z.uuidv4(), sourceSha: z.string().regex(/^[0-9a-f]{40}$/
 const event = <K extends string, S extends z.ZodRawShape>(kind: K, fields: S) => z.strictObject({ ...base, event: z.literal(kind), ...fields });
 const directive = z.enum(["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP", "PRESENT_PREVIEW", "ANSWER_QUERY", "BACKEND_ONLY"]);
 const schema = z.discriminatedUnion("event", [
+  event("POST_CANONICAL_STAGE", { diagnostic: DownstreamDiagnosticSchema }),
   event("INBOUND_ACCEPTED", {}), event("CONTEXT_LOADED", { presence: z.enum(["PRESENT", "ABSENT", "INVALID", "EXPIRED", "UNAVAILABLE"]) }),
   event("MODEL_REQUIRED", {}), event("MODEL_BYPASSED", { reason }), event("REQUEST_REJECTED", { reason }),
   event("REQUEST_PREPARED", { configuredModel: z.literal("google/gemini-2.5-flash-lite"), configuredProvider: z.literal("google-vertex/eu"), routeAdmission: z.enum(["UNVERIFIED", "OFFLINE_FIXTURE", "OBSERVABLE_CANARY"]) }),
