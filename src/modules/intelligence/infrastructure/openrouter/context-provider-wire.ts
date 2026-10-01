@@ -2,7 +2,7 @@ import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterp
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
-export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-correlated-null-enum-4" as const;
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-correlated-interned-5" as const;
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
 const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
@@ -125,13 +125,25 @@ function coalesceBranches(root: Schema): Schema {
   }
   return visit(root);
 }
-/** Singleton-null enum is the same JSON language as a bare null type. Keep
- * nullable unions and every correlated branch intact; never widen padding. */
-function normalizeStandaloneNull(node: Schema): Schema {
-  if (node.type === "null" && Object.keys(node).length === 1) return { enum: [null] };
-  return mapSchemas(node, normalizeStandaloneNull);
+/** Identical assertions under different local names denote the same language.
+ * Intern only exact schema equality, never a union of differing payloads. */
+function internDefinitions(root: Schema): Schema {
+  const aliases = new Map<string, string>(), representatives = new Map<string, string>();
+  for (const [name, definition] of Object.entries(root.$defs ?? {})) {
+    const signature = JSON.stringify(stable(definition)), representative = representatives.get(signature);
+    if (representative) aliases.set(`#/$defs/${name}`, `#/$defs/${representative}`);
+    else representatives.set(signature, name);
+  }
+  const visit = (node: Schema): Schema => {
+    if (node.$ref && aliases.has(node.$ref)) {
+      requireShape(Object.keys(node).length === 1);
+      return { $ref: aliases.get(node.$ref)! };
+    }
+    return mapSchemas(node, visit);
+  };
+  return visit(root);
 }
-const providerSchema = normalizeStandaloneNull(coalesceBranches(normalizeScalars(omitAnnotations(prune(flatten(original))))));
+const providerSchema = prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(original)))))));
 /** Versioned context representation. Canonical prompt/schema and the namespace-only adapter remain unchanged. */
 export function googleLiteEuContextWireSchema() {
   return { version: GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION, schema: structuredClone(providerSchema) as typeof InterpretationJsonSchema };

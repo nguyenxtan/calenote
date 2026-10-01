@@ -38,7 +38,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("8a51135c5081b5e8316c25e3042766f07e082037da93d1692fca7cc452ce41bf");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("372598ad462c1eb09d7742e210ea09f34a4faefb7f3c12084ebc773b5a6ffbe4");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -79,8 +79,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow("CONTEXT_PROVIDER_WIRE_INVALID");
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-correlated-null-enum-4");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("8a51135c5081b5e8316c25e3042766f07e082037da93d1692fca7cc452ce41bf");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-correlated-interned-5");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("372598ad462c1eb09d7742e210ea09f34a4faefb7f3c12084ebc773b5a6ffbe4");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
