@@ -1,6 +1,14 @@
 # LLM-led conversation understanding with validated reminder objects
 
 Date: 2026-09-28
+Current targeted amendment (2026-10-01): **MODEL_OUTPUT_AUTHORITY_AMENDMENT / READY_FOR_OWNER_REVIEW**.
+The Model Output Authority Consolidation in §4.6 supersedes conflicting output
+ownership and generation-schema requirements below as a proposed successor.
+It does not claim runtime implementation, renew T11 authority, or approve an
+implementation plan. Current source audit: `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`
+in `.worktrees/product-experience-v2`, initially clean. Historical approvals
+and accepted T0–T10 behavior remain intact; the next amendment gate is
+OWNER_REVIEW_OF_MODEL_OUTPUT_AUTHORITY_SPEC.
 Historical status (2026-09-28 planning): **WRITTEN_SPEC_APPROVED / IMPLEMENTATION_PLAN_PENDING_REVIEW**
 Approval reference: owner approved the exact specification at
 `e8f9e75f436a672b23387eb0054047da217ade23` on 2026-09-28 for implementation planning only.
@@ -55,11 +63,12 @@ rerun for this documentation task. T0 local A and T1/T2 acceptance are preserved
 the changed output contract requires scoped amendments and renewed measurements,
 not retroactive acceptance of new fields. Route admission B remains unverified.
 
-Direction approved: **LLM owns conversational guidance; backend owns truth and
-execution.** The written amendment and corresponding plan await owner review.
+Historical direction approved: **LLM owns conversational guidance; backend owns truth and
+execution.** At that checkpoint the written amendment and corresponding plan awaited owner review.
 No runtime/test edits, amendment implementation, T4 dispatch, provider call,
 migration, push or deploy is authorized now. This boundary supersedes automatic
-continuation language above. Next gate: OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN.
+continuation language above. Historical next gate: OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN;
+the current gate is stated in §4.6 and the document header.
 
 ## 1. Intended outcome
 
@@ -196,9 +205,12 @@ messages retain their substantive intent.
 
 ### 4.1 Provider proposal: ConversationInterpretation
 
-The provider returns a strict, versioned object with unknown fields rejected:
+The current canonical interpretation is a strict, application-versioned object
+with unknown fields rejected. This list describes the pre-consolidation shape;
+§4.6 defines the successor provider-authored fields and authority boundaries:
 
-- `schemaVersion`: fixed contract version.
+- `schemaVersion`: fixed application-owned contract version, injected after
+  deterministic decode and omitted from the current Google generation schema.
 - `intent`: `CREATE_REMINDER | LIST_REMINDERS | CALENDAR_QUERY | CAPABILITY_QUERY
   | HELP | UNSUPPORTED | AMBIGUOUS`.
 - `dialogueAct`: `NEW_REQUEST | CONTINUE | EDIT | ABANDON_PENDING | GREET
@@ -221,13 +233,13 @@ Issue field is one of the 13 slots, `intent`, `queryRange` or `operation`.
 `controlEvidence` is a required array of at most three references (empty except
 when citing a dialogue act); it uses the same evidence union below.
 
-The accepted T1 implementation still emits `calenote-context-1`. Version 2 is a
-planned successor output revision, not an already-implemented compatibility
-alias. Input/state/detail versions stay unchanged unless their actual shapes
-change; guidance is not a new reminder slot or an authoritative state field.
-Full strict output schema remains the sole provider schema. §4.5 defines a
-narrow independent validation boundary for malformed guidance, not permissive
-parsing of semantic fields or recovery of truncated JSON.
+The historical T1 implementation emitted `calenote-context-1`; the audited
+current canonical contract is `calenote-context-2`. Input/state/detail versions
+stay independent and change only when their actual shapes change; guidance is
+not a reminder slot or authoritative state field. ProviderWireSchema is a
+distinct generation transport with deterministic decode, not the canonical
+validator. §4.5/4.6 define independent advisory validation, never permissive
+semantic parsing or recovery of truncated JSON.
 
 Each change is `{field, operation, value, evidence}`. SET has a non-null value
 matching that field's type. CLEAR has literal null and current explicit-removal
@@ -362,11 +374,14 @@ unsupported/clarification outcome, never a guessed conversion.
 
 Proposal dispatch rules: LIST/CALENDAR/CAPABILITY require their matching `query`
 union and empty changes; non-query intents require query null. Read operations
-may contain uncertainty but never draft SET/CLEAR operations. HELP/UNSUPPORTED/
-ABANDON cannot carry executable changes. A multiple-action utterance is returned
+may contain uncertainty but never draft SET/CLEAR operations. HELP, UNSUPPORTED
+and other non-mutating semantic proposals cannot carry executable changes.
+An advisory ABANDON label cannot invalidate grounded changes under §4.6.
+A multiple-action utterance is returned
 as AMBIGUOUS with `UNSUPPORTED_COMBINATION` and current evidence; ask which to
 handle first, preserve the existing draft and do not silently execute a subset.
-CREATE/EDIT proposals still require backend completeness checks and confirmation.
+CREATE/evidenced semantic edit proposals still require backend completeness
+checks and confirmation; advisory EDIT labels supply no factual authority.
 
 Cross-field checks reject/clarify count/offset conflation, count versus end-date
 disagreement, competing event-relative and absolute schedules, timezone changes,
@@ -431,7 +446,9 @@ Legacy records expose absent detail fields as unknown/null, never inferred.
 
 ### 4.5 Conversation guidance and post-merge reply selection
 
-Design notation (strict objects, no unknown keys):
+Pre-consolidation design notation (strict objects, no unknown keys). In the
+successor §4.6, PRESENT_PREVIEW and ANSWER_QUERY remain application-owned
+effective kinds and leave the model advisory union:
 
 ```ts
 type ConversationDirective =
@@ -453,8 +470,9 @@ type EffectiveDirective = ConversationDirective
 enum. No arbitrary field path, executable action, ID, option token, resolved
 date, occurrence array or database row is added to the directive. It describes
 the next question/action, never completeness, consent or persistence authority.
-The six model kinds cover guidance plus handoff to backend surfaces; controls,
-storage and delivery outcomes have no model kind.
+The current six model kinds include two redundant backend handoffs. §4.6 keeps
+only the four kinds with eligible conversational wording; controls, storage
+and delivery outcomes have no model kind.
 
 `replyProposal.text` is nonblank NFC plain text, at most **400 Unicode code
 points** (and therefore at most 800 UTF-16 units), no clipping. Null requests
@@ -469,7 +487,7 @@ The entire response still obeys 1536 tokens/32768 raw bytes and context limits.
 1. Validate complete JSON, size, version and root-key allowlist. Truncation,
    malformed JSON, unknown root keys or unsupported version reject the whole
    response. Never salvage a prefix or retry with another contract.
-2. Validate the semantic core (all existing interpretation fields) strictly and
+2. Validate the semantic core (the SEMANTIC_UNTRUSTED fields in §4.6) strictly and
    run T2 evidence validation. No unknown semantic fields, fabricated references
    or partial change arrays are admitted. A branded `ValidatedPatch` carries
    only validated semantic facts/operands, not approved guidance.
@@ -480,10 +498,13 @@ The entire response still obeys 1536 tokens/32768 raw bytes and context limits.
    schema failure separately even when that core is retained; never report such
    an output as schema-valid. An invalid core cannot be rescued by valid prose.
 
-Implementation splits validation at these two named root properties only.
-It must not strip unknown keys globally or use a relaxed alternate provider
-schema. Root keys for guidance remain mandatory on the wire; absent keys take
-the defensive fallback path, not successful schema acceptance.
+Current implementation splits validation at these two named root properties.
+The successor extends independently quarantinable boundaries to every retained
+ADVISORY category, and removes redundant advisory labels as specified in §4.6.
+It must not strip unknown keys globally or weaken canonical semantic validation.
+Advisory keys retained in the generation schema remain required for generation;
+an absent isolated advisory property takes defensive fallback and is recorded
+as a full-output schema failure, never successful schema acceptance.
 
 Compute `effectiveDirective` **after** validated merge, resolution, scope and
 current decision checks. T3's resolved slots and resolved facts remain a pair.
@@ -593,6 +614,367 @@ it shows event 11/10/2026 and notifications 09/10 and 10/10 at 08:00. Only later
 scoped “Có.” for that actual delivered preview may commit. No year, count,
 exact clock, confirmation or schedule rule in accepted T3 is superseded.
 
+### 4.6 Model Output Authority Consolidation (2026-10-01)
+
+This is a targeted architectural amendment for owner review, not an implemented
+contract or a detailed implementation plan. It preserves the original product
+expectations and accepted local T0–T10 behavior. Current source and frozen
+fixtures were inspected without provider calls or executable-test changes.
+
+#### 4.6.1 Responsibility model and current versus target
+
+Every field/category has exactly one authority class:
+
+- **SEMANTIC_UNTRUSTED**: model-proposed user meaning, operands, changes and
+  semantic alternatives. Strict structure, scope and required evidence must
+  validate before use. Backend rules alone merge, resolve and admit execution.
+- **ADVISORY**: optional conversational interpretation/wording. Invalid or
+  incompatible guidance is independently discarded. It cannot veto grounded
+  semantic facts, resolve conflict, mint a preview, execute a query or save.
+- **APPLICATION_OWNED**: application-bound metadata, validated source identity,
+  effective decisions and actual execution results. A model value has zero
+  authority; omit it from generation wherever possible.
+
+Current source mixes the first two classes. `SemanticPatchProposalSchema`
+currently includes `dialogueAct` and `continuation`; a branded patch therefore
+does not yet prove these are advisory-independent. `mergePatch()` already
+excludes `conversationDirective` and `replyProposal`, but uses those two labels
+for factual/conflict decisions. This is a migration finding, not target behavior.
+
+| Current consumer | Observed behavior | Target authority and preserved safety |
+| --- | --- | --- |
+| `merge.ts`: ABANDON_PENDING | Skips reminder changes; canonical refinement also prohibits changes with this label | Advisory cannot suppress facts. Actual abandonment remains scoped application control with a current cancellation fence; unbound suggestion cannot cancel or claim cancellation |
+| `merge.ts`: NEW_REQUEST / continuation NO | Returns REPLACEMENT_REQUIRED for an existing request | Compute replacement from validated semantic request targeting and active state. Stage a separate candidate; require the existing REPLACE_PENDING decision; never silently overwrite A with B |
+| `merge.ts`: AMBIGUOUS / continuation UNCERTAIN | Returns AMBIGUOUS_OPERATION | Keep grounded facts and compute a clarification. `transition.ts` currently offers RESUME_PENDING only if a prior request exists; without one the same label can become terminal semantic failure |
+| `merge.ts`: EDIT | Enables conflict resolution and replacement of occupied slot values; otherwise creates CONFLICT | Require evidenced semantic replacement intent plus scoped current sources and actual conflict state. A wrong EDIT label must neither resolve conflict nor erase accepted facts |
+| `evidence.ts`: EDIT | Changes current-evidence requirement for occupied values and permits notes text loss only with EDIT/current evidence | Preserve current-user replacement/CLEAR checks and explicit notes replacement/removal meaning as semantic requirements; advisory cannot permit notes loss or make append-only detail updates fail |
+| `evidence.ts`: continuation YES with CONTINUE/EDIT | Permits inherited QUERY range candidate to reach LIST verifier | Derive query continuity from the pending QUERY question, exact QUERY fact binding, current response semantics and original source re-verification. A label is neither read authority nor a reason to discard valid range facts |
+| `evidence.ts`: controlEvidence | Resolves current CONTROL sources using dialogueAct as the proposed operation | Validate evidence for an actual semantic user instruction independently of labels. An advisory hint cannot create a mandatory evidence obligation or rescue invalid mandatory control evidence |
+| `transition.ts` / `guidance.ts`: ABANDON_PENDING | ESCAPE_REQUIRED notice / BACKEND_ONLY CONTROL routing | Backend state/control selection owns routing. Grounded changes survive contradictory advisory output; unknown cancel meaning clarifies rather than executing |
+| `contracts.ts`: operation uncertainty | Uses DialogueAct values and combined-action constraints | Retain evidenced ambiguity about actual user operations; remove conversational-label alternatives from semantic authority |
+| `service.ts`, `guidance.ts` | Semantic evidence/merge precede independent directive/reply checks; LIST store reads follow RANGE | Preserve this separation and authenticated query admission. Reply selection follows effectiveDirective and actual read outcome; directives never cause the read |
+
+`dialogueAct` and `continuation` are **ADVISORY**, including their old enum
+values. Recommend removing both from ProviderWireSchema and successor semantic
+core: GREET is local whole-message behavior, CONTINUE is state/context targeting,
+AMBIGUOUS/UNCERTAIN are backend clarification, ABANDON is scoped control, and
+NEW_REQUEST/EDIT currently hide actual semantic meaning. Their catchall labels
+add generation enums and cross-field conditions without unique safe authority.
+Keeping them merely for analytics or reproducing canonical fields has no
+concrete product benefit. No misleading label can cause terminal rejection.
+
+Removal must not assume all edit/new-request meaning is application-derivable.
+Natural language distinguishes an explicit replacement from a contradictory
+additional assertion, or a new task from details for the retained one. Preserve
+that indispensable meaning as narrow **SEMANTIC_UNTRUSTED** user instruction
+categories: request targeting (existing/new/unresolved), explicit field
+replacement/removal and operation ambiguity. They require the same scoped
+current evidence as changes; they cannot include confirmation, arbitrary tools,
+internal targets or cancellation authority. These are conceptual semantic
+requirements, not approval of a particular new wire API. The later approved
+plan must choose a minimal representation within semantic operands and prove
+that it does not recreate a general dialogue/control enum under another name.
+Exact quote existence alone is not proof of replacement meaning. If targeting
+or replacement is unresolved, preserve the prior value/candidate and clarify;
+do not infer a destructive edit from SET plus a current quote.
+
+The backend validates these operands and computes compatibility from typed
+facts/context. It does not gain a second general language parser. The bounded
+LIST evidence verifier in §2 remains the sole approved language verification
+exception; this amendment does not broaden it to reminder-edit interpretation.
+
+#### 4.6.2 Normative authority matrix
+
+Y/N describe the **target**, not current consumer behavior. `Conditional` means
+the policy stated in the evidence cell must apply, not unknown ownership.
+CAN_AUTHORIZE_DB_READ/WRITE means independently grant execution authority; every
+row is N. A validated semantic query can participate in backend read admission,
+and changes can participate in a subsequently confirmed write, without owning
+either permission. APPLICATION_DERIVABLE concerns meaning/value, not whether the
+application can copy a model value. Wire discriminants inherit their semantic
+or advisory category; fixed protocol tags never acquire that category.
+
+| FIELD | AUTHORITY_CLASS | MODEL_MAY_PROPOSE | EVIDENCE_REQUIRED | CAN_CAUSE_HARD_REJECT | CAN_CAUSE_CLARIFY | CAN_AFFECT_MERGE | CAN_AUTHORIZE_DB_READ | CAN_AUTHORIZE_DB_WRITE | APPLICATION_DERIVABLE | KEEP_IN_PROVIDER_WIRE |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| intent candidate | SEMANTIC_UNTRUSTED | Y | User/context grounding; no new root evidence API stipulated | Y, invalid semantic structure | Y | Y, scoped dispatch | N | N | N, user meaning | Y |
+| dialogueAct, every old value | ADVISORY | Current only; remove target | N; never mandatory for a hint | N | N, cannot force clarification alone | N | N | N | Partly; unique instruction meaning moves to semantic category | N |
+| continuation, YES/NO/UNCERTAIN | ADVISORY | Current only; remove target | N | N | N, cannot force clarification alone | N | N | N | Y, with validated targeting/context | N |
+| changes array / field / SET-CLEAR operation | SEMANTIC_UNTRUSTED | Y | 1–3 scoped refs per change; current explicit source for replacement/CLEAR | Y, duplicate/unsupported fields or invalid mandatory refs | Y | Y | N | N | N | Y |
+| title / location / notes values | SEMANTIC_UNTRUSTED | Y | User words or exact bound fact; notes loss requires explicit current replacement/removal | Y, invalid structure/mandatory evidence | Y | Y | N | N | N | Y |
+| eventDate / reminderDate / endDate, CIVIL_DATE / RELATIVE_DAY / WEEKDAY operands | SEMANTIC_UNTRUSTED | Y | User operand or exact fact; year only if explicit | Y, invalid structure/mandatory evidence | Y, missing/ambiguous/impossible date | Y | N | N | N; arithmetic is application-owned | Y |
+| eventTime / reminderTime, hour/minute/qualifier | SEMANTIC_UNTRUSTED | Y | Scoped user operand or exact fact | Y, invalid structure/mandatory evidence | Y, unknown qualifier/exactness | Y | N | N | N | Y |
+| calendar / frequency / occurrenceCount / eventRelation / leadOffsetDays | SEMANTIC_UNTRUSTED | Y | Scoped user operands or exact facts; defaults stamped by application only | Y, invalid structure/mandatory evidence | Y, conflicts/unsupported combinations | Y | N | N | N; defaults/derived values are separate | Y |
+| semantic request targeting / explicit replacement / unresolved operation category | SEMANTIC_UNTRUSTED | Y, narrow actual user meaning | Scoped current evidence for new/replacement/removal assertions | Y, malformed/security-invalid mandatory evidence | Y | Y, after validation, never destructive authority | N | N | N, cannot infer every linguistic distinction | Y, minimal representation decided after spec approval |
+| query null / kind LIST-CALENDAR_DATE-CAPABILITY | SEMANTIC_UNTRUSTED | Y | Non-null query has 1–3 scoped refs; query-intent match | Y, ownership/structure violation | Y | Y, QUERY scope only | N | N | N | Y |
+| LIST period / date bounds / offsets | SEMANTIC_UNTRUSTED | Y | Exact source binding then bounded LIST verifier; inherited source re-verified | Y, fabricated/cross-scope mandatory refs; unsupported wording is not fabrication | Y, null/unverified/ambiguous optional range | Y, query facts only | N | N | N; epochs/bounds are derived | Y |
+| query.statusScope DEFAULT | APPLICATION_OWNED | N | N | Y, trusted binding/version corruption, not ignored model padding | N | N | N | N | Y | N; decoder injects fixed supported scope |
+| CALENDAR_DATE date/outputCalendar; CAPABILITY topic | SEMANTIC_UNTRUSTED | Y | Scoped source; input calendar independent of output/draft calendar | Y, invalid structure/mandatory refs | Y, missing/unsupported | Y, QUERY scope only | N | N | N | Y |
+| uncertainties field / reason / typed alternatives | SEMANTIC_UNTRUSTED | Y | Each nonempty alternative has required refs; empty uncertainty is unresolved meaning, not completion authority | Y, malformed semantic alternative/mandatory refs | Y, backend recomputes actual issue | Y, unresolved candidate state only | N | N | N, proposed alternatives; actual missing/conflict state is derived | Y |
+| operation alternatives using old dialogue labels | ADVISORY | Current only; remove target | N for labels; actual instruction evidence remains separate | N | N alone | N | N | N | Partly; replace semantic use per above | N |
+| model evidence refs in changes/query/alternatives/controlEvidence: USER_QUOTE turn/quote/occurrence; CONTEXT_FACT ref/kind | SEMANTIC_UNTRUSTED | Y | Exact user segment or exact field/value/scope alias, current revision | Y, nonexistent/fabricated/non-USER/cross-owner/chat/context | Y only for valid but unresolved meaning, never invalid reference identity | Y, after resolution | N | N | N, model selects proposed supporting refs | Y |
+| controlEvidence for actual semantic user instruction | SEMANTIC_UNTRUSTED | Y | Current scoped USER source when instruction policy requires it | Y, invalid mandatory source/control authority | Y, unresolved instruction without invented control | Y, candidate/ambiguity only | N | N | N, model selects supporting refs | Y only when instruction needs independent grounding; omit dialogue-only evidence |
+| resolved source IDs/spans/source map/scope/currentness/provenance/reference time | APPLICATION_OWNED | N | Backend validates proposal refs | Y, corrupt binding/security violation | N as an advisory path | Y, backend validated inputs | N | N | Y | N |
+| conversationDirective kind + field/reason/issue/topic | ADVISORY | Y, four retained kinds below | N; compatibility checked against backend issue | N | N alone; can word computed clarification | N | N | N | Kind/issue Y; useful wording selection is optional | Y, four kinds only |
+| PRESENT_PREVIEW / ANSWER_QUERY in model directive | ADVISORY | Current only; remove target | N | N | N | N | N | N | Y, fully backend computed | N |
+| replyProposal null / text | ADVISORY | Y | N; bounded structure/privacy/safety/eligibility instead | N | N alone; can word computed clarification | N | N | N | Natural phrasing N; fallback Y | Y |
+| schemaVersion; ProviderWire/canonical/decoder/codebook/capability versions; protocol marker tags | APPLICATION_OWNED | N | N | Y for unsupported application-bound version/corruption, never an ignored model claim | N | N | N | N | Y | N |
+| uncertainty fieldCode value | SEMANTIC_UNTRUSTED | Y, selection of semantic field only | Same as decoded uncertainty; closed mapping | Y, unknown code/invalid semantic domain | Y through valid uncertainty | Y | N | N | N, field selection; mapping/version Y | Y if compact encoding remains measured necessary |
+| wire inactive padding | APPLICATION_OWNED | Transport-required only, zero value authority | N | N for known inactive value; Y for malformed outer/unknown keys or ambiguous active branch | N | N | N | N | Y, selected branch determines discarded keys | Remove where feasible; otherwise shape-only transport padding |
+| effectiveDirective; missing/conflict/resolution/capability/query authority | APPLICATION_OWNED | N | Backend validated semantic/context inputs | Y on security/state corruption | Y, actual computed issue | Y, backend only | N | N | Y | N |
+| preview/confirmation/persistence/canonical mutation/delivery results and resolved epochs/occurrences | APPLICATION_OWNED | N | Scope, control proof, revision, transaction and actual receipts | Y on invalid authority/corrupt state | Y, bound decision needs response | Y, application transitions only | N | N | Y | N |
+
+Application-owned execution admission still authorizes actual operations. Its
+N entries mean that emitting a field/value does not itself grant permission:
+authenticated binding, query policy or explicit confirmation proof is required.
+`statusScope` is presently a fixed model literal; its target removal is
+intentional. The field code is a semantic selector, whereas the immutable
+codebook and its version are application metadata; these are distinct objects,
+not duplicate classes for one field.
+
+#### 4.6.3 Merge, hard rejection and semantic clarification
+
+The required ordering is: strict bounded outer decode → independent semantic
+and advisory validation → mandatory semantic evidence validation → validated
+semantic merge → backend missing/conflict/resolution/capability/query admission
+→ effectiveDirective → compatible reply selection. Executing an authorized
+read and composing its actual result remain backend steps; no model reply sees
+or grants read/write authority. `mergePatch()` consumes validated semantic
+operands/instructions and application-bound context only. No advisory prose,
+act, continuation or directive may affect factual validity or the replacement,
+notes-preservation, conflict-resolution or preview-invalidation decision.
+
+**HARD REJECTION** is reserved for malformed outer/provider or canonical
+semantic structure, unsupported application-bound contract version, fabricated
+or invalid mandatory evidence, cross-owner/chat/context refs, invalid security/
+control authority, corrupt persisted state, or authentication/authorization
+failure. Unknown root keys, truncated JSON, absent required semantic keys,
+ambiguous active wire discriminators and malformed typed semantic alternatives
+remain hard failures. Preserve prior valid context without applying the invalid
+patch; no alternate parser, permissive unknown-key stripping or partial-array
+salvage. Stale CAS/claim results remain their explicit stale/superseded outcome.
+Provider timeout/budget refusal remain operational refusals, not semantic
+clarification or permission for extra calls.
+
+**CLARIFY** applies to valid incomplete user intent, required missing fields,
+grounded alternatives, factual conflict, unclear request targeting or unsupported
+combination. Rejecting an advisory AMBIGUOUS/UNCERTAIN value is not a terminal
+semantic outcome. Advisory output does not itself manufacture missing/conflict
+state: backend computes that state after retaining validated facts. An optional
+operand with a **valid scoped reference** but unsupported entailment may be
+discarded only at an explicitly defined policy boundary while retaining intent:
+the approved LIST period verifier is the current concrete example. It produces
+null period/queryRange clarification and zero list-store reads. This exception
+does not admit fabricated references, malformed required semantics, guessed
+reminder values or arbitrary dropping of changes to make a patch pass.
+
+Independently malformed/absent/extra-key advisory **subobjects** are quarantined
+after a complete unambiguous outer object and valid semantic core are identified.
+They are not malformed outer structure. Record full-output failure separately,
+discard directive/reply as needed, preserve facts, and use backend wording.
+An invalid advisory nested kind is not an invalid active semantic discriminator.
+Mandatory controlEvidence failure remains hard rejection when an actual semantic
+instruction requires it; an advisory label cannot demand that evidence or cause
+its absence to reject otherwise valid facts.
+
+Existing EDIT-dependent safety must be preserved in semantic rules: replacement
+or CLEAR requires current explicit evidence; notes append preserves old notes,
+and notes replacement/removal requires separately grounded meaning. Unresolved
+conflicts retain competing evidenced values; only validated current resolution
+of the actual conflict can replace the retained value. Accepted edits advance
+revision and invalidate the old preview/decision. New-request targeting with A
+pending stages B and asks REPLACE_PENDING; approval replaces pending state only,
+then B gets its own SAVE_PREVIEW decision. Actual abandonment remains an exact
+scoped application control; negated/quoted cancellation is not a control.
+
+#### 4.6.4 Advisory and directive policy
+
+Retain `conversationDirective` as ADVISORY solely to associate optional phrasing
+with a compatible application issue. Retain these four model kinds:
+
+| Kind | Concrete conversational benefit | Authority limit |
+| --- | --- | --- |
+| ASK_FOR_FIELD | Natural targeted question for the actual missing slot instead of repeatedly generic wording | Exact backend field compatibility; cannot choose which facts are missing |
+| ASK_FOR_DISAMBIGUATION | Context-sensitive invitation to clarify an actual ambiguity/conflict | Backend field/reason and factual alternatives are authoritative |
+| HELP | Natural guidance for the selected supported topic | Approved capability facts are application composed |
+| EXPLAIN_UNSUPPORTED | Natural framing of a real capability/domain limitation | Backend selects typed limitation; no invented support or one-off downgrade |
+
+Remove PRESENT_PREVIEW and ANSWER_QUERY from generation: their replies already
+require null and their entire content is backend composed, so the model handoff
+adds no useful conversational choice. Keep them in **APPLICATION_OWNED**
+effectiveDirective, distinct from the removed model advisory instances.
+Mismatched/invalid directive affects only directive/reply eligibility, never
+semantic merge or execution. `replyProposal` remains independently nullable,
+bounded and privacy/safety checked under §4.5.2. Model wording is eligible only
+for the four compatible kinds. Canonical preview, exact schedule, query result,
+factual alternative, confirmation/replacement instructions, mutation and
+delivery results remain backend composed. No second wording LLM call.
+
+#### 4.6.5 ProviderWire and metadata principles
+
+ProviderWireSchema is a generation transport, not ultimate semantic/security
+authority. Application selects immutable wire/schema/decoder/codebook versions
+before dispatch → provider emits only relevant semantic/advisory proposals →
+deterministic decode binds metadata and removes known inactive padding → strict
+canonical semantic/evidence validators admit facts. Every retained model field
+must have a documented reason in the matrix. Do not regenerate every canonical
+property just because it exists in storage or canonical validation.
+
+Current Google wire already omits model schemaVersion, binds
+`calenote-context-2`, translates definitions to `$defs`, discards known inactive
+values and uses the immutable uncertainty-field codebook. The audited wire tag
+is `google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9`; these are
+current source facts, not proof of a live pass. Preserve their boundaries and
+replace the tag for a materially different successor, never repurpose a mapping.
+The canonical generic serializer currently still exposes the full schema; its
+later integration must conform to the same authority rule as the Google path.
+
+Remove fixed model protocol/version/marker/codebook tags (none beyond omitted
+schemaVersion were found in current Google response payload), fixed DEFAULT
+statusScope, dialogueAct, continuation, dialogue-only controlEvidence and the
+two redundant directive kinds. Keep active semantic discriminants (`field`,
+`operation`, operand/query/evidence `kind`) and narrow advisory discriminants
+needed for deterministic decoding. Do not confuse those proposed selections
+with application-owned protocol versions. If provider transport still needs a
+fixed tag, its model value is ignored and a deterministic constant is bound;
+unsupported **selected decoder/version** still rejects.
+
+Prefer smaller/flatter generation shapes and enforce complex canonical
+associations after decode when safely representable. Never union fields
+independently into a Cartesian product or accept ambiguous branches. Known
+inactive padding has no canonical meaning; unknown keys and missing active
+fields fail. Compact codes/serialized alternatives must decode through one
+bounded, versioned mapping with exact canonical field/value/evidence checks.
+Unsupported code, malformed JSON alternative or wire/canonical domain drift
+fails before merge. Finite enums belong only where necessary for model meaning;
+do not grow a large schema-state enum to duplicate every canonical invariant.
+New schema/token feasibility requires measured revalidation, not an assumption
+that removing fields guarantees Google acceptance.
+
+#### 4.6.6 Authority invariants and failure-class regressions
+
+The later implementation must prove these invariants on the actual service
+path with state/read/write/reply observations; they are requirements, not tests
+added or executed by this amendment:
+
+1. I1: ADVISORY fields cannot authorize any DB read or write.
+2. I2: changing only advisory values cannot invalidate valid grounded semantic
+   facts or alter factual merge/conflict/replacement/notes-retention results.
+3. I3: APPLICATION_OWNED values never gain authority from model output.
+4. I4: SEMANTIC_UNTRUSTED operands/instructions validate before application use.
+5. I5: no canonical mutation precedes explicit current confirmation proof.
+6. I6: isolated invalid advisory subobjects are independently discarded; a
+   valid core plus invalid guidance retains facts and reports schema failure.
+7. I7: missing/ambiguous semantics clarify unless a security/contract boundary
+   requires rejection; no broad partial-patch salvage.
+8. I8: effectiveDirective is computed from backend validated state/results.
+9. I9: ProviderWire simplification never weakens canonical/evidence validation.
+10. I10: every generated field/category has a concrete model-authorship reason.
+
+Mandatory generalized controls cover: wrong/omitted model protocol metadata;
+known inactive padding versus unknown keys and invalid active discriminator;
+large finite-domain schema fit; every codebook entry and out-of-domain code;
+wire/canonical type parity; unsupported/ambiguous LIST range with valid refs
+versus fabricated refs; valid semantics plus advisory AMBIGUOUS/UNCERTAIN,
+wrong EDIT/NEW/ABANDON, invalid directive and invalid prose; genuine semantic
+edit versus unresolved conflict, notes append versus destructive replacement;
+replacement approval versus save; and all backend factual-only surfaces. These
+are class regressions, never R02-specific phrase policy. Terminal rejection of
+valid facts is not repaired by changing one prompt example or advisory enum.
+
+#### 4.6.7 R01–R16 acceptance impact
+
+Audited `benchmark/regressions.json`, `tools/benchmark/context-contract-fixtures.ts`
+and expanded acceptance in §9.4. Frozen proposals currently author dialogueAct/
+continuation and all six directives; later fixtures must express semantic intent
+and backend expectations under the new boundaries without changing user words,
+original expected fields/effects or campaign denominators. This table states
+preservation/required new regressions, not newly measured acceptance.
+
+| ID | Actual fixture behavior retained | Consolidation impact / required regression |
+| --- | --- | --- |
+| R01 | “Có lịch nào ko?” clarifies queryRange; “Tháng này có lịch gì ko?” lists Sep1–Oct1, no create | Preserve behavior; remove label-dependent inheritance rejection. Add advisory-mutation invariance and valid-ref unsupported/ambiguous range versus fabricated-ref controls; no read until verified RANGE |
+| R02 | Three actual progressive turns: exam/location/event Oct11/DAILY/count2 → BEFORE_EVENT → 08:00; preview Oct9/10, no commit | Preserve facts and ask only time after turn2. Remove accidental AMBIGUOUS/UNCERTAIN/NEW/NO label veto; add valid semantic progression with contradictory/invalid advisory and deterministic fallback |
+| R03 | Actual setup already has 08:00/count2/event; “Nhắc trước sự kiện.” completes preview | Preserve fixture's preview (generic missing-field description in §9.4 is conditional). No abandon menu; add wrong advisory ABANDON with valid relation |
+| R04 | Actual six-turn two-branch/reset script: ONCE/offset2 then explicit reminder 08:00 versus DAILY/count2 then 08:00 | No schedule-semantic change; preserve Oct9 versus Oct9/10 and eventTime/reminderTime separation. Add advisory-independent branch meaning |
+| R05 | Pending draft → exact “Bỏ.” bypass → CANCELLED → new tomorrow 08:00 preview | No control-authority change; model label cannot cancel. Add cancellation hint without bound control and existing/new semantic targeting controls |
+| R06 | “Đừng bỏ.” preserves draft; quoted note “đừng bỏ quên giấy tờ” is notes SET | Preserve no abandonment and notes detail. Add contradictory ABANDON hint with valid note plus notes append/replacement evidence controls |
+| R07 | Four-turn exam/location/notes/series/08:00 → “Đổi sang 9h.” changes only reminderTime, new revision/preview | Preserve genuine semantic edit despite wrong advisory; add explicit replacement versus unresolved conflicting assertion; no label-based conflict bypass or notes loss |
+| R08 | 08:00 preview → “Có, nhưng đổi sang 9h.” new 09:00 preview, no commit | Preserve mixed correction and old-preview invalidation; advisory EDIT cannot confirm and missing EDIT cannot terminally reject grounded correction. Fresh SAVE_PREVIEW proof still required |
+| R09 | Today's lunar CALENDAR_DATE query; actual coarse status REMINDERS_LISTED | No converter/read-only change; remove redundant ANSWER_QUERY proposal, backend still produces actual conversion. Add misleading HELP guidance fallback, preserve original receipt anchor |
+| R10 | Annual lunar memorial returns clarification/one-time-alternative offer, no accepted reminder fields or write | Preserve honest YEARLY unsupported semantics and explicit alternative acceptance; EXPLAIN_UNSUPPORTED remains optional wording only. Add invalid advisory plus evidenced yearly operand, separate alternative/replacement/save decisions |
+| R11 | Actual preview → current-month side LIST → “Tiếp tục yêu cầu đang giữ.” preview of retained facts | Preserve independent query/draft scope, revision/lifetime and no mutation; remove label authority over resume/inherited range. Add uncertain target clarification without fact loss, preserve RESUME/REPLACE decisions |
+| R12 | Receipt Sep28 23:59, delayed processing after midnight → Sep29 08:00; replay SUPERSEDED/no dispatch | No anchor/dedupe change; metadata removal cannot select new reference time or replay authority. Existing expected behavior unchanged; include advisory invariance in broad suite |
+| R13 | Persisted clarification; delayed 08:00 interpretation SUPERSEDED; later “Bỏ.” CANCELLED; releasing delayed response stays SUPERSEDED | No fence change; source/context revisions stay application-owned. Add delayed valid semantic edit plus contradictory hint cannot resurrect draft. Preserve separate no-draft first-in-flight limitation |
+| R14 | Detail-bearing tomorrow preview → exact “Có.” CONFIRMED once; replay no writes/sends, one child | No confirmation/idempotency change. Add model success/confirmation guidance cannot produce proof; replacement/one-time approval still never saves |
+| R15 | Actual injected TIMEOUT script rejects safely; deterministic expansions cover malformed/unsupported-field/fabricated-evidence/timeout/budget | Preserve all five original explicit refusal classes and prior facts/no mutations. Add isolated advisory-invalid/core-valid as fallback case separately; never relabel malformed semantic/evidence failures as clarification |
+| R16 | Today-lunar query plus deterministic/UI converter parity expansion | No arithmetic/Calendar change; remove ANSWER_QUERY model handoff. Preserve all reference/boundary vectors and separate Layer1/Layer3 evidence; no model arithmetic |
+
+Keep §9.4.1 replacement/annual offer/control sanitization and recovery cases and
+§9.4.2 CO-A–F. Historical full-schema scores remain historical; an advisory
+fallback cannot hide schema failure, and an observed false selected reply still
+fails guidance acceptance. Original 32/80 executions, 32 held-out, 192/480
+call ceilings and output limits are unchanged. This amendment neither raises
+nor restores campaign caps: the separately authorized current PILOT, DIAGNOSTIC
+and FULL ledgers retain their existing limits, holds and spend. New deterministic authority
+regressions add no provider authorization. Source/prompt/contract changes later
+require fresh affected live acceptance and held-out replacement where disclosed
+data were used for tuning; T11 operational success is not full acceptance.
+
+#### 4.6.8 Implementation, migration and release impact (not a plan)
+
+Later affected modules, grouped by responsibility:
+
+- Canonical semantic/advisory separation:
+  `src/modules/conversation/context-contract/{contracts,evidence,merge}.ts`;
+  validated semantic targeting/replacement and uncertainty categories must
+  replace act-dependent logic while retaining branded source authority.
+- Backend outcomes and reply selection:
+  `src/modules/conversation/context-contract/{guidance,service,transition,decisions,control-proof,confirmation,preview-control,query,resolve,state}.ts`;
+  exact controls, bound decisions, stale fences and actual read admission must
+  remain authoritative; evaluate state versioning where proposal shapes persist.
+- Transport, schema and prompt consumers:
+  `src/modules/intelligence/infrastructure/openrouter/{context-provider-wire,provider-wire-schema,semantic-gateway}.ts`,
+  `src/modules/conversation/context-contract/{wire,prompt,validation-diagnostics,downstream}.ts`
+  covering the actual OpenRouter context dispatch path. Future prompt/schema edits
+  follow approved contracts; none are made in this documentation turn.
+- Persisted pending proposal validation and transactions:
+  `src/modules/conversation/context-contract/infrastructure/d1/store.ts` and
+  companion state/confirmation consumers; no canonical reminder/delivery
+  redesign or schema weakening is authorized.
+- Verification/admission observations:
+  related `context-contract` and provider-wire tests;
+  `tools/benchmark/context-contract{,-fixtures,-probe,-runner,-live}.ts`
+  and `tools/benchmark/context-contract-fit.test.ts`,
+  `src/modules/conversation/context-contract/benchmark/{regressions,development,heldout}.json`
+  and their source/provenance-bound acceptance artifacts. Reconcile T1/T1A
+  contracts, T2/T2A evidence, T3 merge, T4–T7 state/query/confirmation,
+  T0/T0A feasibility, T10 observable regression and T11 bounded acceptance in
+  a later owner-approved plan, without rewriting accepted history.
+
+Changing provider generation shape requires a new immutable wire version and
+fresh bound schema/codebook diagnostics. Changing canonical semantic proposal
+shape requires an explicit successor contract; do not alias incompatible data
+to context-2. Input, pending state and canonical detail versions remain
+independent. Pending decisions store candidate proposals, so even a transport
+simplification may affect encrypted state readers; inspect compatibility before
+choosing a state-version bump. No evidence yet establishes that a D1 table
+migration is needed. This amendment executes none and authorizes none.
+
+Never silently reinterpret legacy in-flight unconfirmed candidates. Drain or
+expire/restart with notice at a separately authorized cutover and preserve
+shared ordering/confirmation fences under §9.5. Confirmed reminder schedules,
+details, lineage and delivery stay intact. A rollback version must understand
+the selected state/contract fences; Worker rollback does not undo migrations.
+New local checks or smaller schema do not authorize production use. Release
+still requires exact-head validation, resource/credential isolation, reviewed
+immutable master SHA and separate explicit deployment/remote-mutation authority.
+
+Non-goals: runtime/test/prompt changes, provider/model changes, extra wording
+calls, live provider spending, broad language parsing, migrations, push/PR/merge,
+deployment, new product features, detailed implementation planning or reopening
+accepted T0–T10 behavior. This amendment ends at owner review of the actual
+written specification.
+
 ## 5. Deterministic resolution and merge
 
 - Use trusted inbound reference time and the user's supported timezone, never
@@ -620,10 +1002,10 @@ exact clock, confirmation or schedule rule in accepted T3 is superseded.
 - A relation-only answer preserves existing title/date/time/count. Missing fields
   are computed after merge, not inferred from absence in the current message.
 - A clear contextual “bỏ” abandons only the current unconfirmed request through
-  the scoped whole-utterance control in §5.1. Other model-proposed abandonment
+  the scoped whole-utterance control in §5.1. Unbound semantic abandonment
   asks for that explicit control; negated, quoted or hypothetical text cannot
-  close it. It never cancels confirmed reminders. Confirmation remains outside
-  the model's output vocabulary.
+  close it. Advisory hints cannot veto grounded facts under §4.6. It never
+  cancels confirmed reminders. Confirmation remains outside model vocabulary.
 - Side questions (calendar date, capabilities, list) do not extend pending TTL
   or erase the request. New unrelated intents cannot inherit old facts.
 
@@ -1488,7 +1870,8 @@ post-hoc reconstruction. Assert semantics rather than exact friendly prose.
 | CO-E | “Có, nhưng đổi sang 9h.” after preview | One semantic dispatch; grounded correction; old preview invalid; new backend preview; not confirmation |
 | CO-F | “11/10 tui thi ở Quang Trung, nhắc tui trước đó nha.” → “2 ngày.” → “sáng, khoảng 8h.” | Preserve event/title/location; ask only missing/ambiguous information under §4.5.3; no invented count/exactness; backend derives occurrences after explicit clarification; no forced three-turn preview |
 
-Additional mandatory Layer1 cases: all six directive kinds and typed mismatch
+Additional mandatory Layer1 cases: all six application effective kinds, the
+four retained model advisory kinds (§4.6), and typed mismatch
 fields; unsupported capability without invented support; null/absent/blank/
 401-code-point/unknown-key reply; invalid directive with valid core; invalid
 core with persuasive reply; valid patch plus known/escaped forbidden controls;
@@ -1600,7 +1983,9 @@ work, not optional new product categories.
 - Mock results, real calls, dispatch outcomes and channel acceptance remain
   separately reported; no claim of implementation follows document checks (§8/9).
 
-Next gate: AMENDED_LOCAL_FIT_AND_INDEPENDENT_BUNDLE_REVIEW. Owner approval
-has cleared the prior written-spec review gate, not implementation acceptance.
-Continue to T4 only after the bundle passes. Deployment remains unchanged until
-separately authorized work passes its release gates.
+Historical post-T3 next gate was AMENDED_LOCAL_FIT_AND_INDEPENDENT_BUNDLE_REVIEW;
+that checkpoint is not the current authority amendment gate. Current next gate:
+OWNER_REVIEW_OF_MODEL_OUTPUT_AUTHORITY_SPEC. Do not write the implementation
+plan or implement the consolidation until the owner approves this written
+amendment. Earlier execution/acceptance evidence remains historical and intact;
+deployment remains separately authorized under §9.5.

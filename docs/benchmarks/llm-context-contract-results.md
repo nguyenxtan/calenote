@@ -1,5 +1,28 @@
 # LLM Context Contract — acceptance evidence
 
+## Current documentation gate — 2026-10-01
+
+Source audited at clean `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`.
+T0–T10 retain their historical local acceptance; T11 is not accepted.
+The revised complete wire9 admission returned HTTP200, generation
+`gen-1790860250-VTsnrUtUmBOP0uvtkRRQ`, with no application acceptance credit.
+The subsequent frozen R02 diagnostic replay returned HTTP200, generation
+`gen-1790860298-PEdRtwI4IyF8TDlvlX95`: wire decode, canonical validation,
+evidence and patch validation passed; merge rejected `AMBIGUOUS_OPERATION`.
+It performed zero list-store reads and zero canonical reminder mutations.
+The source predicate is `continuation === UNCERTAIN || dialogueAct === AMBIGUOUS`;
+the response literals were not retained, so the specific triggering label is
+unknown. Historical R01 PASS and earlier failed R02 artifacts remain separately
+attributed; this replay does not replace a scored failure. PILOT remains
+BLOCKED and FULL remains NOT_RUN.
+
+Owner amendment `6d9ff817-cf3f-49cd-96f3-9250f9757426` authorizes documentation
+only. The written spec's §4.6 consolidates model-output authority and is
+READY_FOR_OWNER_REVIEW, not implemented or accepted runtime behavior. No new
+live requests, scoring changes, detailed implementation plan or release work
+are authorized by this entry. Current next gate:
+`OWNER_REVIEW_OF_MODEL_OUTPUT_AUTHORITY_SPEC`.
+
 ## T11 compact uncertainty-field codebook — 2026-10-01
 
 Owner authority `84b2380e-e9e7-44e8-a5cc-6ff672cdd3ba` requires provider
