@@ -1,5 +1,35 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 exact evidence failure diagnostics — 2026-10-01
+
+Owner authority `1393cde0-f2d8-4ddb-b30a-09490ded20f1` authorizes
+failure-only structural telemetry, not relaxed evidence authority. The
+application records the first failed reference's semantic field, container
+path and zero-based reference ordinal; call-local `t0`–`t11` or `fN` alias;
+expected/resolved role; turn ordinal; requested occurrence and exact
+non-overlapping match count; quote byte/code-point lengths; NFC SHA256 quote
+and source-view identities; source-map status; and a closed internal reason.
+Missing source/fact-only attributes are null. No quote, operand, conversation,
+owner/chat identifier, or secret is retained. Hashes never grant authority.
+
+The existing public rejection reason and hard-rejection behavior are unchanged.
+The closed downstream observer carries these diagnostics through the actual
+service/gateway harness into application evidence and reports. Schema-invalid
+NFD quotes still reject at the canonical boundary. Invalid retained maps,
+stale contexts and cross-owner contexts still reject before evidence
+resolution; telemetry does not create an alternative source authority path.
+
+The previous R02 generation `gen-1790840935-u3SzEbJ0EtQUgC0LKsIc`
+passed wire/canonical validation but rejected with
+`EVIDENCE_QUOTE_NOT_FOUND`. Its raw structured payload was intentionally not
+retained. Therefore the exact historical field, alias, occurrence, match
+count and root cause remain **UNKNOWN**. Equivalent offline fixtures prove
+diagnostic coverage, not the historical model's behavior. No prompt, wire
+schema, decoder or evidence acceptance rule is changed by this delta.
+No new live request is dispatched to fill this historical evidence gap.
+The existing stopped ledger is immutable. Current R02/pilot acceptance
+remains blocked; FULL and release are not admitted by local diagnostic tests.
+
 ## T11 application-owned protocol metadata — 2026-10-01
 
 Owner authority `a27d87ef-3fd3-4996-bf41-d7d643e6ef0b` approves removing

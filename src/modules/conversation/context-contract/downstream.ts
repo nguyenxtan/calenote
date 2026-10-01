@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { IssueFieldSchema } from "./contracts";
 
+export const EvidenceFailureDiagnosticSchema = z.strictObject({
+  field: IssueFieldSchema,
+  path: z.array(z.union([z.enum(["changes", "query", "uncertainties", "alternatives", "evidence", "controlEvidence"]), z.number().int().min(0).max(31)])).max(6),
+  referenceOrdinal: z.number().int().min(0).max(2),
+  sourceAlias: z.string().regex(/^(?:t(?:[0-9]|1[01])|f[1-9][0-9]*)$/u).max(16),
+  expectedSourceRole: z.enum(["USER", "CONTEXT_FACT"]),
+  resolvedSourceRole: z.enum(["USER", "ASSISTANT", "CONTEXT_FACT", "UNKNOWN"]),
+  sourceTurnOrdinal: z.number().int().min(0).max(11).nullable(),
+  requestedOccurrence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable(),
+  matchCount: z.number().int().min(0).max(10000).nullable(),
+  quoteBytes: z.number().int().min(0).max(8000).nullable(),
+  quoteCodePoints: z.number().int().min(0).max(2000).nullable(),
+  quoteSha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+  sourceViewSha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+  sourceMapStatus: z.enum(["NOT_CHECKED", "VALID", "INVALID", "REMOVED_CONTROL_SPAN", "NORMALIZATION_BOUNDARY"]),
+  reason: z.enum(["SOURCE_ALIAS_UNKNOWN", "SOURCE_SCOPE_MISMATCH", "SOURCE_ROLE_NOT_USER", "QUOTE_NOT_FOUND", "QUOTE_OCCURRENCE_OUT_OF_RANGE", "QUOTE_NORMALIZATION_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", "QUOTE_REMOVED_CONTROL_SPAN", "EVIDENCE_TARGET_MISMATCH"]),
+});
+export type EvidenceFailureDiagnostic = z.infer<typeof EvidenceFailureDiagnosticSchema>;
+
 // Closed vocabulary only: never persist an exception message or operand value.
 export const DownstreamDiagnosticSchema = z.strictObject({
   stage: z.enum(["CANONICAL", "EVIDENCE", "LIST_RANGE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]),
@@ -10,6 +29,7 @@ export const DownstreamDiagnosticSchema = z.strictObject({
     "MISSING_TOPIC", "MISSING_CALENDAR_OPERAND", "LUNAR_YEAR_REQUIRED", "AMBIGUOUS_WEEK", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_OUT_OF_RANGE", "ENDPOINT_LIMIT", "REVERSED_RANGE", "SPAN_LIMIT",
     "CONTEXT", "EXPIRED", "SEMANTIC", "STALE", "CANDIDATE_EVIDENCE", "UNKNOWN_DIRECTIVE", "CONFIG", "PREVIEW_CHANNEL_REQUIRED", "SIZE", "TRANSITION_STATE_INVALID", "SCHEMA_INVALID", "PROVIDER", "BUDGET"]),
   field: IssueFieldSchema.optional(),
+  evidenceFailure: EvidenceFailureDiagnosticSchema.optional(),
   candidateRange: z.enum(["DAY", "DATE_BOUNDS", "WEEK", "WEEKEND", "MONTH", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING"]).optional(),
   directive: z.enum(["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP", "PRESENT_PREVIEW", "ANSWER_QUERY", "BACKEND_ONLY"]).optional(),
   transition: z.enum(["REPLY_ONLY", "STORED", "CONFIRMATION"]).optional(),

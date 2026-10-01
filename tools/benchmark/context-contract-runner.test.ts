@@ -10,9 +10,42 @@ import { readCampaignLedger } from "./context-contract-live";
 import * as liveAuthority from "./context-contract-live";
 import { preflightContextCampaign, admitFutureLiveIntent } from "./context-contract-live";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { ConversationInterpretationSchema } from "../../src/modules/conversation/context-contract/contracts";
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContext, parseGoogleLiteEuContextSections } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+
+it("exact evidence failure survives the application gateway and durable runner without quote leakage", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-evidence-diagnostics-"));
+  const sentinel = "PRIVATE_ABSENT_EVIDENCE_SENTINEL";
+  let requests = 0;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "evidence-test",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async request => {
+        requests++;
+        const input = JSON.parse(request.messages[1].content) as ContextInput;
+        const proposal = ConversationInterpretationSchema.parse(frozenContextProposal(input, "R01", 0));
+        if (!proposal.query) throw new Error("fixture query missing");
+        proposal.query.evidence = [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: sentinel, occurrence: 1 }];
+        const body = JSON.stringify({ model: request.model, provider: "Google", id: "gen-evidence-test", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(proposal)) } }] });
+        return { status: 200, body, rawResponseBytes: new TextEncoder().encode(body).length };
+      } });
+    expect(requests).toBe(1);
+    expect(result).toMatchObject({ status: "STOP", applicationLlmCalls: 1, providerHttpRequests: 1 });
+    expect(result.applicationEvidence[0]).toMatchObject({ mutations: 0, listStoreReads: 0,
+      downstreamDiagnostics: expect.arrayContaining([expect.objectContaining({ stage: "EVIDENCE", reason: "EVIDENCE_QUOTE_NOT_FOUND",
+        evidenceFailure: expect.objectContaining({ field: "queryRange", path: ["query", "evidence"], referenceOrdinal: 0, reason: "QUOTE_NOT_FOUND", matchCount: 0 }) })]) });
+    const durable = JSON.parse(readFileSync(join(directory, "application-evidence.json"), "utf8"));
+    expect(durable).toEqual(result.applicationEvidence);
+    expect(JSON.parse(readFileSync(join(directory, "report.json"), "utf8")).applicationEvidence).toEqual(durable);
+    for (const file of ["application-evidence.json", "report.json", "responses.json", "campaign.jsonl"]) {
+      const text = readFileSync(join(directory, file), "utf8");
+      for (const privateText of [sentinel, "Có lịch nào ko?", "provider-user", '"quote":']) expect(text).not.toContain(privateText);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 it("source-bound R02 continuation preserves the stopped R01 ledger and dispatches R02 first", async () => {
   const previous = mkdtempSync(join(tmpdir(), "context-prefix-old-")), next = mkdtempSync(join(tmpdir(), "context-prefix-new-"));

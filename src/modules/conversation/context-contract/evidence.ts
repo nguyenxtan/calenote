@@ -3,7 +3,8 @@ import { SemanticPatchProposalSchema, FieldChangeSchema, QueryOperandSchema, Unc
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 import { verifyListRangeEvidence } from "./list-range-evidence";
-import { observeDownstream, evidenceReason, type DownstreamObserver } from "./downstream";
+import { observeDownstream, evidenceReason, type DownstreamObserver, type EvidenceFailureDiagnostic } from "./downstream";
+import { createHash } from "node:crypto";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -75,8 +76,9 @@ function selectReferenceTime(facts: readonly BoundContextFact[], quotes: readonl
 /** Whole-patch authority validation. This proves exact source/scope and edit
  * freshness, not general natural-language entailment or user confirmation. */
 export function validateEvidence(proposal: unknown, built: ReadyContext, observe?: DownstreamObserver): EvidenceValidation {
+  let evidenceFailure: EvidenceFailureDiagnostic | undefined;
   const refused = (reason: string): EvidenceValidation => {
-    observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason) });
+    observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason), ...(evidenceFailure ? { evidenceFailure } : {}) });
     observeDownstream(observe, { stage: "PATCH", result: "REJECTED", reason: "PATCH_REJECTED" });
     return { status: "REFUSED", reason };
   };
@@ -86,37 +88,64 @@ export function validateEvidence(proposal: unknown, built: ReadyContext, observe
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
-  const quoteSource = (ref: Extract<EvidenceRef, { kind: "USER_QUOTE" }>): SourceEvidence => {
+  type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal">;
+  // Failure-only identity telemetry. Hashes never participate in acceptance.
+  const traceFailure = (reason: string, code: EvidenceFailureDiagnostic["reason"], ref: EvidenceRef, site: Site, sourceMapStatus: EvidenceFailureDiagnostic["sourceMapStatus"] = "NOT_CHECKED"): never => {
+    try {
+      const turn = ref.kind === "USER_QUOTE" ? built.evidenceIndex[ref.turn] : undefined;
+      let matchCount = 0, from = 0;
+      if (ref.kind === "USER_QUOTE" && turn?.role === "USER") {
+        for (;;) { const at = turn.semanticView.indexOf(ref.quote, from); if (at < 0) break; matchCount++; from = at + ref.quote.length; }
+      }
+      const hash = (text: string) => createHash("sha256").update(text.normalize("NFC"), "utf8").digest("hex");
+      evidenceFailure = {
+        ...site, sourceAlias: ref.kind === "USER_QUOTE" ? `t${ref.turn}` : ref.ref,
+        expectedSourceRole: ref.kind === "USER_QUOTE" ? "USER" : "CONTEXT_FACT",
+        resolvedSourceRole: ref.kind === "USER_QUOTE" ? turn?.role ?? "UNKNOWN" : internal.facts.has(ref.ref) ? "CONTEXT_FACT" : "UNKNOWN",
+        sourceTurnOrdinal: ref.kind === "USER_QUOTE" ? ref.turn : null,
+        requestedOccurrence: ref.kind === "USER_QUOTE" ? ref.occurrence : null,
+        matchCount: ref.kind === "USER_QUOTE" && turn?.role === "USER" ? matchCount : null,
+        quoteBytes: ref.kind === "USER_QUOTE" ? new TextEncoder().encode(ref.quote).length : null,
+        quoteCodePoints: ref.kind === "USER_QUOTE" ? [...ref.quote].length : null,
+        quoteSha256: ref.kind === "USER_QUOTE" ? hash(ref.quote) : null,
+        sourceViewSha256: turn ? hash(turn.semanticView) : null,
+        sourceMapStatus, reason: code === "QUOTE_NOT_FOUND" && matchCount > 0 ? "QUOTE_OCCURRENCE_OUT_OF_RANGE" : code,
+      };
+    } catch { /* Telemetry must not change the public rejection or authority. */ }
+    return fail(reason);
+  };
+  const quoteSource = (ref: Extract<EvidenceRef, { kind: "USER_QUOTE" }>, site: Site): SourceEvidence => {
     const turn = built.evidenceIndex[ref.turn];
-    if (!turn || turn.role !== "USER") return fail("EVIDENCE_NOT_USER");
+    if (!turn || turn.role !== "USER") return traceFailure("EVIDENCE_NOT_USER", !turn ? "SOURCE_ALIAS_UNKNOWN" : "SOURCE_ROLE_NOT_USER", ref, site);
     let at = -1, from = 0;
     for (let count = 0; count < ref.occurrence; count++) {
       at = turn.semanticView.indexOf(ref.quote, from);
-      if (at < 0) return fail("EVIDENCE_QUOTE_NOT_FOUND");
+      if (at < 0) return traceFailure("EVIDENCE_QUOTE_NOT_FOUND", "QUOTE_NOT_FOUND", ref, site);
       from = at + ref.quote.length;
     }
     const start = [...turn.semanticView.slice(0, at)].length, end = start + [...ref.quote].length;
     const segments = turn.sourceMap.segments.filter(s => s.viewStart < end && s.viewEnd > start);
-    if (!segments.length || segments.some(s => s.kind === "CONTROL_REPLACEMENT")) return fail("EVIDENCE_REMOVED_SPAN");
+    if (!segments.length || segments.some(s => s.kind === "CONTROL_REPLACEMENT")) return traceFailure("EVIDENCE_REMOVED_SPAN", segments.length ? "QUOTE_REMOVED_CONTROL_SPAN" : "QUOTE_SOURCE_MAP_INVALID", ref, site, segments.length ? "REMOVED_CONTROL_SPAN" : "INVALID");
     const mapBoundary = (point: number, side: "start" | "end") => {
       const s = side === "start" ? segments[0] : segments.at(-1)!;
       const offset = point - s.viewStart;
-      if (offset % s.viewStride !== 0) return fail("EVIDENCE_NORMALIZATION_BOUNDARY");
+      if (offset % s.viewStride !== 0) return traceFailure("EVIDENCE_NORMALIZATION_BOUNDARY", "QUOTE_NORMALIZATION_MISMATCH", ref, site, "NORMALIZATION_BOUNDARY");
       return s.sourceStart + offset / s.viewStride * s.sourceStride;
     };
     const sourceStart = mapBoundary(start, "start"), sourceEnd = mapBoundary(end, "end");
-    if ([...turn.text].slice(sourceStart, sourceEnd).join("").normalize("NFC") !== ref.quote) return fail("EVIDENCE_SOURCE_MISMATCH");
+    if ([...turn.text].slice(sourceStart, sourceEnd).join("").normalize("NFC") !== ref.quote) return traceFailure("EVIDENCE_SOURCE_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", ref, site, "INVALID");
     return { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: ref.quote, occurrence: ref.occurrence, sourceSpan: { start: sourceStart, end: sourceEnd }, viewSpan: { start, end }, normalizationVersion: "nfc-codepoint-v1" };
   };
-  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: string, requested: unknown, editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
+  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: EvidenceFailureDiagnostic["field"], requested: unknown, path: Site["path"], editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
     const quotes: SourceEvidence[] = [];
     const factBindings: BoundContextFact[] = [];
-    for (const ref of refs) {
+    for (const [referenceOrdinal, ref] of refs.entries()) {
+      const site = { field, path, referenceOrdinal };
       if (ref.kind === "USER_QUOTE") {
-        quotes.push(quoteSource(ref));
+        quotes.push(quoteSource(ref, site));
       } else {
         const binding = internal.facts.get(ref.ref);
-        if (!binding || binding.supplied.scope !== scope || binding.supplied.field !== field || !equal(operand(binding.supplied.value), operand(requested))) return fail("EVIDENCE_FACT_SCOPE_OR_VALUE");
+        if (!binding || binding.supplied.scope !== scope || binding.supplied.field !== field || !equal(operand(binding.supplied.value), operand(requested))) return traceFailure("EVIDENCE_FACT_SCOPE_OR_VALUE", !binding ? "SOURCE_ALIAS_UNKNOWN" : binding.supplied.scope !== scope ? "SOURCE_SCOPE_MISMATCH" : "EVIDENCE_TARGET_MISMATCH", ref, site);
         factBindings.push(binding);
       }
     }
@@ -156,16 +185,16 @@ export function validateEvidence(proposal: unknown, built: ReadyContext, observe
   };
   try {
     const resolvedChanges: FieldChange[] = [];
-    const changeEvidence = value.changes.map(change => {
+    const changeEvidence = value.changes.map((change, index) => {
       const old = internal.snapshot?.slots[change.field].value ?? null;
-      const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, old !== null && value.dialogueAct === "EDIT");
+      const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && value.dialogueAct === "EDIT");
       const resolved = FieldChangeSchema.parse({ ...change, value: evidence.resolvedValue });
       if ((resolved.operation === "CLEAR" || (old !== null && !equal(old, resolved.value))) && !evidence.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
       if (resolved.field === "notes" && resolved.operation === "SET" && typeof old === "string" && !resolved.value.includes(old) && (value.dialogueAct !== "EDIT" || !evidence.current)) fail("NOTES_LOSS_REQUIRES_CLARIFICATION");
       resolvedChanges.push(resolved);
       return evidenceMetadata(evidence);
     });
-    const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, false, value.query.kind === "LIST") : null;
+    const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, ["query", "evidence"], false, value.query.kind === "LIST") : null;
     if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
     if (resolvedQuery?.kind !== "LIST" || !resolvedQuery.period) observeDownstream(observe, { stage: "LIST_RANGE", result: resolvedQuery?.kind === "LIST" ? "UNSPECIFIED" : "NOT_APPLICABLE", reason: "NONE" });
@@ -180,14 +209,14 @@ export function validateEvidence(proposal: unknown, built: ReadyContext, observe
         rangeIssue = { field: "queryRange", reason: support === "AMBIGUOUS" ? "AMBIGUOUS" : "MISSING", alternatives: [] };
       }
     }
-    const control = resolve(value.controlEvidence, "CONTROL", "operation", value.dialogueAct);
+    const control = resolve(value.controlEvidence, "CONTROL", "operation", value.dialogueAct, ["controlEvidence"]);
     if (value.controlEvidence.length && !control.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     const alternativeEvidence: ValidatedFieldEvidence[] = [];
-    let resolvedUncertainties = value.uncertainties.map(uncertainty => {
+    let resolvedUncertainties = value.uncertainties.map((uncertainty, index) => {
       const scope = uncertainty.field === "queryRange" ? "QUERY"
         : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
-      const alternatives = uncertainty.alternatives.map(alternative => {
-        const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value);
+      const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
+        const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value, ["uncertainties", index, "alternatives", alternativeIndex, "evidence"]);
         alternativeEvidence.push(evidenceMetadata(resolved));
         return { ...alternative, value: resolved.resolvedValue };
       });
