@@ -22,6 +22,7 @@ function wireFixture(value: unknown): unknown {
   const object = value as Record<string, unknown>, result = Object.fromEntries(Object.entries(object).map(([key, child]) => [key, key === "uncertainties" && Array.isArray(child)
     ? child.map((item: { field: unknown; reason: unknown; alternatives: unknown[] }) => ({ field: item.field, reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }))
     : wireFixture(child)]));
+  if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
   return result;
 }
@@ -40,7 +41,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("5d23f1dae10bb34bf4bfd5e43cec5d5932afe5d4b97511eba2734ff6d8fc3df5");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -81,8 +82,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow("CONTEXT_PROVIDER_WIRE_INVALID");
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-uncertainty-json-6");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-application-metadata-7");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("5d23f1dae10bb34bf4bfd5e43cec5d5932afe5d4b97511eba2734ff6d8fc3df5");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

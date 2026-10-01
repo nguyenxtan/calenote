@@ -1,5 +1,47 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 application-owned protocol metadata — 2026-10-01
+
+Owner authority `a27d87ef-3fd3-4996-bf41-d7d643e6ef0b` approves removing
+model authority over fixed application protocol metadata. R02 generation
+`gen-1790837999-kcGv6Kt43eEG7cwWUidN` returned HTTP200 but wire decoding
+rejected `schemaVersion` with `WIRE_SHAPE_INVALID`, actual type string. The
+exact invalid literal was intentionally not retained and remains UNKNOWN.
+Outbound wire-6, decoder and canonical schema all required the same literal
+`calenote-context-2`; no local version drift was found. This proves the
+application unnecessarily depended on model generation of runtime metadata,
+not which private upstream transformation caused the mismatched literal.
+
+Option A removes only the root `schemaVersion` from provider output and its
+encoder. The explicitly selected wire-7 decoder constructs that metadata from
+the unchanged canonical literal before canonical validation. Extra version
+fields reject, unknown canonical versions reject, and model output never
+selects a decoder. Required semantic keys, active discriminators, uncertainty
+JSON representation, evidence/privacy controls and canonical semantics remain
+unchanged. The prompt only clarifies that application metadata is not emitted.
+Other fixed nested tags express semantic variants, not protocol metadata;
+they remain strictly checked. Input/state/telemetry versions remain code-owned.
+
+Wire version: `google-gemini-2.5-flash-lite-vertex-eu-context-application-metadata-7`.
+Wire SHA256: `5d23f1dae10bb34bf4bfd5e43cec5d5932afe5d4b97511eba2734ff6d8fc3df5`.
+Prompt SHA256: `b794e4372d4993cbd3bb8f641cb9f8c83ac57f23cc799315825402711e6edfec`.
+Canonical SHA256 unchanged:
+`8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d`.
+Historical wire-6 sections below are preserved, not current wire-7 acceptance.
+Local/live review and campaign completion require separate fresh evidence.
+
+R02 continuation is a fresh source-bound ledger, not reopening the stopped
+wire-6 ledger. Historical R01 remains separately attributed to its old source
+and wire version. Reuse requires an ancestor source, unchanged downstream
+semantics and all three frozen manifests, exact successful R01 application
+outcomes, and reviewed ledger/response/application artifact hashes. The new
+ledger binds the prefix proof; later FULL admission rechecks its integrity.
+Current measurements cover R02 onward (31 scripts/82 turns/74 healthy calls),
+including all canonical repeats and synthetic fault controls. A composite PILOT
+PASS requires that entire suffix plus the two previously accepted R01 turns;
+it does not relabel historical responses as wire-7 validations or new calls.
+FULL, if admitted, still executes all 80 canonical scripts under the new wire.
+
 ## T11 inactive provider-wire padding policy — 2026-10-01
 
 Owner authority `26b5a178-f64e-4be9-b917-e91d2c417aac` approves treating

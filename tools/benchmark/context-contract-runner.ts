@@ -1,5 +1,5 @@
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
@@ -25,7 +25,72 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
-  httpRequestCount?: () => number; expiresAt?: number; }
+  httpRequestCount?: () => number; expiresAt?: number;
+  pilotPrefix?: { directory: string; ledgerHash: string; responseDigest: string; applicationDigest: string }; }
+
+/** R01 is an independent script, not clarification state for R02. Carry only
+ * its reviewed outcome evidence, never a model payload or persisted context.
+ * Any change to downstream application semantics invalidates this reuse. */
+function verifyPilotPrefix(input: ObservableExecution, root: string, admitted: ReturnType<typeof admitCanonicalCampaign>) {
+  if (!input.pilotPrefix) return null;
+  const fail = () => { throw new Error("INVALID_PILOT_PREFIX"); };
+  if (input.profile !== "PILOT" || resolve(input.pilotPrefix.directory) === resolve(input.directory)
+    || !/^[a-f0-9]{64}$/u.test(input.pilotPrefix.ledgerHash)) return fail();
+  const rows = readCampaignLedger(input.pilotPrefix.directory), begin = rows[0], last = rows.at(-1);
+  if (begin?.event !== "BEGIN" || begin.profile !== "PILOT" || begin.executionKind || !begin.observableAdmission
+    || last?.event !== "STOP" || last.hash !== input.pilotPrefix.ledgerHash || last.reason !== "PROVIDER_ADMISSION_FAILED"
+    || !rows.some(row => row.event === "CANARY_PASS") || rows.filter(row => row.event === "DISPATCH").length !== 3
+    || admitted[0]?.executionId !== "R01" || admitted[0].turns.length !== 2 || admitted[0].turns.some(t => (t.actionsAfter?.length ?? 0) > 0)
+    || admitted[1]?.executionId !== "R02" || !/^[a-f0-9]{40}$/u.test(begin.sourceSha)) return fail();
+  let historicalWireVersion: string | undefined;
+  try {
+    execFileSync("git", ["-C", root, "merge-base", "--is-ancestor", begin.sourceSha, input.sourceSha]);
+    const changed = execFileSync("git", ["-C", root, "diff", "--name-only", begin.sourceSha, input.sourceSha], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+    // Only this metadata correction may reuse R01. No generic cross-source
+    // resume: semantic service, evidence, merge, query, fixtures and config
+    // changes all fail closed, including superficially equivalent edits.
+    const allowed = new Set(["src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts",
+      "src/modules/conversation/context-contract/prompt.ts", "tools/benchmark/context-contract-runner.ts", "tools/benchmark/context-contract-live.ts"]);
+    if (changed.some(path => !allowed.has(path) && !path.endsWith(".test.ts") && !path.startsWith("docs/"))) return fail();
+    historicalWireVersion = begin.sourceSha === input.sourceSha ? googleLiteEuContextWireSchema().version
+      : execFileSync("git", ["-C", root, "show", `${begin.sourceSha}:src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts`], { encoding: "utf8" })
+        .match(/export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "([A-Za-z0-9._-]{1,160})" as const;/u)?.[1];
+    if (!historicalWireVersion) return fail();
+    for (const name of ["regressions", "development", "heldout"]) {
+      const path = `src/modules/conversation/context-contract/benchmark/${name}.json`;
+      if (execFileSync("git", ["-C", root, "show", `${begin.sourceSha}:${path}`], { encoding: "utf8" }) !== readFileSync(join(root, path), "utf8")) return fail();
+    }
+  } catch { return fail(); }
+  const responseText = readFileSync(join(input.pilotPrefix.directory, "responses.json"), "utf8");
+  const applicationText = readFileSync(join(input.pilotPrefix.directory, "application-evidence.json"), "utf8");
+  if (responseText.length > 65536 || applicationText.length > 65536
+    || digest(responseText) !== input.pilotPrefix.responseDigest || digest(applicationText) !== input.pilotPrefix.applicationDigest) return fail();
+  const responses = JSON.parse(responseText) as ResponseEvidence[], application = JSON.parse(applicationText) as ApplicationTurnEvidence[];
+  if (!Array.isArray(responses) || responses.length !== 3 || !Array.isArray(application) || application.length !== 3) return fail();
+  for (let i = 0; i < 2; i++) {
+    const response = responses[i], turn = application[i];
+    if (response.fixtureId !== "R01" || response.turnIndex !== i || response.status !== "SUCCESS" || response.httpStatus !== 200
+      || response.canonicalSchemaDigest !== digest(JSON.stringify(InterpretationJsonSchema))
+      || response.providerWireSchemaVersion !== historicalWireVersion
+      || !/^[a-f0-9]{64}$/u.test(response.providerWireSchemaDigest)
+      || response.providerWireSchemaDigest !== responses[0].providerWireSchemaDigest
+      || (begin.sourceSha === input.sourceSha && response.providerWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchema().schema)))
+      || response.provider?.model !== config.primary.model || response.provider.provider !== "Google"
+      || !response.usage || response.usage.promptTokens === undefined || response.usage.completionTokens === undefined
+      || response.usage.promptTokens > 12000 || response.usage.completionTokens > 1536
+      || response.rawResponseBytes === null || response.rawResponseBytes > 32768 || !response.provider.generationId
+      || !response.requestDigest || !rows.some(row => row.event === "FINISH" && row.reservationId === `call-${i + 1}`
+        && row.observedMicrounits === response.usage?.costMicrounits)) throw new Error("INVALID_PILOT_PREFIX_RESPONSE");
+    if (turn.fixtureId !== "R01" || turn.turnIndex !== i || turn.oracle !== "PASS" || !turn.fullSchemaValid || turn.mutations !== 0
+      || turn.status !== (i === 0 ? "CLARIFICATION_REQUESTED" : "REMINDERS_LISTED")
+      || turn.pendingField !== (i === 0 ? "queryRange" : null) || turn.listStoreReads !== i
+      || (i === 0 ? turn.queryRange !== null : JSON.stringify(turn.queryRange) !== JSON.stringify(admitted[0].turns[1].expect.queryRange))) return fail();
+  }
+  if (responses[2].fixtureId !== "R02" || responses[2].turnIndex !== 0 || responses[2].status !== "FAILURE") return fail();
+  return { directory: resolve(input.pilotPrefix.directory), scripts: 1, turns: 2, sourceSha: begin.sourceSha, provenanceDigest: begin.provenanceDigest,
+    ledgerHash: last.hash, responseDigest: digest(responseText), applicationDigest: digest(applicationText),
+    historicalWireSchemaVersion: responses[0].providerWireSchemaVersion, historicalWireSchemaDigest: responses[0].providerWireSchemaDigest };
+}
 
 /** Tool-only executor. Live entry validates authority first; tests replace HTTP,
  * never the actual application interpretation, storage or confirmation path. */
@@ -38,14 +103,18 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
   const now = input.now ?? Date.now, startedAt = now(), root = input.root ?? process.cwd();
   const deadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
-  appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
-    ...(replayOnly ? { executionKind: "R01_REPLAY" as const } : {}),
-    provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
-    cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: deadline });
   const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
     (JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest).cases) };
   const admitted = admitCanonicalCampaign(manifest, input.profile);
-  const planned = replayOnly ? admitted.filter(script => script.executionId === "R01") : admitted;
+  const pilotPrefix = verifyPilotPrefix(input, root, admitted);
+  if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
+  appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
+    ...(replayOnly ? { executionKind: "R01_REPLAY" as const } : {}),
+    ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
+    provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
+    cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: deadline });
+  if (pilotPrefix) writeFileSync(join(input.directory, "pilot-prefix-proof.json"), JSON.stringify(pilotPrefix), { mode: 0o600 });
+  const planned = replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
   const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: index }] : []));
   if (replayOnly && (planned.length !== 1 || planned[0].turns.length !== 2)) throw new Error("R01_MANIFEST_MISMATCH");
   let offlineSeedExecutions = 0;
@@ -67,9 +136,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const actual = createContextContractGateway(config, async (request, options) => {
     if (replayOnly && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "f1dfa650af32c63e80122addff2443d836175cb6ec0bce187bdf095fa4efada8"
+    if (digest(request.messages[0].content) !== "b794e4372d4993cbd3bb8f641cb9f8c83ac57f23cc799315825402711e6edfec"
       || canonicalSchemaDigest !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06"
+    if (providerWireSchemaDigest !== "5d23f1dae10bb34bf4bfd5e43cec5d5932afe5d4b97511eba2734ff6d8fc3df5"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
@@ -152,6 +221,12 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
         if (stopped()) throw new Error("CAMPAIGN_STOPPED");
       } });
     score = replayOnly ? scoreContextCampaign([{ ...planned[0], turns: [planned[0].turns[1]] }], [{ ...observations[0], turns: [observations[0].turns[1]] }]) : scoreContextCampaign(planned, observations);
+    // Report suffix measurements as suffix measurements. The composite gate
+    // requires every suffix script plus the separately verified historical R01;
+    // historical calls are never counted as current-source/current-wire calls.
+    if (pilotPrefix) score = { ...score, profile: "PILOT", gate: planned.length === admitted.length - 1
+      && score.passedScripts === planned.length && score.healthyFullSchemaValid === score.healthyPlanned
+      && score.detailPassed === score.detailPlanned && score.failedMandatory.length === 0 && score.safetyFailures === 0 ? "PASS" : "FAIL" };
     const scopedReplayPassed = replayOnly && score.passedTurns === 1 && score.healthyFullSchemaValid === 1 && score.detailPassed === score.detailPlanned && score.safetyFailures === 0 && score.failedMandatory.length === 0;
     if ((!scopedReplayPassed && score.gate !== "PASS") || !canaryPassed || score.actualDispatches !== httpCount() || applicationLlmCalls !== httpCount()) stop("CAMPAIGN_GATE_FAILED");
     else completeCampaign(input.directory, { runId: input.runId, at: now() });
@@ -159,6 +234,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
+    ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
     actualProviderCalls: httpCount(), responses, applicationEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
     syntheticFaultTurnsCompleted, providerReportedUsdTotal: responses.reduce((sum, r) => sum + (r.usage?.reportedCostUsd ?? 0), 0),
@@ -173,14 +249,14 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
 
 /** No credential is read until exact authorization and clean source are checked;
  * BEGIN and the conservative reservations precede the first credentialed HTTP. */
-export async function runAuthorizedContextCampaign(intent: FutureLiveIntent, readSecret: () => string) {
+export async function runAuthorizedContextCampaign(intent: FutureLiveIntent, readSecret: () => string, pilotPrefix?: ObservableExecution["pilotPrefix"]) {
   const authorization = admitFutureLiveIntent(intent);
   if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8" }).trim()) throw new Error("SOURCE_NOT_CLEAN");
   const directory = join(authorization.campaignRoot, intent.profile);
   mkdirSync(authorization.campaignRoot, { recursive: true, mode: 0o700 }); mkdirSync(directory, { mode: 0o700 });
   let transport: SemanticTransport | undefined;
   let requests = 0;
-  return executeObservableCampaign({ ...authorization, directory, root: intent.root, httpRequestCount: () => requests, transport: (request, options) => {
+  return executeObservableCampaign({ ...authorization, directory, root: intent.root, pilotPrefix, httpRequestCount: () => requests, transport: (request, options) => {
     transport ??= createContextHttpTransport(readSecret(), async (url, init) => {
       if (Date.now() >= authorization.expiresAt || init?.signal?.aborted) throw new Error("AUTHORIZATION_EXPIRED");
       requests++; return fetch(url, init);

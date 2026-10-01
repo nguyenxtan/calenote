@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import * as runner from "./context-contract-runner";
 import { frozenContextProposal } from "./context-contract-fixtures";
 import { readCampaignLedger } from "./context-contract-live";
@@ -12,6 +13,94 @@ import type { ContextInput } from "../../src/modules/conversation/context-contra
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContext, parseGoogleLiteEuContextSections } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+
+it("source-bound R02 continuation preserves the stopped R01 ledger and dispatches R02 first", async () => {
+  const previous = mkdtempSync(join(tmpdir(), "context-prefix-old-")), next = mkdtempSync(join(tmpdir(), "context-prefix-new-"));
+  try {
+    let priorCalls = 0;
+    const source = preflightContextCampaign({ root: process.cwd() });
+    const prior = await runner.executeObservableCampaign({ directory: previous, sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest, runId: "prefix",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async request => {
+        const n = priorCalls++;
+        const context = JSON.parse(request.messages[1].content) as ContextInput;
+        const proposal = n < 2 ? encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", n)) : { schemaVersion: "wrong" };
+        const body = JSON.stringify({ model: request.model, provider: "Google", id: "gen-synthetic-prefix", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(proposal) } }] });
+        return { status: 200, body, rawResponseBytes: new TextEncoder().encode(body).byteLength };
+      } });
+    expect(prior.applicationLlmCalls).toBe(3);
+    expect(prior.applicationEvidence.slice(0, 2).map(t => t.oracle)).toEqual(["PASS", "PASS"]);
+    expect(prior.applicationEvidence[1]).toMatchObject({ queryRange: { start: 1788195600000, end: 1790787600000 }, listStoreReads: 1 });
+    expect(prior.responses[0]).toMatchObject({ fixtureId: "R01", turnIndex: 0, status: "SUCCESS", httpStatus: 200,
+      provider: { model: "google/gemini-2.5-flash-lite", provider: "Google" }, usage: { promptTokens: 100, completionTokens: 100 }, rawResponseBytes: expect.any(Number) });
+    expect(readCampaignLedger(previous).at(-1)).toMatchObject({ event: "STOP", reason: "PROVIDER_ADMISSION_FAILED" });
+    expect(readCampaignLedger(previous).some(row => row.event === "CANARY_PASS")).toBe(true);
+    const before = readFileSync(join(previous, "campaign.jsonl"), "utf8");
+    const hash = (file: string) => createHash("sha256").update(readFileSync(join(previous, file))).digest("hex");
+    const pilotPrefix = { directory: previous, ledgerHash: readCampaignLedger(previous).at(-1)!.hash,
+      responseDigest: hash("responses.json"), applicationDigest: hash("application-evidence.json") };
+    let calls = 0;
+    const result = await runner.executeObservableCampaign({ directory: next, sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest, runId: "suffix",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1400000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      pilotPrefix,
+      transport: async request => {
+        calls++;
+        expect(JSON.parse(request.messages[1].content).turns.at(-1).text).toBe("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+        return { status: 400, body: "{}" };
+      } });
+    expect(calls).toBe(1);
+    expect(result.responses[0]).toMatchObject({ fixtureId: "R02", turnIndex: 0 });
+    expect(result).toMatchObject({ pilotPrefix: { scripts: 1, turns: 2, sourceSha: source.sourceSha }, status: "STOP" });
+    expect(readFileSync(join(previous, "campaign.jsonl"), "utf8")).toBe(before);
+    await expect(runner.executeObservableCampaign({ directory: mkdtempSync(join(next, "bad-")), sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest,
+      runId: "bad", profile: "FULL", cumulativeAuthorizedMicrounits: 1000000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      pilotPrefix: { ...pilotPrefix, ledgerHash: "0".repeat(64) }, transport: async () => { throw new Error("MUST_NOT_DISPATCH"); } })).rejects.toThrow("INVALID_PILOT_PREFIX");
+    for (const key of ["ledgerHash", "responseDigest", "applicationDigest"] as const) {
+      await expect(runner.executeObservableCampaign({ directory: mkdtempSync(join(next, "tamper-")), sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest,
+        runId: "tamper", profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0,
+        pilotPrefix: { ...pilotPrefix, [key]: "0".repeat(64) }, transport: async () => { throw new Error("MUST_NOT_DISPATCH"); } })).rejects.toThrow("INVALID_PILOT_PREFIX");
+    }
+    const responsePath = join(previous, "responses.json"), originalResponses = readFileSync(responsePath, "utf8");
+    const relabelled = JSON.parse(originalResponses);
+    for (const response of relabelled.slice(0, 2)) response.providerWireSchemaVersion = "wire-relabelled";
+    writeFileSync(responsePath, JSON.stringify(relabelled));
+    await expect(runner.executeObservableCampaign({ directory: mkdtempSync(join(next, "relabel-")), sourceSha: source.sourceSha,
+      provenanceDigest: source.provenanceDigest, runId: "relabel", profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000,
+      cumulativeRetainedMicrounits: 0, now: () => 100, pilotPrefix: { ...pilotPrefix, responseDigest: hash("responses.json") },
+      transport: async () => { throw new Error("MUST_NOT_DISPATCH"); } })).rejects.toThrow("INVALID_PILOT_PREFIX_RESPONSE");
+    writeFileSync(responsePath, originalResponses);
+    const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
+      (JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`, "utf8")) as ContextManifest).cases) };
+    const healthy = admitCanonicalCampaign(manifest, "PILOT").slice(1).flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" ? [{ id: script.executionId, index }] : []));
+    let suffixCalls = 0;
+    const completedDirectory = join(next, "PILOT"); mkdirSync(completedDirectory);
+    const completed = await runner.executeObservableCampaign({ directory: completedDirectory, sourceSha: source.sourceSha,
+      provenanceDigest: source.provenanceDigest, runId: "complete", profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000,
+      cumulativeRetainedMicrounits: 0, now: () => 100, pilotPrefix, transport: async request => {
+        const item = healthy[suffixCalls++], context = JSON.parse(request.messages[1].content) as ContextInput;
+        return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-suffix-${suffixCalls}`,
+          usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop",
+            message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, item.id, item.index))) } }] }) };
+      } });
+    expect(completed).toMatchObject({ status: "PASS", measuredScope: "R02_ONWARD", compositePilotScripts: 32,
+      applicationLlmCalls: 74, providerHttpRequests: 74, score: { gate: "PASS", plannedScripts: 31, passedScripts: 31, plannedTurns: 82 } });
+    expect(completed.responses.map(r => `${r.fixtureId}:${r.turnIndex}`)).toEqual(healthy.map(t => `${t.id}:${t.index}`));
+    expect(readFileSync(join(previous, "campaign.jsonl"), "utf8")).toBe(before);
+    const complete = readCampaignLedger(completedDirectory).at(-1)!;
+    const authorizationPath = join(next, "full-authority.json");
+    writeFileSync(authorizationPath, JSON.stringify({ version: "context-contract-live-2", method: "OBSERVABLE_CANARY", campaignRoot: next,
+      pilotLedgerHash: complete.hash, sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest, profile: "FULL", runId: "full",
+      approvedAt: 100, expiresAt: 1000, cumulativeAuthorizedMicrounits: 1000000, cumulativeRetainedMicrounits: completed.retainedMicrounits }));
+    const intent = { root: process.cwd(), enableLive: true, authorizationPath, profile: "FULL" as const, runId: "full", now: 101 };
+    expect(admitFutureLiveIntent(intent)).toMatchObject({ profile: "FULL" });
+    const prefixProofPath = join(completedDirectory, "pilot-prefix-proof.json");
+    const proofText = readFileSync(prefixProofPath, "utf8");
+    writeFileSync(prefixProofPath, "{}");
+    expect(() => admitFutureLiveIntent(intent)).toThrow("PILOT_PREFIX_PROOF_CHANGED");
+    writeFileSync(prefixProofPath, proofText);
+  } finally { rmSync(previous, { recursive: true, force: true }); rmSync(next, { recursive: true, force: true }); }
+});
 
 it("discards inactive padding through R01 and persists actual reads/mutations before a later pilot stop", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-r01-turn-evidence-")); let calls = 0;
@@ -225,8 +314,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
-      providerWireSchemaDigest: "e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-uncertainty-json-6" });
+      providerWireSchemaDigest: "5d23f1dae10bb34bf4bfd5e43cec5d5932afe5d4b97511eba2734ff6d8fc3df5",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-application-metadata-7" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

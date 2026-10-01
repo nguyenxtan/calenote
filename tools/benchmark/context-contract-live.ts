@@ -108,6 +108,20 @@ export function admitFutureLiveIntent(input: FutureLiveIntent) {
     if (!begin || begin.event !== "BEGIN" || begin.executionKind === "R01_REPLAY" || begin.profile !== "PILOT" || begin.sourceSha !== preflight.sourceSha
       || begin.provenanceDigest !== preflight.provenanceDigest || !last || last.event !== "COMPLETE" || last.gate !== "PASS"
       || last.hash !== record.pilotLedgerHash || last.retainedMicrounits !== record.cumulativeRetainedMicrounits) throw new Error("PILOT_PASS_REQUIRED");
+    if (begin.executionKind === "R02_CONTINUATION") {
+      const directory = join(record.campaignRoot as string, "PILOT");
+      const text = readFileSync(join(directory, "pilot-prefix-proof.json"), "utf8");
+      if (hash(text) !== begin.pilotPrefixDigest) throw new Error("PILOT_PREFIX_PROOF_CHANGED");
+      const proof = JSON.parse(text) as { directory: string; ledgerHash: string; responseDigest: string; applicationDigest: string };
+      if (readCampaignLedger(proof.directory).at(-1)?.hash !== proof.ledgerHash
+        || hash(readFileSync(join(proof.directory, "responses.json"))) !== proof.responseDigest
+        || hash(readFileSync(join(proof.directory, "application-evidence.json"))) !== proof.applicationDigest) throw new Error("PILOT_PREFIX_PROOF_CHANGED");
+      const report = JSON.parse(readFileSync(join(directory, "report.json"), "utf8"));
+      if (report.status !== "PASS" || report.measuredScope !== "R02_ONWARD" || report.compositePilotScripts !== preflight.pilot.scripts
+        || report.score?.gate !== "PASS" || report.score?.plannedScripts !== preflight.pilot.scripts - 1
+        || report.score?.passedScripts !== preflight.pilot.scripts - 1
+        || report.applicationLlmCalls !== rows.filter(r => r.event === "DISPATCH").length) throw new Error("PILOT_PASS_REQUIRED");
+    }
   }
   return record as unknown as ObservableAuthorization;
 }
@@ -155,7 +169,7 @@ export function admitR01ReplayIntent(input: FutureLiveIntent): R01ReplayAuthoriz
 }
 
 type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
-  executionKind?: "R01_REPLAY";
+  executionKind?: "R01_REPLAY" | "R02_CONTINUATION"; pilotPrefixDigest?: string;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; startedAt: number; observableAdmission?: boolean; expiresAt?: number };
 type Reserve = { event: "RESERVE"; runId: string; profile: CampaignProfile; provenanceDigest: string;
   reservationId: string; maximumMicrounits: number; at: number };
