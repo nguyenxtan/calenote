@@ -64,7 +64,7 @@ export function preflightContextCampaign({ root }: PreflightOptions) {
   const corpus: ContextManifest = { version: "context-contract-corpus-1", cases: manifests.flatMap(m => m.cases) };
   const pilot = admitCanonicalCampaign(corpus, "PILOT"), full = admitCanonicalCampaign(corpus, "FULL");
   return { sourceSha, routeAdmission: CONTEXT_ROUTE_ADMISSION, liveEligible: false, networkRequests: 0, secretReads: 0,
-    pilot: { scripts: pilot.length, turns: pilot.reduce((n, c) => n + c.turns.length, 0), maxCalls: 192, maxMicrounits: 650000, maxMs: 1200000 },
+    pilot: { scripts: pilot.length, turns: pilot.reduce((n, c) => n + c.turns.length, 0), maxCalls: 192, maxMicrounits: 1000000, maxMs: 1200000 },
     full: { scripts: full.length, turns: full.reduce((n, c) => n + c.turns.length, 0), maxCalls: 480, maxMicrounits: 1000000, maxMs: 2700000 },
     provenanceDigest, digests };
 }
@@ -92,7 +92,7 @@ export function admitFutureLiveIntent(input: FutureLiveIntent) {
     || (record.approvedAt as number) < 0 || (record.approvedAt as number) > input.now
     || (record.expiresAt as number) <= input.now
     || !Number.isSafeInteger(record.cumulativeAuthorizedMicrounits)
-    || (record.cumulativeAuthorizedMicrounits as number) <= 0 || (record.cumulativeAuthorizedMicrounits as number) > 1650000
+    || (record.cumulativeAuthorizedMicrounits as number) <= 0 || (record.cumulativeAuthorizedMicrounits as number) > 2000000
     || !Number.isSafeInteger(record.cumulativeRetainedMicrounits)
     || (record.cumulativeRetainedMicrounits as number) < 0
     || (record.cumulativeRetainedMicrounits as number) > (record.cumulativeAuthorizedMicrounits as number)) throw new Error("INVALID_AUTHORIZATION");
@@ -197,7 +197,7 @@ function appendUnlocked(directory: string, event: CampaignEvent): Stored {
     if (rows.length) throw new Error("CAMPAIGN_ALREADY_STARTED");
     if (!/^[0-9a-f]{40}$/u.test(event.sourceSha) || !/^[0-9a-f]{64}$/u.test(event.provenanceDigest)
       || !Number.isSafeInteger(event.cumulativeAuthorizedMicrounits) || event.cumulativeAuthorizedMicrounits <= 0
-      || event.cumulativeAuthorizedMicrounits > 1650000
+      || event.cumulativeAuthorizedMicrounits > 2000000
       || !Number.isSafeInteger(event.cumulativeRetainedMicrounits) || event.cumulativeRetainedMicrounits < 0
       || event.cumulativeRetainedMicrounits > event.cumulativeAuthorizedMicrounits
       || !Number.isSafeInteger(event.startedAt) || event.startedAt < 0
@@ -230,7 +230,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "AUTHORIZATION_EXPIRED" });
     throw new Error("AUTHORIZATION_EXPIRED");
   }
-  const cap = input.profile === "PILOT" ? { calls: 192, cost: 650000, ms: 1200000 } : { calls: 480, cost: 1000000, ms: 2700000 };
+  const cap = input.profile === "PILOT" ? { calls: 192, cost: 1000000, ms: 1200000 } : { calls: 480, cost: 1000000, ms: 2700000 };
   const reservations = rows.filter((r): r is Stored & Reserve => r.event === "RESERVE");
   if (begin.observableAdmission && rows.some(r => r.event === "DISPATCH") && !rows.some(r => r.event === "CANARY_PASS")) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "CANARY_UNSETTLED" });

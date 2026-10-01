@@ -6,6 +6,21 @@ import { dirname, join } from "node:path";
 import { admitFutureLiveIntent, appendCampaignEvent, computeContextSourceFreeze, finishCampaignCall, markCampaignDispatched, preflightContextCampaign, readCampaignLedger, reserveCampaignCall } from "./context-contract-live";
 import * as live from "./context-contract-live";
 
+it("owner-amended pilot cap admits one dollar but retains unknown reservations at the boundary", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-amended-pilot-"));
+  try {
+    const provenanceDigest = "b".repeat(64);
+    appendCampaignEvent(dir, { event: "BEGIN", runId: "amended", sourceSha: "a".repeat(40), profile: "PILOT", provenanceDigest,
+      cumulativeAuthorizedMicrounits: 1000000, cumulativeRetainedMicrounits: 0, startedAt: 0 });
+    const reserve = (reservationId: string, maximumMicrounits: number) => reserveCampaignCall(dir, {
+      runId: "amended", profile: "PILOT", provenanceDigest, reservationId, maximumMicrounits, now: 1, startedAt: 0 });
+    expect(reserve("historical-unknown", 634584)).toMatchObject({ status: "RESERVED" });
+    expect(reserve("new-authority", 365416)).toMatchObject({ status: "RESERVED" });
+    expect(reserve("over-cap", 1)).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
+    expect(readCampaignLedger(dir).filter(row => row.event === "RESERVE")).toHaveLength(2);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 it("known actual charges release financial exposure while uncertain dispatches stop the observable campaign", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-observable-ledger-"));
   try {
@@ -65,7 +80,7 @@ it("default preflight reads neither credential nor network and refuses unverifie
   expect(result.liveEligible).toBe(false);
   expect(reads).toBe(0);
   expect(requests).toBe(0);
-  expect(result.pilot).toMatchObject({ maxMicrounits: 650000, maxCalls: 192, maxMs: 1200000 });
+  expect(result.pilot).toMatchObject({ maxMicrounits: 1000000, maxCalls: 192, maxMs: 1200000 });
   expect(result.full).toMatchObject({ maxMicrounits: 1000000, maxCalls: 480, maxMs: 2700000 });
 });
 it("calendar data, all executed migrations, fixture and loader are frozen and a dirty dependency changes the digest", () => {
@@ -117,7 +132,7 @@ it("pilot stops before 193rd call or cost overrun and never discounts uncertain 
   try {
     const digest = "b".repeat(64);
     appendCampaignEvent(dir, { event: "BEGIN", runId: "one", sourceSha: "a".repeat(40), profile: "PILOT", provenanceDigest: digest, cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 0 });
-    expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: digest, reservationId: "r1", maximumMicrounits: 649000, now: 1, startedAt: 0 })).toMatchObject({ status: "RESERVED" });
+    expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: digest, reservationId: "r1", maximumMicrounits: 999000, now: 1, startedAt: 0 })).toMatchObject({ status: "RESERVED" });
     expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: digest, reservationId: "r2", maximumMicrounits: 1815, now: 2, startedAt: 0 })).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
     expect(() => reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest: digest, reservationId: "r3", maximumMicrounits: 1, now: 1200000, startedAt: 0 })).toThrow(/STOPPED/u);
     expect(readCampaignLedger(dir).at(-1)).toMatchObject({ event: "STOP", reason: "COST_CAP" });
@@ -141,7 +156,7 @@ it("cap rejection appends a durable terminal STOP and prevents cheaper retry or 
       cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 0 });
     expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest, reservationId: "r1", maximumMicrounits: 1, now: 1, startedAt: 0 })).toMatchObject({ status: "RESERVED" });
     markCampaignDispatched(dir, { runId: "one", reservationId: "r1", at: 1 });
-    expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest, reservationId: "too-large", maximumMicrounits: 650000, now: 2, startedAt: 0 })).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
+    expect(reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest, reservationId: "too-large", maximumMicrounits: 1000000, now: 2, startedAt: 0 })).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
     expect(readCampaignLedger(dir).map(row => row.event)).toEqual(["BEGIN", "RESERVE", "DISPATCH", "STOP"]);
     expect(() => reserveCampaignCall(dir, { runId: "one", profile: "PILOT", provenanceDigest, reservationId: "cheap", maximumMicrounits: 1, now: 3, startedAt: 0 })).toThrow(/STOPPED/u);
     expect(() => markCampaignDispatched(dir, { runId: "one", reservationId: "r1", at: 3 })).toThrow();
@@ -149,13 +164,13 @@ it("cap rejection appends a durable terminal STOP and prevents cheaper retry or 
     expect(readCampaignLedger(dir).map(row => row.event)).toEqual(["BEGIN", "RESERVE", "DISPATCH", "STOP", "FINISH"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
-it("one campaign cannot authorize over the combined USD 1.65 ceiling or bypass guarded transitions", () => {
+it("one campaign cannot authorize over the combined USD 2.00 ceiling or bypass guarded transitions", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-contract-ledger-"));
   try {
     const begin = { event: "BEGIN" as const, runId: "one", sourceSha: "a".repeat(40), profile: "PILOT" as const,
-      provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 1650001, cumulativeRetainedMicrounits: 0, startedAt: 0 };
+      provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 2000001, cumulativeRetainedMicrounits: 0, startedAt: 0 };
     expect(() => appendCampaignEvent(dir, begin)).toThrow(/INVALID_CUMULATIVE_AUTHORITY/u);
-    appendCampaignEvent(dir, { ...begin, cumulativeAuthorizedMicrounits: 1650000 });
+    appendCampaignEvent(dir, { ...begin, cumulativeAuthorizedMicrounits: 2000000 });
     expect(() => appendCampaignEvent(dir, { event: "RESERVE", runId: "one", profile: "PILOT", provenanceDigest: begin.provenanceDigest,
       reservationId: "r1", maximumMicrounits: 1, at: 1 })).toThrow(/USE_GUARDED_CAMPAIGN_TRANSITION/u);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -174,7 +189,7 @@ it("observable live intent requires explicit source-bound authority and a fixed 
     expect(() => admitFutureLiveIntent({ ...input, enableLive: false })).toThrow(/EXPLICIT_ENABLE_REQUIRED/u);
     expect(() => admitFutureLiveIntent({ ...input, profile: "FULL" })).toThrow(/AUTHORIZATION_MISMATCH/u);
     expect(admitFutureLiveIntent(input)).toMatchObject({ campaignRoot: dir, method: "OBSERVABLE_CANARY" });
-    writeFileSync(authorizationPath, JSON.stringify({ ...authorization, cumulativeAuthorizedMicrounits: 1650001 }));
+    writeFileSync(authorizationPath, JSON.stringify({ ...authorization, cumulativeAuthorizedMicrounits: 2000001 }));
     expect(() => admitFutureLiveIntent(input)).toThrow(/INVALID_AUTHORIZATION/u);
     writeFileSync(authorizationPath, JSON.stringify({ ...authorization, cumulativeRetainedMicrounits: 421898 }));
     expect(() => admitFutureLiveIntent(input)).toThrow(/INVALID_PILOT_AUTHORITY/u);
@@ -183,7 +198,7 @@ it("observable live intent requires explicit source-bound authority and a fixed 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-it("pilot retains unknown historical exposure and admits a normal call up to the USD 0.65 ceiling", () => {
+it("pilot retains unknown historical exposure and admits a normal call up to the USD 1.00 ceiling", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-contract-ledger-"));
   try {
     const provenanceDigest = "b".repeat(64);
@@ -195,7 +210,7 @@ it("pilot retains unknown historical exposure and admits a normal call up to the
     markCampaignDispatched(dir, { runId: "one", reservationId: "historical", at: 1 });
     finishCampaignCall(dir, { runId: "one", reservationId: "historical", at: 2, observedMicrounits: null });
     expect(reserve("normal", 105472, 3).status).toBe("RESERVED");
-    expect(reserve("remaining", 122630, 4).status).toBe("RESERVED");
+    expect(reserve("remaining", 472630, 4).status).toBe("RESERVED");
     expect(reserve("over", 1, 5)).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
     expect(readCampaignLedger(dir).find(row => row.event === "FINISH")).toMatchObject({ observedMicrounits: null });
   } finally { rmSync(dir, { recursive: true, force: true }); }
