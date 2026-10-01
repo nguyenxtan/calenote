@@ -135,14 +135,30 @@ Scheduling authority does **not** move to the LLM. Epochs, timezone selection,
 calendar conversion, date arithmetic, query bounds, occurrence expansion, access
 control, confirmation, storage and delivery remain application-owned.
 Existing scanner modules may remain for legacy paths/tests but must not veto or
-silently reinterpret the new conversational path. Invalid new-contract output
+silently reinterpret the new conversational path. The T11 owner amendment permits
+a bounded deterministic LIST temporal-range evidence verifier whose sole
+purpose is to validate whether an already-proposed query range is grounded in
+user evidence. It is the only exception: no competing general-language parser
+or reminder-field extraction is authorized. At the existing source-map evidence
+boundary it checks the candidate against scoped USER source, including surrounding
+negation, quotation and materially conflicting ranges. Unsupported evidence leaves
+LIST period null with queryRange clarification; ambiguous evidence requires
+queryRange disambiguation. Neither may reach the list store. No default period,
+model authority flag, schema weakening or legacy-parser fallback is permitted.
+An exact QUERY fact may continue an already pending LIST query only after its
+original mapped USER source is re-verified; the historical EXPLICIT_USER stamp
+alone does not authorize inheritance. Source scope and receipt anchoring remain
+authoritative. Trusted deterministic application/API operations retain their own
+authorization. Invalid new-contract output
 must not fall back to a legacy parser with different semantics.
 
 Structural/evidence validation, allowed fields/operations, authorization,
 state/version checks, calendar arithmetic, recurrence expansion, product policy,
 confirmation and idempotency are retained; they are not competing language
 interpretation. Every rejection has a reason code. Valid JSON plus a matching
-quote can still be semantically wrong: never claim these checks prove meaning.
+quote can still be semantically wrong: never claim these checks prove general
+meaning. The bounded LIST verifier proves only its explicitly supported temporal
+productions for a particular candidate; unrecognized wording clarifies.
 The model cannot select another user's records, treat an assistant suggestion
 as user approval, or claim successful creation. Only a committed application
 result can cause a success acknowledgement. Do not request/store private

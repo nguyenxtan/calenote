@@ -2,6 +2,7 @@ import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./
 import { SemanticPatchProposalSchema, FieldChangeSchema, QueryOperandSchema, UncertaintySchema, SLOT_NAMES, type SemanticPatchProposal, type EvidenceRef, type FieldChange, type QueryOperand, type ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
+import { verifyListRangeEvidence } from "./list-range-evidence";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -156,10 +157,21 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
     });
     const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query) : null;
     if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
+    let rangeIssue: SemanticPatchProposal["uncertainties"][number] | null = null;
+    if (resolvedQuery?.kind === "LIST" && resolvedQuery.period) {
+      const inherited = value.query!.evidence.some(e => e.kind === "CONTEXT_FACT");
+      const scopedContinuation = built.input.pendingQuestion?.scope === "QUERY" && built.input.pendingQuestion.field === "queryRange" && value.continuation === "YES" && ["CONTINUE", "EDIT"].includes(value.dialogueAct);
+      const support = inherited && !scopedContinuation ? "UNSUPPORTED" : verifyListRangeEvidence({ candidateRange: resolvedQuery.period, evidence: query!.sources, turns: built.evidenceIndex, currentTurnId: built.evidenceIndex[built.input.currentTurn].id, referenceTime: query!.referenceTime });
+      if (support !== "SUPPORTED") {
+        resolvedQuery = { ...resolvedQuery, period: null };
+        rangeIssue = { field: "queryRange", reason: support === "AMBIGUOUS" ? "AMBIGUOUS" : "MISSING", alternatives: [] };
+      }
+    }
     const control = resolve(value.controlEvidence, "CONTROL", "operation", value.dialogueAct);
     if (value.controlEvidence.length && !control.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     const alternativeEvidence: ValidatedFieldEvidence[] = [];
-    const resolvedUncertainties = value.uncertainties.map(uncertainty => {
+    let resolvedUncertainties = value.uncertainties.map(uncertainty => {
       const scope = uncertainty.field === "queryRange" ? "QUERY"
         : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
       const alternatives = uncertainty.alternatives.map(alternative => {
@@ -169,11 +181,12 @@ export function validateEvidence(proposal: unknown, built: ReadyContext): Eviden
       });
       return UncertaintySchema.parse({ ...uncertainty, alternatives });
     });
+    if (rangeIssue) resolvedUncertainties = [...resolvedUncertainties.filter(u => u.field !== "queryRange"), rangeIssue];
     const patch: ValidatedPatch = freeze({
       [validatedPatchBrand]: true as const,
       proposal: value,
       resolvedChanges,
-      resolvedQuery: query ? QueryOperandSchema.parse(query.resolvedValue) : null,
+      resolvedQuery,
       resolvedUncertainties,
       queryReferenceTime: query?.referenceTime ?? null,
       changeEvidence,

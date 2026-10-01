@@ -203,7 +203,7 @@ describe("evidenced merge", () => {
   it("a_side_query_preserves_pending_request_operation_and_intent_uncertainties", () => {
     const state = request();
     state.ambiguities = [{ field: "operation", reason: "AMBIGUOUS", alternatives: [] }, { field: "intent", reason: "AMBIGUOUS", alternatives: [] }];
-    const result = mergePatch(state, patch(state, {}, { query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [] } }));
+    const result = mergePatch(state, patch(state, {}, { text: "tháng này", query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [] } }));
     expect(result.status).toBe("MERGED"); if (result.status !== "MERGED") return;
     expect(result.candidate.ambiguities).toEqual(state.ambiguities);
   });

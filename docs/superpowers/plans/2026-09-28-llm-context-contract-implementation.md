@@ -522,6 +522,22 @@ reserve the historical per-call amount from an unverified full-token premise.
 
 ### T11 — Separately authorized evaluation and compatible release
 
+Owner amendment (2026-10-01): before resuming R01, implement the bounded LIST-only
+temporal-range evidence verifier at the existing source-map evidence boundary.
+Verify every approved QueryPeriod/date-operand variant with explicit bounded
+productions, never infer reminder fields or intent. Unsupported/ambiguous ranges
+become period:null plus backend queryRange clarification before any list-store
+read. Re-prove historical QUERY source on scoped pending LIST continuation; do
+not trust old quote-only EXPLICIT_USER stamps. Preserve canonical validator,
+prompt, wire contract, frozen benchmark manifests/oracles, reminder ownership,
+receipt anchoring and the original 20-case RED diagnostic/history. Add permanent
+20-case regressions, THIS_WEEK attempts, valid explicit/range-only controls and
+source-context ambiguity/inheritance controls. Require focused T3/T5/T7/T10,
+full pnpm check, typecheck/lint/diff and one independent Critical=0/Important=0
+review before committing or resuming the previously authorized live sequence.
+Local correction evidence is recorded in the task-11-list-range-verifier report;
+it alone grants no live, release or deployment acceptance credit.
+
 **Depends:** T10/local review PASS and explicit next-gate authorizations. Not an automatic extension of implementation approval.
 
 **Modify later:** `docs/benchmarks/llm-context-contract-results.md`, `docs/runbooks/conversation-v2-release.md`, `docs/runbooks/cloudflare-deployment.md`, `docs/runbooks/zalo-production-acceptance.md`, `docs/architecture/current-state.md`; activation only `src/worker/index.ts`, `src/worker/v2-activation.test.ts`, `src/worker/composition-root.ts`/`.test.ts`, reviewed `wrangler.jsonc` and generated Worker types if needed. No new infrastructure. Respect legacy docs as historical evidence, not active-contract authority.

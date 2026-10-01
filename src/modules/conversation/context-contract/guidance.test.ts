@@ -77,14 +77,14 @@ describe("post-merge guidance ownership (pure T0–T3 path, not T7 dispatch proo
     expect(result.semantic.resolvedUncertainties).toMatchObject([{ field: "operation", reason }]);
     expect(result.effective).toEqual({ kind: "ASK_FOR_DISAMBIGUATION", field: "operation", reason });
   });
-  it("I1_resolved_query_retains_its_own_range_ambiguity_before_answer", () => {
+  it("I1_query_retains_its_own_range_ambiguity_before_resolution_or_answer", () => {
     const text = "tháng này hay tháng sau", state = request();
     const evidence = [{ kind: "USER_QUOTE" as const, turn: 1, quote: text, occurrence: 1 }];
     const semantic = patch(state, {}, { text, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence }, uncertainties: [{ field: "queryRange", reason: "AMBIGUOUS", alternatives: [{ value: { kind: "MONTH", offset: 0 }, evidence }, { value: { kind: "MONTH", offset: 1 }, evidence }] }] });
     const merge = mergePatch(state, semantic);
     const queryResolution = resolveQuery(semantic.resolvedQuery!, now, lunarCalendar);
     expect(merge.status).toBe("MERGED");
-    expect(queryResolution.status).toBe("RANGE");
+    expect(queryResolution).toEqual({ status: "CLARIFY", reason: "MISSING_RANGE" });
     const base = { merge, semantic, queryResolution };
     for (const queryResult of [undefined, { status: "RESULTS" as const, rows: [], hasMore: false, partialNotice: null, scopeLabel: "scope", calendarNotice: "Gregorian" }]) expect(computeEffectiveDirective({ ...base, queryResult })).toEqual({ kind: "ASK_FOR_DISAMBIGUATION", field: "queryRange", reason: "AMBIGUOUS" });
     expect(computeEffectiveDirective({ ...base, queryResult: { status: "UNAUTHORIZED", reason: "scope" } })).toEqual({ kind: "BACKEND_ONLY", reason: "FAILURE" });
