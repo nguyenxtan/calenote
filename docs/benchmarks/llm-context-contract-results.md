@@ -1,9 +1,24 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 pilot authorization amendment — 2026-10-01
+
+Owner authority `24f2bfbf-fe14-4c5b-80ba-67f84f2a0a63` increases the PILOT
+reservation ceiling to USD1.50. FULL remains USD1.00; the combined ceiling is
+USD2.50. Diagnostic authority remains separate at USD0.30. These are
+authorization ceilings, not observed spending.
+
+The preserved PILOT historical exposure is 951000 microunits, including
+UNKNOWN holds. The new leg may authorize only the remaining549000; a
+105472 reservation fits, leaving443528 until authoritative cost settlement.
+Historical ledgers and replay authorities remain immutable. No diagnostic or
+FULL authority transfers into PILOT. This amendment alone does not establish
+live R01, pilot, FULL, release, or production acceptance.
+
 ## T11 uncertainty state-limit isolation — 2026-10-01
 
 Owner authority `a1a07a22-7725-4d6d-a7b0-a9bb718faedc` adds USD0.05
-diagnostic-only, raising that campaign to USD0.30. PILOT/FULL remain USD1.00
+diagnostic-only, raising that campaign to USD0.30. At that checkpoint,
+PILOT/FULL remained USD1.00
 each; UNKNOWN reservations remain held and cannot transfer across campaigns.
 Historical local fixture results below are not live acceptance.
 
@@ -62,7 +77,7 @@ independently checked every unchanged non-uncertainty schema branch, derived
 adversarial controls and recomputed both campaigns' historical holds.
 A subsequent diagnostic
 must admit the complete committed wire before a production-shaped R01 canary.
-PILOT currently retains 951000 of 1000000 microunits, leaving49000, less than
+At that checkpoint PILOT retained 951000 of 1000000 microunits, leaving49000, less than
 the next production-shaped reservation105472. No borrowing from diagnostics
 or FULL is authorized; no production canary may dispatch past that gate.
 Production is untouched.
