@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CanonicalValidationDiagnostics } from "../conversation/context-contract/validation-diagnostics";
 import { LocalDateSchema, LocalTimeSchema, SEMANTIC_TIMEZONE, type ModelSemanticInterpretation } from "../semantic/contracts";
 import { SemanticContextSlotsSchema } from "../semantic/context-store";
 import { TemporalEvidenceSchema } from "../semantic/reconciliation";
@@ -71,6 +72,13 @@ export interface SemanticFailureDiagnostics {
   traceId?: string;
   upstreamProvider?: string;
 }
+export interface CanonicalResponseDiagnostics {
+  state: "VALIDATION_FAILED" | "WIRE_DECODE_FAILED" | "OVERSIZED"; schemaVersion: "calenote-context-2";
+  providerWireSchemaVersion: string; payloadByteCount: number; payloadSha256: string | null;
+  inputRepresentation?: "CANONICAL" | "PROVIDER_WIRE"; validation?: CanonicalValidationDiagnostics;
+  wireValidation?: CanonicalValidationDiagnostics;
+  payloadByteCountIsLowerBound?: boolean;
+}
 export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   status: "SUCCESS";
   interpretation: T;
@@ -78,7 +86,8 @@ export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   providerEvidence?: SemanticProviderEvidence;
   /** Actual HTTP chunks consumed; on an early cancelled read this is a prefix. */
   rawResponseBytes?: number;
-} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics };
+  canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
+} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics };
 export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;

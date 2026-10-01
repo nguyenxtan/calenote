@@ -6,7 +6,7 @@ import { createKeyring } from "../../src/modules/security/keyring";
 import { D1ContextContractStore } from "../../src/modules/conversation/context-contract/infrastructure/d1/store";
 import { D1ContextRuntimeStore } from "../../src/modules/conversation/context-contract/runtime-store";
 import { createContextContractService } from "../../src/modules/conversation/context-contract/service";
-import { createContextContractGateway, type ContextOfflineTransport, type SemanticGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type ContextOfflineTransport, type SemanticGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { D1SemanticBudgetStore } from "../../src/modules/semantic/infrastructure/d1/budget-store";
 import { D1SemanticReminderQueryStore } from "../../src/modules/reminders/infrastructure/d1/semantic-query-store";
 import { D1ReminderApiStore } from "../../src/modules/reminders/infrastructure/d1/api-store";
@@ -32,7 +32,7 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
 export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
-  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; }
+  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
   if (!/^[0-9a-f]{40}$/u.test(config.sourceSha) || !Number.isSafeInteger(config.referenceNow)) throw new TypeError("INVALID_PROBE_CONFIG");
@@ -56,14 +56,14 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     let delayed: { started: Promise<void>; signalStarted: () => void; waiting: Promise<void>; release: () => void } | null = null;
     const currentDelivery = (): ReplyReceipt | null => delivery;
     const events: ContextObservationEvent[] = [], inputs: ContextInput[] = [], sends: Array<{ plan: ReplyPlan; receipt: ReplyReceipt }> = [];
-    let queryRange: { start: number; end: number } | null = null;
+    let queryRange: { start: number; end: number } | null = null, listStoreReads = 0;
     let issuedToken: string | null = null;
     let lastSnapshot: ContextSnapshotV1 | null = null;
     const store = new D1ContextContractStore(db, keyring, () => now);
     const service = createContextContractService({ store, runtimeStore: new D1ContextRuntimeStore(db),
       gateway: { prepare(tier, input) {
         inputs.push(structuredClone(input));
-        if (config.liveGateway) {
+        if (config.liveGateway && index > (config.offlineSeedTurns ?? 0)) {
           const prepared = config.liveGateway.prepare(tier, input), hold = delayed;
           if (!hold || prepared.status !== "READY") return prepared;
           delayed = null;
@@ -82,7 +82,11 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(proposed) }, finish_reason: "stop" }] }) };
         const transport: ContextOfflineTransport = { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
           admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response }] };
-        const prepared = createContextContractGateway(gatewayConfig, transport).prepare(tier, input);
+        const offlinePrepared = createContextContractGateway(gatewayConfig, transport).prepare(tier, input);
+        // Same local reservation exposure as the later observable turn, while
+        // the seed dispatch remains declarative OFFLINE_FIXTURE only.
+        const prepared = config.liveGateway && offlinePrepared.status === "READY"
+          ? { ...offlinePrepared, maximumCostMicrounits: CONTEXT_FINANCIAL_RESERVATION_MICROUNITS } : offlinePrepared;
         const hold = delayed;
         if (!hold || prepared.status !== "READY") return prepared;
         delayed = null;
@@ -90,8 +94,9 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
       } }, budgetStore: new D1SemanticBudgetStore(db, { ...budgetLimits,
         ...(config.liveGateway ? { reservationInputTokenExposure: 1048576 } : {}),
         ...(config.budgetRefusal ? { ownerDailyFallbackLimit: 0 } : {}) }), keyring, calendar: lunarCalendar,
-      channel: "TELEGRAM", sourceSha: config.sourceSha, mode: config.liveGateway ? "LIVE" : "OFFLINE_FIXTURE", now: () => now,
-      list: query => { queryRange = query.range; return new D1SemanticReminderQueryStore(db).listContext(query); }, observe: event => events.push(event),
+      channel: "TELEGRAM", sourceSha: config.sourceSha,
+      get mode() { return config.liveGateway && index > (config.offlineSeedTurns ?? 0) ? "LIVE" as const : "OFFLINE_FIXTURE" as const; }, now: () => now,
+      list: query => { listStoreReads++; queryRange = query.range; return new D1SemanticReminderQueryStore(db).listContext(query); }, observe: event => events.push(event),
       reply: async plan => { selected = plan; delivery = deliveryFault ? { status: deliveryFault } : { status: "SENT", messageRef: `synthetic-receipt-${index}` }; sends.push({ plan, receipt: delivery }); return delivery; } });
     const scope = (id: string, claimMarker: string) => ({ ownerId: "owner", chatIdentityId: "identity", sourceInboundId: id, claimMarker, now });
     return {
@@ -100,7 +105,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
         if (!text || !Number.isSafeInteger(Date.parse(receipt))) throw new TypeError("INVALID_PROBE_TURN");
         if (!Number.isSafeInteger(Date.parse(processingAt)) || Date.parse(processingAt) < Date.parse(receipt)) throw new TypeError("INVALID_PROCESSING_TIME");
         now = Date.parse(processingAt); const turnNumber = ++index; deliveryFault = fault; selected = null; delivery = null; queryRange = null;
-        const beforeEvents = events.length, id = `probe-${turnNumber}`, claimMarker = `probe-claim-${turnNumber}`;
+        const beforeEvents = events.length, beforeListReads = listStoreReads, id = `probe-${turnNumber}`, claimMarker = `probe-claim-${turnNumber}`;
         const before = await db.prepare("SELECT count(*) n FROM reminders").first<number>("n") ?? 0;
         await db.prepare("INSERT INTO inbound_updates(id,connection_id,provider,provider_message_id,provider_user_id,private_chat_id,message_ciphertext,message_iv,message_key_version,state,received_at,transition_marker) VALUES(?,'connection','telegram',?,'provider-user','chat',x'01',zeroblob(12),1,'PROCESSING',?,?)")
           .bind(id, id, Date.parse(receipt), claimMarker).run();
@@ -163,6 +168,8 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
               && cipher!.byteLength === Buffer.byteLength(encodeContextSnapshot(snapshot)) + 16 && (!ready || !cipher!.includes(Buffer.from(ready.text))),
             persistedDeliveryReceipt: !snapshot || !ready || (snapshot.transcript.at(-1)?.deliveryState === currentDelivery()?.status && snapshot.transcript.at(-1)?.messageRef === (currentDelivery()?.status === "SENT" ? (currentDelivery() as Extract<ReplyReceipt, { status: "SENT" }>).messageRef : null)),
           },
+          listStoreReads: listStoreReads - beforeListReads,
+          snapshotDigest: snapshot ? Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(encodeContextSnapshot(snapshot)))).toString("hex") : null,
           safetyFailures: after < before ? 1 : 0 };
       },
       issuedControlToken() { if (!issuedToken) throw new Error("NO_ISSUED_CONTROL_TOKEN"); return issuedToken; },

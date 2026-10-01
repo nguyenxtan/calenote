@@ -31,6 +31,7 @@ const files = [
   "tools/benchmark/context-contract.ts", "tools/benchmark/context-contract-probe.ts", "tools/benchmark/context-contract-live.ts",
   "tools/benchmark/context-contract-fixtures.ts", "tools/benchmark/context-contract.test.ts", "tools/benchmark/context-contract-live.test.ts",
   "tools/benchmark/run-context-contract-live.mjs", "tools/benchmark/register-conversation-loader.mjs",
+  "tools/benchmark/run-context-contract-r01-replay.mjs",
   "tools/benchmark/context-contract-runner.ts", "tools/benchmark/context-contract-runner.test.ts", "vitest.config.ts",
   "tools/calendar/reference-vectors.json", "package.json", "pnpm-lock.yaml",
   "src/modules/conversation/context-contract/benchmark/regressions.json",
@@ -101,14 +102,57 @@ export function admitFutureLiveIntent(input: FutureLiveIntent) {
     if (record.pilotLedgerHash !== null || record.cumulativeRetainedMicrounits !== 0) throw new Error("INVALID_PILOT_AUTHORITY");
   } else {
     const rows = ledger(join(record.campaignRoot as string, "PILOT")), begin = rows[0], last = rows.at(-1);
-    if (!begin || begin.event !== "BEGIN" || begin.profile !== "PILOT" || begin.sourceSha !== preflight.sourceSha
+    if (!begin || begin.event !== "BEGIN" || begin.executionKind === "R01_REPLAY" || begin.profile !== "PILOT" || begin.sourceSha !== preflight.sourceSha
       || begin.provenanceDigest !== preflight.provenanceDigest || !last || last.event !== "COMPLETE" || last.gate !== "PASS"
       || last.hash !== record.pilotLedgerHash || last.retainedMicrounits !== record.cumulativeRetainedMicrounits) throw new Error("PILOT_PASS_REQUIRED");
   }
   return record as unknown as ObservableAuthorization;
 }
 
+export interface R01ReplayAuthorization extends Omit<ObservableAuthorization, "version" | "pilotLedgerHash"> {
+  version: "context-contract-r01-replay-1";
+  historicalLedgers: Array<{ directory: string; finalHash: string }>;
+}
+/** Exact historical accounting is bound by durable ledger hashes; the normal
+ * PILOT/FULL authorization contract is deliberately unchanged. */
+export function admitR01ReplayIntent(input: FutureLiveIntent): R01ReplayAuthorization {
+  if (!input.enableLive || input.profile !== "PILOT" || !isAbsolute(input.authorizationPath)
+    || !/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId) || !Number.isSafeInteger(input.now) || input.now < 0) throw new Error("INVALID_REPLAY_INTENT");
+  const preflight = preflightContextCampaign({ root: input.root });
+  const record = JSON.parse(readFileSync(input.authorizationPath, "utf8")) as R01ReplayAuthorization;
+  const keys = ["version", "method", "campaignRoot", "sourceSha", "provenanceDigest", "profile", "runId", "approvedAt", "expiresAt", "cumulativeAuthorizedMicrounits", "cumulativeRetainedMicrounits", "historicalLedgers"];
+  if (!record || typeof record !== "object" || Array.isArray(record) || Object.keys(record).sort().join("|") !== keys.sort().join("|")
+    || record.version !== "context-contract-r01-replay-1" || record.method !== "OBSERVABLE_CANARY" || record.profile !== "PILOT"
+    || typeof record.campaignRoot !== "string" || !isAbsolute(record.campaignRoot) || record.sourceSha !== preflight.sourceSha
+    || record.provenanceDigest !== preflight.provenanceDigest || record.runId !== input.runId
+    || !Number.isSafeInteger(record.approvedAt) || record.approvedAt < 0 || record.approvedAt > input.now
+    || !Number.isSafeInteger(record.expiresAt) || record.expiresAt <= input.now
+    || record.cumulativeAuthorizedMicrounits !== 650000 || record.cumulativeRetainedMicrounits !== 528605
+    || !Array.isArray(record.historicalLedgers) || record.historicalLedgers.length < 1 || record.historicalLedgers.length > 10) throw new Error("INVALID_REPLAY_AUTHORIZATION");
+  let count = 0, retained = 0, unknown = 0, historicalRoutePassed = false;
+  const seen = new Set<string>();
+  for (const proof of record.historicalLedgers) {
+    if (!proof || Object.keys(proof).sort().join("|") !== "directory|finalHash" || typeof proof.directory !== "string" || !isAbsolute(proof.directory)
+      || typeof proof.finalHash !== "string" || !/^[0-9a-f]{64}$/u.test(proof.finalHash) || seen.has(resolve(proof.directory))) throw new Error("INVALID_HISTORICAL_PROOF");
+    seen.add(resolve(proof.directory));
+    const rows = readCampaignLedger(proof.directory), final = rows.at(-1), begin = rows[0];
+    if (!begin || begin.event !== "BEGIN" || begin.profile !== "PILOT" || begin.executionKind === "R01_REPLAY"
+      || !final || final.hash !== proof.finalHash || !["STOP", "COMPLETE", "FINISH"].includes(final.event)) throw new Error("HISTORICAL_LEDGER_MISMATCH");
+    historicalRoutePassed ||= rows.some(row => row.event === "CANARY_PASS");
+    for (const dispatched of rows.filter(row => row.event === "DISPATCH")) {
+      const reserved = rows.find(row => row.event === "RESERVE" && row.reservationId === dispatched.reservationId);
+      const finished = rows.find(row => row.event === "FINISH" && row.reservationId === dispatched.reservationId);
+      if (!reserved || reserved.event !== "RESERVE") throw new Error("HISTORICAL_RESERVATION_MISSING");
+      const cost = finished?.event === "FINISH" ? finished.observedMicrounits : null;
+      count++; retained += cost ?? reserved.maximumMicrounits; if (cost === null) unknown += reserved.maximumMicrounits;
+    }
+  }
+  if (count !== 10 || retained !== 528605 || unknown !== 527360 || !historicalRoutePassed) throw new Error("HISTORICAL_ACCOUNTING_MISMATCH");
+  return record;
+}
+
 type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
+  executionKind?: "R01_REPLAY";
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; startedAt: number; observableAdmission?: boolean; expiresAt?: number };
 type Reserve = { event: "RESERVE"; runId: string; profile: CampaignProfile; provenanceDigest: string;
   reservationId: string; maximumMicrounits: number; at: number };
@@ -198,7 +242,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
   }
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.reservationId) || reservations.some(r => r.reservationId === input.reservationId)
     || !Number.isSafeInteger(input.maximumMicrounits) || input.maximumMicrounits <= 0) throw new Error("INVALID_RESERVATION");
-  if (input.now - input.startedAt >= cap.ms || reservations.length >= cap.calls) {
+  if (input.now - input.startedAt >= cap.ms || reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "TIME_OR_CALL_CAP" });
     return { status: "STOPPED", reason: "TIME_OR_CALL_CAP" } as const;
   }

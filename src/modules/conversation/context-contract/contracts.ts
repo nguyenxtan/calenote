@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
 
 /** Dormant canonical successor contract. No execution or confirmation authority. */
 export const SLOT_NAMES = ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const;
@@ -104,7 +105,9 @@ export type ParsedInterpretation = {
 export type InterpretationSections = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: ParsedInterpretation };
 /** Accept a fully decoded JSON object only. The transport still owns raw-body
  * byte/finish-reason checks. Quarantine exactly the two guidance properties. */
-export function parseInterpretationSections(raw: unknown): InterpretationSections {
+export function parseInterpretationSections(raw: unknown, observeInvalid?: (value: CanonicalValidationDiagnostics) => void): InterpretationSections {
+  const full = ConversationInterpretationSchema.safeParse(raw);
+  if (!full.success) observeInvalid?.(projectCanonicalValidation(raw, full.error.issues));
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   const { conversationDirective, replyProposal, ...core } = raw as Record<string, unknown>;
   const semantic = SemanticPatchProposalSchema.safeParse(core);
@@ -116,7 +119,7 @@ export function parseInterpretationSections(raw: unknown): InterpretationSection
     semantic: semantic.data,
     directive: directive.success ? { status: "VALID", value: directive.data } : { status: "INVALID" },
     reply: reply.success ? { status: "VALID", value: reply.data } : { status: "INVALID", reason: typeof text === "string" && [...text].length > 400 ? "REPLY_TOO_LONG" : "REPLY_INVALID" },
-    fullSchemaValid: ConversationInterpretationSchema.safeParse(raw).success,
+    fullSchemaValid: full.success,
   } };
 }
 const factAlias = z.string().regex(/^f[1-9][0-9]*$/u).max(16);

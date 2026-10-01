@@ -10,6 +10,35 @@ import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptRes
 import { projectProviderFailure } from "./failure-diagnostics";
 import { googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
+import type { CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
+
+async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number, providerWire: boolean): Promise<SemanticAttemptResult<ParsedInterpretation>> {
+  const version = googleLiteEuContextWireSchema().version;
+  if (response.oversized || response.body.length > config.maxResponseBytes || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
+    return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null }, canonicalValidationDiagnostics: {
+      state: "OVERSIZED", schemaVersion: "calenote-context-2", providerWireSchemaVersion: version,
+      payloadByteCount: Number.isSafeInteger(response.rawResponseBytes) && response.rawResponseBytes! >= 0 ? response.rawResponseBytes! : response.body.length,
+      payloadByteCountIsLowerBound: true, payloadSha256: null } };
+  }
+  let validation: CanonicalValidationDiagnostics | undefined, wireValidation: CanonicalValidationDiagnostics | undefined;
+  const observe = (value: CanonicalValidationDiagnostics) => { validation = value; };
+  const output = z.unknown().transform((raw, ctx): ParsedInterpretation => {
+    const parsed = providerWire ? parseGoogleLiteEuContextSections(raw, observe, value => { wireValidation = value; }) : parseInterpretationSections(raw, observe);
+    if (parsed.status === "PARSED") return parsed.value;
+    ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
+  });
+  const result = decodeResponse(response, config, maximum, output, true);
+  if (!validation && !wireValidation) return result;
+  // Outer HTTP bytes are bounded before parsing; hash the original bounded
+  // model content, never a recursively serialized model-controlled object.
+  const content: string = JSON.parse(response.body).choices[0].message.content;
+  const bytes = new TextEncoder().encode(content);
+  const hashed = await crypto.subtle.digest("SHA-256", bytes);
+  const payloadSha256 = Array.from(new Uint8Array(hashed), byte => byte.toString(16).padStart(2, "0")).join("");
+  return { ...result, canonicalValidationDiagnostics: { state: validation ? "VALIDATION_FAILED" : "WIRE_DECODE_FAILED", schemaVersion: "calenote-context-2",
+    providerWireSchemaVersion: version, inputRepresentation: validation ? "CANONICAL" : "PROVIDER_WIRE", payloadByteCount: bytes.byteLength, payloadSha256,
+    validation: validation ?? wireValidation, ...(validation && wireValidation ? { wireValidation } : {}) } };
+}
 
 const routeSchema = z.object({
   model: z.string().max(160).regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/u)
@@ -291,7 +320,7 @@ export function createContextHttpTransport(apiKey: string,
     } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
   };
 }
-function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): SemanticAttemptResult<ParsedInterpretation> {
+async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): Promise<SemanticAttemptResult<ParsedInterpretation>> {
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
   if (response.status !== 200 && response.failureDiagnostics) {
     let rawUsage: unknown;
@@ -304,7 +333,7 @@ function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport
         ...(cost.success ? { reportedCostUsd: cost.data.cost } : {}), ...(tokens.success ? { promptTokens: tokens.data.prompt_tokens, completionTokens: tokens.data.completion_tokens } : {}) }, failureDiagnostics: response.failureDiagnostics };
   }
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes)
-    return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null } };
+    return decodeContextResponse(response, config, maximum, true);
   let raw: unknown;
   try { raw = JSON.parse(response.body); } catch { return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" }; }
   const accounting = z.object({ usage: z.unknown().optional() }).safeParse(raw);
@@ -324,10 +353,10 @@ function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport
   if (!observed.success) return fail("SCHEMA_INVALID");
   const evidence = { model: observed.data.model, provider: observed.data.provider,
     location: observed.data.location ?? "UNEXPOSED" as const, generationId: observed.data.id ?? null };
-  const parsed = decodeResponse(response, config, maximum, providerContextSectionsSchema, true);
+  const parsed = await decodeContextResponse(response, config, maximum, true);
   // Runtime retains independently valid core and quarantines bad guidance (T5).
   // Strict campaign full-schema admission is a separate evaluation gate.
-  if (parsed.status !== "SUCCESS") return { ...fail(parsed.category), providerEvidence: evidence };
+  if (parsed.status !== "SUCCESS") return { ...fail(parsed.category), providerEvidence: evidence, ...(parsed.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : {}) };
   return { ...parsed, usage, providerEvidence: evidence };
 }
 /** Declarative synthetic exchanges, not an executable transport. Request JSON
@@ -346,18 +375,6 @@ const offlineSchema = z.strictObject({ kind: z.literal("OFFLINE_FIXTURE"), excha
   admission: z.strictObject({ fullInputTokens: z.number(), billableOverheadMicrounits: z.number() }),
   response: z.strictObject({ status: z.number().int(), body: z.string().max(131072), oversized: z.boolean().optional() }),
 })).max(1000) });
-const contextSectionsSchema = z.unknown().transform((raw, ctx): ParsedInterpretation => {
-  const parsed = parseInterpretationSections(raw);
-  if (parsed.status === "PARSED") return parsed.value;
-  ctx.addIssue({ code: "custom", message: "Invalid context semantic envelope or core" });
-  return z.NEVER;
-});
-const providerContextSectionsSchema = z.unknown().transform((raw, ctx): ParsedInterpretation => {
-  const parsed = parseGoogleLiteEuContextSections(raw);
-  if (parsed.status === "PARSED") return parsed.value;
-  ctx.addIssue({ code: "custom", message: "Invalid provider context semantic envelope or core" });
-  return z.NEVER;
-});
 
 /** Dormant successor factory. Callable transports refuse without the explicit
  * observable method; the campaign owns durable canary acceptance before reuse.
@@ -401,8 +418,8 @@ export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
           const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
           try {
             return await Promise.race([
-              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(response => ({
-                ...decodeObservableResponse(response, config), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
+              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => ({
+                ...await decodeObservableResponse(response, config), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               })),
               new Promise<SemanticAttemptResult<ParsedInterpretation>>(resolve => { timer = setTimeout(() => {
@@ -429,7 +446,7 @@ export function createContextContractGateway(rawConfig: SemanticGatewayConfig,
       async dispatch() {
         if (dispatched) return { status: "FAILURE", category: "UNAVAILABLE" };
         dispatched = true;
-        return decodeResponse(fixture.response, config, maximumCostMicrounits, contextSectionsSchema, true);
+        return decodeContextResponse(fixture.response, config, maximumCostMicrounits, false);
       },
     };
   } };

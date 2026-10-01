@@ -1,4 +1,5 @@
 import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterpretationSections, type InterpretationSections } from "../../../conversation/context-contract/contracts";
+import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-flat-2" as const;
@@ -138,30 +139,48 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
   if (node.type === "object") return !!value && typeof value === "object" && !Array.isArray(value) && node.required!.every(key => Object.hasOwn(value, key)) && Object.keys(value).every(key => Object.hasOwn(node.properties!, key)) && Object.entries(value).every(([key, child]) => predicate(node.properties![key], child, root));
   return true;
 }
-function codec(raw: Schema, value: unknown, direction: "encode" | "decode"): unknown {
+class WireShapeFailure extends Error {
+  constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number) { super("WIRE_SHAPE_INVALID"); }
+}
+function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
+  for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
+  const extra = Object.keys(object).filter(key => !allowed.includes(key)).length;
+  if (extra) throw new WireShapeFailure(path, "object", extra);
+}
+function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path: PropertyKey[] = []): unknown {
   const node = deref(raw, original), plan = taggedPlan(node, original);
+  const requireShape = (condition: unknown, expected = node.type ?? "UNION") => { if (!condition) throw new WireShapeFailure(path, expected); };
   if (plan) {
     requireShape(value && typeof value === "object" && !Array.isArray(value));
     const object = value as Record<string, unknown>, matches = plan.tags.flatMap((tag, index) => Object.entries(tag).every(([key, values]) => values.some(option => equal(object[key], option))) ? [index] : []);
-    requireShape(matches.length === 1); const branch = plan.branches[matches[0]];
+    if (matches.length !== 1) {
+      // Compare only trusted schema discriminants. A matching field must not
+      // be blamed when a later operation tag is the sole failed discriminator.
+      const closest = plan.tags.map(tag => Object.entries(tag).filter(([key, values]) => !values.some(option => equal(object[key], option))).map(([key]) => key))
+        .sort((a, b) => a.length - b.length)[0];
+      throw new WireShapeFailure([...path, closest[0] ?? Object.keys(plan.tags[0])[0]], "CONTROL_ENUM");
+    }
+    const branch = plan.branches[matches[0]];
     if (direction === "decode") {
-      requireShape(equal(Object.keys(object).sort(), [...plan.keys].sort()));
-      for (const key of plan.keys) if (!Object.hasOwn(branch.properties!, key)) requireShape(object[key] === null);
+      requireWireKeys(object, plan.keys, plan.keys, path);
+      for (const key of plan.keys) if (!Object.hasOwn(branch.properties!, key) && object[key] !== null) throw new WireShapeFailure([...path, key], "null");
     } else requireShape(predicate(branch, value, original));
-    const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction)]));
+    const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction, [...path, key])]));
     if (direction === "encode") { for (const key of plan.keys) if (!Object.hasOwn(result, key)) result[key] = null; }
     else requireShape(predicate(branch, result, original));
     return result;
   }
   if (node.anyOf || node.oneOf) {
-    const results: unknown[] = [];
-    for (const branch of node.anyOf ?? node.oneOf!) try { const result = codec(branch, value, direction); if (predicate(branch, direction === "encode" ? value : result, original)) results.push(result); } catch { /* Another canonical union branch may match. */ }
+    const results: unknown[] = [], failures: WireShapeFailure[] = [];
+    for (const branch of node.anyOf ?? node.oneOf!) try { const result = codec(branch, value, direction, path); if (predicate(branch, direction === "encode" ? value : result, original)) results.push(result); } catch (error) { if (error instanceof WireShapeFailure) failures.push(error); }
+    if (results.length === 0 && failures.length) throw failures.sort((a, b) => b.path.length - a.path.length)[0];
     requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
   }
-  if (node.type === "array") { requireShape(Array.isArray(value) && (node.minItems === undefined || value.length >= Number(node.minItems)) && (node.maxItems === undefined || value.length <= Number(node.maxItems))); return value.map(item => codec(node.items!, item, direction)); }
+  if (node.type === "array") { requireShape(Array.isArray(value) && (node.minItems === undefined || value.length >= Number(node.minItems)) && (node.maxItems === undefined || value.length <= Number(node.maxItems))); return (value as unknown[]).map((item, index) => codec(node.items!, item, direction, [...path, index])); }
   if (node.type === "object") {
-    requireShape(value && typeof value === "object" && !Array.isArray(value) && equal(Object.keys(value).sort(), [...node.required!].sort()));
-    return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction)]));
+    requireShape(value && typeof value === "object" && !Array.isArray(value));
+    requireWireKeys(value as Record<string, unknown>, node.required!, node.required!, path);
+    return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction, [...path, key])]));
   }
   requireShape(predicate(node, value, original)); return structuredClone(value);
 }
@@ -169,18 +188,18 @@ export function encodeGoogleLiteEuContext(canonical: unknown): unknown {
   requireShape(ConversationInterpretationSchema.safeParse(canonical).success); return codec(original, canonical, "encode");
 }
 /** Core is atomic; guidance is decoded independently and remains quarantinable. */
-export function parseGoogleLiteEuContextSections(raw: unknown): InterpretationSections {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1]): InterpretationSections {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) { observeWireInvalid?.(projectWireValidation(raw, [], "object")); return { status: "REFUSED", reason: "ENVELOPE_INVALID" }; }
   const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]), coreKeys = original.required!.filter(key => !guidance.has(key));
   try {
-    requireShape(coreKeys.every(key => Object.hasOwn(object, key)) && Object.keys(object).every(key => Object.hasOwn(original.properties!, key)));
-    const decoded = Object.fromEntries(coreKeys.map(key => [key, codec(original.properties![key], object[key], "decode")]));
-    try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode"); }
-    catch { decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
+    requireWireKeys(object, coreKeys, Object.keys(original.properties!), []);
+    const decoded = Object.fromEntries(coreKeys.map(key => [key, codec(original.properties![key], object[key], "decode", [key])]));
+    try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode", ["conversationDirective"]); }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
     // Reply has no flattened tagged union. Retaining an invalid original reply
     // preserves the canonical parser's REPLY_TOO_LONG vs REPLY_INVALID reason.
-    try { decoded.replyProposal = codec(original.properties!.replyProposal, object.replyProposal, "decode"); }
-    catch { decoded.replyProposal = object.replyProposal; }
-    return parseInterpretationSections(decoded);
-  } catch { return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
+    try { decoded.replyProposal = codec(original.properties!.replyProposal, object.replyProposal, "decode", ["replyProposal"]); }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount)); decoded.replyProposal = object.replyProposal; }
+    return parseInterpretationSections(decoded, observeInvalid);
+  } catch (error) { observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount) : projectCanonicalValidation(raw, [])); return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
 }

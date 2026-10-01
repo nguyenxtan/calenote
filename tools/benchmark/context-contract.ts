@@ -37,7 +37,7 @@ export interface ContextObservation {
   turns: Array<{ status: string; dispatches: number; mutations: number; fields: Record<string, unknown>;
     source?: "BACKEND" | "MODEL_GUIDANCE"; kind?: string; decisionKind?: string | null;
     selectedText?: string; delivery?: "SENT" | "FAILED" | "UNCERTAIN"; apiPreviews?: number;
-    detailFields?: Record<string, unknown>; fullSchemaValid?: boolean; rawSchemaValid?: boolean;
+    detailFields?: Record<string, unknown>; fullSchemaValid?: boolean; rawSchemaValid?: boolean; listStoreReads?: number; snapshotDigest?: string | null;
     previewFields?: Record<string, unknown>; canonicalReminders?: Array<Record<string, unknown>>;
     coreValidity?: string; directiveValidity?: string; replyValidity?: string; effectiveDirective?: string;
     directiveMatch?: string; replyEligibility?: string;
