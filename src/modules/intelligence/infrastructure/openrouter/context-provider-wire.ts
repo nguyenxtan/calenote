@@ -2,7 +2,16 @@ import { ConversationInterpretationSchema, InterpretationJsonSchema, Uncertainty
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
-export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-control-parity-8" as const;
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
+// Immutable V1 transport protocol, independent of canonical declaration order.
+// The application chooses this mapping, never the model or response payload.
+export const UNCERTAINTY_FIELD_WIRE_CODE_V1 = Object.freeze({
+  title: 0, location: 1, notes: 2, eventDate: 3, eventTime: 4,
+  reminderDate: 5, reminderTime: 6, calendar: 7, frequency: 8,
+  occurrenceCount: 9, eventRelation: 10, leadOffsetDays: 11, endDate: 12,
+  intent: 13, queryRange: 14, operation: 15,
+} as const satisfies Record<ConversationInterpretation["uncertainties"][number]["field"], number>);
+const uncertaintyFieldByCode = new Map<number, string>(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => [code, field]));
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
 const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
@@ -151,10 +160,12 @@ function simplifyUncertainties(root: Schema): Schema {
   const reason = items.anyOf[0].properties!.reason;
   requireShape(items.anyOf.every(branch => equal(branch.properties!.reason, reason)));
   output.properties!.uncertainties.items = { type: "object", properties: {
-    field: { type: "string", enum: UncertaintySchema.options.map(branch => branch.shape.field.value) }, reason: structuredClone(reason), alternatives: { type: "array", items: {
+    fieldCode: { type: "integer", minimum: 0, maximum: 15,
+      description: "UncertaintyFieldWireCodeV1: " + Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => `${code}=${field}`).join(","),
+    }, reason: structuredClone(reason), alternatives: { type: "array", items: {
       type: "string", description: "JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
     } },
-  }, required: ["field", "reason", "alternatives"], additionalProperties: false };
+  }, required: ["fieldCode", "reason", "alternatives"], additionalProperties: false };
   return prune(output);
 }
 const applicationSchemaVersion = ConversationInterpretationSchema.shape.schemaVersion.value;
@@ -233,7 +244,7 @@ export function encodeGoogleLiteEuContext(canonical: unknown): unknown {
   requireShape(ConversationInterpretationSchema.safeParse(canonical).success);
   const encoded = codec(original, canonical, "encode") as Record<string, unknown>;
   delete encoded.schemaVersion;
-  encoded.uncertainties = (canonical as ConversationInterpretation).uncertainties.map(item => ({ field: item.field, reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
+  encoded.uncertainties = (canonical as ConversationInterpretation).uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
   return encoded;
 }
 function decodeUncertainties(raw: unknown): unknown {
@@ -241,17 +252,20 @@ function decodeUncertainties(raw: unknown): unknown {
   return raw.map((item, index) => {
     const path = ["uncertainties", index];
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
-    requireWireKeys(item, ["field", "reason", "alternatives"], ["field", "reason", "alternatives"], path);
-    if (typeof item.field !== "string" || typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
-    if (!UncertaintySchema.options.some(branch => branch.shape.field.safeParse(item.field).success)) throw new WireShapeFailure([...path, "field"], "CONTROL_ENUM");
-    return { field: item.field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
+    requireWireKeys(item, ["fieldCode", "reason", "alternatives"], ["fieldCode", "reason", "alternatives"], path);
+    if (typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
+    if (typeof item.fieldCode !== "number" || !Number.isSafeInteger(item.fieldCode) || !uncertaintyFieldByCode.has(item.fieldCode)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM");
+    const field = uncertaintyFieldByCode.get(item.fieldCode)!;
+    if (!UncertaintySchema.options.some(branch => branch.shape.field.safeParse(field).success)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM");
+    return { field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
       if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
       try { return JSON.parse(text) as unknown; } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }
     }) };
   });
 }
 /** Core is atomic; guidance is decoded independently and remains quarantinable. */
-export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1]): InterpretationSections {
+export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1], wireVersion: string = GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION): InterpretationSections {
+  if (wireVersion !== GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) { observeWireInvalid?.(projectWireValidation(raw, [], "object")); return { status: "REFUSED", reason: "ENVELOPE_INVALID" }; }
   const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]), coreKeys = providerRoot.required!.filter(key => !guidance.has(key));
   try {

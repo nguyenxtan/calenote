@@ -1,5 +1,42 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 compact uncertainty-field codebook — 2026-10-01
+
+Owner authority `84b2380e-e9e7-44e8-a5cc-6ff672cdd3ba` requires provider
+proof before production-source changes. At clean source `d8a23d9559a744389aae2514c6cc89eeca593fb3`,
+the complete string-enum wire returned HTTP400 `Schema state limit exceeded`.
+The controlled variant changed ONLY `uncertainties.items.properties.field`
+from the 16-value string enum to integer minimum0/maximum15. It returned HTTP200,
+generation `gen-1790859053-14Kh7BuPR5dB57s4rgya`, 2245 input / 875 output
+tokens, 3797 response bytes, observed USD0.0005745. This is schema admission
+only, not R02/application acceptance; the transient reply was not retained.
+
+String-enum schema SHA256: `6d1552d1f033e9064c3ebaabdf56e0edc2302d77377c05ae92e4b46d3087d891`.
+Integer-range schema SHA256: `31ac8a3c403b8db13586092fb57d2a48cd3e5a36a9bb7a321d6d5595f25de444`.
+Both non-schema request SHA256: `6a11f4424a3d66005c5b7faec4ca8e71e317cac64b7ebe01a420f78c035856ca`.
+Historical string-enum HTTP400 had no observed cost and its PILOT reservation
+remains held. The integer probe reserves/settles DIAGNOSTIC funds only.
+
+The version9 application-owned `UncertaintyFieldWireCodeV1` is explicit and
+immutable, not based on canonical enum order: 0=title, 1=location, 2=notes,
+3=eventDate, 4=eventTime, 5=reminderDate, 6=reminderTime, 7=calendar,
+8=frequency, 9=occurrenceCount, 10=eventRelation, 11=leadOffsetDays,
+12=endDate, 13=intent, 14=queryRange, 15=operation. Active `fieldCode` must
+be a bounded integer; the deterministic decoder maps it to the original field
+before unchanged canonical/evidence validation. Unknown versions/codes and
+legacy field keys are rejected without a default. The model cannot select
+codebook version, canonical version or effectiveDirective.
+
+Complete revised wire version: `google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9`.
+Complete revised wire SHA256: `840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab`.
+Wire bytes: 12057 versus11982 (+75). Canonical prompt bytes/digest are unchanged;
+the compact mapping guide is a schema description only. Exact transformed
+provider token impact remains unexposed and must not be inferred from byte
+counts. Complete version9 provider admission and live R02 remain separate
+post-review gates; the integer-field-only probe does not prove those gates.
+Small enums and all other schema branches remain unchanged. No provider-private
+state-count formula, evidence-authority expansion or production change claimed.
+
 ## T11 offline control-domain parity — 2026-10-01
 
 Owner authority `d650d8b6-2ab7-44f4-90f3-ff82caa8975c` authorizes offline

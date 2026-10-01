@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { UncertaintySchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import * as wire from "./context-provider-wire";
+
+// Protocol snapshot is explicit: reordering the canonical declaration cannot
+// change V1 wire meaning. Domain coverage below is independently derived.
+const v1 = { title: 0, location: 1, notes: 2, eventDate: 3, eventTime: 4,
+  reminderDate: 5, reminderTime: 6, calendar: 7, frequency: 8,
+  occurrenceCount: 9, eventRelation: 10, leadOffsetDays: 11, endDate: 12,
+  intent: 13, queryRange: 14, operation: 15 };
+const base = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+const publicCodeShape = () => z.object({ properties: z.object({ uncertainties: z.object({ items: z.object({ properties: z.object({ fieldCode: z.object({ type: z.literal("integer"), minimum: z.number(), maximum: z.number() }).passthrough() }).passthrough() }) }) }) }).parse(wire.googleLiteEuContextWireSchema().schema).properties.uncertainties.items.properties;
+describe("immutable uncertainty field codebook V1", () => {
+  it.each(Object.entries(v1))("round trips established %s code %s", (field, fieldCode) => {
+    const canonical = { ...base, uncertainties: [{ field, reason: "MISSING", alternatives: [] }] };
+    const encoded = wire.encodeGoogleLiteEuContext(canonical) as Record<string, unknown>;
+    expect(encoded.uncertainties).toEqual([{ fieldCode, reason: "MISSING", alternatives: [] }]);
+    expect(wire.parseGoogleLiteEuContextSections(encoded)).toEqual(parseInterpretationSections(canonical));
+  });
+  it("keeps exact canonical domain and unique established V1 code meanings", () => {
+    expect(wire.UNCERTAINTY_FIELD_WIRE_CODE_V1).toEqual(v1);
+    expect(Object.isFrozen(wire.UNCERTAINTY_FIELD_WIRE_CODE_V1)).toBe(true);
+    expect(Object.keys(v1).sort()).toEqual(UncertaintySchema.options.map(b => b.shape.field.value).sort());
+    expect(new Set(Object.values(v1)).size).toBe(16);
+  });
+  it("advertises integer bounds not an arbitrary string or high-state enum", () => {
+    const properties = publicCodeShape();
+    expect(properties.fieldCode).toMatchObject({ type: "integer", minimum: 0, maximum: 15 });
+    expect(properties).not.toHaveProperty("field");
+    expect(properties.fieldCode).not.toHaveProperty("enum");
+  });
+  it.each([-1, 16, 0.5, "0", null, undefined, NaN, Infinity])("rejects active invalid code %# independently", fieldCode => {
+    const encoded = { ...wire.encodeGoogleLiteEuContext(base) as object, uncertainties: [{ fieldCode, reason: "MISSING", alternatives: [] }] };
+    expect(wire.parseGoogleLiteEuContextSections(encoded).status).toBe("REFUSED");
+    expect(z.fromJSONSchema(publicCodeShape().fieldCode).safeParse(fieldCode).success).toBe(false);
+  });
+  it("rejects unsupported application-selected wire version before decoding", () => {
+    expect(wire.parseGoogleLiteEuContextSections(wire.encodeGoogleLiteEuContext(base), undefined, undefined, "unknown-version").status).toBe("REFUSED");
+  });
+  it("model cannot select codebook version or use old field names", () => {
+    for (const item of [{ field: "title", reason: "MISSING", alternatives: [] }, { fieldCode: 0, codebookVersion: "v1", reason: "MISSING", alternatives: [] }]) {
+      expect(wire.parseGoogleLiteEuContextSections({ ...wire.encodeGoogleLiteEuContext(base) as object, uncertainties: [item] }).status).toBe("REFUSED");
+    }
+  });
+  it("identifies the new structural code path without retaining invalid values", () => {
+    const diagnostics: unknown[] = [];
+    const encoded = { ...wire.encodeGoogleLiteEuContext(base) as object, uncertainties: [{ fieldCode: "sensitive-code-value", reason: "MISSING", alternatives: [] }] };
+    expect(wire.parseGoogleLiteEuContextSections(encoded, undefined, d => diagnostics.push(d)).status).toBe("REFUSED");
+    expect(JSON.stringify(diagnostics)).toContain('"uncertainties",0,"fieldCode"');
+    expect(JSON.stringify(diagnostics)).not.toContain("sensitive-code-value");
+  });
+});

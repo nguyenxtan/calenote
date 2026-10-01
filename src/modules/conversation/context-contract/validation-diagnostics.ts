@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-const keys = new Set("schemaVersion intent dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
+const keys = new Set("schemaVersion intent dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion intent dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
 export interface CanonicalValidationIssue {
