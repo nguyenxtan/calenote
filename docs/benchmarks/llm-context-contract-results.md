@@ -1,5 +1,72 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 uncertainty state-limit isolation — 2026-10-01
+
+Owner authority `a1a07a22-7725-4d6d-a7b0-a9bb718faedc` adds USD0.05
+diagnostic-only, raising that campaign to USD0.30. PILOT/FULL remain USD1.00
+each; UNKNOWN reservations remain held and cannot transfer across campaigns.
+Historical local fixture results below are not live acceptance.
+
+The controlled minimal pair used the complete surrounding wire-5 schema:
+
+| Probe | Schema SHA256 | Result |
+| --- | --- | --- |
+| alternative-empty | `0ecbbdfabf4eca079c9c1f5e15c8e2572bec3428d99832798215e4ef381db620` | HTTP200, structured output valid |
+| alternative-value | `d3dee174a57326f21104ee61611da49aafcc8cb27dfeb26670a819bc3dbde7e2` | HTTP400, Schema state limit exceeded |
+
+Sole meaningful delta: add required `value` using the already-reachable plain
+string `#/$defs/__schema3` to the uncertainty alternative's empty strict object.
+This adds one property, one required entry and one ref; no definitions change.
+All non-schema request parameters have the same SHA256
+`66481bb1cb74945802ed644c4949b8a9cd85caeb6f48f73a8dec368d5918508d`.
+PASS generation: `gen-1790831102-b2I7fL4kcQSVhdwk01tv`.
+FAIL safe trace: `a438ee5f88cee2e2-HKG`.
+Confidence HIGH for this measured tipping delta in its surrounding schema,
+not a universal incompatibility of string/ref fields or knowledge of Google's
+private state count.
+
+The complete simplified prototype uses a fixed `field/reason/alternatives`
+uncertainty object: field is a string checked by the unchanged canonical enum,
+reason keeps its four-value enum, and each alternative is a JSON string
+encoding the complete canonical `{value,evidence}` object. The deterministic
+decoder checks the envelope/count/size, parses once and submits the complete
+object to the unchanged canonical validator and later evidence validator.
+Invalid combinations remain hard rejection, not repair or partial acceptance.
+Changes/query/directive representations and application authority are unchanged.
+
+Prototype schema SHA256:
+`e6d27cd9b798b0a3e07dabd2e98f2e1502714bee00b8c91fa42758c9a927fe06`.
+HTTP200, structured-output valid; generation
+`gen-1790831283-Tl9TATO2QqWZma9VZ2DB`.
+Local metrics: 11,853 bytes, 163 required / zero optional properties,
+19 definitions, 43 refs, 17 anyOf / zero oneOf, 49 union branches,
+expanded depth11. These are regression measurements, not a provider state-limit
+formula. Provider admission with an empty synthetic uncertainty array does
+not prove uncertainty inference quality or application pilot acceptance.
+
+After ten new diagnostic requests, cumulative diagnostic evidence is:
+52 HTTP requests, 268271 microunits retained, 31729 remaining, 35 UNKNOWN
+reservations. Six new successful requests report USD0.0000391 each
+(USD0.0002346 known subtotal); four new failures have UNKNOWN cost.
+Total actual spend remains UNKNOWN. Sanitized append-only artifacts are in
+`.superpowers/sdd/2026-09-28-llm-context-contract-implementation/diagnostic-uncertainty-*-a1a07a22/`.
+No raw provider/user content or secrets are retained there.
+
+The wire-6 implementation matches the prototype digest. Fresh focused
+verification: 30 files / 3255 tests PASS. Complete `pnpm check`: exit0,
+138 files / 5242 PASS / one existing skip, architecture test PASS,
+typecheck/lint/build/Worker types/dry-run PASS; lint162 warnings / zero errors.
+Separate fresh typecheck and diff check PASS. One independent GPT-6.1 Sol
+Medium review accepted the delta: Critical0 / Important0 / Minor0. The reviewer
+independently checked every unchanged non-uncertainty schema branch, derived
+adversarial controls and recomputed both campaigns' historical holds.
+A subsequent diagnostic
+must admit the complete committed wire before a production-shaped R01 canary.
+PILOT currently retains 951000 of 1000000 microunits, leaving49000, less than
+the next production-shaped reservation105472. No borrowing from diagnostics
+or FULL is authorized; no production canary may dispatch past that gate.
+Production is untouched.
+
 ## Current scoped review correction — 2026-09-30
 
 **Local fixture gates complete; same-reviewer delta acceptance pending.** The Important role-grounding finding in the owner-completion table below is corrected without production changes. R04 retains original event08 and both original count/offset requests, clarifies missing notification time, then collects explicit “Nhắc tôi lúc 8h sáng.” in each reset branch (six USER total). D06 retains event08, collects notification08 before issuing the genuine preview token, and edits only notification time to09 with that token. H29's unchanged heldout sentence retains eventDate21/10 and missing reminderDate/reminderTime. Oracles are independently hand-authored, not taken from observed output; original reports/hashes remain preserved as superseded.

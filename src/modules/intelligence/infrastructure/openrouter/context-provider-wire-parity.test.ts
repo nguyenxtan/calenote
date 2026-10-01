@@ -49,6 +49,63 @@ const periods = [
 ];
 const values: Record<string, unknown> = { title: "synthetic", location: "synthetic", notes: "synthetic", eventDate: dates[0], eventTime: { hour: 10, minute: 0, qualifier: "H24" }, reminderDate: dates[1], reminderTime: { hour: 10, minute: 0, qualifier: "H24" }, calendar: "GREGORIAN", frequency: "ONCE", occurrenceCount: 1, eventRelation: "BEFORE_EVENT", leadOffsetDays: 1, endDate: dates[2] };
 const uncertaintyValues = { ...values, intent: "HELP", queryRange: periods[0], operation: "NEW_REQUEST" };
+it("freezes the measured uncertainty schema-complexity boundary without claiming Google's private state count", () => {
+  expect(Buffer.byteLength(JSON.stringify(publicSchema))).toBeLessThanOrEqual(11853);
+  const shape = z.object({ properties: z.object({ uncertainties: z.object({ items: z.record(z.string(), z.unknown()) }) }) }).parse(publicSchema);
+  expect(Object.keys(shape.properties.uncertainties.items).sort()).toEqual(["additionalProperties", "properties", "required", "type"]);
+  expect(shape.properties.uncertainties.items).toMatchObject({
+    properties: { field: { type: "string" }, alternatives: { type: "array", items: { type: "string" } } },
+    required: ["field", "reason", "alternatives"], additionalProperties: false,
+  });
+});
+it.each([
+  null, [], 7, "sensitive synthetic value",
+  { evidence }, { value: "synthetic" },
+  { value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "sensitive synthetic value", occurrence: 1, extra: true }] },
+  { value: "synthetic", evidence: [{ kind: "CONTEXT_FACT", ref: 7 }] },
+  { value: { kind: "UNRECOGNIZED" }, evidence },
+])("rejects decoded invalid alternative #%#", alternative => {
+  const wire = { ...encodeGoogleLiteEuContext(base) as object, uncertainties: [{ field: "title", reason: "AMBIGUOUS", alternatives: [JSON.stringify(alternative)] }] };
+  expect(validator.safeParse(wire).success).toBe(true);
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSections(wire, issue => diagnostics.push(issue)).status).toBe("REFUSED");
+  expect(JSON.stringify(diagnostics)).not.toContain("sensitive synthetic value");
+});
+it.each([
+  { field: "unknown", reason: "AMBIGUOUS", alternatives: [] },
+  { field: "title", reason: "unknown", alternatives: [] },
+  { field: "title", reason: "AMBIGUOUS", alternatives: [null] },
+  { field: "title", reason: "AMBIGUOUS", alternatives: Array(3).fill(JSON.stringify({ value: "synthetic", evidence })) },
+  { field: "title", reason: "AMBIGUOUS", alternatives: [], extra: true },
+  { field: "title", reason: "AMBIGUOUS" },
+])("rejects invalid uncertainty envelope #%#", item => {
+  expect(parseGoogleLiteEuContextSections({ ...encodeGoogleLiteEuContext(base) as object, uncertainties: [item] }).status).toBe("REFUSED");
+});
+it("rejects an oversized uncertainty array before parsing alternatives", () => {
+  const item = { field: "title", reason: "MISSING", alternatives: [] };
+  expect(parseGoogleLiteEuContextSections({ ...encodeGoogleLiteEuContext(base) as object, uncertainties: Array(5).fill(item) }).status).toBe("REFUSED");
+});
+it.each([...dates, ...periods])("preserves typed date/query alternatives without inactive padding %#", value => {
+  const field = periods.includes(value as typeof periods[number]) ? "queryRange" : "eventDate";
+  const canonical = { ...base, uncertainties: [{ field, reason: "AMBIGUOUS", alternatives: [{ value, evidence: [{ kind: "CONTEXT_FACT", ref: "f1" }] }] }] };
+  const wire = encodeGoogleLiteEuContext(canonical);
+  expect(validator.safeParse(wire).success).toBe(true);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
+});
+it.each(Object.entries(uncertaintyValues))("uncertainty wire preserves canonical JSON alternatives for %s", (field, value) => {
+  const canonical = { ...base, uncertainties: [{ field, reason: "AMBIGUOUS", alternatives: [{ value, evidence }] }] };
+  const wire = encodeGoogleLiteEuContext(canonical) as { uncertainties: Array<{ field: string; reason: string; alternatives: unknown[] }> };
+  expect(wire.uncertainties).toEqual([{ field, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value, evidence })] }]);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
+});
+it("emitted uncertainty shape avoids nested typed alternatives while canonical validation rejects invalid combinations", () => {
+  const schema = inlineRefs(publicSchema) as { properties: { uncertainties: { items: unknown } } };
+  expect(schema.properties.uncertainties.items).toMatchObject({ type: "object", properties: { field: { type: "string" }, alternatives: { type: "array", items: { type: "string" } } } });
+  for (const alternative of ["not JSON", JSON.stringify({ value: 12, evidence }), JSON.stringify({ value: "synthetic", evidence: [] }), JSON.stringify({ value: "synthetic", evidence, unexpected: true }), "x".repeat(32769)]) {
+    const wire = { ...encodeGoogleLiteEuContext(base) as object, uncertainties: [{ field: "title", reason: "AMBIGUOUS", alternatives: [alternative] }] };
+    expect(parseGoogleLiteEuContextSections(wire).status).toBe("REFUSED");
+  }
+});
 const directives = [ { kind: "ASK_FOR_FIELD", field: "title" }, { kind: "ASK_FOR_DISAMBIGUATION", field: "title", reason: "AMBIGUOUS" }, { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" }, { kind: "HELP", topic: "GENERAL" }, { kind: "PRESENT_PREVIEW" }, { kind: "ANSWER_QUERY", queryKind: "LIST" } ];
 const pads: Record<string, string[]> = {
   USER_QUOTE: ["ref"], CONTEXT_FACT: ["turn", "quote", "occurrence"],
@@ -108,9 +165,13 @@ it.each(Object.entries(values))("producer retains SET/CLEAR and field/value asso
     expect(parseGoogleLiteEuContextSections(invalid).status).toBe("REFUSED");
   }
 });
-it.each(Object.entries(uncertaintyValues))("producer retains homogeneous alternatives/field association for %s", (field, value) => {
+it.each(Object.entries(uncertaintyValues))("canonical boundary retains homogeneous alternatives/field association for %s", (field, value) => {
   const wire = encoded.find(f => f.name === `uncertainty/${field}`)!.wire;
-  const invalid = replace(wire, ["uncertainties", 0, "alternatives", 1, "value"], typeof value === "number" ? "wrong type" : 12);
-  expect(validator.safeParse(invalid).success).toBe(false);
+  const badAlternative = { value: typeof value === "number" ? "wrong type" : 12, evidence };
+  const invalid = replace(wire, ["uncertainties", 0, "alternatives", 1], JSON.stringify(badAlternative));
+  // The wire accepts bounded JSON strings; the unchanged canonical validator
+  // owns the field/value correlation after deterministic decoding.
+  expect(validator.safeParse(invalid).success).toBe(true);
+  expect(ConversationInterpretationSchema.safeParse({ ...base, uncertainties: [{ field, reason: "AMBIGUOUS", alternatives: [{ value, evidence }, badAlternative] }] }).success).toBe(false);
   expect(parseGoogleLiteEuContextSections(invalid).status).toBe("REFUSED");
 });

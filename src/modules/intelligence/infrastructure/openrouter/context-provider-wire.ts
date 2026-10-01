@@ -1,8 +1,8 @@
-import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterpretationSections, type InterpretationSections } from "../../../conversation/context-contract/contracts";
+import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterpretationSections, type InterpretationSections, type ConversationInterpretation } from "../../../conversation/context-contract/contracts";
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
-export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-correlated-interned-5" as const;
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-uncertainty-json-6" as const;
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
 const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
@@ -143,7 +143,21 @@ function internDefinitions(root: Schema): Schema {
   };
   return visit(root);
 }
-const providerSchema = prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(original)))))));
+/** Avoid the measured nested alternative-object state explosion. Field/value
+ * association and evidence constraints remain canonical application checks. */
+function simplifyUncertainties(root: Schema): Schema {
+  const output = structuredClone(root), items = deref(output.properties!.uncertainties.items!, output);
+  requireShape(items.anyOf?.length);
+  const reason = items.anyOf[0].properties!.reason;
+  requireShape(items.anyOf.every(branch => equal(branch.properties!.reason, reason)));
+  output.properties!.uncertainties.items = { type: "object", properties: {
+    field: { type: "string" }, reason: structuredClone(reason), alternatives: { type: "array", items: {
+      type: "string", description: "JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
+    } },
+  }, required: ["field", "reason", "alternatives"], additionalProperties: false };
+  return prune(output);
+}
+const providerSchema = simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(original))))))));
 /** Versioned context representation. Canonical prompt/schema and the namespace-only adapter remain unchanged. */
 export function googleLiteEuContextWireSchema() {
   return { version: GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION, schema: structuredClone(providerSchema) as typeof InterpretationJsonSchema };
@@ -208,7 +222,23 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
   requireShape(predicate(node, value, original)); return structuredClone(value);
 }
 export function encodeGoogleLiteEuContext(canonical: unknown): unknown {
-  requireShape(ConversationInterpretationSchema.safeParse(canonical).success); return codec(original, canonical, "encode");
+  requireShape(ConversationInterpretationSchema.safeParse(canonical).success);
+  const encoded = codec(original, canonical, "encode") as Record<string, unknown>;
+  encoded.uncertainties = (canonical as ConversationInterpretation).uncertainties.map(item => ({ field: item.field, reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
+  return encoded;
+}
+function decodeUncertainties(raw: unknown): unknown {
+  if (!Array.isArray(raw) || raw.length > 4) throw new WireShapeFailure(["uncertainties"], "ARRAY_MAX_4");
+  return raw.map((item, index) => {
+    const path = ["uncertainties", index];
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
+    requireWireKeys(item, ["field", "reason", "alternatives"], ["field", "reason", "alternatives"], path);
+    if (typeof item.field !== "string" || typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
+    return { field: item.field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
+      if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
+      try { return JSON.parse(text) as unknown; } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }
+    }) };
+  });
 }
 /** Core is atomic; guidance is decoded independently and remains quarantinable. */
 export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1]): InterpretationSections {
@@ -216,7 +246,7 @@ export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: 
   const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]), coreKeys = original.required!.filter(key => !guidance.has(key));
   try {
     requireWireKeys(object, coreKeys, Object.keys(original.properties!), []);
-    const decoded = Object.fromEntries(coreKeys.map(key => [key, codec(original.properties![key], object[key], "decode", [key])]));
+    const decoded = Object.fromEntries(coreKeys.map(key => [key, key === "uncertainties" ? decodeUncertainties(object[key]) : codec(original.properties![key], object[key], "decode", [key])]));
     try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode", ["conversationDirective"]); }
     catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
     // Reply has no flattened tagged union. Retaining an invalid original reply
