@@ -1,8 +1,8 @@
-import { ConversationInterpretationSchema, InterpretationJsonSchema, parseInterpretationSections, type InterpretationSections, type ConversationInterpretation } from "../../../conversation/context-contract/contracts";
+import { ConversationInterpretationSchema, InterpretationJsonSchema, UncertaintySchema, parseInterpretationSections, type InterpretationSections, type ConversationInterpretation } from "../../../conversation/context-contract/contracts";
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
-export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-application-metadata-7" as const;
+export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-control-parity-8" as const;
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
 const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)])) : value;
@@ -151,7 +151,7 @@ function simplifyUncertainties(root: Schema): Schema {
   const reason = items.anyOf[0].properties!.reason;
   requireShape(items.anyOf.every(branch => equal(branch.properties!.reason, reason)));
   output.properties!.uncertainties.items = { type: "object", properties: {
-    field: { type: "string" }, reason: structuredClone(reason), alternatives: { type: "array", items: {
+    field: { type: "string", enum: UncertaintySchema.options.map(branch => branch.shape.field.value) }, reason: structuredClone(reason), alternatives: { type: "array", items: {
       type: "string", description: "JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
     } },
   }, required: ["field", "reason", "alternatives"], additionalProperties: false };
@@ -243,6 +243,7 @@ function decodeUncertainties(raw: unknown): unknown {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
     requireWireKeys(item, ["field", "reason", "alternatives"], ["field", "reason", "alternatives"], path);
     if (typeof item.field !== "string" || typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
+    if (!UncertaintySchema.options.some(branch => branch.shape.field.safeParse(item.field).success)) throw new WireShapeFailure([...path, "field"], "CONTROL_ENUM");
     return { field: item.field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
       if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
       try { return JSON.parse(text) as unknown; } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }

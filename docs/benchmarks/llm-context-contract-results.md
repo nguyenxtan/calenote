@@ -1,5 +1,47 @@
 # LLM Context Contract — acceptance evidence
 
+## T11 offline control-domain parity — 2026-10-01
+
+Owner authority `d650d8b6-2ab7-44f4-90f3-ff82caa8975c` authorizes offline
+parity closure before any additional live inference. The version-7 simplified
+uncertainty transport advertised arbitrary `field` strings, whereas canonical
+uncertainties permit precisely the 13 reminder slots plus intent, queryRange,
+and operation. A minimal wire-valid unknown field with no alternatives was
+canonical-invalid. RED tests reproduced this structural discrepancy. Version
+8 derives the wire field enum directly from the unchanged canonical uncertainty
+branches and rejects invalid active field values in the decoder. Alternatives
+remain JSON strings with canonical typed validation, not expanded nested unions.
+New wire version: `google-gemini-2.5-flash-lite-vertex-eu-context-control-parity-8`.
+Wire SHA256: `6d1552d1f033e9064c3ebaabdf56e0edc2302d77377c05ae92e4b46d3087d891`.
+Measured wire size is 11982 bytes; the prior version-7 complexity evidence
+remains historical. This measurement is not Google's private schema state count.
+
+Directive kinds/active fields already have correlated wire branches with
+canonical finite domains. An invalid active ASK field deterministically
+quarantines guidance to `{kind: INVALID_PROVIDER_WIRE}`. That application-only
+sentinel explains a subsequent canonical kind invalid_union; it does not prove
+the model originally emitted an invalid kind. Inactive padding remains ignored
+without reading values; active invalid fields are never coerced or defaulted.
+No directive decoder semantics or backend effectiveDirective authority changed.
+
+Finite domains: uncertainty/ASK fields = title, location, notes, eventDate,
+eventTime, reminderDate, reminderTime, calendar, frequency, occurrenceCount,
+eventRelation, leadOffsetDays, endDate, intent, queryRange, operation;
+directive kinds = ASK_FOR_FIELD, ASK_FOR_DISAMBIGUATION, EXPLAIN_UNSUPPORTED,
+HELP, PRESENT_PREVIEW, ANSWER_QUERY. Reason/issue/topic/query-kind finite values
+and their combinations are exhaustively derived from canonical branch schemas
+in parity tests. Provider schema/decoder/canonical projection are checked at
+the actual transport boundary. Canonical semantic/evidence refinement failures
+remain intentional stricter application gates, not wire domain fixes.
+
+Historical generation `gen-1790848271-meIwxnVnjRKMiauzPYhb` did not retain the
+invalid field literal, so its precise model-authored value cannot be asserted.
+The uncertainty domain widening is a proven local class defect; the directive
+active-field failure is characterized, not speculatively repaired. Historical
+eventRelation mismatch remains unresolved. No model/provider/prompt/canonical
+validator/evidence matcher changes, production mutation, or live acceptance
+is claimed by offline parity evidence.
+
 ## T11 diagnostic-only quote mismatch classification — 2026-10-01
 
 Owner authority `20e30843-66ef-4fea-a22c-b67e6364c0a0` permits only

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
 import { z } from "zod";
-import { ConversationInterpretationSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { ConversationInterpretationSchema, ConversationDirectiveSchema, IssueFieldSchema, UncertaintySchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
 import { encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
 
 // Validate the actual publicly emitted JSON Schema with an independent public
@@ -36,6 +36,55 @@ it("equivalent string payload definitions coalesce only their finite field discr
 });
 const evidence = [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }];
 const base = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: evidence, conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+const uncertaintyFields = UncertaintySchema.options.map(branch => branch.shape.field.value);
+it.each(uncertaintyFields)("finite control uncertainty domain roundtrips %s", field => {
+  const canonical = { ...base, uncertainties: [{ field, reason: "MISSING", alternatives: [] }] };
+  expect(ConversationInterpretationSchema.safeParse(canonical).success).toBe(true);
+  const wire = encodeGoogleLiteEuContext(canonical);
+  expect(validator.safeParse(wire).success).toBe(true);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
+});
+it("RED: uncertainty wire must not advertise unknown active field strings", () => {
+  const wire = { ...encodeGoogleLiteEuContext(base) as object, uncertainties: [{ field: "not_a_canonical_field", reason: "MISSING", alternatives: [] }] };
+  expect(validator.safeParse(wire).success).toBe(false);
+  expect(parseGoogleLiteEuContextSections(wire).status).toBe("REFUSED");
+});
+it("exhaustively equals canonical and advertised uncertainty field domains", () => {
+  const schema = inlineRefs(publicSchema) as { properties: { uncertainties: { items: { properties: { field: { enum?: string[] } } } } } };
+  expect(schema.properties.uncertainties.items.properties.field.enum?.slice().sort()).toEqual(uncertaintyFields.slice().sort());
+});
+const controlDirectives = ConversationDirectiveSchema.options.flatMap(branch => {
+  const shape = branch.shape;
+  const combinations = Object.entries(shape).reduce<Record<string, unknown>[]>((rows, [key, schema]) => {
+    const values: readonly unknown[] = "options" in schema ? schema.options : "value" in schema ? [schema.value] : [];
+    return rows.flatMap(row => values.map(value => ({ ...row, [key]: value })));
+  }, [{}]);
+  return combinations;
+});
+it.each(controlDirectives)("control directive branch parity %#", conversationDirective => {
+  expect(ConversationDirectiveSchema.safeParse(conversationDirective).success).toBe(true);
+  const canonical = { ...base, conversationDirective };
+  const wire = encodeGoogleLiteEuContext(canonical) as { conversationDirective: Record<string, unknown> };
+  expect(validator.safeParse(wire).success).toBe(true);
+  expect(parseGoogleLiteEuContextSections(wire)).toEqual(parseInterpretationSections(canonical));
+  for (const key of Object.keys(conversationDirective)) {
+    const invalid = structuredClone(wire);
+    invalid.conversationDirective[key] = "not_a_control_enum";
+    expect(validator.safeParse(invalid).success).toBe(false);
+    const result = parseGoogleLiteEuContextSections(invalid);
+    expect(result.status === "REFUSED" || !result.value.fullSchemaValid).toBe(true);
+  }
+});
+it("active directive field rejection explains canonical invalid_union sentinel without domain drift", () => {
+  const wire = encodeGoogleLiteEuContext({ ...base, conversationDirective: { kind: "ASK_FOR_FIELD", field: IssueFieldSchema.options[0] } }) as { conversationDirective: Record<string, unknown> };
+  wire.conversationDirective.field = "not_a_control_enum";
+  const canonicalIssues: unknown[] = [], wireIssues: unknown[] = [];
+  expect(validator.safeParse(wire).success).toBe(false);
+  const parsed = parseGoogleLiteEuContextSections(wire, d => canonicalIssues.push(d), d => wireIssues.push(d));
+  expect(parsed.status === "PARSED" && parsed.value.directive.status === "INVALID" && !parsed.value.fullSchemaValid).toBe(true);
+  expect(JSON.stringify(wireIssues)).toContain('"conversationDirective","field"');
+  expect(JSON.stringify(canonicalIssues)).toContain('"conversationDirective","kind"');
+});
 const dates = [
   { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 1, month: 1, year: null, leapMonth: null },
   { kind: "RELATIVE_DAY", offsetDays: 0 },
@@ -50,7 +99,8 @@ const periods = [
 const values: Record<string, unknown> = { title: "synthetic", location: "synthetic", notes: "synthetic", eventDate: dates[0], eventTime: { hour: 10, minute: 0, qualifier: "H24" }, reminderDate: dates[1], reminderTime: { hour: 10, minute: 0, qualifier: "H24" }, calendar: "GREGORIAN", frequency: "ONCE", occurrenceCount: 1, eventRelation: "BEFORE_EVENT", leadOffsetDays: 1, endDate: dates[2] };
 const uncertaintyValues = { ...values, intent: "HELP", queryRange: periods[0], operation: "NEW_REQUEST" };
 it("freezes the measured uncertainty schema-complexity boundary without claiming Google's private state count", () => {
-  expect(Buffer.byteLength(JSON.stringify(publicSchema))).toBeLessThanOrEqual(11853);
+  // Version 8 adds only the canonical finite field enum, not nested alternatives.
+  expect(Buffer.byteLength(JSON.stringify(publicSchema))).toBeLessThanOrEqual(11982);
   const shape = z.object({ properties: z.object({ uncertainties: z.object({ items: z.record(z.string(), z.unknown()) }) }) }).parse(publicSchema);
   expect(Object.keys(shape.properties.uncertainties.items).sort()).toEqual(["additionalProperties", "properties", "required", "type"]);
   expect(shape.properties.uncertainties.items).toMatchObject({
