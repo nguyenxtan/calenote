@@ -29,6 +29,172 @@ function trustedAccount(count = 2, maximum = 500, account: "PILOT" | "FULL" = "P
   return { root, old, target, record, intent, load, pin };
 }
 
+// Independent fixture hashing authenticates deliberately invalid event grammar.
+function rehashCampaign(directory: string, rows: Array<Record<string, unknown>>) {
+  let previousHash = "0".repeat(64);
+  const rebound = rows.map((row, index) => {
+    const event = { ...row }; delete event.hash; delete event.sequence; delete event.previousHash;
+    const body = { ...event, sequence: index + 1, previousHash };
+    const hash = createHash("sha256").update(JSON.stringify(body)).digest("hex"); previousHash = hash;
+    return { ...body, hash };
+  });
+  writeFileSync(join(directory, "campaign.jsonl"), rebound.map(row => JSON.stringify(row)).join("\n") + "\n");
+  return previousHash;
+}
+function namedTarget() {
+  const f = trustedAccount();
+  const capability = f.load(), admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: capability });
+  appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", observableAdmission: true, expiresAt: 1200002 });
+  const reserve = { runId: "fresh", profile: "PILOT" as const, provenanceDigest: admitted.provenanceDigest,
+    reservationId: "first", maximumMicrounits: 100, now: 3, startedAt: 2 };
+  reserveCampaignCall(f.target, reserve);
+  markCampaignDispatched(f.target, { runId: "fresh", reservationId: "first", at: 3 });
+  finishCampaignCall(f.target, { runId: "fresh", reservationId: "first", at: 3, observedMicrounits: 7 });
+  return { ...f, capability, reserve };
+}
+
+it.each(["finish-before-reserve", "orphan-finish", "duplicate-finish", "duplicate-reserve", "duplicate-dispatch", "missing-dispatch",
+  "missing-begin", "duplicate-begin", "begin-source", "begin-debt", "begin-calls", "begin-unknown", "begin-clock", "begin-deadline",
+  "begin-profile", "begin-observable", "begin-missing-observable", "begin-method", "begin-extra", "unknown-field", "reserve-source", "clock", "unsafe-cost", "unknown-result", "canary-before-finish", "duplicate-canary",
+  "complete-before-canary", "reserve-after-stop", "complete-after-stop"])("whole I1 pinned current target rejects %s before authority or reports", mode => {
+  const f = namedTarget();
+  try {
+    const rows = structuredClone([...readCampaignLedger(f.target)]) as Array<Record<string, unknown>>;
+    const begin = rows[0], reserve = rows[1], dispatch = rows[2], finish = rows[3];
+    if (mode === "finish-before-reserve") rows.splice(1, 0, rows.pop()!);
+    else if (mode === "orphan-finish") finish.reservationId = "orphan";
+    else if (mode === "duplicate-finish") rows.push({ ...finish });
+    else if (mode === "duplicate-reserve") rows.splice(2, 0, { ...reserve });
+    else if (mode === "duplicate-dispatch") rows.splice(3, 0, { ...dispatch });
+    else if (mode === "missing-dispatch") rows.splice(2, 1);
+    else if (mode === "missing-begin") rows.shift();
+    else if (mode === "duplicate-begin") rows.push({ ...begin });
+    else if (mode === "begin-source") begin.sourceSha = "c".repeat(40);
+    else if (mode === "begin-debt") begin.cumulativeRetainedMicrounits = 0;
+    else if (mode === "begin-calls") begin.historicalCalls = 0;
+    else if (mode === "begin-unknown") begin.historicalUnknownReservations = 0;
+    else if (mode === "begin-clock") begin.startedAt = 0;
+    else if (mode === "begin-deadline") begin.expiresAt = 1200003;
+    else if (mode === "begin-profile") begin.profile = "FULL";
+    else if (mode === "begin-observable") begin.observableAdmission = false;
+    else if (mode === "begin-missing-observable") delete begin.observableAdmission;
+    else if (mode === "begin-method") begin.method = "SKIP_CANARY";
+    else if (mode === "begin-extra") begin.result = "PASS";
+    else if (mode === "unknown-field") finish.authoritative = true;
+    else if (mode === "reserve-source") reserve.provenanceDigest = "c".repeat(64);
+    else if (mode === "clock") finish.at = 2;
+    else if (mode === "unsafe-cost") finish.observedMicrounits = Number.MAX_SAFE_INTEGER + 1;
+    else if (mode === "unknown-result") finish.observedMicrounits = "0";
+    else if (mode === "canary-before-finish") rows.splice(3, 0, { event: "CANARY_PASS", runId: "fresh", at: 3 });
+    else if (mode === "duplicate-canary") rows.push(...[1, 2].map(() => ({ event: "CANARY_PASS", runId: "fresh", at: 3 })));
+    else if (mode === "complete-before-canary") rows.push({ event: "COMPLETE", runId: "fresh", at: 3, gate: "PASS", retainedMicrounits: 7 });
+    else { rows.push({ event: "STOP", runId: "fresh", at: 3, reason: "COST_CAP" }); rows.push(mode === "reserve-after-stop"
+      ? { ...reserve, reservationId: "late" } : { event: "COMPLETE", runId: "fresh", at: 3, gate: "PASS", retainedMicrounits: 7 }); }
+    rehashCampaign(f.target, rows);
+    const bytes = readFileSync(join(f.target, "campaign.jsonl"), "utf8");
+    expect(() => f.load()).toThrow();
+    expect(() => live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.capability })).toThrow();
+    // Grant-bound substitutions may be structurally readable, never authoritative.
+    if (!["begin-source", "begin-debt", "begin-calls", "begin-unknown", "begin-clock", "begin-deadline", "begin-profile", "begin-observable", "begin-missing-observable"].includes(mode))
+      expect(() => readCampaignLedger(f.target)).toThrow();
+    expect(readFileSync(join(f.target, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each(["unfinished", "null", "absent"])("whole I2 current named resume retains full UNKNOWN hold %s", mode => {
+  const f = namedTarget();
+  try {
+    const rows = structuredClone([...readCampaignLedger(f.target)]) as Array<Record<string, unknown>>;
+    if (mode === "unfinished") rows.pop();
+    else if (mode === "null") rows[3].observedMicrounits = null;
+    else delete rows[3].observedMicrounits;
+    rehashCampaign(f.target, rows);
+    const bytes = readFileSync(join(f.target, "campaign.jsonl"), "utf8");
+    expect(readCampaignLedger(f.target).filter(row => row.event === "RESERVE")).toHaveLength(1);
+    const record = { ...f.record, priorLedgers: [...f.record.priorLedgers,
+      { directory: f.target, finalHash: JSON.parse(bytes.trim().split("\n").at(-1)!).hash }], runId: "next", startedAt: 4 };
+    const next = join(f.root, "next", "PILOT"); mkdirSync(next, { recursive: true });
+    writeFileSync(f.intent.authorizationPath, JSON.stringify(record));
+    const capability = live.createCampaignAuthorizationLoader({ reviewedOwnerRecordSha256: f.pin(record), accountRoot: f.root }).load(record, next);
+    const admitted = live.admitFutureLiveIntent({ ...f.intent, runId: "next", now: 5, authorizationCapability: capability });
+    expect(admitted).toMatchObject({ cumulativeRetainedMicrounits: 607, historicalCalls: 3, historicalUnknownReservations: 2 });
+    expect(readFileSync(join(f.target, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("whole I2 above-account actual debt is readable unchanged and blocks fresh authority", () => {
+  const f = trustedAccount(1, 1000);
+  try {
+    markCampaignDispatched(f.old, { runId: "old", reservationId: "old-0", at: 2 });
+    finishCampaignCall(f.old, { runId: "old", reservationId: "old-0", at: 3, observedMicrounits: 1500001 });
+    const bytes = readFileSync(join(f.old, "campaign.jsonl"), "utf8");
+    expect(readCampaignLedger(f.old).find(row => row.event === "FINISH")).toMatchObject({ observedMicrounits: 1500001 });
+    expect(() => f.load({ ...f.record, priorLedgers: [{ directory: f.old, finalHash: readCampaignLedger(f.old).at(-1)!.hash }] })).toThrow("HISTORICAL_ACCOUNTING_CAP");
+    expect(readFileSync(join(f.old, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each([1, 2])("whole I2 individually safe actual overflow with %i calls is durably retained and blocks new authority", calls => {
+  const f = trustedAccount(calls, 1000);
+  try {
+    markCampaignDispatched(f.old, { runId: "old", reservationId: "old-0", at: 2 });
+    expect(finishCampaignCall(f.old, { runId: "old", reservationId: "old-0", at: 3, observedMicrounits: Number.MAX_SAFE_INTEGER }))
+      .toMatchObject({ event: "FINISH", observedMicrounits: 9007199254740991 });
+    expect(readCampaignLedger(f.old).at(-1)).toMatchObject({ event: "STOP", reason: "RESERVATION_EXCEEDED" });
+    const bytes = readFileSync(join(f.old, "campaign.jsonl"), "utf8");
+    expect(() => f.load({ ...f.record, priorLedgers: [{ directory: f.old, finalHash: readCampaignLedger(f.old).at(-1)!.hash }] })).toThrow("HISTORICAL_ACCOUNTING_CAP");
+    expect(() => reserveCampaignCall(f.old, { runId: "old", profile: "PILOT", provenanceDigest: "b".repeat(64), reservationId: "reset", maximumMicrounits: 1, now: 4, startedAt: 0 })).toThrow(/STOPPED/u);
+    expect(readFileSync(join(f.old, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("whole I1 prospective STOP unknown fields never enter a valid campaign", () => {
+  const f = namedTarget();
+  try {
+    const bytes = readFileSync(join(f.target, "campaign.jsonl"), "utf8");
+    const event = { event: "STOP" as const, runId: "fresh", at: 3, reason: "COST_CAP", result: "PASS" };
+    expect(() => appendCampaignEvent(f.target, event)).toThrow();
+    expect(readFileSync(join(f.target, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each(["reserve", "dispatch", "finish", "canary", "complete", "append"])("whole I1 mutation after capability blocks %s without writes", operation => {
+  const f = namedTarget();
+  try {
+    const rows = structuredClone([...readCampaignLedger(f.target)]) as Array<Record<string, unknown>>;
+    rows.splice(1, 0, { event: "FINISH", runId: "fresh", reservationId: "orphan", observedMicrounits: 0, at: 3 });
+    rehashCampaign(f.target, rows); const bytes = readFileSync(join(f.target, "campaign.jsonl"), "utf8");
+    const attempt = () => {
+      if (operation === "reserve") reserveCampaignCall(f.target, { ...f.reserve, reservationId: "next" });
+      else if (operation === "dispatch") markCampaignDispatched(f.target, { runId: "fresh", reservationId: "orphan", at: 3 });
+      else if (operation === "finish") finishCampaignCall(f.target, { runId: "fresh", reservationId: "orphan", at: 3, observedMicrounits: 0 });
+      else if (operation === "canary") live.settleCampaignCanary(f.target, { runId: "fresh", at: 3, accepted: true });
+      else if (operation === "complete") live.completeCampaign(f.target, { runId: "fresh", at: 3 });
+      else appendCampaignEvent(f.target, { event: "STOP", runId: "fresh", at: 3, reason: "COST_CAP" });
+    };
+    expect(attempt).toThrow(); expect(readFileSync(join(f.target, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each(["producer-stop", "finish-crash", "late-settlement"])("whole I2 producer actual overrun survives prior import %s", mode => {
+  const f = trustedAccount(1, 1000);
+  try {
+    markCampaignDispatched(f.old, { runId: "old", reservationId: "old-0", at: 2 });
+    if (mode === "late-settlement") appendCampaignEvent(f.old, { event: "STOP", runId: "old", at: 2, reason: "COST_CAP" });
+    finishCampaignCall(f.old, { runId: "old", reservationId: "old-0", at: 3, observedMicrounits: 1001 });
+    if (mode === "finish-crash") {
+      const rows = structuredClone([...readCampaignLedger(f.old)]) as Array<Record<string, unknown>>; rows.pop(); rehashCampaign(f.old, rows);
+    }
+    const bytes = readFileSync(join(f.old, "campaign.jsonl"), "utf8");
+    const record = { ...f.record, priorLedgers: [{ directory: f.old, finalHash: JSON.parse(bytes.trim().split("\n").at(-1)!).hash }] };
+    const admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.load(record) });
+    expect(admitted).toMatchObject({ cumulativeRetainedMicrounits: 1001, historicalCalls: 1, historicalUnknownReservations: 0 });
+    expect(() => reserveCampaignCall(f.old, { runId: "old", profile: "PILOT", provenanceDigest: "b".repeat(64),
+      reservationId: "restart", maximumMicrounits: 1, now: 4, startedAt: 0 })).toThrow(/STOPPED/u);
+    expect(readFileSync(join(f.old, "campaign.jsonl"), "utf8")).toBe(bytes);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 it("trusted fresh account derives UNKNOWN, known costs and calls without counting inherited BEGIN debt", () => {
   const f = trustedAccount();
   try {
@@ -66,7 +232,7 @@ it("historical account reservations cannot reset the 192-call ceiling", () => {
   const f = trustedAccount(191, 1);
   try {
     const admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.load() });
-    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", expiresAt: 1200002 });
+    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", observableAdmission: true, expiresAt: 1200002 });
     const reserve = (reservationId: string) => reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest, reservationId, maximumMicrounits: 1, now: 3, startedAt: 2 });
     expect(reserve("192").status).toBe("RESERVED"); expect(reserve("193")).toMatchObject({ status: "STOPPED", reason: "TIME_OR_CALL_CAP" });
   } finally { rmSync(f.root, { recursive: true, force: true }); }
@@ -76,7 +242,7 @@ it("trusted retained costs consume the same account cap in a fresh attempt", () 
   const f = trustedAccount(1, 1499000);
   try {
     const admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.load() });
-    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", expiresAt: 1200002 });
+    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", observableAdmission: true, expiresAt: 1200002 });
     expect(reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest,
       reservationId: "over-cap", maximumMicrounits: 1001, now: 3, startedAt: 2 })).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
     expect(readCampaignLedger(f.target).filter(r => r.event === "RESERVE")).toHaveLength(0);

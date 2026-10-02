@@ -36,7 +36,7 @@ function validateInventory(grant: Pick<Grant, "root" | "directory" | "record">) 
   });
   if (new Set(paths).size !== paths.length) throw new Error("PRIOR_LEDGER_ALIAS");
   if (JSON.stringify([...paths].sort()) !== JSON.stringify(accountInventory(grant.root, grant.directory))) throw new Error("PRIOR_LEDGER_INVENTORY");
-  let retained = 0, unknown = 0;
+  let retained = 0n, unknown = 0;
   // Count each ledger's own reservations once; BEGIN's inherited totals are
   // observations of ancestors, not new charges to count again.
   for (const binding of grant.record.priorLedgers) {
@@ -45,8 +45,8 @@ function validateInventory(grant: Pick<Grant, "root" | "directory" | "record">) 
     const state = reduceDiagnosticHistory(rows);
     retained += state.localRetainedMicrounits; unknown += state.localUnknownReservations;
   }
-  if (!integer(retained) || retained > grant.record.capMicrounits) throw new Error("DIAGNOSTIC_CAP");
-  return { priorRetainedMicrounits: retained, priorUnknownReservations: unknown };
+  if (retained > BigInt(grant.record.capMicrounits)) throw new Error("DIAGNOSTIC_CAP");
+  return { priorRetainedMicrounits: Number(retained), priorUnknownReservations: unknown };
 }
 /** Trusted orchestration supplies the reviewed owner-record pin and complete
  * account namespace. No live entry point configures this loader in this task.
@@ -137,7 +137,9 @@ function reduceDiagnosticHistory(rows: Row[]) {
   const invalid: () => never = () => { throw new Error("DIAGNOSTIC_HISTORY_INVALID"); };
   let begin: Extract<HistoryEvent, { event: "BEGIN" }> | undefined, stopped = false, requests = 0;
   const reservations = new Map<string, ReservationState>(), stops = new Set<string>();
-  let reservedMicrounits = 0, observedMicrounits = 0, localRetainedMicrounits = 0, localUnknownReservations = 0;
+  // Exact internal totals preserve individually valid settlements even when
+  // their aggregate cannot be represented by a public safe-integer number.
+  let reservedMicrounits = 0n, observedMicrounits = 0n, localRetainedMicrounits = 0n, localUnknownReservations = 0;
   for (const [index, row] of rows.entries()) {
     const body = Object.fromEntries(Object.entries(row).filter(([key]) => !["sequence", "previousHash", "hash", "accountingClass"].includes(key)));
     const parsed = historyEventSchema.safeParse(body); if (!parsed.success) invalid();
@@ -155,8 +157,8 @@ function reduceDiagnosticHistory(rows: Row[]) {
         || event.sourceSha !== begin.sourceSha || event.sourceDigest !== begin.sourceDigest
         || event.inputFinancialBound !== event.envelopeBytes * 4 + DIAGNOSTIC_FINANCIAL_FRAMING_TOKENS
         || event.reservedMicrounits !== charge(event.inputFinancialBound, event.maxOutputTokens)
-        || (begin.priorRetainedMicrounits ?? 0) + localRetainedMicrounits + event.reservedMicrounits > begin.capMicrounits) invalid();
-      reservations.set(event.probeId, { reserve: event, dispatched: false }); reservedMicrounits += event.reservedMicrounits; localRetainedMicrounits += event.reservedMicrounits; localUnknownReservations++;
+        || BigInt(begin.priorRetainedMicrounits ?? 0) + localRetainedMicrounits + BigInt(event.reservedMicrounits) > BigInt(begin.capMicrounits)) invalid();
+      reservations.set(event.probeId, { reserve: event, dispatched: false }); reservedMicrounits += BigInt(event.reservedMicrounits); localRetainedMicrounits += BigInt(event.reservedMicrounits); localUnknownReservations++;
     } else if (event.event === "DISPATCH") {
       const state = reservations.get(event.probeId);
       if (stopped || !state || state.dispatched || state.finish) invalid();
@@ -170,17 +172,18 @@ function reduceDiagnosticHistory(rows: Row[]) {
         || (event.observedMicrounits ?? null) !== cost || (event.tokenEstimatedMicrounits ?? null) !== estimated
         || (event.tokenUsageStatus === "VALID") !== (event.usage !== null)) invalid();
       state.finish = event;
-      if (cost !== null) { localRetainedMicrounits += cost - state.reserve.reservedMicrounits; observedMicrounits += cost; localUnknownReservations--; }
+      if (cost !== null) { localRetainedMicrounits += BigInt(cost) - BigInt(state.reserve.reservedMicrounits); observedMicrounits += BigInt(cost); localUnknownReservations--; }
       if (cost !== null && cost > state.reserve.reservedMicrounits || estimated !== null && estimated > state.reserve.reservedMicrounits) stopped = true;
     } else {
       const identity = event.reason + ":" + event.probeId, state = reservations.get(event.probeId);
       if (stops.has(identity) || event.reason === "RESERVATION_OVERRUN" && (!state?.finish || ![state.finish.observedMicrounits, state.finish.tokenEstimatedMicrounits].some(value => typeof value === "number" && value > state.reserve.reservedMicrounits))) invalid();
       stops.add(identity); stopped = true;
     }
-    if (![reservedMicrounits, observedMicrounits, localRetainedMicrounits, localUnknownReservations].every(integer)) invalid();
+    if (!integer(localUnknownReservations) || localRetainedMicrounits < 0n) invalid();
   }
-  const retainedMicrounits = (begin?.priorRetainedMicrounits ?? 0) + localRetainedMicrounits, unknownReservations = (begin?.priorUnknownReservations ?? 0) + localUnknownReservations;
-  if (!integer(retainedMicrounits) || !integer(unknownReservations)) invalid();
+  const retainedMicrounits = BigInt(begin?.priorRetainedMicrounits ?? 0) + localRetainedMicrounits, unknownReservations = (begin?.priorUnknownReservations ?? 0) + localUnknownReservations;
+  if (!integer(unknownReservations)) invalid();
+  if (begin && retainedMicrounits > BigInt(begin.capMicrounits)) stopped = true;
   return { begin, reservations, localRetainedMicrounits, localUnknownReservations, reservedMicrounits, observedMicrounits, retainedMicrounits, unknownReservations, totalSpendKnown: unknownReservations === 0, requests, stopped };
 }
 export function readDiagnosticLedger(directory: string): Row[] { return readValidatedHistory(directory, new Set(), new Map()); }
@@ -202,7 +205,7 @@ function readValidatedHistory(directory: string, ancestors: Set<string>, validat
   }
   const state = reduceDiagnosticHistory(rows);
   if (state.begin?.authorizationRecord) {
-    const paths = new Set<string>(); let retained = 0, unknown = 0;
+    const paths = new Set<string>(); let retained = 0n, unknown = 0;
     for (const binding of state.begin.authorizationRecord.priorLedgers) {
       const path = realpathSync(binding.directory);
       if (path !== binding.directory || paths.has(path)) throw new Error("DIAGNOSTIC_HISTORY_INVALID"); paths.add(path);
@@ -210,7 +213,7 @@ function readValidatedHistory(directory: string, ancestors: Set<string>, validat
       if (!prior.length || prior.at(-1)!.hash !== binding.finalHash) throw new Error("PRIOR_LEDGER_BINDING");
       const priorState = reduceDiagnosticHistory(prior); retained += priorState.localRetainedMicrounits; unknown += priorState.localUnknownReservations;
     }
-    if (retained !== state.begin.priorRetainedMicrounits || unknown !== state.begin.priorUnknownReservations) throw new Error("DIAGNOSTIC_HISTORY_INVALID");
+    if (retained !== BigInt(state.begin.priorRetainedMicrounits!) || unknown !== state.begin.priorUnknownReservations) throw new Error("DIAGNOSTIC_HISTORY_INVALID");
   }
   validated.set(canonical, rows); return rows;
 }
@@ -230,7 +233,11 @@ function append(directory: string, rows: Row[], event: Record<string, unknown>) 
 }
 function summary(rows: Row[]) {
   const { reservedMicrounits, observedMicrounits, retainedMicrounits, unknownReservations, totalSpendKnown, requests, stopped } = reduceDiagnosticHistory(rows);
-  return { reservedMicrounits, observedMicrounits, retainedMicrounits, unknownReservations, totalSpendKnown, requests, stopped };
+  const number = (value: bigint) => {
+    if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("DIAGNOSTIC_ACCOUNTING_OVERFLOW");
+    return Number(value);
+  };
+  return { reservedMicrounits: number(reservedMicrounits), observedMicrounits: number(observedMicrounits), retainedMicrounits: number(retainedMicrounits), unknownReservations, totalSpendKnown, requests, stopped };
 }
 export function diagnosticSummary(directory: string) { return summary(readDiagnosticLedger(directory)); }
 export function beginDiagnosticLedger(directory: string, input: Source & { prices: DiagnosticPrices; authorization?: unknown }) {
@@ -257,7 +264,7 @@ export function reserveDiagnosticProbe(directory: string, input: Source & { prob
   validateInventory(grant);
   return locked(directory, rows => {
     const begin = rows[0];
-    if (!begin || begin.event !== "BEGIN" || summary(rows).stopped) throw new Error("DIAGNOSTIC_STOPPED");
+    if (!begin || begin.event !== "BEGIN" || reduceDiagnosticHistory(rows).stopped) throw new Error("DIAGNOSTIC_STOPPED");
     if (begin.authorizationSha256 !== grant.sha256) throw new Error("DIAGNOSTIC_AUTHORIZATION");
     if (input.sourceSha !== begin.sourceSha || input.sourceDigest !== begin.sourceDigest) throw new Error("SOURCE_BINDING");
     const probe = input.probe;
@@ -269,7 +276,7 @@ export function reserveDiagnosticProbe(directory: string, input: Source & { prob
     const estimate = estimateDiagnosticReservation(input.serializedEnvelope, input.maxOutputTokens, begin.prices as DiagnosticPrices);
     const cap = begin.capMicrounits;
     if (typeof cap !== "number" || !integer(cap) || ![DIAGNOSTIC_CAP_MICROUNITS, 300000].includes(cap)) throw new Error("DIAGNOSTIC_AUTHORIZATION");
-    if (summary(rows).retainedMicrounits + estimate.reservedMicrounits > cap) {
+    if (reduceDiagnosticHistory(rows).retainedMicrounits + BigInt(estimate.reservedMicrounits) > BigInt(cap)) {
       append(directory, rows, { event: "STOP", reason: "DIAGNOSTIC_CAP", probeId: probe.id });
       throw new Error("DIAGNOSTIC_CAP");
     }
@@ -281,7 +288,7 @@ export function dispatchDiagnosticProbe(directory: string, probeId: string, seri
     const reserve = rows.find(row => row.event === "RESERVE" && row.probeId === probeId);
     if (!reserve) throw new Error("RESERVATION_REQUIRED");
     if (rows.some(row => row.event === "DISPATCH" && row.probeId === probeId)) throw new Error("ALREADY_DISPATCHED");
-    if (summary(rows).stopped) throw new Error("DIAGNOSTIC_STOPPED");
+    if (reduceDiagnosticHistory(rows).stopped) throw new Error("DIAGNOSTIC_STOPPED");
     if (digest(serializedEnvelope) !== reserve.envelopeDigest) throw new Error("ENVELOPE_BINDING");
     return append(directory, rows, { event: "DISPATCH", probeId });
   });

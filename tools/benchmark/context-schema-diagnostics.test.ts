@@ -60,6 +60,39 @@ it("overspend FINISH before STOP crash boundary still retains actual debt and st
   expect(() => diagnostic.dispatchDiagnosticProbe(directory, "probe", "{}")).toThrow();
   expect(() => diagnostic.finishDiagnosticProbe(directory, "probe", { httpStatus: 200, upstreamCategory: "SUCCESS", usage: null, reportedCostUsd: 0 })).toThrow();
 });
+it.each(["ordinary", "late", "finish-crash", "inherited"])("safe actual diagnostic overflow remains durable with explicit summary refusal: %s", mode => {
+  const root = fresh(), directory = join(root, "attempt"), prior = join(root, "prior"), next = join(root, "next");
+  mkdirSync(directory); mkdirSync(next);
+  const known = { ...legacyFinish(), reportedCostUsd: .000007, observedMicrounits: 7 };
+  const own: Array<Record<string, unknown>> = [legacyBegin(), legacyReserve(), { event: "DISPATCH", probeId: "probe" }, known,
+    { ...legacyReserve(), probeId: "second" }, { event: "DISPATCH", probeId: "second" }];
+  if (mode === "inherited") {
+    mkdirSync(prior); const priorRows = writeHistory(prior, [legacyBegin(), legacyReserve(), { event: "DISPATCH", probeId: "probe" }, known]);
+    const record = { authorizationId: "synthetic-overflow", account: "DIAGNOSTIC", capMicrounits: 300000,
+      priorLedgers: [{ directory: prior, finalHash: priorRows.at(-1)!.hash }] };
+    diagnostic.beginDiagnosticLedger(directory, { ...source, prices, authorization: trustedGrant(record, directory, root) });
+    const begin = diagnostic.readDiagnosticLedger(directory)[0];
+    own.splice(0, own.length, Object.fromEntries(Object.entries(begin).filter(([key]) => !["sequence", "previousHash", "hash", "accountingClass"].includes(key))),
+      { ...legacyReserve(), probeId: "second" }, { event: "DISPATCH", probeId: "second" });
+  }
+  if (mode === "late") own.push({ event: "STOP", reason: "DIAGNOSTIC_CAP", probeId: "later" });
+  writeHistory(directory, own);
+  const result = { httpStatus: 200, upstreamCategory: "SUCCESS", usage: null, reportedCostUsd: 9007199254.74099 };
+  expect(diagnostic.finishDiagnosticProbe(directory, "second", result)).toMatchObject({ event: "FINISH", observedMicrounits: 9007199254740990 });
+  expect(diagnostic.readDiagnosticLedger(directory).at(-1)).toMatchObject({ event: "STOP", reason: "RESERVATION_OVERRUN" });
+  if (mode === "finish-crash") {
+    const events = diagnostic.readDiagnosticLedger(directory).slice(0, -1).map(row => Object.fromEntries(Object.entries(row).filter(([key]) => !["sequence", "previousHash", "hash", "accountingClass"].includes(key))));
+    writeHistory(directory, events);
+  }
+  const bytes = readFileSync(join(directory, "diagnostic.jsonl"), "utf8");
+  expect(() => diagnostic.diagnosticSummary(directory)).toThrow("DIAGNOSTIC_ACCOUNTING_OVERFLOW");
+  expect(() => diagnostic.dispatchDiagnosticProbe(directory, "second", "{}")).toThrow();
+  const record = { authorizationId: "synthetic-next", account: "DIAGNOSTIC", capMicrounits: 300000,
+    priorLedgers: [...(mode === "inherited" ? [{ directory: prior, finalHash: diagnostic.readDiagnosticLedger(prior).at(-1)!.hash }] : []),
+      { directory, finalHash: diagnostic.readDiagnosticLedger(directory).at(-1)!.hash }] };
+  expect(() => trustedGrant(record, next, root)).toThrow("DIAGNOSTIC_CAP");
+  expect(readFileSync(join(directory, "diagnostic.jsonl"), "utf8")).toBe(bytes);
+});
 it("resumed named capability cannot append after hash-valid financial corruption", () => {
   const directory = setup(), begin = diagnostic.readDiagnosticLedger(directory)[0];
   const body = Object.fromEntries(Object.entries(begin).filter(([key]) => !["sequence", "previousHash", "hash", "accountingClass"].includes(key)));
