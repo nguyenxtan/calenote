@@ -13,8 +13,8 @@ import { buildContextInputV2 } from "./context";
 import { ContextSnapshotV2Schema, type ContextSnapshotV2 } from "./state";
 import { SemanticPatchProposalV3Schema } from "./contracts";
 
-function successorBuild(text: string, state: ContextSnapshotV2 | null = null) {
-  const msg = { ...message(text), id: `v3-${state?.transcript.length ?? 0}`, receivedAt: Date.parse(state?.inbound.receivedAt ?? "2026-09-28T03:00:00.000Z") + 60000 };
+function successorBuild(text: string, state: ContextSnapshotV2 | null = null, receivedAt = Date.parse(state?.inbound.receivedAt ?? "2026-09-28T03:00:00.000Z") + 60000) {
+  const msg = { ...message(text), id: `v3-${state?.transcript.length ?? 0}`, receivedAt };
   const context = { ...chat, inboundRowId: (state?.inbound.rowid ?? 0) + 1 };
   const observed = observation(null, msg, context);
   const built = buildContextInputV2({ message: msg, context, snapshot: state, observation: state ? { ...observed, observed: { presence: "PRESENT", contextId: state.id, contextRevision: state.contextRevision } } : observed });
@@ -30,6 +30,37 @@ function successorPatch(text: string, state: ContextSnapshotV2 | null, target: "
 }
 const successorNotes = () => ContextSnapshotV2Schema.parse({ ...withNotes(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
 describe("successor grounded semantic merge", () => {
+  function delayedNoAAdoption() {
+    const original = successorBuild("nhắc gọi mẹ");
+    const refs = [{ kind: "USER_QUOTE", turn: original.input.currentTurn, quote: "nhắc gọi mẹ", occurrence: 1 }];
+    const proposed = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "UNRESOLVED", evidence: refs }, changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: refs }], query: null, uncertainties: [] });
+    const checked = successorEvidence.validateEvidenceV3(proposed, original);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(null, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("tạo lịch mới", staged.candidate, Date.parse("2026-09-28T03:06:00.000Z"));
+    const answer = SemanticPatchProposalV3Schema.parse({ ...proposed, requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "tạo lịch mới", occurrence: 1 }] }, changes: [] });
+    const adopted = successorEvidence.validateEvidenceV3(answer, built);
+    if (adopted.status !== "VALID") throw new Error(adopted.reason);
+    expect(adopted.patch.adoptedCandidate).toBe(true);
+    const merged = successorMerge.mergePatchV3(staged.candidate, adopted.patch);
+    if (merged.status !== "MERGED") throw new Error("expected adopted request");
+    return merged.candidate;
+  }
+  it("delayed_NEW_without_A_retains_original_candidate_lifetime", () => {
+    expect(delayedNoAAdoption()).toMatchObject({ draftCreatedAt: "2026-09-28T03:01:00.000Z", draftExpiresAt: "2026-09-28T03:11:00.000Z", slots: { title: { value: "gọi mẹ", resolution: { referenceTime: "2026-09-28T03:01:00.000Z" } } } });
+  });
+  it("original_candidate_expiry_cannot_be_extended_by_NEW_target_answer", () => {
+    const state = delayedNoAAdoption(), msg = { ...message("xác nhận"), id: "expiry-confirmation", receivedAt: Date.parse("2026-09-28T03:11:00.000Z") }, context = { ...chat, inboundRowId: state.inbound.rowid + 1 }, observed = observation(null, msg, context);
+    expect(buildContextInputV2({ message: msg, context, snapshot: state, observation: { ...observed, observed: { presence: "PRESENT", contextId: state.id, contextRevision: state.contextRevision } } })).toEqual({ status: "REFUSED", reason: "CONTEXT_EXPIRED" });
+  });
+  it("fresh_NEW_without_adoption_uses_fresh_receipt_lifetime", () => {
+    const built = successorBuild("nhắc gọi mẹ", null, Date.parse("2026-09-28T03:06:00.000Z")), evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "nhắc gọi mẹ", occurrence: 1 }];
+    const checked = successorEvidence.validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence }], query: null, uncertainties: [] }), built);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    expect(successorMerge.mergePatchV3(null, checked.patch)).toMatchObject({ status: "MERGED", candidate: { draftCreatedAt: "2026-09-28T03:06:00.000Z", draftExpiresAt: "2026-09-28T03:16:00.000Z" } });
+  });
   it("current_replace_differs_from_new_candidate", () => {
     const state = successorNotes();
     for (const target of ["CURRENT", "NEW"] as const) {

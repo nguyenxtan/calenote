@@ -1,6 +1,6 @@
-import { ConversationDirectiveSchema, IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type ParsedInterpretation } from "./contracts";
-import { isValidatedPatch, type GuidancePrivacyValidation, type ValidatedPatch } from "./evidence";
-import type { MergeResult } from "./merge";
+import { ConversationDirectiveSchema, ModelDirectiveV3Schema, IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type ParsedInterpretation, type ParsedInterpretationV3 } from "./contracts";
+import { isValidatedPatch, isValidatedPatchV3, type GuidancePrivacyValidation, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
+import type { MergeResult, MergeResultV3 } from "./merge";
 import type { RequestResolution } from "./resolve";
 import type { ContextQueryResult, QueryResolution } from "./query";
 import { containsForbiddenGuidanceMaterial } from "./projection";
@@ -8,6 +8,7 @@ import { containsForbiddenGuidanceMaterial } from "./projection";
 export type EffectiveDirective = ConversationDirective | { kind: "BACKEND_ONLY"; reason: "CONTROL" | "RECOVERY" | "FAILURE" | "MUTATION" | "DELIVERY" };
 type BackendReason = Extract<EffectiveDirective, { kind: "BACKEND_ONLY" }>["reason"];
 type ApplicationOutcome = { semantic: ValidatedPatch; merge: MergeResult; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
+export type ApplicationOutcomeV3 = { semantic: ValidatedPatchV3; merge: MergeResultV3; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 const failure = (): EffectiveDirective => ({ kind: "BACKEND_ONLY", reason: "FAILURE" });
 const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
 
@@ -17,8 +18,21 @@ const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_C
 export function computeEffectiveDirective(outcome: ApplicationOutcome): EffectiveDirective {
   if (outcome.backendOnly) return { kind: "BACKEND_ONLY", reason: outcome.backendOnly };
   if (!isValidatedPatch(outcome.semantic) || outcome.merge.status !== "MERGED") return failure();
+  if (outcome.semantic.proposal.dialogueAct === "ABANDON_PENDING") return { kind: "BACKEND_ONLY", reason: "CONTROL" };
+  return computeMergedDirective({ ...outcome, merge: outcome.merge });
+}
+
+export function computeEffectiveDirectiveV3(outcome: ApplicationOutcomeV3): EffectiveDirective {
+  if (outcome.backendOnly) return { kind: "BACKEND_ONLY", reason: outcome.backendOnly };
+  if (!isValidatedPatchV3(outcome.semantic) || outcome.merge.status === "REJECTED") return failure();
+  if (outcome.merge.status === "NEEDS_REPLACEMENT") return { kind: "BACKEND_ONLY", reason: "CONTROL" };
+  if (outcome.merge.status === "CLARIFY_OPERATION") return { kind: "ASK_FOR_DISAMBIGUATION", field: "operation", reason: "AMBIGUOUS" };
+  return computeMergedDirective({ ...outcome, merge: outcome.merge });
+}
+
+function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "merge"> & { semantic: ValidatedPatch | ValidatedPatchV3; merge: Extract<MergeResult | MergeResultV3, { status: "MERGED" }> }): EffectiveDirective {
   const candidate = outcome.merge.candidate, semantic = outcome.semantic.proposal, isQuery = outcome.merge.query !== null;
-  if (candidate.pendingDecision || candidate.lifecycle === "AWAITING_CONFIRMATION" || semantic.dialogueAct === "ABANDON_PENDING") return { kind: "BACKEND_ONLY", reason: "CONTROL" };
+  if (candidate.pendingDecision || candidate.lifecycle === "AWAITING_CONFIRMATION") return { kind: "BACKEND_ONLY", reason: "CONTROL" };
   const scopedNonSlotIssue = (): EffectiveDirective | null => {
     // T3 does not copy AMBIGUOUS/combined-action proposals into a reminder.
     // Consult their validated current uncertainties directly. A side query
@@ -97,6 +111,10 @@ export function validateDirective(model: ParsedInterpretation["directive"], effe
   if (!parsed.success) return { status: "INVALID", reason: "DIRECTIVE_INVALID" };
   const same = Object.keys(parsed.data).length === Object.keys(effective).length && Object.entries(parsed.data).every(([key, value]) => effective[key as keyof EffectiveDirective] === value);
   return same ? { status: "VALID" } : { status: "INVALID", reason: "DIRECTIVE_MISMATCH" };
+}
+export function validateDirectiveV3(model: ParsedInterpretationV3["directive"], effective: EffectiveDirective): DirectiveValidation {
+  if (model.status !== "VALID" || !ModelDirectiveV3Schema.safeParse(model.value).success) return { status: "INVALID", reason: "DIRECTIVE_INVALID" };
+  return validateDirective(model, effective);
 }
 
 export const OUTPUT_SAFETY_LINT_VERSION = "conversation-guidance-lint-1";

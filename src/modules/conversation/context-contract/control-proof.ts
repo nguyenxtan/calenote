@@ -1,11 +1,11 @@
 import { digest, validDecision } from "./confirmation";
 import { selectControl, type ControlSelection } from "./decisions";
-import type { ContextSnapshotV1, ControlAuthority } from "./state";
+import type { ContextSnapshotV1, ContextSnapshotV2, ControlAuthority } from "./state";
 import type { DecisionProof } from "./store";
 
 /** Local UI authority does not need provider-context capacity. Both T5 and
  * the service use this exact construction; T4 remains the final atomic guard. */
-export async function createControlProof(snapshot: ContextSnapshotV1, inbound: ContextSnapshotV1["inbound"], text: string,
+export async function createControlProof(snapshot: ContextSnapshotV1 | ContextSnapshotV2, inbound: ContextSnapshotV1["inbound"], text: string,
   control: Extract<ControlSelection, { kind: "APPROVE" }>, authority: ControlAuthority, now: number): Promise<DecisionProof | null> {
   if (authority.kind !== "CHAT" || authority.scope.sourceInboundId !== inbound.id || authority.scope.claimMarker !== inbound.claimMarker) return null;
   const selected = selectControl(text, snapshot.pendingDecision, authority, { snapshot, now, replyReference: control.response.kind === "REPLY" ? control.response.reference : null });

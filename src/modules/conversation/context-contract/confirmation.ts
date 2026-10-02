@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CanonicalDetailsV1Schema, ContextSnapshotV1Schema, type ContextSnapshotV1, type ControlAuthority } from "./state";
+import { CanonicalDetailsV1Schema, ContextSnapshotV1Schema, ContextSnapshotV2Schema, type ContextSnapshotV1, type ContextSnapshotV2, type ControlAuthority } from "./state";
 import type { CanonicalPreview, DecisionProof } from "./store";
 import { resolveRequest } from "./resolve";
 import { lunarCalendar } from "../lunar-calendar";
@@ -19,7 +19,7 @@ export async function previewHash(preview: CanonicalPreview): Promise<string> {
 }
 /** A retained preview cannot originate after the snapshot containing it, and
  * SAVE authority can be issued with/after that preview, never before it. */
-export function validPreviewOrder(snapshot: ContextSnapshotV1): boolean {
+export function validPreviewOrder(snapshot: ContextSnapshotV1 | ContextSnapshotV2): boolean {
   const p = snapshot.previewReceipt;
   if (!p) return true;
   const after = (a: {receivedAt:string;rowid:number}, b: {receivedAt:string;rowid:number}) =>
@@ -31,9 +31,9 @@ export function validPreviewOrder(snapshot: ContextSnapshotV1): boolean {
     && (snapshot.pendingDecision?.kind !== "SAVE_PREVIEW"
       || !after(p.issuedAfterOrder, snapshot.pendingDecision.issuedAfterInbound));
 }
-export function validPreview(snapshot: ContextSnapshotV1, preview: CanonicalPreview, now: number): boolean {
+export function validPreview(snapshot: ContextSnapshotV1 | ContextSnapshotV2, preview: CanonicalPreview, now: number): boolean {
   const parsed = CanonicalPreviewSchema.safeParse(preview);
-  if (!parsed.success || !ContextSnapshotV1Schema.safeParse(snapshot).success || !validPreviewOrder(snapshot)) return false;
+  if (!parsed.success || !(snapshot.schemaVersion === "calenote-context-state-2" ? ContextSnapshotV2Schema : ContextSnapshotV1Schema).safeParse(snapshot).success || !validPreviewOrder(snapshot)) return false;
   const resolved = resolveRequest(snapshot, now, lunarCalendar);
   return resolved.status === "READY" && preview.title === snapshot.slots.title.value
     && JSON.stringify(parsed.data.details) === JSON.stringify(CanonicalDetailsV1Schema.parse(resolved.details))
@@ -42,7 +42,7 @@ export function validPreview(snapshot: ContextSnapshotV1, preview: CanonicalPrev
 }
 /** No language interpretation here: only exact application controls. Database
  * ownership, inbound order, session and revision are rechecked in the batch. */
-export function validDecision(snapshot: ContextSnapshotV1, proof: DecisionProof, authority: ControlAuthority, now: number): boolean {
+export function validDecision(snapshot: ContextSnapshotV1 | ContextSnapshotV2, proof: DecisionProof, authority: ControlAuthority, now: number): boolean {
   const d = snapshot.pendingDecision;
   const owner = authority.kind === "CHAT" ? authority.scope.ownerId : authority.principal.userId;
   const chat = authority.kind === "CHAT" ? authority.scope.chatIdentityId : authority.chat.chatIdentityId;
@@ -61,7 +61,7 @@ export function validDecision(snapshot: ContextSnapshotV1, proof: DecisionProof,
   const normalized = response.text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
   return d.acceptedReplies.some(reply => reply === normalized);
 }
-export async function validateConfirmation(snapshot: ContextSnapshotV1, preview: CanonicalPreview, proof: DecisionProof, authority: ControlAuthority, now: number): Promise<boolean> {
+export async function validateConfirmation(snapshot: ContextSnapshotV1 | ContextSnapshotV2, preview: CanonicalPreview, proof: DecisionProof, authority: ControlAuthority, now: number): Promise<boolean> {
   if (proof.kind !== "SAVE_PREVIEW" || snapshot.lifecycle !== "AWAITING_CONFIRMATION"
     || !validDecision(snapshot, proof, authority, now) || !validPreview(snapshot, preview, now)) return false;
   const p = snapshot.previewReceipt;

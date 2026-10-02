@@ -112,10 +112,15 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   }
   candidate.pendingSemanticCandidate = null;
   if (candidate.requestId === null) {
+    const original = patch.adoptedCandidate ? patch.candidateSnapshot.pendingSemanticCandidate : null;
     candidate.requestId = candidate.inbound.id;
     candidate.draftRevision = 1;
-    candidate.draftCreatedAt = candidate.inbound.receivedAt;
-    candidate.draftExpiresAt = new Date(Math.min(Date.parse(candidate.inbound.receivedAt) + 600000, Date.parse(candidate.absoluteExpiresAt))).toISOString();
+    candidate.draftCreatedAt = original?.createdAt ?? candidate.inbound.receivedAt;
+    candidate.draftExpiresAt = new Date(Math.min(
+      original ? Date.parse(original.expiresAt) : Date.parse(candidate.inbound.receivedAt) + 600000,
+      Date.parse(candidate.absoluteExpiresAt),
+      ...(original ? [Date.parse(candidate.idleExpiresAt)] : []),
+    )).toISOString();
     candidate.lifecycle = "CLARIFYING";
   }
   // A proposal (including an EDIT label or a replacement uncertainty) is not

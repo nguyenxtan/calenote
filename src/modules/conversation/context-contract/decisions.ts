@@ -8,14 +8,14 @@ export type ControlSelection = { kind: "NONE" } | { kind: "AMBIGUOUS_TARGET" }
   | { kind: "APPROVE"; decisionId: string; decisionKind: PendingDecision["kind"]; response: DecisionProof["response"] };
 export interface ControlContext {
   /** Needed for a draft without a current decision, and for channel replies. */
-  snapshot?: import("./state").ContextSnapshotV1;
+  snapshot?: import("./state").ContextSnapshotV1 | import("./state").ContextSnapshotV2;
   replyReference?: string | null;
   now?: number;
 }
 const normalize = (text: string) => text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
 /** Exact UI vocabulary only. No prefix or general-language interpretation.
  * This selection is not authority: transition/store recheck the full proof. */
-export function selectControl(text: string, decision: PendingDecision | null, authority: ControlAuthority, context: ControlContext = {}): ControlSelection {
+export function selectControl(text: string, decision: PendingDecision | import("./state").ContextSnapshotV2["pendingDecision"], authority: ControlAuthority, context: ControlContext = {}): ControlSelection {
   const none: ControlSelection = { kind: "NONE" };
   if (!text.isWellFormed() || authority.kind !== "CHAT") return none;
   const now = context.now ?? authority.scope.now;
@@ -23,7 +23,8 @@ export function selectControl(text: string, decision: PendingDecision | null, au
   if (!target || target.ownerId !== authority.scope.ownerId || target.chatIdentityId !== authority.scope.chatIdentityId) return none;
   const normalized = normalize(text);
   const requestId = decision?.target.requestId ?? context.snapshot?.requestId ?? null;
-  const proposalId = decision?.candidate?.proposalId ?? (decision && ["REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE"].includes(decision.kind) ? decision.target.proposalId : null);
+  const proposalId = decision?.candidate?.proposalId ?? (decision && ["REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE"].includes(decision.kind) ? decision.target.proposalId : null)
+    ?? (context.snapshot?.schemaVersion === "calenote-context-state-2" ? context.snapshot.pendingSemanticCandidate?.proposalId ?? null : null);
   if (["bỏ", "hủy", "huỷ"].includes(normalized)) {
     if (requestId && proposalId) return { kind: "AMBIGUOUS_TARGET" };
     return requestId || proposalId ? { kind: "ABANDON", requestId, proposalId } : none;

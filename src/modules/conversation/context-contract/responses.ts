@@ -21,7 +21,7 @@ export type ReplyOutcome =
   | { kind: "RECOVERY"; count: 2 | 3; question: string; facts: string[]; token?: string }
   | { kind: "FAILURE"; reason: FailureReason }
   | { kind: "MUTATION"; result: ConfirmationResult }
-  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" };
+  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" };
 const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const failures: Record<FailureReason, string> = {
   PROVIDER: "Chưa thể xử lý câu trả lời lúc này. Bản nháp còn hiệu lực được giữ nguyên; bạn có thể thử lại.",
@@ -37,6 +37,7 @@ const notices = {
   DECLINED: "Đã từ chối lựa chọn này. Bản nháp còn hiệu lực vẫn được giữ nguyên.",
   ABANDONED: "Đã bỏ yêu cầu chưa lưu.", RESTARTED: "Bạn muốn được nhắc việc gì mới?",
   AMBIGUOUS_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Trả lời 2 để từ chối đề xuất mới trước.",
+  AMBIGUOUS_SEMANTIC_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Mình cần làm rõ yêu cầu bạn đang nói tới.",
   ESCAPE_REQUIRED: "Để bỏ yêu cầu chưa lưu hiện tại, hãy trả lời riêng Bỏ. Nếu đang có cả bản nháp và đề xuất mới, hãy chọn rõ đối tượng trước.",
   RESUME: "Bản nháp còn hiệu lực được giữ nguyên. Bạn có thể tiếp tục để xem lại câu hỏi.",
   CHECKING: "Đang kiểm tra phiên bản bạn chọn.", HELP: "Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn.",

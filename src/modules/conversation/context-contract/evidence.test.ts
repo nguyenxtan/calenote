@@ -11,6 +11,20 @@ import { ContextSnapshotV2Schema } from "./state";
 import { mergePatchV3 } from "./merge";
 
 describe("successor scoped semantic evidence", () => {
+  it.each(["old-quote", "fact", "mixed-old-quote", "mixed-fact", "current"])("NEW_fresh_factual_alternative_%s_requires_B_sources", source => {
+    const state = ContextSnapshotV2Schema.parse({ ...withNotes(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+    const msg = message("tạo lịch mới gọi mẹ mang giấy tờ"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(withNotes(), msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const current = { kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 };
+    const old = source.endsWith("fact") ? { kind: "CONTEXT_FACT", ref: built.input.facts.find(f => f.field === "notes")!.alias } : { kind: "USER_QUOTE", turn: 0, quote: "mang giấy tờ", occurrence: 1 };
+    const evidence = source === "current" ? [current] : source.startsWith("mixed") ? [current, old] : [old];
+    const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [current] }, changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [current] }], query: null, uncertainties: [{ field: "notes", reason: "AMBIGUOUS", alternatives: [{ value: "mang giấy tờ", evidence }] }] });
+    const result = validateEvidenceV3(semantic, built);
+    if (source === "current") {
+      expect(result.status).toBe("VALID");
+      if (result.status === "VALID") expect(result.patch.alternativeEvidence[0].sources.map(s => s.sourceTurnId)).toEqual([msg.id]);
+    } else expect(result).toEqual({ status: "REFUSED", reason: "NEW_REQUEST_FACT_REUSE" });
+  });
   it.each(["source", "occurrence", "role", "target-old", "alternative-old"])("invalid_%s_rejects_whole_patch", variant => {
     const state = ContextSnapshotV2Schema.parse({ ...snapshot(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
     if (variant === "role") state.transcript[0] = { ...turn("nhắc tôi"), role: "ASSISTANT", kind: "NOTICE", deliveryState: "SENT" };

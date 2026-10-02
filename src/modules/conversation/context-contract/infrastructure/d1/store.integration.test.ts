@@ -62,15 +62,14 @@ it("cross_protocol_ciphertext_refused",async()=>{
  expect(await successor.observe(f.scope(1))).toEqual({failure:"INVALID"});
  expect(await f.store.observe(f.scope(1))).toEqual({failure:"INVALID"});
 });
-it("successor_decision_execution_refuses_without_mutation",async()=>{
+it("successor_invalid_decision_proof_refuses_without_mutation",async()=>{
  const f=await setup(),successor=stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
  const observed=await successor.observe(f.scope());if("failure"in observed)throw new Error("fixture");
  const snapshot=ContextSnapshotV2Schema.parse({...f.snapshot,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null,pendingDecision:null,previewReceipt:null,lifecycle:"CLARIFYING"});
- const refused={status:"NOT_READY",reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED"};
  await expect(successor.apply(f.scope(),observed.observation,{...f.transition,snapshot:null as never,preview:null})).resolves.toEqual({status:"INVALID"});
- expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot})).toEqual(refused);
- expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot,preview:null,decisionProof:f.proof})).toEqual(refused);
- expect(await successor.confirm({kind:"CHAT",scope:f.scope()},f.proof)).toEqual(refused);
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot})).toEqual({status:"INVALID"});
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot,preview:null,decisionProof:f.proof})).toEqual({status:"INVALID"});
+ expect(await successor.confirm({kind:"CHAT",scope:f.scope()},f.proof)).toEqual({status:"STALE"});
  for(const table of ["conversation_contexts","conversation_contract_ownership","conversation_contract_write_permits","conversation_context_outcomes","reminders","audit_events"])expect(await f.db.prepare(`SELECT count(*) n FROM ${table}`).first("n")).toBe(0);
 });
 it.each(["CHAT","WEB"] as const)("prepared_preview_only_confirms_on_%s_after_exact_sent_receipt",async channel=>{

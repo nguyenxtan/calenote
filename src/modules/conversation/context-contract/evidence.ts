@@ -411,7 +411,13 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     }
     const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["controlEvidence"]) : null;
     if (target && value.requestTarget!.evidence.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
-    if (value.requestTarget?.kind === "NEW" && value.changes.some(c => c.evidence.some(e => e.kind === "CONTEXT_FACT" || e.turn !== built.input.currentTurn))) fail("NEW_REQUEST_FACT_REUSE");
+    // Fresh B operands, including alternatives, cannot borrow A's sources.
+    // Original pending-candidate adoption is revalidated separately below.
+    const freshOperandEvidence = [
+      ...value.changes.map(change => change.evidence),
+      ...value.uncertainties.flatMap(uncertainty => uncertainty.alternatives.map(alternative => alternative.evidence)),
+    ];
+    if (value.requestTarget?.kind === "NEW" && freshOperandEvidence.some(refs => refs.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn))) fail("NEW_REQUEST_FACT_REUSE");
     const pending = built.candidateSnapshot.pendingSemanticCandidate;
     const question = built.candidateSnapshot.pendingReminderQuestion;
     const retainedUncertainties: SemanticPatchProposalV3["uncertainties"] = [];

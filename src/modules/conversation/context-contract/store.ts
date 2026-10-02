@@ -16,8 +16,10 @@ export type ObservedContextV2 = { observation: ContextObservation; snapshot: Con
 export interface ContextContractStoreV3 {
   readonly protocol: Readonly<ContextProtocolV3>;
   observe(scope: ConversationScope): Promise<ObservedContextV2>;
-  apply(scope: ConversationScope, observation: ContextObservation, transition: StoredTransitionV2): Promise<AppliedTransition | { status: "NOT_READY"; reason: "SUCCESSOR_DECISIONS_NOT_INTEGRATED" }>;
-  confirm(authority: ControlAuthority, proof: DecisionProof): Promise<{ status: "NOT_READY"; reason: "SUCCESSOR_DECISIONS_NOT_INTEGRATED" }>;
+  apply(scope: ConversationScope, observation: ContextObservation, transition: StoredTransitionV2): Promise<AppliedTransition>;
+  confirm(authority: ControlAuthority, proof: DecisionProof): Promise<ConfirmationResult>;
+  readOutcome(authority: ControlAuthority, operationKey: string): Promise<ConfirmationResult | null>;
+  recordDelivery(scope: ConversationScope, receipt: DeliveryReceipt): Promise<"RECORDED" | "STALE">;
 }
 
 export interface CanonicalPreview {

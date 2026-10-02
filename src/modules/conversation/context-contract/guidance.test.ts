@@ -10,6 +10,35 @@ import { resolveRequest } from "./resolve";
 import { resolveQuery } from "./query";
 import { date, now, patch, request, time } from "./resolution-test-support";
 import { decodeContextSnapshot, encodeContextSnapshot, type ContextSnapshotV1 } from "./state";
+import { buildContextInputV2 } from "./context";
+import { parseInterpretationSectionsV3 } from "./contracts";
+import { validateEvidenceV3 } from "./evidence";
+import { computeEffectiveDirectiveV3, validateDirectiveV3 } from "./guidance";
+import { mergePatchV3 } from "./merge";
+
+it.each([
+  [undefined, undefined], [null, null], [{ kind: "ABANDON_PENDING" }, { text: "Đã lưu thành công" }],
+  [{ kind: "ASK_FOR_FIELD", field: "location" }, { text: "Địa điểm ở đâu?" }],
+  [{ kind: "ASK_FOR_FIELD", field: "reminderTime", extra: true }, { text: "Bạn muốn được nhắc lúc mấy giờ?" }],
+  [{ kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "Bạn muốn được nhắc lúc mấy giờ?", extra: true }],
+] as const)("A4 invalid_guidance_retains_valid_facts (%j)", (directive, reply) => {
+  const text = "nhắc đi thi ngày mai", msg = { ...message(text), receivedAt: now };
+  const built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+  if (built.status !== "READY") throw new Error(built.reason);
+  const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: text, occurrence: 1 }];
+  const sections = parseInterpretationSectionsV3({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence }, { field: "reminderDate", operation: "SET", value: { kind: "RELATIVE_DAY", offsetDays: 1 }, evidence }], query: null, uncertainties: [], conversationDirective: directive, replyProposal: reply });
+  if (sections.status !== "PARSED") throw new Error(sections.reason);
+  const checked = validateEvidenceV3(sections.value.semantic, built);
+  if (checked.status !== "VALID") throw new Error(checked.reason);
+  const merge = mergePatchV3(null, checked.patch);
+  if (merge.status !== "MERGED") throw new Error(merge.status);
+  const effective = computeEffectiveDirectiveV3({ semantic: checked.patch, merge, resolution: resolveRequest(merge.candidate, now, lunarCalendar) });
+  expect(merge.candidate.slots.title.value).toBe("đi thi");
+  expect(effective).toEqual({ kind: "ASK_FOR_FIELD", field: "reminderTime" });
+  const selected = selectGuidance({ effectiveDirective: effective, directiveValidation: validateDirectiveV3(sections.value.directive, effective), replyProposal: sections.value.reply, privacyValidation: { status: "VALID" }, language: "vi" });
+  expect(selected).toMatchObject({ source: "BACKEND", text: question });
+  expect(merge.candidate.pendingDecision).toBeNull(); expect(merge.candidate.previewReceipt).toBeNull();
+});
 
 const ask = { kind: "ASK_FOR_FIELD", field: "reminderTime" } as const;
 const question = "Bạn muốn được nhắc lúc mấy giờ?";

@@ -28,7 +28,9 @@ export function createD1ContextContractStoreV3(args:{db:D1Database;keyring:Keyri
  return Object.freeze({protocol:CONTEXT_PROTOCOL_V3,
   observe:(scope:ConversationScope)=>store.observeSuccessor(scope),
   apply:(scope:ConversationScope,observation:ContextObservation,transition:StoredTransitionV2)=>store.applySuccessor(scope,observation,transition),
-  confirm:async()=>({status:"NOT_READY" as const,reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED" as const}),
+  confirm:(authority:ControlAuthority,proof:DecisionProof)=>store.confirm(authority,proof),
+  readOutcome:(authority:ControlAuthority,key:string)=>store.readOutcome(authority,key),
+  recordDelivery:(scope:ConversationScope,receipt:DeliveryReceipt)=>store.recordDelivery(scope,receipt),
  });
 }
 const permitted = "EXISTS(SELECT 1 FROM conversation_contract_write_permits WHERE marker=?)";
@@ -130,12 +132,12 @@ export class D1ContextContractStore implements ContextContractStore {
   return receipt.publicId===request.publicId&&receipt.operationKey===key&&receipt.proofHash===await digest(["web-decline-proof",request])
    &&receipt.settledRevision===current.revision?{status:"ALREADY_DECLINED"}:{status:"STALE"};
  }
- private async declineWebPreview(authority:Extract<ControlAuthority,{kind:"WEB"}>,row:WebRow,s:ContextSnapshotV1,request:PreviewDecisionRequestV1,key:string):Promise<{status:"DECLINED"|"ALREADY_DECLINED"|"STALE"|"UNCERTAIN"}> {
+ private async declineWebPreview(authority:Extract<ControlAuthority,{kind:"WEB"}>,row:WebRow,s:Snapshot,request:PreviewDecisionRequestV1,key:string):Promise<{status:"DECLINED"|"ALREADY_DECLINED"|"STALE"|"UNCERTAIN"}> {
   const a=this.authority(authority),prior=await this.readWebDecline(authority,row,key,request);if(prior)return prior;
-  const next:ContextSnapshotV1=structuredClone(s);next.contextRevision++;next.lifecycle="CLARIFYING";next.pendingDecision=null;next.previewReceipt=null;
+  const next=structuredClone(s);next.contextRevision++;next.lifecycle="CLARIFYING";next.pendingDecision=null;next.previewReceipt=null;
   next.webDeclineReceipt={publicId:request.publicId,operationKey:key,proofHash:await digest(["web-decline-proof",request]),settledRevision:next.contextRevision,settledAt:new Date(a.now).toISOString()};
   let encrypted:Awaited<ReturnType<Keyring["encryptSensitive"]>>;
-  try{const encoded=encodeContextSnapshot(next);if(bytes(encoded)>16384)return {status:"STALE"};encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(next.scope,next.id),1,encoded);}
+  try{const encoded=next.schemaVersion==="calenote-context-state-2"?encodeContextSnapshotV2(next):encodeContextSnapshot(next);if(bytes(encoded)>16384)return {status:"STALE"};encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(next.scope,next.id,this.protocol),1,encoded);}
   catch{return {status:"STALE"};}
   const marker=randomOpaqueId(),cas=this.rowCas(row);
   const statements=[this.permit(a,s.id,marker,"APPLY",cas.sql+" AND EXISTS(SELECT 1 FROM conversation_contract_ownership WHERE context_id=? AND chat_identity_id=? AND owner_id=?)",
@@ -163,7 +165,7 @@ export class D1ContextContractStore implements ContextContractStore {
    || Date.parse(snapshot.createdAt)!==row.created_at || this.expiry(snapshot)!==row.expires_at
    || snapshot.inbound.id!==row.last_inbound_id || snapshot.inbound.claimMarker!==row.claim_marker
    || (snapshot.lifecycle==="AWAITING_CONFIRMATION"?"DRAFT_READY":"CLARIFYING")!==row.status) throw new Error("INVALID");
-  if(snapshot.schemaVersion==="calenote-context-state-1"&&!validPreviewOrder(snapshot))throw new Error("INVALID");
+  if(!validPreviewOrder(snapshot))throw new Error("INVALID");
   return snapshot;
  }
  private async isOtherProtocol(row:Row,scope:{ownerId:string;chatIdentityId:string}):Promise<boolean> {
@@ -174,13 +176,7 @@ export class D1ContextContractStore implements ContextContractStore {
   }catch{return false;}
  }
  private async decryptState(row:Row,scope:{ownerId:string;chatIdentityId:string}) {
-  if(this.protocol)throw new Error("SUCCESSOR_DECISIONS_NOT_INTEGRATED");
-  const snapshot=decodeContextSnapshot(await this.keyring.decryptSensitive("context-contract-state",identity(scope,row.id),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)}));
-  if(!validPreviewOrder(snapshot) || snapshot.id!==row.id || snapshot.contextRevision!==row.revision || snapshot.scope.ownerId!==row.owner_id || snapshot.scope.chatIdentityId!==row.chat_identity_id
-   || Date.parse(snapshot.createdAt)!==row.created_at || this.expiry(snapshot)!==row.expires_at
-   || snapshot.inbound.id!==row.last_inbound_id || snapshot.inbound.claimMarker!==row.claim_marker
-   || (snapshot.lifecycle==="AWAITING_CONFIRMATION"?"DRAFT_READY":"CLARIFYING")!==row.status) throw new Error("INVALID");
-  return snapshot;
+  return this.decryptSelectedState(row,scope);
  }
  private async history(chat:string){return (await this.statement("SELECT coalesce(max(o.rowid),0) n FROM conversation_context_outcomes o JOIN conversation_contexts c ON c.id=o.context_id WHERE c.chat_identity_id=?",[chat]).first<number>("n"))!;}
  async observe(scope:ConversationScope):Promise<ObservedContext>{
@@ -245,7 +241,6 @@ export class D1ContextContractStore implements ContextContractStore {
  async applySuccessor(scope:ConversationScope,observation:ContextObservation,t:StoredTransitionV2):ReturnType<ContextContractStoreV3["apply"]>{
   if(!this.protocol)return {status:"INVALID"};
   const parsed=ContextSnapshotV2Schema.safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
-  if(t.preview!==null||t.decisionProof!==undefined||parsed.data.pendingDecision!==null||parsed.data.previewReceipt!==null||parsed.data.lifecycle==="AWAITING_CONFIRMATION")return {status:"NOT_READY",reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED"};
   return this.applySelected(scope,observation,t);
  }
  private async applySelected(scope:ConversationScope,observation:ContextObservation,t:StoredTransition|StoredTransitionV2):Promise<AppliedTransition>{
@@ -259,7 +254,7 @@ export class D1ContextContractStore implements ContextContractStore {
    const parsed=(this.protocol?ContextSnapshotV2Schema:ContextSnapshotV1Schema).safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
    const s=parsed.data, prior=observed.snapshot;
    if(prior?.webDeclineReceipt)s.webDeclineReceipt=null;
-   if(s.schemaVersion==="calenote-context-state-1"&&!validPreviewOrder(s))return {status:"INVALID"};
+   if(!validPreviewOrder(s))return {status:"INVALID"};
    if(t.expectedContextRevision!==(prior?.contextRevision??null)||t.expectedDraftRevision!==(prior?.draftRevision??null))return {status:"STALE"};
    if(s.contextRevision!==(prior?.contextRevision??0)+1 || (prior&&s.id!==prior.id)
     || JSON.stringify(s.scope)!==JSON.stringify(observation.scope) || JSON.stringify(s.inbound)!==JSON.stringify(observation.inbound)
@@ -271,10 +266,10 @@ export class D1ContextContractStore implements ContextContractStore {
     const changed=JSON.stringify(s.slots)!==JSON.stringify(prior.slots);
     if(changed ? s.draftRevision!==(prior.draftRevision??0)+1 : s.draftRevision!==prior.draftRevision&&s.draftRevision!==(prior.draftRevision??0)+1)return {status:"INVALID"};
    }
-   if(t.decisionProof&&(!prior||prior.schemaVersion!=="calenote-context-state-1"||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
+   if(t.decisionProof&&(!prior||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
    if(t.decisionProof&&s.pendingDecision?.decisionId===t.decisionProof.decisionId)return {status:"INVALID"};
    if(prior?.requestId && s.requestId!==prior.requestId && !t.terminal && !["REPLACE_PENDING","RESTART_PENDING"].includes(t.decisionProof?.kind??""))return {status:"INVALID"};
-   if(t.preview && (s.schemaVersion!=="calenote-context-state-1"||!validPreview(s,t.preview,scope.now)||!s.previewReceipt||await previewHash(t.preview)!==s.previewReceipt.draftHash))return {status:"INVALID"};
+   if(t.preview && (!validPreview(s,t.preview,scope.now)||!s.previewReceipt||await previewHash(t.preview)!==s.previewReceipt.draftHash))return {status:"INVALID"};
    if(s.lifecycle==="AWAITING_CONFIRMATION"&&!t.preview)return {status:"INVALID"};
    const encoded=s.schemaVersion==="calenote-context-state-2"?encodeContextSnapshotV2(s):encodeContextSnapshot(s);if(bytes(encoded)>16384)return {status:"INVALID"};
    const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id,this.protocol),1,encoded);
@@ -293,7 +288,7 @@ export class D1ContextContractStore implements ContextContractStore {
    statements.push(this.statement(`INSERT INTO conversation_contract_ownership(chat_identity_id,owner_id,context_id,contract_version) SELECT ?,?,?,2 WHERE ${permitted} ON CONFLICT(chat_identity_id) DO NOTHING`,[a.chat,a.owner,s.id,marker]),
     this.statement(`UPDATE command_drafts SET status='CANCELLED',resolution_inbound_id=NULL,updated_at=?,write_marker=? WHERE chat_identity_id=? AND status='PENDING' AND contract_version=2 AND ${permitted}`,[scope.now,marker,a.chat,marker]),
     this.statement(`UPDATE reminder_series_proposals SET status='INVALID',transaction_marker=? WHERE chat_identity_id=? AND status='PENDING' AND contract_version=2 AND ${permitted}`,[marker,a.chat,marker]));
-   if(t.preview&&!t.terminal&&s.schemaVersion==="calenote-context-state-1")await this.preparePreview(statements,s,CanonicalPreviewSchema.parse(t.preview),marker,scope.now);
+   if(t.preview&&!t.terminal)await this.preparePreview(statements,s,CanonicalPreviewSchema.parse(t.preview),marker,scope.now);
    statements.push(this.statement(`INSERT INTO conversation_context_outcomes(context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash) SELECT ?,?,?,?,?,?,? WHERE ${permitted}`,
     [s.id,s.contextRevision,scope.sourceInboundId,t.terminal?"FINISH":"SAVE",scope.now,key,hash,marker]),
     this.statement(`UPDATE inbound_updates SET state=?,processed_at=? WHERE id=? AND ${permitted}`,[t.inboundOutcome,scope.now,scope.sourceInboundId,marker]));
@@ -310,7 +305,7 @@ export class D1ContextContractStore implements ContextContractStore {
   if(bytes(plain)>CONTEXT_DETAIL_MAX_BYTES)throw new Error("DETAIL_TOO_LARGE");
   return this.keyring.encryptSensitive(purpose,identity(scope,id),1,plain);
  }
- private async preparePreview(statements:D1PreparedStatement[],s:ContextSnapshotV1,p:CanonicalPreview,marker:string,now:number){
+ private async preparePreview(statements:D1PreparedStatement[],s:Snapshot,p:CanonicalPreview,marker:string,now:number){
   if(p.occurrences.length===1){
    const id=s.requestId!,title=await this.keyring.encryptSensitive("draft-title",id,1,p.title);
    const details=await this.detail("context-contract-draft-details",s.scope,id,p.details);
@@ -324,7 +319,7 @@ export class D1ContextContractStore implements ContextContractStore {
   }else{
    const id=s.pendingDecision?.target.proposalId??s.requestId;
    if(!id)throw new Error("MISSING_PROPOSAL_ID");
-   const encrypted=await this.keyring.encryptSensitive("context-contract-proposal",identity(s.scope,id),1,JSON.stringify(p));
+   const encrypted=await this.keyring.encryptSensitive("context-contract-proposal",identity(s.scope,id,this.protocol),1,JSON.stringify(p));
    if(encrypted.ciphertext.byteLength>32784)throw new Error("PROPOSAL_TOO_LARGE");
    statements.push(this.statement(`INSERT INTO reminder_series_proposals(id,owner_id,chat_identity_id,context_id,context_revision,revision,source_inbound_id,action,status,payload_ciphertext,payload_iv,key_version,created_at,expires_at,contract_version,transaction_marker)
     SELECT ?,?,?,?,?,?,?,'CREATE','PENDING',?,?,1,?,?,2,? WHERE ${permitted}
@@ -338,8 +333,13 @@ export class D1ContextContractStore implements ContextContractStore {
    this.statement(`DELETE FROM conversation_contract_ownership WHERE chat_identity_id=? AND context_id=? AND ${permitted}`,[a.chat,id,marker])];
  }
  private async readRow(a:Auth,id:string){const auth=authQuery(a,false);return this.statement(`SELECT * FROM conversation_contexts WHERE id=? AND owner_id=? AND chat_identity_id=? AND contract_version=2 AND EXISTS(${auth.sql})`,[id,a.owner,a.chat,...auth.args]).first<Row>();}
+ private confirmationOperationKey(a:Auth,key:string){
+  // Terminal payloads are cleared. Keep replay/result authority bound to the
+  // application-selected protocol after that cleanup, without changing SQL family.
+  return digest(this.protocol?["confirm",a.owner,a.chat,key,this.protocol.canonicalVersion]:["confirm",a.owner,a.chat,key]);
+ }
  private async operation(a:Auth,key:string){
-  const auth=authQuery(a,false),op=await digest(["confirm",a.owner,a.chat,key]);
+  const auth=authQuery(a,false),op=await this.confirmationOperationKey(a,key);
   return this.statement(`SELECT o.result_json,o.proof_hash FROM conversation_context_outcomes o JOIN conversation_contexts c ON c.id=o.context_id WHERE o.operation_key=? AND c.owner_id=? AND c.chat_identity_id=? AND EXISTS(${auth.sql})`,[op,a.owner,a.chat,...auth.args]).first<{result_json:string|null;proof_hash:string}>();
  }
  async readReminderDetails(authority:ControlAuthority,id:string):Promise<import("../../state").CanonicalDetailsV1|null>{
@@ -374,12 +374,12 @@ export class D1ContextContractStore implements ContextContractStore {
   const parsed=resultSchema.safeParse(row.result_json?JSON.parse(row.result_json):null);
   return parsed.success?{status:"IDEMPOTENT",...parsed.data}:{status:"UNCERTAIN"};
  }
- private async loadPreview(s:ContextSnapshotV1):Promise<CanonicalPreview|null>{
+ private async loadPreview(s:Snapshot):Promise<CanonicalPreview|null>{
   if(s.pendingDecision?.target.proposalId){
    const p=await this.statement("SELECT * FROM reminder_series_proposals WHERE id=? AND owner_id=? AND chat_identity_id=? AND context_id=? AND context_revision=? AND revision=? AND contract_version=2 AND status='PENDING'",
     [s.pendingDecision.target.proposalId,s.scope.ownerId,s.scope.chatIdentityId,s.id,s.contextRevision,s.draftRevision]).first<{id:string;payload_ciphertext:unknown;payload_iv:unknown;key_version:number}>();
    if(!p)return null;
-   return CanonicalPreviewSchema.parse(JSON.parse(await this.keyring.decryptSensitive("context-contract-proposal",identity(s.scope,p.id),p.key_version,{ciphertext:persistedD1Blob(p.payload_ciphertext),iv:persistedD1Blob(p.payload_iv)})));
+   return CanonicalPreviewSchema.parse(JSON.parse(await this.keyring.decryptSensitive("context-contract-proposal",identity(s.scope,p.id,this.protocol),p.key_version,{ciphertext:persistedD1Blob(p.payload_ciphertext),iv:persistedD1Blob(p.payload_iv)})));
   }
   const d=await this.statement("SELECT d.*,f.payload_ciphertext,f.payload_iv,f.key_version,f.encryption_entity_id,f.payload_version,f.owner_id FROM command_drafts d JOIN command_draft_context_details f ON f.draft_id=d.id WHERE d.id=? AND d.chat_identity_id=? AND d.contract_version=2 AND d.status='PENDING'",[s.requestId,s.scope.chatIdentityId]).first<{id:string;title_ciphertext:unknown;title_iv:unknown;title_key_version:number;scheduled_at:number;payload_ciphertext:unknown;payload_iv:unknown;key_version:number;encryption_entity_id:string;payload_version:string;owner_id:string}>();
   if(!d||d.owner_id!==s.scope.ownerId||d.encryption_entity_id!==d.id||d.payload_version!=="calenote-reminder-details-1")return null;
@@ -401,7 +401,7 @@ export class D1ContextContractStore implements ContextContractStore {
    const row=await this.readRow(a,proof.contextId);
    if(!row||!["CLARIFYING","DRAFT_READY"].includes(row.status))return {status:"STALE"};
    if(row.expires_at<=a.now)return {status:"EXPIRED"};
-   let s:ContextSnapshotV1,preview:CanonicalPreview|null;
+   let s:Snapshot,preview:CanonicalPreview|null;
    try { s=await this.decryptState(row,{ownerId:a.owner,chatIdentityId:a.chat}); preview=await this.loadPreview(s); }
    catch { return {status:"REJECTED"}; }
    if(!preview||!await validateConfirmation(s,preview,proof,authority,a.now))return {status:"REJECTED"};
@@ -435,7 +435,7 @@ export class D1ContextContractStore implements ContextContractStore {
    if(!proposalId)statements.push(this.statement(`UPDATE command_drafts SET status='CONFIRMED',resolution_inbound_id=?,updated_at=?,write_marker=? WHERE id=? AND ${permitted}`,[authority.kind==="CHAT"?inbound:null,a.now,marker,s.requestId,marker]));
    const result={reminderPublicIds,seriesPublicId,childCount:reminderPublicIds.length};
    statements.push(this.statement(`UPDATE conversation_contexts SET status='COMPLETED',revision=revision+1,last_inbound_id=?,claim_marker=?,updated_at=?,payload_ciphertext=NULL,payload_iv=NULL,key_version=NULL,write_marker=? WHERE id=? AND ${permitted}`,[inbound,authority.kind==="WEB"?"web:"+authority.principal.sessionId:authority.scope.claimMarker,a.now,marker,s.id,marker]),
-    this.statement(`INSERT INTO conversation_context_outcomes(context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash,result_json,web_session_id) SELECT ?,?,?,'FINISH',?,?,?,?,? WHERE ${permitted}`,[s.id,s.contextRevision+1,inbound,a.now,await digest(["confirm",a.owner,a.chat,proof.operationKey]),proofHash,JSON.stringify(result),authority.kind==="WEB"?authority.principal.sessionId:null,marker]));
+    this.statement(`INSERT INTO conversation_context_outcomes(context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash,result_json,web_session_id) SELECT ?,?,?,'FINISH',?,?,?,?,? WHERE ${permitted}`,[s.id,s.contextRevision+1,inbound,a.now,await this.confirmationOperationKey(a,proof.operationKey),proofHash,JSON.stringify(result),authority.kind==="WEB"?authority.principal.sessionId:null,marker]));
    if(authority.kind==="CHAT")statements.push(this.statement(`UPDATE inbound_updates SET state='PROCESSED',processed_at=? WHERE id=? AND ${permitted}`,[a.now,inbound,marker]));
    statements.push(...this.terminalCleanup(a,s.id,marker),this.release(marker));
    const results=await this.db.batch(statements);
@@ -472,8 +472,8 @@ export class D1ContextContractStore implements ContextContractStore {
     if(receipt.deliveryState!=="SENT")s.pendingDecision=null;
     else {s.pendingDecision.deliveryState="SENT";s.pendingDecision.replyReference=receipt.messageRef;}
    }
-   const encoded=encodeContextSnapshot(s);if(bytes(encoded)>16384)return "STALE";
-   const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id),1,encoded);
+   const encoded=s.schemaVersion==="calenote-context-state-2"?encodeContextSnapshotV2(s):encodeContextSnapshot(s);if(bytes(encoded)>16384)return "STALE";
+   const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id,this.protocol),1,encoded);
    const marker=randomOpaqueId(),cas=this.rowCas(row);
    const result=await this.db.batch([
     this.permit(a,s.id,marker,"DELIVERY",cas.sql+` AND EXISTS(SELECT 1 FROM inbound_updates i WHERE i.id=? AND NOT ${newerConversationOutcomeSql("i",true)})`,[...cas.args,scope.now,scope.sourceInboundId],false),
