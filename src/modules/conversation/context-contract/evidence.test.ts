@@ -4,6 +4,59 @@ import { chat, message, observation, snapshot, turn, withNotes } from "./context
 import { isValidatedPatch, validateEvidence, validateGuidancePrivacy } from "./evidence";
 import { parseInterpretationSections } from "./contracts";
 import { decodeContextSnapshot, type ContextSnapshotV1 } from "./state";
+import { buildContextInputV2 } from "./context";
+import { validateEvidenceV3 } from "./evidence";
+import { SemanticPatchProposalV3Schema } from "./contracts";
+import { ContextSnapshotV2Schema } from "./state";
+import { mergePatchV3 } from "./merge";
+
+describe("successor scoped semantic evidence", () => {
+  it.each(["source", "occurrence", "role", "target-old", "alternative-old"])("invalid_%s_rejects_whole_patch", variant => {
+    const state = ContextSnapshotV2Schema.parse({ ...snapshot(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+    if (variant === "role") state.transcript[0] = { ...turn("nhắc tôi"), role: "ASSISTANT", kind: "NOTICE", deliveryState: "SENT" };
+    const msg = message("nhắc mới"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(snapshot(), msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const current = { kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "nhắc mới", occurrence: 1 };
+    const bad = variant === "source" ? { ...current, quote: "bịa" } : variant === "occurrence" ? { ...current, occurrence: 2 } : { ...current, turn: 0, quote: "nhắc tôi" };
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: [variant === "target-old" ? bad : current] }, changes: [{ field: "title", operation: "SET", value: "mới", evidence: [variant === "alternative-old" || variant === "target-old" ? current : bad] }], query: null, uncertainties: variant === "alternative-old" ? [{ field: "operation", reason: "AMBIGUOUS", alternatives: [{ value: "NEW", evidence: [bad] }] }] : [] });
+    expect(validateEvidenceV3(proposal, built).status).toBe("REFUSED");
+  });
+  it("valid_ref_unsupported_range_clarifies_but_fabricated_ref_rejects", () => {
+    const msg = message("những lời nhắc"), built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    for (const quote of ["những lời nhắc", "tuần sau"]) {
+      const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [], query: { kind: "LIST", period: { kind: "WEEK", offset: 1 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote, occurrence: 1 }] }, uncertainties: [] });
+      const result = validateEvidenceV3(semantic, built);
+      expect(result.status).toBe(quote === "tuần sau" ? "REFUSED" : "VALID");
+      if (result.status === "VALID") expect(result.patch).toMatchObject({ resolvedQuery: { period: null }, resolvedUncertainties: [{ field: "queryRange", reason: "MISSING" }] });
+    }
+  });
+  it("query_inheritance_needs_scope_and_original_range_source", () => {
+    const msg = message("lời nhắc tuần sau"), first = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+    if (first.status !== "READY") throw new Error(first.reason);
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [], query: { kind: "LIST", period: { kind: "WEEK", offset: 1 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: first.input.currentTurn, quote: "lời nhắc tuần sau", occurrence: 1 }] }, uncertainties: [] });
+    const checked = validateEvidenceV3(proposal, first);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const merged = mergePatchV3(null, checked.patch);
+    if (merged.status !== "MERGED") throw new Error("query merge refused");
+    for (const hasQueryQuestion of [true, false]) {
+      const state = structuredClone(merged.candidate);
+      if (hasQueryQuestion) state.pendingQueryQuestion = { questionId: "query-question", text: "Bạn muốn xem khoảng này?", scope: "QUERY", field: "queryRange", decisionKind: null, reason: "MISSING", noProgressCount: 0, deliveryState: "SENT", issuedAfterOrder: { receivedAt: state.inbound.receivedAt, rowid: state.inbound.rowid } };
+      const current = { ...message("có"), id: "answer", receivedAt: msg.receivedAt + 60000 };
+      const context = { ...chat, inboundRowId: 3 }, observed = observation(null, current, context);
+      const built = buildContextInputV2({ message: current, context, snapshot: state, observation: { ...observed, observed: { presence: "PRESENT", contextId: state.id, contextRevision: state.contextRevision } } });
+      if (built.status !== "READY") throw new Error(built.reason);
+      const query = built.input.facts.find(f => f.scope === "QUERY")!;
+      const semantic = SemanticPatchProposalV3Schema.parse({ ...proposal, query: { ...query.value, evidence: [{ kind: "CONTEXT_FACT", ref: query.alias }, { kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "có", occurrence: 1 }] } });
+      const result = validateEvidenceV3(semantic, built);
+      expect(result.status).toBe("VALID");
+      if (result.status === "VALID") {
+        expect(result.patch.resolvedQuery).toMatchObject({ period: hasQueryQuestion ? { kind: "WEEK", offset: 1 } : null });
+        expect(result.patch.queryReferenceTime).toBe(new Date(msg.receivedAt).toISOString());
+      }
+    }
+  });
+});
 
 function build(text: string, state: ContextSnapshotV1 | null = null, receivedAt = message().receivedAt): ReadyContext {
   const msg = { ...message(text), receivedAt }, result = buildContextInput({ message: msg, context: chat, snapshot: state, observation: observation(state, msg) });

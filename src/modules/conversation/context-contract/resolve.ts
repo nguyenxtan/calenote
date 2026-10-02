@@ -1,5 +1,5 @@
 import { ClockOperandSchema, DateOperandSchema, SLOT_NAMES, type DateOperand } from "./contracts";
-import { encodeContextSnapshot, type CanonicalDetailsV1, type ContextSlots, type ContextSnapshotV1, type SlotProvenance } from "./state";
+import { encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV2, type CanonicalDetailsV1, type ContextSlots, type ContextSnapshotV1, type SlotProvenance } from "./state";
 import type { LunarCalendarAdapter } from "../lunar-calendar";
 import { isValidSemanticLocalDate } from "@/modules/semantic/validation";
 import type { SeriesOccurrence } from "@/modules/reminders/series";
@@ -61,8 +61,9 @@ function projectResolvedFacts(slots: ContextSlots, previous: ContextSnapshotV1["
   return facts;
 }
 
-export function resolveRequest(candidate: ContextSnapshotV1, now: number, calendar: LunarCalendarAdapter): RequestResolution {
+export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2, now: number, calendar: LunarCalendarAdapter): RequestResolution {
   const slots = structuredClone(candidate.slots), fields: string[] = [], reasons: string[] = [];
+  if (candidate.schemaVersion === "calenote-context-state-2" && (candidate.pendingSemanticCandidate || candidate.ambiguities.some(u => u.field === "operation"))) return { status: "CLARIFY", fields: ["operation"], reasons: ["AMBIGUOUS"] };
   const issue = (field: string, reason: string) => { if (!fields.includes(field)) fields.push(field); if (!reasons.includes(reason)) reasons.push(reason); };
   const clarification = (): RequestResolution => ({ status: "CLARIFY", fields, reasons });
   if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime())) { issue("operation", "INVALID_PROCESSING_TIME"); return clarification(); }
@@ -159,7 +160,8 @@ export function resolveRequest(candidate: ContextSnapshotV1, now: number, calend
   if (render.status === "INVALID") { issue("operation", "INVALID_DETAILS"); return clarification(); }
   const resolvedFacts = projectResolvedFacts(slots, candidate.facts);
   try {
-    if (new TextEncoder().encode(encodeContextSnapshot({ ...candidate, slots, facts: resolvedFacts })).length > 16384) { issue("operation", "CONTEXT_SNAPSHOT_TOO_LARGE"); return clarification(); }
+    const encoded = candidate.schemaVersion === "calenote-context-state-2" ? encodeContextSnapshotV2({ ...candidate, slots, facts: resolvedFacts }) : encodeContextSnapshot({ ...candidate, slots, facts: resolvedFacts });
+    if (new TextEncoder().encode(encoded).length > 16384) { issue("operation", "CONTEXT_SNAPSHOT_TOO_LARGE"); return clarification(); }
   } catch { issue("operation", "INVALID_RESOLVED_STATE"); return clarification(); }
   return { status: "READY", resolvedSlots: slots, resolvedFacts, occurrences, details };
 }

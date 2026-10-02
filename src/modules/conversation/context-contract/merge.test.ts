@@ -7,6 +7,216 @@ import { decodeContextSnapshot, encodeContextSnapshot, type ContextSnapshotV1 } 
 import { buildContextInput } from "./context";
 import { validateEvidence } from "./evidence";
 import { chat, message, observation, turn, withNotes } from "./context-test-fixtures";
+import * as successorEvidence from "./evidence";
+import * as successorMerge from "./merge";
+import { buildContextInputV2 } from "./context";
+import { ContextSnapshotV2Schema, type ContextSnapshotV2 } from "./state";
+import { SemanticPatchProposalV3Schema } from "./contracts";
+
+function successorBuild(text: string, state: ContextSnapshotV2 | null = null) {
+  const msg = { ...message(text), id: `v3-${state?.transcript.length ?? 0}`, receivedAt: Date.parse(state?.inbound.receivedAt ?? "2026-09-28T03:00:00.000Z") + 60000 };
+  const context = { ...chat, inboundRowId: (state?.inbound.rowid ?? 0) + 1 };
+  const observed = observation(null, msg, context);
+  const built = buildContextInputV2({ message: msg, context, snapshot: state, observation: state ? { ...observed, observed: { presence: "PRESENT", contextId: state.id, contextRevision: state.contextRevision } } : observed });
+  if (built.status !== "READY") throw new Error(built.reason);
+  return built;
+}
+function successorPatch(text: string, state: ContextSnapshotV2 | null, target: "CURRENT" | "NEW" | "UNRESOLVED", operation: "SET" | "REPLACE" | "CLEAR" = "SET", value: string | null = "new", source: "current" | "old" | "fact" = "current") {
+  const built = successorBuild(text, state);
+  const evidence = source === "fact" ? [{ kind: "CONTEXT_FACT", ref: built.input.facts.find(f => f.field === "notes")!.alias }] : [{ kind: "USER_QUOTE", turn: source === "old" ? 0 : built.input.currentTurn, quote: source === "old" ? state!.transcript[0].semanticView : text, occurrence: 1 }];
+  const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: target, evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: text, occurrence: 1 }] }, changes: [{ field: "notes", operation, value, evidence }], query: null, uncertainties: [] });
+  expect(successorEvidence.validateEvidenceV3, "V3 must independently validate semantic source authority").toBeTypeOf("function");
+  return successorEvidence.validateEvidenceV3(semantic, built);
+}
+const successorNotes = () => ContextSnapshotV2Schema.parse({ ...withNotes(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+describe("successor grounded semantic merge", () => {
+  it("current_replace_differs_from_new_candidate", () => {
+    const state = successorNotes();
+    for (const target of ["CURRENT", "NEW"] as const) {
+      const validated = successorPatch("đổi ghi chú", state, target, "REPLACE");
+      expect(validated.status).toBe("VALID"); if (validated.status !== "VALID") throw new Error(validated.reason);
+      expect(successorMerge.mergePatchV3).toBeTypeOf("function");
+      const merged = successorMerge.mergePatchV3(state, validated.patch);
+      expect(merged.status).toBe(target === "CURRENT" ? "MERGED" : "NEEDS_REPLACEMENT");
+      expect(merged).toMatchObject({ candidate: { slots: { notes: { value: target === "CURRENT" ? "new" : "mang giấy tờ" } } } });
+    }
+  });
+  it("set_on_occupied_field_keeps_conflict", () => {
+    const state = successorNotes(), validated = successorPatch("ghi chú khác", state, "CURRENT");
+    expect(validated.status).toBe("VALID"); if (validated.status !== "VALID") throw new Error(validated.reason);
+    const merged = successorMerge.mergePatchV3(state, validated.patch);
+    expect(merged).toMatchObject({ status: "MERGED", candidate: { slots: { notes: { value: "mang giấy tờ" } }, ambiguities: [{ field: "notes", reason: "CONFLICT" }] } });
+  });
+  it.each(["REPLACE", "CLEAR"] as const)("%s_requires_current_source", operation => {
+    expect(successorPatch("đổi nhé", successorNotes(), "CURRENT", operation, operation === "CLEAR" ? null : "new", "old")).toEqual({ status: "REFUSED", reason: "CURRENT_USER_EVIDENCE_REQUIRED" });
+  });
+  it("notes_set_preserves_old_text", () => {
+    const state = successorNotes(), validated = successorPatch("thêm ô", state, "CURRENT", "SET", "mang giấy tờ; thêm ô");
+    expect(validated.status).toBe("VALID"); if (validated.status !== "VALID") throw new Error(validated.reason);
+    expect(successorMerge.mergePatchV3(state, validated.patch)).toMatchObject({ status: "MERGED", candidate: { slots: { notes: { value: "mang giấy tờ; thêm ô" } } } });
+  });
+  it("unresolved_target_keeps_facts_and_clarifies", () => {
+    const state = successorNotes(), validated = successorPatch("ghi chú khác", state, "UNRESOLVED");
+    expect(validated.status).toBe("VALID"); if (validated.status !== "VALID") throw new Error(validated.reason);
+    const result = successorMerge.mergePatchV3(state, validated.patch);
+    expect(result).toMatchObject({ status: "CLARIFY_OPERATION", candidate: { slots: state.slots, pendingSemanticCandidate: { proposal: { changes: [{ value: "new" }] }, baseContextRevision: state.contextRevision } } });
+    if (result.status === "CLARIFY_OPERATION") expect(ContextSnapshotV2Schema.safeParse(result.candidate).success).toBe(true);
+  });
+  it("new_candidate_cannot_copy_A_facts", () => {
+    expect(successorPatch("lịch mới", successorNotes(), "NEW", "SET", "mang giấy tờ", "fact")).toEqual({ status: "REFUSED", reason: "NEW_REQUEST_FACT_REUSE" });
+  });
+  it("current_without_existing_target_clarifies", () => {
+    const checked = successorPatch("8h", null, "CURRENT");
+    expect(checked.status).toBe("VALID"); if (checked.status !== "VALID") throw new Error(checked.reason);
+    expect(successorMerge.mergePatchV3(null, checked.patch).status).toBe("CLARIFY_OPERATION");
+  });
+  it("brand_cannot_be_reconstructed_from_JSON", () => {
+    const checked = successorPatch("ghi chú", null, "NEW");
+    expect(checked.status).toBe("VALID"); if (checked.status !== "VALID") throw new Error(checked.reason);
+    expect(successorMerge.mergePatchV3(null, JSON.parse(JSON.stringify(checked.patch)))).toEqual({ status: "REJECTED", reason: "UNVALIDATED_PATCH" });
+  });
+  it("new_candidate_cannot_copy_A_quotes", () => {
+    expect(successorPatch("lịch mới", successorNotes(), "NEW", "SET", "mang giấy tờ", "old")).toEqual({ status: "REFUSED", reason: "NEW_REQUEST_FACT_REUSE" });
+  });
+  it("replace_resolves_only_current_grounded_conflict_and_fact_echo_cannot_resolve", () => {
+    const state = successorNotes(), checked = successorPatch("ghi chú khác", state, "CURRENT");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const conflicted = successorMerge.mergePatchV3(state, checked.patch);
+    if (conflicted.status !== "MERGED") throw new Error("merge failed");
+    for (const operation of ["SET", "REPLACE"] as const) {
+      const evidence = successorPatch("giữ ghi chú cũ", conflicted.candidate, "CURRENT", operation, "mang giấy tờ", operation === "SET" ? "old" : "current");
+      if (evidence.status !== "VALID") throw new Error(evidence.reason);
+      const result = successorMerge.mergePatchV3(conflicted.candidate, evidence.patch);
+      expect(result).toMatchObject({ status: "MERGED", candidate: { ambiguities: operation === "SET" ? conflicted.candidate.ambiguities : [] } });
+    }
+  });
+  it("missing_field_REPLACE_clarifies_instead_of_SETTING", () => {
+    const built = successorBuild("thay ghi chú");
+    const state = { ...built.candidateSnapshot, requestId: "request", draftRevision: 1, lifecycle: "CLARIFYING" as const, draftCreatedAt: built.candidateSnapshot.createdAt, draftExpiresAt: "2026-09-28T03:11:00.000Z" };
+    const checked = successorPatch("thay ghi chú", state, "CURRENT", "REPLACE");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    expect(successorMerge.mergePatchV3(state, checked.patch)).toMatchObject({ status: "CLARIFY_OPERATION", candidate: { slots: { notes: { value: null } } } });
+  });
+  it("pending_candidate_sources_are_adopted_only_after_bound_current_answer", () => {
+    const state = successorNotes(), checked = successorPatch("ghi chú khác", state, "UNRESOLVED", "REPLACE");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected operation clarification");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("cập nhật yêu cầu hiện tại", staged.candidate);
+    const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "cập nhật yêu cầu hiện tại", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] });
+    const adopted = successorEvidence.validateEvidenceV3(semantic, built);
+    expect(adopted.status).toBe("VALID"); if (adopted.status !== "VALID") throw new Error(adopted.reason);
+    expect(successorMerge.mergePatchV3(staged.candidate, adopted.patch)).toMatchObject({ status: "MERGED", candidate: { slots: { notes: { value: "new", evidence: [{ sourceTurnId: "v3-1" }] } }, pendingSemanticCandidate: null } });
+  });
+  it("unresolved_candidate_blocks_resolver_preview", () => {
+    const state = successorNotes(), checked = successorPatch("ghi chú khác", state, "UNRESOLVED");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected operation clarification");
+    expect(resolveRequest(staged.candidate, now, lunarCalendar)).toMatchObject({ status: "CLARIFY", fields: expect.arrayContaining(["operation"]) });
+  });
+  it("unresolved_candidate_remaps_provider_turn_and_fact_alias_before_retention", () => {
+    const state = successorNotes();
+    state.transcript.push({ ...turn("question", "failed-question"), receivedAt: state.inbound.receivedAt, role: "ASSISTANT", kind: "CLARIFICATION", deliveryState: "FAILED" });
+    const checked = successorPatch("nouvelle note", state, "UNRESOLVED");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const result = successorMerge.mergePatchV3(state, checked.patch);
+    expect(result.status).toBe("CLARIFY_OPERATION");
+    if (result.status === "CLARIFY_OPERATION") expect(result.pendingSemanticCandidate.proposal.changes[0].evidence).toEqual([{ kind: "USER_QUOTE", turn: 2, quote: "nouvelle note", occurrence: 1 }]);
+  });
+  it("bound_answer_retains_original_factual_alternatives", () => {
+    const state = successorNotes(), built = successorBuild("ghi chú chưa rõ", state);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "ghi chú chưa rõ", occurrence: 1 }];
+    const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "UNRESOLVED", evidence }, changes: [], query: null, uncertainties: [{ field: "notes", reason: "AMBIGUOUS", alternatives: [{ value: "mang ô", evidence }] }] });
+    const checked = successorEvidence.validateEvidenceV3(semantic, built);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    expect(staged.status).toBe("CLARIFY_OPERATION"); if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const answer = successorBuild("yêu cầu hiện tại", staged.candidate);
+    const adopted = successorEvidence.validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ ...semantic, requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: answer.input.currentTurn, quote: "yêu cầu hiện tại", occurrence: 1 }] }, uncertainties: [] }), answer);
+    if (adopted.status !== "VALID") throw new Error(adopted.reason);
+    expect(successorMerge.mergePatchV3(staged.candidate, adopted.patch)).toMatchObject({ status: "MERGED", uncertainties: [{ field: "notes", alternatives: [{ value: "mang ô" }] }] });
+  });
+  it("undelivered_operation_question_preserves_candidate", () => {
+    const state = successorNotes(), checked = successorPatch("ghi chú khác", state, "UNRESOLVED");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    const answer = successorPatch("yêu cầu hiện tại", staged.candidate, "CURRENT");
+    if (answer.status !== "VALID") throw new Error(answer.reason);
+    expect(successorMerge.mergePatchV3(staged.candidate, answer.patch)).toMatchObject({ status: "CLARIFY_OPERATION", candidate: { pendingSemanticCandidate: staged.candidate.pendingSemanticCandidate, slots: staged.candidate.slots } });
+  });
+  it("NEW_answer_cannot_adopt_A_sources_from_unresolved_candidate", () => {
+    const state = successorNotes(), checked = successorPatch("chưa rõ lịch nào", state, "UNRESOLVED", "SET", "mang giấy tờ", "fact");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("tạo lịch mới", staged.candidate);
+    const answer = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "tạo lịch mới", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] });
+    expect(successorEvidence.validateEvidenceV3(answer, built)).toEqual({ status: "REFUSED", reason: "NEW_REQUEST_FACT_REUSE" });
+  });
+  it("grounded_operation_alternatives_preserve_A_until_target_is_resolved", () => {
+    const state = successorNotes(), built = successorBuild("chưa rõ lịch nào", state);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "chưa rõ lịch nào", occurrence: 1 }];
+    const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence }, changes: [{ field: "notes", operation: "REPLACE", value: "new", evidence }], query: null, uncertainties: [{ field: "operation", reason: "AMBIGUOUS", alternatives: [{ value: "CURRENT", evidence }, { value: "NEW", evidence }] }] });
+    const checked = successorEvidence.validateEvidenceV3(semantic, built);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    expect(successorMerge.mergePatchV3(state, checked.patch)).toMatchObject({ status: "CLARIFY_OPERATION", candidate: { slots: state.slots, pendingSemanticCandidate: { proposal: { uncertainties: [{ field: "operation", alternatives: [{ value: "CURRENT" }, { value: "NEW" }] }] } } } });
+  });
+  it.each([
+    ["mang giấy tờ; thêm ô", "RESOLVED", "mang giấy tờ; thêm ô"],
+    ["thêm ô", "CONFLICT", "mang giấy tờ"],
+  ] as const)("adopted_notes_SET_%s_keeps_original_source_without_promoting_currentness", (value, slotState, want) => {
+    const state = successorNotes(), checked = successorPatch("thêm ô", state, "UNRESOLVED", "SET", value);
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("cập nhật yêu cầu hiện tại", staged.candidate);
+    const answer = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "cập nhật yêu cầu hiện tại", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] });
+    const adopted = successorEvidence.validateEvidenceV3(answer, built);
+    if (adopted.status !== "VALID") throw new Error(adopted.reason);
+    expect(adopted.patch.adoptedCandidate).toBe(true);
+    expect(adopted.patch.changeEvidence[0].current).toBe(false);
+    const result = successorMerge.mergePatchV3(staged.candidate, adopted.patch);
+    expect(result).toMatchObject({ status: "MERGED", candidate: { slots: { notes: { state: slotState, value: want } } } });
+    if (result.status === "MERGED" && slotState === "RESOLVED") expect(result.candidate.slots.notes.evidence[0].sourceTurnId).toBe("v3-1");
+  });
+  it("adopting_notes_cannot_promote_unrelated_fact_echo_to_current_answer", () => {
+    const state = successorNotes();
+    state.slots.title = { ...structuredClone(state.slots.notes), value: "thi", fact: "f10" };
+    state.facts.push({ ...structuredClone(state.facts[0]), scope: "REMINDER", alias: "f10", field: "title", value: "thi", evidenceSlot: "title" });
+    state.ambiguities = [{ field: "title", reason: "AMBIGUOUS", alternatives: [] }];
+    const checked = successorPatch("thêm ô", state, "UNRESOLVED", "SET", "mang giấy tờ; thêm ô");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("yêu cầu hiện tại", staged.candidate), fact = built.input.facts.find(f => f.field === "title")!;
+    const answer = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "yêu cầu hiện tại", occurrence: 1 }] }, changes: [{ field: "title", operation: "SET", value: "thi", evidence: [{ kind: "CONTEXT_FACT", ref: fact.alias }] }], query: null, uncertainties: [] });
+    const adopted = successorEvidence.validateEvidenceV3(answer, built);
+    if (adopted.status !== "VALID") throw new Error(adopted.reason);
+    expect(successorMerge.mergePatchV3(staged.candidate, adopted.patch)).toMatchObject({ status: "MERGED", uncertainties: [{ field: "title", reason: "AMBIGUOUS" }] });
+  });
+  it.each(["change", "alternative", "overridden-change", "overridden-alternative"])("retained_%s_fact_operand_mismatch_rejects_instead_of_repairing", site => {
+    const state = successorNotes(), checked = successorPatch("chưa rõ lịch nào", state, "UNRESOLVED", "SET", "mang giấy tờ", "fact");
+    if (checked.status !== "VALID") throw new Error(checked.reason);
+    const staged = successorMerge.mergePatchV3(state, checked.patch);
+    if (staged.status !== "CLARIFY_OPERATION") throw new Error("expected staged");
+    const pending = staged.candidate.pendingSemanticCandidate!;
+    const evidence = [{ kind: "CONTEXT_FACT" as const, ref: "f9" }];
+    if (site.endsWith("change")) pending.proposal.changes = [{ field: "notes", operation: "SET", value: "corrupt", evidence }];
+    else { pending.proposal.changes = []; pending.proposal.uncertainties = [{ field: "notes", reason: "AMBIGUOUS", alternatives: [{ value: "corrupt", evidence }] }]; }
+    staged.candidate.pendingReminderQuestion!.deliveryState = "SENT";
+    const built = successorBuild("yêu cầu hiện tại", staged.candidate);
+    const currentEvidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "yêu cầu hiện tại", occurrence: 1 }];
+    const answer = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: currentEvidence }, changes: site === "overridden-change" ? [{ field: "notes", operation: "REPLACE", value: "fresh", evidence: currentEvidence }] : [], query: null, uncertainties: site === "overridden-alternative" ? [{ field: "notes", reason: "AMBIGUOUS", alternatives: [] }] : [] });
+    expect(successorEvidence.validateEvidenceV3(answer, built)).toEqual({ status: "REFUSED", reason: "EVIDENCE_FACT_SCOPE_OR_VALUE" });
+  });
+});
 
 function retainedDerived(field: "frequency" | "occurrenceCount"): ContextSnapshotV1 {
   const first = mergePatch(null, patch(null, {
