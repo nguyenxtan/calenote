@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { confirmationFixture } from "./confirmation-test-support";
 import { SLOT_NAMES } from "./contracts";
+import * as stateCodec from "./state";
 import { CanonicalDetailsV1Schema, ContextObservationBindingSchema, ContextSnapshotV1Schema, decodeContextSnapshot, encodeContextSnapshot, type ContextObservation, type ContextSlots, type ContextSnapshotV1, type ControlAuthority } from "./state";
 
 const at = "2026-09-28T03:00:00.000Z";
@@ -21,6 +22,55 @@ function snapshot() {
 const details = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung", notes: "giấy tờ", eventDate: "2026-10-11", eventTime: "08:00", calendarProvenance: { calendar: "GREGORIAN", sourceDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 11, month: 10, year: null, leapMonth: null }, provenance: { kind: "DERIVED_POLICY", policyVersion: "year-1", dependencies: ["eventDate"], referenceTime: at } }, resolutionVersion: "resolution-1" };
 
 describe("internal application state", () => {
+  it("state2_roundtrips_new_and_replace_candidates", () => {
+    expect(stateCodec).toHaveProperty("ContextSnapshotV2Schema");
+    expect(stateCodec).toHaveProperty("encodeContextSnapshotV2");
+    expect(stateCodec).toHaveProperty("decodeContextSnapshotV2");
+    const proposal = { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc tôi", occurrence: 1 }] }, changes: [{ field: "title", operation: "REPLACE", value: "nhắc tôi", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc tôi", occurrence: 1 }] }], query: null, uncertainties: [] };
+    const source = { kind: "USER_QUOTE", sourceTurnId: "turn", sourceMapTurnId: "turn", quote: "nhắc tôi", occurrence: 1, sourceSpan: { start: 0, end: 8 }, viewSpan: { start: 0, end: 8 }, normalizationVersion: "nfc-codepoint-v1" };
+    const value = { ...snapshot(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null,
+      pendingDecision: { decisionId: "decision", kind: "REPLACE_PENDING", target: { ownerId: "owner", chatIdentityId: "identity", chatId: "chat", requestId: "request", proposalId: "proposal" }, questionId: "question", previewId: null, draftRevision: 1, contextRevision: 1, issuedAfterInbound: order, deliveryState: "SENT", expiresAt: expires, acceptedReplies: ["có"], replyReference: null, tokenHandle: null,
+        candidate: { proposalId: "proposal", proposalRevision: 1, proposal, sourceEvidence: [source], evidenceIndex: [{ field: "title", evidence: [source] }], createdAt: at, expiresAt: expires } } };
+    const parsed = stateCodec.ContextSnapshotV2Schema.parse(value);
+    const encoded = stateCodec.encodeContextSnapshotV2(parsed);
+    expect(stateCodec.decodeContextSnapshotV2(encoded)).toEqual(parsed);
+    expect(() => decodeContextSnapshot(encoded)).toThrow();
+    expect(() => stateCodec.decodeContextSnapshotV2(encodeContextSnapshot(snapshot()))).toThrow();
+    expect(ContextSnapshotV1Schema.safeParse({ ...snapshot(), pendingDecision: value.pendingDecision }).success).toBe(false);
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse({ ...value, pendingDecision: { ...value.pendingDecision, candidate: { ...value.pendingDecision.candidate, proposal: { ...proposal, dialogueAct: "START_NEW" } } } }).success).toBe(false);
+  });
+  it("unresolved_candidate_is_nonapprovable_and_revision_bound", () => {
+    const source = { kind: "USER_QUOTE", sourceTurnId: "turn", sourceMapTurnId: "turn", quote: "nhắc tôi", occurrence: 1, sourceSpan: { start: 0, end: 8 }, viewSpan: { start: 0, end: 8 }, normalizationVersion: "nfc-codepoint-v1" };
+    const value = { ...snapshot(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: {
+      proposalId: "candidate", proposalRevision: 1, baseContextRevision: 1, questionId: "operation-question", sourceEvidence: [source], evidenceIndex: [], createdAt: at, expiresAt: expires,
+      proposal: { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "UNRESOLVED", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc tôi", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] },
+    }, pendingReminderQuestion: { questionId: "operation-question", text: "Nhắc nào?", scope: "REMINDER", field: "operation", decisionKind: null, reason: "AMBIGUOUS", noProgressCount: 0, deliveryState: "SENT", issuedAfterOrder: order } };
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse(value).success).toBe(true);
+    for (const patch of [{ baseContextRevision: 2 }, { questionId: "old" }, { acceptedReplies: ["ok"] }, { tokenHandle: "CN-x" }, { expiresAt: "2026-09-28T03:11:00.000Z" }, { sourceEvidence: [{ ...source, quote: "missing" }] }]) {
+      expect(stateCodec.ContextSnapshotV2Schema.safeParse({ ...value, pendingSemanticCandidate: { ...value.pendingSemanticCandidate, ...patch } }).success).toBe(false);
+    }
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse({ ...value, lifecycle: "CANCELLED" }).success).toBe(false);
+    const missingOriginal = structuredClone(value); missingOriginal.pendingSemanticCandidate.proposal.requestTarget.evidence[0].quote = "forged";
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse(missingOriginal).success).toBe(false);
+    const wrongOccurrence = structuredClone(value); wrongOccurrence.pendingSemanticCandidate.sourceEvidence[0].occurrence = 2; wrongOccurrence.pendingSemanticCandidate.proposal.requestTarget.evidence[0].occurrence = 2;
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse(wrongOccurrence).success).toBe(false);
+    const wrongMap = structuredClone(value);
+    wrongMap.transcript[0] = { ...wrongMap.transcript[0], text: "nhắc tôi nhắc tôi", semanticView: "nhắc tôi nhắc tôi", sourceMap: { ...wrongMap.transcript[0].sourceMap, sourceCodePoints: 17, viewCodePoints: 17, segments: [{ sourceStart: 0, sourceEnd: 17, viewStart: 0, viewEnd: 17, kind: "UNCHANGED", sourceStride: 1, viewStride: 1 }] } };
+    wrongMap.pendingSemanticCandidate.sourceEvidence[0].sourceSpan = { start: 9, end: 17 };
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse(wrongMap).success).toBe(false);
+    const futureQuestion=structuredClone(value);futureQuestion.pendingReminderQuestion.issuedAfterOrder.rowid=2;
+    expect(stateCodec.ContextSnapshotV2Schema.safeParse(futureQuestion).success).toBe(false);
+  });
+  it("state2_capacity_and_corruption_never_truncate_sources", () => {
+    const state=stateCodec.ContextSnapshotV2Schema.parse({ ...snapshot(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+    const encoded=stateCodec.encodeContextSnapshotV2(state);
+    for(const bad of [encoded+" ","{}","x".repeat(16385)])expect(()=>stateCodec.decodeContextSnapshotV2(bad)).toThrow();
+    const huge=structuredClone(state); huge.transcript.push({ ...huge.transcript[0], id:"assistant",role:"ASSISTANT",kind:"NOTICE",deliveryState:"SENT",text:"x".repeat(16384),semanticView:"x".repeat(16384),sourceMap:{normalizationVersion:"nfc-codepoint-v1",sourceCodePoints:16384,viewCodePoints:16384,segments:[{sourceStart:0,sourceEnd:16384,viewStart:0,viewEnd:16384,kind:"UNCHANGED",sourceStride:1,viewStride:1}]} });
+    const full=stateCodec.encodeContextSnapshotV2(huge);
+    expect(new TextEncoder().encode(full).length).toBeGreaterThan(16384);
+    expect(()=>stateCodec.decodeContextSnapshotV2(full)).toThrow("storage limit");
+    expect(huge.transcript[0]).toEqual(state.transcript[0]);
+  });
   it("prepared_save_decision_is_inert_and_matches_its_current_outbound",async()=>{
     const f=await confirmationFixture(),s=f.snapshot,outbound=s.transcript.at(-1)!;
     s.pendingDecision!.deliveryState="UNCERTAIN";s.pendingDecision!.replyReference=null;

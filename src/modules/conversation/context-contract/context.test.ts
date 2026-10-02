@@ -1,10 +1,52 @@
 import { describe, expect, it } from "vitest";
 import { buildContextInput } from "./context";
+import * as contextBuilder from "./context";
 import { at, chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
 import { serializeContextRequest } from "./wire";
 import { ContextSnapshotV1Schema, encodeContextSnapshot } from "./state";
+import { ContextSnapshotV2Schema, encodeContextSnapshotV2 } from "./state";
 
 describe("bounded private context", () => {
+  it("state_capacity_retains_evidence_or_refuses", () => {
+    expect(contextBuilder).toHaveProperty("buildContextInputV2");
+    const legacy=withNotes("mang giấy tờ"),state=ContextSnapshotV2Schema.parse({ ...legacy, schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null }),msg=message();
+    const prior=encodeContextSnapshotV2(state);
+    const result=contextBuilder.buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(legacy,msg)});
+    expect(result.status).toBe("READY");
+    if(result.status==="READY") {
+      expect(result.input.schemaVersion).toBe("calenote-context-input-2");
+      expect(result.candidateSnapshot.schemaVersion).toBe("calenote-context-state-2");
+      expect(result.candidateSnapshot.slots.notes.evidence).toEqual(state.slots.notes.evidence);
+      expect(result.candidateSnapshot.draftExpiresAt).toBe(state.draftExpiresAt);
+      expect(result.measurement.admitted).toBe(false);
+      expect(result.measurement.reasons).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
+    }
+    expect(encodeContextSnapshotV2(state)).toBe(prior);
+    state.transcript.push({...turn("x".repeat(11000),"assistant"),role:"ASSISTANT",kind:"NOTICE",deliveryState:"SENT"});
+    const full=encodeContextSnapshotV2(state),large=message("ế".repeat(1800));
+    expect(new TextEncoder().encode(full).length).toBeLessThanOrEqual(16384);
+    expect(contextBuilder.buildContextInputV2({message:large,context:chat,snapshot:state,observation:observation(legacy,large)})).toEqual({status:"REFUSED",reason:"CONTEXT_SNAPSHOT_TOO_LARGE"});
+    expect(encodeContextSnapshotV2(state)).toBe(full);
+  });
+  it("successor_input_preserves_typed_operation_ambiguity_and_bound_candidate",()=>{
+    const legacy=snapshot(),msg=message("Tiếp tục yêu cầu này.");
+    const evidence={kind:"USER_QUOTE",sourceTurnId:"old",sourceMapTurnId:"old",quote:"nhắc tôi",occurrence:1,sourceSpan:{start:0,end:8},viewSpan:{start:0,end:8},normalizationVersion:"nfc-codepoint-v1"};
+    const refs=[{kind:"USER_QUOTE",turn:0,quote:"nhắc tôi",occurrence:1}];
+    const state=ContextSnapshotV2Schema.parse({...legacy,schemaVersion:"calenote-context-state-2",
+      pendingReminderQuestion:{questionId:"operation",text:"Yêu cầu nào?",scope:"REMINDER",field:"operation",decisionKind:null,reason:"AMBIGUOUS",noProgressCount:0,deliveryState:"SENT",issuedAfterOrder:{receivedAt:at,rowid:1}},
+      ambiguities:[{field:"operation",reason:"AMBIGUOUS",alternatives:[{value:"CURRENT",evidence:refs},{value:"NEW",evidence:refs}]}],
+      pendingSemanticCandidate:{proposalId:"candidate",proposalRevision:1,baseContextRevision:1,questionId:"operation",sourceEvidence:[evidence],evidenceIndex:[],createdAt:at,expiresAt:legacy.draftExpiresAt,proposal:{schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"UNRESOLVED",evidence:refs},changes:[],query:null,uncertainties:[]}},
+    });
+    const result=contextBuilder.buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(legacy,msg)});
+    expect(result.status,JSON.stringify(result)).toBe("READY");
+    if(result.status==="READY"){
+      expect(result.input.ambiguities).toEqual([{field:"operation",reason:"AMBIGUOUS",alternatives:[{value:"CURRENT",evidence:refs},{value:"NEW",evidence:refs}]}]);
+      expect(result.candidateSnapshot.pendingSemanticCandidate).toEqual(state.pendingSemanticCandidate);
+      expect(result.input).not.toHaveProperty("pendingSemanticCandidate");
+    }
+    expect(buildContextInput({message:msg,context:chat,snapshot:state as never,observation:observation(legacy,msg)})).toEqual({status:"REFUSED",reason:"CONTEXT_INVALID"});
+    expect(contextBuilder.buildContextInputV2({message:msg,context:chat,snapshot:legacy as never,observation:observation(legacy,msg)})).toEqual({status:"REFUSED",reason:"CONTEXT_INVALID"});
+  });
   it("controls_absent_in_every_provider_string", () => {
     const state = withNotes("mang CN-AbC123 giấy tờ");
     state.slots.notes.evidence = [{ ...state.slots.notes.evidence[0], quote: "giấy tờ", sourceSpan: { start: 15, end: 22 }, viewSpan: { start: 15, end: 22 } }];

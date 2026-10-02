@@ -1,11 +1,24 @@
 import type { ConversationScope } from "../contracts";
 import type { CanonicalDetailsV1, ContextObservation, ContextSnapshotV1, ControlAuthority, PendingDecision } from "./state";
 import type { SeriesOccurrence } from "@/modules/reminders/series";
+import type { ContextSnapshotV2 } from "./state";
+import { isContextProtocolV3, type ContextProtocolV3 } from "./protocol";
 
 /** Separate envelope from the 16KiB context. Covers the strict detail schema's
  * escaped Unicode maxima, including both bounded policy/version identifiers. */
 export const CONTEXT_DETAIL_MAX_BYTES = 24576;
-export const contextContractEncryptionIdentity = (scope:{ownerId:string;chatIdentityId:string}, id:string) => JSON.stringify([scope.ownerId,scope.chatIdentityId,id,"calenote-context-2"]);
+export const contextContractEncryptionIdentity = (scope:{ownerId:string;chatIdentityId:string}, id:string, protocol?: ContextProtocolV3) => {
+  if (protocol !== undefined && !isContextProtocolV3(protocol)) throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+  return JSON.stringify([scope.ownerId,scope.chatIdentityId,id,protocol?.canonicalVersion ?? "calenote-context-2"]);
+};
+export type StoredTransitionV2 = Omit<StoredTransition, "snapshot"> & { snapshot: ContextSnapshotV2 };
+export type ObservedContextV2 = { observation: ContextObservation; snapshot: ContextSnapshotV2 | null } | Extract<ObservedContext, { failure: string }>;
+export interface ContextContractStoreV3 {
+  readonly protocol: Readonly<ContextProtocolV3>;
+  observe(scope: ConversationScope): Promise<ObservedContextV2>;
+  apply(scope: ConversationScope, observation: ContextObservation, transition: StoredTransitionV2): Promise<AppliedTransition | { status: "NOT_READY"; reason: "SUCCESSOR_DECISIONS_NOT_INTEGRATED" }>;
+  confirm(authority: ControlAuthority, proof: DecisionProof): Promise<{ status: "NOT_READY"; reason: "SUCCESSOR_DECISIONS_NOT_INTEGRATED" }>;
+}
 
 export interface CanonicalPreview {
   schemaVersion: "calenote-context-preview-1";

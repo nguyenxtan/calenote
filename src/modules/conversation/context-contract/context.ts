@@ -1,11 +1,17 @@
 import type { BoundChatMessage, BoundChatContext } from "@/modules/reminders/command-service";
 import { ContextInputSchema, SLOT_NAMES, type ContextInput, type EvidenceRef } from "./contracts";
+import { ContextInputV2Schema, InterpretationJsonSchemaV3, type ContextInputV2 } from "./contracts";
+import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV2 } from "./state";
 import { ContextObservationBindingSchema, ContextSnapshotV1Schema, encodeContextSnapshot, type ContextObservation, type ContextSnapshotV1, type TranscriptEntry, type SourceEvidence } from "./state";
 import { measureEnvelope, type EnvelopeMeasurement } from "./admission";
 import { containsForbiddenControl, projectSemanticView } from "./projection";
 export type ContextBuildArgs = { message: BoundChatMessage; context: BoundChatContext; snapshot: ContextSnapshotV1 | null; observation: ContextObservation };
 export type ReadyContext = { status: "READY"; input: ContextInput; observation: ContextObservation; evidenceIndex: readonly TranscriptEntry[]; sourceMap: readonly TranscriptEntry["sourceMap"][]; candidateSnapshot: ContextSnapshotV1; candidateSnapshotJson: string; measurement: EnvelopeMeasurement };
 export type ContextBuildResult = ReadyContext | { status: "REFUSED"; reason: string };
+export type ContextBuildArgsV2 = Omit<ContextBuildArgs, "snapshot"> & { snapshot: ContextSnapshotV2 | null };
+export type ReadyContextV2 = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInputV2; candidateSnapshot: ContextSnapshotV2 };
+export type ContextBuildResultV2 = ReadyContextV2 | { status: "REFUSED"; reason: string };
+type AnyReadyContext = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInput | ContextInputV2; candidateSnapshot: ContextSnapshotV1 | ContextSnapshotV2 };
 /** A call-local alias binds two different representations to one source. Never
  * compare a supplied operand to the internal value, or persist the supplied
  * placeholder as user content. Source spans do not depend on quote occurrences. */
@@ -16,19 +22,35 @@ export interface BoundContextFact {
   referenceTime: string;
 }
 type EvidenceContext = {
-  snapshot: ContextSnapshotV1 | null;
+  snapshot: ContextSnapshotV1 | ContextSnapshotV2 | null;
   handles: string[];
   facts: ReadonlyMap<string, BoundContextFact>;
 };
-const builtContexts = new WeakMap<ReadyContext, EvidenceContext>();
+const builtContexts = new WeakMap<AnyReadyContext, EvidenceContext>();
 /** @internal Only locally constructed, frozen payloads can validate evidence. */
 export const evidenceContextFor = (built: ReadyContext) => builtContexts.get(built);
+export const evidenceContextForV2 = (built: ReadyContextV2) => builtContexts.get(built);
 function freeze<T>(value: T): T {
   if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); }
   return value;
 }
 export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
-  const refused = (reason: string): ContextBuildResult => ({ status: "REFUSED", reason });
+  const result = buildContext(args, false);
+  if (result.status === "REFUSED") return result;
+  const ready = freeze({ ...result, input: ContextInputSchema.parse(result.input), candidateSnapshot: ContextSnapshotV1Schema.parse(result.candidateSnapshot) });
+  const evidence = builtContexts.get(result); if (evidence) builtContexts.set(ready, evidence);
+  return ready;
+}
+export function buildContextInputV2(args: ContextBuildArgsV2): ContextBuildResultV2 {
+  const result = buildContext(args, true);
+  if (result.status === "REFUSED") return result;
+  const ready = freeze({ ...result, input: ContextInputV2Schema.parse(result.input), candidateSnapshot: ContextSnapshotV2Schema.parse(result.candidateSnapshot) });
+  const evidence = builtContexts.get(result); if (evidence) builtContexts.set(ready, evidence);
+  return ready;
+}
+function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: boolean): AnyReadyContext | { status: "REFUSED"; reason: string } {
+  const refused = (reason: string) => ({ status: "REFUSED" as const, reason });
+  const stateSchema = successor ? ContextSnapshotV2Schema : ContextSnapshotV1Schema;
   const { message, context, observation } = args;
   if (!message.text.isWellFormed() || !Number.isFinite(message.receivedAt)) return refused("INPUT_INVALID");
   if (message.text.normalize("NFC").length > 1800) return refused("SEMANTIC_INPUT_TOO_LONG");
@@ -39,7 +61,7 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
   const inbound = { id: message.id, receivedAt: instant, rowid: context.inboundRowId, claimMarker: message.claimMarker };
   const same = (a: object, b: object) => Object.entries(a).every(([key, value]) => (b as Record<string, unknown>)[key] === value);
   if (!same(scope, binding.data.scope) || !same(inbound, binding.data.inbound) || context.timezone !== "Asia/Ho_Chi_Minh") return refused("CONTEXT_SCOPE_MISMATCH");
-  const stateResult = args.snapshot === null ? null : ContextSnapshotV1Schema.safeParse(args.snapshot);
+  const stateResult = args.snapshot === null ? null : stateSchema.safeParse(args.snapshot);
   if (stateResult && !stateResult.success) return refused("CONTEXT_INVALID");
   const state = stateResult?.data ?? null;
   if (state ? binding.data.observed.presence !== "PRESENT" || binding.data.observed.contextId !== state.id || binding.data.observed.contextRevision !== state.contextRevision : binding.data.observed.presence !== "ABSENT") return refused("CONTEXT_STALE");
@@ -91,6 +113,10 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
       if (state.pendingDecision?.candidate) {
         state.pendingDecision.candidate.sourceEvidence = state.pendingDecision.candidate.sourceEvidence.map(remapSource);
         state.pendingDecision.candidate.evidenceIndex.forEach(e => { e.evidence = e.evidence.map(remapSource); });
+      }
+      if ("pendingSemanticCandidate" in state && state.pendingSemanticCandidate) {
+        state.pendingSemanticCandidate.sourceEvidence = state.pendingSemanticCandidate.sourceEvidence.map(remapSource);
+        state.pendingSemanticCandidate.evidenceIndex.forEach(e => { e.evidence = e.evidence.map(remapSource); });
       }
     } catch (error) { return refused(error instanceof BuildFailure ? error.message : "CONTEXT_INVALID"); }
   }
@@ -183,7 +209,7 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
     // Latest query question takes priority; assistant receipt is never evidence.
     const question = questions[0];
     const raw = {
-      schemaVersion: "calenote-context-input-1",
+      schemaVersion: successor ? "calenote-context-input-2" : "calenote-context-input-1",
       reference: { instant, localDate: new Date(message.receivedAt + 7 * 3600000).toISOString().slice(0, 10), timezone: "Asia/Ho_Chi_Minh" },
       turns: evidenceIndex.map(t => ({ role: t.role, text: t.semanticView })),
       currentTurn: evidenceIndex.length - 1,
@@ -201,7 +227,7 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
       if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, project(x)]));
       return v;
     };
-    const input = ContextInputSchema.parse({ ...raw, activeRequest: project(raw.activeRequest), facts: project(raw.facts), pendingQuestion: project(raw.pendingQuestion), ambiguities: project(raw.ambiguities) });
+    const input = (successor ? ContextInputV2Schema : ContextInputSchema).parse({ ...raw, activeRequest: project(raw.activeRequest), facts: project(raw.facts), pendingQuestion: project(raw.pendingQuestion), ambiguities: project(raw.ambiguities) });
     if (containsForbiddenControl(input, handles)) return refused("CONTROL_PROJECTION_AMBIGUOUS");
 
     // Refresh internal references BEFORE encoding. Internal turn indexes retain
@@ -214,24 +240,27 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
         proposal: remapRefs(pendingDecision.candidate.proposal, "INTERNAL"),
       },
     } : pendingDecision;
-    const candidateSnapshot = ContextSnapshotV1Schema.parse(state ? {
+    const retainedCandidate = state && "pendingSemanticCandidate" in state ? state.pendingSemanticCandidate : null;
+    const candidateSnapshot = stateSchema.parse(state ? {
       ...state, inbound, transcript: retainedTranscript, modelAttemptBinding: null, webDeclineReceipt: null,
       facts: remapRefs(state.facts, "INTERNAL"),
       ambiguities: remapRefs(state.ambiguities, "INTERNAL"),
       pendingDecision: refreshedDecision,
+      ...(successor ? { pendingSemanticCandidate: retainedCandidate ? { ...retainedCandidate, proposal: remapRefs(retainedCandidate.proposal, "INTERNAL") } : null } : {}),
     } : {
-      schemaVersion: "calenote-context-state-1", id: message.id, scope, inbound,
+      schemaVersion: successor ? "calenote-context-state-2" : "calenote-context-state-1", id: message.id, scope, inbound,
       requestId: null, contextRevision: 1, draftRevision: null, lifecycle: "NONE",
       slots: Object.fromEntries(SLOT_NAMES.map(field => [field, { state: "MISSING", value: null, fact: null, evidence: [], provenance: null, resolution: null, proposalRevision: 1 }])),
       facts: [], pendingReminderQuestion: null, pendingQueryQuestion: null, ambiguities: [],
       transcript: [currentEntry], pendingDecision: null, previewReceipt: null, controlRegistry: [],
       modelAttemptBinding: null, lastTerminalOutcome: binding.data.lastTerminalOutcome,
+      ...(successor ? { pendingSemanticCandidate: null } : {}),
       createdAt: instant,
       idleExpiresAt: new Date(message.receivedAt + 1800000).toISOString(),
       absoluteExpiresAt: new Date(message.receivedAt + 7200000).toISOString(),
       draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-1",
     });
-    const candidateSnapshotJson = encodeContextSnapshot(candidateSnapshot);
+    const candidateSnapshotJson = candidateSnapshot.schemaVersion === "calenote-context-state-2" ? encodeContextSnapshotV2(candidateSnapshot) : encodeContextSnapshot(candidateSnapshot);
     if (new TextEncoder().encode(candidateSnapshotJson).length > 16384) return refused("CONTEXT_SNAPSHOT_TOO_LARGE");
 
     for (const [index, original] of originalFacts.entries()) {
@@ -245,13 +274,22 @@ export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
         referenceTime: original.sourceReferenceTime,
       }));
     }
-    const measurement = measureEnvelope(input, candidateSnapshotJson);
+    // A2 has no successor prompt/dispatch. Measure its actual local envelope;
+    // prompt/framing stay absent and token admission stays explicitly refused.
+    const measurement = input.schemaVersion === "calenote-context-input-1" ? measureEnvelope(input, candidateSnapshotJson) : measureSuccessorEnvelope(input, candidateSnapshotJson);
     const localReason = measurement.reasons.find(r => r !== "TOKEN_BOUND_UNVERIFIED");
     if (localReason) return refused(localReason);
-    const ready: ReadyContext = freeze({ status: "READY", input, observation, evidenceIndex, sourceMap: evidenceIndex.map(t => t.sourceMap), candidateSnapshot, candidateSnapshotJson, measurement });
+    const ready: AnyReadyContext = freeze({ status: "READY", input, observation, evidenceIndex, sourceMap: evidenceIndex.map(t => t.sourceMap), candidateSnapshot, candidateSnapshotJson, measurement });
     builtContexts.set(ready, { snapshot: state ? candidateSnapshot : null, handles, facts });
     return ready;
   } catch (error) { return refused(error instanceof BuildFailure ? error.message : "CONTEXT_INVALID"); }
+}
+function measureSuccessorEnvelope(input: ContextInputV2, snapshotJson: string): EnvelopeMeasurement {
+  const counts = (text: string) => ({ utf16Units: text.length, codePoints: [...text].length });
+  const bytes = (text: string) => new TextEncoder().encode(text).length;
+  return { current: counts(input.turns[input.currentTurn].text), turns: input.turns.map(t => ({ role: t.role, ...counts(t.text) })),
+    bytes: { snapshot: bytes(snapshotJson), prompt: 0, schema: bytes(JSON.stringify(InterpretationJsonSchemaV3)), input: bytes(JSON.stringify(input)), request: 0, framing: 0, output: null },
+    tokenMethod: "gemini-2.5-flash-lite:UNVERIFIED", inputTokens: null, outputTokens: null, serverFramingTokens: null, admitted: false, reasons: ["TOKEN_BOUND_UNVERIFIED"] };
 }
 class BuildFailure extends Error {}
 function fail(reason: string): never { throw new BuildFailure(reason); }

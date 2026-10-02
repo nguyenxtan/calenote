@@ -2,12 +2,16 @@
 import { afterEach, expect, it } from "vitest";
 import { fixture, now } from "./test-support";
 import { D1ContextContractStore } from "./store";
+import * as stores from "./store";
 import { addConfirmationToken } from "../../confirmation-test-support";
 import { buildContextInput } from "../../context";
 import { chat, message } from "../../context-test-fixtures";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { Keyring } from "@/modules/security/keyring";
 import { ContextSnapshotV1Schema, encodeContextSnapshot } from "../../state";
+import { ContextSnapshotV2Schema, encodeContextSnapshotV2 } from "../../state";
+import { CONTEXT_PROTOCOL_V3 } from "../../protocol";
+import { createD1ContextRuntimeStoreV3, D1ContextRuntimeStore } from "../../runtime-store";
 import { contextContractEncryptionIdentity } from "../../store";
 const fixtures: Awaited<ReturnType<typeof fixture>>[] = [];
 async function setup(){ const f=await fixture();fixtures.push(f);return f; }
@@ -20,6 +24,55 @@ async function preparedSave(){
 }
 const preparedReceipt={contextId:"context",contextRevision:1,draftRevision:1,outboundId:"preview",decisionId:"decision",deliveryState:"SENT",messageRef:"actual-delivery"} as const;
 afterEach(()=>{for(const f of fixtures.splice(0)) f.close();});
+it("family2_is_not_protocol_selection", async () => {
+ expect(stores).toHaveProperty("createD1ContextContractStoreV3");
+ const f=await setup();
+ expect(()=>stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:{...CONTEXT_PROTOCOL_V3,canonicalVersion:"calenote-context-2"} as never})).toThrow("UNSUPPORTED_CONTEXT_PROTOCOL");
+ expect(()=>stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:undefined as never})).toThrow("UNSUPPORTED_CONTEXT_PROTOCOL");
+ expect(()=>createD1ContextRuntimeStoreV3({db:f.db,keyring:f.keyring,protocol:undefined as never})).toThrow("UNSUPPORTED_CONTEXT_PROTOCOL");
+});
+it("v3_legacy_owner_is_other_contract_not_absent",async()=>{
+ const f=await setup();expect((await f.save()).result.status).toBe("APPLIED");
+ const successor=stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ const before=await f.db.prepare("SELECT revision,expires_at,payload_ciphertext,payload_iv FROM conversation_contexts").first();
+ expect(await successor.observe(f.scope(1))).toEqual({failure:"OTHER_CONTRACT"});
+ expect(await successor.observe(f.scope(1))).toEqual({failure:"OTHER_CONTRACT"});
+ expect(await createD1ContextRuntimeStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3}).ownsContext(f.scope(1))).toBe(true);
+ expect(await f.db.prepare("SELECT revision,expires_at,payload_ciphertext,payload_iv FROM conversation_contexts").first()).toEqual(before);
+ const legacy=await f.store.observe(f.scope(1));if("failure"in legacy)throw new Error("fixture");
+ expect(await createD1ContextRuntimeStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3}).claimAttempt(f.scope(1),legacy.observation,"a".repeat(64))).toBe(false);
+ expect(await f.db.prepare("SELECT count(*) n FROM audit_events").first("n")).toBe(0);
+});
+it("cross_protocol_ciphertext_refused",async()=>{
+ const f=await setup(),successor=stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ const observed=await successor.observe(f.scope());if("failure"in observed)throw new Error("fixture");
+ const snapshot=ContextSnapshotV2Schema.parse({...f.snapshot,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null,pendingDecision:null,previewReceipt:null,lifecycle:"CLARIFYING"});
+ const transition={...f.transition,snapshot,preview:null};
+ expect(await successor.apply(f.scope(),observed.observation,transition)).toMatchObject({status:"APPLIED"});
+ expect(await successor.observe(f.scope(1))).toMatchObject({snapshot:{schemaVersion:"calenote-context-state-2"}});
+ expect(await f.store.observe(f.scope(1))).toEqual({failure:"OTHER_CONTRACT"});
+ const current=await successor.observe(f.scope(1));if("failure"in current)throw new Error("fixture");
+ expect(await new D1ContextRuntimeStore(f.db).claimAttempt(f.scope(1),current.observation,"a".repeat(64))).toBe(false);
+ const runtime=createD1ContextRuntimeStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ expect(await runtime.ownsContext(f.scope(1))).toBe(true);
+ expect(await runtime.claimAttempt(f.scope(1),current.observation,"a".repeat(64))).toBe(true);
+ expect(await runtime.claimAttempt(f.scope(1),current.observation,"b".repeat(64))).toBe(false);
+ const wrong=await f.keyring.encryptSensitive("context-contract-state",contextContractEncryptionIdentity(snapshot.scope,snapshot.id),1,encodeContextSnapshotV2(snapshot));
+ await f.db.batch([f.db.prepare("INSERT INTO conversation_contract_write_permits VALUES('identity','context','wrong-protocol','APPLY','in-1',NULL)"),f.db.prepare("UPDATE conversation_contexts SET payload_ciphertext=?,payload_iv=?,write_marker='wrong-protocol'").bind(wrong.ciphertext,wrong.iv),f.db.prepare("DELETE FROM conversation_contract_write_permits")]);
+ expect(await successor.observe(f.scope(1))).toEqual({failure:"INVALID"});
+ expect(await f.store.observe(f.scope(1))).toEqual({failure:"INVALID"});
+});
+it("successor_decision_execution_refuses_without_mutation",async()=>{
+ const f=await setup(),successor=stores.createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ const observed=await successor.observe(f.scope());if("failure"in observed)throw new Error("fixture");
+ const snapshot=ContextSnapshotV2Schema.parse({...f.snapshot,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null,pendingDecision:null,previewReceipt:null,lifecycle:"CLARIFYING"});
+ const refused={status:"NOT_READY",reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED"};
+ await expect(successor.apply(f.scope(),observed.observation,{...f.transition,snapshot:null as never,preview:null})).resolves.toEqual({status:"INVALID"});
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot})).toEqual(refused);
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot,preview:null,decisionProof:f.proof})).toEqual(refused);
+ expect(await successor.confirm({kind:"CHAT",scope:f.scope()},f.proof)).toEqual(refused);
+ for(const table of ["conversation_contexts","conversation_contract_ownership","conversation_contract_write_permits","conversation_context_outcomes","reminders","audit_events"])expect(await f.db.prepare(`SELECT count(*) n FROM ${table}`).first("n")).toBe(0);
+});
 it.each(["CHAT","WEB"] as const)("prepared_preview_only_confirms_on_%s_after_exact_sent_receipt",async channel=>{
  const f=await preparedSave();expect((await f.save()).result.status).toBe("APPLIED");
  const chatAuthority={kind:"CHAT",scope:f.scope(1)} as const;

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { ConversationScope } from "../contracts";
 import { CalendarSchema, contextFactSchema, SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, UncertaintySchema } from "./contracts";
+import { SemanticPatchProposalV3Schema, UncertaintyV3Schema } from "./contracts";
 
 const id = z.string().min(1).max(512);
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
@@ -71,12 +72,17 @@ const target = z.strictObject({ ownerId: id, chatIdentityId: id, chatId: id, req
 export const PreviewReceiptSchema = z.strictObject({ previewId: id, requestId: id, draftRevision: revision, draftHash: hash, ownerId: id, chatIdentityId: id, chatId: id, channel: z.enum(["ZALO", "TELEGRAM", "WEB"]), issuedAfterOrder: InboundOrderSchema, expiresAt: instant, deliveryState: delivery, replyReference: id.nullable() });
 export type PreviewReceipt = z.infer<typeof PreviewReceiptSchema>;
 const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: SemanticPatchProposalSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(13), createdAt: instant, expiresAt: instant });
-export const PendingDecisionSchema = z.strictObject({ decisionId: id, kind: decisionKind, target, questionId: id, previewId: id.nullable(), draftRevision: revision.nullable(), contextRevision: revision, issuedAfterInbound: InboundOrderSchema, deliveryState: delivery, expiresAt: instant, acceptedReplies: z.array(z.enum(["có", "ok", "1", "xác nhận"])).min(1).max(4), replyReference: id.nullable(), tokenHandle: id.nullable(), candidate: candidate.nullable() }).superRefine((d, ctx) => {
+const candidateV3 = candidate.extend({ proposal: SemanticPatchProposalV3Schema });
+const decisionBase = z.strictObject({ decisionId: id, kind: decisionKind, target, questionId: id, previewId: id.nullable(), draftRevision: revision.nullable(), contextRevision: revision, issuedAfterInbound: InboundOrderSchema, deliveryState: delivery, expiresAt: instant, acceptedReplies: z.array(z.enum(["có", "ok", "1", "xác nhận"])).min(1).max(4), replyReference: id.nullable(), tokenHandle: id.nullable(), candidate: candidate.nullable() });
+const decisionV2Base = decisionBase.extend({ candidate: candidateV3.nullable() });
+function validateDecision(d: z.infer<typeof decisionBase> | z.infer<typeof decisionV2Base>, ctx: z.RefinementCtx) {
   if (new Set(d.acceptedReplies).size !== d.acceptedReplies.length || (d.kind !== "SAVE_PREVIEW" && d.acceptedReplies.includes("xác nhận"))) ctx.addIssue({ code: "custom", message: "Invalid decision replies" });
   if (d.kind === "SAVE_PREVIEW" && (d.previewId === null || d.draftRevision === null || d.target.requestId === null || d.candidate !== null)) ctx.addIssue({ code: "custom", message: "Save requires a preview and draft binding" });
   if (d.candidate && (!["REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE"].includes(d.kind) || d.target.proposalId !== d.candidate.proposalId || Date.parse(d.expiresAt) > Date.parse(d.candidate.expiresAt))) ctx.addIssue({ code: "custom", message: "Candidate binding mismatch" });
   if (["REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE"].includes(d.kind) && !d.candidate) ctx.addIssue({ code: "custom", message: "Decision requires candidate" });
-});
+}
+export const PendingDecisionSchema = decisionBase.superRefine(validateDecision);
+export const PendingDecisionV2Schema = decisionV2Base.superRefine(validateDecision);
 export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 const terminal = z.strictObject({ outcomeId: id, status: z.enum(["COMPLETED", "CANCELLED", "EXPIRED", "INVALID"]), contextId: id, contextRevision: revision, inboundId: id, order: InboundOrderSchema });
 export const ContextObservationBindingSchema = z.strictObject({ scope: ContextScopeSchema, inbound, observed: z.discriminatedUnion("presence", [z.strictObject({ presence: z.literal("ABSENT") }), z.strictObject({ presence: z.literal("PRESENT"), contextId: id, contextRevision: revision })]), lastTerminalOutcome: terminal.nullable() });
@@ -91,11 +97,20 @@ export type ControlAuthority = { kind: "CHAT"; scope: ConversationScope } | { ki
 const attempt = z.strictObject({ attemptId: id, observationId: id, contextRevision: revision.nullable(), sourceInboundId: id, claimMarker: id, inputDigest: hash, promptDigest: hash, contractDigest: hash, contractVersion: z.literal("calenote-context-2"), status: z.enum(["PREPARED", "DISPATCHED", "RECEIVED", "REJECTED", "ACCEPTED", "UNCERTAIN"]) });
 const control = z.strictObject({ handle: id, kind: z.enum(["TOKEN", "ACTION_URL", "OPAQUE_HANDLE", "CONTROL_ID"]), ownerId: id, chatIdentityId: id, chatId: id, decisionId: id, contextRevision: revision, draftRevision: revision.nullable(), expiresAt: instant });
 
-export const ContextSnapshotV1Schema = z.strictObject({
+const snapshotV1Base = z.strictObject({
   schemaVersion: z.literal("calenote-context-state-1"), id, scope: ContextScopeSchema, inbound, requestId: id.nullable(), contextRevision: revision, draftRevision: revision.nullable(), lifecycle: z.enum(["NONE", "CLARIFYING", "AWAITING_CONFIRMATION", "COMPLETED", "CANCELLED", "EXPIRED", "INVALID"]),
   slots: SlotsSchema, facts: z.array(contextFactSchema({ evidenceSlot: SlotNameSchema.nullable() })).max(26), pendingReminderQuestion: reminderQuestion.nullable(), pendingQueryQuestion: queryQuestion.nullable(), ambiguities: z.array(UncertaintySchema).max(4), transcript: z.array(TranscriptEntrySchema).max(12), pendingDecision: PendingDecisionSchema.nullable(), previewReceipt: PreviewReceiptSchema.nullable(), controlRegistry: z.array(control).max(32), modelAttemptBinding: attempt.nullable(), lastTerminalOutcome: terminal.nullable(), createdAt: instant, idleExpiresAt: instant, absoluteExpiresAt: instant, draftCreatedAt: instant.nullable(), draftExpiresAt: instant.nullable(), capabilityVersion: id,
   webDeclineReceipt: z.strictObject({ publicId: z.string().regex(/^[A-Za-z0-9_-]{22}$/u), operationKey: hash, proofHash: hash, settledRevision: revision, settledAt: instant }).nullable().optional(),
-}).superRefine((s, ctx) => {
+});
+const pendingSemanticCandidate = candidateV3.extend({ baseContextRevision: revision, questionId: id });
+const snapshotV2Base = snapshotV1Base.extend({
+  schemaVersion: z.literal("calenote-context-state-2"),
+  pendingDecision: PendingDecisionV2Schema.nullable(),
+  pendingSemanticCandidate: pendingSemanticCandidate.nullable(),
+  ambiguities: z.array(UncertaintyV3Schema).max(4),
+  modelAttemptBinding: attempt.extend({ contractVersion: z.literal("calenote-context-3") }).nullable(),
+});
+function validateSnapshot(s: z.infer<typeof snapshotV1Base> | z.infer<typeof snapshotV2Base>, ctx: z.RefinementCtx) {
   const fail = (message: string) => ctx.addIssue({ code: "custom", message });
   const created = Date.parse(s.createdAt), absolute = Date.parse(s.absoluteExpiresAt), idle = Date.parse(s.idleExpiresAt), latest = Date.parse(s.inbound.receivedAt);
   if (s.webDeclineReceipt && (s.webDeclineReceipt.settledRevision !== s.contextRevision || s.lifecycle !== "CLARIFYING" || s.pendingDecision !== null || s.previewReceipt !== null || Date.parse(s.webDeclineReceipt.settledAt) < latest || Date.parse(s.webDeclineReceipt.settledAt) >= absolute)) fail("Invalid web decline receipt");
@@ -114,6 +129,46 @@ export const ContextSnapshotV1Schema = z.strictObject({
   for (const f of s.facts) if (f.scope === "REMINDER" && (f.evidenceSlot !== f.field || !SLOT_NAMES.includes(f.field as typeof SLOT_NAMES[number]) || JSON.stringify(s.slots[f.evidenceSlot!].value) !== JSON.stringify(f.value))) fail("Fact/slot mismatch");
   const ownerMatches = (t: { ownerId: string; chatIdentityId: string; chatId: string }) => t.ownerId === s.scope.ownerId && t.chatIdentityId === s.scope.chatIdentityId && t.chatId === s.scope.chatId;
   const boundExpiry = Math.min(idle, absolute, s.draftExpiresAt ? Date.parse(s.draftExpiresAt) : absolute);
+  const checkSuccessorCandidate = (c: z.infer<typeof candidateV3>) => {
+    const sources = [...c.sourceEvidence, ...c.evidenceIndex.flatMap(e => e.evidence)];
+    sources.forEach(checkEvidence);
+    for(const e of sources) {
+      const t=s.transcript.find(t=>t.id===e.sourceTurnId);
+      if(!t)continue;
+      const segments=t.sourceMap.segments.filter(segment=>segment.sourceStart<e.sourceSpan.end && segment.sourceEnd>e.sourceSpan.start);
+      const boundary=(point:number,segment:SourceMap["segments"][number]|undefined):number|null=>{
+        if(!segment || segment.kind==="CONTROL_REPLACEMENT" || segment.sourceStride===0)return null;
+        const offset=point-segment.sourceStart;
+        return offset%segment.sourceStride===0 ? segment.viewStart+offset/segment.sourceStride*segment.viewStride : null;
+      };
+      if(boundary(e.sourceSpan.start,segments[0])!==e.viewSpan.start || boundary(e.sourceSpan.end,segments.at(-1))!==e.viewSpan.end)fail("Candidate source map mismatch");
+      let count=0,from=0,found=-1;
+      while(count<e.occurrence) { found=t.semanticView.indexOf(e.quote,from); if(found<0)break; count++;from=found+e.quote.length; }
+      if(count!==e.occurrence || [...t.semanticView.slice(0,found)].length!==e.viewSpan.start)fail("Candidate quote occurrence mismatch");
+    }
+    if(Date.parse(c.createdAt)<created || Date.parse(c.createdAt)>latest || Date.parse(c.expiresAt)<=Date.parse(c.createdAt) || Date.parse(c.expiresAt)>boundExpiry)fail("Candidate lifetime mismatch");
+    const refs = (v: unknown): void => {
+      if(Array.isArray(v)){v.forEach(refs);return;}
+      if(!v || typeof v!=="object")return;
+      if("kind"in v && v.kind==="USER_QUOTE" && "turn"in v && typeof v.turn==="number" && "quote"in v && typeof v.quote==="string" && "occurrence"in v) {
+        const t=s.transcript[v.turn];
+        if(!t || t.role!=="USER" || !sources.some(e=>e.sourceTurnId===t.id && e.quote===v.quote && e.occurrence===v.occurrence))fail("Candidate source reference mismatch");
+      }else if("kind"in v && v.kind==="CONTEXT_FACT" && "ref"in v && !s.facts.some(f=>f.alias===v.ref))fail("Candidate fact reference mismatch");
+      Object.values(v).forEach(refs);
+    };
+    refs(c.proposal);
+  };
+  if ("pendingSemanticCandidate" in s && s.pendingSemanticCandidate) {
+    const c = s.pendingSemanticCandidate, q = s.pendingReminderQuestion;
+    if (!q || q.field !== "operation" || q.questionId !== c.questionId || q.decisionKind !== null
+      || Date.parse(q.issuedAfterOrder.receivedAt)>latest || (q.issuedAfterOrder.receivedAt===s.inbound.receivedAt && q.issuedAfterOrder.rowid>s.inbound.rowid)
+      || c.baseContextRevision !== s.contextRevision || c.proposalRevision > s.contextRevision
+      || c.proposal.requestTarget?.kind !== "UNRESOLVED" || s.pendingDecision !== null
+      || !["NONE", "CLARIFYING"].includes(s.lifecycle)
+      || Date.parse(c.createdAt) < created || Date.parse(c.createdAt) > latest
+      || Date.parse(c.expiresAt) <= latest || Date.parse(c.expiresAt) > boundExpiry) fail("Unresolved candidate binding mismatch");
+    checkSuccessorCandidate(c);
+  }
   const preview = s.previewReceipt;
   if (preview && (!ownerMatches(preview) || preview.requestId !== s.requestId || preview.draftRevision !== s.draftRevision || Date.parse(preview.expiresAt) > boundExpiry)) fail("Preview binding mismatch");
   const d = s.pendingDecision;
@@ -132,13 +187,17 @@ export const ContextSnapshotV1Schema = z.strictObject({
         fail("Save decision needs a matching delivered or inert prepared preview");
     }
     d.candidate?.sourceEvidence.forEach(checkEvidence); d.candidate?.evidenceIndex.forEach(e => e.evidence.forEach(checkEvidence));
+    if(s.schemaVersion==="calenote-context-state-2" && s.pendingDecision?.candidate)checkSuccessorCandidate(s.pendingDecision.candidate);
   }
   if (new Set(s.controlRegistry.map(c => c.handle)).size !== s.controlRegistry.length) fail("Duplicate issued handle");
   for (const c of s.controlRegistry) if (!ownerMatches(c) || Date.parse(c.expiresAt) > absolute || c.contextRevision > s.contextRevision) fail("Control scope/lifetime mismatch");
   if (d?.tokenHandle && !s.controlRegistry.some(c => c.handle === d.tokenHandle && c.decisionId === d.decisionId && c.contextRevision === d.contextRevision && c.draftRevision === d.draftRevision)) fail("Missing decision control binding");
   for (const t of s.transcript) for (const c of t.controlSpans) if (!s.controlRegistry.some(r => r.handle === c.handle)) fail("Control span lacks registry binding");
   if (s.modelAttemptBinding && (s.modelAttemptBinding.sourceInboundId !== s.inbound.id || s.modelAttemptBinding.claimMarker !== s.inbound.claimMarker || (s.modelAttemptBinding.contextRevision !== null && s.modelAttemptBinding.contextRevision > s.contextRevision))) fail("Attempt binding mismatch");
-});
+}
+export const ContextSnapshotV1Schema = snapshotV1Base.superRefine(validateSnapshot);
+export const ContextSnapshotV2Schema = snapshotV2Base.superRefine(validateSnapshot);
+export type ContextSnapshotV2 = z.infer<typeof ContextSnapshotV2Schema>;
 export type ContextSnapshotV1 = z.infer<typeof ContextSnapshotV1Schema>;
 export const CanonicalDetailsV1Schema = z.strictObject({ schemaVersion: z.literal("calenote-reminder-details-1"), location: SlotValueSchemas.location.nullable(), notes: SlotValueSchemas.notes.nullable(), eventDate: z.iso.date().nullable(), eventTime: z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u).nullable(), calendarProvenance: z.strictObject({ calendar: CalendarSchema, sourceDate: DateOperandSchema.nullable(), provenance }), resolutionVersion: id }).refine(d => d.calendarProvenance.sourceDate?.kind !== "CIVIL_DATE" || d.calendarProvenance.sourceDate.calendar === d.calendarProvenance.calendar, "Calendar provenance mismatch");
 export type CanonicalDetailsV1 = z.infer<typeof CanonicalDetailsV1Schema>;
@@ -157,7 +216,12 @@ const expandedKeys = new Map([...compactKeys].map(([key, compact]) => [compact, 
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export function encodeContextSnapshot(value: unknown): string {
-  const state = ContextSnapshotV1Schema.parse(value);
+  return encodeSnapshot(ContextSnapshotV1Schema.parse(value));
+}
+export function encodeContextSnapshotV2(value: ContextSnapshotV2): string {
+  return encodeSnapshot(ContextSnapshotV2Schema.parse(value));
+}
+function encodeSnapshot(state: ContextSnapshotV1 | ContextSnapshotV2): string {
   const counts = new Map<string, number>();
   const count = (v: Json): void => { if (typeof v === "string") counts.set(v, (counts.get(v) ?? 0) + 1); else if (v && typeof v === "object") Object.values(v).forEach(count); };
   count(state as Json);
@@ -169,6 +233,12 @@ export function encodeContextSnapshot(value: unknown): string {
   return JSON.stringify({ encoding: storageVersion, strings, snapshot: encode(state as Json) });
 }
 export function decodeContextSnapshot(encoded: string): ContextSnapshotV1 {
+  return ContextSnapshotV1Schema.parse(decodeSnapshot(encoded));
+}
+export function decodeContextSnapshotV2(encoded: string): ContextSnapshotV2 {
+  return ContextSnapshotV2Schema.parse(decodeSnapshot(encoded));
+}
+function decodeSnapshot(encoded: string): unknown {
   if (bytes(encoded) > 16384) throw new Error("Context snapshot exceeds storage limit");
   const parsed: unknown = JSON.parse(encoded);
   // Both persisted encoders write canonical JSON.stringify payloads. Refuse
@@ -205,5 +275,5 @@ export function decodeContextSnapshot(encoded: string): ContextSnapshotV1 {
   };
   const decoded = decode(envelope.snapshot, 0);
   if (used.size !== envelope.strings.length) throw new Error("Unused string table entry");
-  return ContextSnapshotV1Schema.parse(decoded);
+  return decoded;
 }

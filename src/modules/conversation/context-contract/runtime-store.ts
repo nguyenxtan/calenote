@@ -3,6 +3,12 @@ import type { ContextObservation } from "./state";
 import { ContextObservationBindingSchema } from "./state";
 import { ownedInbound, auth } from "../infrastructure/d1/context-store";
 import { newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { contextObservationProtocol } from "./infrastructure/d1/store";
+import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "./protocol";
+import { contextContractEncryptionIdentity } from "./store";
+import { decodeContextSnapshotV2 } from "./state";
+import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import type { Keyring } from "@/modules/security/keyring";
 
 export interface ContextRuntimeStore {
   claimAttempt(scope: ConversationScope, observation: ContextObservation, bindingDigest: string): Promise<boolean>;
@@ -13,8 +19,23 @@ export interface ContextRuntimeStore {
 }
 
 export class D1ContextRuntimeStore implements ContextRuntimeStore {
-  constructor(private readonly db: D1Database) {}
+  constructor(private readonly db: D1Database, private readonly selection?: { protocol: Readonly<ContextProtocolV3>; keyring: Keyring }) {
+    if(selection && !isContextProtocolV3(selection.protocol))throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+  }
+  private async selectedContext(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }): Promise<boolean> {
+    if(!this.selection)return true;
+    try {
+      const row=await this.db.prepare("SELECT id,revision,key_version,payload_ciphertext,payload_iv FROM conversation_contexts WHERE owner_id=? AND chat_identity_id=? AND contract_version=2 AND status IN ('CLARIFYING','DRAFT_READY') AND expires_at>?")
+        .bind(scope.ownerId,scope.chatIdentityId,scope.now).first<{id:string;revision:number;key_version:number;payload_ciphertext:unknown;payload_iv:unknown}>();
+      if(!row)return false;
+      const value=decodeContextSnapshotV2(await this.selection.keyring.decryptSensitive("context-contract-state",contextContractEncryptionIdentity(scope,row.id,this.selection.protocol),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)}));
+      return value.id===row.id && value.contextRevision===row.revision && value.scope.ownerId===scope.ownerId && value.scope.chatIdentityId===scope.chatIdentityId
+        && (!expected || expected.contextId===row.id && expected.contextRevision===row.revision);
+    }catch{return false;}
+  }
   async claimAttempt(scope: ConversationScope, observation: ContextObservation, bindingDigest: string): Promise<boolean> {
+    if(contextObservationProtocol(observation)!==(this.selection?"calenote-context-3":"calenote-context-2"))return false;
+    if(this.selection && observation.observed.presence==="PRESENT" && !await this.selectedContext(scope,{contextId:observation.observed.contextId,contextRevision:observation.observed.contextRevision}))return false;
     const parsed = ContextObservationBindingSchema.safeParse(observation);
     if (!parsed.success || !/^[0-9a-f]{64}$/u.test(bindingDigest)) return false;
     const o = parsed.data;
@@ -51,6 +72,7 @@ export class D1ContextRuntimeStore implements ContextRuntimeStore {
       .bind(scope.now, scope.sourceInboundId, ...auth(scope)).run()).meta.changes === 1; } catch { return false; }
   }
   async canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }): Promise<boolean> {
+    if(this.selection && !await this.selectedContext(scope,expected))return false;
     try { return !!await this.db.prepare(`SELECT 1 FROM inbound_updates i
       JOIN chat_identities ci ON ci.connection_id=i.connection_id AND ci.provider_user_id=i.provider_user_id AND ci.private_chat_id=i.private_chat_id
       JOIN bot_connections c ON c.id=ci.connection_id AND c.state='ACTIVE_BOUND'
@@ -61,6 +83,8 @@ export class D1ContextRuntimeStore implements ContextRuntimeStore {
         ...(expected ? [expected.contextId, scope.ownerId, scope.chatIdentityId, expected.contextRevision, scope.sourceInboundId, scope.now] : [])).first(); } catch { return false; }
   }
   async ownsContext(scope: ConversationScope): Promise<boolean> {
+    // This answers the shared SQL ownership fence, not decoder eligibility.
+    // A legacy/corrupt family2 owner must still block parallel request routing.
     try { return !!await this.db.prepare(`SELECT 1 FROM conversation_contract_ownership WHERE chat_identity_id=? AND owner_id=? AND contract_version=2 AND EXISTS(${ownedInbound})`)
       .bind(scope.chatIdentityId, scope.ownerId, ...auth(scope)).first(); } catch { return false; }
   }
@@ -73,4 +97,8 @@ export class D1ContextRuntimeStore implements ContextRuntimeStore {
         OR EXISTS(SELECT 1 FROM command_drafts d WHERE d.chat_identity_id=c.chat_identity_id AND d.contract_version=1 AND d.status='PENDING' AND d.expires_at>?))`)
       .bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope), scope.now, scope.now).first(); } catch { return false; }
   }
+}
+export function createD1ContextRuntimeStoreV3(args:{db:D1Database;keyring:Keyring;protocol:ContextProtocolV3}):ContextRuntimeStore {
+  if(!isContextProtocolV3(args.protocol))throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+  return new D1ContextRuntimeStore(args.db,{protocol:CONTEXT_PROTOCOL_V3,keyring:args.keyring});
 }

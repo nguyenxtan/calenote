@@ -13,13 +13,30 @@ import { newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d
 import { base64UrlToBytes, bytesToBase64Url } from "@/modules/security/encoding";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { PublicPreviewV1, PreviewDecisionRequestV1 } from "@/contracts/api/conversation-previews";
+import { ContextSnapshotV2Schema, decodeContextSnapshotV2, encodeContextSnapshotV2, type ContextSnapshotV2 } from "../../state";
+import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../protocol";
+import type { ContextContractStoreV3, ObservedContextV2, StoredTransitionV2 } from "../../store";
 
 const active = "status IN ('CLARIFYING','DRAFT_READY')";
+const observationProtocols=new WeakMap<object,"calenote-context-2"|"calenote-context-3">();
+/** Read-only provenance of a capability minted by the selected store. */
+export const contextObservationProtocol=(observation:ContextObservation)=>observationProtocols.get(observation);
+/** Explicit application selection. SQL family2 never selects this decoder. */
+export function createD1ContextContractStoreV3(args:{db:D1Database;keyring:Keyring;protocol:ContextProtocolV3;clock?:()=>number}):ContextContractStoreV3 {
+ if(!isContextProtocolV3(args.protocol))throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+ const store=new D1ContextContractStore(args.db,args.keyring,args.clock,CONTEXT_PROTOCOL_V3);
+ return Object.freeze({protocol:CONTEXT_PROTOCOL_V3,
+  observe:(scope:ConversationScope)=>store.observeSuccessor(scope),
+  apply:(scope:ConversationScope,observation:ContextObservation,transition:StoredTransitionV2)=>store.applySuccessor(scope,observation,transition),
+  confirm:async()=>({status:"NOT_READY" as const,reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED" as const}),
+ });
+}
 const permitted = "EXISTS(SELECT 1 FROM conversation_contract_write_permits WHERE marker=?)";
 const resultSchema = z.strictObject({ reminderPublicIds: z.array(z.string().min(1)).min(1).max(30), seriesPublicId: z.string().nullable(), childCount: z.number().int().min(1).max(30) }).refine(v=>v.childCount===v.reminderPublicIds.length && new Set(v.reminderPublicIds).size===v.childCount);
 type Row = { id:string; owner_id:string; chat_identity_id:string; contract_version:number; revision:number; status:string; created_at:number; updated_at:number; expires_at:number; last_inbound_id:string; claim_marker:string; payload_ciphertext:unknown; payload_iv:unknown; key_version:number };
 type Auth = { authority:ControlAuthority; now:number; owner:string; chat:string };
-type ObservationRecord = { row:Row|null; snapshot:ContextSnapshotV1|null; history:number; scope:ConversationScope; binding:string };
+type Snapshot = ContextSnapshotV1 | ContextSnapshotV2;
+type ObservationRecord = { row:Row|null; snapshot:Snapshot|null; history:number; scope:ConversationScope; binding:string };
 type WebRow = Row & { workspace_id:string; connection_id:string; private_chat_id:string };
 const freeze = <T>(v:T):T => { if(v && typeof v==="object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const bytes = (s:string)=>new TextEncoder().encode(s).length;
@@ -39,7 +56,9 @@ function authQuery(a:Auth, mutate:boolean) {
 }
 export class D1ContextContractStore implements ContextContractStore {
  private readonly observations=new WeakMap<object,ObservationRecord>();
- constructor(private readonly db:D1Database,private readonly keyring:Keyring,private readonly clock:()=>number=Date.now) {}
+ constructor(private readonly db:D1Database,private readonly keyring:Keyring,private readonly clock:()=>number=Date.now, private readonly protocol?: Readonly<ContextProtocolV3>) {
+  if(protocol !== undefined && !isContextProtocolV3(protocol))throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+ }
  private authority(authority:ControlAuthority):Auth {
   return {authority,now:authority.kind==="CHAT"?authority.scope.now:this.clock(),owner:authority.kind==="CHAT"?authority.scope.ownerId:authority.principal.userId,chat:authority.kind==="CHAT"?authority.scope.chatIdentityId:authority.chat.chatIdentityId};
  }
@@ -136,8 +155,26 @@ export class D1ContextContractStore implements ContextContractStore {
    try{return await this.readWebDecline(authority,row,key,request)??{status:"UNCERTAIN"};}catch{return {status:"UNCERTAIN"};}
   }
  }
- private expiry(s:ContextSnapshotV1){return Math.min(Date.parse(s.idleExpiresAt),Date.parse(s.absoluteExpiresAt),s.draftExpiresAt?Date.parse(s.draftExpiresAt):Infinity);}
+ private expiry(s:Snapshot){return Math.min(Date.parse(s.idleExpiresAt),Date.parse(s.absoluteExpiresAt),s.draftExpiresAt?Date.parse(s.draftExpiresAt):Infinity);}
+ private async decryptSelectedState(row:Row,scope:{ownerId:string;chatIdentityId:string}):Promise<Snapshot> {
+  const encoded=await this.keyring.decryptSensitive("context-contract-state",identity(scope,row.id,this.protocol),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)});
+  const snapshot=this.protocol?decodeContextSnapshotV2(encoded):decodeContextSnapshot(encoded);
+  if(snapshot.id!==row.id || snapshot.contextRevision!==row.revision || snapshot.scope.ownerId!==row.owner_id || snapshot.scope.chatIdentityId!==row.chat_identity_id
+   || Date.parse(snapshot.createdAt)!==row.created_at || this.expiry(snapshot)!==row.expires_at
+   || snapshot.inbound.id!==row.last_inbound_id || snapshot.inbound.claimMarker!==row.claim_marker
+   || (snapshot.lifecycle==="AWAITING_CONFIRMATION"?"DRAFT_READY":"CLARIFYING")!==row.status) throw new Error("INVALID");
+  if(snapshot.schemaVersion==="calenote-context-state-1"&&!validPreviewOrder(snapshot))throw new Error("INVALID");
+  return snapshot;
+ }
+ private async isOtherProtocol(row:Row,scope:{ownerId:string;chatIdentityId:string}):Promise<boolean> {
+  try {
+   const encoded=await this.keyring.decryptSensitive("context-contract-state",identity(scope,row.id,this.protocol?undefined:CONTEXT_PROTOCOL_V3),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)});
+   if(this.protocol)decodeContextSnapshot(encoded);else decodeContextSnapshotV2(encoded);
+   return true;
+  }catch{return false;}
+ }
  private async decryptState(row:Row,scope:{ownerId:string;chatIdentityId:string}) {
+  if(this.protocol)throw new Error("SUCCESSOR_DECISIONS_NOT_INTEGRATED");
   const snapshot=decodeContextSnapshot(await this.keyring.decryptSensitive("context-contract-state",identity(scope,row.id),row.key_version,{ciphertext:persistedD1Blob(row.payload_ciphertext),iv:persistedD1Blob(row.payload_iv)}));
   if(!validPreviewOrder(snapshot) || snapshot.id!==row.id || snapshot.contextRevision!==row.revision || snapshot.scope.ownerId!==row.owner_id || snapshot.scope.chatIdentityId!==row.chat_identity_id
    || Date.parse(snapshot.createdAt)!==row.created_at || this.expiry(snapshot)!==row.expires_at
@@ -147,6 +184,18 @@ export class D1ContextContractStore implements ContextContractStore {
  }
  private async history(chat:string){return (await this.statement("SELECT coalesce(max(o.rowid),0) n FROM conversation_context_outcomes o JOIN conversation_contexts c ON c.id=o.context_id WHERE c.chat_identity_id=?",[chat]).first<number>("n"))!;}
  async observe(scope:ConversationScope):Promise<ObservedContext>{
+  if(this.protocol)return {failure:"OTHER_CONTRACT"};
+  const result=await this.observeSelected(scope);
+  if("failure"in result)return result;
+  return {observation:result.observation,snapshot:result.snapshot===null?null:ContextSnapshotV1Schema.parse(result.snapshot)};
+ }
+ async observeSuccessor(scope:ConversationScope):Promise<ObservedContextV2>{
+  if(!this.protocol)return {failure:"OTHER_CONTRACT"};
+  const result=await this.observeSelected(scope);
+  if("failure"in result)return result;
+  return {observation:result.observation,snapshot:result.snapshot===null?null:ContextSnapshotV2Schema.parse(result.snapshot)};
+ }
+ private async observeSelected(scope:ConversationScope):Promise<{observation:ContextObservation;snapshot:Snapshot|null}|Extract<ObservedContext,{failure:string}>>{
   try{
    const a=this.authority({kind:"CHAT",scope}), auth=authQuery(a,true);
    const binding=await this.statement(auth.sql,auth.args).first<{id:string;connection_id:string;private_chat_id:string;workspace_id:string}>();
@@ -156,12 +205,14 @@ export class D1ContextContractStore implements ContextContractStore {
    const rows=await this.statement(`SELECT c.*,(SELECT coalesce(max(o.rowid),0) FROM conversation_context_outcomes o JOIN conversation_contexts h ON h.id=o.context_id WHERE h.chat_identity_id=?) history
     FROM (SELECT 1) seed LEFT JOIN conversation_contexts c ON c.id=(SELECT id FROM conversation_contexts WHERE chat_identity_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1)`,[scope.chatIdentityId,scope.chatIdentityId]).first<Row & {history:number}>();
    const row=rows?.id?rows:null;
+   const owner=await this.statement("SELECT context_id,owner_id,contract_version FROM conversation_contract_ownership WHERE chat_identity_id=?",[scope.chatIdentityId]).first<{context_id:string;owner_id:string;contract_version:number}>();
+   if(owner&&(!row||owner.context_id!==row.id||owner.owner_id!==scope.ownerId||owner.contract_version!==2))return {failure:"OTHER_CONTRACT"};
    if(row && row.owner_id!==scope.ownerId)return {failure:"INVALID"};
    const isActive=!!row && ["CLARIFYING","DRAFT_READY"].includes(row.status);
    if(isActive && row.contract_version!==2)return {failure:"OTHER_CONTRACT"};
    if(isActive && row.expires_at<=scope.now)return {failure:"EXPIRED"};
-   let snapshot:ContextSnapshotV1|null=null;
-   if(isActive){try{snapshot=await this.decryptState(row!,scope);}catch{return {failure:"INVALID"};}}
+   let snapshot:Snapshot|null=null;
+   if(isActive){try{snapshot=await this.decryptSelectedState(row!,scope);}catch{return {failure:await this.isOtherProtocol(row!,scope)?"OTHER_CONTRACT":"INVALID"};}}
    const contextScope:ContextScope={ownerId:scope.ownerId,chatIdentityId:scope.chatIdentityId,workspaceId:binding.workspace_id,connectionId:binding.connection_id,chatId:binding.private_chat_id};
    if(snapshot && JSON.stringify(snapshot.scope)!==JSON.stringify(contextScope))return {failure:"INVALID"};
    const terminal=row&&!isActive?await this.statement("SELECT received_at,rowid FROM inbound_updates WHERE id=?",[row.last_inbound_id]).first<{received_at:number;rowid:number}>():null;
@@ -169,6 +220,7 @@ export class D1ContextContractStore implements ContextContractStore {
     observed:snapshot?{presence:"PRESENT",contextId:snapshot.id,contextRevision:snapshot.contextRevision}:{presence:"ABSENT"},
     lastTerminalOutcome:row&&terminal&&!isActive?{outcomeId:row.id+":"+row.revision,status:row.status,contextId:row.id,contextRevision:row.revision,inboundId:row.last_inbound_id,order:{receivedAt:new Date(terminal.received_at).toISOString(),rowid:terminal.rowid}}:null});
    const observation=freeze(parsed) as ContextObservation;
+   observationProtocols.set(observation,this.protocol?.canonicalVersion??"calenote-context-2");
    this.observations.set(observation,{row:isActive?row:null,snapshot:structuredClone(snapshot),history:rows?.history??0,scope:{...scope},binding:JSON.stringify(parsed)});
    return {observation,snapshot};
   }catch{return {failure:"UNAVAILABLE"};}
@@ -187,6 +239,16 @@ export class D1ContextContractStore implements ContextContractStore {
   return row?row.proof_hash===hash?{status:"IDEMPOTENT",contextId:row.context_id,contextRevision:row.revision}:{status:"STALE"}:null;
  }
  async apply(scope:ConversationScope,observation:ContextObservation,t:StoredTransition):Promise<AppliedTransition>{
+  if(this.protocol)return {status:"INVALID"};
+  return this.applySelected(scope,observation,t);
+ }
+ async applySuccessor(scope:ConversationScope,observation:ContextObservation,t:StoredTransitionV2):ReturnType<ContextContractStoreV3["apply"]>{
+  if(!this.protocol)return {status:"INVALID"};
+  const parsed=ContextSnapshotV2Schema.safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
+  if(t.preview!==null||t.decisionProof!==undefined||parsed.data.pendingDecision!==null||parsed.data.previewReceipt!==null||parsed.data.lifecycle==="AWAITING_CONFIRMATION")return {status:"NOT_READY",reason:"SUCCESSOR_DECISIONS_NOT_INTEGRATED"};
+  return this.applySelected(scope,observation,t);
+ }
+ private async applySelected(scope:ConversationScope,observation:ContextObservation,t:StoredTransition|StoredTransitionV2):Promise<AppliedTransition>{
   let key="",hash="";
   try{
    key=await digest(["apply",scope.ownerId,scope.chatIdentityId,scope.sourceInboundId]);hash=await digest(t);
@@ -194,10 +256,10 @@ export class D1ContextContractStore implements ContextContractStore {
    const observed=this.observations.get(observation);
    if(!observed || JSON.stringify(observation)!==observed.binding || JSON.stringify(scope)!==JSON.stringify(observed.scope))return {status:"STALE"};
    if(await this.history(scope.chatIdentityId)!==observed.history)return {status:"STALE"};
-   const parsed=ContextSnapshotV1Schema.safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
+   const parsed=(this.protocol?ContextSnapshotV2Schema:ContextSnapshotV1Schema).safeParse(t.snapshot);if(!parsed.success)return {status:"INVALID"};
    const s=parsed.data, prior=observed.snapshot;
    if(prior?.webDeclineReceipt)s.webDeclineReceipt=null;
-   if(!validPreviewOrder(s))return {status:"INVALID"};
+   if(s.schemaVersion==="calenote-context-state-1"&&!validPreviewOrder(s))return {status:"INVALID"};
    if(t.expectedContextRevision!==(prior?.contextRevision??null)||t.expectedDraftRevision!==(prior?.draftRevision??null))return {status:"STALE"};
    if(s.contextRevision!==(prior?.contextRevision??0)+1 || (prior&&s.id!==prior.id)
     || JSON.stringify(s.scope)!==JSON.stringify(observation.scope) || JSON.stringify(s.inbound)!==JSON.stringify(observation.inbound)
@@ -209,13 +271,13 @@ export class D1ContextContractStore implements ContextContractStore {
     const changed=JSON.stringify(s.slots)!==JSON.stringify(prior.slots);
     if(changed ? s.draftRevision!==(prior.draftRevision??0)+1 : s.draftRevision!==prior.draftRevision&&s.draftRevision!==(prior.draftRevision??0)+1)return {status:"INVALID"};
    }
-   if(t.decisionProof&&(!prior||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
+   if(t.decisionProof&&(!prior||prior.schemaVersion!=="calenote-context-state-1"||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
    if(t.decisionProof&&s.pendingDecision?.decisionId===t.decisionProof.decisionId)return {status:"INVALID"};
    if(prior?.requestId && s.requestId!==prior.requestId && !t.terminal && !["REPLACE_PENDING","RESTART_PENDING"].includes(t.decisionProof?.kind??""))return {status:"INVALID"};
-   if(t.preview && (!validPreview(s,t.preview,scope.now)||!s.previewReceipt||await previewHash(t.preview)!==s.previewReceipt.draftHash))return {status:"INVALID"};
+   if(t.preview && (s.schemaVersion!=="calenote-context-state-1"||!validPreview(s,t.preview,scope.now)||!s.previewReceipt||await previewHash(t.preview)!==s.previewReceipt.draftHash))return {status:"INVALID"};
    if(s.lifecycle==="AWAITING_CONFIRMATION"&&!t.preview)return {status:"INVALID"};
-   const encoded=encodeContextSnapshot(s);if(bytes(encoded)>16384)return {status:"INVALID"};
-   const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id),1,encoded);
+   const encoded=s.schemaVersion==="calenote-context-state-2"?encodeContextSnapshotV2(s):encodeContextSnapshot(s);if(bytes(encoded)>16384)return {status:"INVALID"};
+   const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id,this.protocol),1,encoded);
    const a=this.authority({kind:"CHAT",scope}),marker=randomOpaqueId(),cas=observed.row?this.rowCas(observed.row):null;
    const condition=(cas?cas.sql:"NOT EXISTS(SELECT 1 FROM conversation_contexts WHERE chat_identity_id=? AND "+active+")")
     +" AND (SELECT coalesce(max(o.rowid),0) FROM conversation_context_outcomes o JOIN conversation_contexts c ON c.id=o.context_id WHERE c.chat_identity_id=?)=?"
@@ -231,7 +293,7 @@ export class D1ContextContractStore implements ContextContractStore {
    statements.push(this.statement(`INSERT INTO conversation_contract_ownership(chat_identity_id,owner_id,context_id,contract_version) SELECT ?,?,?,2 WHERE ${permitted} ON CONFLICT(chat_identity_id) DO NOTHING`,[a.chat,a.owner,s.id,marker]),
     this.statement(`UPDATE command_drafts SET status='CANCELLED',resolution_inbound_id=NULL,updated_at=?,write_marker=? WHERE chat_identity_id=? AND status='PENDING' AND contract_version=2 AND ${permitted}`,[scope.now,marker,a.chat,marker]),
     this.statement(`UPDATE reminder_series_proposals SET status='INVALID',transaction_marker=? WHERE chat_identity_id=? AND status='PENDING' AND contract_version=2 AND ${permitted}`,[marker,a.chat,marker]));
-   if(t.preview&&!t.terminal)await this.preparePreview(statements,s,CanonicalPreviewSchema.parse(t.preview),marker,scope.now);
+   if(t.preview&&!t.terminal&&s.schemaVersion==="calenote-context-state-1")await this.preparePreview(statements,s,CanonicalPreviewSchema.parse(t.preview),marker,scope.now);
    statements.push(this.statement(`INSERT INTO conversation_context_outcomes(context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash) SELECT ?,?,?,?,?,?,? WHERE ${permitted}`,
     [s.id,s.contextRevision,scope.sourceInboundId,t.terminal?"FINISH":"SAVE",scope.now,key,hash,marker]),
     this.statement(`UPDATE inbound_updates SET state=?,processed_at=? WHERE id=? AND ${permitted}`,[t.inboundOutcome,scope.now,scope.sourceInboundId,marker]));

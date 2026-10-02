@@ -4,9 +4,36 @@ import { fixture, now } from "./test-support";
 import { D1ConversationStore } from "../../../infrastructure/d1/context-store";
 import { D1SeriesStore } from "@/modules/reminders/infrastructure/d1/series-store";
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
+import { createD1ContextContractStoreV3 } from "./store";
+import { CONTEXT_PROTOCOL_V3 } from "../../protocol";
+import { ContextSnapshotV2Schema } from "../../state";
 const fixtures: Awaited<ReturnType<typeof fixture>>[]=[];
 async function setup(count=2){const f=await fixture();fixtures.push(f);expect((await f.save(count)).result.status).toBe("APPLIED");return f;}
 afterEach(()=>{for(const f of fixtures.splice(0))f.close();});
+it("old_reader_cannot_confirm_v3",async()=>{
+ const f=await fixture();fixtures.push(f);
+ const successor=createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ const observed=await successor.observe(f.scope());if("failure"in observed)throw new Error("fixture");
+ const snapshot=ContextSnapshotV2Schema.parse({...f.snapshot,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null,pendingDecision:null,previewReceipt:null,lifecycle:"CLARIFYING"});
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot,preview:null})).toMatchObject({status:"APPLIED"});
+ expect(await f.store.confirm({kind:"CHAT",scope:f.scope(1)},f.proof)).toEqual({status:"REJECTED"});
+ expect(await new D1ConversationStore(f.db,f.keyring).load(f.scope(1))).toBeNull();
+ expect(await new D1SeriesStore(f.db,f.keyring).confirm(f.scope(1),"proposal",1)).toEqual({status:"STALE"});
+ expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
+it("one_family_ownership_prevents_parallel_request",async()=>{
+ const f=await fixture();fixtures.push(f);
+ const oldObservation=await f.store.observe(f.scope(1));if("failure"in oldObservation)throw new Error("fixture");
+ const successor=createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});
+ const observed=await successor.observe(f.scope());if("failure"in observed)throw new Error("fixture");
+ const snapshot=ContextSnapshotV2Schema.parse({...f.snapshot,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null,pendingDecision:null,previewReceipt:null,lifecycle:"CLARIFYING"});
+ expect(await successor.apply(f.scope(),observed.observation,{...f.transition,snapshot,preview:null})).toMatchObject({status:"APPLIED"});
+ expect(await f.store.apply(f.scope(1),oldObservation.observation,{...f.transition,snapshot:{...f.snapshot,inbound:{...oldObservation.observation.inbound}}})).toEqual({status:"STALE"});
+ await expect(f.db.prepare("INSERT INTO command_drafts(id,chat_identity_id,source_inbound_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,expires_at,created_at,updated_at) VALUES('old-parallel','identity','in-2',x'01',zeroblob(12),1,1900000000000,'Asia/Ho_Chi_Minh','PENDING',1900000000000,1,1)").run()).rejects.toThrow("CONTEXT_CONTRACT_FENCE");
+ expect(await f.db.prepare("SELECT count(*) n FROM conversation_contexts").first("n")).toBe(1);
+ expect(await f.db.prepare("SELECT contract_version FROM conversation_contract_ownership").first("contract_version")).toBe(2);
+ expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+});
 it("old_sql_cannot_confirm_or_create_overlapping_request",async()=>{
  const f=await setup();
  for(const sql of [
