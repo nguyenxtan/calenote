@@ -1,11 +1,19 @@
 # LLM Context Contract — acceptance evidence
 
-## Current local authority-amendment candidate — 2026-10-02
+## Current local authority-amendment acceptance — 2026-10-02
 
 Approved §4.6 spec `904afe5` and plan `598a59d` authorize the local A1–A6
 authority amendment; they supersede the historical documentation-only gate.
-Current A5+A6 changes remain unstaged/uncommitted at base
-`68fac9b2b5e95ee57c53f0ac1f491210e153ed01`, awaiting grouped independent review.
+The A5+A6 boundary is committed at `4d76b574cc38e2b3a244b0d025bcf980e4fdcbd9`.
+The independently reviewed final accounting correction is committed at
+`6ff549175867951485368d1b9ba4879fb2350235`. Local whole-amendment acceptance
+is PASS: CRITICAL=0, IMPORTANT=0. The scoped closing review addresses ordered
+target history validation, authoritative actual-cost overruns and exact
+aggregate overflow without rewriting historical financial evidence.
+The final frozen-source full check passed 7,827 tests with two explicit opt-in
+skips (148 files), documentation checks, typecheck, lint (zero errors, 162
+preserved warnings), build, Worker types and local Wrangler dry-run. Covering
+campaign/diagnostic/runner suites passed 82/44/37 tests respectively.
 The selected actual V3 service/gateway offline corpus passes FULL80/158 and
 PILOT32/84 with frozen wording/oracles, no missing scripts or safety failures.
 These are injected synthetic provider exchanges and isolated encrypted stores,
@@ -32,8 +40,12 @@ account root. No such live orchestrator is configured here.
 No provider/network campaign, migration, runtime activation, push, merge,
 upload/deploy or channel UAT occurred. T11_ROUTE_ADMISSION remains UNVERIFIED;
 historical PILOT BLOCKED and FULL NOT_RUN below remain historical facts, not
-rewritten PASS. Next gate is fresh aggregate local verification and grouped
-A5+A6/whole-amendment independent review, then separately authorized live gates.
+rewritten PASS. Next gate is trusted live orchestration and reviewed owner
+authority bound to the complete account root, including serialized financial
+admission. Previously available OpenRouter credentials are treated as revoked;
+a newly approved secure credential is required before any provider request.
+No old credential was read or tested. Only after these gates may the separately
+authorized wire admission, R01/R02 and frozen pilot/full acceptance resume.
 
 ## Historical documentation gate — 2026-10-01
 

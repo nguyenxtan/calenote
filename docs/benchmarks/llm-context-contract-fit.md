@@ -1,10 +1,13 @@
 # LLM context contract: offline feasibility evidence
 
-## Authority V3 candidate — 2026-10-02, local only
+## Authority V3 accepted local fit — 2026-10-02, local only
 
 Approved §4.6 spec `904afe5` and implementation plan `598a59d` supersede the
-documentation-only gate below. This unstaged A5+A6 candidate is based on
-`68fac9b2b5e95ee57c53f0ac1f491210e153ed01`; grouped independent review is pending.
+documentation-only gate below. A5+A6 is committed at
+`4d76b574cc38e2b3a244b0d025bcf980e4fdcbd9`; the closing accounting correction is
+`6ff549175867951485368d1b9ba4879fb2350235`. Grouped and whole-amendment reviews
+are complete with CRITICAL=0, IMPORTANT=0. The financial correction does not
+change the six fit-bound source hashes or regenerate the measurement artifact.
 Machine evidence: [authority V3 measurements](llm-context-contract-authority-v3-measurements.json).
 Historical measurements and failures below are not rewritten as current PASS.
 
