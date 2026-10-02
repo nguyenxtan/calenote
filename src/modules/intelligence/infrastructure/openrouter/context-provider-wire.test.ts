@@ -1,14 +1,49 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
-import { ContextInputSchema, ConversationInterpretationSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { ContextInputSchema, ConversationInterpretationSchema, ConversationInterpretationV3Schema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { createContextContractGateway, createContextHttpTransport, type SemanticJsonRequest } from "./semantic-gateway";
 import { encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import * as wireModule from "./context-provider-wire";
 
 const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-1", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+const successorWire = wireModule;
+const selectedV3 = CONTEXT_PROTOCOL_V3;
+const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+function v3Wire() { expect(successorWire.googleLiteEuContextWireSchemaV3).toBeDefined(); return successorWire.googleLiteEuContextWireSchemaV3(); }
+it("new_wire_has_no_dialogue_or_owned_metadata", () => {
+  const schema = v3Wire().schema;
+  const text = JSON.stringify(schema);
+  for (const key of ["dialogueAct", "continuation", "controlEvidence", "schemaVersion", "statusScope", "PRESENT_PREVIEW", "ANSWER_QUERY"]) expect(text).not.toContain(`\"${key}\"`);
+  expect(schema.properties).toHaveProperty("requestTarget");
+});
+it("invalid_active_discriminator_rejects", () => {
+  v3Wire();
+  const wire = successorWire.encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(v3Help)) as Record<string, unknown>;
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3({ ...wire, intent: "INVALID" }, selectedV3)).toMatchObject({ status: "REFUSED" });
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3(wire, { ...selectedV3, canonicalVersion: "calenote-context-2" } as unknown as typeof selectedV3)).toMatchObject({ status: "REFUSED" });
+});
+it("inactive_padding_never_enters_core", () => {
+  v3Wire();
+  const value = { ...v3Help, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "new", occurrence: 1 }] }, changes: [{ field: "eventDate", operation: "SET", value: { kind: "RELATIVE_DAY", offsetDays: 1 }, evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "new", occurrence: 1 }] }] };
+  const wire = successorWire.encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(value)) as { changes: Array<{ value: Record<string, unknown> }> };
+  wire.changes[0].value.year = { malicious: true };
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3(wire, selectedV3)).toMatchObject({ status: "PARSED", value: { semantic: { changes: value.changes } } });
+  wire.changes[0].value.unknown = true;
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3(wire, selectedV3)).toMatchObject({ status: "REFUSED" });
+});
+it("isolated_wire_guidance_failure_keeps_core_and_reports_full_failure", () => {
+  const wire = successorWire.encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(v3Help)) as Record<string, unknown>;
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3({ ...wire, conversationDirective: { kind: "HELP", topic: "GENERAL" } }, selectedV3)).toMatchObject({ status: "PARSED", value: { directive: { status: "INVALID" }, fullSchemaValid: false } });
+  const withoutGuidance = Object.fromEntries(Object.entries(wire).filter(([key]) => !["conversationDirective", "replyProposal"].includes(key)));
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3(withoutGuidance, selectedV3)).toMatchObject({ status: "PARSED", value: { directive: { status: "INVALID" }, reply: { status: "INVALID" }, fullSchemaValid: false } });
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3({ ...wire, conversationDirective: { kind: "INVALID" }, replyProposal: { text: "valid independent wording" } }, selectedV3)).toMatchObject({ status: "PARSED", value: { directive: { status: "INVALID" }, reply: { status: "VALID" }, fullSchemaValid: false } });
+  expect(successorWire.parseGoogleLiteEuContextSectionsV3({ ...wire, extra: true }, selectedV3)).toMatchObject({ status: "REFUSED" });
+});
 const quote = { kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 };
 const evidence = [quote, { kind: "CONTEXT_FACT", ref: "f1" }, quote];
 const civil = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 31, month: 12, year: 9999, leapMonth: null };

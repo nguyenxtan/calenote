@@ -1,0 +1,51 @@
+// @vitest-environment node
+import { expect, it } from "vitest";
+import { InterpretationJsonSchemaV3 } from "./contracts";
+import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+import * as authority from "./output-authority";
+
+// Inspect active schema branches independently of the registry; adding a leaf
+// without an authority rule must fail, rather than inherit a broad prefix.
+function schemaPaths(root: unknown): Set<string> {
+  const paths = new Set<string>();
+  function visit(value: unknown, path: string): void {
+    const node = value as Record<string, unknown>;
+    if (node.$ref) {
+      let target: unknown = root;
+      for (const key of String(node.$ref).slice(2).split("/")) target = (target as Record<string, unknown>)[key.replaceAll("~1", "/").replaceAll("~0", "~")];
+      visit(target, path); return;
+    }
+    if (path) paths.add(path);
+    const properties = node.properties as Record<string, Record<string, unknown>> | undefined;
+    const tags = ["kind", "field", "operation"].flatMap(key => {
+      const property = properties?.[key];
+      return property && (Object.hasOwn(property, "const") || property.enum) ? [[key, (property.enum ?? [property.const]) as string[]] as const] : [];
+    });
+    let variants = [""];
+    for (const [key, values] of tags) variants = variants.flatMap(prior => values.map(value => `${prior}${prior ? ";" : ""}${key}=${value}`));
+    if (tags.length) for (const variant of variants) paths.add(`${path}{${variant}}`);
+    for (const [key, child] of Object.entries(node.properties ?? {})) visit(child, path ? `${path}.${key}` : key);
+    if (node.items) visit(node.items, `${path}[]`);
+    for (const key of ["anyOf", "oneOf", "allOf"]) for (const child of (node[key] ?? []) as unknown[]) visit(child, path);
+  }
+  visit(root, ""); return paths;
+}
+it("authority_paths_are_exhaustive_and_nonoverlapping", () => {
+  for (const path of new Set([...schemaPaths(InterpretationJsonSchemaV3), ...schemaPaths(googleLiteEuContextWireSchemaV3().schema)])) {
+    expect(Object.keys(authority.OUTPUT_AUTHORITY_REGISTRY_V3).filter(key => key === path)).toHaveLength(1);
+    const rule = authority.classifyOutputPathV3(path as Parameters<typeof authority.classifyOutputPathV3>[0]);
+    expect(rule.canAuthorizeRead).toBe(false); expect(rule.canAuthorizeWrite).toBe(false);
+    expect(rule.modelAuthorshipReason.length).toBeGreaterThan(0);
+    if (rule.class === "ADVISORY") {
+      expect(rule.canAffectMerge).toBe(false); expect(rule.canCauseHardReject).toBe(false); expect(rule.canCauseClarify).toBe(false);
+    }
+  }
+  expect(() => authority.classifyOutputPathV3("changes[].value.newActiveField" as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow();
+});
+it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
+  for (const [path, rule] of Object.entries(authority.OUTPUT_AUTHORITY_REGISTRY_V3)) {
+    if (path.startsWith("conversationDirective") || path.startsWith("replyProposal")) expect(rule.class).toBe("ADVISORY");
+    else if (path === "schemaVersion" || path === "query.statusScope" || path.startsWith("protocol.") || path.startsWith("transport.")) expect(rule.class).toBe("APPLICATION_OWNED");
+    else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
+  }
+});

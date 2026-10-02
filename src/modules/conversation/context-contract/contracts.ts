@@ -160,3 +160,73 @@ export type ContextInput = z.infer<typeof ContextInputSchema>;
 // Reused definitions retain every branch. Semantic refinements are local gates,
 // not proof that a provider enforces them or supports this entire schema dialect.
 export const InterpretationJsonSchema = z.toJSONSchema(ConversationInterpretationSchema, { target: "draft-07", reused: "ref" });
+
+/** Authority-consolidated successor. Kept dormant alongside context-2 until A5. */
+export const RequestTargetV3Schema = z.strictObject({ kind: z.enum(["CURRENT", "NEW", "UNRESOLVED"]), evidence });
+export type RequestTargetV3 = z.infer<typeof RequestTargetV3Schema>;
+export type FieldOperationV3 = "SET" | "REPLACE" | "CLEAR";
+function changeBranchV3<K extends keyof typeof values>(field: K) {
+  return z.strictObject({ field: z.literal(field), operation: z.enum(["SET", "REPLACE"]), value: values[field], evidence });
+}
+export const FieldChangeV3Schema = z.union([
+  changeBranchV3("title"), changeBranchV3("location"), changeBranchV3("notes"), changeBranchV3("eventDate"), changeBranchV3("eventTime"), changeBranchV3("reminderDate"), changeBranchV3("reminderTime"), changeBranchV3("calendar"), changeBranchV3("frequency"), changeBranchV3("occurrenceCount"), changeBranchV3("eventRelation"), changeBranchV3("leadOffsetDays"), changeBranchV3("endDate"),
+  z.strictObject({ field: SlotNameSchema, operation: z.literal("CLEAR"), value: z.null(), evidence }),
+]);
+export type FieldChangeV3 = z.infer<typeof FieldChangeV3Schema>;
+export const UncertaintyV3Schema = z.union([
+  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"),
+  z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
+  z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
+  z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(z.enum(["CURRENT", "NEW"]))).max(2) }),
+]);
+export type UncertaintyV3 = z.infer<typeof UncertaintyV3Schema>;
+export const SemanticPatchProposalV3Schema = z.strictObject({
+  schemaVersion: z.literal("calenote-context-3"), intent: IntentSchema, requestTarget: RequestTargetV3Schema.nullable(),
+  changes: z.array(FieldChangeV3Schema).max(13), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
+}).superRefine((v, ctx) => {
+  const fail = (message: string) => ctx.addIssue({ code: "custom", message });
+  const hasUser = (refs: EvidenceRef[]) => refs.some(ref => ref.kind === "USER_QUOTE");
+  if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("Duplicate field rejects whole patch");
+  const queryKinds: Record<string, string> = { LIST_REMINDERS: "LIST", CALENDAR_QUERY: "CALENDAR_DATE", CAPABILITY_QUERY: "CAPABILITY" };
+  const queryKind = queryKinds[v.intent];
+  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("Query/intent ownership mismatch");
+  if (["HELP", "UNSUPPORTED"].includes(v.intent) && v.changes.length) fail("Non-mutating proposal cannot carry changes");
+  const targeted = v.uncertainties.some(u => u.field === "operation");
+  if (v.intent === "CREATE_REMINDER" ? v.requestTarget === null : v.requestTarget !== null && (v.intent !== "AMBIGUOUS" || !targeted)) fail("Request target/intent ownership mismatch");
+  if (v.requestTarget && !v.requestTarget.evidence.every(ref => ref.kind === "USER_QUOTE")) fail("Request targeting requires current user evidence");
+  if (v.changes.some(c => c.operation !== "SET" && !hasUser(c.evidence))) fail("REPLACE/CLEAR requires user evidence");
+  if (v.uncertainties.some(u => u.field === "operation" && u.alternatives.some(a => !hasUser(a.evidence)))) fail("Operation alternatives require user evidence");
+  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
+  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("Combined actions must be ambiguous and grounded without executable changes");
+});
+export type SemanticPatchProposalV3 = z.infer<typeof SemanticPatchProposalV3Schema>;
+export const ModelDirectiveV3Schema = z.discriminatedUnion("kind", [ConversationDirectiveSchema.options[0], ConversationDirectiveSchema.options[1], ConversationDirectiveSchema.options[2], ConversationDirectiveSchema.options[3]]);
+export type ModelDirectiveV3 = z.infer<typeof ModelDirectiveV3Schema>;
+export const ConversationInterpretationV3Schema = SemanticPatchProposalV3Schema.safeExtend({ conversationDirective: ModelDirectiveV3Schema, replyProposal: ReplyProposalSchema });
+export type ConversationInterpretationV3 = z.infer<typeof ConversationInterpretationV3Schema>;
+export type ParsedInterpretationV3 = {
+  semantic: SemanticPatchProposalV3;
+  directive: { status: "VALID"; value: ModelDirectiveV3 } | { status: "INVALID" };
+  reply: ParsedInterpretation["reply"];
+  fullSchemaValid: boolean;
+};
+export type InterpretationSectionsV3 = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: ParsedInterpretationV3 };
+export function parseInterpretationSectionsV3(raw: unknown): InterpretationSectionsV3 {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+  const { conversationDirective, replyProposal, ...core } = raw as Record<string, unknown>;
+  const semantic = SemanticPatchProposalV3Schema.safeParse(core);
+  if (!semantic.success) return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
+  const directive = ModelDirectiveV3Schema.safeParse(conversationDirective), reply = ReplyProposalSchema.safeParse(replyProposal);
+  const text = replyProposal && typeof replyProposal === "object" && "text" in replyProposal ? replyProposal.text : null;
+  return { status: "PARSED", value: { semantic: semantic.data,
+    directive: directive.success ? { status: "VALID", value: directive.data } : { status: "INVALID" },
+    reply: reply.success ? { status: "VALID", value: reply.data } : { status: "INVALID", reason: typeof text === "string" && [...text].length > 400 ? "REPLY_TOO_LONG" : "REPLY_INVALID" },
+    fullSchemaValid: ConversationInterpretationV3Schema.safeParse(raw).success,
+  } };
+}
+export const ContextInputV2Schema = z.strictObject({ ...ContextInputSchema.shape, schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
+  if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", message: "Invalid current turn or role bounds" });
+  if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", message: "Duplicate fact alias" });
+});
+export type ContextInputV2 = z.infer<typeof ContextInputV2Schema>;
+export const InterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema, { target: "draft-07", reused: "ref" });

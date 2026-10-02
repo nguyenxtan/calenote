@@ -3,23 +3,36 @@ import { expect, it } from "vitest";
 import { z } from "zod";
 import { ConversationInterpretationSchema, ConversationDirectiveSchema, IssueFieldSchema, UncertaintySchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
 import { UNCERTAINTY_FIELD_WIRE_CODE_V1, encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
+import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
+import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 
 // Validate the actual publicly emitted JSON Schema with an independent public
 // JSON-Schema consumer, rather than reconstructing the producer's predicates.
 const publicSchema = googleLiteEuContextWireSchema().schema;
 // Zod's converter supports definition refs only. Resolve local pointers without
 // altering any assertions so it can consume this provider's draft-7/$defs mix.
-function inlineRefs(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(inlineRefs);
+function inlineRefs(value: unknown, root: unknown = publicSchema): unknown {
+  if (Array.isArray(value)) return value.map(child => inlineRefs(child, root));
   if (!value || typeof value !== "object") return value;
   const node = value as Record<string, unknown>;
   if (typeof node.$ref === "string") {
     if (Object.keys(node).length !== 1) throw new Error("Reference siblings need an independent validator proof");
-    const target = decodeURIComponent(node.$ref).slice(2).split("/").reduce((current, key) => (current as Record<string, unknown>)[key.replaceAll("~1", "/").replaceAll("~0", "~")], publicSchema as unknown);
-    return inlineRefs(target);
+    const target = decodeURIComponent(node.$ref).slice(2).split("/").reduce((current, key) => (current as Record<string, unknown>)[key.replaceAll("~1", "/").replaceAll("~0", "~")], root);
+    return inlineRefs(target, root);
   }
-  return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs").map(([key, child]) => [key, inlineRefs(child)]));
+  return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs").map(([key, child]) => [key, inlineRefs(child, root)]));
 }
+const successorSchema = googleLiteEuContextWireSchemaV3().schema;
+const successorValidator = z.fromJSONSchema(inlineRefs(successorSchema, successorSchema) as Parameters<typeof z.fromJSONSchema>[0]);
+const successorEvidence = [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }];
+const successorValues = { title: "title", location: "location", notes: "notes", eventDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 1, month: 2, year: null, leapMonth: null }, eventTime: { hour: 8, minute: 0, qualifier: "H24" }, reminderDate: { kind: "RELATIVE_DAY", offsetDays: 1 }, reminderTime: { hour: 9, minute: 0, qualifier: "AM" }, calendar: "LUNAR_VN", frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT", leadOffsetDays: 1, endDate: { kind: "WEEKDAY", weekday: 1, qualifier: "NEXT_WEEK" } };
+it.each(Object.entries(successorValues).flatMap(([field, value]) => ["SET", "REPLACE", "CLEAR"].map(operation => ({ field, operation, value: operation === "CLEAR" ? null : value }))))("successor_wire_canonical_parity $field/$operation", change => {
+  const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: successorEvidence }, changes: [{ ...change, evidence: successorEvidence }], query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "title" }, replyProposal: null });
+  const encoded = encodeGoogleLiteEuContextV3(canonical);
+  expect(successorValidator.safeParse(encoded).success).toBe(true);
+  expect(parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+});
 const validator = z.fromJSONSchema(inlineRefs(publicSchema) as Parameters<typeof z.fromJSONSchema>[0]);
 it("standalone inactive null rejects every non-null JSON type", () => {
   const schema = inlineRefs(publicSchema) as { properties: { conversationDirective: { anyOf: Array<{ properties: Record<string, unknown> }> } } };

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { UncertaintySchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
 import * as wire from "./context-provider-wire";
+import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
+import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 
 // Protocol snapshot is explicit: reordering the canonical declaration cannot
 // change V1 wire meaning. Domain coverage below is independently derived.
@@ -10,6 +12,20 @@ const v1 = { title: 0, location: 1, notes: 2, eventDate: 3, eventTime: 4,
   occurrenceCount: 9, eventRelation: 10, leadOffsetDays: 11, endDate: 12,
   intent: 13, queryRange: 14, operation: 15 };
 const base = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+const successorBase = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it.each(Object.entries(v1))("all_16_codes_roundtrip_and_unknown_code_rejects: %s=%s", (field, fieldCode) => {
+  const canonical = ConversationInterpretationV3Schema.parse({ ...successorBase, uncertainties: [{ field, reason: "MISSING", alternatives: [] }] });
+  const encoded = wire.encodeGoogleLiteEuContextV3(canonical) as Record<string, unknown>;
+  expect(encoded.uncertainties).toEqual([{ fieldCode, reason: "MISSING", alternatives: [] }]);
+  expect(wire.parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+  for (const invalid of [-1, 16, 0.5, "0", null]) expect(wire.parseGoogleLiteEuContextSectionsV3({ ...encoded, uncertainties: [{ fieldCode: invalid, reason: "MISSING", alternatives: [] }] }, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it("v3_alternative_json_and_mandatory_evidence_are_atomic", () => {
+  const encoded = wire.encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(successorBase)) as Record<string, unknown>;
+  for (const text of ["{", JSON.stringify({ value: "NEW", evidence: [] }), JSON.stringify({ value: "EDIT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "new", occurrence: 1 }] }), JSON.stringify({ value: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "new", occurrence: 1 }], extra: true })]) {
+    expect(wire.parseGoogleLiteEuContextSectionsV3({ ...encoded, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [text] }] }, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  }
+});
 const publicCodeShape = () => z.object({ properties: z.object({ uncertainties: z.object({ items: z.object({ properties: z.object({ fieldCode: z.object({ type: z.literal("integer"), minimum: z.number(), maximum: z.number() }).passthrough() }).passthrough() }) }) }) }).parse(wire.googleLiteEuContextWireSchema().schema).properties.uncertainties.items.properties;
 describe("immutable uncertainty field codebook V1", () => {
   it.each(Object.entries(v1))("round trips established %s code %s", (field, fieldCode) => {
