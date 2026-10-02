@@ -8,9 +8,17 @@
 
 **Tech Stack:** TypeScript 6.0.3, Zod 4.5.4, Next.js 16.3.4/React 19.2.8, Cloudflare Workers/D1/Queues, existing keyring encryption, Vitest 4.1.11, Miniflare and node:sqlite test stores, pnpm 11.19.0/Node >=22. Canonical lunar artifact is already local; no runtime astronomy dependency is added.
 
-**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md` (S below). Original approved content at `e8f9e75f436a672b23387eb0054047da217ade23`; owner approved the post-T3 amendment at `fb5331378d71e9f8eb8e63bc0447bd62f129fc50`. Implementation acceptance remains a separate measured/reviewed gate.
+**Spec:** `docs/superpowers/specs/2026-09-28-llm-context-contract-design.md` (S below). Original approved content at `e8f9e75f436a672b23387eb0054047da217ade23`; post-T3 amendment at `fb5331378d71e9f8eb8e63bc0447bd62f129fc50`; Model Output Authority Consolidation approved at `904afe5a56d7f82530b44b07d775d6d3cc2467bf`. Implementation acceptance remains a separate measured/reviewed gate.
 
-**Inspected baseline:** same HEAD, clean `codex/llm-context-contract-design`, worktree `/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2`; no intervening commits. Spec's earlier runtime audit names `6329b33264a2916f004953865f6483fafdfd7491`; source was inspected again at this planning HEAD. No live state is inferred from either SHA.
+**Current planning status (2026-10-01): MODEL_OUTPUT_AUTHORITY_PLAN_READY_FOR_OWNER_REVIEW.**
+The normative A1–A6 amendment below supersedes conflicting future instructions,
+output interfaces and automatic continuation in the historical T0–T11 plan.
+Its written-spec gate has passed; the current gate is OWNER_REVIEW_OF_AUTHORITY_IMPLEMENTATION_PLAN.
+This turn changes documentation only. No implementation, executable tests,
+provider calls, migrations, push, PR, merge or deployment are authorized by
+writing or committing this plan. Accepted T0–T10 and T11 history are preserved.
+
+**Current inspected baseline:** `904afe5a56d7f82530b44b07d775d6d3cc2467bf`, clean `codex/llm-context-contract-design`, worktree `/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2`. Latest runtime commit is `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`; older planning/runtime SHAs below are historical, not current live-state evidence.
 
 **Historical initial status:** READY_FOR_OWNER_REVIEW; at initial planning all tasks were NOT_STARTED. Current acceptance and the post-T3 owner-review gate below supersede this historical state.
 
@@ -626,6 +634,10 @@ are unchanged. No executable fixture was edited by this documentation amendment.
 
 ## Gate summary, risks and execution recommendation
 
+This final historical summary is retained for provenance. The current A1–A6
+gate and review cadence below control the authority consolidation; do not use
+the historical per-task review/automatic T11 text as execution permission.
+
 1. **Authorization:** prior plan/execution method approved; current documentation-only amendment awaits OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN. No T4/implementation continuation in this turn. Documentation checks prove neither amended fit nor implementation.
 2. **Local:** historical T0 A and T1–T3 accepted; scoped T1A/T2A/T0A precede T4–T10 after owner review, independent Critical=0/Important=0 at boundaries. Keep successor dormant; isolated fake transports only until actual-route admission is established.
 3. **Provider:** separately verified route admission B, conditional bounded owner authorization, fresh official compatibility/prices, pilot then full, immutable provenance, all stops/caps retained. Currently NOT_RUN.
@@ -647,3 +659,628 @@ independent reviewer at each boundary**, then whole-branch review. No agents
 or tasks are dispatched during this documentation amendment. Stop at
 OWNER_REVIEW_OF_AMENDED_SPEC_AND_PLAN; do not ask to reselect the execution
 method or treat the older automatic-continuation approval as clearing this gate.
+
+## Model Output Authority Consolidation implementation amendment (2026-10-01)
+
+**Controlling scope:** implement S §4.6 only after owner review of this plan.
+Planning baseline is clean `904afe5a56d7f82530b44b07d775d6d3cc2467bf` in
+`/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2`; runtime source
+is unchanged from `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`.
+Use GPT-6.1 Sol Medium for implementation/review. Preserve the existing chosen
+execution method. Six coherent tasks have three boundary reviews: A1+A2,
+A3+A4, A5+A6, followed by one whole-amendment review. Do not dispatch a fresh
+reviewer for each mechanical edit or reopen accepted T0–T10 tasks.
+
+### Source map verified before assigning A1–A6
+
+All paths below exist except those explicitly labelled create. `C` below means
+`src/modules/conversation/context-contract/`; `O` means
+`src/modules/intelligence/infrastructure/openrouter/`. Commands use full paths.
+
+| Existing boundary | Current finding | Amendment owner |
+| --- | --- | --- |
+| C `contracts.ts`, `wire.ts`, `prompt.ts` | canonical context-2 has act/continuation/controlEvidence and six directives; generic serializer emits canonical schema | A1 successor schemas; A5 serialization/prompt switch |
+| O `context-provider-wire.ts`, `provider-wire-schema.ts` | wire field-codebook-9; schemaVersion injected; fixed DEFAULT statusScope still generated; compact uncertainty codebook; guidance quarantine only two fields | A1 new versioned codec; A5 gateway default switch |
+| C `evidence.ts`, `merge.ts`, `list-range-evidence.ts` | EDIT affects notes/replacement evidence/conflicts; labels control replacement/reject and inherited LIST admission | A3 semantic authority, existing bounded LIST verifier preserved |
+| C `query.ts`, `resolve.ts` | typed query/calendar/arithmetic; no general-language edit parser | A3 type integration and regression, no arithmetic policy change |
+| C `decisions.ts`, `control-proof.ts`, `preview-control.ts`, `responses.ts`, `guidance.ts`, `transition.ts` | exact controls and explicit proofs; transition converts some merge rejects into decisions; backend factual composition | A4 semantic outcomes and optional guidance |
+| C `state.ts`, `context.ts`, `store.ts`, `runtime-store.ts`, `confirmation.ts`, `infrastructure/d1/store.ts` | state-1 embeds context-2 pending proposals; encryption identity context-2; SQL/fences hardcode numeric contract_version=2 | A2 successor codec/isolation; A4/A5 transaction consumers |
+| `migrations/0009_llm_context_contract.sql` | CHECK versions(1,2), ownership CHECK=2, shared triggers/permits | Preserve immutable migration; numeric2 remains storage fence family, never label it canonical schema3 |
+| C `service.ts`, `observability.ts`, `downstream.ts`, `validation-diagnostics.ts`; O `semantic-gateway.ts` | contract/prompt version2 binding in attempts/events; real production-shaped provider adapter differs from generic/offline path | A5 same successor codec/authority on every dispatch path |
+| `tools/benchmark/context-contract{,-fixtures,-fit.test,-probe,-runner,-live}.ts` and benchmark JSON | declarative proposals author old labels; actual-service read/write observations; prefix reuse intentionally disallows semantic changes | A6 migrate proposals, retain exact user scripts/oracles; no reuse of historical R01 prefix |
+| `tools/benchmark/context-schema-diagnostics.ts` | generic constant250000 differs from authorized diagnostic driver cap300000 | A5 explicit authority-bound cap; preserve prior charges and failed/unknown reservations |
+
+### Concrete interfaces and version policy
+
+A1 owns these successor types, initially exported with `V3` suffix alongside
+the existing dormant context-2 contract. A5 switches the existing generic
+contract exports/service consumers to these types and removes superseded
+runtime proposal functions. Do not cast a context-2 proposal to V3 or bridge it
+through fabricated semantic instructions.
+
+```ts
+type RequestTargetV3 = {
+  kind: 'CURRENT' | 'NEW' | 'UNRESOLVED'; evidence: EvidenceRef[];
+};
+// Existing 13 field/value unions remain; REPLACE is a semantic instruction.
+type FieldOperationV3 = 'SET' | 'REPLACE' | 'CLEAR';
+// SemanticPatchProposalV3: application-bound schemaVersion + intent +
+// requestTarget + changes + query + uncertainties; no guidance/control labels.
+// query.statusScope is canonical DEFAULT, never model-authored.
+type ModelDirectiveV3 =
+  | { kind: 'ASK_FOR_FIELD'; field: IssueField }
+  | { kind: 'ASK_FOR_DISAMBIGUATION'; field: IssueField;
+      reason: 'AMBIGUOUS' | 'CONFLICT' | 'UNSUPPORTED_COMBINATION' }
+  | { kind: 'HELP'; topic: 'GENERAL' | 'REMINDERS' | 'LUNAR' | 'FINITE_SERIES' }
+  | { kind: 'EXPLAIN_UNSUPPORTED'; issue:
+      'CAPABILITY' | 'REQUEST_COMBINATION' | 'DOMAIN_LIMIT' | 'ASSISTANT_SCOPE' };
+```
+
+`requestTarget` is required non-null for CREATE_REMINDER; it is allowed only
+for CREATE_REMINDER or AMBIGUOUS with a targeted operation uncertainty, otherwise
+null. CURRENT means the sole retained request, never a model ID. With no retained
+request, CURRENT is valid unresolved meaning and clarifies; NEW starts a fresh
+candidate. With A present, NEW stages B without copying A facts and requires
+REPLACE_PENDING. UNRESOLVED preserves A and retains separately grounded candidate
+facts for a scoped operation clarification. Evidence is 1–3 current USER_QUOTE
+refs for NEW/UNRESOLVED or explicit CURRENT targeting; context-only echoes cannot
+approve targeting. No cancellation, greeting, success, confirmation or arbitrary
+action value is added. A current short reply such as “8h.” grounds a CURRENT
+candidate in the application-bound pending reminder question; no new phrase
+parser interprets it.
+
+SET proposes a missing value, exact reuse or non-destructive addition; an
+occupied differing scalar becomes an evidenced conflict, never silent overwrite.
+REPLACE asserts explicit current user replacement of that field; CLEAR asserts
+explicit removal, retains literal null and makes required fields incomplete.
+Both require current USER_QUOTE evidence; retained facts/old quotes alone cannot
+replace/clear. Notes SET must contain prior notes intact, and append genuinely
+grounded new detail; REPLACE/CLEAR are the only destructive notes operations.
+REPLACE targeting a missing field clarifies operation rather than converting to
+SET. A current REPLACE answering a retained conflict can resolve it; exact fact
+echoes cannot. Model operation meaning remains untrusted like every semantic
+operand: exact matching quotes prove source identity, not universal entailment;
+preview/confirmation and actual semantic evaluation address residual risk.
+
+Remove root `controlEvidence`: its surviving semantic purpose is represented
+by `requestTarget.evidence`, per-change evidence and typed operation alternative
+evidence. `uncertainties.field=operation` alternatives become CURRENT/NEW
+request-target meanings with refs, never old DialogueAct values. Combined-action
+uncertainty has zero executable changes, grounded requestTarget UNRESOLVED and
+UNSUPPORTED_COMBINATION; backend asks which request to handle. No model value
+authorizes abandonment; only existing exact application controls/proofs do.
+
+Application protocol descriptor is immutable:
+
+```ts
+type ContextProtocolV3 = {
+  canonicalVersion: 'calenote-context-3';
+  promptVersion: 'calenote-context-3';
+  inputVersion: 'calenote-context-input-2';
+  stateVersion: 'calenote-context-state-2';
+  wireVersion: 'google-gemini-2.5-flash-lite-vertex-eu-context-authority-10';
+  codebookVersion: 'context-uncertainty-fields-1';
+  storageFenceFamily: 2;
+};
+```
+
+Input version advances because input ambiguities also contain the changed
+operation alternative shape. Canonical reminder detail/preview payloads retain
+their independent unchanged versions. Codebook entries0–15 retain existing
+field meaning; codebook1 cannot be reordered. New transport version10 reflects
+material structure/authority change; protocol3, prompt3, input2 and state2
+are not model values. No change to model/provider/capability version or budgets.
+
+Numeric storage family2 means the already-reviewed SQL ownership/permit/fence
+namespace for this dormant subsystem. It is intentionally independent of
+canonical output3 and encrypted state2. A2/A5 retain its SQL CHECK/trigger
+semantics and one-owner/chat ownership row. Encryption identity adds the selected
+canonicalVersion: application-selected V3 store uses context-3 only. An explicitly
+invoked read-only legacy codec uses context-2/state-1 only and returns an opaque
+legacy result, never ContextSnapshotV2/ValidatedPatchV3. Active V3 observe returns
+OTHER_CONTRACT for legacy ownership/data; it must not treat it as absent/start
+over. No auto dual runtime, model-selected decoder or automatic conversion.
+Future cutover quiesces/drains pending context-2 work or expires/restarts it with
+notice; confirmed records/details/delivery stay intact. No migration is needed
+for retaining numeric family2; do not edit0009. Any later storage change requiring
+DDL is a separate reviewed forward migration/release gate, not implied by this plan.
+
+### Amendment global constraints and review focus
+
+All original numeric, privacy, calendar, TTL, confirmation, channel and envelope
+limits remain. No generic input parser, new provider/model, repair/wording call,
+tools/SQL/IDs, provider fallback or silent schema relaxation. One bounded semantic
+call, retries0. Runtime remains dormant; no production activation/config writes.
+Exact provider constraints remain `google/gemini-2.5-flash-lite`,
+`google-vertex/eu`, `stream=false`, `retry=0`, `fallback=none`,
+`provider.require_parameters=true`, approved ZDR/data-collection-deny routing,
+and strict structured output. Input ceiling is 12000 tokens, output ceiling
+1536 tokens, and raw provider response ceiling 32768 bytes. No task changes
+these limits or treats advisory success as canonical semantic validation.
+No network/tokenizer provisioning is needed for the offline task commands below.
+The cache-backed tokenizer fails explicitly if unavailable; do not install silently.
+
+For **every A1–A6 commit**, run its named focused command, then the shared
+relevant-regression command:
+`pnpm exec vitest run src/modules/conversation/context-contract src/modules/intelligence/infrastructure/openrouter tools/benchmark/context-contract.test.ts tools/benchmark/context-contract-runner.test.ts`.
+Run these sequentially, not concurrently with the full suite; record counts,
+skips and exit status. New tests must first fail on intended assertions, not
+tooling/import setup. Each task's acceptance also requires `pnpm typecheck`
+and `git diff --check`; no commit follows a failing gate.
+
+Review these five likely boundary failures; each is pinned by the named task:
+
+1. Natural correction versus unrelated task shares similar SET values: A3
+   `current_replace_differs_from_new_candidate` and A4 replacement decision test.
+2. Innocent new notes text loses retained detail: A3 `notes_set_preserves_old_text`
+   and `notes_replace_requires_current_source`.
+3. A missing advisory key is mistaken for malformed semantic outer structure:
+   A1 `isolated_guidance_failure_keeps_core` versus `outer_failure_rejects`.
+4. Row family2 is mistaken for canonical2, letting a legacy reader mutate V3:
+   A2/A5 `family2_is_not_protocol_selection` and mixed-version store tests.
+5. R01 passed under older semantics is counted for the changed candidate or an
+   unknown reservation disappears on new run: A6 `semantic_change_invalidates_prefix`
+   and `new_source_retains_all_unknown_reservations`.
+
+### A1 — Successor semantic/advisory contract and deterministic transport
+
+**Files:** create C `output-authority.ts`, `output-authority.test.ts`,
+`protocol.ts`, `authority-contract.test.ts`; modify C `contracts.ts` and
+O `context-provider-wire.ts`, `provider-wire-schema.ts`; tests O
+`context-provider-wire.test.ts`, `context-provider-wire-parity.test.ts`,
+`context-protocol-metadata.test.ts`, `context-uncertainty-codebook.test.ts`.
+Existing active/dormant context-2 exports retain behavior at this commit.
+
+**Interfaces:** export strict `SemanticPatchProposalV3Schema`,
+`ConversationInterpretationV3Schema`, `ContextInputV2Schema`, matching types and
+`parseInterpretationSectionsV3(raw: unknown): InterpretationSectionsV3` from C
+`contracts.ts`. Canonical version3 includes statusScope DEFAULT injected by
+decoder. `ParsedInterpretationV3` retains semantic/directive/reply/fullSchemaValid
+section-result separation. O exports
+`googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3`,
+`encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown`,
+`parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3): InterpretationSectionsV3`.
+No model payload can select `selected`; unsupported descriptor rejects.
+
+`output-authority.ts` is the sole **executable** typed registry; S §4.6 remains
+the human normative matrix, not another manually synchronized docs registry.
+Export `OutputAuthorityClass`, `OutputAuthorityRule` (class, modelAuthorshipReason,
+evidencePolicy, mergePolicy, canAffectMerge, canCauseHardReject, canCauseClarify,
+canAuthorizeRead, canAuthorizeWrite, applicationDerivable), `OUTPUT_AUTHORITY_REGISTRY_V3` and
+`classifyOutputPathV3(path: OutputFieldPathV3): OutputAuthorityRule`. Field paths
+are derived from the V3 types, including array/value/evidence/alternative branch
+paths; category prefix rules cannot overlap and every canonical/generated leaf
+must match exactly one rule. Semantic discriminants inherit SEMANTIC_UNTRUSTED;
+four-kind directive/reply leaves ADVISORY; protocol/status constants
+APPLICATION_OWNED. Fixed codebook mapping/version is owned, proposed fieldCode
+semantic. Known inactive padding is shape-only owned transport material.
+Use this registry to generate the table-driven test cases for every root and
+meaningful nested path; do not maintain a second manually copied test matrix.
+Read/write booleans describe independent field authority and must always be
+false; backend admission remains separate. Advisory rows cannot affect merge
+or cause hard rejection; an unknown outer key is a transport violation, not
+an advisory row. Schema inspection must reject every newly added unclassified
+root, nested active branch or meaningful generated category.
+
+- [ ] Write RED `authority_paths_are_exhaustive_and_nonoverlapping`,
+  `new_wire_has_no_dialogue_or_owned_metadata`, `replace_is_typed_semantic`,
+  `isolated_guidance_failure_keeps_core`, `outer_failure_rejects`,
+  `invalid_active_discriminator_rejects`, `inactive_padding_never_enters_core`,
+  `all_16_codes_roundtrip_and_unknown_code_rejects`. Assert no act/continuation/
+  controlEvidence/version/statusScope in generated model properties, no two
+  backend-only directive kinds, mandatory semantic keys/unknown-root failures,
+  strict duplicate13-field/4-uncertainty/2-alternative/1–3-ref bounds.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/authority-contract.test.ts src/modules/conversation/context-contract/output-authority.test.ts src/modules/intelligence/infrastructure/openrouter/context-provider-wire.test.ts src/modules/intelligence/infrastructure/openrouter/context-provider-wire-parity.test.ts src/modules/intelligence/infrastructure/openrouter/context-protocol-metadata.test.ts src/modules/intelligence/infrastructure/openrouter/context-uncertainty-codebook.test.ts`.
+  Record intended assertion RED; fix setup/import failures separately.
+- [ ] Implement the above strict V3 interfaces using existing typed slot/operand
+  definitions. Flatten only unambiguous active branches; decode metadata locally.
+  Keep complete JSON/root/core hard failure separate from advisory quarantine.
+  Invalid mandatory evidence shapes remain semantic failure, never quarantine.
+- [ ] Rerun the focused command, `pnpm typecheck`, `git diff --check`; existing
+  context-2 consumers compile and accepted tests remain unchanged at this stage.
+- [ ] Selectively stage named A1 files and commit
+  `feat(conversation): define authority consolidated context contract`.
+  A1 stays unaccepted until the combined A1+A2 review; no reviewer per substep.
+
+### A2 — Versioned pending-state codec and legacy isolation
+
+**Depends:** A1 local green. **Files:** create C `legacy-state-reader.ts`,
+`legacy-state-reader.test.ts`; modify C `state.ts`, `context.ts`, `store.ts`,
+`runtime-store.ts`, `infrastructure/d1/store.ts`; tests C `state.test.ts`,
+`context.test.ts`, `infrastructure/d1/compatibility.integration.test.ts`,
+`infrastructure/d1/store.integration.test.ts`. No migration change/execution.
+
+**Interfaces:** export `ContextSnapshotV2Schema`, `ContextSnapshotV2`,
+`encodeContextSnapshotV2(value: ContextSnapshotV2): string`,
+`decodeContextSnapshotV2(encoded: string): ContextSnapshotV2` and
+`buildContextInputV2(args: ContextBuildArgsV2): ContextBuildResultV2`.
+`ContextBuildArgsV2` is `Omit<ContextBuildArgs, 'snapshot'>` with
+`snapshot: ContextSnapshotV2 | null`; `ReadyContextV2` preserves every existing
+ReadyContext member, replacing input with ContextInputV2 and candidateSnapshot
+with ContextSnapshotV2. `ContextBuildResultV2` is ReadyContextV2 or the existing
+REFUSED `{reason}`. These types live in C `context.ts`.
+State2 pending candidates use SemanticPatchProposalV3; input2 uses matching
+operation ambiguity types. Preserve slot/provenance/maps/receipt/decision bounds.
+State2 additionally has nullable `pendingSemanticCandidate` containing the
+existing bounded V3 candidate shape plus `baseContextRevision` and `questionId`.
+It preserves an unresolved-target proposal alongside the actual operation
+question; it has no acceptedReplies, token or confirmation authority. Its
+question must match the actual retained operation question, revision must match
+the post-store context revision, and expiry is capped by existing draft/idle/
+absolute lifetimes. Both incoming and retained candidate source maps must fit
+16KiB without evicting supporting evidence. Subsequent current semantic targeting
+can select this exact bound candidate only after original sources are revalidated
+and no newer correction/terminal revision supersedes it. No model internal ID
+or control approval adopts it. A changed target/candidate receives a new revision.
+Extend `contextContractEncryptionIdentity(scope, id, protocol)` to bind only
+application-selected canonical version; protocol mandatory on V3 path. Export
+`readLegacyContextState(encoded: string): LegacyContextReadResult` with VALID
+opaque legacy record or INVALID; no mutation/adoption/ValidatedPatch methods.
+Keep only the bounded legacy proposal/state decoding definitions needed for
+state1, sharing unchanged value/evidence primitives rather than duplicating
+the full old contracts/prompt/gateway API. V3 store/runtime factory requires
+`protocol: ContextProtocolV3`; family2 SQL cannot supply or change it.
+
+- [ ] RED `state2_roundtrips_new_and_replace_candidates`,
+  `family2_is_not_protocol_selection`, `legacy_reader_never_produces_v3_state`,
+  `v3_legacy_owner_is_other_contract_not_absent`, `cross_protocol_ciphertext_refused`,
+  `old_reader_cannot_confirm_v3`, `one_family_ownership_prevents_parallel_request`,
+  `corrupt_state_rejects`, `state_capacity_retains_evidence_or_refuses`,
+  `unresolved_candidate_is_nonapprovable_and_revision_bound`.
+  Assert state1/state2 candidates rejected by the opposite strict codec,
+  unchanged16KiB maximum and no pending TTL renewal from read/refusal.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/state.test.ts src/modules/conversation/context-contract/context.test.ts src/modules/conversation/context-contract/legacy-state-reader.test.ts src/modules/conversation/context-contract/infrastructure/d1/compatibility.integration.test.ts src/modules/conversation/context-contract/infrastructure/d1/store.integration.test.ts`.
+  Use isolated synthetic local stores; no Wrangler remote command.
+- [ ] Implement the independent codec/protocol selection and read-only legacy
+  boundary. Preserve ownership permits, inbound ordering, CAS and storage family2.
+  Keep existing context-2 store default callable until A5 consumer switch;
+  successor path cannot reinterpret old observation/proofs as current authority.
+- [ ] Rerun focused command, `pnpm typecheck`, `git diff --check`.
+- [ ] Review A1+A2 once for registry completeness, unambiguous decode, core versus
+  guidance failure, protocol identity/storage-family safety; fix scoped findings
+  with RED/GREEN and re-review only findings. Accept at Critical0/Important0.
+- [ ] Selectively stage A2 files and commit
+  `feat(conversation): isolate successor state and protocol ownership`.
+
+### A3 — Evidenced semantic targeting, replacement and merge outcomes
+
+**Depends:** A1+A2 accepted. **Files:** modify C `evidence.ts`, `merge.ts`,
+`query.ts`, `resolve.ts`, `list-range-evidence.ts` only for scoped continuity
+integration; tests C `evidence.test.ts`, `merge.test.ts`, `query.test.ts`,
+`resolve.test.ts`, `list-range-authority.test.ts`, `list-range-evidence.test.ts`,
+`quote-classification.test.ts`, `evidence-diagnostics.test.ts`.
+
+**Interfaces:** add `validateEvidenceV3(proposal: SemanticPatchProposalV3, built: ReadyContextV2, observe?: DownstreamObserver): EvidenceValidationV3`.
+Its `ValidatedPatchV3` separately carries resolvedChanges/query/uncertainties,
+application-bound change/alternative evidence, `requestTargetEvidence` and
+validated requestTarget, observation and ContextSnapshotV2 candidate. Brand
+cannot be constructed by casting/JSON and never includes guidance. Export
+`mergePatchV3(previous: ContextSnapshotV2 | null, patch: ValidatedPatchV3): MergeResultV3`;
+results MERGED (candidate, changedFields, uncertainties, query/referenceTime),
+NEEDS_REPLACEMENT (retained candidate plus separately grounded proposed NEW
+patch), CLARIFY_OPERATION (retained candidate plus grounded pending meaning),
+or REJECTED (security/structure/state reason). Neither expected semantic decision
+uses REJECTED; no advisory field enters the signature. Reuse deterministic
+resolve/query calculations with V2 state, preserving resolved slots/facts paired.
+
+- [ ] RED `current_replace_differs_from_new_candidate`,
+  `set_on_occupied_field_keeps_conflict`, `replace_resolves_only_current_grounded_conflict`,
+  `fact_echo_cannot_resolve_conflict`, `notes_set_preserves_old_text`,
+  `notes_replace_requires_current_source`, `clear_requires_current_source`,
+  `unresolved_target_keeps_facts_and_clarifies`, `new_candidate_cannot_copy_A_facts`,
+  `query_inheritance_needs_scope_and_original_range_source`,
+  `valid_ref_unsupported_range_clarifies_but_fabricated_ref_rejects`.
+  Assert CURRENT/NEW/UNRESOLVED, missing-field REPLACE, no existing target,
+  mixed correction, explicit notes replacement, old-source edits, non-USER,
+  cross-owner/chat/context and invalid operation-alternative refs. Retain all
+  verifier variant/negation/quotation/receipt/Unicode controls; no broadened parser.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/evidence.test.ts src/modules/conversation/context-contract/merge.test.ts src/modules/conversation/context-contract/query.test.ts src/modules/conversation/context-contract/resolve.test.ts src/modules/conversation/context-contract/list-range-authority.test.ts src/modules/conversation/context-contract/list-range-evidence.test.ts src/modules/conversation/context-contract/quote-classification.test.ts src/modules/conversation/context-contract/evidence-diagnostics.test.ts`.
+- [ ] Implement validated semantic instructions and explicit merge outcomes;
+  retain accepted facts while unresolved targeting/conflicts block preview.
+  CURRENT relation/calendar/time operands remain model interpreted, backend
+  evaluated; do not add a Vietnamese edit/new-request classifier. Evidence refs
+  resolve via the existing exact source map; mandatory invalid refs hard-reject.
+  Current QUERY answer plus exact pending scope and reverified original source
+  permits inheritance without act/continuation. Valid unsupported range nulls
+  only that policy-defined optional period; no generic partial-patch salvage.
+  CLARIFY_OPERATION stages pendingSemanticCandidate without editing A; CURRENT
+  or NEW semantic answers use current targeting evidence and only that exact
+  question/revision-bound candidate's revalidated original sources. A later
+  replacement or cancellation invalidates it before merge/adoption.
+- [ ] Rerun focused command, `pnpm typecheck`, `git diff --check`; retain
+  context-2 functions until A5 migrates consumers, no old-to-V3 authority bridge.
+- [ ] Selectively commit A3 files as
+  `feat(conversation): merge only grounded semantic instructions`.
+
+### A4 — Backend decisions, independent guidance and confirmation safety
+
+**Depends:** A3 local green. **Files:** modify C `guidance.ts`, `transition.ts`,
+`decisions.ts`, `responses.ts`, `control-proof.ts`, `preview-control.ts`,
+`confirmation.ts`, `store.ts`, `infrastructure/d1/store.ts`; tests C
+`guidance.test.ts`, `decisions.test.ts`, `responses.test.ts`, `confirmation.test.ts`,
+`transition.integration.test.ts`, `infrastructure/d1/store.integration.test.ts`.
+
+**Interfaces:** `computeEffectiveDirectiveV3(applicationOutcome: ApplicationOutcomeV3): EffectiveDirective`
+consumes ValidatedPatchV3/MergeResultV3/resolution/query/control/persistence
+results, never model directive. `validateDirectiveV3(model: ParsedInterpretationV3['directive'], effective: EffectiveDirective): DirectiveValidation`;
+`selectGuidance` keeps existing independently checked reply contract. Add
+`transitionConversationV3(input: TransitionInputV3): Promise<ConversationTransitionV3>`
+with ContextSnapshotV2, ValidatedPatchV3, explicit merge outcomes and existing
+ControlSelection/authority/result dependencies. Compose through existing
+`composeContextReply`; EffectiveDirective retains PRESENT_PREVIEW, ANSWER_QUERY
+and BACKEND_ONLY. `validDecision`/`validateConfirmation` consume V2 state and
+existing proof/preview shapes; caller-selected protocol remains application data.
+`ApplicationOutcomeV3` has semantic `ValidatedPatchV3`, merge `MergeResultV3`,
+optional `RequestResolution`, `QueryResolution`, `ContextQueryResult` and the
+existing optional BACKEND_ONLY reason; export it from `guidance.ts`.
+`TransitionInputV3` retains `TransitionInput`'s control/authority/time/channel/
+guidance/failure/query members, replacing snapshot/received with
+`ContextSnapshotV2`, interpretation with `ValidatedPatchV3` and merge with
+`MergeResultV3`. Stored transition V3 replaces its snapshot with
+`ContextSnapshotV2`; the ReplyOnly/proof/receipt shapes stay unchanged. These
+types are owned by `transition.ts` and `store.ts`, not implicit casts.
+
+- [ ] RED `advisory_variations_never_change_merge_or_execution`,
+  `new_request_yes_only_replaces_pending`, `mixed_yes_replace_never_confirms`,
+  `one_time_acceptance_then_replacement_then_save`,
+  `unresolved_target_without_prior_draft_clarifies`,
+  `exact_abandon_control_cancels_but_negated_or_note_does_not`,
+  `invalid_guidance_retains_valid_facts`, `backend_factual_surfaces_ignore_reply`,
+  `stale_old_preview_and_duplicate_confirmation_preserve_one_transaction`.
+  Observe actual decision kind, revision/hash, selected text and transaction
+  counts; malformed advisory kind/field/text cannot mutate or block valid facts.
+  Controls remain exact whole utterances, not model labels; uncertain delivery
+  cannot create SENT proof; first-in-flight/no-draft abandon stays truthful.
+  For removed legacy labels, test the semantic merge interface's independence
+  using separately supplied quarantined advisory metadata (AMBIGUOUS/UNCERTAIN,
+  wrong EDIT/NEW/ABANDON), never insert removed keys into an accepted V3 wire.
+  A1/A5 additionally assert actual extra root dialogueAct/continuation in V3
+  fail unknown-root validation; no stripping, legacy decode or provider fallback.
+  Those wire rejections preserve prior context, not an allegedly accepted patch.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/guidance.test.ts src/modules/conversation/context-contract/decisions.test.ts src/modules/conversation/context-contract/responses.test.ts src/modules/conversation/context-contract/confirmation.test.ts src/modules/conversation/context-contract/transition.integration.test.ts src/modules/conversation/context-contract/infrastructure/d1/store.integration.test.ts`.
+- [ ] Map NEEDS_REPLACEMENT to scoped REPLACE_PENDING, CLARIFY_OPERATION to a
+  real operation question/RESUME_PENDING when applicable, never terminal semantic
+  rejection of grounded intent. NEW staging keeps A untouched until its bound
+  approval; then issue a distinct SAVE_PREVIEW. Apply REPLACE updates before
+  computing new preview and invalidate old decision. Unsupported YEARLY still
+  asks explicit one-time acceptance; exact cancellation fences delayed edits.
+  Remove model ABANDON special routing. Fallback selects actual backend issue;
+  no directive/prose can choose missing facts, query admission or confirmation.
+- [ ] Rerun focused command, `pnpm typecheck`, `git diff --check`.
+- [ ] Review A3+A4 once for source/evidence/merge semantics and all control,
+  notes-loss, conflict, replacement and transaction safety. Fix findings with
+  scoped RED/GREEN; accept Critical0/Important0 before next bundle.
+- [ ] Selectively commit A4 files as
+  `feat(conversation): compute decisions independently of model guidance`.
+
+### A5 — Actual service/gateway switch and cumulative admission binding
+
+**Depends:** A3+A4 accepted. **Files:** modify C `contracts.ts`, `wire.ts`,
+`prompt.ts`, `context.ts`, `service.ts`, `state.ts`, `runtime-store.ts`,
+`store.ts`, `observability.ts`, `downstream.ts`, `validation-diagnostics.ts`,
+O `context-provider-wire.ts`, `semantic-gateway.ts`, `failure-diagnostics.ts`,
+`tools/benchmark/context-schema-diagnostics.ts`; corresponding existing tests,
+C `service.test.ts`, `protocol-metadata-service.test.ts`, `observability.test.ts`,
+`downstream.test.ts`; O `semantic-gateway.test.ts`, `failure-diagnostics.test.ts`;
+`tools/benchmark/context-schema-diagnostics.test.ts`.
+
+**Interfaces:** switch public generic aliases to V3/V2; existing
+`createContextContractGateway(config, transport, admission)` returns
+`SemanticGateway<ParsedInterpretationV3, ContextInputV2>` and requires a selected
+`ContextProtocolV3` in its application configuration. The serializer emits the
+V3 generation transport on offline and real transport paths; fake fixtures
+also cross encode/decode/canonical validation. `createContextContractService`
+uses V3 validation/merge/transition and protocol3 attempt/event digests. Keep
+legacy *read-only* codec isolated; remove superseded interpretation functions
+after every consumer migrates, without touching deployed legacy Conversation V2.
+Diagnostics admission consumes a named owner-authorized cap record with hash
+and prior cumulative retained amount, never a model/runtime-env arbitrary cap.
+
+- [ ] RED `every_gateway_path_uses_same_authority_wire`,
+  `one_dispatch_no_guidance_retry`, `service_metadata_bound_by_application`,
+  `new_protocol_digest_invalidates_old_attempt`, `wrong_model_version_has_no_authority`,
+  `service_read_requires_verified_range_not_directive`,
+  `family2_is_not_protocol_selection`, `diagnostic_cap_uses_authorization_provenance`,
+  `new_source_retains_all_unknown_reservations`. Inject invalid outer/core,
+  valid core plus invalid guidance, wrong scope/capability/receipt and all old
+  T11 failure classes through real service with fake transport. Reserved holds
+  survive timeout/no-cost settlement/restart; no retry or second wording call.
+- [ ] Run `pnpm exec vitest run src/modules/conversation/context-contract/service.test.ts src/modules/conversation/context-contract/protocol-metadata-service.test.ts src/modules/conversation/context-contract/observability.test.ts src/modules/conversation/context-contract/downstream.test.ts src/modules/intelligence/infrastructure/openrouter/semantic-gateway.test.ts src/modules/intelligence/infrastructure/openrouter/failure-diagnostics.test.ts tools/benchmark/context-schema-diagnostics.test.ts`.
+- [ ] Switch dormant consumers together; update prompt3 only to teach semantic
+  CURRENT/NEW/UNRESOLVED and SET/REPLACE/CLEAR/evidence, four advisory kinds and
+  application metadata omission. Do not tune to R02 wording or change model/
+  provider. Update all schema/prompt/input/state/wire/codebook observation and
+  binding defaults, categorical diagnostics and source-freeze paths. No schema
+  version is chosen by provider text. Preserve bounds/secret/control sanitization.
+  Reconcile generic250000 diagnostic constant with authorized300000 through
+  explicit cap provenance; never reset historical retained debt or borrow PILOT.
+- [ ] Rerun focused/shared regression commands, `pnpm typecheck`,
+  `pnpm exec eslint src/modules/conversation/context-contract src/modules/intelligence/infrastructure/openrouter tools/benchmark/context-schema-diagnostics.ts tools/benchmark/context-schema-diagnostics.test.ts`
+  and `git diff --check`; actual composition stays dormant, no Worker
+  configuration/provider dispatch is changed by local integration.
+- [ ] Selectively commit A5 files as
+  `feat(conversation): bind consolidated authority through service and gateway`.
+
+### A6 — Complete acceptance mapping, envelope proof and resumption gates
+
+**Depends:** A5 local green. **Files:** modify `tools/benchmark/context-contract.ts`,
+`context-contract-fixtures.ts`, `context-contract.test.ts`,
+`context-contract-fit.test.ts`, `context-contract-probe.ts`,
+`context-contract-runner.ts`, `context-contract-runner.test.ts`,
+`context-contract-live.ts`, `context-contract-live.test.ts`,
+`run-context-contract-r01-replay.mjs` only where protocol/preflight consumers
+require; C benchmark `regressions.json`, `development.json`, `heldout.json`
+only for schema-dependent structured setup, never user wording/oracles;
+documentation `docs/benchmarks/llm-context-contract-{fit,results}.md`, local
+measurement JSON and tracked progress/review reports. Verify each existing test
+path before execution; no provider CLI is run as an offline check.
+
+**Interfaces:** retain actual-service `createContextContractProbe`, manifest
+scorer and existing runner signatures with V3 input/proposal/result types.
+`preflightContextCampaign`, sourceFreeze and authorized intent admission bind
+new protocol/schema/prompt/source/corpus digests and actual cumulative ledger
+hashes. `verifyPilotPrefix` rejects the old source's R01 prefix for this amendment;
+no new compatibility whitelist hides semantic changes. A fresh candidate starts
+R01 then R02 while retaining financial history. Add source-bound complexity
+measurements to existing fit artifact, not a parallel mock acceptance engine.
+
+- [ ] RED `all_R01_R16_keep_original_words_and_oracles`,
+  `semantic_change_invalidates_prefix`, `whole_service_I1_I10_authority_controls`,
+  `wire_complexity_before_after_is_source_bound`,
+  `fresh_run_cannot_reset_budget_or_unknown_reservations`,
+  `revised_heldout_data_requires_replacement`. Registry test walks every branch
+  in actual generation/canonical JSON schemas; I1/I2/I5/I6/I7/I8 additionally
+  observe actual state/read/write/reply effects, not only registry labels.
+- [ ] Run `pnpm exec vitest run tools/benchmark/context-contract.test.ts tools/benchmark/context-contract-fit.test.ts tools/benchmark/context-contract-runner.test.ts tools/benchmark/context-contract-live.test.ts src/modules/conversation/context-contract/output-authority.test.ts` with fake/blocked transport and isolated synthetic stores. No live command.
+- [ ] Adapt declarative outputs: first new request NEW, follow-ups CURRENT,
+  genuine corrections REPLACE, ambiguous D07 UNRESOLVED, null advisory for
+  backend-only surfaces. Preserve original scripts, all fields/revisions/TTL,
+  zero-mutation/read authority oracles, delayed replay/actions and five R15
+  deterministic expansions. Scorer observes actual selected service behavior;
+  safe fallback never launders full-output failure as schema PASS.
+- [ ] Measure baseline wire9 versus successor10 from immutable schema artifacts
+  (use `git show 899b1f25f38d4d4afcd7429ffbb10c91851c25e3:<path>` for baseline,
+  do not switch checkout). Record each schema/canonical/request digest, bytes,
+  object/array nesting, branch/discriminator count, finite-enum count and largest
+  domain, required field/padding counts, definitions/$refs and exact serialized
+  ordinary/worst accepted outputs. Record baseline/target input/output/snapshot
+  tokens/bytes with method provenance. Assert removed root fields/kinds/constants
+  and fewer redundant branch conditions; report increases caused by explicit
+  instruction evidence rather than asserting smaller by definition. All original
+  12000/1536/32768/16384 limits and no-detail-loss ordinary flows must pass.
+  Google full-route/schema admission remains separately measured, not implied
+  by offline complexity counts. No finite enum/domain/codebook weakening.
+  The freshly inspected baseline wire9 has12057 serialized UTF-8 bytes,
+  nine root model keys,337 recursive object/array nodes,49 summed anyOf/oneOf
+  branches,22 enum arrays and100 enum values, maximum object/array depth11.
+  These count all schema object/array nodes including metadata arrays and are
+  not Google's private state count. Reproduce baseline and successor with the
+  same algorithm in Vitest compilation, which supports TypeScript parameter
+  properties; direct Node strip-only imports of the module are not sufficient.
+- [ ] Read applicable Cloudflare Workers/Wrangler guidance and inspect the
+  canonical scripts, then run a fresh complete `pnpm check`, followed by
+  `git diff --check`, with provider transport blocked. `pnpm check` includes
+  full tests, documentation test, typecheck, lint, build, Worker type check and
+  local deploy dry-run; dry-run is not deployment. Record exact immutable source,
+  counts/skips and exit status; do not reuse earlier partial runs.
+- [ ] Review A5+A6 once for actual-path observations, all invariants and corpus/
+  fit/source/budget fidelity. Accept Critical0/Important0; selectively commit
+  `test(conversation): verify consolidated authority and frozen acceptance`.
+- [ ] Perform whole-amendment independent review after local full checks;
+  fix only scoped findings using RED/GREEN, rerun affected/full checks when
+  justified by the change, and record immutable final candidate. Do not enter
+  live admission on a partial/review-pending candidate.
+
+### R01–R16, invariants and T11 failure traceability
+
+| Original case | Tasks / exact preserved obligation |
+| --- | --- |
+| R01 | A1/A3/A5/A6: generic LIST clarification then verified current-month query; invalid range no read; advisory cannot veto inheritance |
+| R02 | A3/A4/A5/A6: exam/location/event/count2 retained; BEFORE_EVENT then only time missing; Oct9/10 08:00 preview/no commit |
+| R03 | A3/A4/A6: actual fixture has time/count/event already; relation answer completes preview, no escape menu |
+| R04 | A3/A6: separate reset branches ONCE/offset2 versus DAILY/count2; eventTime distinct from reminderTime |
+| R05 | A2/A4/A5/A6: exact Bỏ cancels only bound pending; next NEW works, no canonical cancellation |
+| R06 | A3/A4/A6: negated cancellation preserves facts, quoted note remains notes; destructive notes requires REPLACE/CLEAR current source |
+| R07 | A2/A3/A4/A6: CURRENT REPLACE09:00 preserves title/location/notes/count; revision/preview invalidation |
+| R08 | A3/A4/A5/A6: mixed yes+time correction never proof; new09:00 preview needs fresh bound confirmation |
+| R09 | A3/A4/A6: actual receipt-date lunar conversion, backend query facts, no capability-help misrouting |
+| R10 | A3/A4/A6: YEARLY unsupported, explicit alternative approval separate from replacement and save, no downgrade |
+| R11 | A2/A3/A4/A6: side query keeps reminder facts/version/TTL; CURRENT resume truthful, unresolved target clarifies |
+| R12 | A2/A3/A5/A6: original Sep28 receipt anchors tomorrow; replay no dispatch or mutation |
+| R13 | A2/A4/A5/A6: persisted cancellation/ordering defeats delayed edit; separate first-in-flight limitation |
+| R14 | A2/A4/A5/A6: current SAVE proof only; one transaction/child lineage; replay/read-back no duplicate send promise |
+| R15 | A1/A3/A5/A6: five deterministic failures remain explicit and distinct; actual TIMEOUT injection unchanged; isolated advisory-invalid case separate |
+| R16 | A3/A4/A6: shared lunar/solar converter and UI vector parity, no model arithmetic |
+
+I1/I2/I5/I6/I7/I8: A3/A4/A5/A6 actual-service controls. I3: A1/A2/A5
+metadata/ciphertext/protocol tests. I4/I9: A1/A3/A5 strict core/evidence and
+decode parity. I10: A1/A6 exhaustive nonoverlapping registry/schema walk.
+CO-A–F, D01–D10 and mandatory closure cases retain their original obligations;
+fresh labels alone cannot count as semantic proof. No acceptance expectation
+is weakened or held-out data used for tuning without replacement.
+
+| Discovered T11 class | Preventing task / observation |
+| --- | --- |
+| Model schemaVersion/protocol choice | A1/A2/A5 omitted generation tags, application descriptor, wrong-version rejection |
+| Inactive padding changes canonical state | A1/A5 exact active decode, discarded known padding, unknown-root/active errors fail |
+| Large finite enum/schema-state explosion | A1/A6 fewer redundant kinds/control domains, measured branch/domain bytes, separate real-route gate |
+| Wire/canonical finite-domain drift | A1/A6 16-code registry/parity, unsupported code/alternative fail before merge |
+| Unsupported LIST range authority | A3/A5 scoped source verifier, period-null clarify, zero read; mandatory fabricated refs hardreject |
+| Advisory ambiguity terminal rejection | A3/A4/A5 backend clarification from semantic uncertainty, retained facts even without prior draft |
+| Advisory continuation terminal rejection | A1 removes label; A3/A4 scoped semantic target and pending state own continuity |
+| Field only exists because canonical contains it | A1/A6 registry reason and transport projection excludes versions/statusScope/backend-only kinds |
+| Prefix reuse hides material semantic change | A6 new source-bound R01/R02, old evidence retained only historically |
+
+### Resume sequence and financial/release gates (future, not executed)
+
+Local full PASS → whole-amendment review PASS → immutable candidate freeze →
+material wire10 route/schema admission → R01 → R02 → remaining frozen pilot →
+pilot acceptance → separately admitted full → separately authorized release.
+The first production-shaped R01 semantic call can be its route canary and
+counts once as case1; do not add a sacrificial debug/calibration request.
+R01 historical PASS is not reusable acceptance under the changed semantics.
+
+Read-only financial audit supplied at planning checkpoint:
+
+| Account | Authorized microunits | Retained microunits | Unknown holds included in retained | Remaining |
+| --- | --- | --- | --- | --- |
+| PILOT | 1500000 | 1060966 | 1054720 | 439034 |
+| DIAGNOSTIC | 300000 | 269424 | 267181 | 30576 |
+| FULL | 1000000 | 0 | 0 | 1000000 |
+
+These are inspected historical charges/holds, not new spending. Before any
+future dispatch recompute every relevant append-only ledger hash chain, cap
+authority/source/config/corpus bindings, dispatched/settled/unknown reservations
+and remaining balance. New run/source cannot reset them; no account borrowing
+or optimistic release of unknown holds. At current105472 production-shaped
+reservation, PILOT remainder fits only four such reservations; this does not
+prove the full revised pilot fits. Diagnostics remainder is less than that
+reservation and is not production inference authority. Determine actual worst
+case for its specifically authorized diagnostic operation before admitting it;
+otherwise report budget block. FULL stays untouched until pilot PASS and its
+own current authorization/admission. Stop before exceeding cost/calls/deadline;
+no automatic cap increase or repeated T11 compatibility spending.
+
+Preserve original 32/80 executions, 192/480 call caps, 20/45-minute deadlines,
+retries0/no fallback, safety/mandatory failure stops and cumulative authorization.
+Official current price/route/ZDR/structured-schema metadata and isolated
+non-production credentials must be reverified before dispatch. Do not print
+secrets or use production authority in synthetic tests. A route failure stops
+before R02; an R01 failure stops before R02; R02 failure stops remaining pilot;
+pilot failure blocks full; full failure blocks release. New artifacts bind
+source, wire10/canonical3/prompt3/input2/state2, decoder/codebook1, scorer and
+all observed application outputs. Historical wire9 and ledgers remain immutable.
+
+Only after full live PASS may a separately authorized release reconcile
+quiescence/drain or explicit legacy pending expiry/restart, compatible immutable
+rollback, exact-head CI and reviewed master SHA, resource/migration preflight,
+remote mutations and upload-once/promotion of that exact Worker version. No
+numeric-family migration or activation is hidden in A1–A6. Worker rollback does
+not undo D1 or confirmed reminders; old reader cannot confirm successor data.
+After authorized release, fresh deployed read-back and controlled channel/UI
+acceptance remain distinct from offline/live-model gates.
+
+Future release execution checklist, only after full PASS and applicable owner
+authorization; none of these operations is authorized by this planning turn:
+
+- [ ] Run fresh read-only Git/runtime/security/resource preflight and migration review.
+- [ ] Apply only separately authorized pending migrations if required; verify state and forward-only rollback compatibility.
+- [ ] Push the reviewed feature normally and create its canonical feature-to-master PR.
+- [ ] Require all required remote CI checks to pass, then merge normally.
+- [ ] Record immutable resulting master SHA and obtain exact-master-SHA deployment authorization.
+- [ ] Record active rollback version, upload once from that master SHA, and promote that exact immutable Worker version.
+- [ ] Verify deployed infrastructure/configuration read-back and controlled production channel/UI UAT before declaring release readiness.
+
+### Planning self-review and stop
+
+Coverage: S §4.6.1–2→A1/A2; §4.6.3→A3/A4; §4.6.4→A4/A5;
+§4.6.5→A1/A5/A6; §4.6.6–7→A6; §4.6.8→A2/A5/release gates.
+Interfaces are owned above; no unspecified rename, new approval question or
+general-language backend classifier is needed. Concrete schema choice preserves
+unique semantic edit/target meaning and omits all advisory/control catchalls.
+No task has executed in this planning turn; named RED/GREEN commands are future
+implementation instructions. Do not mark A1–A6 accepted from static plan checks.
+
+NEXT_GATE=OWNER_REVIEW_OF_AUTHORITY_IMPLEMENTATION_PLAN.
+Stop after the local documentation commit. No runtime source/executable test
+change, LLM provider call, migration, push, PR, merge or deploy in this turn.

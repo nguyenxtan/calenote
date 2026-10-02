@@ -1,14 +1,18 @@
 # LLM-led conversation understanding with validated reminder objects
 
 Date: 2026-09-28
-Current targeted amendment (2026-10-01): **MODEL_OUTPUT_AUTHORITY_AMENDMENT / READY_FOR_OWNER_REVIEW**.
+Current targeted amendment (2026-10-01): **MODEL_OUTPUT_AUTHORITY_AMENDMENT / APPROVED**.
+Owner approved the written amendment at
+`904afe5a56d7f82530b44b07d775d6d3cc2467bf` for implementation planning.
+The canonical implementation plan's A1–A6 successor section is the pending
+execution document; approval of the spec does not authorize its implementation.
 The Model Output Authority Consolidation in §4.6 supersedes conflicting output
-ownership and generation-schema requirements below as a proposed successor.
+ownership and generation-schema requirements below as an approved successor design.
 It does not claim runtime implementation, renew T11 authority, or approve an
 implementation plan. Current source audit: `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`
 in `.worktrees/product-experience-v2`, initially clean. Historical approvals
 and accepted T0–T10 behavior remain intact; the next amendment gate is
-OWNER_REVIEW_OF_MODEL_OUTPUT_AUTHORITY_SPEC.
+OWNER_REVIEW_OF_AUTHORITY_IMPLEMENTATION_PLAN.
 Historical status (2026-09-28 planning): **WRITTEN_SPEC_APPROVED / IMPLEMENTATION_PLAN_PENDING_REVIEW**
 Approval reference: owner approved the exact specification at
 `e8f9e75f436a672b23387eb0054047da217ade23` on 2026-09-28 for implementation planning only.
@@ -616,8 +620,8 @@ exact clock, confirmation or schedule rule in accepted T3 is superseded.
 
 ### 4.6 Model Output Authority Consolidation (2026-10-01)
 
-This is a targeted architectural amendment for owner review, not an implemented
-contract or a detailed implementation plan. It preserves the original product
+This is an owner-approved targeted architectural amendment, not an implemented
+contract. Its implementation plan requires separate owner review. It preserves the original product
 expectations and accepted local T0–T10 behavior. Current source and frozen
 fixtures were inspected without provider calls or executable-test changes.
 
@@ -973,7 +977,8 @@ Non-goals: runtime/test/prompt changes, provider/model changes, extra wording
 calls, live provider spending, broad language parsing, migrations, push/PR/merge,
 deployment, new product features, detailed implementation planning or reopening
 accepted T0–T10 behavior. This amendment ends at owner review of the actual
-written specification.
+written specification; that gate has since passed, and planning now ends at
+OWNER_REVIEW_OF_AUTHORITY_IMPLEMENTATION_PLAN.
 
 ## 5. Deterministic resolution and merge
 
@@ -1985,7 +1990,7 @@ work, not optional new product categories.
 
 Historical post-T3 next gate was AMENDED_LOCAL_FIT_AND_INDEPENDENT_BUNDLE_REVIEW;
 that checkpoint is not the current authority amendment gate. Current next gate:
-OWNER_REVIEW_OF_MODEL_OUTPUT_AUTHORITY_SPEC. Do not write the implementation
-plan or implement the consolidation until the owner approves this written
-amendment. Earlier execution/acceptance evidence remains historical and intact;
+OWNER_REVIEW_OF_AUTHORITY_IMPLEMENTATION_PLAN. The owner has approved this
+written amendment for planning; do not implement until the written implementation
+plan is approved. Earlier execution/acceptance evidence remains historical and intact;
 deployment remains separately authorized under §9.5.
