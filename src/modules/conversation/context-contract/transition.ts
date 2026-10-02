@@ -1,11 +1,11 @@
-import { isValidatedPatch, isValidatedPatchV3, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
-import { mergePatch, mergePatchV3, type MergeResult, type MergeResultV3 } from "./merge";
+import { isLegacyV2ValidatedPatch as isValidatedPatch, isValidatedPatchV3, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
+import { mergeLegacyV2Patch as mergePatch, mergePatchV3, type MergeResult, type MergeResultV3 } from "./merge";
 import { resolveRequest, RESOLUTION_VERSION, type RequestResolution } from "./resolve";
 import { ContextSnapshotV1Schema, ContextSnapshotV2Schema, PendingDecisionSchema, PendingDecisionV2Schema, SlotsSchema, encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV1, type ContextSnapshotV2, type ControlAuthority, type PendingDecision, type SourceEvidence } from "./state";
 import type { StoredTransition, StoredTransitionV2, DecisionProof, CanonicalPreview } from "./store";
 import type { ControlSelection } from "./decisions";
 import { selectControl } from "./decisions";
-import { computeEffectiveDirective, computeEffectiveDirectiveV3, selectGuidance, type GuidanceSelection } from "./guidance";
+import { computeLegacyV2EffectiveDirective as computeEffectiveDirective, computeEffectiveDirectiveV3, selectGuidance, type GuidanceSelection } from "./guidance";
 import { composeContextReply, formatPendingFact, type ReplyOutcome, type ReadyReplyPlan, type FailureReason } from "./responses";
 import { resolveQuery, type ContextQueryResult, type QueryResolution } from "./query";
 import { digest, previewHash } from "./confirmation";
@@ -13,7 +13,7 @@ import { createControlProof } from "./control-proof";
 import { isPreviewRecoveryResponse, SAVE_APPROVAL_REPLIES } from "./preview-control";
 import { projectSemanticView } from "./projection";
 import { lunarCalendar } from "../lunar-calendar";
-import { SLOT_NAMES, SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
+import { SLOT_NAMES, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
 
 export interface TransitionInput {
   snapshot: ContextSnapshotV1 | null;
@@ -98,7 +98,7 @@ function candidateFromPatchV3(patch: ValidatedPatchV3, proposalId: string): Cand
   // answer cannot renew a pending proposal or its relative-date anchor.
   const original = patch.adoptedCandidate ? s.pendingSemanticCandidate : null;
   const createdAt = original?.createdAt ?? s.inbound.receivedAt;
-  return { proposalId, proposalRevision: original?.proposalRevision ?? 1, proposal: proposal.data, sourceEvidence: structuredClone(sources), evidenceIndex, createdAt, expiresAt: original?.expiresAt ?? new Date(Math.min(Date.parse(createdAt) + 600000, Date.parse(expiry(s)))).toISOString() };
+  return { proposalId, proposalRevision: original?.proposalRevision ?? 1, proposal: proposal.data, sourceEvidence: structuredClone(sources), evidenceIndex, createdAt, expiresAt: original?.expiresAt ?? new Date(Math.min(Date.parse(createdAt) + 600000, Date.parse(s.idleExpiresAt), Date.parse(s.absoluteExpiresAt))).toISOString() };
 }
 
 /** Successor state is never converted to context2. Decisions are constructed
@@ -204,10 +204,25 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
       if (merge.status === "REJECTED") return fail("SEMANTIC", merge.reason);
       s = structuredClone(merge.candidate); clearDecision(s);
       if (merge.status === "CLARIFY_OPERATION") {
-        const pending = merge.candidate.pendingSemanticCandidate, q = merge.candidate.pendingReminderQuestion;
-        if (!pending || !q || pending.questionId !== q.questionId) return fail("CONTEXT");
-        outboundId = q.questionId;
-        outcome = { kind: "QUESTION", field: "operation", question: q.text, facts: recap(s) };
+        const operation = patch.resolvedUncertainties[0];
+        const emptyCurrentOperation = !patch.adoptedCandidate && patch.requestTarget?.kind === "UNRESOLVED" && patch.resolvedChanges.length === 0
+          && patch.resolvedUncertainties.length === 1 && operation.field === "operation" && operation.reason === "AMBIGUOUS"
+          && operation.alternatives.length === 2 && ["CURRENT", "NEW"].every(value => operation.alternatives.some(a => a.value === value))
+          && patch.requestTargetEvidence.every(e => e.sourceTurnId === s.inbound.id)
+          && patch.alternativeEvidence.every(e => e.current);
+        if (emptyCurrentOperation && prior?.pendingDecision?.candidate) {
+          s = structuredClone(received); suspendSelectedOffer();
+          outcome = { kind: "NOTICE", notice: "AMBIGUOUS_TARGET" };
+        } else if (emptyCurrentOperation && prior?.requestId && !prior.pendingSemanticCandidate) {
+          // This asks only whether to resume A. Preserve its unrelated field/
+          // query questions and uncertainties; never adopt the empty meaning.
+          s = structuredClone(received); issue("RESUME_PENDING");
+        } else {
+          const pending = merge.candidate.pendingSemanticCandidate, q = merge.candidate.pendingReminderQuestion;
+          if (!pending || !q || pending.questionId !== q.questionId) return fail("CONTEXT");
+          outboundId = q.questionId;
+          outcome = { kind: "QUESTION", field: "operation", question: q.text, facts: recap(s) };
+        }
       } else if (merge.status === "NEEDS_REPLACEMENT") {
         const candidate = candidateFromPatchV3(merge.proposed, proposalId);
         if (!candidate) return fail("SEMANTIC", "CANDIDATE_EVIDENCE");
@@ -351,7 +366,7 @@ function effectiveSelected(semantic: ValidatedPatch | ValidatedPatchV3, candidat
   }
   return { kind: "BACKEND_ONLY" as const, reason: "FAILURE" as const };
 }
-export async function transitionConversation(input: TransitionInput): Promise<ConversationTransition> {
+export async function transitionLegacyV2Conversation(input: TransitionInput): Promise<ConversationTransition> {
   const result = await transitionSelected(input, false);
   if ("kind" in result) return result;
   const snapshot = ContextSnapshotV1Schema.safeParse(result.snapshot);

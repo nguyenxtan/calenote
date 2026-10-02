@@ -22,6 +22,31 @@ function snapshot() {
 const details = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung", notes: "giấy tờ", eventDate: "2026-10-11", eventTime: "08:00", calendarProvenance: { calendar: "GREGORIAN", sourceDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 11, month: 10, year: null, leapMonth: null }, provenance: { kind: "DERIVED_POLICY", policyVersion: "year-1", dependencies: ["eventDate"], referenceTime: at } }, resolutionVersion: "resolution-1" };
 
 describe("internal application state", () => {
+  it.each([
+    ["own lifetime beyond A", "2026-09-28T03:11:00.000Z", "2026-09-28T03:30:00.000Z", true],
+    ["own ten-minute limit", "2026-09-28T03:11:00.001Z", "2026-09-28T03:30:00.000Z", false],
+    ["context idle limit", "2026-09-28T03:11:00.000Z", "2026-09-28T03:05:00.000Z", false],
+  ])("fresh decision candidate obeys %s without renewing A", (_name, candidateExpiry, idleExpiry, valid) => {
+    const later = "2026-09-28T03:01:00.000Z";
+    const source = { kind: "USER_QUOTE", sourceTurnId: "turn", sourceMapTurnId: "turn", quote: "nhắc tôi", occurrence: 1, sourceSpan: { start: 0, end: 8 }, viewSpan: { start: 0, end: 8 }, normalizationVersion: "nfc-codepoint-v1" };
+    const value = { ...snapshot(), schemaVersion: "calenote-context-state-2", idleExpiresAt: idleExpiry, inbound: { id: "inbound", receivedAt: later, rowid: 2, claimMarker: "claim" }, pendingSemanticCandidate: null,
+      pendingDecision: { decisionId: "decision", kind: "REPLACE_PENDING", target: { ownerId: "owner", chatIdentityId: "identity", chatId: "chat", requestId: "request", proposalId: "proposal" }, questionId: "question", previewId: null, draftRevision: 1, contextRevision: 1, issuedAfterInbound: { receivedAt: later, rowid: 2 }, deliveryState: "SENT", expiresAt: expires, acceptedReplies: ["có"], replyReference: null, tokenHandle: null,
+        candidate: { proposalId: "proposal", proposalRevision: 1, sourceEvidence: [source], evidenceIndex: [], createdAt: later, expiresAt: candidateExpiry,
+          proposal: { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc tôi", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] } } } };
+    const parsed = stateCodec.ContextSnapshotV2Schema.safeParse(value);
+    expect(parsed.success).toBe(valid);
+    if (parsed.success) {
+      expect(parsed.data.draftExpiresAt).toBe(expires);
+      expect(parsed.data.pendingDecision?.expiresAt).toBe(expires);
+      expect(stateCodec.decodeContextSnapshotV2(stateCodec.encodeContextSnapshotV2(parsed.data))).toEqual(parsed.data);
+      const unresolved = { ...value, pendingDecision: null, pendingSemanticCandidate: { ...value.pendingDecision.candidate, baseContextRevision: 1, questionId: "operation-question",
+        proposal: { ...value.pendingDecision.candidate.proposal, requestTarget: { ...value.pendingDecision.candidate.proposal.requestTarget, kind: "UNRESOLVED" } } },
+        pendingReminderQuestion: { questionId: "operation-question", text: "Nhắc nào?", scope: "REMINDER", field: "operation", decisionKind: null, reason: "AMBIGUOUS", noProgressCount: 0, deliveryState: "SENT", issuedAfterOrder: { receivedAt: later, rowid: 2 } } };
+      // Same own/context-valid lifetime is invalid for an unresolved proposal
+      // retained alongside A, whose original03:10 expiry remains binding.
+      expect(stateCodec.ContextSnapshotV2Schema.safeParse(unresolved).success).toBe(false);
+    }
+  });
   it("state2_roundtrips_new_and_replace_candidates", () => {
     expect(stateCodec).toHaveProperty("ContextSnapshotV2Schema");
     expect(stateCodec).toHaveProperty("encodeContextSnapshotV2");

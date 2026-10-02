@@ -1,11 +1,46 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
 import { z } from "zod";
-import { ConversationInterpretationSchema, ConversationDirectiveSchema, IssueFieldSchema, UncertaintySchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
-import { UNCERTAINTY_FIELD_WIRE_CODE_V1, encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, ConversationDirectiveSchema, IssueFieldSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { UNCERTAINTY_FIELD_WIRE_CODE_V1, legacyV2EncodeGoogleLiteEuContext as encodeGoogleLiteEuContext, legacyV2GoogleLiteEuContextWireSchema as googleLiteEuContextWireSchema, legacyV2ParseGoogleLiteEuContextSections as parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
+import { createContextContractGateway } from "./semantic-gateway";
+import { buildContextInputV2 } from "../../../conversation/context-contract/context";
+import { chat, message, observation } from "../../../conversation/context-contract/context-test-fixtures";
+import { serializeContextRequest } from "../../../conversation/context-contract/wire";
+
+it("null advice is full-valid through strict canonical, advertised wire and both selected gateway paths", async () => {
+  const text = "nhắc đi thi", msg = message(text);
+  const built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+  if (built.status !== "READY") throw new Error(built.reason);
+  const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: text, occurrence: 1 }];
+  const raw = { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null };
+  expect(ConversationInterpretationV3Schema.safeParse(raw).success, "explicit absent advice must satisfy the full contract").toBe(true);
+  const encoded = encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(raw));
+  expect(successorValidator.safeParse(encoded).success).toBe(true);
+  expect(parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3)).toMatchObject({ status: "PARSED", value: { fullSchemaValid: true, directive: { status: "VALID", value: null }, reply: { status: "VALID", value: null } } });
+  const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+    primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+  const response = { status: 200, body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encoded) } }], usage: { cost: .0004, prompt_tokens: 2200, completion_tokens: 500 } }) };
+  const request = { model: config.primary.model, ...serializeContextRequest(built.input), provider: { only: [config.primary.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } };
+  const offline = createContextContractGateway(config, { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request), response, admission: { fullInputTokens: 2200, billableOverheadMicrounits: 0 } }] });
+  const observable = createContextContractGateway(config, async () => response, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+  for (const gateway of [offline, observable]) {
+    const attempt = gateway.prepare("PRIMARY", built.input); expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") throw new Error(attempt.category);
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true, directive: { status: "VALID", value: null }, semantic: { changes: [{ field: "title", operation: "SET", value: "đi thi" }] } } });
+  }
+  const wire = encoded as Record<string, unknown>;
+  for (const advice of [undefined, { kind: "UNKNOWN" }, { kind: "HELP", topic: "GENERAL", extra: true }, { kind: "PRESENT_PREVIEW" }]) {
+    const changed = { ...wire, conversationDirective: advice };
+    if (advice === undefined) delete changed.conversationDirective;
+    expect(parseGoogleLiteEuContextSectionsV3(changed, CONTEXT_PROTOCOL_V3)).toMatchObject({ status: "PARSED", value: { fullSchemaValid: false, directive: { status: "INVALID" }, reply: { status: "VALID", value: null } } });
+  }
+  expect(parseGoogleLiteEuContextSectionsV3({ ...wire, replyProposal: { text: "valid independent words", extra: true } }, CONTEXT_PROTOCOL_V3)).toMatchObject({ status: "PARSED", value: { fullSchemaValid: false, directive: { status: "VALID", value: null }, reply: { status: "INVALID" } } });
+  expect(parseGoogleLiteEuContextSectionsV3({ ...wire, extra: true }, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
 
 // Validate the actual publicly emitted JSON Schema with an independent public
 // JSON-Schema consumer, rather than reconstructing the producer's predicates.

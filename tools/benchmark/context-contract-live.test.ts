@@ -1,10 +1,138 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, realpathSync, symlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { admitFutureLiveIntent, appendCampaignEvent, computeContextSourceFreeze, finishCampaignCall, markCampaignDispatched, preflightContextCampaign, readCampaignLedger, reserveCampaignCall } from "./context-contract-live";
+import { admitHistoricalV2IntentReference as admitFutureLiveIntent, appendCampaignEvent, computeContextSourceFreeze, finishCampaignCall, markCampaignDispatched, preflightContextCampaign, readCampaignLedger, reserveCampaignCall } from "./context-contract-live";
 import * as live from "./context-contract-live";
+
+function trustedAccount(count = 2, maximum = 500, account: "PILOT" | "FULL" = "PILOT") {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "context-trusted-account-"))), old = join(root, "old", account), target = join(root, "fresh", "PILOT");
+  mkdirSync(old, { recursive: true }); mkdirSync(target, { recursive: true });
+  const provenanceDigest = "b".repeat(64);
+  appendCampaignEvent(old, { event: "BEGIN", runId: "old", sourceSha: "a".repeat(40), profile: account, provenanceDigest,
+    cumulativeAuthorizedMicrounits: 2500000, cumulativeRetainedMicrounits: 1000, startedAt: 0 });
+  for (let i = 0; i < count; i++) {
+    reserveCampaignCall(old, { runId: "old", profile: account, provenanceDigest, reservationId: `old-${i}`, maximumMicrounits: maximum, now: i + 1, startedAt: 0 });
+    if (count === 2 && i === 1) { markCampaignDispatched(old, { runId: "old", reservationId: `old-${i}`, at: i + 1 }); finishCampaignCall(old, { runId: "old", reservationId: `old-${i}`, at: i + 1, observedMicrounits: 7 }); }
+  }
+  const preflight = preflightContextCampaign({ root: process.cwd() });
+  const record = { version: "context-contract-live-3", method: "OBSERVABLE_CANARY", authorizationId: "synthetic-reviewed-owner", account: "PILOT",
+    sourceSha: preflight.sourceSha, provenanceDigest: preflight.provenanceDigest, protocolDigest: preflight.protocolDigest, corpusDigest: preflight.corpusDigest,
+    runId: "fresh", approvedAt: 1, startedAt: 2, expiresAt: 2000000,
+    priorLedgers: [{ directory: old, finalHash: readCampaignLedger(old).at(-1)!.hash }], pilotLedger: null };
+  const authorizationPath = join(root, "owner.json");
+  const pin = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const load = (value: unknown = record) => { writeFileSync(authorizationPath, JSON.stringify(value)); return live.createCampaignAuthorizationLoader({ reviewedOwnerRecordSha256: pin(value), accountRoot: root }).load(value, target); };
+  const intent = { root: process.cwd(), enableLive: true, authorizationPath, profile: "PILOT" as const, runId: "fresh", now: 3 };
+  return { root, old, target, record, intent, load, pin };
+}
+
+it("trusted fresh account derives UNKNOWN, known costs and calls without counting inherited BEGIN debt", () => {
+  const f = trustedAccount();
+  try {
+    const capability = f.load(), admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: capability });
+    expect(admitted).toMatchObject({ cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 507, historicalCalls: 2, historicalUnknownReservations: 1, startedAt: 2 });
+    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", observableAdmission: true, expiresAt: 1200002 });
+    expect(reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest,
+      reservationId: "first", maximumMicrounits: 100, now: 3, startedAt: 2 })).toMatchObject({ status: "RESERVED" });
+    expect(() => reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest,
+      reservationId: "reset-clock", maximumMicrounits: 1, now: 3, startedAt: 3 })).toThrow("CLOCK_ORIGIN_CHANGED");
+    reserveCampaignCall(f.old, { runId: "old", profile: "PILOT", provenanceDigest: "b".repeat(64), reservationId: "late", maximumMicrounits: 1, now: 4, startedAt: 0 });
+    expect(() => reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest,
+      reservationId: "inventory-changed", maximumMicrounits: 1, now: 4, startedAt: 2 })).toThrow("PRIOR_LEDGER_BINDING");
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each(["omitted", "duplicate", "alias", "foreign-profile", "pin", "forged-capability", "corpus", "protocol", "deadline"])("trusted admission fails closed for %s", mode => {
+  const f = trustedAccount(2, 500, mode === "foreign-profile" ? "FULL" : "PILOT");
+  try {
+    if (mode === "omitted") expect(() => f.load({ ...f.record, priorLedgers: [] })).toThrow("PRIOR_LEDGER_INVENTORY");
+    else if (mode === "duplicate") expect(() => f.load({ ...f.record, priorLedgers: [...f.record.priorLedgers, ...f.record.priorLedgers] })).toThrow("PRIOR_LEDGER_ALIAS");
+    else if (mode === "alias") { symlinkSync(f.old, join(f.root, "alias")); expect(() => f.load()).toThrow("PRIOR_LEDGER_ALIAS"); }
+    else if (mode === "foreign-profile") expect(() => f.load()).toThrow("PRIOR_LEDGER_BINDING");
+    else if (mode === "pin") expect(() => live.createCampaignAuthorizationLoader({ reviewedOwnerRecordSha256: "a".repeat(64), accountRoot: f.root }).load(f.record, f.target)).toThrow("OWNER_AUTHORIZATION_MISMATCH");
+    else if (mode === "forged-capability") expect(() => live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: {} as live.CampaignAuthorization })).toThrow("AUTHORIZATION_NOT_CONFIGURED");
+    else {
+      const record = { ...f.record, ...(mode === "corpus" ? { corpusDigest: "0".repeat(64) } : mode === "protocol" ? { protocolDigest: "0".repeat(64) } : {}) };
+      const capability = f.load(record);
+      expect(() => live.admitFutureLiveIntent({ ...f.intent, now: mode === "deadline" ? 1200002 : 3, authorizationCapability: capability })).toThrow("AUTHORIZATION_MISMATCH");
+    }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("historical account reservations cannot reset the 192-call ceiling", () => {
+  const f = trustedAccount(191, 1);
+  try {
+    const admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.load() });
+    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", expiresAt: 1200002 });
+    const reserve = (reservationId: string) => reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest, reservationId, maximumMicrounits: 1, now: 3, startedAt: 2 });
+    expect(reserve("192").status).toBe("RESERVED"); expect(reserve("193")).toMatchObject({ status: "STOPPED", reason: "TIME_OR_CALL_CAP" });
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("trusted retained costs consume the same account cap in a fresh attempt", () => {
+  const f = trustedAccount(1, 1499000);
+  try {
+    const admitted = live.admitFutureLiveIntent({ ...f.intent, authorizationCapability: f.load() });
+    appendCampaignEvent(f.target, { ...admitted, event: "BEGIN", expiresAt: 1200002 });
+    expect(reserveCampaignCall(f.target, { runId: "fresh", profile: "PILOT", provenanceDigest: admitted.provenanceDigest,
+      reservationId: "over-cap", maximumMicrounits: 1001, now: 3, startedAt: 2 })).toMatchObject({ status: "STOPPED", reason: "COST_CAP" });
+    expect(readCampaignLedger(f.target).filter(r => r.event === "RESERVE")).toHaveLength(0);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it.each(["duplicate-dispatch", "finish-without-dispatch", "foreign-provenance", "dispatch-clock"])("malformed historical %s cannot release UNKNOWN authority even with a valid hash chain", mode => {
+  const f = trustedAccount();
+  try {
+    const rows = JSON.parse(JSON.stringify(readCampaignLedger(f.old))) as Array<Record<string, unknown>>;
+    const dispatch = rows.find(row => row.event === "DISPATCH")!;
+    if (mode === "duplicate-dispatch") rows.splice(rows.indexOf(dispatch) + 1, 0, { ...dispatch });
+    else if (mode === "finish-without-dispatch") rows.splice(rows.indexOf(dispatch), 1);
+    else if (mode === "foreign-provenance") rows.find(row => row.event === "RESERVE")!.provenanceDigest = "c".repeat(64);
+    else dispatch.at = -1;
+    let previousHash = "0".repeat(64);
+    const rebound = rows.map((row, i) => {
+      const event = { ...row }; delete event.hash; delete event.sequence; delete event.previousHash;
+      const body = { ...event, sequence: i + 1, previousHash }, hash = f.pin(body); previousHash = hash; return { ...body, hash };
+    });
+    writeFileSync(join(f.old, "campaign.jsonl"), rebound.map(row => JSON.stringify(row)).join("\n") + "\n");
+    const record = { ...f.record, priorLedgers: [{ directory: f.old, finalHash: previousHash }] };
+    expect(() => f.load(record)).toThrow("PRIOR_LEDGER_BINDING");
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("mixed profile namespace cannot masquerade as a reviewed account-specific root", () => {
+  const f = trustedAccount();
+  try {
+    const other = join(f.root, "foreign", "FULL"); mkdirSync(other, { recursive: true });
+    appendCampaignEvent(other, { event: "BEGIN", runId: "foreign", sourceSha: "a".repeat(40), profile: "FULL", provenanceDigest: "b".repeat(64),
+      cumulativeAuthorizedMicrounits: 1000000, cumulativeRetainedMicrounits: 0, startedAt: 0 });
+    expect(() => f.load({ ...f.record, priorLedgers: [...f.record.priorLedgers, { directory: other, finalHash: readCampaignLedger(other).at(-1)!.hash }] })).toThrow("PRIOR_LEDGER_BINDING");
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+it("revised_heldout_data_requires_replacement without modifying original corpus or denominator", () => {
+  const manifests = ["regressions", "development", "heldout"].map(name => JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`, "utf8")));
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), manifests)).not.toThrow();
+  const revised = structuredClone(manifests); revised[2].cases[0].turns[0].text += " changed";
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), revised)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
+  const changedOracle = structuredClone(manifests); changedOracle[0].cases[0].turns[0].expect.mutations = 1;
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), changedOracle)).toThrow("FROZEN_ORACLES_CHANGED");
+});
+
+it("fresh_run_cannot_reset_budget_or_unknown_reservations without trusted owner authority", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-untrusted-fresh-"));
+  try {
+    const preflight = preflightContextCampaign({ root: process.cwd() });
+    const authorizationPath = join(dir, "authorization.json");
+    writeFileSync(authorizationPath, JSON.stringify({ version: "context-contract-live-2", method: "OBSERVABLE_CANARY", campaignRoot: dir, pilotLedgerHash: null,
+      sourceSha: preflight.sourceSha, provenanceDigest: preflight.provenanceDigest, profile: "PILOT", runId: "fresh", approvedAt: 1, expiresAt: 1000,
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0 }));
+    expect(() => live.admitFutureLiveIntent({ root: process.cwd(), enableLive: true, authorizationPath, profile: "PILOT", runId: "fresh", now: 2 })).toThrow("AUTHORIZATION_NOT_CONFIGURED");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 it("prior one-dollar pilot authority retains its own lower boundary after the cap amendment", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-amended-pilot-"));

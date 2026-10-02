@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildContextInput } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
 import * as contextBuilder from "./context";
 import { at, chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
-import { serializeContextRequest } from "./wire";
+import { serializeLegacyV2ContextRequestReference as serializeContextRequest } from "./wire";
 import { ContextSnapshotV1Schema, encodeContextSnapshot } from "./state";
 import { ContextSnapshotV2Schema, encodeContextSnapshotV2 } from "./state";
 

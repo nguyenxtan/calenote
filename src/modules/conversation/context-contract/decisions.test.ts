@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { confirmationFixture } from "./confirmation-test-support";
 import { selectControl } from "./decisions";
-import { transitionConversation, type ConversationTransition } from "./transition";
+import { transitionLegacyV2Conversation as transitionConversation, type ConversationTransition } from "./transition";
 import { date, now, patch, time } from "./resolution-test-support";
 import { ContextSnapshotV1Schema, type ContextSnapshotV1, type ControlAuthority } from "./state";
 import { validDecision, validateConfirmation } from "./confirmation";
 import { encodeContextSnapshot } from "./state";
 import { turn } from "./context-test-fixtures";
-import { buildContextInput } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
 import { chat, message, observation } from "./context-test-fixtures";
-import { validateEvidence, validateGuidancePrivacy } from "./evidence";
-import { parseInterpretationSections } from "./contracts";
-import { mergePatch } from "./merge";
+import { validateLegacyV2Evidence as validateEvidence, validateGuidancePrivacy } from "./evidence";
+import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
+import { mergeLegacyV2Patch as mergePatch } from "./merge";
 import { resolveRequest } from "./resolve";
 import { lunarCalendar } from "../lunar-calendar";
-import { computeEffectiveDirective, selectGuidance, validateDirective } from "./guidance";
+import { computeLegacyV2EffectiveDirective as computeEffectiveDirective, selectGuidance, validateLegacyV2Directive as validateDirective } from "./guidance";
 
 function stored(result: ConversationTransition) {
   if ("kind" in result) throw new Error(`expected stored transition: ${result.reason}`);

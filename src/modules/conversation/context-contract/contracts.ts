@@ -37,11 +37,11 @@ const values = SlotValueSchemas;
 function setBranch<K extends keyof typeof values>(field: K) {
   return z.strictObject({ field: z.literal(field), operation: z.literal("SET"), value: values[field], evidence });
 }
-export const FieldChangeSchema = z.union([
+export const LegacyV2FieldChangeSchema = z.union([
   setBranch("title"), setBranch("location"), setBranch("notes"), setBranch("eventDate"), setBranch("eventTime"), setBranch("reminderDate"), setBranch("reminderTime"), setBranch("calendar"), setBranch("frequency"), setBranch("occurrenceCount"), setBranch("eventRelation"), setBranch("leadOffsetDays"), setBranch("endDate"),
   z.strictObject({ field: SlotNameSchema, operation: z.literal("CLEAR"), value: z.null(), evidence }),
 ]);
-export type FieldChange = z.infer<typeof FieldChangeSchema>;
+export type LegacyV2FieldChange = z.infer<typeof LegacyV2FieldChangeSchema>;
 export const QueryPeriodSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("DAY"), date: DateOperandSchema.nullable() }),
   z.strictObject({ kind: z.enum(["WEEK", "MONTH", "WEEKEND"]), offset: z.union([z.literal(-1), z.literal(0), z.literal(1)]) }),
@@ -61,16 +61,16 @@ const reason = z.enum(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINAT
 // Typed possible values with grounding; never free-form model prose.
 const alternative = <T extends z.ZodType>(value: T) => z.strictObject({ value, evidence });
 function slotUncertainty<K extends keyof typeof values>(field: K) { return z.strictObject({ field: z.literal(field), reason, alternatives: z.array(z.strictObject({ value: values[field], evidence })).max(2) }); }
-export const UncertaintySchema = z.union([
+export const LegacyV2UncertaintySchema = z.union([
   slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"),
   z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
   z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
   z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(DialogueActSchema)).max(2) }),
 ]);
-export const SemanticPatchProposalSchema = z.strictObject({
+export const LegacyV2SemanticPatchProposalSchema = z.strictObject({
   schemaVersion: z.literal("calenote-context-2"), intent: IntentSchema, dialogueAct: DialogueActSchema,
-  continuation: z.enum(["YES", "NO", "UNCERTAIN"]), changes: z.array(FieldChangeSchema).max(13),
-  query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintySchema).max(4), controlEvidence: z.array(EvidenceRefSchema).max(3),
+  continuation: z.enum(["YES", "NO", "UNCERTAIN"]), changes: z.array(LegacyV2FieldChangeSchema).max(13),
+  query: QueryOperandSchema.nullable(), uncertainties: z.array(LegacyV2UncertaintySchema).max(4), controlEvidence: z.array(EvidenceRefSchema).max(3),
 }).superRefine((v, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: "custom", message });
   if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("Duplicate field rejects whole patch");
@@ -82,7 +82,7 @@ export const SemanticPatchProposalSchema = z.strictObject({
   if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
   if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || !v.controlEvidence.some(e => e.kind === "USER_QUOTE"))) fail("Combined actions must be ambiguous and grounded without executable changes");
 });
-export type SemanticPatchProposal = z.infer<typeof SemanticPatchProposalSchema>;
+export type LegacyV2SemanticPatchProposal = z.infer<typeof LegacyV2SemanticPatchProposalSchema>;
 export const ConversationDirectiveSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("ASK_FOR_FIELD"), field: IssueFieldSchema }),
   z.strictObject({ kind: z.literal("ASK_FOR_DISAMBIGUATION"), field: IssueFieldSchema, reason: z.enum(["AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]) }),
@@ -94,23 +94,23 @@ export const ConversationDirectiveSchema = z.discriminatedUnion("kind", [
 export type ConversationDirective = z.infer<typeof ConversationDirectiveSchema>;
 export const ReplyProposalSchema = z.strictObject({ text: nfcText(400) }).nullable();
 export type ReplyProposal = z.infer<typeof ReplyProposalSchema>;
-export const ConversationInterpretationSchema = SemanticPatchProposalSchema.safeExtend({ conversationDirective: ConversationDirectiveSchema, replyProposal: ReplyProposalSchema });
-export type ConversationInterpretation = z.infer<typeof ConversationInterpretationSchema>;
-export type ParsedInterpretation = {
-  semantic: SemanticPatchProposal;
+export const LegacyV2ConversationInterpretationSchema = LegacyV2SemanticPatchProposalSchema.safeExtend({ conversationDirective: ConversationDirectiveSchema, replyProposal: ReplyProposalSchema });
+export type LegacyV2ConversationInterpretation = z.infer<typeof LegacyV2ConversationInterpretationSchema>;
+export type LegacyV2ParsedInterpretation = {
+  semantic: LegacyV2SemanticPatchProposal;
   directive: { status: "VALID"; value: ConversationDirective } | { status: "INVALID" };
   reply: { status: "VALID"; value: ReplyProposal } | { status: "INVALID"; reason: "REPLY_INVALID" | "REPLY_TOO_LONG" };
   fullSchemaValid: boolean;
 };
-export type InterpretationSections = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: ParsedInterpretation };
+export type LegacyV2InterpretationSections = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: LegacyV2ParsedInterpretation };
 /** Accept a fully decoded JSON object only. The transport still owns raw-body
  * byte/finish-reason checks. Quarantine exactly the two guidance properties. */
-export function parseInterpretationSections(raw: unknown, observeInvalid?: (value: CanonicalValidationDiagnostics) => void): InterpretationSections {
-  const full = ConversationInterpretationSchema.safeParse(raw);
+export function LegacyV2parseInterpretationSections(raw: unknown, observeInvalid?: (value: CanonicalValidationDiagnostics) => void): LegacyV2InterpretationSections {
+  const full = LegacyV2ConversationInterpretationSchema.safeParse(raw);
   if (!full.success) observeInvalid?.(projectCanonicalValidation(raw, full.error.issues));
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   const { conversationDirective, replyProposal, ...core } = raw as Record<string, unknown>;
-  const semantic = SemanticPatchProposalSchema.safeParse(core);
+  const semantic = LegacyV2SemanticPatchProposalSchema.safeParse(core);
   if (!semantic.success) return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   const directive = ConversationDirectiveSchema.safeParse(conversationDirective);
   const reply = ReplyProposalSchema.safeParse(replyProposal);
@@ -141,7 +141,7 @@ const slot = <T extends z.ZodType>(value: T) => z.strictObject({ state: z.enum([
   const v = "value" in s ? s.value : undefined;
   return s.state === "MISSING" ? v === null && s.fact === null : s.state !== "RESOLVED" || (v !== null && s.fact !== null);
 }, "Slot state/value/fact mismatch");
-export const ContextInputSchema = z.strictObject({
+export const LegacyV2ContextInputSchema = z.strictObject({
   schemaVersion: z.literal("calenote-context-input-1"),
   reference: z.strictObject({ instant: z.iso.datetime(), localDate: z.iso.date(), timezone: z.literal("Asia/Ho_Chi_Minh") }),
   turns: z.array(z.strictObject({ role: z.enum(["USER", "ASSISTANT"]), text: z.string().refine(s => s.isWellFormed() && s === s.normalize("NFC"), "NFC scalar semantic view required") })).min(1).max(12), currentTurn: z.number().int().min(0).max(11),
@@ -150,16 +150,16 @@ export const ContextInputSchema = z.strictObject({
   }) }).nullable(),
   facts: z.array(contextFactSchema({})).max(26),
   pendingQuestion: z.strictObject({ text: nfcText(2000), scope: z.enum(["REMINDER", "QUERY"]), field: IssueFieldSchema, decisionKind: z.enum(["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"]).nullable(), reason }).nullable(),
-  ambiguities: z.array(UncertaintySchema).max(4),
+  ambiguities: z.array(LegacyV2UncertaintySchema).max(4),
   capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(5), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
 }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", message: "Invalid current turn or role bounds" });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", message: "Duplicate fact alias" });
 });
-export type ContextInput = z.infer<typeof ContextInputSchema>;
+export type LegacyV2ContextInput = z.infer<typeof LegacyV2ContextInputSchema>;
 // Reused definitions retain every branch. Semantic refinements are local gates,
 // not proof that a provider enforces them or supports this entire schema dialect.
-export const InterpretationJsonSchema = z.toJSONSchema(ConversationInterpretationSchema, { target: "draft-07", reused: "ref" });
+export const LegacyV2InterpretationJsonSchema = z.toJSONSchema(LegacyV2ConversationInterpretationSchema, { target: "draft-07", reused: "ref" });
 
 /** Authority-consolidated successor. Kept dormant alongside context-2 until A5. */
 export const RequestTargetV3Schema = z.strictObject({ kind: z.enum(["CURRENT", "NEW", "UNRESOLVED"]), evidence });
@@ -200,18 +200,21 @@ export const SemanticPatchProposalV3Schema = z.strictObject({
   if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("Combined actions must be ambiguous and grounded without executable changes");
 });
 export type SemanticPatchProposalV3 = z.infer<typeof SemanticPatchProposalV3Schema>;
-export const ModelDirectiveV3Schema = z.discriminatedUnion("kind", [ConversationDirectiveSchema.options[0], ConversationDirectiveSchema.options[1], ConversationDirectiveSchema.options[2], ConversationDirectiveSchema.options[3]]);
+// Null is explicit absence of advice, not an inferred model directive.
+export const ModelDirectiveV3Schema = z.discriminatedUnion("kind", [ConversationDirectiveSchema.options[0], ConversationDirectiveSchema.options[1], ConversationDirectiveSchema.options[2], ConversationDirectiveSchema.options[3]]).nullable();
 export type ModelDirectiveV3 = z.infer<typeof ModelDirectiveV3Schema>;
 export const ConversationInterpretationV3Schema = SemanticPatchProposalV3Schema.safeExtend({ conversationDirective: ModelDirectiveV3Schema, replyProposal: ReplyProposalSchema });
 export type ConversationInterpretationV3 = z.infer<typeof ConversationInterpretationV3Schema>;
 export type ParsedInterpretationV3 = {
   semantic: SemanticPatchProposalV3;
   directive: { status: "VALID"; value: ModelDirectiveV3 } | { status: "INVALID" };
-  reply: ParsedInterpretation["reply"];
+  reply: LegacyV2ParsedInterpretation["reply"];
   fullSchemaValid: boolean;
 };
 export type InterpretationSectionsV3 = { status: "REFUSED"; reason: "ENVELOPE_INVALID" | "SEMANTIC_PATCH_INVALID" } | { status: "PARSED"; value: ParsedInterpretationV3 };
-export function parseInterpretationSectionsV3(raw: unknown): InterpretationSectionsV3 {
+export function parseInterpretationSectionsV3(raw: unknown, observeInvalid?: (value: CanonicalValidationDiagnostics) => void): InterpretationSectionsV3 {
+  const full = ConversationInterpretationV3Schema.safeParse(raw);
+  if (!full.success) observeInvalid?.(projectCanonicalValidation(raw, full.error.issues, "calenote-context-3"));
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   const { conversationDirective, replyProposal, ...core } = raw as Record<string, unknown>;
   const semantic = SemanticPatchProposalV3Schema.safeParse(core);
@@ -221,12 +224,27 @@ export function parseInterpretationSectionsV3(raw: unknown): InterpretationSecti
   return { status: "PARSED", value: { semantic: semantic.data,
     directive: directive.success ? { status: "VALID", value: directive.data } : { status: "INVALID" },
     reply: reply.success ? { status: "VALID", value: reply.data } : { status: "INVALID", reason: typeof text === "string" && [...text].length > 400 ? "REPLY_TOO_LONG" : "REPLY_INVALID" },
-    fullSchemaValid: ConversationInterpretationV3Schema.safeParse(raw).success,
+    fullSchemaValid: full.success,
   } };
 }
-export const ContextInputV2Schema = z.strictObject({ ...ContextInputSchema.shape, schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
+export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape, schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", message: "Invalid current turn or role bounds" });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", message: "Duplicate fact alias" });
 });
 export type ContextInputV2 = z.infer<typeof ContextInputV2Schema>;
 export const InterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema, { target: "draft-07", reused: "ref" });
+
+// Application-selected successor aliases. LegacyV2 exports are isolated reference codecs.
+export const FieldChangeSchema = FieldChangeV3Schema;
+export type FieldChange = FieldChangeV3;
+export const UncertaintySchema = UncertaintyV3Schema;
+export const SemanticPatchProposalSchema = SemanticPatchProposalV3Schema;
+export type SemanticPatchProposal = SemanticPatchProposalV3;
+export const ConversationInterpretationSchema = ConversationInterpretationV3Schema;
+export type ConversationInterpretation = ConversationInterpretationV3;
+export type ParsedInterpretation = ParsedInterpretationV3;
+export type InterpretationSections = InterpretationSectionsV3;
+export const ContextInputSchema = ContextInputV2Schema;
+export type ContextInput = ContextInputV2;
+export const InterpretationJsonSchema = InterpretationJsonSchemaV3;
+export const parseInterpretationSections = parseInterpretationSectionsV3;

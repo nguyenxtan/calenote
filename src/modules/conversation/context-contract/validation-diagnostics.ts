@@ -1,21 +1,21 @@
 import type { z } from "zod";
 
-const keys = new Set("schemaVersion intent dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
-const rootKeys = new Set("schemaVersion intent dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
+const keys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
+const rootKeys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
 export interface CanonicalValidationIssue {
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
 }
 export interface CanonicalValidationDiagnostics {
-  schemaVersion: "calenote-context-2"; issues: CanonicalValidationIssue[];
+  schemaVersion: "calenote-context-2" | "calenote-context-3"; issues: CanonicalValidationIssue[];
   topLevelKeys: string[]; unknownTopLevelKeyCount: number; truncated: boolean;
 }
 const jsonType = (value: unknown) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? "object" : types.has(typeof value) ? typeof value : "non_json";
 /** Zod issues are untrusted: never copy messages, literals, inputs or unknown
  * names. Visit only bounded issue lists and bounded paths, never payload trees. */
-export function projectCanonicalValidation(raw: unknown, issues: readonly z.core.$ZodIssue[]): CanonicalValidationDiagnostics {
-  const result: CanonicalValidationDiagnostics = { schemaVersion: "calenote-context-2", issues: [], topLevelKeys: [], unknownTopLevelKeyCount: 0, truncated: false };
+export function projectCanonicalValidation(raw: unknown, issues: readonly z.core.$ZodIssue[], schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2"): CanonicalValidationDiagnostics {
+  const result: CanonicalValidationDiagnostics = { schemaVersion, issues: [], topLevelKeys: [], unknownTopLevelKeyCount: 0, truncated: false };
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     for (const key of Object.keys(raw)) {
       if (rootKeys.has(key)) result.topLevelKeys.push(key);
@@ -51,8 +51,8 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
   };
   visit(issues, 0); return result;
 }
-export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number): CanonicalValidationDiagnostics {
-  const result = projectCanonicalValidation(raw, [{ code: "custom", path, message: "" }]);
+export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2"): CanonicalValidationDiagnostics {
+  const result = projectCanonicalValidation(raw, [{ code: "custom", path, message: "" }], schemaVersion);
   result.issues[0].code = "WIRE_SHAPE_INVALID";
   if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";

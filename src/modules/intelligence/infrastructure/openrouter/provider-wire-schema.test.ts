@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
-import { InterpretationJsonSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2parseInterpretationSections as parseInterpretationSections } from "../../../conversation/context-contract/contracts";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 
 it("translates schema namespaces and local pointers while preserving property names and literal data", () => {

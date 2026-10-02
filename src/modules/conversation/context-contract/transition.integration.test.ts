@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { afterEach, expect, it } from "vitest";
 import { fixture } from "./infrastructure/d1/test-support";
-import { buildContextInput } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
 import { chat, message } from "./context-test-fixtures";
-import { validateEvidence } from "./evidence";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { selectControl } from "./decisions";
-import { transitionConversation, type ConversationTransition } from "./transition";
+import { transitionLegacyV2Conversation as transitionConversation, type ConversationTransition } from "./transition";
 import type { ContextSnapshotV1 } from "./state";
 import { date, time } from "./resolution-test-support";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
@@ -60,6 +60,38 @@ async function setupSuccessor() {
   };
   return { f, store, read, semantic, persist, control };
 }
+
+it("sole grounded A resumes without dropping an unrelated retained field conflict", async () => {
+  const h = await setupSuccessor(), first = await h.semantic(0, complete); await h.persist(first.turn, first.result);
+  const conflict = await h.semantic(1, { title: "gọi mẹ" }, "CURRENT"); await h.persist(conflict.turn, conflict.result);
+  const turn = await h.read(2, "Xử lý yêu cầu này thế nào?"), before = turn.observed.snapshot!;
+  const evidence = [{ kind: "USER_QUOTE", turn: turn.built.input.currentTurn, quote: "Xử lý yêu cầu này thế nào?", occurrence: 1 }];
+  const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "AMBIGUOUS", requestTarget: { kind: "UNRESOLVED", evidence }, changes: [], query: null, uncertainties: [{ field: "operation", reason: "AMBIGUOUS", alternatives: ["CURRENT", "NEW"].map(value => ({ value, evidence })) }] });
+  const checked = validateEvidenceV3(proposal, turn.built); if (checked.status !== "VALID") throw new Error(checked.reason);
+  const result = await successorTransition.transitionConversationV3({ snapshot: before, interpretation: checked.patch, control: { kind: "NONE" }, now: turn.scope.now, channel: "TELEGRAM" });
+  const resumed = await h.persist(turn, result);
+  expect(resumed.snapshot.pendingDecision?.kind).toBe("RESUME_PENDING");
+  expect(resumed.snapshot.slots).toEqual(before.slots); expect(resumed.snapshot.ambiguities).toEqual(before.ambiguities);
+  expect(resumed.snapshot.pendingReminderQuestion).toEqual(before.pendingReminderQuestion);
+  expect(resumed.snapshot.draftExpiresAt).toBe(before.draftExpiresAt); expect(resumed.preview).toBeNull();
+  const approval = await h.control(3, "Có.");
+  if ("kind" in approval.result) throw new Error("non-saving resume");
+  expect(approval.result.preview).toBeNull(); expect(approval.result.snapshot.pendingReminderQuestion?.field).toBe("title");
+  expect(approval.result.snapshot.ambiguities).toEqual(before.ambiguities);
+  const sent = approval.turn.observed.snapshot!;
+  const stale = await successorTransition.transitionConversationV3({ snapshot: sent, received: approval.turn.built.candidateSnapshot, control: selectControl("Có.", sent.pendingDecision, approval.authority, { snapshot: sent, now: approval.turn.scope.now }), authority: { kind: "CHAT", scope: h.f.scope(4) }, now: approval.turn.scope.now, channel: "TELEGRAM" });
+  expect(stale).toMatchObject({ kind: "REPLY_ONLY", reason: "STALE" });
+  expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
+
+it.each(["ONCE", "YEARLY"] as const)("fresh %s replacement candidate retains its own minute-later expiry", async frequency => {
+  const h = await setupSuccessor(), first = await h.semantic(0, complete); const a = await h.persist(first.turn, first.result);
+  const next = await h.semantic(1, { ...complete, title: "gọi mẹ", frequency }, "NEW", "SET", undefined, "nhắc gọi mẹ 2026 8h hằng năm", h.f.scope(0).now + 60000);
+  const offered = await h.persist(next.turn, next.result);
+  expect(offered.snapshot.slots).toEqual(a.snapshot.slots); expect(offered.snapshot.draftExpiresAt).toBe("2026-09-28T03:10:00.000Z");
+  expect(offered.snapshot.pendingDecision?.candidate).toMatchObject({ createdAt: "2026-09-28T03:01:00.000Z", expiresAt: "2026-09-28T03:11:00.000Z" });
+  expect(offered.preview).toBeNull(); expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});
 
 it.each((["PROVIDER", "BUDGET", "SIZE"] as const).flatMap(failure => (["SENT", "UNCERTAIN"] as const).map(delivery => ({ failure, delivery }))))("A4 $failure refusal preserves $delivery grounded targeting candidate for valid retry", async ({ failure, delivery }) => {
   const h = await setupSuccessor(), pending = await h.semantic(0, { title: "đi thi" }, "UNRESOLVED");

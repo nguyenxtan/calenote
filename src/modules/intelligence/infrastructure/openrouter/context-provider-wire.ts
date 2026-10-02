@@ -1,4 +1,4 @@
-import { ConversationInterpretationSchema, InterpretationJsonSchema, UncertaintySchema, parseInterpretationSections, type InterpretationSections, type ConversationInterpretation } from "../../../conversation/context-contract/contracts";
+import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
 import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
@@ -179,7 +179,9 @@ delete providerRoot.properties!.schemaVersion;
 providerRoot.required = providerRoot.required!.filter(key => key !== "schemaVersion");
 const providerSchema = simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(providerRoot))))))));
 /** Versioned context representation. Canonical prompt/schema and the namespace-only adapter remain unchanged. */
-export function googleLiteEuContextWireSchema() {
+/** Historical context2 reference codec only. Selected service/gateway use V3
+ * exports below; this cannot select, dispatch, or adapt protocols. */
+export function legacyV2GoogleLiteEuContextWireSchema() {
   return { version: GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION, schema: structuredClone(providerSchema) as typeof InterpretationJsonSchema };
 }
 function predicate(raw: Schema, value: unknown, root: Schema): boolean {
@@ -243,7 +245,7 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
   }
   requireShape(predicate(node, value, root)); return structuredClone(value);
 }
-export function encodeGoogleLiteEuContext(canonical: unknown): unknown {
+export function legacyV2EncodeGoogleLiteEuContext(canonical: unknown): unknown {
   requireShape(ConversationInterpretationSchema.safeParse(canonical).success);
   const encoded = codec(original, canonical, "encode") as Record<string, unknown>;
   delete encoded.schemaVersion;
@@ -267,7 +269,7 @@ function decodeUncertainties(raw: unknown, successor = false): unknown {
   });
 }
 /** Core is atomic; guidance is decoded independently and remains quarantinable. */
-export function parseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1], wireVersion: string = GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION): InterpretationSections {
+export function legacyV2ParseGoogleLiteEuContextSections(raw: unknown, observeInvalid?: Parameters<typeof parseInterpretationSections>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSections>[1], wireVersion: string = GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION): InterpretationSections {
   if (wireVersion !== GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) { observeWireInvalid?.(projectWireValidation(raw, [], "object")); return { status: "REFUSED", reason: "ENVELOPE_INVALID" }; }
   const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]), coreKeys = providerRoot.required!.filter(key => !guidance.has(key));
@@ -307,9 +309,12 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
   return output;
 }
-export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3): InterpretationSectionsV3 {
+export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1]): InterpretationSectionsV3 {
   if (!isContextProtocolV3(selected)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    observeWireInvalid?.(projectWireValidation(raw, [], "object", undefined, "calenote-context-3"));
+    return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
+  }
   const object = raw as Record<string, unknown>, guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
@@ -319,8 +324,14 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
     if (decoded.query && typeof decoded.query === "object" && "kind" in decoded.query && decoded.query.kind === "LIST") decoded.query = { ...decoded.query, statusScope: "DEFAULT" };
     for (const key of guidance) {
       try { decoded[key] = codec(originalV3.properties![key], object[key], "decode", [key], originalV3); }
-      catch { decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key]; }
+      catch (error) {
+        if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3"));
+        decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key];
+      }
     }
-    return parseInterpretationSectionsV3(decoded);
-  } catch { return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
+    return parseInterpretationSectionsV3(decoded, observeInvalid);
+  } catch (error) {
+    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3") : projectCanonicalValidation(raw, [], "calenote-context-3"));
+    return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
+  }
 }

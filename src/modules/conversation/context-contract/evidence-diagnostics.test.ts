@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildContextInput, type ReadyContext } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput, type ReadyContext } from "./context";
 import { chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
-import { validateEvidence } from "./evidence";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { DownstreamTraceSchema, type DownstreamDiagnostic } from "./downstream";
 
 function build(text: string, state = null as ReturnType<typeof snapshot> | null): ReadyContext {

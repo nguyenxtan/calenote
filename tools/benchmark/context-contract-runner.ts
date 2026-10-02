@@ -5,15 +5,16 @@ import { DownstreamTraceSchema } from "../../src/modules/conversation/context-co
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
-import { googleLiteEuContextWireSchema } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
+import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
   settleCampaignCanary, completeCampaign, admitR01ReplayIntent, type FutureLiveIntent } from "./context-contract-live";
 
-const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -26,6 +27,7 @@ export interface ObservableExecution { directory: string; sourceSha: string; pro
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
   httpRequestCount?: () => number; expiresAt?: number;
+  startedAt?: number; authorizationSha256?: string; historicalCalls?: number; historicalUnknownReservations?: number;
   pilotPrefix?: { directory: string; ledgerHash: string; responseDigest: string; applicationDigest: string }; }
 
 /** R01 is an independent script, not clarification state for R02. Carry only
@@ -41,20 +43,11 @@ function verifyPilotPrefix(input: ObservableExecution, root: string, admitted: R
     || last?.event !== "STOP" || last.hash !== input.pilotPrefix.ledgerHash || last.reason !== "PROVIDER_ADMISSION_FAILED"
     || !rows.some(row => row.event === "CANARY_PASS") || rows.filter(row => row.event === "DISPATCH").length !== 3
     || admitted[0]?.executionId !== "R01" || admitted[0].turns.length !== 2 || admitted[0].turns.some(t => (t.actionsAfter?.length ?? 0) > 0)
-    || admitted[1]?.executionId !== "R02" || !/^[a-f0-9]{40}$/u.test(begin.sourceSha)) return fail();
+    || admitted[1]?.executionId !== "R02" || !/^[a-f0-9]{40}$/u.test(begin.sourceSha)
+    || begin.sourceSha !== input.sourceSha || begin.provenanceDigest !== input.provenanceDigest) return fail();
   let historicalWireVersion: string | undefined;
   try {
-    execFileSync("git", ["-C", root, "merge-base", "--is-ancestor", begin.sourceSha, input.sourceSha]);
-    const changed = execFileSync("git", ["-C", root, "diff", "--name-only", begin.sourceSha, input.sourceSha], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
-    // Only this metadata correction may reuse R01. No generic cross-source
-    // resume: semantic service, evidence, merge, query, fixtures and config
-    // changes all fail closed, including superficially equivalent edits.
-    const allowed = new Set(["src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts",
-      "src/modules/conversation/context-contract/prompt.ts", "tools/benchmark/context-contract-runner.ts", "tools/benchmark/context-contract-live.ts"]);
-    if (changed.some(path => !allowed.has(path) && !path.endsWith(".test.ts") && !path.startsWith("docs/"))) return fail();
-    historicalWireVersion = begin.sourceSha === input.sourceSha ? googleLiteEuContextWireSchema().version
-      : execFileSync("git", ["-C", root, "show", `${begin.sourceSha}:src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts`], { encoding: "utf8" })
-        .match(/export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "([A-Za-z0-9._-]{1,160})" as const;/u)?.[1];
+    historicalWireVersion = googleLiteEuContextWireSchemaV3().version;
     if (!historicalWireVersion) return fail();
     for (const name of ["regressions", "development", "heldout"]) {
       const path = `src/modules/conversation/context-contract/benchmark/${name}.json`;
@@ -74,7 +67,7 @@ function verifyPilotPrefix(input: ObservableExecution, root: string, admitted: R
       || response.providerWireSchemaVersion !== historicalWireVersion
       || !/^[a-f0-9]{64}$/u.test(response.providerWireSchemaDigest)
       || response.providerWireSchemaDigest !== responses[0].providerWireSchemaDigest
-      || (begin.sourceSha === input.sourceSha && response.providerWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchema().schema)))
+      || (begin.sourceSha === input.sourceSha && response.providerWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)))
       || response.provider?.model !== config.primary.model || response.provider.provider !== "Google"
       || !response.usage || response.usage.promptTokens === undefined || response.usage.completionTokens === undefined
       || response.usage.promptTokens > 12000 || response.usage.completionTokens > 1536
@@ -101,7 +94,7 @@ export async function executeObservableR01Replay(input: ObservableExecution) {
 }
 async function executeObservable(input: ObservableExecution, replayOnly = false) {
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
-  const now = input.now ?? Date.now, startedAt = now(), root = input.root ?? process.cwd();
+  const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
   const deadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
   const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
     (JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest).cases) };
@@ -111,6 +104,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(replayOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
+    ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
     provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
     cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: deadline });
   if (pilotPrefix) writeFileSync(join(input.directory, "pilot-prefix-proof.json"), JSON.stringify(pilotPrefix), { mode: 0o600 });
@@ -130,15 +124,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const responses: ResponseEvidence[] = [];
   const applicationEvidence: ApplicationTurnEvidence[] = [];
   const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
-  const providerWire = googleLiteEuContextWireSchema();
+  const providerWire = googleLiteEuContextWireSchemaV3();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
   const schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   const actual = createContextContractGateway(config, async (request, options) => {
     if (replayOnly && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "b794e4372d4993cbd3bb8f641cb9f8c83ac57f23cc799315825402711e6edfec"
-      || canonicalSchemaDigest !== "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab"
+    if (digest(request.messages[0].content) !== "b5d589629594cf953b8a93f46608ec0070a732a907c8d33ba6074eecc70c3647"
+      || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== "966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
@@ -253,7 +247,7 @@ export async function runAuthorizedContextCampaign(intent: FutureLiveIntent, rea
   const authorization = admitFutureLiveIntent(intent);
   if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8" }).trim()) throw new Error("SOURCE_NOT_CLEAN");
   const directory = join(authorization.campaignRoot, intent.profile);
-  mkdirSync(authorization.campaignRoot, { recursive: true, mode: 0o700 }); mkdirSync(directory, { mode: 0o700 });
+  mkdirSync(authorization.campaignRoot, { recursive: true, mode: 0o700 }); mkdirSync(directory, { recursive: true, mode: 0o700 });
   let transport: SemanticTransport | undefined;
   let requests = 0;
   return executeObservableCampaign({ ...authorization, directory, root: intent.root, pilotPrefix, httpRequestCount: () => requests, transport: (request, options) => {

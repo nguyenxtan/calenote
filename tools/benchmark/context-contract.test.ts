@@ -4,14 +4,29 @@ import { spawnSync } from "node:child_process";
 import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type ContextManifest, type ContextObservation } from "./context-contract";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { encodeGoogleLiteEuContext } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
-import { frozenContextProposal, validateContextFixtureCoverage } from "./context-contract-fixtures";
+import { frozenContextProposal, validateContextFixtureCoverage, encodeFixtureV3 } from "./context-contract-fixtures";
+import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
+
+it("all_R01_R16_keep_original_words_and_oracles", () => {
+  const original = spawnSync("git", ["show", "68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/regressions.json"], { encoding: "utf8" });
+  expect(original.status).toBe(0);
+  expect(regressions).toEqual(JSON.parse(original.stdout));
+  expect(regressions.cases.map(c => c.id)).toEqual(Array.from({ length: 16 }, (_, i) => `R${String(i + 1).padStart(2, "0")}`));
+  const input = { currentTurn: 0, turns: [{ role: "USER", text: "Đổi sang 9h." }] } as Parameters<typeof frozenContextProposal>[0];
+  const correction = frozenContextProposal(input, "R07", 3);
+  expect(correction).toMatchObject({ schemaVersion: "calenote-context-3", requestTarget: { kind: "CURRENT" },
+    changes: [{ field: "reminderTime", operation: "REPLACE" }], conversationDirective: null });
+  expect(correction).not.toHaveProperty("dialogueAct");
+  const encoded = encodeFixtureV3(correction);
+  expect(parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3), JSON.stringify(encoded)).toMatchObject({ status: "PARSED" });
+});
 
 it.each(["directive", "reply"])("production observable service retains valid core and backend fallback for bad %s", async section => {
-  const cfg = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  const cfg = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
     primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
   const gateway = createContextContractGateway(cfg, async request => {
-    const input = JSON.parse(request.messages[1].content), proposal = encodeGoogleLiteEuContext(frozenContextProposal(input, "R14", 0)) as object;
+    const input = JSON.parse(request.messages[1].content), proposal = encodeFixtureV3(frozenContextProposal(input, "R14", 0)) as object;
     return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
       choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ ...proposal,
         ...(section === "directive" ? { conversationDirective: { kind: "SAVE" } } : { replyProposal: { text: "x".repeat(401) } }) }) } }] }) };
@@ -27,12 +42,12 @@ it.each(["directive", "reply"])("production observable service retains valid cor
 
 it("live probe uses the production callable gateway and financial reservation without fixture substitution", async () => {
   let calls = 0;
-  const cfg = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  const cfg = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
     primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
   const gateway = createContextContractGateway(cfg, async request => {
     calls++; const input = JSON.parse(request.messages[1].content);
     return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-offline-test",
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(input, "R14", 0))) } }],
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(input, "R14", 0))) } }],
       usage: { cost: .001, prompt_tokens: 1000, completion_tokens: 300 } }) };
   }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z"), liveGateway: gateway }, () => { throw new Error("LIVE_USED_OFFLINE_PROPOSAL"); });
@@ -53,6 +68,13 @@ import heldout from "../../src/modules/conversation/context-contract/benchmark/h
 import lunarReference from "../calendar/reference-vectors.json";
 import { lunarCalendar } from "../../src/modules/conversation/lunar-calendar";
 import { calendarDayPresentation } from "../../src/modules/conversation/calendar-presentation";
+
+it.each(["R15", "D01", "D02", "D07"])("frozen %s authority oracle survives selected V3 service", async id => {
+  const corpus = { version: "context-contract-corpus-1", cases: [...regressions.cases, ...development.cases].filter(c => c.id === id) } as ContextManifest;
+  const planned = expandContextCampaign(corpus, "FULL", []);
+  const observed = await runContextFixtureCampaign(planned, { sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, frozenContextProposal);
+  expect(scoreContextCampaign(planned, observed), JSON.stringify({ planned, observed })).toMatchObject({ passedScripts: 1, failedMandatory: [], passedTurns: planned[0].turns.length });
+});
 
 it("role-grounded R04 never copies the event clock before each explicit notification-clock turn", async () => {
   const script = regressions.cases.find(c => c.id === "R04")!;
@@ -82,7 +104,7 @@ it("role-grounded D06 collects notification clock before genuine issued-token ed
 it("role-grounded H29 retains event date without inventing notification date", async () => {
   const script = heldout.cases.find(c => c.id === "H29")!;
   const observed = await runContextFixtureCampaign(expandContextCampaign({ version: "context-contract-corpus-1", cases: [script] } as ContextManifest, "FULL", []), { sourceSha: "a".repeat(40), referenceNow: Date.parse(script.turns[0].receipt) }, frozenContextProposal);
-  expect(observed[0].turns[0]).toMatchObject({ status: "CLARIFICATION_REQUESTED", mutations: 0, apiPreviews: 0, occurrences: [],
+  expect(observed[0].turns[0], JSON.stringify(observed[0].turns[0])).toMatchObject({ status: "CLARIFICATION_REQUESTED", mutations: 0, apiPreviews: 0, occurrences: [],
     fields: { eventDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 21, month: 10, year: null, leapMonth: null }, reminderDate: null, reminderTime: null } });
 });
 
@@ -93,11 +115,11 @@ it("ordinary five-turn D02 closure retains complete evidence with at least 1KiB 
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse(script.turns[0].receipt) }, input => {
     const proposed = frozenContextProposal(input, "D02", index) as Record<string, unknown>;
     if (index === 4) {
-      proposed.dialogueAct = "EDIT";
+
       proposed.changes = (proposed.changes as Array<{ field: string }>).filter(c => c.field !== "reminderDate");
       (proposed.changes as unknown[]).push({ field: "reminderDate", operation: "SET", value: lunar,
         evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] });
-      proposed.conversationDirective = { kind: "PRESENT_PREVIEW" };
+      proposed.conversationDirective = null;
     }
     return proposed;
   });
@@ -137,8 +159,8 @@ it.each([
   ["EXPLAIN_UNSUPPORTED", "UNSUPPORTED", { kind: "EXPLAIN_UNSUPPORTED", issue: "ASSISTANT_SCOPE" }, "Bạn có thể chọn một yêu cầu về lịch hoặc lời nhắc.", "MODEL_GUIDANCE"],
 ] as const)("actual %s route selects eligible natural guidance and persists the exact receipt", async (effective, intent, directive, text, source) => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, () => ({
-    schemaVersion: "calenote-context-2", intent, dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null,
-    uncertainties: [], controlEvidence: [], conversationDirective: directive, replyProposal: { text },
+    schemaVersion: "calenote-context-3", intent, requestTarget: null, changes: [], query: null,
+    uncertainties: [], conversationDirective: directive, replyProposal: { text },
   }));
   try {
     const actual = await probe.turn("Tôi có thể nhờ bạn những việc gì nhỉ?", "2026-09-28T03:00:00Z");
@@ -157,8 +179,8 @@ it.each([
   ["unsupported issue", "UNSUPPORTED", { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" }],
 ] as const)("actual typed %s mismatch cannot select model wording", async (_name, intent, directive) => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, () => ({
-    schemaVersion: "calenote-context-2", intent, dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null,
-    uncertainties: [], controlEvidence: [], conversationDirective: directive, replyProposal: { text: "Bạn có thể diễn đạt tự nhiên nhé." },
+    schemaVersion: "calenote-context-3", intent, requestTarget: null, changes: [], query: null,
+    uncertainties: [], conversationDirective: directive, replyProposal: { text: "Bạn có thể diễn đạt tự nhiên nhé." },
   }));
   try {
     expect(await probe.turn("Tôi có thể nhờ bạn những việc gì nhỉ?", "2026-09-28T03:00:00Z")).toMatchObject({
@@ -196,7 +218,7 @@ it("invalid core cannot be rescued by persuasive eligible guidance", async () =>
   try {
     const actual = await probe.turn("Ngày 11/10 đi thi ở Quang Trung.", "2026-09-28T03:00:00Z");
     expect(actual).toMatchObject({ status: "REJECTED", source: "BACKEND", dispatches: 1, mutations: 0, apiPreviews: 0 });
-    expect(actual.fields).toEqual({});
+    expect(Object.values(actual.fields).every(value => value === null)).toBe(true);
     expect(actual.selectedText).not.toContain("Bạn muốn mình nhắc");
   } finally { probe.dispose(); }
 });
@@ -344,7 +366,7 @@ it.each(["reason", "field"] as const)("actual disambiguation %s mismatch preserv
 
 it("actual query-kind mismatch never replaces the backend Calendar answer", async () => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, input => ({
-    ...(frozenContextProposal(input, "R09", 0) as Record<string, unknown>), conversationDirective: { kind: "ANSWER_QUERY", queryKind: "LIST" }, replyProposal: { text: "Bạn xem lịch nhé." },
+    ...(frozenContextProposal(input, "R09", 0) as Record<string, unknown>), conversationDirective: { kind: "HELP", topic: "REMINDERS" }, replyProposal: { text: "Bạn xem lịch nhé." },
   }));
   try {
     const actual = await probe.turn("Hôm nay là ngày mấy âm lịch?", "2026-09-28T03:00:00Z");
@@ -356,9 +378,9 @@ it("actual query-kind mismatch never replaces the backend Calendar answer", asyn
 
 it("probe records the actual selected reply, encrypted state and dispatched count", async () => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, input => ({
-    schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO",
+    schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] },
     changes: [{ field: "title", operation: "SET", value: "đi thi", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }],
-    query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" },
+    query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" },
     replyProposal: { text: "Bạn muốn mình nhắc lúc mấy giờ?" },
   }));
   try {
@@ -472,7 +494,7 @@ it("runner resets R04 branches with a new actual service and keeps planned resul
 
 it.each([
   ["CO-B", { conversationDirective: { kind: "ASK_FOR_FIELD", field: "eventDate" }, replyProposal: { text: "Bạn thi ngày nào?" } }, "DIRECTIVE_MISMATCH"],
-  ["CO-C", { conversationDirective: { kind: "PRESENT_PREVIEW" }, replyProposal: { text: "Mình đã lên lịch cho bạn." } }, "DIRECTIVE_MISMATCH"],
+  ["CO-C", { conversationDirective: { kind: "HELP", topic: "REMINDERS" }, replyProposal: { text: "Mình đã lên lịch cho bạn." } }, "DIRECTIVE_MISMATCH"],
   ["CO-D", { conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Đã lưu lịch cho bạn." } }, "REPLY_FORBIDDEN"],
 ] as const)("%s selects backend guidance but preserves accepted facts", async (_id, override, reason) => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, input =>
@@ -544,7 +566,7 @@ it("R16 checks 13 converter/Calendar vectors and their 12 nonnegative-time servi
   expect(calendarDayPresentation("2101-01-29").lunarAvailable).toBe(false);
 });
 
-it("all frozen Layer1 scripts execute through the actual service without missing fixture dispatch", async () => {
+it("whole_service_I1_I10_authority_controls: all frozen Layer1 scripts execute through actual service", async () => {
   const corpus = { version: "context-contract-corpus-1", cases: [...regressions.cases, ...development.cases, ...heldout.cases] } as ContextManifest;
   const planned = expandContextCampaign(corpus, "FULL");
   expect(planned).toHaveLength(80);

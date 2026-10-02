@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { parseInterpretationSections } from "./contracts";
+import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";

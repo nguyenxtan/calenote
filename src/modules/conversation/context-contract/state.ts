@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { ConversationScope } from "../contracts";
-import { CalendarSchema, contextFactSchema, SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, UncertaintySchema } from "./contracts";
+import { CalendarSchema, contextFactSchema, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, LegacyV2UncertaintySchema as UncertaintySchema } from "./contracts";
 import { SemanticPatchProposalV3Schema, UncertaintyV3Schema } from "./contracts";
 
 const id = z.string().min(1).max(512);
@@ -146,7 +146,8 @@ function validateSnapshot(s: z.infer<typeof snapshotV1Base> | z.infer<typeof sna
       while(count<e.occurrence) { found=t.semanticView.indexOf(e.quote,from); if(found<0)break; count++;from=found+e.quote.length; }
       if(count!==e.occurrence || [...t.semanticView.slice(0,found)].length!==e.viewSpan.start)fail("Candidate quote occurrence mismatch");
     }
-    if(Date.parse(c.createdAt)<created || Date.parse(c.createdAt)>latest || Date.parse(c.expiresAt)<=Date.parse(c.createdAt) || Date.parse(c.expiresAt)>boundExpiry)fail("Candidate lifetime mismatch");
+    const candidateExpiry = Math.min(Date.parse(c.createdAt) + 600000, idle, absolute);
+    if(Date.parse(c.createdAt)<created || Date.parse(c.createdAt)>latest || Date.parse(c.expiresAt)<=Date.parse(c.createdAt) || Date.parse(c.expiresAt)>candidateExpiry)fail("Candidate lifetime mismatch");
     const refs = (v: unknown): void => {
       if(Array.isArray(v)){v.forEach(refs);return;}
       if(!v || typeof v!=="object")return;

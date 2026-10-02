@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { lunarCalendar } from "../lunar-calendar";
-import { buildContextInput } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
 import { at, chat, message, observation, turn } from "./context-test-fixtures";
-import { parseInterpretationSections, type ConversationDirective, type SemanticPatchProposal } from "./contracts";
-import { validateEvidence, validateGuidancePrivacy } from "./evidence";
-import { computeEffectiveDirective, selectGuidance, validateDirective, type EffectiveDirective } from "./guidance";
-import { mergePatch } from "./merge";
+import { LegacyV2parseInterpretationSections as parseInterpretationSections, type ConversationDirective, type LegacyV2SemanticPatchProposal as SemanticPatchProposal } from "./contracts";
+import { validateLegacyV2Evidence as validateEvidence, validateGuidancePrivacy } from "./evidence";
+import { computeLegacyV2EffectiveDirective as computeEffectiveDirective, selectGuidance, validateLegacyV2Directive as validateDirective, type EffectiveDirective } from "./guidance";
+import { mergeLegacyV2Patch as mergePatch } from "./merge";
 import { resolveRequest } from "./resolve";
 import { resolveQuery } from "./query";
 import { date, now, patch, request, time } from "./resolution-test-support";
@@ -15,6 +15,22 @@ import { parseInterpretationSectionsV3 } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
 import { computeEffectiveDirectiveV3, validateDirectiveV3 } from "./guidance";
 import { mergePatchV3 } from "./merge";
+
+it("explicit null advice cannot promote independent wording or change backend issue selection", () => {
+  const text = "nhắc đi thi ngày mai", msg = { ...message(text), receivedAt: now };
+  const built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+  if (built.status !== "READY") throw new Error(built.reason);
+  const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: text, occurrence: 1 }];
+  const sections = parseInterpretationSectionsV3({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence }, { field: "reminderDate", operation: "SET", value: { kind: "RELATIVE_DAY", offsetDays: 1 }, evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: { text: "Hãy chọn thông tin khác" } });
+  expect(sections).toMatchObject({ status: "PARSED", value: { fullSchemaValid: true, directive: { status: "VALID", value: null }, reply: { status: "VALID" } } });
+  if (sections.status !== "PARSED") throw new Error(sections.reason);
+  const checked = validateEvidenceV3(sections.value.semantic, built); if (checked.status !== "VALID") throw new Error(checked.reason);
+  const merge = mergePatchV3(null, checked.patch); if (merge.status !== "MERGED") throw new Error(merge.status);
+  const effective = computeEffectiveDirectiveV3({ semantic: checked.patch, merge, resolution: resolveRequest(merge.candidate, now, lunarCalendar) });
+  expect(effective).toEqual({ kind: "ASK_FOR_FIELD", field: "reminderTime" });
+  expect(selectGuidance({ effectiveDirective: effective, directiveValidation: validateDirectiveV3(sections.value.directive, effective), replyProposal: sections.value.reply, privacyValidation: { status: "VALID" }, language: "vi" })).toMatchObject({ source: "BACKEND", text: "Bạn muốn được nhắc lúc mấy giờ?" });
+  expect(merge.candidate.pendingDecision).toBeNull(); expect(merge.candidate.previewReceipt).toBeNull();
+});
 
 it.each([
   [undefined, undefined], [null, null], [{ kind: "ABANDON_PENDING" }, { text: "Đã lưu thành công" }],

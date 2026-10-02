@@ -1,16 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { buildContextInput, type ReadyContext } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput, type ReadyContext } from "./context";
 import { chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
-import { isValidatedPatch, validateEvidence, validateGuidancePrivacy } from "./evidence";
-import { parseInterpretationSections } from "./contracts";
+import { isLegacyV2ValidatedPatch as isValidatedPatch, validateLegacyV2Evidence as validateEvidence, validateGuidancePrivacy } from "./evidence";
+import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 import { decodeContextSnapshot, type ContextSnapshotV1 } from "./state";
 import { buildContextInputV2 } from "./context";
 import { validateEvidenceV3 } from "./evidence";
 import { SemanticPatchProposalV3Schema } from "./contracts";
 import { ContextSnapshotV2Schema } from "./state";
 import { mergePatchV3 } from "./merge";
+import { DownstreamDiagnosticSchema, type DownstreamDiagnostic } from "./downstream";
 
 describe("successor scoped semantic evidence", () => {
+  it("requestTarget refusal reports the actual sanitized structural path", () => {
+    const msg = message("nhắc mới"), built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "SYNTHETIC_PRIVATE", occurrence: 1 }] }, changes: [], query: null, uncertainties: [] });
+    const diagnostics: DownstreamDiagnostic[] = [];
+    expect(validateEvidenceV3(proposal, built, value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "EVIDENCE_QUOTE_NOT_FOUND" });
+    const failure = diagnostics.find(value => value.stage === "EVIDENCE")!;
+    expect(failure.evidenceFailure?.path).toEqual(["requestTarget", "evidence"]);
+    expect(failure.evidenceFailure?.referenceOrdinal).toBe(0);
+    expect(DownstreamDiagnosticSchema.safeParse(failure).success).toBe(true);
+    expect(JSON.stringify(failure)).not.toContain("SYNTHETIC_PRIVATE");
+  });
   it.each(["old-quote", "fact", "mixed-old-quote", "mixed-fact", "current"])("NEW_fresh_factual_alternative_%s_requires_B_sources", source => {
     const state = ContextSnapshotV2Schema.parse({ ...withNotes(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
     const msg = message("tạo lịch mới gọi mẹ mang giấy tờ"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(withNotes(), msg) });

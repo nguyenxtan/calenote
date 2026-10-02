@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { readFileSync, openSync, closeSync, writeSync, existsSync, fsyncSync, unlinkSync, readdirSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { readFileSync, openSync, closeSync, writeSync, existsSync, fsyncSync, unlinkSync, readdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, resolve, relative, basename } from "node:path";
 import { execFileSync } from "node:child_process";
+import { z } from "zod";
+import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import type { CampaignProfile } from "./context-contract";
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 
@@ -64,20 +66,31 @@ export function preflightContextCampaign({ root }: PreflightOptions) {
   const sourceSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const { provenanceDigest, digests } = computeContextSourceFreeze(root);
   const manifests = ["regressions", "development", "heldout"].map(name => JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest);
+  validateFrozenContextCorpus(root, manifests);
   const corpus: ContextManifest = { version: "context-contract-corpus-1", cases: manifests.flatMap(m => m.cases) };
   const pilot = admitCanonicalCampaign(corpus, "PILOT"), full = admitCanonicalCampaign(corpus, "FULL");
   return { sourceSha, routeAdmission: CONTEXT_ROUTE_ADMISSION, liveEligible: false, networkRequests: 0, secretReads: 0,
+    protocolDigest: hash(JSON.stringify(CONTEXT_PROTOCOL_V3)), corpusDigest: hash(JSON.stringify(manifests)),
     pilot: { scripts: pilot.length, turns: pilot.reduce((n, c) => n + c.turns.length, 0), maxCalls: 192, maxMicrounits: pilotAuthorizedMicrounits, maxMs: 1200000 },
     full: { scripts: full.length, turns: full.reduce((n, c) => n + c.turns.length, 0), maxCalls: 480, maxMicrounits: fullAuthorizedMicrounits, maxMs: 2700000 },
     provenanceDigest, digests };
 }
 
-export interface FutureLiveIntent { root: string; enableLive: boolean; authorizationPath: string; profile: CampaignProfile; runId: string; now: number; }
+/** Immutable acceptance data is never silently reclassified as new held-out
+ * evidence. Replacement and reauthorization are a separate approved workflow. */
+export function validateFrozenContextCorpus(root: string, manifests: readonly ContextManifest[]) {
+  for (const [i, name] of ["regressions", "development", "heldout"].entries()) {
+    const original = JSON.parse(execFileSync("git", ["-C", root, "show", `68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/${name}.json`], { encoding: "utf8" }));
+    if (hash(JSON.stringify(manifests[i])) !== hash(JSON.stringify(original))) throw new Error(name === "heldout" ? "HELDOUT_REPLACEMENT_REQUIRED" : "FROZEN_ORACLES_CHANGED");
+  }
+}
+
+export interface FutureLiveIntent { root: string; enableLive: boolean; authorizationPath: string; profile: CampaignProfile; runId: string; now: number; authorizationCapability?: CampaignAuthorization; }
 export interface ObservableAuthorization { version: "context-contract-live-2"; method: "OBSERVABLE_CANARY";
   campaignRoot: string; pilotLedgerHash: string | null; sourceSha: string; provenanceDigest: string; profile: CampaignProfile;
   runId: string; approvedAt: number; expiresAt: number; cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; }
 /** Source-bound authority admits the method, never claims canary PASS. */
-export function admitFutureLiveIntent(input: FutureLiveIntent) {
+export function admitHistoricalV2IntentReference(input: FutureLiveIntent) {
   if (!input.enableLive) throw new Error("EXPLICIT_ENABLE_REQUIRED");
   if (!isAbsolute(input.authorizationPath) || !Number.isSafeInteger(input.now) || input.now < 0
     || !/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId) || !["PILOT", "FULL"].includes(input.profile)) throw new Error("INVALID_LIVE_INTENT");
@@ -130,9 +143,156 @@ export interface R01ReplayAuthorization extends Omit<ObservableAuthorization, "v
   version: "context-contract-r01-replay-1";
   historicalLedgers: Array<{ directory: string; finalHash: string }>;
 }
+
+/** No trusted replay orchestrator is installed for this dormant successor. */
+export function admitR01ReplayIntent(input: FutureLiveIntent): R01ReplayAuthorization { void input; throw new Error("AUTHORIZATION_NOT_CONFIGURED"); }
+const authorizationBrand: unique symbol = Symbol("CampaignAuthorization");
+export interface CampaignAuthorization { readonly [authorizationBrand]: true; }
+const bindingSchema = z.strictObject({ directory: z.string().min(1).max(4096), finalHash: z.string().regex(/^[a-f0-9]{64}$/u) });
+const ownerSchema = z.strictObject({ version: z.literal("context-contract-live-3"), method: z.literal("OBSERVABLE_CANARY"),
+  authorizationId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/u), account: z.enum(["PILOT", "FULL"]),
+  sourceSha: z.string().regex(/^[a-f0-9]{40}$/u), provenanceDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  protocolDigest: z.string().regex(/^[a-f0-9]{64}$/u), corpusDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  runId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/u), approvedAt: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative(),
+  startedAt: z.number().int().nonnegative(), priorLedgers: z.array(bindingSchema).max(1024),
+  pilotLedger: bindingSchema.extend({ reportSha256: z.string().regex(/^[a-f0-9]{64}$/u) }).nullable() });
+type CampaignGrant = { record: z.infer<typeof ownerSchema>; sha256: string; root: string; directory: string };
+const campaignGrants = new WeakMap<object, CampaignGrant>();
+const activeCampaignGrants = new Map<string, CampaignGrant>();
+function accountInventory(root: string, excluded: string): string[] {
+  const result: string[] = [];
+  function visit(path: string) {
+    if (path !== excluded && existsSync(join(path, "campaign.jsonl"))) result.push(realpathSync(path));
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) throw new Error("PRIOR_LEDGER_ALIAS");
+      if (entry.isDirectory()) visit(join(path, entry.name));
+    }
+  }
+  visit(root); return result.sort();
+}
+function campaignInventory(grant: CampaignGrant) {
+  const paths = grant.record.priorLedgers.map(binding => {
+    const path = realpathSync(binding.directory), rel = relative(grant.root, path);
+    if (path !== binding.directory || rel.startsWith("..") || isAbsolute(rel) || path === grant.directory) throw new Error("PRIOR_LEDGER_ALIAS");
+    return path;
+  });
+  if (new Set(paths).size !== paths.length) throw new Error("PRIOR_LEDGER_ALIAS");
+  if (JSON.stringify([...paths].sort()) !== JSON.stringify(accountInventory(grant.root, grant.directory))) throw new Error("PRIOR_LEDGER_INVENTORY");
+  let retained = 0, calls = 0, unknown = 0;
+  for (const binding of grant.record.priorLedgers) {
+    const rows = ledger(binding.directory), begin = rows[0];
+    if (begin?.event !== "BEGIN" || begin.profile !== grant.record.account || rows.at(-1)?.hash !== binding.finalHash) throw new Error("PRIOR_LEDGER_BINDING");
+    validateHistoricalCampaign(rows, grant.record.account);
+    const ids = new Set<string>();
+    for (const reserve of rows.filter((row): row is Stored & Reserve => row.event === "RESERVE")) {
+      if (reserve.profile !== begin.profile || reserve.runId !== begin.runId || ids.has(reserve.reservationId)
+        || !Number.isSafeInteger(reserve.maximumMicrounits) || reserve.maximumMicrounits <= 0) throw new Error("PRIOR_LEDGER_BINDING");
+      ids.add(reserve.reservationId); calls++;
+      const finishes = rows.filter((row): row is Stored & Finish => row.event === "FINISH" && row.reservationId === reserve.reservationId);
+      if (finishes.length > 1) throw new Error("PRIOR_LEDGER_BINDING");
+      const finish = finishes[0], amount = finish?.observedMicrounits ?? reserve.maximumMicrounits;
+      if (!Number.isSafeInteger(amount) || amount < 0 || amount > reserve.maximumMicrounits || (finish && finish.runId !== begin.runId)) throw new Error("PRIOR_LEDGER_BINDING");
+      retained += amount; if (finish?.observedMicrounits == null) unknown++;
+    }
+    if (rows.some(row => (row.event === "FINISH" || row.event === "DISPATCH") && !ids.has(row.reservationId))) throw new Error("PRIOR_LEDGER_BINDING");
+  }
+  const cap = grant.record.account === "PILOT" ? pilotAuthorizedMicrounits : fullAuthorizedMicrounits;
+  if (!Number.isSafeInteger(retained) || retained > cap || calls > (grant.record.account === "PILOT" ? 192 : 480)) throw new Error("HISTORICAL_ACCOUNTING_CAP");
+  return { retained, calls, unknown };
+}
+function validateHistoricalCampaign(rows: readonly Stored[], account: CampaignProfile): void {
+  const fail = () => { throw new Error("PRIOR_LEDGER_BINDING"); }, begin = rows[0];
+  const integer = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  if (begin?.event !== "BEGIN" || begin.profile !== account || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits)
+    || !integer(begin.cumulativeRetainedMicrounits) || !/^[a-f0-9]{40}$/u.test(begin.sourceSha) || !/^[a-f0-9]{64}$/u.test(begin.provenanceDigest)
+    || !/^[A-Za-z0-9_-]{1,100}$/u.test(begin.runId)) return fail();
+  const reserves = new Map<string, Reserve>(), dispatches = new Map<string, Dispatch>(), finishes = new Map<string, Finish>();
+  let stopped = false, completed = false, canary = false;
+  for (const row of rows.slice(1)) {
+    if (row.runId !== begin.runId || completed || row.event === "BEGIN" || !integer(row.at) || row.at < begin.startedAt) return fail();
+    if (row.event === "RESERVE") {
+      if (stopped || row.profile !== begin.profile || row.provenanceDigest !== begin.provenanceDigest || !integer(row.maximumMicrounits)
+        || row.maximumMicrounits <= 0 || !/^[A-Za-z0-9_-]{1,100}$/u.test(row.reservationId) || reserves.has(row.reservationId)) return fail();
+      reserves.set(row.reservationId, row);
+    } else if (row.event === "DISPATCH") {
+      const reserve = reserves.get(row.reservationId);
+      if (stopped || !reserve || row.at < reserve.at || dispatches.has(row.reservationId)) return fail();
+      dispatches.set(row.reservationId, row);
+    } else if (row.event === "FINISH") {
+      const dispatch = dispatches.get(row.reservationId), reserve = reserves.get(row.reservationId);
+      if (!dispatch || !reserve || row.at < dispatch.at || finishes.has(row.reservationId)
+        || (row.observedMicrounits !== null && (!integer(row.observedMicrounits) || row.observedMicrounits > reserve.maximumMicrounits))) return fail();
+      finishes.set(row.reservationId, row);
+    } else if (row.event === "CANARY_PASS") {
+      if (stopped || canary || ![...finishes.values()].some(finish => finish.observedMicrounits !== null && finish.at <= row.at)) return fail();
+      canary = true;
+    } else if (row.event === "STOP") {
+      if (stopped || typeof row.reason !== "string" || !/^[A-Z0-9_]{1,160}$/u.test(row.reason)) return fail();
+      stopped = true;
+    } else if (row.event === "COMPLETE") {
+      if (stopped || !canary || row.gate !== "PASS" || reserves.size !== dispatches.size || dispatches.size !== finishes.size
+        || [...finishes.values()].some(finish => finish.observedMicrounits === null)
+        || row.retainedMicrounits !== [...finishes.values()].reduce((sum, finish) => sum + finish.observedMicrounits!, 0)) return fail();
+      completed = true;
+    } else return fail();
+  }
+}
+/** Approval provenance and complete account namespace come from trusted
+ * orchestration, never from a raw record, CLI, env override or self-hash. */
+export function createCampaignAuthorizationLoader(trusted: { reviewedOwnerRecordSha256: string; accountRoot: string }) {
+  if (!/^[a-f0-9]{64}$/u.test(trusted.reviewedOwnerRecordSha256)) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+  const root = realpathSync(trusted.accountRoot), pin = trusted.reviewedOwnerRecordSha256;
+  return { load(raw: unknown, targetDirectory: string): CampaignAuthorization {
+    const record = ownerSchema.parse(raw);
+    if (hash(JSON.stringify(raw)) !== pin) throw new Error("OWNER_AUTHORIZATION_MISMATCH");
+    const directory = realpathSync(targetDirectory), rel = relative(root, directory);
+    if (directory !== targetDirectory || rel.startsWith("..") || isAbsolute(rel) || basename(directory) !== record.account) throw new Error("PRIOR_LEDGER_ALIAS");
+    const grant = { record, sha256: pin, root, directory }; campaignInventory(grant);
+    const existing = ledger(directory);
+    if (existing.length && (existing[0].event !== "BEGIN" || existing[0].authorizationSha256 !== pin)) throw new Error("OWNER_AUTHORIZATION_MISMATCH");
+    const capability = Object.freeze({ [authorizationBrand]: true as const }); campaignGrants.set(capability, grant); return capability;
+  } };
+}
+export function admitFutureLiveIntent(input: FutureLiveIntent) {
+  if (!input.enableLive) throw new Error("EXPLICIT_ENABLE_REQUIRED");
+  const grant = input.authorizationCapability && campaignGrants.get(input.authorizationCapability);
+  if (!grant) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+  const current = preflightContextCampaign({ root: input.root }), record = grant.record;
+  if (hash(readFileSync(input.authorizationPath)) !== grant.sha256 || record.account !== input.profile || record.runId !== input.runId
+    || record.sourceSha !== current.sourceSha || record.provenanceDigest !== current.provenanceDigest
+    || record.protocolDigest !== current.protocolDigest || record.corpusDigest !== current.corpusDigest
+    || !Number.isSafeInteger(input.now) || record.approvedAt > input.now || record.startedAt < record.approvedAt || record.startedAt > input.now
+    || input.now >= Math.min(record.expiresAt, record.startedAt + (record.account === "PILOT" ? 1200000 : 2700000))) throw new Error("AUTHORIZATION_MISMATCH");
+  const totals = campaignInventory(grant);
+  if (record.account === "PILOT" && record.pilotLedger !== null) throw new Error("INVALID_PILOT_AUTHORITY");
+  if (record.account === "FULL") {
+    const binding = record.pilotLedger, rows = binding && ledger(binding.directory), begin = rows?.[0], last = rows?.at(-1);
+    if (!binding || begin?.event !== "BEGIN" || begin.profile !== "PILOT" || begin.sourceSha !== current.sourceSha
+      || begin.provenanceDigest !== current.provenanceDigest || begin.executionKind || last?.event !== "COMPLETE" || last.gate !== "PASS"
+      || last.hash !== binding.finalHash) throw new Error("PILOT_PASS_REQUIRED");
+    if (binding.directory !== realpathSync(binding.directory)) throw new Error("PRIOR_LEDGER_ALIAS");
+    validateHistoricalCampaign(rows!, "PILOT");
+    const text = readFileSync(join(binding.directory, "report.json"), "utf8");
+    if (hash(text) !== binding.reportSha256) throw new Error("PILOT_PASS_REQUIRED");
+    const report = JSON.parse(text), score = report.score;
+    const dispatches = rows!.filter(row => row.event === "DISPATCH").length;
+    if (report.status !== "PASS" || report.routeAdmission !== "PASS" || report.measuredScope || report.replayOnly
+      || score?.gate !== "PASS" || score.plannedScripts !== current.pilot.scripts || score.passedScripts !== current.pilot.scripts
+      || score.plannedTurns !== current.pilot.turns || score.passedTurns !== current.pilot.turns || score.safetyFailures !== 0
+      || score.detailPassed !== score.detailPlanned || score.healthyFullSchemaValid !== score.healthyPlanned
+      || score.actualDispatches !== dispatches || report.applicationLlmCalls !== dispatches || report.providerHttpRequests !== dispatches
+      || !Array.isArray(report.applicationEvidence) || report.applicationEvidence.length !== current.pilot.turns
+      || report.applicationEvidence.some((row: { oracle: string }) => row.oracle !== "PASS")) throw new Error("PILOT_PASS_REQUIRED");
+  }
+  activeCampaignGrants.set(grant.directory, grant);
+  return { version: "context-contract-live-3" as const, method: record.method, campaignRoot: resolve(grant.directory, ".."),
+    sourceSha: record.sourceSha, provenanceDigest: record.provenanceDigest, profile: record.account, runId: record.runId, approvedAt: record.approvedAt,
+    startedAt: record.startedAt, expiresAt: record.expiresAt, cumulativeAuthorizedMicrounits: record.account === "PILOT" ? pilotAuthorizedMicrounits : fullAuthorizedMicrounits,
+    cumulativeRetainedMicrounits: totals.retained, historicalCalls: totals.calls, historicalUnknownReservations: totals.unknown, authorizationSha256: grant.sha256 };
+}
 /** Exact historical accounting is bound by durable ledger hashes; the normal
  * PILOT/FULL authorization contract is deliberately unchanged. */
-export function admitR01ReplayIntent(input: FutureLiveIntent): R01ReplayAuthorization {
+export function admitHistoricalR01ReplayIntentReference(input: FutureLiveIntent): R01ReplayAuthorization {
   if (!input.enableLive || input.profile !== "PILOT" || !isAbsolute(input.authorizationPath)
     || !/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId) || !Number.isSafeInteger(input.now) || input.now < 0) throw new Error("INVALID_REPLAY_INTENT");
   const preflight = preflightContextCampaign({ root: input.root });
@@ -170,6 +330,7 @@ export function admitR01ReplayIntent(input: FutureLiveIntent): R01ReplayAuthoriz
 
 type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
   executionKind?: "R01_REPLAY" | "R02_CONTINUATION"; pilotPrefixDigest?: string;
+  authorizationSha256?: string; historicalCalls?: number; historicalUnknownReservations?: number;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; startedAt: number; observableAdmission?: boolean; expiresAt?: number };
 type Reserve = { event: "RESERVE"; runId: string; profile: CampaignProfile; provenanceDigest: string;
   reservationId: string; maximumMicrounits: number; at: number };
@@ -212,6 +373,16 @@ function appendUnlocked(directory: string, event: CampaignEvent): Stored {
   const rows = ledger(directory), begin = rows[0];
   if (event.event === "BEGIN") {
     if (rows.length) throw new Error("CAMPAIGN_ALREADY_STARTED");
+    if (event.authorizationSha256 !== undefined) {
+      const grant = activeCampaignGrants.get(realpathSync(directory));
+      if (!grant || grant.sha256 !== event.authorizationSha256) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+      const totals = campaignInventory(grant);
+      if (event.cumulativeRetainedMicrounits !== totals.retained || event.historicalCalls !== totals.calls || event.historicalUnknownReservations !== totals.unknown
+        || event.sourceSha !== grant.record.sourceSha || event.provenanceDigest !== grant.record.provenanceDigest || event.runId !== grant.record.runId
+        || event.profile !== grant.record.account || event.startedAt !== grant.record.startedAt
+        || event.expiresAt !== Math.min(grant.record.expiresAt, grant.record.startedAt + (event.profile === "PILOT" ? 1200000 : 2700000))
+        || event.cumulativeAuthorizedMicrounits !== (event.profile === "PILOT" ? pilotAuthorizedMicrounits : fullAuthorizedMicrounits)) throw new Error("OWNER_AUTHORIZATION_MISMATCH");
+    }
     if (!/^[0-9a-f]{40}$/u.test(event.sourceSha) || !/^[0-9a-f]{64}$/u.test(event.provenanceDigest)
       || !Number.isSafeInteger(event.cumulativeAuthorizedMicrounits) || event.cumulativeAuthorizedMicrounits <= 0
       || event.cumulativeAuthorizedMicrounits > cumulativeAuthorizedMicrounits
@@ -240,6 +411,12 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
   reservationId: string; maximumMicrounits: number; now: number; startedAt: number }) {
   const rows = ledger(directory), begin = rows[0];
   if (!begin || begin.event !== "BEGIN" || begin.runId !== input.runId || begin.profile !== input.profile) throw new Error("CROSS_RESUME");
+  if (begin.authorizationSha256 !== undefined) {
+    const grant = activeCampaignGrants.get(realpathSync(directory));
+    if (!grant || grant.sha256 !== begin.authorizationSha256) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+    const totals = campaignInventory(grant);
+    if (totals.retained !== begin.cumulativeRetainedMicrounits || totals.calls !== begin.historicalCalls || totals.unknown !== begin.historicalUnknownReservations) throw new Error("PRIOR_LEDGER_BINDING");
+  }
   if (begin.provenanceDigest !== input.provenanceDigest) throw new Error("PROVENANCE_CHANGED");
   if (begin.startedAt !== input.startedAt) throw new Error("CLOCK_ORIGIN_CHANGED");
   if (rows.some(r => r.event === "STOP" || r.event === "COMPLETE") || !Number.isSafeInteger(input.now) || input.now < input.startedAt) throw new Error("STOPPED_OR_INVALID_CLOCK");
@@ -259,7 +436,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
   }
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.reservationId) || reservations.some(r => r.reservationId === input.reservationId)
     || !Number.isSafeInteger(input.maximumMicrounits) || input.maximumMicrounits <= 0) throw new Error("INVALID_RESERVATION");
-  if (input.now - input.startedAt >= cap.ms || reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)) {
+  if (input.now - input.startedAt >= cap.ms || (begin.historicalCalls ?? 0) + reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "TIME_OR_CALL_CAP" });
     return { status: "STOPPED", reason: "TIME_OR_CALL_CAP" } as const;
   }

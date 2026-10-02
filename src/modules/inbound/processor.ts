@@ -830,7 +830,6 @@ export async function processInbound(
     }) : undefined;
     const conversation = dependencies.contextContract ? createContextContractService({ ...dependencies.contextContract,
       keyring: dependencies.keyring, now, channel: message.provider === "zalo" ? "ZALO" : "TELEGRAM", processingFeedback,
-      legacy: legacyConversation,
       reply: async plan => plan.status === "READY" ? replyWithReceipt(message, plan.text, dependencies) : { status: "FAILED" },
     }) : legacyConversation;
     return processBoundChatMessage(message, {

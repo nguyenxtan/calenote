@@ -1,12 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
-import { InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
-import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
+import { InterpretationJsonSchema, LegacyV2InterpretationJsonSchema, type ContextInput, type LegacyV2ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { serializeContextRequest, serializeLegacyV2ContextRequestReference } from "../../src/modules/conversation/context-contract/wire";
 
 /** Development bridge only. Never imported by src/ or used for route admission. */
-export function measureLocalTokens(samples: { name: string; input: ContextInput; output?: string }[]) {
-  const rows = samples.map(s => ({ case: s.name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(s.input), schemaJson: JSON.stringify(InterpretationJsonSchema), wireJson: JSON.stringify(serializeContextRequest(s.input)), outputJson: s.output ?? null }));
+export function measureLocalTokens(samples: { name: string; input: ContextInput | LegacyV2ContextInput; output?: string }[], reference?: "LEGACY_V2_REFERENCE") {
+  const rows = samples.map(s => ({ case: s.name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(s.input), schemaJson: JSON.stringify(reference ? LegacyV2InterpretationJsonSchema : InterpretationJsonSchema), wireJson: JSON.stringify(reference ? serializeLegacyV2ContextRequestReference(s.input as LegacyV2ContextInput) : serializeContextRequest(s.input as ContextInput)), outputJson: s.output ?? null }));
+  return measureLocalTokenArtifacts(rows);
+}
+
+/** Explicit serialized artifacts, including immutable-byte schema comparisons. */
+export function measureLocalTokenArtifacts(rows: { case: string; prompt: string; inputJson: string; schemaJson: string; wireJson: string; outputJson: string | null }[]) {
   const result = spawnSync("/usr/bin/sandbox-exec", ["-p", "(version 1)(allow default)(deny network*)", resolve("artifacts/context-contract-tokenizer/venv/bin/python"), resolve("tools/benchmark/tokenizer/measure.py")], {
     input: JSON.stringify(rows), encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
     // Worker-generated ProcessEnv augmentation is irrelevant to this isolated

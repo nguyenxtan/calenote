@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveRequest } from "./resolve";
-import { mergePatch } from "./merge";
+import { mergeLegacyV2Patch as mergePatch } from "./merge";
 import { lunarCalendar } from "../lunar-calendar";
 import { date, now, patch, request, time } from "./resolution-test-support";
 

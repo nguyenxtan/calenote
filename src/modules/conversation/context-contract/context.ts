@@ -1,9 +1,9 @@
 import type { BoundChatMessage, BoundChatContext } from "@/modules/reminders/command-service";
-import { ContextInputSchema, SLOT_NAMES, type ContextInput, type EvidenceRef } from "./contracts";
+import { LegacyV2ContextInputSchema as ContextInputSchema, SLOT_NAMES, type LegacyV2ContextInput as ContextInput, type EvidenceRef } from "./contracts";
 import { ContextInputV2Schema, InterpretationJsonSchemaV3, type ContextInputV2 } from "./contracts";
 import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV2 } from "./state";
 import { ContextObservationBindingSchema, ContextSnapshotV1Schema, encodeContextSnapshot, type ContextObservation, type ContextSnapshotV1, type TranscriptEntry, type SourceEvidence } from "./state";
-import { measureEnvelope, type EnvelopeMeasurement } from "./admission";
+import { measureLegacyV2EnvelopeReference, type EnvelopeMeasurement } from "./admission";
 import { containsForbiddenControl, projectSemanticView } from "./projection";
 export type ContextBuildArgs = { message: BoundChatMessage; context: BoundChatContext; snapshot: ContextSnapshotV1 | null; observation: ContextObservation };
 export type ReadyContext = { status: "READY"; input: ContextInput; observation: ContextObservation; evidenceIndex: readonly TranscriptEntry[]; sourceMap: readonly TranscriptEntry["sourceMap"][]; candidateSnapshot: ContextSnapshotV1; candidateSnapshotJson: string; measurement: EnvelopeMeasurement };
@@ -28,13 +28,13 @@ type EvidenceContext = {
 };
 const builtContexts = new WeakMap<AnyReadyContext, EvidenceContext>();
 /** @internal Only locally constructed, frozen payloads can validate evidence. */
-export const evidenceContextFor = (built: ReadyContext) => builtContexts.get(built);
+export const evidenceContextFor = (built: ReadyContext | ReadyContextV2) => builtContexts.get(built);
 export const evidenceContextForV2 = (built: ReadyContextV2) => builtContexts.get(built);
 function freeze<T>(value: T): T {
   if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); }
   return value;
 }
-export function buildContextInput(args: ContextBuildArgs): ContextBuildResult {
+export function buildLegacyV2ContextInput(args: ContextBuildArgs): ContextBuildResult {
   const result = buildContext(args, false);
   if (result.status === "REFUSED") return result;
   const ready = freeze({ ...result, input: ContextInputSchema.parse(result.input), candidateSnapshot: ContextSnapshotV1Schema.parse(result.candidateSnapshot) });
@@ -276,7 +276,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     }
     // A2 has no successor prompt/dispatch. Measure its actual local envelope;
     // prompt/framing stay absent and token admission stays explicitly refused.
-    const measurement = input.schemaVersion === "calenote-context-input-1" ? measureEnvelope(input, candidateSnapshotJson) : measureSuccessorEnvelope(input, candidateSnapshotJson);
+    const measurement = input.schemaVersion === "calenote-context-input-1" ? measureLegacyV2EnvelopeReference(input, candidateSnapshotJson) : measureSuccessorEnvelope(input, candidateSnapshotJson);
     const localReason = measurement.reasons.find(r => r !== "TOKEN_BOUND_UNVERIFIED");
     if (localReason) return refused(localReason);
     const ready: AnyReadyContext = freeze({ status: "READY", input, observation, evidenceIndex, sourceMap: evidenceIndex.map(t => t.sourceMap), candidateSnapshot, candidateSnapshotJson, measurement });

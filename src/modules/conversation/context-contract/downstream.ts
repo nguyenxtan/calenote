@@ -20,7 +20,7 @@ export type QuoteClassification = z.infer<typeof QuoteClassificationSchema>;
 
 export const EvidenceFailureDiagnosticSchema = z.strictObject({
   field: IssueFieldSchema,
-  path: z.array(z.union([z.enum(["changes", "query", "uncertainties", "alternatives", "evidence", "controlEvidence"]), z.number().int().min(0).max(31)])).max(6),
+  path: z.array(z.union([z.enum(["changes", "query", "uncertainties", "alternatives", "evidence", "controlEvidence", "requestTarget"]), z.number().int().min(0).max(31)])).max(6),
   referenceOrdinal: z.number().int().min(0).max(2),
   sourceAlias: z.string().regex(/^(?:t(?:[0-9]|1[01])|f[1-9][0-9]*)$/u).max(16),
   expectedSourceRole: z.enum(["USER", "CONTEXT_FACT"]),

@@ -1,8 +1,8 @@
 import { expect } from "vitest";
-import { buildContextInput } from "./context";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
 import { at, chat, message, observation, withNotes } from "./context-test-fixtures";
-import type { ConversationInterpretation, DateOperand, FieldChange } from "./contracts";
-import { validateEvidence } from "./evidence";
+import type { LegacyV2ConversationInterpretation as ConversationInterpretation, DateOperand, LegacyV2FieldChange as FieldChange } from "./contracts";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import type { ContextSnapshotV1 } from "./state";
 
 export const date = (day = 11, month = 10, year: number | null = null): DateOperand => ({ kind: "CIVIL_DATE", calendar: "GREGORIAN", day, month, year, leapMonth: null });

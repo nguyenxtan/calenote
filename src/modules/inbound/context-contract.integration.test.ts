@@ -64,12 +64,12 @@ it("a proven active legacy V2 series drains through unchanged V2 service", async
     request, turns: [{ userText: "nhắc hai ngày trước thi", receivedAt: old.now, outcomeCode: "PROPOSE" }] })).toBe("SAVED");
   expect(await seriesStore.propose(old, request, "legacy-context", 1)).not.toBeNull();
   await runtimeStore.complete(old);
-  h.deps.legacy = createConversationService({ contextStore, seriesStore, runtimeStore, commandStore, calendar: h.deps.calendar, keyring: h.f.keyring,
+  const legacyConversation = createConversationService({ contextStore, seriesStore, runtimeStore, commandStore, calendar: h.deps.calendar, keyring: h.f.keyring,
     budgetStore: h.deps.budgetStore, now: h.deps.now, reply: async () => {}, list: async () => [], gateway: { prepare: () => ({ status: "FAILURE", category: "UNAVAILABLE" }) } });
   h.setIndex(1);
   const scope = h.f.scope(1);
   expect(await processBoundChatMessage({ ...message("có"), id: scope.sourceInboundId, claimMarker: scope.claimMarker, receivedAt: scope.now }, {
-    store: commandStore, keyring: h.f.keyring, now: h.deps.now, conversation: h.service, reply: async () => {},
+    store: commandStore, keyring: h.f.keyring, now: h.deps.now, conversation: legacyConversation, reply: async () => {},
   })).toEqual({ status: "CONFIRMED" });
   expect(h.inputs).toHaveLength(0);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(2);

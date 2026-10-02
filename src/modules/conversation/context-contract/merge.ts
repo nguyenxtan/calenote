@@ -1,5 +1,5 @@
-import { SLOT_NAMES, UncertaintySchema, type ConversationInterpretation, type EvidenceRef, type QueryOperand } from "./contracts";
-import { isValidatedPatch, type ValidatedFieldEvidence, type ValidatedPatch } from "./evidence";
+import { SLOT_NAMES, LegacyV2UncertaintySchema as UncertaintySchema, type LegacyV2ConversationInterpretation as ConversationInterpretation, type EvidenceRef, type QueryOperand } from "./contracts";
+import { isLegacyV2ValidatedPatch as isValidatedPatch, type ValidatedFieldEvidence, type ValidatedPatch } from "./evidence";
 import { ContextSnapshotV1Schema, encodeContextSnapshot, type ContextSnapshotV1, type SlotProvenance, type SourceEvidence } from "./state";
 import { RESOLUTION_VERSION } from "./resolve";
 import { UncertaintyV3Schema, type SemanticPatchProposalV3 } from "./contracts";
@@ -77,7 +77,10 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
     return finish(query);
   }
   if (!patch.requestTarget) return finish(null);
-  if (candidate.pendingSemanticCandidate && patch.requestTarget.kind === "CURRENT" && !patch.adoptedCandidate) {
+  const operationUncertainty = patch.resolvedUncertainties.some(u => u.field === "operation");
+  const emptyOperationClarification = patch.requestTarget.kind === "UNRESOLVED" && patch.resolvedChanges.length === 0
+    && operationUncertainty && patch.resolvedUncertainties.every(u => u.field === "operation");
+  if (candidate.pendingSemanticCandidate && !patch.adoptedCandidate && (patch.requestTarget.kind === "CURRENT" || emptyOperationClarification)) {
     return { status: "CLARIFY_OPERATION", candidate, pendingSemanticCandidate: candidate.pendingSemanticCandidate };
   }
   const stage = (): ContextSnapshotV2["pendingSemanticCandidate"] => ({
@@ -94,7 +97,6 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
     expiresAt: new Date(Math.min(Date.parse(candidate.inbound.receivedAt) + 600000, Date.parse(candidate.idleExpiresAt), Date.parse(candidate.absoluteExpiresAt), candidate.draftExpiresAt ? Date.parse(candidate.draftExpiresAt) : Infinity)).toISOString(),
     baseContextRevision: candidate.contextRevision, questionId: candidate.inbound.id + ":operation",
   });
-  const operationUncertainty = patch.resolvedUncertainties.some(u => u.field === "operation");
   if (patch.requestTarget.kind === "NEW" && previous?.requestId && !operationUncertainty) {
     candidate.pendingSemanticCandidate = null;
     return { status: "NEEDS_REPLACEMENT", candidate, proposed: patch };
@@ -205,7 +207,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
 
 
 /** Pure candidate construction. No draft is persisted or confirmed here. */
-export function mergePatch(previous: ContextSnapshotV1 | null, patch: ValidatedPatch): MergeResult {
+export function mergeLegacyV2Patch(previous: ContextSnapshotV1 | null, patch: ValidatedPatch): MergeResult {
   if (!isValidatedPatch(patch)) return { status: "REJECTED", reason: "UNVALIDATED_PATCH" };
   const reject = (reason: string): MergeResult => ({ status: "REJECTED", reason });
   const observation = patch.observation.observed;

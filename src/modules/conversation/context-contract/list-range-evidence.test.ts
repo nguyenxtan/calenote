@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { verifyListRangeEvidence } from "./list-range-evidence";
-import { buildContextInput } from "./context";
-import { validateEvidence } from "./evidence";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
 import type { QueryOperand } from "./contracts";
 import type { ContextSnapshotV1, SourceEvidence } from "./state";

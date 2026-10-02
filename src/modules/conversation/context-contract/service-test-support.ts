@@ -1,6 +1,6 @@
 import { afterEach, expect } from "vitest";
 import { fixture } from "./infrastructure/d1/test-support";
-import { D1ContextRuntimeStore } from "./runtime-store";
+import { createD1ContextRuntimeStoreV3 } from "./runtime-store";
 import { createContextContractService, type ContextContractServiceDependencies } from "./service";
 import { createContextContractGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { D1SemanticBudgetStore } from "@/modules/semantic/infrastructure/d1/budget-store";
@@ -12,10 +12,13 @@ import { date, time } from "./resolution-test-support";
 import type { ContextInput } from "./contracts";
 import type { ReadyReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
+import { CONTEXT_PROTOCOL_V3 } from "./protocol";
+import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
+import { encodeFixtureV3 } from "../../../../tools/benchmark/context-contract-fixtures";
 const fixtures: Awaited<ReturnType<typeof fixture>>[] = [];
 afterEach(() => fixtures.splice(0).forEach(f => f.close()));
 export async function setup() { const f = await fixture(); fixtures.push(f); return f; }
-const gatewayConfig = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+const gatewayConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 export const limits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 500000, globalDailyCostMicrounits: 2000000, maxInputTokens: 12000, maxOutputTokens: 1536,
   promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000, reservationTtlMs: 300000 };
@@ -29,18 +32,18 @@ export function scriptedGateway(proposals: Proposal[], inputs: ContextInput[]) {
     const request = { model: gatewayConfig.primary.model, ...serializeContextRequest(input), provider: {
       only: [gatewayConfig.primary.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } };
     return createContextContractGateway(gatewayConfig, { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
-      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
+      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(value)) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
   } };
 }
-export function proposal(values: Record<string, unknown>, act = "NEW_REQUEST", guidance: unknown = { kind: "PRESENT_PREVIEW" }, reply: unknown = null): Proposal {
-  return input => ({ schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: act, continuation: act === "NEW_REQUEST" ? "NO" : "YES",
-    changes: Object.entries(values).map(([field, value]) => ({ field, value, operation: "SET", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] })),
-    query: null, uncertainties: [], controlEvidence: [], conversationDirective: guidance, replyProposal: reply });
+export function proposal(values: Record<string, unknown>, target: "NEW" | "CURRENT" = "NEW", guidance: unknown = null, reply: unknown = null, replacements: string[] = []): Proposal {
+  return input => ({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: target, evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] },
+    changes: Object.entries(values).map(([field, value]) => ({ field, value, operation: replacements.includes(field) ? "REPLACE" : "SET", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] })),
+    query: null, uncertainties: [], conversationDirective: guidance, replyProposal: reply });
 }
 export async function harness(proposals: Proposal[]) {
-  const f = await setup(), inputs: ContextInput[] = [], events: ContextObservationEvent[] = [], replies: ReadyReplyPlan[] = [];
+  const original = await setup(), f = { ...original, store: { ...createD1ContextContractStoreV3({ db: original.db, keyring: original.keyring, protocol: CONTEXT_PROTOCOL_V3 }) } }, inputs: ContextInput[] = [], events: ContextObservationEvent[] = [], replies: ReadyReplyPlan[] = [];
   let index = 0, delivery: ReplyReceipt = { status: "SENT", messageRef: "provider-ref" };
-  const deps: ContextContractServiceDependencies = { store: f.store, runtimeStore: new D1ContextRuntimeStore(f.db), gateway: scriptedGateway(proposals, inputs),
+  const deps: ContextContractServiceDependencies = { store: f.store, runtimeStore: createD1ContextRuntimeStoreV3({ db: f.db, keyring: f.keyring, protocol: CONTEXT_PROTOCOL_V3 }), gateway: scriptedGateway(proposals, inputs),
     budgetStore: new D1SemanticBudgetStore(f.db, limits), keyring: f.keyring, calendar: lunarCalendar, now: () => f.scope(index).now,
     channel: "TELEGRAM", mode: "OFFLINE_FIXTURE", sourceSha: "3cc856535dcdc8da4bf21cd27b9f7958b3c458d9",
     list: input => new D1SemanticReminderQueryStore(f.db).listContext(input), observe: e => events.push(e),

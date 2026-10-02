@@ -3,7 +3,7 @@ import type { Keyring } from "@/modules/security/keyring";
 import type { SemanticBudgetStore } from "@/modules/semantic/budget-store";
 import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
 import type { LunarCalendarAdapter } from "../lunar-calendar";
-import type { ContextContractStore } from "./store";
+import type { ContextContractStoreV3 } from "./store";
 import type { ContextRuntimeStore } from "./runtime-store";
 import type { ContextInput, ParsedInterpretation } from "./contracts";
 import type { ContextReminderQuery, ContextQueryResult } from "./query";
@@ -11,29 +11,31 @@ import type { ReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
 import { createContextTraceId } from "./observability";
 import type { ConversationScope } from "../contracts";
-import { buildContextInput } from "./context";
+import { buildContextInputV2 } from "./context";
 import { selectControl } from "./decisions";
-import { transitionConversation, type ConversationTransition } from "./transition";
+import { transitionConversationV3, type ConversationTransitionV3 } from "./transition";
 import { composeContextReply, type FailureReason, type ReadyReplyPlan } from "./responses";
-import { validateEvidence, validateGuidancePrivacy } from "./evidence";
-import { mergePatch } from "./merge";
+import { validateEvidenceV3, validateGuidancePrivacy } from "./evidence";
+import { mergePatchV3 } from "./merge";
 import { resolveRequest } from "./resolve";
 import { resolveQuery } from "./query";
-import { computeEffectiveDirective, validateDirective, selectGuidance } from "./guidance";
+import { computeEffectiveDirectiveV3, validateDirectiveV3, selectGuidance } from "./guidance";
 import { digest } from "./confirmation";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { InterpretationJsonSchema } from "./contracts";
-import type { ContextSnapshotV1 } from "./state";
+import type { ContextSnapshotV2 } from "./state";
 import { projectSemanticView } from "./projection";
 import { createControlProof } from "./control-proof";
 import { isPreviewRecoveryResponse } from "./preview-control";
 import { SLOT_NAMES } from "./contracts";
-import { SlotsSchema, encodeContextSnapshot } from "./state";
+import { SlotsSchema, encodeContextSnapshotV2 } from "./state";
 import type { DecisionProof } from "./store";
 import { evidenceReason, type DownstreamDiagnostic } from "./downstream";
+import { CONTEXT_PROTOCOL_V3, isContextProtocolV3 } from "./protocol";
+import type { ContextObservation } from "./state";
 
 export interface ContextContractServiceDependencies {
-  store: ContextContractStore; runtimeStore: ContextRuntimeStore;
+  store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
   gateway: SemanticGateway<ParsedInterpretation, ContextInput>; budgetStore: SemanticBudgetStore;
   keyring: Pick<Keyring, "decryptSensitive">; calendar: LunarCalendarAdapter;
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
@@ -41,13 +43,13 @@ export interface ContextContractServiceDependencies {
   list(input: ContextReminderQuery): Promise<ContextQueryResult>;
   processingFeedback?: () => void | Promise<void>;
   observe?: (event: ContextObservationEvent) => void;
-  legacy?: { handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult> };
 }
 const normalizedControl = (text: string) => text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
 const localWords = new Set(["có", "ok", "1", "xác nhận", "không", "2", "bỏ", "hủy", "huỷ"]);
 const helpWords = new Set(["help", "/help", "trợ giúp", "hướng dẫn"]);
 const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
 export function createContextContractService(deps: ContextContractServiceDependencies) {
+  if (!isContextProtocolV3(deps.store.protocol)) throw new TypeError("Selected context protocol required");
   if (!/^[0-9a-f]{40}$/u.test(deps.sourceSha)) throw new TypeError("Source SHA required");
   const scopeFor = (message: BoundChatMessage, context: BoundChatContext): ConversationScope => ({ ownerId: context.userId,
     chatIdentityId: context.chatIdentityId, sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() });
@@ -62,11 +64,13 @@ export function createContextContractService(deps: ContextContractServiceDepende
       const traceId = createContextTraceId();
       type EventFields = ContextObservationEvent extends infer E ? E extends ContextObservationEvent ? Omit<E, "traceId" | "sourceSha" | "contractVersion" | "promptVersion" | "mode"> : never : never;
       const emit = (event: EventFields) => { try { deps.observe?.({ traceId, sourceSha: deps.sourceSha, mode: deps.mode,
-        contractVersion: "calenote-context-2", promptVersion: "calenote-context-2", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+        contractVersion: "calenote-context-3", promptVersion: "calenote-context-3", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+      let sendObservation: ContextObservation | undefined;
+      let failureSnapshot: ContextSnapshotV2 | null = null, failureReceived: ContextSnapshotV2 | undefined;
       let downstreamCount = 0;
       const downstream = (diagnostic: DownstreamDiagnostic) => { if (downstreamCount++ < 24) emit({ event: "POST_CANONICAL_STAGE", diagnostic }); };
       const send = async (plan: ReadyReplyPlan, expected?: { contextId: string; contextRevision: number }): Promise<ReplyReceipt | null> => {
-        if (!await deps.runtimeStore.canSend({ ...scope, now: deps.now() }, expected)) { emit({ event: "TRANSITION_REJECTED", reason: "STALE" }); return null; }
+        if (!await deps.runtimeStore.canSend({ ...scope, now: deps.now() }, expected, sendObservation)) { emit({ event: "TRANSITION_REJECTED", reason: "STALE" }); return null; }
         emit({ event: "REPLY_SELECTED", source: plan.source }); emit({ event: "REPLY_DISPATCHED" });
         let receipt: ReplyReceipt;
         try { receipt = await deps.reply(plan); } catch { receipt = { status: "UNCERTAIN" }; }
@@ -76,6 +80,22 @@ export function createContextContractService(deps: ContextContractServiceDepende
       };
       const finish = async (reason: FailureReason): Promise<ProcessBoundChatResult> => {
         if (downstreamCount > 0) downstream({ stage: "TRANSITION", result: "REJECTED", reason: evidenceReason(reason, "TRANSITION_REJECTED"), transition: "REPLY_ONLY" });
+        // Only prior selected state needs durable revocation/preservation.
+        // A fresh builder candidate is not accepted semantic context. A prior
+        // no-A grounded candidate still is, even when requestId is null.
+        if (sendObservation && failureSnapshot && failureReceived) {
+          const transition = await transitionConversationV3({ snapshot: failureSnapshot, received: failureReceived, failure: reason, control: { kind: "NONE" }, authority, now: deps.now(), channel: deps.channel });
+          if (!("kind" in transition)) {
+            const { reply, ...stored } = transition;
+            const applied = await deps.store.apply(scope, sendObservation, stored);
+            if (applied.status !== "APPLIED") return { status: "SUPERSEDED" };
+            if (downstreamCount > 0) downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: reply.source });
+            const receipt = await send(reply, applied);
+            if (receipt) await deps.store.recordDelivery({ ...scope, now: deps.now() }, { ...applied, draftRevision: stored.snapshot.draftRevision,
+              outboundId: stored.snapshot.transcript.at(-1)!.id, decisionId: null, deliveryState: receipt.status, messageRef: receipt.status === "SENT" ? receipt.messageRef : null });
+            return { status: "REJECTED" };
+          }
+        }
         if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
         const reply = composeContextReply({ kind: "FAILURE", reason });
         if (reply.status === "READY") { if (downstreamCount > 0) downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: reply.source }); await send(reply); }
@@ -94,12 +114,11 @@ export function createContextContractService(deps: ContextContractServiceDepende
       try {
         const observed = await deps.store.observe(scope);
         if ("failure" in observed) {
-          const legacyControl = ["có", "ok", "1", "xác nhận", "hủy", "huỷ", "không", "2"].includes(message.text.normalize("NFC").trim().toLocaleLowerCase("vi"));
-          if (observed.failure === "OTHER_CONTRACT" && legacyControl && deps.legacy && await deps.runtimeStore.ownsLegacyContext(scope)) return deps.legacy.handle(message, context);
           emit({ event: "MODEL_BYPASSED", reason: observed.failure === "UNAUTHORIZED" ? "AUTH_INVALID" : "CONTEXT_INVALID" });
           return observed.failure === "UNAUTHORIZED" ? { status: "SUPERSEDED" } : finish(observed.failure === "EXPIRED" ? "EXPIRED" : "CONTEXT");
         }
         emit({ event: "INBOUND_ACCEPTED" }); emit({ event: "CONTEXT_LOADED", presence: observed.snapshot ? "PRESENT" : "ABSENT" });
+        sendObservation = observed.observation;
         const prior = observed.snapshot;
         if (observed.observation.scope.workspaceId !== context.workspaceId || observed.observation.scope.connectionId !== message.connectionId
           || observed.observation.scope.chatId !== message.privateChatId || observed.observation.inbound.rowid !== context.inboundRowId
@@ -116,8 +135,17 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const proof = await createControlProof(prior, observed.observation.inbound, message.text, control, authority, scope.now);
           return proof ? confirm(proof) : finish("STALE");
         }
-        const built = buildContextInput({ message, context, snapshot: prior, observation: observed.observation });
-        let transition: ConversationTransition;
+        const built = buildContextInputV2({ message, context, snapshot: prior, observation: observed.observation });
+        if (built.status === "READY") { failureSnapshot = prior; failureReceived = built.candidateSnapshot; }
+        else if (prior) {
+          // Refused content never enters the accepted semantic transcript.
+          // Retain validated facts/candidate/lifetimes, bind only the actual
+          // inbound receipt, and let the selected failure transition revoke
+          // old actionable proof before completing this inbound.
+          failureSnapshot = prior;
+          failureReceived = { ...structuredClone(prior), inbound: observed.observation.inbound, modelAttemptBinding: null, webDeclineReceipt: null };
+        }
+        let transition: ConversationTransitionV3;
         if (built.status !== "READY") {
           const capacity = built.reason === "CONTEXT_TURN_COUNT_EXCEEDED" || built.reason === "CONTEXT_SNAPSHOT_TOO_LARGE";
           const restart = control.kind === "APPROVE" && control.decisionKind === "RESTART_PENDING";
@@ -128,12 +156,12 @@ export function createContextContractService(deps: ContextContractServiceDepende
             transition = await terminalOverflow(prior, observed.observation.inbound, restart, proof);
           } else if (capacity && prior && (control.kind === "DECLINE" || control.kind === "AMBIGUOUS_TARGET" || recovery)) {
             emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
-            transition = await transitionConversation({ snapshot: prior, received: { ...structuredClone(prior), inbound: observed.observation.inbound, modelAttemptBinding: null, webDeclineReceipt: null },
+            transition = await transitionConversationV3({ snapshot: prior, received: { ...structuredClone(prior), inbound: observed.observation.inbound, modelAttemptBinding: null, webDeclineReceipt: null },
               ...(recovery ? { previewRecoveryText: message.text } : { localControlText: message.text }), control, authority, now: scope.now, channel: deps.channel });
           } else { emit({ event: "REQUEST_REJECTED", reason: "INVALID_INPUT" }); return finish(built.reason.includes("EXPIRED") ? "EXPIRED" : built.reason.includes("LARGE") || built.reason.includes("LONG") || built.reason.includes("COUNT") ? "SIZE" : "CONTEXT"); }
         } else if (local) {
           emit({ event: "MODEL_BYPASSED", reason: control.kind !== "NONE" || staleControl ? "LOCAL_CONTROL" : helpWords.has(normalized) ? "HELP" : "GREETING" });
-          if (control.kind !== "NONE" || recovery) transition = await transitionConversation({ snapshot: prior, received: built.candidateSnapshot,
+          if (control.kind !== "NONE" || recovery) transition = await transitionConversationV3({ snapshot: prior, received: built.candidateSnapshot,
             ...(recovery ? { previewRecoveryText: message.text } : {}), control, authority, now: scope.now, channel: deps.channel });
           else {
             const reply = composeContextReply(staleControl ? { kind: "FAILURE", reason: "STALE" } : { kind: "NOTICE", notice: "HELP" });
@@ -147,7 +175,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
           emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: "google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
           const inputDigest = await digest(built.input), promptDigest = await digest(CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
-          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, contractVersion: "calenote-context-2", promptVersion: "calenote-context-2" });
+          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: CONTEXT_PROTOCOL_V3 });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });
           if (reservation.status !== "RESERVED") { emit({ event: "REQUEST_REJECTED", reason: "BUDGET_EXHAUSTED" }); return finish("BUDGET"); }
@@ -168,11 +196,11 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const parsed = result.interpretation;
           downstream({ stage: "CANONICAL", result: parsed.fullSchemaValid ? "PASS" : "QUARANTINED_GUIDANCE", reason: parsed.fullSchemaValid ? "NONE" : "SCHEMA_INVALID" });
           emit({ event: "STRUCTURE_VALIDATED", fullSchemaValid: parsed.fullSchemaValid, semanticPatchValidation: "VALID", directiveValidation: parsed.directive.status, replyEligibility: parsed.reply.status });
-          const evidence = validateEvidence(parsed.semantic, built, downstream);
+          const evidence = validateEvidenceV3(parsed.semantic, built, downstream);
           emit({ event: "PROVENANCE_DOMAIN_VALIDATED", result: evidence.status === "VALID" ? "VALID" : "INVALID", ...(evidence.status !== "VALID" ? { reason: "EVIDENCE_INVALID" as const } : {}) });
           if (evidence.status !== "VALID") return finish("SEMANTIC");
-          const merge = mergePatch(prior, evidence.patch);
-          downstream({ stage: "MERGE", result: merge.status === "MERGED" ? "PASS" : "REJECTED", reason: merge.status === "MERGED" ? "NONE" : evidenceReason(merge.reason, "PATCH_REJECTED") });
+          const merge = mergePatchV3(prior, evidence.patch);
+          downstream({ stage: "MERGE", result: merge.status === "REJECTED" ? "REJECTED" : merge.status === "CLARIFY_OPERATION" ? "CLARIFY" : "PASS", reason: merge.status === "REJECTED" ? evidenceReason(merge.reason, "PATCH_REJECTED") : "NONE" });
           const resolution = merge.status === "MERGED" ? resolveRequest(merge.candidate, deps.now(), deps.calendar) : undefined;
           const queryResolution = merge.status === "MERGED" && merge.query ? resolveQuery(merge.query, Date.parse(merge.queryReferenceTime ?? new Date(message.receivedAt).toISOString()), deps.calendar) : undefined;
           downstream({ stage: "QUERY_RESOLUTION", result: !queryResolution ? "NOT_APPLICABLE" : queryResolution.status === "REJECTED" ? "REJECTED" : queryResolution.status === "CLARIFY" ? "CLARIFY" : "PASS",
@@ -190,8 +218,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
             emit({ event: "QUERY_EXECUTED", result: queryResult.status !== "RESULTS" ? "FAILURE" : queryResult.hasMore ? "PARTIAL" : "SUCCESS", hasMore: queryResult.status === "RESULTS" ? queryResult.hasMore : null });
           }
           if (merge.status === "MERGED" && !merge.query && resolution) emit({ event: "SCHEDULE_RESOLVED", result: resolution.status });
-          const effective = computeEffectiveDirective({ semantic: evidence.patch, merge, resolution, queryResolution, queryResult });
-          const directiveValidation = validateDirective(parsed.directive, effective);
+          const effective = computeEffectiveDirectiveV3({ semantic: evidence.patch, merge, resolution, queryResolution, queryResult });
+          const directiveValidation = validateDirectiveV3(parsed.directive, effective);
           downstream({ stage: "DIRECTIVE", result: effective.kind === "BACKEND_ONLY" && effective.reason === "FAILURE" ? "REJECTED" : effective.kind === "ASK_FOR_FIELD" || effective.kind === "ASK_FOR_DISAMBIGUATION" ? "CLARIFY" : "PASS", reason: directiveValidation.status === "VALID" ? "NONE" : directiveValidation.reason, directive: effective.kind,
             ...("field" in effective ? { field: effective.field } : {}) });
           const guidance = selectGuidance({ effectiveDirective: effective, directiveValidation, replyProposal: parsed.reply,
@@ -200,13 +228,13 @@ export function createContextContractService(deps: ContextContractServiceDepende
           emit({ event: "EFFECTIVE_DIRECTIVE_COMPUTED", kind: effective.kind });
           emit({ event: "DIRECTIVE_VALIDATED", result: directiveValidation.status === "VALID" ? "MATCH" : directiveValidation.reason });
           emit({ event: "REPLY_ELIGIBILITY_EVALUATED", result: guidance.source === "MODEL_GUIDANCE" ? "ELIGIBLE" : guidance.reason });
-          transition = await transitionConversation({ snapshot: prior, interpretation: evidence.patch, merge, resolution, queryResolution, queryResult, queryTitles, guidance, control, authority, now: deps.now(), channel: deps.channel });
+          transition = await transitionConversationV3({ snapshot: prior, interpretation: evidence.patch, merge, resolution, queryResolution, queryResult, queryTitles, guidance, control, authority, now: deps.now(), channel: deps.channel });
           const transitionRejected = "kind" in transition && !transition.confirmationProof || effective.kind === "BACKEND_ONLY" && effective.reason === "FAILURE";
           downstream({ stage: "TRANSITION", result: transitionRejected ? "REJECTED" : transition.reply.kind === "CLARIFICATION" ? "CLARIFY" : "PASS", reason: "kind" in transition && transition.reason ? evidenceReason(transition.reason, "TRANSITION_REJECTED") : transitionRejected ? "TRANSITION_REJECTED" : "NONE", transition: "kind" in transition ? transition.confirmationProof ? "CONFIRMATION" : "REPLY_ONLY" : "STORED" });
           downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: transition.reply.source, replyKind: transition.reply.kind });
           if (!("kind" in transition)) transition.snapshot.modelAttemptBinding = { attemptId: traceId, observationId: bindingDigest, contextRevision: prior?.contextRevision ?? null,
-            sourceInboundId: message.id, claimMarker: message.claimMarker, inputDigest, promptDigest, contractDigest, contractVersion: "calenote-context-2", status: "ACCEPTED" };
-          if (!("kind" in transition) && new TextEncoder().encode(encodeContextSnapshot(transition.snapshot)).length > 16384) return finish("SIZE");
+            sourceInboundId: message.id, claimMarker: message.claimMarker, inputDigest, promptDigest, contractDigest, contractVersion: "calenote-context-3", status: "ACCEPTED" };
+          if (!("kind" in transition) && new TextEncoder().encode(encodeContextSnapshotV2(transition.snapshot)).length > 16384) return finish("SIZE");
         }
         if ("kind" in transition) {
           if (!transition.confirmationProof) return finish("STALE");
@@ -228,10 +256,10 @@ export function createContextContractService(deps: ContextContractServiceDepende
 
 /** Terminal discard may erase its unconfirmed payload; active evidence is never
  * evicted to make a semantic request fit. The unchanged T4 CAS owns finality. */
-async function terminalOverflow(prior: ContextSnapshotV1, inbound: ContextSnapshotV1["inbound"], restart: boolean, proof: DecisionProof | null): Promise<ConversationTransition> {
-  const received: ContextSnapshotV1 = { ...structuredClone(prior), inbound, requestId: null, draftRevision: null, draftCreatedAt: null, draftExpiresAt: null,
+async function terminalOverflow(prior: ContextSnapshotV2, inbound: ContextSnapshotV2["inbound"], restart: boolean, proof: DecisionProof | null): Promise<ConversationTransitionV3> {
+  const received: ContextSnapshotV2 = { ...structuredClone(prior), inbound, requestId: null, draftRevision: null, draftCreatedAt: null, draftExpiresAt: null,
     slots: SlotsSchema.parse(Object.fromEntries(SLOT_NAMES.map(field => [field, { state: "MISSING", value: null, fact: null, evidence: [], provenance: null, resolution: null, proposalRevision: 1 }]))),
-    facts: [], ambiguities: [], transcript: [], controlRegistry: [], pendingDecision: null, previewReceipt: null, pendingQueryQuestion: null, pendingReminderQuestion: null, modelAttemptBinding: null };
+    pendingSemanticCandidate: null, facts: [], ambiguities: [], transcript: [], controlRegistry: [], pendingDecision: null, previewReceipt: null, pendingQueryQuestion: null, pendingReminderQuestion: null, modelAttemptBinding: null };
   const reply = composeContextReply({ kind: "NOTICE", notice: restart ? "RESTARTED" : "ABANDONED" });
   if (reply.status !== "READY") throw new Error("Invalid terminal reply");
   const result = await localTransition(prior, received, reply);
@@ -241,7 +269,7 @@ async function terminalOverflow(prior: ContextSnapshotV1, inbound: ContextSnapsh
   return result;
 }
 
-async function localTransition(prior: ContextSnapshotV1 | null, received: ContextSnapshotV1, reply: ReadyReplyPlan): Promise<ConversationTransition> {
+async function localTransition(prior: ContextSnapshotV2 | null, received: ContextSnapshotV2, reply: ReadyReplyPlan): Promise<ConversationTransitionV3> {
   const snapshot = structuredClone(received);
   snapshot.contextRevision = (prior?.contextRevision ?? 0) + 1;
   snapshot.webDeclineReceipt = null;

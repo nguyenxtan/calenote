@@ -3,17 +3,17 @@
  * outbound messaging receipt. No semantic outcome is reconstructed here. */
 import { SqliteD1Database } from "../../src/testing/sqlite-d1.test-support";
 import { createKeyring } from "../../src/modules/security/keyring";
-import { D1ContextContractStore } from "../../src/modules/conversation/context-contract/infrastructure/d1/store";
-import { D1ContextRuntimeStore } from "../../src/modules/conversation/context-contract/runtime-store";
+import { D1ContextContractStore, createD1ContextContractStoreV3 } from "../../src/modules/conversation/context-contract/infrastructure/d1/store";
+import { createD1ContextRuntimeStoreV3 } from "../../src/modules/conversation/context-contract/runtime-store";
 import { createContextContractService } from "../../src/modules/conversation/context-contract/service";
-import { createContextContractGateway, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type ContextOfflineTransport, type SemanticGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type ContextOfflineTransport, type ContextGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { D1SemanticBudgetStore } from "../../src/modules/semantic/infrastructure/d1/budget-store";
 import { D1SemanticReminderQueryStore } from "../../src/modules/reminders/infrastructure/d1/semantic-query-store";
 import { D1ReminderApiStore } from "../../src/modules/reminders/infrastructure/d1/api-store";
 import { listDetailedReminders } from "../../src/modules/reminders/details-api-service";
 import { lunarCalendar } from "../../src/modules/conversation/lunar-calendar";
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
-import { decodeContextSnapshot, encodeContextSnapshot, type ContextSnapshotV1 } from "../../src/modules/conversation/context-contract/state";
+import { decodeContextSnapshotV2, encodeContextSnapshotV2, type ContextSnapshotV2 } from "../../src/modules/conversation/context-contract/state";
 import { isDeepStrictEqual } from "node:util";
 import { persistedD1Blob } from "../../src/modules/db/persisted-blob";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
@@ -22,8 +22,10 @@ import type { SemanticGateway } from "../../src/modules/intelligence/semantic-ga
 import type { ReplyPlan, ReplyReceipt } from "../../src/modules/conversation/context-contract/responses";
 import type { ContextObservationEvent } from "../../src/modules/conversation/context-contract/observability";
 import type { ContextObservation, PlannedContextCase } from "./context-contract";
+import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
+import { encodeFixtureV3 } from "./context-contract-fixtures";
 
-const gatewayConfig: SemanticGatewayConfig = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+const gatewayConfig: ContextGatewayConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 500000, globalDailyCostMicrounits: 2000000,
@@ -58,9 +60,9 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     const events: ContextObservationEvent[] = [], inputs: ContextInput[] = [], sends: Array<{ plan: ReplyPlan; receipt: ReplyReceipt }> = [];
     let queryRange: { start: number; end: number } | null = null, listStoreReads = 0;
     let issuedToken: string | null = null;
-    let lastSnapshot: ContextSnapshotV1 | null = null;
-    const store = new D1ContextContractStore(db, keyring, () => now);
-    const service = createContextContractService({ store, runtimeStore: new D1ContextRuntimeStore(db),
+    let lastSnapshot: ContextSnapshotV2 | null = null;
+    const store = new D1ContextContractStore(db, keyring, () => now, CONTEXT_PROTOCOL_V3);
+    const service = createContextContractService({ store: createD1ContextContractStoreV3({ db, keyring, clock: () => now, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db, keyring, protocol: CONTEXT_PROTOCOL_V3 }),
       gateway: { prepare(tier, input) {
         inputs.push(structuredClone(input));
         if (config.liveGateway && index > (config.offlineSeedTurns ?? 0)) {
@@ -79,7 +81,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           ? proposed.fixtureFault === "TIMEOUT" ? { status: 408, body: "" }
             : proposed.fixtureFault === "INVALID_JSON" ? { status: 200, body: "not-json" }
               : { status: 200, body: JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }) }
-          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(proposed) }, finish_reason: "stop" }] }) };
+          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(proposed)) }, finish_reason: "stop" }] }) };
         const transport: ContextOfflineTransport = { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
           admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response }] };
         const offlinePrepared = createContextContractGateway(gatewayConfig, transport).prepare(tier, input);
@@ -117,7 +119,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
         await db.prepare("INSERT INTO inbound_updates(id,connection_id,provider,provider_message_id,provider_user_id,private_chat_id,message_ciphertext,message_iv,message_key_version,state,received_at,transition_marker) VALUES(?,'connection','telegram',?,'provider-user','chat',x'01',zeroblob(12),1,'PROCESSING',?,?)")
           .bind(readId, readId, now + 1, "probe-read-claim").run();
         const traceId = events[beforeEvents]?.traceId;
-        const actualEvents = events.slice(beforeEvents).filter(e => e.traceId === traceId), observed = await store.observe({ ...scope(readId, "probe-read-claim"), now: now + 1 });
+        const actualEvents = events.slice(beforeEvents).filter(e => e.traceId === traceId), observed = await store.observeSuccessor({ ...scope(readId, "probe-read-claim"), now: now + 1 });
         const snapshot = "failure" in observed ? null : observed.snapshot;
         lastSnapshot = snapshot;
         issuedToken = snapshot?.pendingDecision?.tokenHandle ?? null;
@@ -158,19 +160,19 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           idleExpiresAt: snapshot?.idleExpiresAt ?? null, absoluteExpiresAt: snapshot?.absoluteExpiresAt ?? null,
           draftExpiresAt: snapshot?.draftExpiresAt ?? null, queryRange, childCount: detailed.reminders.length,
           transactionCommits: commits, sendAttempts: actualEvents.filter(e => e.event === "REPLY_DISPATCHED").length,
-          snapshotEncodedBytes: snapshot ? Buffer.byteLength(encodeContextSnapshot(snapshot)) : null,
+          snapshotEncodedBytes: snapshot ? Buffer.byteLength(encodeContextSnapshotV2(snapshot)) : null,
           snapshotLogicalBytes: snapshot ? Buffer.byteLength(JSON.stringify(snapshot)) : null,
           fullSchemaValid: structural?.event === "STRUCTURE_VALIDATED" ? structural.fullSchemaValid : false,
           downstreamDiagnostics: actualEvents.filter(e => e.event === "POST_CANONICAL_STAGE").map(e => e.diagnostic),
           rawSchemaValid: structural?.event === "STRUCTURE_VALIDATED" ? structural.fullSchemaValid : false,
           assertions: { persistedSelectedText: !ready || snapshot?.transcript.at(-1)?.text === ready.text || ["CONFIRMED", "REJECTED", "CANCELLED"].includes(result.status),
-            completeLogicalRoundTrip: !snapshot || isDeepStrictEqual(decodeContextSnapshot(encodeContextSnapshot(snapshot)), snapshot),
+            completeLogicalRoundTrip: !snapshot || isDeepStrictEqual(decodeContextSnapshotV2(encodeContextSnapshotV2(snapshot)), snapshot),
             encryptedStateBoundary: !snapshot || !!cipherRow && cipherRow.key_version === 1 && persistedD1Blob(cipherRow.payload_iv).byteLength === 12
-              && cipher!.byteLength === Buffer.byteLength(encodeContextSnapshot(snapshot)) + 16 && (!ready || !cipher!.includes(Buffer.from(ready.text))),
+              && cipher!.byteLength === Buffer.byteLength(encodeContextSnapshotV2(snapshot)) + 16 && (!ready || !cipher!.includes(Buffer.from(ready.text))),
             persistedDeliveryReceipt: !snapshot || !ready || (snapshot.transcript.at(-1)?.deliveryState === currentDelivery()?.status && snapshot.transcript.at(-1)?.messageRef === (currentDelivery()?.status === "SENT" ? (currentDelivery() as Extract<ReplyReceipt, { status: "SENT" }>).messageRef : null)),
           },
           listStoreReads: listStoreReads - beforeListReads,
-          snapshotDigest: snapshot ? Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(encodeContextSnapshot(snapshot)))).toString("hex") : null,
+          snapshotDigest: snapshot ? Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(encodeContextSnapshotV2(snapshot)))).toString("hex") : null,
           safetyFailures: after < before ? 1 : 0 };
       },
       issuedControlToken() { if (!issuedToken) throw new Error("NO_ISSUED_CONTROL_TOKEN"); return issuedToken; },

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mergePatch } from "./merge";
+import { mergeLegacyV2Patch as mergePatch } from "./merge";
 import { resolveRequest } from "./resolve";
 import { lunarCalendar } from "../lunar-calendar";
 import { date, now, patch, request, time } from "./resolution-test-support";
 import { decodeContextSnapshot, encodeContextSnapshot, type ContextSnapshotV1 } from "./state";
-import { buildContextInput } from "./context";
-import { validateEvidence } from "./evidence";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { chat, message, observation, turn, withNotes } from "./context-test-fixtures";
 import * as successorEvidence from "./evidence";
 import * as successorMerge from "./merge";

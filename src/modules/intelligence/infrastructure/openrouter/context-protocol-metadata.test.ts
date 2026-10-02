@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { ConversationInterpretationSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
-import { encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2parseInterpretationSections as parseInterpretationSections } from "../../../conversation/context-contract/contracts";
+import { legacyV2EncodeGoogleLiteEuContext as encodeGoogleLiteEuContext, legacyV2GoogleLiteEuContextWireSchema as googleLiteEuContextWireSchema, legacyV2ParseGoogleLiteEuContextSections as parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import { ConversationInterpretationV3Schema } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";

@@ -4,7 +4,7 @@ import * as observations from "./observability";
 
 afterEach(() => vi.restoreAllMocks());
 const base = { traceId: "53102386-5ca6-4db5-af63-3882b19059ef", sourceSha: "e1b2e4a6d403fa2046cf104be8ae537ba561a02e",
-  contractVersion: "calenote-context-2", promptVersion: "calenote-context-2", mode: "OFFLINE_FIXTURE" };
+  contractVersion: "calenote-context-3", promptVersion: "calenote-context-3", mode: "OFFLINE_FIXTURE" };
 function observe(event: unknown) {
   expect(observations).toHaveProperty("observeContextEvent", expect.any(Function));
   observations.observeContextEvent(event as Parameters<typeof observations.observeContextEvent>[0]);

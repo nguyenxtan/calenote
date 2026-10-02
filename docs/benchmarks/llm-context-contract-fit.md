@@ -1,5 +1,64 @@
 # LLM context contract: offline feasibility evidence
 
+## Authority V3 candidate — 2026-10-02, local only
+
+Approved §4.6 spec `904afe5` and implementation plan `598a59d` supersede the
+documentation-only gate below. This unstaged A5+A6 candidate is based on
+`68fac9b2b5e95ee57c53f0ac1f491210e153ed01`; grouped independent review is pending.
+Machine evidence: [authority V3 measurements](llm-context-contract-authority-v3-measurements.json).
+Historical measurements and failures below are not rewritten as current PASS.
+
+The same recursive-all-object-array algorithm counts metadata arrays as nodes.
+Wire9 bytes are proven identical to the schema golden read with `git show
+899b1f25f38d4d4afcd7429ffbb10c91851c25e3:...semantic-gateway.test.ts`, not merely
+matched by source hashes. That exact immutable serialized-schema SHA256 is
+`840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab`;
+wire10 is `966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38`.
+The JSON records immutable/current source hashes and every measured input,
+request, output and complete encoded snapshot digest.
+
+| Public schema metric | Immutable wire9 | Selected wire10 |
+| --- | ---: | ---: |
+| Serialized UTF-8 bytes / root keys | 12057 / 9 | 11118 / 7 |
+| Recursive object/array nodes / maximum depth | 337 / 11 | 323 / 11 |
+| Summed anyOf/oneOf branches / constant discriminators | 49 / 31 | 51 / 21 |
+| Required entries / nullable nodes | 162 / 78 | 143 / 65 |
+| Enum arrays / values / largest domain | 22 / 100 / 16 | 27 / 105 / 16 |
+| References / definitions | 43 / 19 | 42 / 18 |
+| Local raw-schema diagnostic tokens | 3190 | 2937 |
+
+Instruction evidence causes some branch/enum counts to increase. Removed roots
+`dialogueAct`, `continuation`, `controlEvidence` and advisory kinds
+`PRESENT_PREVIEW`, `ANSWER_QUERY` do not return. No finite domain is widened to
+arbitrary strings and these counts make no claim about Google's private states.
+
+Seven production-service flows R02/R07/R14/D01/D02/D06/D07 provide 23 complete
+encoded snapshots, maximum 13656 bytes. Actual healthy outputs from the complete
+frozen FULL 80-script/158-turn expansion additionally provide canonical/wire
+token measurements. Across 327 ordinary/comparison rows, known application text
+input is at most 3674 tokens; the largest accepted output is D09's wire output,
+1855 bytes / 493 local text tokens (not a universal worst-case guarantee).
+All these accepted outputs fit 1536 and ordinary snapshots retain every detail.
+The schema-only maximal notes/evidence probe is **not accepted**: wire output
+80309 bytes / 26693 text tokens exceeds both limits. The actual selected gateway
+and service reject it with zero mutation, no persisted fresh snapshot, no partial
+patch or arbitrary truncation. It does not contribute ordinary PASS credit.
+
+The pinned cached google-genai2.25.0/gemma3 artifact runs under OS network deny
+plus Python audit guard; the child inherits only PATH and Python deterministic
+flags, not application credentials. Missing/mismatched cache fails closed;
+no install/bootstrap/provider/counting API is performed. The baseline schema
+comparison intentionally uses the same V3 input and prompt to isolate schema
+bytes; it is not a legacy runtime replay or old-dialogueAct conversion.
+Full structured SDK counting is unsupported (`null`), server/route framing is
+UNKNOWN, and actual token admission remains UNVERIFIED. Limits remain input12000,
+output1536, raw32768, encoded snapshot16384. Local capability/fit PASS is neither
+T11_ROUTE_ADMISSION nor live-model, UAT, staging or production acceptance.
+
+```sh
+CONTEXT_FIT_LOCAL_TOKENS=1 CONTEXT_FIT_V3_REPORT=1 pnpm exec vitest run tools/benchmark/context-contract-fit.test.ts
+```
+
 ## Conversation guidance revision — 2026-09-29
 
 Revision `conversation-guidance-v2` measures the complete canonical

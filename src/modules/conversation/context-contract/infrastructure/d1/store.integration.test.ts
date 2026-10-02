@@ -4,7 +4,7 @@ import { fixture, now } from "./test-support";
 import { D1ContextContractStore } from "./store";
 import * as stores from "./store";
 import { addConfirmationToken } from "../../confirmation-test-support";
-import { buildContextInput } from "../../context";
+import { buildLegacyV2ContextInput as buildContextInput } from "../../context";
 import { chat, message } from "../../context-test-fixtures";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { Keyring } from "@/modules/security/keyring";

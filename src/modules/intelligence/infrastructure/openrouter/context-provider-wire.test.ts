@@ -4,21 +4,37 @@ import { expect, it } from "vitest";
 import { ContextInputSchema, ConversationInterpretationSchema, ConversationInterpretationV3Schema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { createContextContractGateway, createContextHttpTransport, type SemanticJsonRequest } from "./semantic-gateway";
-import { encodeGoogleLiteEuContext, googleLiteEuContextWireSchema, parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 import * as wireModule from "./context-provider-wire";
 
-const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
-const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-1", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
-const minimal = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
+const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it.each([
+  [42, "number"], [null, "null"], [["SENSITIVE_PRIVATE_VALUE"], "array"], ["SENSITIVE_PRIVATE_VALUE".repeat(10000), "string"], [false, "boolean"],
+] as const)("selected primitive envelope diagnostics remain bounded and private (case %#)", (raw, actualType) => {
+  const diagnostics: unknown[] = [], canonical: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, value => canonical.push(value), value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "ENVELOPE_INVALID" });
+  expect(canonical).toEqual([]);
+  expect(diagnostics).toEqual([{ schemaVersion: "calenote-context-3", issues: [{ path: [], code: "WIRE_SHAPE_INVALID", expected: "object", actualType, classification: "value", unknownPathSegments: 0 }], topLevelKeys: [], unknownTopLevelKeyCount: 0, truncated: false }]);
+  expect(JSON.stringify(diagnostics)).not.toContain("SENSITIVE_PRIVATE_VALUE");
+  expect(JSON.stringify(diagnostics).length).toBeLessThan(400);
+});
+it("invalid application protocol selection does not produce raw-envelope diagnostics", () => {
+  const diagnostics: unknown[] = [];
+  const wrong = { ...CONTEXT_PROTOCOL_V3, canonicalVersion: "calenote-context-2" } as unknown as typeof CONTEXT_PROTOCOL_V3;
+  expect(parseGoogleLiteEuContextSectionsV3(42, wrong, value => diagnostics.push(value), value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "ENVELOPE_INVALID" });
+  expect(diagnostics).toEqual([]);
+});
 function v3Wire() { expect(successorWire.googleLiteEuContextWireSchemaV3).toBeDefined(); return successorWire.googleLiteEuContextWireSchemaV3(); }
 it("new_wire_has_no_dialogue_or_owned_metadata", () => {
   const schema = v3Wire().schema;
   const text = JSON.stringify(schema);
-  for (const key of ["dialogueAct", "continuation", "controlEvidence", "schemaVersion", "statusScope", "PRESENT_PREVIEW", "ANSWER_QUERY"]) expect(text).not.toContain(`\"${key}\"`);
+  for (const key of ["dialogueAct", "continuation", "controlEvidence", "schemaVersion", "PRESENT_PREVIEW", "ANSWER_QUERY"]) expect(text).not.toContain(`\"${key}\"`);
   expect(schema.properties).toHaveProperty("requestTarget");
 });
 it("invalid_active_discriminator_rejects", () => {
@@ -50,7 +66,7 @@ const civil = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 31, month: 12, y
 const clock = { hour: 23, minute: 59, qualifier: "H24" };
 const values = { title: "t".repeat(1800), location: "l".repeat(300), notes: "n".repeat(2000), eventDate: civil, eventTime: clock, reminderDate: { kind: "RELATIVE_DAY", offsetDays: -366 }, reminderTime: clock, calendar: "LUNAR_VN", frequency: "DAILY", occurrenceCount: Number.MAX_SAFE_INTEGER, eventRelation: "BEFORE_EVENT", leadOffsetDays: Number.MAX_SAFE_INTEGER, endDate: { kind: "WEEKDAY", weekday: 7, qualifier: "NEXT_WEEK" } };
 // Independent, hand-specified wire layout; never calls a production encoder.
-const pads: Record<string, string[]> = { USER_QUOTE: ["ref"], CONTEXT_FACT: ["turn", "quote", "occurrence"], CIVIL_DATE: ["offsetDays", "weekday", "qualifier"], RELATIVE_DAY: ["calendar", "day", "month", "year", "leapMonth", "weekday", "qualifier"], WEEKDAY: ["calendar", "day", "month", "year", "leapMonth", "offsetDays"], DAY: ["offset", "from", "through"], WEEK: ["date", "from", "through"], MONTH: ["date", "from", "through"], WEEKEND: ["date", "from", "through"], UPCOMING: ["date", "offset", "from", "through"], DATE_BOUNDS: ["date", "offset"], LIST: ["date", "outputCalendar", "topic"], CALENDAR_DATE: ["period", "statusScope", "topic"], CAPABILITY: ["period", "statusScope", "date", "outputCalendar"], HELP: ["field", "reason", "issue", "queryKind"], ASK_FOR_FIELD: ["reason", "issue", "topic", "queryKind"], ASK_FOR_DISAMBIGUATION: ["issue", "topic", "queryKind"], EXPLAIN_UNSUPPORTED: ["field", "reason", "topic", "queryKind"], PRESENT_PREVIEW: ["field", "reason", "issue", "topic", "queryKind"], ANSWER_QUERY: ["field", "reason", "issue", "topic"] };
+const pads: Record<string, string[]> = { USER_QUOTE: ["ref"], CONTEXT_FACT: ["turn", "quote", "occurrence"], CIVIL_DATE: ["offsetDays", "weekday", "qualifier"], RELATIVE_DAY: ["calendar", "day", "month", "year", "leapMonth", "weekday", "qualifier"], WEEKDAY: ["calendar", "day", "month", "year", "leapMonth", "offsetDays"], DAY: ["offset", "from", "through"], WEEK: ["date", "from", "through"], MONTH: ["date", "from", "through"], WEEKEND: ["date", "from", "through"], UPCOMING: ["date", "offset", "from", "through"], DATE_BOUNDS: ["date", "offset"], LIST: ["date", "outputCalendar", "topic"], CALENDAR_DATE: ["period", "topic"], CAPABILITY: ["period", "date", "outputCalendar"], HELP: ["field", "reason", "issue"], ASK_FOR_FIELD: ["reason", "issue", "topic"], ASK_FOR_DISAMBIGUATION: ["issue", "topic"], EXPLAIN_UNSUPPORTED: ["field", "reason", "topic"], PRESENT_PREVIEW: ["field", "reason", "issue", "topic"], ANSWER_QUERY: ["field", "reason", "issue", "topic"] };
 function wireFixture(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(wireFixture);
   if (!value || typeof value !== "object") return value;
@@ -58,6 +74,7 @@ function wireFixture(value: unknown): unknown {
     ? child.map((item: { field: unknown; reason: unknown; alternatives: unknown[] }) => ({ fieldCode: ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "intent", "queryRange", "operation"].indexOf(String(item.field)), reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }))
     : wireFixture(child)]));
   if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
+  if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
   return result;
 }
@@ -76,7 +93,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -84,16 +101,16 @@ it("reconstructs the exact minimal canonical fixture from required inactive null
   expect(await dispatch(wireFixture(minimal))).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true, directive: { status: "VALID", value: minimal.conversationDirective } } });
 });
 it.each(Object.entries(values).flatMap(([field, value]) => ["SET", "CLEAR"].map(operation => ({ field, operation, value: operation === "SET" ? value : null, evidence }))))("preserves typed SET/CLEAR and evidence order for $field/$operation", async change => {
-  const canonical = { ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [change] };
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [change] };
   expect(ConversationInterpretationSchema.safeParse(canonical).success).toBe(true);
   expect(await dispatch(wireFixture(canonical))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes: [change] }, fullSchemaValid: true } });
 });
 it("preserves full changes/uncertainties/evidence capacities and ordered alternatives", async () => {
   const changes = Object.entries(values).map(([field, value]) => ({ field, operation: "SET", value, evidence }));
   const uncertainties = Array.from({ length: 4 }, () => ({ field: "title", reason: "AMBIGUOUS", alternatives: [{ value: "first", evidence }, { value: "second", evidence: [...evidence].reverse() }] }));
-  expect(await dispatch(wireFixture({ ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes, uncertainties, controlEvidence: evidence }))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes, uncertainties, controlEvidence: evidence }, fullSchemaValid: true } });
+  expect(await dispatch(wireFixture({ ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes, uncertainties }))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes, uncertainties }, fullSchemaValid: true } });
 });
-it.each(Object.entries({ ...values, intent: "HELP", operation: "NEW_REQUEST", queryRange: { kind: "DATE_BOUNDS", from: civil, through: civil } }))("preserves uncertainty field association for %s", async (field, value) => {
+it.each(Object.entries({ ...values, intent: "HELP", operation: "CURRENT", queryRange: { kind: "DATE_BOUNDS", from: civil, through: civil } }))("preserves uncertainty field association for %s", async (field, value) => {
   const uncertainties = [{ field, reason: "AMBIGUOUS", alternatives: [{ value, evidence }, { value, evidence }] }];
   expect(await dispatch(wireFixture({ ...minimal, uncertainties }))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { uncertainties }, fullSchemaValid: true } });
 });
@@ -105,20 +122,20 @@ it.each([
   expect(await dispatch(wireFixture({ ...minimal, intent, query }))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { intent, query }, fullSchemaValid: true } });
 });
 it("versioned encoder matches independent fixtures and reconstructs every typed canonical field", () => {
-  const canonical = { ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: Object.entries(values).map(([field, value]) => ({ field, operation: "SET", value, evidence })), controlEvidence: evidence };
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: Object.entries(values).map(([field, value]) => ({ field, operation: "SET", value, evidence })) };
   const before = JSON.stringify(canonical), encoded = encodeGoogleLiteEuContext(canonical);
   expect(encoded).toEqual(wireFixture(canonical));
   expect(parseGoogleLiteEuContextSections(encoded)).toEqual(parseInterpretationSections(canonical));
   expect(JSON.stringify(canonical)).toBe(before);
-  for (const directive of [{ kind: "ASK_FOR_FIELD", field: "title" }, { kind: "ASK_FOR_DISAMBIGUATION", field: "title", reason: "AMBIGUOUS" }, { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" }, { kind: "HELP", topic: "GENERAL" }, { kind: "PRESENT_PREVIEW" }, { kind: "ANSWER_QUERY", queryKind: "LIST" }]) {
+  for (const directive of [{ kind: "ASK_FOR_FIELD", field: "title" }, { kind: "ASK_FOR_DISAMBIGUATION", field: "title", reason: "AMBIGUOUS" }, { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" }, { kind: "HELP", topic: "GENERAL" }, null]) {
     const fixture = { ...minimal, conversationDirective: directive, replyProposal: { text: "x".repeat(400) } };
     expect(encodeGoogleLiteEuContext(fixture)).toEqual(wireFixture(fixture));
     expect(parseGoogleLiteEuContextSections(encodeGoogleLiteEuContext(fixture))).toEqual(parseInterpretationSections(fixture));
   }
-  expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow("CONTEXT_PROVIDER_WIRE_INVALID");
+  expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-authority-10");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
@@ -134,19 +151,19 @@ it.each([
   ["evidence string cap", { field: "title", operation: "SET", value: "synthetic", evidence: [{ ...quote, quote: "x".repeat(2001) }] }],
   ["fact reference pattern", { field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "CONTEXT_FACT", ref: "f0" }] }],
 ])("retains canonical omitted-bound/refinement authority: %s", async (_label, change) => {
-  expect(await dispatch(wireFixture({ ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [change] }))).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+  expect(await dispatch(wireFixture({ ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [change] }))).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
 });
 it.each([
   { ...minimal, uncertainties: Array.from({ length: 5 }, () => ({ field: "title", reason: "MISSING", alternatives: [] })) },
   { ...minimal, uncertainties: [{ field: "title", reason: "AMBIGUOUS", alternatives: Array.from({ length: 3 }, () => ({ value: "synthetic", evidence })) }] },
   { ...minimal, uncertainties: [{ field: "title", reason: "AMBIGUOUS", alternatives: [{ value: "synthetic", evidence }, { value: 2, evidence }] }] },
-  { ...minimal, controlEvidence: [...evidence, quote] },
+  { ...minimal, requestTarget: { kind: "NEW", evidence: [...evidence, quote] } },
   { ...minimal, query: { kind: "CAPABILITY", topic: "LUNAR", evidence } },
 ])("rejects array caps, mixed field alternatives and query/intent mismatch %#", async canonical => {
   expect(await dispatch(wireFixture(canonical))).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
 });
 it("retains active nullable date values and rejects missing envelope/core keys", () => {
-  const canonical = { ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [{ field: "eventDate", operation: "SET", value: { ...civil, year: null }, evidence }] };
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "eventDate", operation: "SET", value: { ...civil, year: null }, evidence }] };
   expect(parseGoogleLiteEuContextSections(encodeGoogleLiteEuContext(canonical))).toEqual(parseInterpretationSections(canonical));
   for (const raw of [null, [], "invalid", {}, { ...wireFixture(minimal) as object, extra: null }]) expect(parseGoogleLiteEuContextSections(raw).status).toBe("REFUSED");
 });
@@ -168,13 +185,16 @@ it.each([
   ["unknown root", (raw: Record<string, unknown>) => { raw.extra = null; }],
   ["missing core", (raw: Record<string, unknown>) => { delete raw.intent; }],
 ] as const)("rejects invalid core atomically: %s", async (_label, mutate) => {
-  const raw = wireFixture({ ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] }) as Record<string, unknown>; mutate(raw);
+  const raw = wireFixture({ ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] }) as Record<string, unknown>; mutate(raw);
   expect(await dispatch(raw)).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
 });
 it("discards inactive evidence and guidance at the HTTP boundary without changing semantic authority", async () => {
-  const canonical = { ...minimal, intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
   const raw = wireFixture(canonical) as Record<string, unknown>;
   (raw.conversationDirective as Record<string, unknown>).field = "title";
   (((raw.changes as Array<Record<string, unknown>>)[0].evidence as Array<Record<string, unknown>>)[0]).ref = "f999";
   expect(await dispatch(raw)).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes: canonical.changes }, directive: { status: "VALID", value: minimal.conversationDirective }, fullSchemaValid: true } });
 });
+
+function encodeGoogleLiteEuContext(value: unknown) { return encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(value)); }
+function parseGoogleLiteEuContextSections(value: unknown) { return parseGoogleLiteEuContextSectionsV3(value, CONTEXT_PROTOCOL_V3); }

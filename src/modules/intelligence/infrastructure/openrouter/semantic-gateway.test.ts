@@ -5,8 +5,10 @@ import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gate
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
 import * as gateways from "./semantic-gateway";
-import { ContextInputSchema, InterpretationJsonSchema, parseInterpretationSections } from "../../../conversation/context-contract/contracts";
-import { encodeGoogleLiteEuContext } from "./context-provider-wire";
+import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
+import { googleLiteEuContextWireSchemaV3 } from "./context-provider-wire";
+import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-contract-fixtures";
+import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
 
@@ -21,24 +23,24 @@ const success = { status: 200, body: JSON.stringify({ choices: [{ message: { con
 
 afterEach(() => vi.useRealTimers());
 
-const contextInput = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-1",
+const contextInput = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2",
   reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" },
   turns: [{ role: "USER", text: "nhắc gọi mẹ" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [],
   capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
-const contextConfig = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+const contextConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
-const contextOutput = { schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO",
+const contextOutput = { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc gọi mẹ", occurrence: 1 }] },
   changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "gọi mẹ", occurrence: 1 }] }],
-  query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }], controlEvidence: [],
+  query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }],
   conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
 const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
   messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify(value) }],
-  response_format: { type: "json_schema", json_schema: { name: "calenote_context_2", strict: true, schema: InterpretationJsonSchema } },
+  response_format: { type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
   stream: false, max_tokens: 1536,
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
 const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
-  choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: finish }] }) });
+  choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload)) }, finish_reason: finish }] }) });
 const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
   admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
 
@@ -156,16 +158,7 @@ describe("observable successor route", () => {
     if (attempt.status !== "READY") throw new Error("prepare failed");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
   });
-  const providerPayload = (payload: unknown) => {
-    const parsed = parseInterpretationSections(payload);
-    if (parsed.status !== "PARSED") return payload;
-    const raw = payload as Record<string, unknown>;
-    const encoded = encodeGoogleLiteEuContext({ ...raw, conversationDirective: parsed.value.directive.status === "VALID" ? raw.conversationDirective : contextOutput.conversationDirective,
-      replyProposal: parsed.value.reply.status === "VALID" ? raw.replyProposal : null }) as Record<string, unknown>;
-    if (parsed.value.directive.status === "INVALID") encoded.conversationDirective = raw.conversationDirective;
-    if (parsed.value.reply.status === "INVALID") encoded.replyProposal = raw.replyProposal;
-    return encoded;
-  };
+  const providerPayload = encodeFixtureV3;
   const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
     id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(providerPayload(payload)).body),
     usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
@@ -182,11 +175,11 @@ describe("observable successor route", () => {
       usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
       providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
     expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex"))
-      .toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+      .toBe("966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38");
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
-      name: "calenote_context_2", strict: true, schema: expect.any(Object) } } }]);
+      name: "calenote_context_3", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
-      .toBe("8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d");
+      .toBe("43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
     expect(requests).toHaveLength(1);
   });
@@ -246,9 +239,9 @@ describe("observable successor route", () => {
     expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
     const emitted = JSON.parse(String(seen?.init.body));
     expect(createHash("sha256").update(JSON.stringify(emitted.response_format.json_schema.schema)).digest("hex"))
-      .toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+      .toBe("966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38");
     expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
-      name: "calenote_context_2", strict: true, schema: expect.any(Object) } } });
+      name: "calenote_context_3", strict: true, schema: expect.any(Object) } } });
     expect(seen?.init.body).not.toContain("synthetic-test-secret");
   });
   it("raw byte evidence measures original HTTP chunks, including BOM, not decoded text or Content-Length", async () => {

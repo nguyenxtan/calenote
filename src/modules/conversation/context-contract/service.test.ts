@@ -3,13 +3,13 @@ import { expect, it } from "vitest";
 import { D1ContextRuntimeStore } from "./runtime-store";
 import { date, time } from "./resolution-test-support";
 import { setup, harness, proposal, complete, type Proposal } from "./service-test-support";
-import { D1ContextContractStore } from "./infrastructure/d1/store";
+import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
 import { createContextContractService } from "./service";
 import { chat, message } from "./context-test-fixtures";
 import { createContextContractGateway, createContextHttpTransport } from "../../intelligence/infrastructure/openrouter/semantic-gateway";
 it("provider diagnostics never enter actual service errors, telemetry, replies or persisted conversation state", async () => {
   const h = await harness([]);
-  const config = { maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
     primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
   const gateway = createContextContractGateway(config, createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(JSON.stringify({
     error: { code: "invalid_argument", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL SYNTHETIC_OWNER_ID", metadata: { param: "response_format.json_schema" } },
@@ -66,7 +66,7 @@ it.each([
   ["missing reply", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, undefined, "BACKEND"],
   ["oversized reply", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "x".repeat(401) }, "BACKEND"],
 ] as const)("%s retains grounded facts and captures only actual selected reply", async (_name, directive, reply, source) => {
-  const h = await harness([proposal(missingTime, "NEW_REQUEST", directive, reply)]);
+  const h = await harness([proposal(missingTime, "NEW", directive, reply)]);
   expect(await h.turn(0)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   const state = await h.read(1);
   expect(state?.slots).toMatchObject({ title: { value: "đi thi" }, location: { value: "Quang Trung" }, notes: { value: "nhớ giấy tờ" }, reminderTime: { state: "MISSING" } });
@@ -76,8 +76,8 @@ it.each([
   expect(state?.previewReceipt).toBeNull();
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
-const queryQuestion: Proposal = input => ({ schemaVersion: "calenote-context-2", intent: "LIST_REMINDERS", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [],
-    query: { kind: "LIST", period: null, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [{ field: "queryRange", reason: "MISSING", alternatives: [] }], controlEvidence: [],
+const queryQuestion: Proposal = input => ({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
+    query: { kind: "LIST", period: null, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [{ field: "queryRange", reason: "MISSING", alternatives: [] }],
     conversationDirective: { kind: "ASK_FOR_FIELD", field: "queryRange" }, replyProposal: null });
 it.each(["SENT", "FAILED", "UNCERTAIN"] as const)("actual %s query clarification receipt controls next provider question", async status => {
   const h = await harness([queryQuestion]); h.setDelivery(status === "SENT" ? { status, messageRef: null } : { status });
@@ -104,7 +104,7 @@ it("replacement_yes_never_saves_A_or_B through actual service", async () => {
   expect(await h.turn(3, `xác nhận ${b!.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
 });
 it("R02 R07 R08 CO-E progressive facts then mixed correction never confirms", async () => {
-  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CONTINUE"), proposal({ reminderTime: time(9) }, "EDIT")]);
+  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT"), proposal({ reminderTime: time(9) }, "CURRENT", null, null, ["reminderTime"])]);
   await h.turn(0); await h.turn(1, "8h");
   const before = await h.read(2);
   expect(before?.previewReceipt?.deliveryState).toBe("SENT");
@@ -117,9 +117,9 @@ it("R02 R07 R08 CO-E progressive facts then mixed correction never confirms", as
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it("R11 query interruption retains exact draft expiry and suspends save", async () => {
-  const query: Proposal = input => ({ schemaVersion: "calenote-context-2", intent: "LIST_REMINDERS", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [],
-    query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ANSWER_QUERY", queryKind: "LIST" }, replyProposal: null });
-  const h = await harness([proposal(complete), query, proposal({}, "CONTINUE")]);
+  const query: Proposal = input => ({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
+    query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [], conversationDirective: null, replyProposal: null });
+  const h = await harness([proposal(complete), query, proposal({}, "CURRENT")]);
   await h.turn(0); const before = await h.read(1);
   expect(await h.turn(1, "Tháng này có lịch gì?")).toEqual({ status: "REMINDERS_LISTED" });
   const after = await h.read(2);
@@ -132,7 +132,7 @@ it("R11 query interruption retains exact draft expiry and suspends save", async 
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it("R13 delayed old edit loses to a later accepted abandon without stale outbound", async () => {
-  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CONTINUE")]);
+  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
   await h.turn(0);
   const gateway = h.deps.gateway;
   let release!: () => void, started!: () => void;
@@ -170,9 +170,9 @@ it.each(["greeting", "help", "no pending abandon"])("%s is a zero-call bounded b
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it("process restart reloads encrypted accepted facts and never exposes identities to gateway/events", async () => {
-  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CONTINUE")]);
+  const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
   await h.turn(0);
-  h.deps.store = new D1ContextContractStore(h.f.db, h.f.keyring);
+  h.deps.store = createD1ContextContractStoreV3({ db: h.f.db, keyring: h.f.keyring, protocol: CONTEXT_PROTOCOL_V3 });
   const restarted = createContextContractService(h.deps); h.setIndex(1);
   const s = h.f.scope(1);
   expect(await restarted.handle({ ...message("8h"), id: s.sourceInboundId, claimMarker: s.claimMarker, receivedAt: s.now }, { ...chat, inboundRowId: 2 })).toEqual({ status: "DRAFT_CREATED" });
@@ -254,14 +254,14 @@ it.each(["expired", "corrupt"])("%s context cannot fall back to another parser",
   else {
     // Encryption fault at the actual reader boundary, without weakening D1's
     // immutable write triggers to manufacture invalid database rows.
-    h.deps.store = new D1ContextContractStore(h.f.db, { ...h.f.keyring, decryptSensitive: async () => { throw new Error("corrupt ciphertext"); } });
+    h.deps.store = createD1ContextContractStoreV3({ db: h.f.db, keyring: { ...h.f.keyring, decryptSensitive: async () => { throw new Error("corrupt ciphertext"); } }, protocol: CONTEXT_PROTOCOL_V3 });
   }
   await h.turn(1, "8h");
   expect(h.inputs).toHaveLength(1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it.each(["reminder", "query"])("stale %s question receipt cannot overwrite a newer delivered question", async kind => {
-  const h = await harness(kind === "reminder" ? [proposal({ title: "đi thi" }), proposal({ reminderDate: date() }, "CONTINUE")] : [queryQuestion, queryQuestion]);
+  const h = await harness(kind === "reminder" ? [proposal({ title: "đi thi" }), proposal({ reminderDate: date() }, "CURRENT")] : [queryQuestion, queryQuestion]);
   await h.turn(0); const old = (await h.read(1))!;
   await h.turn(1); const current = (await h.read(2))!;
   expect(await h.f.store.recordDelivery(h.f.scope(), { contextId: old.id, contextRevision: old.contextRevision, draftRevision: old.draftRevision,
@@ -272,8 +272,8 @@ it.each(["reminder", "query"])("stale %s question receipt cannot overwrite a new
 it("CO-F retains offset without manufacturing daily count and keeps approximate time uncertain", async () => {
   const h = await harness([
     proposal({ title: "đi thi", location: "Quang Trung", eventDate: date(), eventRelation: "BEFORE_EVENT" }),
-    proposal({ leadOffsetDays: 2 }, "CONTINUE"),
-    input => ({ ...(proposal({ reminderTime: time() }, "CONTINUE")(input) as object), uncertainties: [{ field: "reminderTime", reason: "AMBIGUOUS", alternatives: [] }] }),
+    proposal({ leadOffsetDays: 2 }, "CURRENT"),
+    input => ({ ...(proposal({ reminderTime: time() }, "CURRENT")(input) as object), uncertainties: [{ field: "reminderTime", reason: "AMBIGUOUS", alternatives: [] }] }),
   ]);
   await h.turn(0, "11/10 tui thi ở Quang Trung, nhắc tui trước đó nha.");
   await h.turn(1, "2 ngày.");
@@ -286,7 +286,7 @@ it("CO-F retains offset without manufacturing daily count and keeps approximate 
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(3);
 });
 it("a fresh request after abandonment can continue past its first accepted turn", async () => {
-  const h = await harness([proposal({ title: "đi thi" }), proposal(missingTime), proposal({ reminderTime: time() }, "CONTINUE")]);
+  const h = await harness([proposal({ title: "đi thi" }), proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
   await h.turn(0); await h.turn(1, "Bỏ.");
   expect(await h.turn(2)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   expect(await h.turn(3, "8h")).toEqual({ status: "DRAFT_CREATED" });
@@ -294,8 +294,8 @@ it("a fresh request after abandonment can continue past its first accepted turn"
 it("R02 exact three-turn series preserves count while accepting relation then clock", async () => {
   const h = await harness([
     proposal({ title: "đi thi", location: "Quang Trung", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }),
-    proposal({ eventRelation: "BEFORE_EVENT" }, "CONTINUE"),
-    proposal({ reminderTime: time() }, "CONTINUE"),
+    proposal({ eventRelation: "BEFORE_EVENT" }, "CURRENT"),
+    proposal({ reminderTime: time() }, "CURRENT"),
   ]);
   await h.turn(0, "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   await h.turn(1, "Nhắc trước 2 ngày.");
@@ -308,8 +308,8 @@ it("R02 exact three-turn series preserves count while accepting relation then cl
 it("R07 exact four-turn sequence preserves location and notes on clock edit", async () => {
   const h = await harness([
     proposal({ title: "đi thi", location: "Quang Trung", notes: "nhớ mang giấy tờ", eventDate: date() }),
-    proposal({ frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT" }, "CONTINUE"),
-    proposal({ reminderTime: time() }, "CONTINUE"), proposal({ reminderTime: time(9) }, "EDIT"),
+    proposal({ frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT" }, "CURRENT"),
+    proposal({ reminderTime: time() }, "CURRENT"), proposal({ reminderTime: time(9) }, "CURRENT", null, null, ["reminderTime"]),
   ]);
   await h.turn(0, "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ.");
   await h.turn(1, "Nhắc hai ngày liên tiếp trước hôm thi."); await h.turn(2, "8h.");
@@ -367,8 +367,8 @@ it("two real owner/chat scopes cannot borrow each other's context or confirmatio
   expect(h.inputs).toHaveLength(1);
 });
 it.each(["save", "abandon"])("local %s remains available after six retained USER turns", async operation => {
-  const h = await harness([proposal({ title: "đi thi" }), proposal({ notes: "giấy tờ" }, "CONTINUE"), proposal({ location: "Quang Trung" }, "CONTINUE"),
-    proposal({ eventDate: date() }, "CONTINUE"), proposal({ eventRelation: "INCLUDING_EVENT" }, "CONTINUE"), proposal({ reminderTime: time() }, "CONTINUE")]);
+  const h = await harness([proposal({ title: "đi thi" }), proposal({ notes: "giấy tờ" }, "CURRENT"), proposal({ location: "Quang Trung" }, "CURRENT"),
+    proposal({ eventDate: date() }, "CURRENT"), proposal({ eventRelation: "INCLUDING_EVENT" }, "CURRENT"), proposal({ reminderTime: time() }, "CURRENT")]);
   for (let i = 0; i <= 5; i++) { const result = await h.turn(i, "đi thi giấy tờ Quang Trung 11/10 nhắc cùng ngày 8h"); expect(result).toEqual({ status: i === 5 ? "DRAFT_CREATED" : "CLARIFICATION_REQUESTED" }); }
   const before = (await h.read(6))!;
   expect(before.transcript.filter(t => t.role === "USER")).toHaveLength(6);
@@ -377,7 +377,7 @@ it.each(["save", "abandon"])("local %s remains available after six retained USER
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(operation === "save" ? 1 : 0);
 });
 it.each([1, 2])("I1 numeric clarification answer %s reaches one semantic turn rather than unscoped control", async count => {
-  const h = await harness([proposal({ title: "đi thi", eventDate: date(), reminderTime: time(), eventRelation: "BEFORE_EVENT", frequency: "DAILY" }), proposal({ occurrenceCount: count }, "CONTINUE")]);
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), reminderTime: time(), eventRelation: "BEFORE_EVENT", frequency: "DAILY" }), proposal({ occurrenceCount: count }, "CURRENT")]);
   await h.turn(0);
   expect((await h.read(1))?.pendingReminderQuestion?.field).toBe("occurrenceCount");
   expect(await h.turn(1, String(count))).toEqual({ status: count === 2 ? "DRAFT_CREATED" : "CLARIFICATION_REQUESTED" });
@@ -386,8 +386,8 @@ it.each([1, 2])("I1 numeric clarification answer %s reaches one semantic turn ra
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(2);
 });
 it.each(["2", "không", "ambiguous then 2"])("I2 decline %s at six USER turns preserves A and permits subsequent scoped abandonment", async answer => {
-  const h = await harness([proposal({ title: "đi thi" }), proposal({ notes: "giấy tờ" }, "CONTINUE"), proposal({ location: "Quang Trung" }, "CONTINUE"),
-    proposal({ eventDate: date() }, "CONTINUE"), proposal({ eventRelation: "INCLUDING_EVENT" }, "CONTINUE"), proposal({ ...complete, title: "gọi mẹ" })]);
+  const h = await harness([proposal({ title: "đi thi" }), proposal({ notes: "giấy tờ" }, "CURRENT"), proposal({ location: "Quang Trung" }, "CURRENT"),
+    proposal({ eventDate: date() }, "CURRENT"), proposal({ eventRelation: "INCLUDING_EVENT" }, "CURRENT"), proposal({ ...complete, title: "gọi mẹ" })]);
   for (let i = 0; i < 6; i++) await h.turn(i);
   const before = (await h.read(6))!;
   expect(before.pendingDecision?.kind).toBe("REPLACE_PENDING");
@@ -453,3 +453,5 @@ it("I3 bound-only recovery survives uncertain-preview eviction and six USER capa
   expect(await h.turn(7, `xác nhận ${d.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
 });
+
+import { CONTEXT_PROTOCOL_V3 } from "./protocol";

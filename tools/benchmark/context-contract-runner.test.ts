@@ -5,15 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import * as runner from "./context-contract-runner";
-import { frozenContextProposal } from "./context-contract-fixtures";
+import { frozenContextProposal, encodeFixtureV3 } from "./context-contract-fixtures";
 import { readCampaignLedger } from "./context-contract-live";
 import * as liveAuthority from "./context-contract-live";
-import { preflightContextCampaign, admitFutureLiveIntent } from "./context-contract-live";
+import { preflightContextCampaign, admitHistoricalV2IntentReference as admitFutureLiveIntent } from "./context-contract-live";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { ConversationInterpretationSchema } from "../../src/modules/conversation/context-contract/contracts";
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { encodeGoogleLiteEuContext, parseGoogleLiteEuContextSections } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
 it("exact evidence failure survives the application gateway and durable runner without quote leakage", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-evidence-diagnostics-"));
@@ -29,7 +29,7 @@ it("exact evidence failure survives the application gateway and durable runner w
         if (!proposal.query) throw new Error("fixture query missing");
         proposal.query.evidence = [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: sentinel, occurrence: 1 }];
         const body = JSON.stringify({ model: request.model, provider: "Google", id: "gen-evidence-test", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
-          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(proposal)) } }] });
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(proposal)) } }] });
         return { status: 200, body, rawResponseBytes: new TextEncoder().encode(body).length };
       } });
     expect(requests).toBe(1);
@@ -47,7 +47,7 @@ it("exact evidence failure survives the application gateway and durable runner w
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-it("source-bound R02 continuation preserves the stopped R01 ledger and dispatches R02 first", async () => {
+it("semantic_change_invalidates_prefix while exact same-source R02 continuation preserves R01", async () => {
   const previous = mkdtempSync(join(tmpdir(), "context-prefix-old-")), next = mkdtempSync(join(tmpdir(), "context-prefix-new-"));
   try {
     let priorCalls = 0;
@@ -57,7 +57,7 @@ it("source-bound R02 continuation preserves the stopped R01 ledger and dispatche
       transport: async request => {
         const n = priorCalls++;
         const context = JSON.parse(request.messages[1].content) as ContextInput;
-        const proposal = n < 2 ? encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", n)) : { schemaVersion: "wrong" };
+        const proposal = n < 2 ? encodeFixtureV3(frozenContextProposal(context, "R01", n)) : { schemaVersion: "wrong" };
         const body = JSON.stringify({ model: request.model, provider: "Google", id: "gen-synthetic-prefix", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
           choices: [{ finish_reason: "stop", message: { content: JSON.stringify(proposal) } }] });
         return { status: 200, body, rawResponseBytes: new TextEncoder().encode(body).byteLength };
@@ -74,6 +74,10 @@ it("source-bound R02 continuation preserves the stopped R01 ledger and dispatche
     const pilotPrefix = { directory: previous, ledgerHash: readCampaignLedger(previous).at(-1)!.hash,
       responseDigest: hash("responses.json"), applicationDigest: hash("application-evidence.json") };
     let calls = 0;
+    await expect(runner.executeObservableCampaign({ directory: mkdtempSync(join(next, "semantic-change-")), sourceSha: source.sourceSha,
+      provenanceDigest: "0".repeat(64), runId: "changed", profile: "PILOT", cumulativeAuthorizedMicrounits: 1400000,
+      cumulativeRetainedMicrounits: 0, now: () => 100, pilotPrefix,
+      transport: async () => { throw new Error("MUST_NOT_DISPATCH"); } })).rejects.toThrow("INVALID_PILOT_PREFIX");
     const result = await runner.executeObservableCampaign({ directory: next, sourceSha: source.sourceSha, provenanceDigest: source.provenanceDigest, runId: "suffix",
       profile: "PILOT", cumulativeAuthorizedMicrounits: 1400000, cumulativeRetainedMicrounits: 0, now: () => 100,
       pilotPrefix,
@@ -114,7 +118,7 @@ it("source-bound R02 continuation preserves the stopped R01 ledger and dispatche
         const item = healthy[suffixCalls++], context = JSON.parse(request.messages[1].content) as ContextInput;
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-suffix-${suffixCalls}`,
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop",
-            message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, item.id, item.index))) } }] }) };
+            message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(context, item.id, item.index))) } }] }) };
       } });
     expect(completed).toMatchObject({ status: "PASS", measuredScope: "R02_ONWARD", compositePilotScripts: 32,
       applicationLlmCalls: 74, providerHttpRequests: 74, score: { gate: "PASS", plannedScripts: 31, passedScripts: 31, plannedTurns: 82 } });
@@ -144,9 +148,9 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
         const index = calls++;
         if (index >= 2) return { status: 400, body: '{"error":{"code":400}}' };
         const context = JSON.parse(request.messages[1].content) as ContextInput;
-        const wire = encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", index)) as { query: Record<string, unknown>; conversationDirective: Record<string, unknown> };
+        const wire = encodeFixtureV3(frozenContextProposal(context, "R01", index)) as { query: Record<string, unknown>; conversationDirective: Record<string, unknown> };
         wire.query.date = { calendar: "GREGORIAN", kind: "CONTEXT_FACT", ref: "f999" };
-        wire.conversationDirective.topic = "PRIVATE_INACTIVE_PADDING_SENTINEL";
+        wire.query.date = { privatePadding: "PRIVATE_INACTIVE_PADDING_SENTINEL" };
         if (wire.query.period) (wire.query.period as Record<string, unknown>).date = { calendar: "GREGORIAN" };
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-r01-${index}`, usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
           choices: [{ finish_reason: "stop", message: { content: JSON.stringify(wire) } }] }) };
@@ -173,13 +177,13 @@ it.each([
   ["title", "INVALID", "operation"], ["location", "INVALID", "operation"], ["notes", undefined, "operation"],
   ["INVALID", "SET", "field"], [undefined, "SET", "field"], ["title", "CLEAR_BAD", "operation"],
 ] as const)("wire discriminant failure uses closest schema branch for field=%s operation=%s", (field, operation, expectedPath) => {
-  const raw = encodeGoogleLiteEuContext({ schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO",
-    query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null,
+  const raw = encodeGoogleLiteEuContextV3({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] },
+    query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null,
     changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
   if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
   if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
   let diagnostics: unknown;
-  expect(parseGoogleLiteEuContextSections(raw, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
+  expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
   expect(diagnostics).toMatchObject({ issues: [expect.objectContaining({ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
 });
 
@@ -191,9 +195,9 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
       profile: "PILOT", cumulativeAuthorizedMicrounits: 650000, cumulativeRetainedMicrounits: 0, now: () => 100,
       transport: async request => {
         const input = JSON.parse(request.messages[1].content) as ContextInput;
-        const wire = encodeGoogleLiteEuContext(frozenContextProposal(input, "R01", 0)) as Record<string, unknown>;
+        const wire = encodeFixtureV3(frozenContextProposal(input, "R01", 0)) as Record<string, unknown>;
         if (mode.startsWith("operation-")) {
-          const changed = encodeGoogleLiteEuContext({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
+          const changed = encodeFixtureV3({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
           wire.changes = changed.changes;
           if (mode === "operation-invalid") changed.changes[0].operation = sentinel; else delete changed.changes[0].operation;
         }
@@ -231,7 +235,7 @@ it("isolated R01 replay seeds encrypted pending LIST offline and dispatches turn
         expect(context.turns.filter(turn => turn.role === "USER")).toHaveLength(2);
         expect(context.turns.filter(turn => turn.role === "USER").map(turn => turn.text)).toEqual(["Có lịch nào ko?", "Tháng này có lịch gì ko?"]);
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-replay-test", usage: { cost: .000512, prompt_tokens: 100, completion_tokens: 100 },
-          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, "R01", 1))) } }] }) };
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(context, "R01", 1))) } }] }) };
       } });
     expect(result.seedFailure).toBeNull();
     expect(result.seed).toMatchObject({ oracle: "PASS" });
@@ -245,7 +249,7 @@ it("isolated R01 replay seeds encrypted pending LIST offline and dispatches turn
 });
 it("replay authority rejects missing or changed historical ledger before reading a credential", async () => {
   expect(runner).toHaveProperty("runAuthorizedR01Replay", expect.any(Function));
-  expect(liveAuthority).toHaveProperty("admitR01ReplayIntent", expect.any(Function));
+  expect(liveAuthority).toHaveProperty("admitHistoricalR01ReplayIntentReference", expect.any(Function));
   let reads = 0;
   await expect(runner.runAuthorizedR01Replay({ root: process.cwd(), enableLive: true, profile: "PILOT", runId: "test", authorizationPath: "/nonexistent/replay-authority.json", now: 100 }, () => { reads++; return "NEVER_READ"; })).rejects.toThrow();
   expect(reads).toBe(0);
@@ -269,13 +273,13 @@ it("hash-bound replay authority retains historical FINISH-null holds and rejects
       cumulativeAuthorizedMicrounits: 650000, cumulativeRetainedMicrounits: 528605, historicalLedgers };
     const intent = { root: process.cwd(), enableLive: true, profile: "PILOT" as const, runId: "replay", now: 100, authorizationPath };
     writeFileSync(authorizationPath, JSON.stringify(authorization));
-    expect(liveAuthority.admitR01ReplayIntent(intent)).toMatchObject({ cumulativeRetainedMicrounits: 528605 });
+    expect(liveAuthority.admitHistoricalR01ReplayIntentReference(intent)).toMatchObject({ cumulativeRetainedMicrounits: 528605 });
     writeFileSync(authorizationPath, JSON.stringify({ ...authorization, cumulativeRetainedMicrounits: 1245 }));
-    expect(() => liveAuthority.admitR01ReplayIntent(intent)).toThrow("INVALID_REPLAY_AUTHORIZATION");
+    expect(() => liveAuthority.admitHistoricalR01ReplayIntentReference(intent)).toThrow("INVALID_REPLAY_AUTHORIZATION");
     writeFileSync(authorizationPath, JSON.stringify({ ...authorization, historicalLedgers: historicalLedgers.map((proof, index) => index === 0 ? { ...proof, finalHash: "0".repeat(64) } : proof) }));
-    expect(() => liveAuthority.admitR01ReplayIntent(intent)).toThrow("HISTORICAL_LEDGER_MISMATCH");
+    expect(() => liveAuthority.admitHistoricalR01ReplayIntentReference(intent)).toThrow("HISTORICAL_LEDGER_MISMATCH");
     writeFileSync(authorizationPath, JSON.stringify({ ...authorization, historicalLedgers: [...historicalLedgers.slice(0, 9), historicalLedgers[0]] }));
-    expect(() => liveAuthority.admitR01ReplayIntent(intent)).toThrow("INVALID_HISTORICAL_PROOF");
+    expect(() => liveAuthority.admitHistoricalR01ReplayIntentReference(intent)).toThrow("INVALID_HISTORICAL_PROOF");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 it("a replay COMPLETE ledger never admits ordinary FULL authority", async () => {
@@ -285,7 +289,7 @@ it("a replay COMPLETE ledger never admits ordinary FULL authority", async () => 
     const replay = await runner.executeObservableR01Replay({ directory, root: process.cwd(), sourceSha: preflight.sourceSha, provenanceDigest: preflight.provenanceDigest, runId: "replay", profile: "PILOT",
       cumulativeAuthorizedMicrounits: 650000, cumulativeRetainedMicrounits: 528605, now: () => 100,
       transport: async request => ({ status: 200, body: JSON.stringify({ model: request.model, provider: "Google", usage: { cost: .000512, prompt_tokens: 100, completion_tokens: 100 },
-        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(JSON.parse(request.messages[1].content), "R01", 1))) } }] }) }) });
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content), "R01", 1))) } }] }) }) });
     expect(replay.status).toBe("PASS");
     const authorizationPath = join(root, "full.json");
     writeFileSync(authorizationPath, JSON.stringify({ version: "context-contract-live-2", method: "OBSERVABLE_CANARY", campaignRoot: root, pilotLedgerHash: readCampaignLedger(directory).at(-1)!.hash,
@@ -346,9 +350,9 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
       }) });
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
-      canonicalSchemaDigest: "8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d",
-      providerWireSchemaDigest: "840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" });
+      canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
+      providerWireSchemaDigest: "966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-authority-10" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");
@@ -368,7 +372,7 @@ it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases
       transport: async request => {
         const item = healthy[calls++]; const context = JSON.parse(request.messages[1].content) as ContextInput;
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: `gen-mock-${calls}`,
-          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeGoogleLiteEuContext(frozenContextProposal(context, item.id, item.index))) } }],
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(context, item.id, item.index))) } }],
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 } }) };
       } });
     expect(result.status).toBe("PASS"); expect(result.score?.gate).toBe("PASS");
@@ -394,9 +398,9 @@ it.each(["next-fails", "deadline", "application-fails", "counter-fails", "guidan
         if (mode === "deadline") clock = 1200100;
         return { status: 200, body: JSON.stringify({ model: calls > 1 ? "wrong" : "google/gemini-2.5-flash-lite", provider: "Google",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(
-            mode === "application-fails" ? encodeGoogleLiteEuContext({ ...(proposal as object), query: { ...((proposal as { query: object }).query),
+            mode === "application-fails" ? encodeFixtureV3({ ...(proposal as object), query: { ...((proposal as { query: object }).query),
               evidence: [{ kind: "USER_QUOTE", turn: context.currentTurn, quote: "not present in receipt", occurrence: 1 }] } })
-              : mode === "guidance-fails" ? { ...(encodeGoogleLiteEuContext(proposal) as object), conversationDirective: { kind: "SAVE" } } : encodeGoogleLiteEuContext(proposal)) } }] }) };
+              : mode === "guidance-fails" ? { ...(encodeFixtureV3(proposal) as object), conversationDirective: { kind: "SAVE" } } : encodeFixtureV3(proposal)) } }] }) };
       } });
     expect(result.status).toBe("STOP"); expect(calls).toBe(mode === "next-fails" ? 2 : 1);
     expect(result.routeAdmission).toBe(mode === "next-fails" ? "PASS" : "STOP");
@@ -406,6 +410,8 @@ it.each(["next-fails", "deadline", "application-fails", "counter-fails", "guidan
       profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, transport: async () => { throw new Error("restart dispatch"); } })).rejects.toThrow(/ALREADY_STARTED/u);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 
 it("offers an isolated observable executor, not a default credentialed path", () => {
   expect(runner).toHaveProperty("executeObservableCampaign", expect.any(Function));
@@ -429,7 +435,7 @@ it("FULL cannot bypass retained pilot proof, and invalid authority never reads c
       approvedAt: 1, expiresAt: 1000, cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 76000 }));
     const intent = { root: process.cwd(), enableLive: true, profile: "FULL" as const, runId: "full", now: 2, authorizationPath };
     expect(() => admitFutureLiveIntent(intent)).toThrow(/PILOT_PASS_REQUIRED/u);
-    await expect(runner.runAuthorizedContextCampaign(intent, () => { reads++; return "synthetic"; })).rejects.toThrow(/PILOT_PASS_REQUIRED/u);
+    await expect(runner.runAuthorizedContextCampaign(intent, () => { reads++; return "synthetic"; })).rejects.toThrow("AUTHORIZATION_NOT_CONFIGURED");
     expect(reads).toBe(0);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

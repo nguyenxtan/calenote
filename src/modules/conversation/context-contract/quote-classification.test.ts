@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { turn, chat, message, observation, snapshot } from "./context-test-fixtures";
 import { projectSemanticView } from "./projection";
-import { buildContextInput } from "./context";
-import { validateEvidence } from "./evidence";
+import { buildLegacyV2ContextInput as buildContextInput } from "./context";
+import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { DownstreamTraceSchema, type DownstreamDiagnostic } from "./downstream";
 
 describe("diagnostic-only scoped quote classification", () => {

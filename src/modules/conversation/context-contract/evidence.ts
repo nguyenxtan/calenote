@@ -1,5 +1,5 @@
 import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./context";
-import { SemanticPatchProposalSchema, FieldChangeSchema, QueryOperandSchema, UncertaintySchema, SLOT_NAMES, type SemanticPatchProposal, type EvidenceRef, type FieldChange, type QueryOperand, type ContextInput } from "./contracts";
+import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, QueryOperandSchema, LegacyV2UncertaintySchema as UncertaintySchema, SLOT_NAMES, type LegacyV2SemanticPatchProposal as SemanticPatchProposal, type EvidenceRef, type LegacyV2FieldChange as FieldChange, type QueryOperand, type LegacyV2ContextInput as ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 import { verifyListRangeEvidence } from "./list-range-evidence";
@@ -36,7 +36,7 @@ export type ValidatedPatch = {
 };
 export type EvidenceValidation = { status: "VALID"; patch: ValidatedPatch } | { status: "REFUSED"; reason: string };
 const issuedPatches = new WeakSet<object>();
-export function isValidatedPatch(value: unknown): value is ValidatedPatch { return typeof value === "object" && value !== null && issuedPatches.has(value); }
+export function isLegacyV2ValidatedPatch(value: unknown): value is ValidatedPatch { return typeof value === "object" && value !== null && issuedPatches.has(value); }
 class EvidenceFailure extends Error {}
 const fail = (reason: string): never => { throw new EvidenceFailure(reason); };
 const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -79,7 +79,7 @@ function selectReferenceTime(facts: readonly BoundContextFact[], quotes: readonl
 
 /** Whole-patch authority validation. This proves exact source/scope and edit
  * freshness, not general natural-language entailment or user confirmation. */
-export function validateEvidence(proposal: unknown, built: ReadyContext, observe?: DownstreamObserver): EvidenceValidation {
+export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext, observe?: DownstreamObserver): EvidenceValidation {
   let evidenceFailure: EvidenceFailureDiagnostic | undefined;
   const refused = (reason: string): EvidenceValidation => {
     observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason), ...(evidenceFailure ? { evidenceFailure } : {}) });
@@ -409,7 +409,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
         rangeIssue = { field: "queryRange", reason: support === "AMBIGUOUS" ? "AMBIGUOUS" : "MISSING", alternatives: [] };
       }
     }
-    const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["controlEvidence"]) : null;
+    const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["requestTarget", "evidence"]) : null;
     if (target && value.requestTarget!.evidence.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     // Fresh B operands, including alternatives, cannot borrow A's sources.
     // Original pending-candidate adoption is revalidated separately below.
@@ -450,7 +450,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       const originalTarget = pending.proposal.requestTarget;
       if (!originalTarget) return fail("CURRENT_USER_EVIDENCE_REQUIRED");
       if (originalTarget.evidence.some(ref => ref.kind !== "USER_QUOTE" || built.candidateSnapshot.transcript[ref.turn]?.receivedAt !== pending.createdAt)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
-      resolve(providerRefs(originalTarget.evidence), "CONTROL", "operation", originalTarget.kind, ["controlEvidence"]);
+      resolve(providerRefs(originalTarget.evidence), "CONTROL", "operation", originalTarget.kind, ["requestTarget", "evidence"]);
       for (const [index, change] of pending.proposal.changes.entries()) {
         const refs = providerRefs(change.evidence);
         const requested = retainedOperand(refs, "REMINDER", change.field, change.value);
@@ -523,7 +523,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
 
 
 /** Privacy only: never a semantic/directive approval or a redacted sendable reply. */
-export function validateGuidancePrivacy(proposal: unknown, built: ReadyContext): GuidancePrivacyValidation {
+export function validateGuidancePrivacy(proposal: unknown, built: ReadyContext | ReadyContextV2): GuidancePrivacyValidation {
   const internal = evidenceContextFor(built);
   if (!internal) return { status: "REFUSED", reason: "CONTEXT_NOT_BUILT" };
   const state = built.candidateSnapshot, decision = state.pendingDecision;

@@ -4,8 +4,8 @@ import { harness, type Proposal } from "./service-test-support";
 import type { ContextInput } from "./contracts";
 import { DownstreamDiagnosticSchema, DownstreamTraceSchema, observeDownstream } from "./downstream";
 
-const list = (input: ContextInput) => ({ schemaVersion: "calenote-context-2", intent: "LIST_REMINDERS", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [],
-  query: { kind: "LIST", period: { kind: "DAY", date: { kind: "CIVIL_DATE", day: 5, month: 10, year: 2026, calendar: "GREGORIAN", leapMonth: null } }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "queryRange" }, replyProposal: null });
+const list = (input: ContextInput) => ({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
+  query: { kind: "LIST", period: { kind: "DAY", date: { kind: "CIVIL_DATE", day: 5, month: 10, year: 2026, calendar: "GREGORIAN", leapMonth: null } }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "queryRange" }, replyProposal: null });
 
 it("valid LIST with ungrounded executable explicit-year range retains intent and clarifies without DB reads or mutations", async () => {
   const h = await harness([list]);
@@ -40,7 +40,7 @@ it.each([
   ["fabricated or foreign context fact", (p: ReturnType<typeof list>) => ({ ...p, query: { ...p.query, evidence: [{ kind: "CONTEXT_FACT", ref: "f999" }] } }), "REJECTED"],
   ["malformed canonical query", (p: ReturnType<typeof list>) => ({ ...p, query: { ...p.query, unexpected: true } }), "REJECTED"],
   ["calendar explicit year gate", (p: ReturnType<typeof list>) => ({ ...p, intent: "CALENDAR_QUERY", query: { kind: "CALENDAR_DATE", date: p.query.period.date, outputCalendar: "LUNAR_VN", evidence: p.query.evidence } }), "REJECTED"],
-  ["reminder explicit year gate", (p: ReturnType<typeof list>) => ({ ...p, intent: "CREATE_REMINDER", query: null, changes: [{ field: "reminderDate", operation: "SET", value: p.query.period.date, evidence: p.query.evidence }] }), "REJECTED"],
+  ["reminder explicit year gate", (p: ReturnType<typeof list>) => ({ ...p, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: p.query.evidence }, query: null, changes: [{ field: "reminderDate", operation: "SET", value: p.query.period.date, evidence: p.query.evidence }] }), "REJECTED"],
   ["alternative explicit year gate", (p: ReturnType<typeof list>) => ({ ...p, query: { ...p.query, period: null }, uncertainties: [{ field: "queryRange", reason: "AMBIGUOUS", alternatives: [{ value: p.query.period, evidence: p.query.evidence }] }] }), "REJECTED"],
   ["unsupported capability", (p: ReturnType<typeof list>) => ({ ...p, intent: "UNSUPPORTED", query: null, conversationDirective: { kind: "EXPLAIN_UNSUPPORTED", issue: "ASSISTANT_SCOPE" } }), "CLARIFICATION_REQUESTED"],
 ] as const)("adjacency: %s preserves domain/security outcome", async (name, transform, expected) => {

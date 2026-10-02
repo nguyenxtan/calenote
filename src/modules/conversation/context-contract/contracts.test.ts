@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { ContextInputSchema, ConversationInterpretationSchema, FieldChangeSchema, InterpretationJsonSchema, SLOT_NAMES, UncertaintySchema, parseInterpretationSections, type FieldChange } from "./contracts";
+import { LegacyV2ContextInputSchema as ContextInputSchema, LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, SLOT_NAMES, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2FieldChange as FieldChange } from "./contracts";
 
 const ref = { kind: "USER_QUOTE", turn: 0, quote: "ngày mai", occurrence: 1 };
 const proposal = { schemaVersion: "calenote-context-2", intent: "CREATE_REMINDER", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null };

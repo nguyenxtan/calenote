@@ -13,9 +13,8 @@ import type { Keyring } from "@/modules/security/keyring";
 export interface ContextRuntimeStore {
   claimAttempt(scope: ConversationScope, observation: ContextObservation, bindingDigest: string): Promise<boolean>;
   complete(scope: ConversationScope): Promise<boolean>;
-  canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }): Promise<boolean>;
+  canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }, observation?: ContextObservation): Promise<boolean>;
   ownsContext(scope: ConversationScope): Promise<boolean>;
-  ownsLegacyContext(scope: ConversationScope): Promise<boolean>;
 }
 
 export class D1ContextRuntimeStore implements ContextRuntimeStore {
@@ -71,9 +70,29 @@ export class D1ContextRuntimeStore implements ContextRuntimeStore {
     try { return (await this.db.prepare(`UPDATE inbound_updates SET state='PROCESSED',processed_at=? WHERE id=? AND EXISTS(${ownedInbound})`)
       .bind(scope.now, scope.sourceInboundId, ...auth(scope)).run()).meta.changes === 1; } catch { return false; }
   }
-  async canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }): Promise<boolean> {
-    if(this.selection && !await this.selectedContext(scope,expected))return false;
-    try { return !!await this.db.prepare(`SELECT 1 FROM inbound_updates i
+  async canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }, observation?: ContextObservation): Promise<boolean> {
+    try {
+    if (this.selection) {
+      // The selected store minted this observation before any payload cleanup.
+      // SQL family2 alone cannot attest the encrypted protocol or grant a send.
+      if (!observation || contextObservationProtocol(observation) !== "calenote-context-3"
+        || observation.scope.ownerId !== scope.ownerId || observation.scope.chatIdentityId !== scope.chatIdentityId
+        || observation.inbound.id !== scope.sourceInboundId || observation.inbound.claimMarker !== scope.claimMarker) return false;
+      if (!await this.selectedContext(scope, expected)) {
+        const row = await this.db.prepare("SELECT id,revision,status,last_inbound_id FROM conversation_contexts WHERE owner_id=? AND chat_identity_id=? ORDER BY updated_at DESC LIMIT 1")
+          .bind(scope.ownerId, scope.chatIdentityId).first<{ id: string; revision: number; status: string; last_inbound_id: string }>();
+        if (observation.observed.presence === "PRESENT") {
+          if (!row || !["COMPLETED", "CANCELLED", "INVALID"].includes(row.status) || row.last_inbound_id !== scope.sourceInboundId
+            || row.id !== observation.observed.contextId || row.revision !== observation.observed.contextRevision + 1
+            || expected && (row.id !== expected.contextId || row.revision !== expected.contextRevision)) return false;
+        } else {
+          if (expected) return false;
+          const terminal = observation.lastTerminalOutcome;
+          if (terminal ? !row || row.id !== terminal.contextId || row.revision !== terminal.contextRevision || row.status !== terminal.status || row.last_inbound_id !== terminal.inboundId : row !== null) return false;
+        }
+      }
+    }
+    return !!await this.db.prepare(`SELECT 1 FROM inbound_updates i
       JOIN chat_identities ci ON ci.connection_id=i.connection_id AND ci.provider_user_id=i.provider_user_id AND ci.private_chat_id=i.private_chat_id
       JOIN bot_connections c ON c.id=ci.connection_id AND c.state='ACTIVE_BOUND'
       WHERE i.id=? AND i.transition_marker=? AND i.state IN ('PROCESSED','REJECTED') AND ci.id=? AND c.user_id=?
@@ -87,15 +106,6 @@ export class D1ContextRuntimeStore implements ContextRuntimeStore {
     // A legacy/corrupt family2 owner must still block parallel request routing.
     try { return !!await this.db.prepare(`SELECT 1 FROM conversation_contract_ownership WHERE chat_identity_id=? AND owner_id=? AND contract_version=2 AND EXISTS(${ownedInbound})`)
       .bind(scope.chatIdentityId, scope.ownerId, ...auth(scope)).first(); } catch { return false; }
-  }
-  async ownsLegacyContext(scope: ConversationScope): Promise<boolean> {
-    try { return !!await this.db.prepare(`SELECT 1 FROM conversation_contexts c
-      WHERE c.owner_id=? AND c.chat_identity_id=? AND c.contract_version=1 AND c.status IN ('CLARIFYING','DRAFT_READY') AND c.expires_at>?
-      AND NOT EXISTS(SELECT 1 FROM conversation_contract_ownership WHERE chat_identity_id=c.chat_identity_id)
-      AND EXISTS(${ownedInbound})
-      AND (c.status='CLARIFYING' OR EXISTS(SELECT 1 FROM reminder_series_proposals p WHERE p.owner_id=c.owner_id AND p.chat_identity_id=c.chat_identity_id AND p.contract_version=1 AND p.status='PENDING' AND p.expires_at>?)
-        OR EXISTS(SELECT 1 FROM command_drafts d WHERE d.chat_identity_id=c.chat_identity_id AND d.contract_version=1 AND d.status='PENDING' AND d.expires_at>?))`)
-      .bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope), scope.now, scope.now).first(); } catch { return false; }
   }
 }
 export function createD1ContextRuntimeStoreV3(args:{db:D1Database;keyring:Keyring;protocol:ContextProtocolV3}):ContextRuntimeStore {

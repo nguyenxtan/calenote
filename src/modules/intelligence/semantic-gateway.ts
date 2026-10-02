@@ -73,7 +73,7 @@ export interface SemanticFailureDiagnostics {
   upstreamProvider?: string;
 }
 export interface CanonicalResponseDiagnostics {
-  state: "VALIDATION_FAILED" | "WIRE_DECODE_FAILED" | "OVERSIZED"; schemaVersion: "calenote-context-2";
+  state: "VALIDATION_FAILED" | "WIRE_DECODE_FAILED" | "OVERSIZED"; schemaVersion: "calenote-context-2" | "calenote-context-3";
   providerWireSchemaVersion: string; payloadByteCount: number; payloadSha256: string | null;
   inputRepresentation?: "CANONICAL" | "PROVIDER_WIRE"; validation?: CanonicalValidationDiagnostics;
   wireValidation?: CanonicalValidationDiagnostics;

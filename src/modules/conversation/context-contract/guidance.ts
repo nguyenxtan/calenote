@@ -1,5 +1,5 @@
-import { ConversationDirectiveSchema, ModelDirectiveV3Schema, IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type ParsedInterpretation, type ParsedInterpretationV3 } from "./contracts";
-import { isValidatedPatch, isValidatedPatchV3, type GuidancePrivacyValidation, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
+import { ConversationDirectiveSchema, ModelDirectiveV3Schema, IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type LegacyV2ParsedInterpretation as ParsedInterpretation, type ParsedInterpretationV3 } from "./contracts";
+import { isLegacyV2ValidatedPatch as isValidatedPatch, isValidatedPatchV3, type GuidancePrivacyValidation, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
 import type { MergeResult, MergeResultV3 } from "./merge";
 import type { RequestResolution } from "./resolve";
 import type { ContextQueryResult, QueryResolution } from "./query";
@@ -15,7 +15,7 @@ const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_C
 /** Pure reply routing over accepted T3 results. Returning PRESENT_PREVIEW is
  * only a composition handoff; it creates no decision, token or save authority.
  * T5/T7 must supply current lifecycle/scope outcomes, never model directives. */
-export function computeEffectiveDirective(outcome: ApplicationOutcome): EffectiveDirective {
+export function computeLegacyV2EffectiveDirective(outcome: ApplicationOutcome): EffectiveDirective {
   if (outcome.backendOnly) return { kind: "BACKEND_ONLY", reason: outcome.backendOnly };
   if (!isValidatedPatch(outcome.semantic) || outcome.merge.status !== "MERGED") return failure();
   if (outcome.semantic.proposal.dialogueAct === "ABANDON_PENDING") return { kind: "BACKEND_ONLY", reason: "CONTROL" };
@@ -105,16 +105,22 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
 }
 
 export type DirectiveValidation = { status: "VALID" } | { status: "INVALID"; reason: "DIRECTIVE_INVALID" | "DIRECTIVE_MISMATCH" };
-export function validateDirective(model: ParsedInterpretation["directive"], effective: EffectiveDirective): DirectiveValidation {
+export function validateLegacyV2Directive(model: ParsedInterpretation["directive"], effective: EffectiveDirective): DirectiveValidation {
   if (model.status !== "VALID") return { status: "INVALID", reason: "DIRECTIVE_INVALID" };
   const parsed = ConversationDirectiveSchema.safeParse(model.value);
   if (!parsed.success) return { status: "INVALID", reason: "DIRECTIVE_INVALID" };
-  const same = Object.keys(parsed.data).length === Object.keys(effective).length && Object.entries(parsed.data).every(([key, value]) => effective[key as keyof EffectiveDirective] === value);
+  return validateCompatibleDirective(parsed.data, effective);
+}
+function validateCompatibleDirective(proposal: ConversationDirective, effective: EffectiveDirective): DirectiveValidation {
+  const same = Object.keys(proposal).length === Object.keys(effective).length && Object.entries(proposal).every(([key, value]) => effective[key as keyof EffectiveDirective] === value);
   return same ? { status: "VALID" } : { status: "INVALID", reason: "DIRECTIVE_MISMATCH" };
 }
 export function validateDirectiveV3(model: ParsedInterpretationV3["directive"], effective: EffectiveDirective): DirectiveValidation {
   if (model.status !== "VALID" || !ModelDirectiveV3Schema.safeParse(model.value).success) return { status: "INVALID", reason: "DIRECTIVE_INVALID" };
-  return validateDirective(model, effective);
+  // Explicit absence is structurally valid but cannot match a backend issue
+  // or make independently supplied model wording eligible.
+  if (model.value === null) return { status: "INVALID", reason: "DIRECTIVE_MISMATCH" };
+  return validateCompatibleDirective(model.value, effective);
 }
 
 export const OUTPUT_SAFETY_LINT_VERSION = "conversation-guidance-lint-1";

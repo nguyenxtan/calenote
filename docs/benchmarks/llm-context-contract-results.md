@@ -1,6 +1,41 @@
 # LLM Context Contract — acceptance evidence
 
-## Current documentation gate — 2026-10-01
+## Current local authority-amendment candidate — 2026-10-02
+
+Approved §4.6 spec `904afe5` and plan `598a59d` authorize the local A1–A6
+authority amendment; they supersede the historical documentation-only gate.
+Current A5+A6 changes remain unstaged/uncommitted at base
+`68fac9b2b5e95ee57c53f0ac1f491210e153ed01`, awaiting grouped independent review.
+The selected actual V3 service/gateway offline corpus passes FULL80/158 and
+PILOT32/84 with frozen wording/oracles, no missing scripts or safety failures.
+These are injected synthetic provider exchanges and isolated encrypted stores,
+not live provider or deployed acceptance. [Source-bound local fit evidence](llm-context-contract-authority-v3-measurements.json)
+retains unknown route framing and unsupported full SDK structured counting.
+
+Actual future LIVE/replay entry remains AUTHORIZATION_NOT_CONFIGURED without
+trusted orchestration. Synthetic trusted loaders require an independently
+reviewed owner-record pin and complete canonical **account-specific** root;
+raw JSON/self-hash, environment overrides or a convenient narrow directory are
+not authority. Mixed PILOT/FULL namespaces and omitted/alias histories reject.
+Each historical local RESERVE counts once against account192/480 calls; known
+FINISH cost is retained, otherwise its maximum remains UNKNOWN. Parent BEGIN
+inherited debt is not double-counted. New attempts do not reset costs/calls;
+their explicit startedAt20/45-minute deadline is bounded by owner expiresAt.
+FULL requires an exact fresh source/protocol/corpus-bound PILOT PASS and bound
+report, not historical R01, replay or prefix-only credit. No actual financial
+ledger, authorization or provider grant was changed by this work.
+Ledger locks are target-directory locks; inventory rechecks are not a proof of
+generic account-wide concurrent reservation atomicity. Future trusted
+orchestration must serialize reviewed grants/reservations within each complete
+account root. No such live orchestrator is configured here.
+
+No provider/network campaign, migration, runtime activation, push, merge,
+upload/deploy or channel UAT occurred. T11_ROUTE_ADMISSION remains UNVERIFIED;
+historical PILOT BLOCKED and FULL NOT_RUN below remain historical facts, not
+rewritten PASS. Next gate is fresh aggregate local verification and grouped
+A5+A6/whole-amendment independent review, then separately authorized live gates.
+
+## Historical documentation gate — 2026-10-01
 
 Source audited at clean `899b1f25f38d4d4afcd7429ffbb10c91851c25e3`.
 T0–T10 retain their historical local acceptance; T11 is not accepted.

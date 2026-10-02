@@ -2,13 +2,139 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { measureEnvelope, preflightEnvelopeTransition } from "../../src/modules/conversation/context-contract/admission";
-import { ContextInputSchema, ConversationInterpretationSchema, InterpretationJsonSchema, SLOT_NAMES, parseInterpretationSections, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { measureLegacyV2EnvelopeReference as measureEnvelope, preflightLegacyV2EnvelopeReference as preflightEnvelopeTransition } from "../../src/modules/conversation/context-contract/admission";
+import { LegacyV2ContextInputSchema as ContextInputSchema, LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, SLOT_NAMES, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2ContextInput as ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
-import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
+import { serializeLegacyV2ContextRequestReference as serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
 import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
-import { measureLocalTokens } from "./local-tokenizer";
+import { measureLocalTokens, measureLocalTokenArtifacts } from "./local-tokenizer";
+import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
+import { frozenContextProposal, encodeFixtureV3 } from "./context-contract-fixtures";
+import { admitContextManifest, expandContextCampaign, type ContextManifest } from "./context-contract";
+import { ConversationInterpretationSchema as SelectedInterpretationSchema, InterpretationJsonSchema as SelectedInterpretationJsonSchema } from "../../src/modules/conversation/context-contract/contracts";
+import { serializeContextRequest as serializeSelectedRequest } from "../../src/modules/conversation/context-contract/wire";
+import { measureEnvelope as measureSelectedEnvelope } from "../../src/modules/conversation/context-contract/admission";
+import { encodeContextSnapshotV2 } from "../../src/modules/conversation/context-contract/state";
 import { ContextSnapshotV1Schema, decodeContextSnapshot, encodeContextSnapshot } from "../../src/modules/conversation/context-contract/state";
+import { execFileSync } from "node:child_process";
+import { legacyV2GoogleLiteEuContextWireSchema, googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+
+it("wire_complexity_before_after_is_source_bound", () => {
+  const immutable = execFileSync("git", ["show", "899b1f25f38d4d4afcd7429ffbb10c91851c25e3:src/modules/intelligence/infrastructure/openrouter/semantic-gateway.test.ts"], { encoding: "utf8" });
+  const golden = immutable.match(/\.toBe\("(840ad[a-f0-9]+)"\)/u)?.[1];
+  expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+  expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
+  console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)) }));
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("b5d589629594cf953b8a93f46608ec0070a732a907c8d33ba6074eecc70c3647");
+});
+
+function schemaMetrics(schema: unknown) {
+  let nodes = 0, depth = 0, branches = 0, required = 0, enumArrays = 0, enumValues = 0, largestEnum = 0, nullable = 0, refs = 0, definitions = 0, constants = 0;
+  function walk(value: unknown, level: number) {
+    if (!value || typeof value !== "object") return;
+    nodes++; depth = Math.max(depth, level);
+    if (Array.isArray(value)) { value.forEach(v => walk(v, level + 1)); return; }
+    const obj = value as Record<string, unknown>;
+    for (const key of ["anyOf", "oneOf"]) if (Array.isArray(obj[key])) branches += obj[key].length;
+    if (Array.isArray(obj.required)) required += obj.required.length;
+    if (Array.isArray(obj.enum)) { enumArrays++; enumValues += obj.enum.length; largestEnum = Math.max(largestEnum, obj.enum.length); }
+    if (obj.type === "null" || Array.isArray(obj.type) && obj.type.includes("null")) nullable++;
+    if (typeof obj.$ref === "string") refs++;
+    for (const key of ["$defs", "definitions"]) if (obj[key] && typeof obj[key] === "object") definitions += Object.keys(obj[key]).length;
+    if ("const" in obj) constants++;
+    Object.values(obj).forEach(v => walk(v, level + 1));
+  }
+  walk(schema, 0);
+  const root = schema as { properties: object };
+  return { utf8Bytes: utf8(JSON.stringify(schema)), rootKeys: Object.keys(root.properties).length, recursiveObjectArrayNodes: nodes, maximumDepth: depth, unionBranches: branches, requiredEntries: required, enumArrays, enumValues, largestEnum, nullableNodes: nullable, references: refs, definitions, constantDiscriminators: constants };
+}
+
+it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_service_envelopes_and_wire9_wire10_same_algorithm_fit", async () => {
+  const baselineSchema = legacyV2GoogleLiteEuContextWireSchema().schema;
+  const targetSchema = googleLiteEuContextWireSchemaV3().schema;
+  expect(digest(JSON.stringify(baselineSchema))).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
+  expect(schemaMetrics(baselineSchema)).toMatchObject({ utf8Bytes: 12057, rootKeys: 9, recursiveObjectArrayNodes: 337, unionBranches: 49, enumArrays: 22, enumValues: 100, maximumDepth: 11 });
+  expect(Object.keys((targetSchema as { properties: object }).properties)).not.toEqual(expect.arrayContaining(["dialogueAct", "continuation", "controlEvidence"]));
+  expect(JSON.stringify(targetSchema)).not.toContain('"PRESENT_PREVIEW"');
+  expect(JSON.stringify(targetSchema)).not.toContain('"ANSWER_QUERY"');
+  const manifests = ["regressions", "development"].map(name => admitContextManifest(JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`, "utf8"))));
+  const selected = manifests.flatMap(m => m.cases).filter(c => ["R02", "R07", "R14", "D01", "D02", "D06", "D07"].includes(c.id));
+  const artifacts: Parameters<typeof measureLocalTokenArtifacts>[0] = [];
+  const measurements: unknown[] = [];
+  for (const script of selected) {
+    let count = 0, turnIndex = 0;
+    const outputs: string[] = [];
+    const probe = await createContextContractProbe({ sourceSha: "68fac9b2b5e95ee57c53f0ac1f491210e153ed01", referenceNow: Date.parse(script.turns[0].receipt) }, value => {
+      const proposal = frozenContextProposal(value, script.id, turnIndex); count++;
+      const canonical = JSON.stringify(SelectedInterpretationSchema.parse(proposal));
+      const wireOutput = JSON.stringify(encodeFixtureV3(proposal));
+      const request = serializeSelectedRequest(value);
+      const name = `${script.id}_dispatch_${count}`;
+      artifacts.push({ case: name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(request), outputJson: wireOutput });
+      artifacts.push({ case: `${name}_canonical_output`, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(request), outputJson: canonical });
+      outputs.push(canonical);
+      return proposal;
+    });
+    try {
+      for (const turn of script.turns) {
+        await probe.turn(turn.text.includes("{{ISSUED_TOKEN}}") ? turn.text.replaceAll("{{ISSUED_TOKEN}}", probe.issuedControlToken()) : turn.text, turn.receipt, undefined, turn.processingAt);
+        turnIndex++;
+        const snapshot = probe.snapshot();
+        const value = probe.inputs.at(-1);
+        if (snapshot && value) {
+          const encoded = encodeContextSnapshotV2(snapshot);
+          const measured = measureSelectedEnvelope(value, encoded, outputs.at(-1));
+          expect(measured.reasons, script.id).toEqual(["TOKEN_BOUND_UNVERIFIED"]);
+          expect(measured.bytes.snapshot).toBeLessThanOrEqual(16384);
+          expect(measured.admitted).toBe(false);
+          measurements.push({ script: script.id, turn: turn.text, encodedSnapshotSha256: digest(encoded), ...measured });
+        }
+      }
+    } finally { probe.dispose(); }
+  }
+  expect(artifacts.length).toBeGreaterThan(20);
+  const all = ["regressions", "development", "heldout"].map(name => admitContextManifest(JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`, "utf8"))));
+  const planned = expandContextCampaign({ version: "context-contract-corpus-1", cases: all.flatMap(m => m.cases) } as ContextManifest, "FULL");
+  const candidates = new Map<string, Parameters<typeof measureLocalTokenArtifacts>[0]>();
+  const observed = await runContextFixtureCampaign(planned, { sourceSha: "68fac9b2b5e95ee57c53f0ac1f491210e153ed01", referenceNow: Date.parse("2026-09-28T03:00:00Z") }, (value, id, index) => {
+    const proposal = frozenContextProposal(value, id, index), parsed = SelectedInterpretationSchema.safeParse(proposal);
+    if (parsed.success) {
+      const wire = serializeSelectedRequest(value), common = { prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(wire) };
+      candidates.set(`${id}:${index}`, [{ ...common, case: `FULL_${id}_${index}_wire`, outputJson: JSON.stringify(encodeFixtureV3(parsed.data)) }, { ...common, case: `FULL_${id}_${index}_canonical`, outputJson: JSON.stringify(parsed.data) }]);
+    }
+    return proposal;
+  });
+  for (const script of observed) for (const [index, actual] of script.turns.entries()) if (actual.fullSchemaValid && actual.status !== "FAILED") artifacts.push(...(candidates.get(`${script.id}:${index}`) ?? []));
+  const common = artifacts[0];
+  artifacts.push({ ...common, case: "wire9_immutable_schema_same_input", schemaJson: JSON.stringify(baselineSchema), wireJson: JSON.stringify({ ...JSON.parse(common.wireJson), response_format: { type: "json_schema", json_schema: legacyV2GoogleLiteEuContextWireSchema() } }) });
+  const long = "ế".repeat(2000);
+  const evidence = [quote(0, long), quote(0, long), quote(0, long)];
+  const worst = SelectedInterpretationSchema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote(0, long)] }, changes: [{ field: "notes", operation: "SET", value: long, evidence }], query: null, uncertainties: [{ field: "notes", reason: "AMBIGUOUS", alternatives: [{ value: long, evidence }, { value: long, evidence }] }], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: { text: "ế".repeat(400) } });
+  artifacts.push({ ...common, case: "schema_maximal_notes_evidence_canonical_not_product_accepted", outputJson: JSON.stringify(worst) });
+  artifacts.push({ ...common, case: "schema_maximal_notes_evidence_wire_not_product_accepted", outputJson: JSON.stringify(encodeFixtureV3(worst)) });
+  const oversized = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, () => worst);
+  try {
+    const actual = await oversized.turn("Mai 8h nhắc gọi mẹ", "2026-09-28T03:00:00Z");
+    expect(actual).toMatchObject({ status: "REJECTED", dispatches: 1, mutations: 0, fullSchemaValid: false });
+    expect(oversized.snapshot()).toBeNull();
+    expect(utf8(JSON.stringify(encodeFixtureV3(worst)))).toBeGreaterThan(32768);
+  } finally { oversized.dispose(); }
+  const evidenceResult = measureLocalTokenArtifacts(artifacts);
+  expect(evidenceResult.provenance.networkGuardActive).toBe(true);
+  expect(evidenceResult.provenance.networkAttemptsAfterSelfCheck).toEqual([]);
+  for (const row of evidenceResult.rows.filter(r => !r.case.startsWith("schema_maximal"))) {
+    expect(row.applicationTextTokens, row.case).toBeLessThanOrEqual(12000);
+    expect(row.outputTextTokens, row.case).toBeLessThanOrEqual(1536);
+    expect(row.routeFramingTokens).toBe("UNKNOWN");
+  }
+  expect(evidenceResult.rows.find(r => r.case === "schema_maximal_notes_evidence_wire_not_product_accepted")!.outputTextTokens).toBeGreaterThan(1536);
+  expect(digest(JSON.stringify(InterpretationJsonSchema))).toBe("8f1b868f606fd39972adc8984666f62960bf6c6f5ad38ff64774997b8765ba2d");
+  expect(digest(JSON.stringify(SelectedInterpretationJsonSchema))).toBe("43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b");
+  const paths = ["src/modules/conversation/context-contract/contracts.ts", "src/modules/conversation/context-contract/prompt.ts", "src/modules/conversation/context-contract/wire.ts", "src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts", "src/modules/intelligence/infrastructure/openrouter/provider-wire-schema.ts", "src/modules/intelligence/infrastructure/openrouter/semantic-gateway.test.ts"];
+  const report = { revision: "context-authority-v3-A6", method: "recursive-all-object-array-v1+pinned-local-tokenizer-offline-1", immutableBaseline: { sourceSha: "899b1f25f38d4d4afcd7429ffbb10c91851c25e3", sourceHashes: Object.fromEntries(paths.map(path => [path, digest(execFileSync("git", ["show", `899b1f25f38d4d4afcd7429ffbb10c91851c25e3:${path}`], { encoding: "utf8" }))])), exactSerializedSchemaSha256: digest(JSON.stringify(baselineSchema)), ...schemaMetrics(baselineSchema) }, target: { sourceBaseSha: "68fac9b2b5e95ee57c53f0ac1f491210e153ed01", sourceHashes: Object.fromEntries(paths.map(path => [path, digest(readFileSync(path, "utf8"))])), exactSerializedSchemaSha256: digest(JSON.stringify(targetSchema)), promptSha256: digest(CONTEXT_CONTRACT_PROMPT), ...schemaMetrics(targetSchema) }, routeAdmission: "UNVERIFIED", applicationProviderCalls: 0, providerCountingCalls: 0, caveat: "Same V3 input/prompt isolates schema bytes, not a legacy runtime replay. Maximal output is schema-only, not accepted grounding. No Google private validator-state claim.", evidence: evidenceResult, actualV3EnvelopeMeasurements: measurements, artifacts: artifacts.map(a => ({ case: a.case, inputSha256: digest(a.inputJson), wireSha256: digest(a.wireJson), outputSha256: a.outputJson && digest(a.outputJson), outputUtf8Bytes: a.outputJson && utf8(a.outputJson) })) };
+  if (process.env.CONTEXT_FIT_V3_REPORT === "1") writeFileSync("docs/benchmarks/llm-context-contract-authority-v3-measurements.json", JSON.stringify(report, null, 2) + "\n");
+  console.log(JSON.stringify({ baseline: report.immutableBaseline, target: report.target, ordinaryRows: artifacts.length - 2, actualEnvelopeRows: measurements.length }));
+}, 60000);
 
 const input = ContextInputSchema.parse({
   schemaVersion: "calenote-context-input-1",
@@ -250,7 +376,7 @@ describe("full specimen measurements", () => {
       { name: "encoded_snapshot_16385", input: boundaryInput, snapshot: decodeIdentityViews(JSON.stringify(encodedBoundary)), output: JSON.stringify(proposal([])) },
       { name: "oversized_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized },
       { name: "truncated_output", input, snapshot: JSON.stringify(snapshotSample(input)), output: oversized.slice(0, -1) }];
-    const evidence = measureLocalTokens(samples);
+    const evidence = measureLocalTokens(samples, "LEGACY_V2_REFERENCE");
     if (process.env.CONTEXT_FIT_AMENDMENT_REPORT === "1") {
       writeFileSync("docs/benchmarks/llm-context-contract-conversation-guidance-v2-measurements.json", JSON.stringify({
         revision: "conversation-guidance-v2", contractVersion: "calenote-context-2", methodVersion: "pinned-local-tokenizer-offline-1", routeAdmission: "UNVERIFIED", applicationLlmCalls: 0, providerCountingCalls: 0,
