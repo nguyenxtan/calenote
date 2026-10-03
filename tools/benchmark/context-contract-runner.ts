@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
-import { createContextContractGateway, createContextHttpTransport, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
@@ -12,11 +12,14 @@ import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
-  settleCampaignCanary, completeCampaign, admitR01ReplayIntent, type FutureLiveIntent } from "./context-contract-live";
+  settleCampaignCanary, completeCampaign, admitR01ReplayIntent, withAuthorizedAccountRootLock, contextCampaignGitEnvironment, revalidateCampaignPaidAdmission, type FutureLiveIntent } from "./context-contract-live";
 
-const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+export const contextCampaignGatewayConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
     promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+const config = contextCampaignGatewayConfig;
+export const contextCampaignAdvertisedContextTokens = 1048576;
+export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
@@ -28,6 +31,8 @@ export interface ObservableExecution { directory: string; sourceSha: string; pro
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
   httpRequestCount?: () => number; expiresAt?: number;
   startedAt?: number; authorizationSha256?: string; historicalCalls?: number; historicalUnknownReservations?: number;
+  /** Additional execution fence; never replaces the owner's BEGIN expiry. */
+  paidExpiresAt?: number;
   pilotPrefix?: { directory: string; ledgerHash: string; responseDigest: string; applicationDigest: string }; }
 
 /** R01 is an independent script, not clarification state for R02. Carry only
@@ -51,7 +56,7 @@ function verifyPilotPrefix(input: ObservableExecution, root: string, admitted: R
     if (!historicalWireVersion) return fail();
     for (const name of ["regressions", "development", "heldout"]) {
       const path = `src/modules/conversation/context-contract/benchmark/${name}.json`;
-      if (execFileSync("git", ["-C", root, "show", `${begin.sourceSha}:${path}`], { encoding: "utf8" }) !== readFileSync(join(root, path), "utf8")) return fail();
+      if (execFileSync("git", ["-C", root, "show", `${begin.sourceSha}:${path}`], { encoding: "utf8", env: contextCampaignGitEnvironment }) !== readFileSync(join(root, path), "utf8")) return fail();
     }
   } catch { return fail(); }
   const responseText = readFileSync(join(input.pilotPrefix.directory, "responses.json"), "utf8");
@@ -95,7 +100,8 @@ export async function executeObservableR01Replay(input: ObservableExecution) {
 async function executeObservable(input: ObservableExecution, replayOnly = false) {
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
   const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
-  const deadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
+  const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
+  const deadline = Math.min(ownerDeadline, input.paidExpiresAt ?? Number.MAX_SAFE_INTEGER);
   const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
     (JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest).cases) };
   const admitted = admitCanonicalCampaign(manifest, input.profile);
@@ -106,7 +112,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
     provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
-    cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: deadline });
+    cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: ownerDeadline });
   if (pilotPrefix) writeFileSync(join(input.directory, "pilot-prefix-proof.json"), JSON.stringify(pilotPrefix), { mode: 0o600 });
   const planned = replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
   const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: index }] : []));
@@ -140,7 +146,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
     const response = await input.transport(request, { ...options, signal: AbortSignal.any([options.signal, AbortSignal.timeout(Math.min(30000, remaining))]) });
     httpStatus = response.status; return response;
   },
-    { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+    { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
   const stop = (reason: string) => { if (!stopped()) appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
   const gateway: SemanticGateway<ParsedInterpretation, ContextInput> = { prepare(tier, context) {
@@ -152,6 +158,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
       const reserved = reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
         reservationId, maximumMicrounits: prepared.maximumCostMicrounits, now: now(), startedAt });
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
+      if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
       outboundDigest = null; httpStatus = null;
       const parsed = await prepared.dispatch();
@@ -243,24 +250,44 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
 
 /** No credential is read until exact authorization and clean source are checked;
  * BEGIN and the conservative reservations precede the first credentialed HTTP. */
-export async function runAuthorizedContextCampaign(intent: FutureLiveIntent, readSecret: () => string, pilotPrefix?: ObservableExecution["pilotPrefix"]) {
-  const authorization = admitFutureLiveIntent(intent);
-  if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8" }).trim()) throw new Error("SOURCE_NOT_CLEAN");
+export async function runAuthorizedContextCampaign(intent: FutureLiveIntent, readSecret: () => string, pilotPrefix?: ObservableExecution["pilotPrefix"], testTransport?: SemanticTransport) {
+  const outcome = await withAuthorizedAccountRootLock(intent.authorizationCapability, () => runLockedAuthorizedContextCampaign(intent, readSecret, pilotPrefix, testTransport));
+  if (outcome.kind === "REJECTED") throw outcome.error;
+  return outcome.result;
+}
+async function runLockedAuthorizedContextCampaign(intent: FutureLiveIntent, readSecret: () => string, pilotPrefix?: ObservableExecution["pilotPrefix"], testTransport?: SemanticTransport) {
+  let authorization: ReturnType<typeof admitFutureLiveIntent>, key: string, paidExpiresAt: number;
+  try {
+    authorization = admitFutureLiveIntent({ ...intent, now: Date.now() });
+    if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim()) throw new Error("SOURCE_NOT_CLEAN");
+    if (readCampaignLedger(join(authorization.campaignRoot, intent.profile)).length) throw new Error("CAMPAIGN_ALREADY_STARTED");
+    paidExpiresAt = revalidateCampaignPaidAdmission(intent.authorizationCapability);
+    const credentialAt = Date.now(), ownerDeadline = Math.min(authorization.expiresAt, authorization.startedAt + (intent.profile === "PILOT" ? 1200000 : 2700000));
+    if (credentialAt >= ownerDeadline) throw new Error("AUTHORIZATION_EXPIRED");
+    if (credentialAt >= paidExpiresAt) throw new Error("PAID_AUTHORIZATION_EXPIRED");
+    key = readSecret();
+    if (!key) throw new Error("CREDENTIAL_MISSING");
+    if (/[\r\n]/u.test(key)) throw new Error("CREDENTIAL_INVALID");
+  } catch (error) { return { kind: "REJECTED" as const, error }; }
   const directory = join(authorization.campaignRoot, intent.profile);
   mkdirSync(authorization.campaignRoot, { recursive: true, mode: 0o700 }); mkdirSync(directory, { recursive: true, mode: 0o700 });
   let transport: SemanticTransport | undefined;
   let requests = 0;
-  return executeObservableCampaign({ ...authorization, directory, root: intent.root, pilotPrefix, httpRequestCount: () => requests, transport: (request, options) => {
-    transport ??= createContextHttpTransport(readSecret(), async (url, init) => {
-      if (Date.now() >= authorization.expiresAt || init?.signal?.aborted) throw new Error("AUTHORIZATION_EXPIRED");
+  const deadline = Math.min(paidExpiresAt, authorization.expiresAt, authorization.startedAt + (intent.profile === "PILOT" ? 1200000 : 2700000));
+  const result = await executeObservableCampaign({ ...authorization, paidExpiresAt, directory, root: intent.root, pilotPrefix, httpRequestCount: () => requests, transport: (request, options) => {
+    if (Date.now() >= deadline || options.signal.aborted) throw new Error("AUTHORIZATION_EXPIRED");
+    if (testTransport) { requests++; return testTransport(request, options); }
+    transport ??= createContextHttpTransport(key, async (url, init) => {
+      if (Date.now() >= deadline || init?.signal?.aborted) throw new Error("AUTHORIZATION_EXPIRED");
       requests++; return fetch(url, init);
     }); return transport(request, options);
   } });
+  return { kind: "EXECUTED" as const, result };
 }
 
 export async function runAuthorizedR01Replay(intent: FutureLiveIntent, readSecret: () => string) {
   const authorization = admitR01ReplayIntent(intent);
-  if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8" }).trim()) throw new Error("SOURCE_NOT_CLEAN");
+  if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim()) throw new Error("SOURCE_NOT_CLEAN");
   const directory = join(authorization.campaignRoot, "R01_REPLAY");
   mkdirSync(authorization.campaignRoot, { recursive: true, mode: 0o700 }); mkdirSync(directory, { mode: 0o700 });
   let transport: SemanticTransport | undefined; let requests = 0;

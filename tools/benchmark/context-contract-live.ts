@@ -36,10 +36,13 @@ const files = [
   "tools/benchmark/run-context-contract-r01-replay.mjs",
   "tools/benchmark/context-contract-runner.ts", "tools/benchmark/context-contract-runner.test.ts", "vitest.config.ts",
   "tools/calendar/reference-vectors.json", "package.json", "pnpm-lock.yaml",
+  "tools/benchmark/context-contract-orchestration.ts", "tools/benchmark/context-contract-orchestration.test.ts",
   "src/modules/conversation/context-contract/benchmark/regressions.json",
   "src/modules/conversation/context-contract/benchmark/development.json", "src/modules/conversation/context-contract/benchmark/heldout.json",
 ] as const;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+export const contextCampaignGitEnvironment = Object.freeze({ PATH: "/usr/bin:/bin:/opt/homebrew/bin", TMPDIR: "/tmp",
+  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }) as unknown as NodeJS.ProcessEnv;
 const pilotAuthorizedMicrounits = 1500000;
 const fullAuthorizedMicrounits = 1000000;
 const cumulativeAuthorizedMicrounits = pilotAuthorizedMicrounits + fullAuthorizedMicrounits;
@@ -63,7 +66,7 @@ export function computeContextSourceFreeze(root: string, paths?: readonly string
   return { provenanceDigest: hash(JSON.stringify(digests)), digests };
 }
 export function preflightContextCampaign({ root }: PreflightOptions) {
-  const sourceSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const sourceSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim();
   const { provenanceDigest, digests } = computeContextSourceFreeze(root);
   const manifests = ["regressions", "development", "heldout"].map(name => JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest);
   validateFrozenContextCorpus(root, manifests);
@@ -80,7 +83,7 @@ export function preflightContextCampaign({ root }: PreflightOptions) {
  * evidence. Replacement and reauthorization are a separate approved workflow. */
 export function validateFrozenContextCorpus(root: string, manifests: readonly ContextManifest[]) {
   for (const [i, name] of ["regressions", "development", "heldout"].entries()) {
-    const original = JSON.parse(execFileSync("git", ["-C", root, "show", `68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/${name}.json`], { encoding: "utf8" }));
+    const original = JSON.parse(execFileSync("git", ["-C", root, "show", `68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/${name}.json`], { encoding: "utf8", env: contextCampaignGitEnvironment }));
     if (hash(JSON.stringify(manifests[i])) !== hash(JSON.stringify(original))) throw new Error(name === "heldout" ? "HELDOUT_REPLACEMENT_REQUIRED" : "FROZEN_ORACLES_CHANGED");
   }
 }
@@ -156,9 +159,26 @@ const ownerSchema = z.strictObject({ version: z.literal("context-contract-live-3
   runId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/u), approvedAt: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative(),
   startedAt: z.number().int().nonnegative(), priorLedgers: z.array(bindingSchema).max(1024),
   pilotLedger: bindingSchema.extend({ reportSha256: z.string().regex(/^[a-f0-9]{64}$/u) }).nullable() });
-type CampaignGrant = { record: z.infer<typeof ownerSchema>; sha256: string; root: string; directory: string };
+type CampaignGrant = { record: z.infer<typeof ownerSchema>; sha256: string; root: string; directory: string; inventoryPin?: string;
+  paidAdmission?: () => number; paidExpiresAt?: number };
 const campaignGrants = new WeakMap<object, CampaignGrant>();
 const activeCampaignGrants = new Map<string, CampaignGrant>();
+/** Trusted orchestration attaches its separately pinned paid-record verifier to
+ * the existing private loader capability. No raw/boolean CLI authority. */
+export function bindCampaignPaidAdmission(capability: CampaignAuthorization, revalidate: () => number) {
+  const grant = campaignGrants.get(capability);
+  if (!grant) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+  grant.paidAdmission = revalidate;
+}
+export function revalidateCampaignPaidAdmission(capability: CampaignAuthorization | undefined) {
+  const grant = capability && campaignGrants.get(capability);
+  if (!grant?.paidAdmission) throw new Error("PAID_CONFIRMATION_REQUIRED");
+  const expiresAt = grant.paidAdmission();
+  if (!Number.isSafeInteger(expiresAt) || expiresAt < 0) throw new Error("PAID_CONFIRMATION_MISMATCH");
+  grant.paidExpiresAt = expiresAt;
+  activeCampaignGrants.set(grant.directory, grant);
+  return expiresAt;
+}
 function accountInventory(root: string, excluded: string): string[] {
   const result: string[] = [];
   function visit(path: string) {
@@ -177,7 +197,10 @@ function campaignInventory(grant: CampaignGrant) {
     return path;
   });
   if (new Set(paths).size !== paths.length) throw new Error("PRIOR_LEDGER_ALIAS");
-  if (JSON.stringify([...paths].sort()) !== JSON.stringify(accountInventory(grant.root, grant.directory))) throw new Error("PRIOR_LEDGER_INVENTORY");
+  const inventory = grant.inventoryPin ? auditCampaignAccountRoot(grant.root, grant.directory) : null;
+  if (inventory && inventory.inventoryDigest !== grant.inventoryPin) throw new Error("PRIOR_LEDGER_INVENTORY");
+  const expectedPaths = inventory ? inventory.bindings.filter(b => b.account === grant.record.account).map(b => b.directory) : accountInventory(grant.root, grant.directory);
+  if (JSON.stringify([...paths].sort()) !== JSON.stringify(expectedPaths)) throw new Error("PRIOR_LEDGER_INVENTORY");
   let retained = 0n, calls = 0, unknown = 0;
   for (const binding of grant.record.priorLedgers) {
     const rows = ledger(binding.directory), begin = rows[0];
@@ -191,6 +214,48 @@ function campaignInventory(grant: CampaignGrant) {
   if (retained > BigInt(cap) || calls > (grant.record.account === "PILOT" ? 192 : 480)) throw new Error("HISTORICAL_ACCOUNTING_CAP");
   // Conversion is only after the exact account ceiling bounds the result.
   return { retained: Number(retained), calls, unknown };
+}
+/** Complete cross-stage namespace. Costs derive only from local reservations,
+ * never from inherited BEGIN totals. No aliases or unvalidated histories. */
+export function auditCampaignAccountRoot(accountRoot: string, excluded?: string) {
+  const root = realpathSync(accountRoot);
+  if (root !== accountRoot || !isAbsolute(accountRoot)) throw new Error("PRIOR_LEDGER_ALIAS");
+  const bindings = accountInventory(root, excluded ?? "").map(directory => {
+    const rows = ledger(directory), state = validateCampaign(rows);
+    if (!state.begin) throw new Error("PRIOR_LEDGER_BINDING");
+    const unknownMicrounits = [...state.reserves.values()].reduce((n, reservation) => {
+      const finish = state.finishes.get(reservation.reservationId);
+      return safeCampaignSum(n, finish?.observedMicrounits == null ? reservation.maximumMicrounits : 0);
+    }, 0);
+    if (state.retained > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("ACCOUNTING_OVERFLOW");
+    return { directory, finalHash: rows.at(-1)!.hash, account: state.begin.profile,
+      retainedMicrounits: Number(state.retained), unknownMicrounits, calls: state.reserves.size };
+  });
+  return { root, inventoryDigest: hash(JSON.stringify(bindings)), bindings,
+    totals: Object.fromEntries((["PILOT", "FULL"] as const).map(account => [account,
+      bindings.filter(b => b.account === account).reduce((n, b) => ({ retainedMicrounits: safeCampaignSum(n.retainedMicrounits, b.retainedMicrounits),
+        unknownMicrounits: safeCampaignSum(n.unknownMicrounits, b.unknownMicrounits), calls: safeCampaignSum(n.calls, b.calls) }),
+      { retainedMicrounits: 0, unknownMicrounits: 0, calls: 0 })])) };
+}
+export async function withAccountRootLock<T>(accountRoot: string, operation: () => Promise<T>): Promise<T> {
+  if (realpathSync(accountRoot) !== accountRoot || !isAbsolute(accountRoot)) throw new Error("PRIOR_LEDGER_ALIAS");
+  const path = join(accountRoot, "account.lock");
+  let descriptor: number;
+  try { descriptor = openSync(path, "wx", 0o600); } catch { throw new Error("ACCOUNT_LOCKED"); }
+  try {
+    writeSync(descriptor, JSON.stringify({ version: 1, pid: process.pid }) + "\n"); fsyncSync(descriptor);
+    const parent = openSync(accountRoot, "r"); try { fsyncSync(parent); } finally { closeSync(parent); }
+    const result = await operation();
+    closeSync(descriptor); descriptor = -1;
+    unlinkSync(path);
+    const released = openSync(accountRoot, "r"); try { fsyncSync(released); } finally { closeSync(released); }
+    return result;
+  } finally { if (descriptor >= 0) closeSync(descriptor); }
+}
+export async function withAuthorizedAccountRootLock<T>(capability: CampaignAuthorization | undefined, operation: () => Promise<T>): Promise<T> {
+  const grant = capability && campaignGrants.get(capability);
+  if (!grant) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
+  return withAccountRootLock(grant.root, operation);
 }
 function validateHistoricalCampaign(rows: readonly Stored[], account: CampaignProfile): void {
   if (validateCampaign(rows).begin?.profile !== account) throw new Error("PRIOR_LEDGER_BINDING");
@@ -210,7 +275,7 @@ function validateTargetCampaign(grant: CampaignGrant, totals: ReturnType<typeof 
 }
 /** Approval provenance and complete account namespace come from trusted
  * orchestration, never from a raw record, CLI, env override or self-hash. */
-export function createCampaignAuthorizationLoader(trusted: { reviewedOwnerRecordSha256: string; accountRoot: string }) {
+export function createCampaignAuthorizationLoader(trusted: { reviewedOwnerRecordSha256: string; accountRoot: string; reviewedAccountInventorySha256?: string }) {
   if (!/^[a-f0-9]{64}$/u.test(trusted.reviewedOwnerRecordSha256)) throw new Error("AUTHORIZATION_NOT_CONFIGURED");
   const root = realpathSync(trusted.accountRoot), pin = trusted.reviewedOwnerRecordSha256;
   return { load(raw: unknown, targetDirectory: string): CampaignAuthorization {
@@ -218,7 +283,13 @@ export function createCampaignAuthorizationLoader(trusted: { reviewedOwnerRecord
     if (hash(JSON.stringify(raw)) !== pin) throw new Error("OWNER_AUTHORIZATION_MISMATCH");
     const directory = realpathSync(targetDirectory), rel = relative(root, directory);
     if (directory !== targetDirectory || rel.startsWith("..") || isAbsolute(rel) || basename(directory) !== record.account) throw new Error("PRIOR_LEDGER_ALIAS");
-    const grant = { record, sha256: pin, root, directory };
+    const grant: CampaignGrant = { record, sha256: pin, root, directory, inventoryPin: trusted.reviewedAccountInventorySha256 };
+    if (trusted.reviewedAccountInventorySha256 !== undefined) {
+      const audit = auditCampaignAccountRoot(root, directory);
+      if (audit.inventoryDigest !== trusted.reviewedAccountInventorySha256) throw new Error("PRIOR_LEDGER_INVENTORY");
+      const expected = audit.bindings.filter(b => b.account === record.account).map(({ directory, finalHash }) => ({ directory, finalHash }));
+      if (JSON.stringify(record.priorLedgers) !== JSON.stringify(expected)) throw new Error("PRIOR_LEDGER_INVENTORY");
+    }
     validateTargetCampaign(grant, campaignInventory(grant), ledger(directory));
     const capability = Object.freeze({ [authorizationBrand]: true as const }); campaignGrants.set(capability, grant); return capability;
   } };
@@ -460,6 +531,12 @@ function appendUnlocked(directory: string, event: CampaignEvent): Stored {
   if (event.event === "BEGIN" && event.authorizationSha256 !== undefined) {
     const grant = activeCampaignGrants.get(realpathSync(directory))!;
     validateTargetCampaign(grant, campaignInventory(grant), [row]);
+  }
+  // Last admission clock after inventory/grammar work, before durable hold or
+  // dispatch. Paid expiry is separate from the immutable owner BEGIN binding.
+  if ((event.event === "RESERVE" || event.event === "DISPATCH") && begin?.event === "BEGIN" && begin.authorizationSha256 !== undefined) {
+    const grant = activeCampaignGrants.get(realpathSync(directory));
+    if (grant?.paidExpiresAt !== undefined && Date.now() >= grant.paidExpiresAt) throw new Error("PAID_AUTHORIZATION_EXPIRED");
   }
   const descriptor = openSync(join(resolve(directory), "campaign.jsonl"), "a", 0o600);
   try { writeSync(descriptor, JSON.stringify(row) + "\n"); fsyncSync(descriptor); } finally { closeSync(descriptor); }
