@@ -199,7 +199,8 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
   return true;
 }
 class WireShapeFailure extends Error {
-  constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number) { super("WIRE_SHAPE_INVALID"); }
+  constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
+    readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number }) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -237,7 +238,16 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     if (results.length === 0 && failures.length) throw failures.sort((a, b) => b.path.length - a.path.length)[0];
     requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
   }
-  if (node.type === "array") { requireShape(Array.isArray(value) && (node.minItems === undefined || value.length >= Number(node.minItems)) && (node.maxItems === undefined || value.length <= Number(node.maxItems))); return (value as unknown[]).map((item, index) => codec(node.items!, item, direction, [...path, index], root)); }
+  if (node.type === "array") {
+    requireShape(Array.isArray(value));
+    const items = value as unknown[];
+    if ((node.minItems !== undefined && items.length < Number(node.minItems)) || (node.maxItems !== undefined && items.length > Number(node.maxItems))) {
+      throw new WireShapeFailure(path, "array", undefined, { actualCount: items.length,
+        ...(node.minItems !== undefined ? { minItems: Number(node.minItems) } : {}),
+        ...(node.maxItems !== undefined ? { maxItems: Number(node.maxItems) } : {}) });
+    }
+    return items.map((item, index) => codec(node.items!, item, direction, [...path, index], root));
+  }
   if (node.type === "object") {
     requireShape(value && typeof value === "object" && !Array.isArray(value));
     requireWireKeys(value as Record<string, unknown>, node.required!, node.required!, path);
@@ -278,13 +288,13 @@ export function legacyV2ParseGoogleLiteEuContextSections(raw: unknown, observeIn
     const decoded = Object.fromEntries(coreKeys.map(key => [key, key === "uncertainties" ? decodeUncertainties(object[key]) : codec(original.properties![key], object[key], "decode", [key])]));
     decoded.schemaVersion = applicationSchemaVersion;
     try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode", ["conversationDirective"]); }
-    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
     // Reply has no flattened tagged union. Retaining an invalid original reply
     // preserves the canonical parser's REPLY_TOO_LONG vs REPLY_INVALID reason.
     try { decoded.replyProposal = codec(original.properties!.replyProposal, object.replyProposal, "decode", ["replyProposal"]); }
-    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount)); decoded.replyProposal = object.replyProposal; }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality)); decoded.replyProposal = object.replyProposal; }
     return parseInterpretationSections(decoded, observeInvalid);
-  } catch (error) { observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount) : projectCanonicalValidation(raw, [])); return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
+  } catch (error) { observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality) : projectCanonicalValidation(raw, [])); return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
 }
 
 function omitOwnedV3(node: Schema): Schema {
@@ -325,13 +335,13 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
     for (const key of guidance) {
       try { decoded[key] = codec(originalV3.properties![key], object[key], "decode", [key], originalV3); }
       catch (error) {
-        if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3"));
+        if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality));
         decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key];
       }
     }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
-    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3") : projectCanonicalValidation(raw, [], "calenote-context-3"));
+    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality) : projectCanonicalValidation(raw, [], "calenote-context-3"));
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }

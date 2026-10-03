@@ -6,6 +6,7 @@ const types = new Set(["string", "number", "boolean", "null", "undefined", "arra
 export interface CanonicalValidationIssue {
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
+  constraint?: "ARRAY_CARDINALITY"; actualCount?: number; minItems?: number; maxItems?: number;
 }
 export interface CanonicalValidationDiagnostics {
   schemaVersion: "calenote-context-2" | "calenote-context-3"; issues: CanonicalValidationIssue[];
@@ -51,11 +52,17 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
   };
   visit(issues, 0); return result;
 }
-export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2"): CanonicalValidationDiagnostics {
+export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2", cardinality?: { actualCount: number; minItems?: number; maxItems?: number }): CanonicalValidationDiagnostics {
   const result = projectCanonicalValidation(raw, [{ code: "custom", path, message: "" }], schemaVersion);
   result.issues[0].code = "WIRE_SHAPE_INVALID";
   if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
   if (extraKeyCount !== undefined) { result.issues[0].classification = "extra"; result.issues[0].extraKeyCount = extraKeyCount; }
+  if (result.issues[0].actualType === "array" && cardinality && [cardinality.actualCount, cardinality.minItems, cardinality.maxItems].every(value => value === undefined || Number.isSafeInteger(value) && value >= 0)) {
+    result.issues[0].constraint = "ARRAY_CARDINALITY";
+    result.issues[0].actualCount = cardinality.actualCount;
+    if (cardinality.minItems !== undefined) result.issues[0].minItems = cardinality.minItems;
+    if (cardinality.maxItems !== undefined) result.issues[0].maxItems = cardinality.maxItems;
+  }
   return result;
 }
