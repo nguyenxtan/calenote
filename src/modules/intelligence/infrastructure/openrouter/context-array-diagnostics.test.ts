@@ -11,8 +11,8 @@ const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "cal
   uncertainties: [], conversationDirective: null, replyProposal: null });
 
 it.each([0, 4, 10000])("array cardinality rejection exposes only structural counts (%i)", count => {
-  const wire = encodeGoogleLiteEuContextV3(canonical) as { query: { evidence: unknown[] } };
-  wire.query.evidence = Array(count).fill(wire.query.evidence[0]);
+  const wire = encodeGoogleLiteEuContextV3(canonical) as { query: { evidence: unknown } };
+  wire.query.evidence = Array(count).fill(evidence);
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3, undefined, value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" });
   expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "evidence"], code: "WIRE_SHAPE_INVALID", actualType: "array",
@@ -35,7 +35,7 @@ it("unrelated wrong array type keeps existing diagnostics without counts", () =>
   wire.query.evidence = secret;
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3, undefined, value => diagnostics.push(value))).toMatchObject({ status: "REFUSED" });
-  expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "evidence"], code: "WIRE_SHAPE_INVALID", actualType: "string", expected: "array" }] }]);
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "evidence"], code: "WIRE_SHAPE_INVALID", actualType: "string", expected: "object" }] }]);
   const text = JSON.stringify(diagnostics);
   for (const field of [secret, "actualCount", "minItems", "maxItems", "ARRAY_CARDINALITY"]) expect(text).not.toContain(field);
 });

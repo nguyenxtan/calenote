@@ -49,3 +49,16 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });
+it("provider query evidence slots remain untrusted selections without execution authority", () => {
+  for (const slot of ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"]) {
+    const prefix = `query.evidence.${slot}`;
+    for (const path of [prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}`), `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]) {
+      expect(authority.classifyOutputPathV3(path as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({
+        class: "SEMANTIC_UNTRUSTED", canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false,
+      });
+    }
+  }
+  expect(authority.classifyOutputPathV3("query.evidence[]").class).toBe("SEMANTIC_UNTRUSTED");
+  expect(authority.classifyOutputPathV3("transport.inactivePadding")).toMatchObject({ class: "APPLICATION_OWNED", canCauseHardReject: false, canAuthorizeRead: false, canAuthorizeWrite: false });
+  expect(() => authority.classifyOutputPathV3("query.evidence.fourthEvidence" as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
+});

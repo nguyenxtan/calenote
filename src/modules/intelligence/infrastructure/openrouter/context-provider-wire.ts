@@ -239,6 +239,28 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
   }
   if (node.type === "array") {
+    // V3 query evidence uses bounded slots on the provider wire. Canonical
+    // arrays and all other evidence locations keep their original contract.
+    if (root === originalV3 && path.length === 2 && path[0] === "query" && path[1] === "evidence") {
+      const keys = ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"];
+      if (direction === "encode") {
+        requireShape(Array.isArray(value) && predicate(node, value, root));
+        return Object.fromEntries(keys.map((key, index) => [key, index < (value as unknown[]).length
+          ? codec(node.items!, (value as unknown[])[index], direction, [...path, key], root) : null]));
+      }
+      // Preserve sanitized diagnostics for the old observed invalid array;
+      // no legacy array (including a valid-sized one) is accepted as V3 slots.
+      if (Array.isArray(value) && (value.length < 1 || value.length > 3)) {
+        throw new WireShapeFailure(path, "array", undefined, { actualCount: value.length, minItems: 1, maxItems: 3 });
+      }
+      requireShape(value && typeof value === "object" && !Array.isArray(value), "object");
+      const object = value as Record<string, unknown>;
+      requireWireKeys(object, keys, keys, path);
+      // primary is always traversed: null/absent/invalid cannot supply evidence.
+      const refs = [codec(node.items!, object.primaryEvidence, direction, [...path, keys[0]], root)];
+      for (const key of keys.slice(1)) if (object[key] !== null) refs.push(codec(node.items!, object[key], direction, [...path, key], root));
+      return refs;
+    }
     requireShape(Array.isArray(value));
     const items = value as unknown[];
     if ((node.minItems !== undefined && items.length < Number(node.minItems)) || (node.maxItems !== undefined && items.length > Number(node.maxItems))) {
@@ -306,7 +328,24 @@ function omitOwnedV3(node: Schema): Schema {
   return result;
 }
 const originalV3 = omitOwnedV3(googleLiteEuProviderWireSchema(InterpretationJsonSchemaV3).schema as Schema);
-const providerSchemaV3 = simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(originalV3, originalV3))))))));
+function queryEvidenceSlots(root: Schema): Schema {
+  const visit = (node: Schema): Schema => {
+    const result = mapSchemas(node, visit);
+    if (node.properties?.evidence && node.properties.kind && ["LIST", "CALENDAR_DATE", "CAPABILITY"].includes(String(deref(node.properties.kind, root).const))) {
+      const evidence = deref(node.properties.evidence, root);
+      requireShape(evidence.type === "array" && evidence.items);
+      result.properties!.evidence = { type: "object", properties: {
+        primaryEvidence: structuredClone(evidence.items),
+        secondaryEvidence: { anyOf: [structuredClone(evidence.items), { type: "null" }] },
+        tertiaryEvidence: { anyOf: [structuredClone(evidence.items), { type: "null" }] },
+      }, required: ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"], additionalProperties: false };
+    }
+    return result;
+  };
+  return visit(root);
+}
+const slottedV3 = queryEvidenceSlots(originalV3);
+const providerSchemaV3 = simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))));
 export function googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3 {
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: structuredClone(providerSchemaV3) as typeof InterpretationJsonSchemaV3 };
 }

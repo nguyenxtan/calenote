@@ -173,6 +173,47 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "one", "two", "three", "fabricated", "unsupported-operand", "inactive-padding"] as const)("R01 actual path retains evidence authority for %s", async mode => {
+  const directory = mkdtempSync(join(tmpdir(), "r01-slotted-evidence-")); let calls = 0;
+  try {
+    const result = await runner.executeObservableR01Turn0Replay({ directory, root: process.cwd(), sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "offline-evidence-regression",
+      profile: "PILOT", cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async request => {
+        calls++;
+        const context = JSON.parse(request.messages[1].content) as ContextInput;
+        expect(context.turns).toEqual([{ role: "USER", text: "Có lịch nào ko?" }]);
+        expect(context.currentTurn).toBe(0); expect(context.activeRequest).toBeNull(); expect(context.pendingQuestion).toBeNull();
+        const wire = encodeFixtureV3(frozenContextProposal(context, "R01", 0)) as { query: { evidence: Record<string, unknown> | unknown[]; period: unknown; date: unknown } };
+        const refs = wire.query.evidence as Record<string, unknown>;
+        if (mode === "old-empty-array") wire.query.evidence = [];
+        if (mode === "missing-primary") delete refs.primaryEvidence;
+        if (mode === "null-primary") refs.primaryEvidence = null;
+        if (mode === "four-slots") refs.fourthEvidence = refs.primaryEvidence;
+        if (mode === "two" || mode === "three") refs.secondaryEvidence = refs.primaryEvidence;
+        if (mode === "three") refs.tertiaryEvidence = refs.primaryEvidence;
+        if (mode === "fabricated") (refs.primaryEvidence as Record<string, unknown>).quote = "PRIVATE_FABRICATED_QUOTE";
+        if (mode === "unsupported-operand") wire.query.period = { kind: "MONTH", offset: 0, date: null, from: null, through: null };
+        if (mode === "inactive-padding") wire.query.date = { evidence: [], calendar: "LUNAR_VN", privatePadding: "PRIVATE_INACTIVE_CONTENT" };
+        return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-offline-slots", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(wire) } }] }) };
+      } });
+    expect(calls).toBe(1); expect(result.applicationLlmCalls).toBe(1); expect(result.providerHttpRequests).toBe(1);
+    expect(result.applicationEvidence).toHaveLength(1);
+    const observed = result.applicationEvidence[0];
+    expect(observed).toMatchObject({ listStoreReads: 0, mutations: 0, queryRange: null });
+    const wireInvalid = ["old-empty-array", "missing-primary", "null-primary", "four-slots"].includes(mode);
+    expect(result.responses[0].status).toBe(wireInvalid ? "FAILURE" : "SUCCESS");
+    if (wireInvalid) expect(result.responses[0].canonicalValidationDiagnostics?.inputRepresentation).toBe("PROVIDER_WIRE");
+    if (["one", "two", "three", "unsupported-operand", "inactive-padding"].includes(mode)) expect(observed).toMatchObject({ status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", oracle: "PASS" });
+    if (mode === "fabricated") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED" }));
+    if (mode === "unsupported-operand") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "LIST_RANGE", result: "UNSUPPORTED" }));
+    for (const file of ["responses.json", "application-evidence.json"]) {
+      const persisted = readFileSync(join(directory, file), "utf8");
+      expect(persisted).not.toContain("PRIVATE_FABRICATED_QUOTE"); expect(persisted).not.toContain("PRIVATE_INACTIVE_CONTENT");
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.each([
   ["title", "INVALID", "operation"], ["location", "INVALID", "operation"], ["notes", undefined, "operation"],
   ["INVALID", "SET", "field"], [undefined, "SET", "field"], ["title", "CLEAR_BAD", "operation"],
@@ -204,7 +245,7 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
         else if (mode === "guidance") wire.replyProposal = { text: sentinel, [sentinel]: sentinel };
         else if (mode === "missing") delete wire.intent;
         else if (mode === "unexpected-key") wire[sentinel] = sentinel;
-        else if (mode === "nested-evidence") ((wire.query as { evidence: Array<Record<string, unknown>> }).evidence[0]).occurrence = sentinel;
+        else if (mode === "nested-evidence") ((wire.query as { evidence: { primaryEvidence: Record<string, unknown> } }).evidence.primaryEvidence).occurrence = sentinel;
         else wire.intent = sentinel;
         return { status: 200, ...(mode === "oversized" ? { oversized: true } : {}), body: mode === "oversized" ? sentinel.repeat(4000) : JSON.stringify({ model: request.model, provider: "Google", id: "gen-canonical-test",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mode === "primitive" ? 42 : wire) } }] }) };
@@ -351,8 +392,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "966fce193d323e996185f4f61846f2a9342c353e7fbacb1f99ad567773971c38",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-authority-10" });
+      providerWireSchemaDigest: "6092054ed374d5e1ee936cbf2087588bbcd5502b92521d75fcdb9e1f1f3e3a3f",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-11" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

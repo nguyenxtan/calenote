@@ -61,6 +61,20 @@ function inlineRefs(value: unknown, root: unknown = publicSchema): unknown {
 const successorSchema = googleLiteEuContextWireSchemaV3().schema;
 const successorValidator = z.fromJSONSchema(inlineRefs(successorSchema, successorSchema) as Parameters<typeof z.fromJSONSchema>[0]);
 const successorEvidence = [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }];
+it.each([1, 2, 3])("query evidence slots enforce and roundtrip %i canonical refs", count => {
+  const refs = Array.from({ length: count }, (_, index) => ({ ...successorEvidence[0], occurrence: index + 1 }));
+  const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
+    query: { kind: "LIST", period: { kind: "UPCOMING" }, statusScope: "DEFAULT", evidence: refs }, uncertainties: [], conversationDirective: null, replyProposal: null });
+  const wire = encodeGoogleLiteEuContextV3(canonical) as { query: { evidence: Record<string, unknown> } };
+  expect(wire.query.evidence).toEqual({ primaryEvidence: { ...refs[0], ref: null }, secondaryEvidence: count >= 2 ? { ...refs[1], ref: null } : null, tertiaryEvidence: count === 3 ? { ...refs[2], ref: null } : null });
+  expect(successorValidator.safeParse(wire).success).toBe(true);
+  expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+  for (const invalid of [[], {}, { ...wire.query.evidence, primaryEvidence: null }, { secondaryEvidence: null, tertiaryEvidence: null }, { ...wire.query.evidence, fourthEvidence: wire.query.evidence.primaryEvidence }]) {
+    const changed = { ...wire, query: { ...wire.query, evidence: invalid } };
+    expect(successorValidator.safeParse(changed).success).toBe(false);
+    expect(parseGoogleLiteEuContextSectionsV3(changed, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  }
+});
 const successorValues = { title: "title", location: "location", notes: "notes", eventDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 1, month: 2, year: null, leapMonth: null }, eventTime: { hour: 8, minute: 0, qualifier: "H24" }, reminderDate: { kind: "RELATIVE_DAY", offsetDays: 1 }, reminderTime: { hour: 9, minute: 0, qualifier: "AM" }, calendar: "LUNAR_VN", frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT", leadOffsetDays: 1, endDate: { kind: "WEEKDAY", weekday: 1, qualifier: "NEXT_WEEK" } };
 it.each(Object.entries(successorValues).flatMap(([field, value]) => ["SET", "REPLACE", "CLEAR"].map(operation => ({ field, operation, value: operation === "CLEAR" ? null : value }))))("successor_wire_canonical_parity $field/$operation", change => {
   const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: successorEvidence }, changes: [{ ...change, evidence: successorEvidence }], query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "title" }, replyProposal: null });
