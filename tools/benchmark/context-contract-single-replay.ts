@@ -56,6 +56,11 @@ function syncDirectoryChain(accountRoot: string, leaf: string) {
  * bound to its reviewed harness revision. */
 export function singleReplayCandidateProof(root: string, candidate: string) {
   if (candidate !== SINGLE_REPLAY_CANDIDATE) throw new Error("SINGLE_REPLAY_CANDIDATE_MISMATCH");
+  return immutableApplicationProof(root, candidate);
+}
+/** Byte proof shared with fresh validations; historical grant stays fixed. */
+export function immutableApplicationProof(root: string, candidate: string) {
+  if (!/^[a-f0-9]{40}$/u.test(candidate)) throw new Error("SINGLE_REPLAY_CANDIDATE_MISMATCH");
   const selected = (path: string) => path.startsWith("src/") || path.startsWith("migrations/")
     || ["wrangler.jsonc", "package.json", "pnpm-lock.yaml", "tools/calendar/reference-vectors.json"].includes(path);
   const entries = git(root, ["ls-tree", "-r", candidate]).split("\n").map(line => {
