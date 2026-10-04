@@ -93,11 +93,20 @@ function verifyPilotPrefix(input: ObservableExecution, root: string, admitted: R
 /** Tool-only executor. Live entry validates authority first; tests replace HTTP,
  * never the actual application interpretation, storage or confirmation path. */
 export async function executeObservableCampaign(input: ObservableExecution) { return executeObservable(input); }
+/** Historical second-turn reference, retained solely for audit regressions.
+ * No live launcher calls this obsolete budget-bound executor. The trusted
+ * single-turn-zero bridge is the only live diagnostic entry. */
 export async function executeObservableR01Replay(input: ObservableExecution) {
   if (input.profile !== "PILOT" || input.cumulativeAuthorizedMicrounits !== 650000 || input.cumulativeRetainedMicrounits !== 528605) throw new Error("INVALID_REPLAY_BUDGET");
   return executeObservable(input, true);
 }
-async function executeObservable(input: ObservableExecution, replayOnly = false) {
+/** Dedicated diagnostic scope: the manifest itself contains exactly one turn.
+ * Success cannot advance to a second semantic turn or campaign. */
+export async function executeObservableR01Turn0Replay(input: ObservableExecution) {
+  if (input.profile !== "PILOT" || input.pilotPrefix) throw new Error("INVALID_SINGLE_REPLAY_SCOPE");
+  return executeObservable(input, false, true);
+}
+async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false) {
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
   const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
   const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
@@ -108,13 +117,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
-    ...(replayOnly ? { executionKind: "R01_REPLAY" as const } : {}),
+    ...(replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
     provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
     cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: ownerDeadline });
   if (pilotPrefix) writeFileSync(join(input.directory, "pilot-prefix-proof.json"), JSON.stringify(pilotPrefix), { mode: 0o600 });
-  const planned = replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
+  const planned = turnZeroOnly ? admitted.filter(script => script.executionId === "R01").map(script => ({ ...script, turns: [{ ...script.turns[0], actionsAfter: [] }] }))
+    : replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
+  if (turnZeroOnly && (planned.length !== 1 || planned[0].turns.length !== 1 || planned[0].turns[0].model !== "HEALTHY")) throw new Error("R01_MANIFEST_MISMATCH");
   const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: index }] : []));
   if (replayOnly && (planned.length !== 1 || planned[0].turns.length !== 2)) throw new Error("R01_MANIFEST_MISMATCH");
   let offlineSeedExecutions = 0;
@@ -134,7 +145,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
   const schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   const actual = createContextContractGateway(config, async (request, options) => {
-    if (replayOnly && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
+    if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "b5d589629594cf953b8a93f46608ec0070a732a907c8d33ba6074eecc70c3647"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
@@ -152,7 +163,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
   const gateway: SemanticGateway<ParsedInterpretation, ContextInput> = { prepare(tier, context) {
     const prepared = actual.prepare(tier, context); if (prepared.status !== "READY") return prepared;
     return { ...prepared, async dispatch() {
-      if (replayOnly && (!seed || applicationLlmCalls >= 1)) throw new Error("REPLAY_SEED_OR_CALL_CAP");
+      if ((turnZeroOnly && applicationLlmCalls >= 1) || (replayOnly && (!seed || applicationLlmCalls >= 1))) throw new Error("REPLAY_SEED_OR_CALL_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       const reservationId = `call-${applicationLlmCalls + 1}`;
       const reserved = reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
@@ -161,7 +172,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
       outboundDigest = null; httpStatus = null;
-      const parsed = await prepared.dispatch();
+      let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
+      try { parsed = await prepared.dispatch(); }
+      catch (error) {
+        if (turnZeroOnly) {
+          finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: null });
+          stop("SINGLE_REPLAY_PROVIDER_EXCEPTION");
+        }
+        throw error;
+      }
       // Evaluation requires the canonical full envelope before entering the
       // application. Runtime T5 core/guidance quarantine remains unchanged.
       const result = parsed.status === "SUCCESS" && !parsed.interpretation.fullSchemaValid
@@ -229,12 +248,14 @@ async function executeObservable(input: ObservableExecution, replayOnly = false)
       && score.passedScripts === planned.length && score.healthyFullSchemaValid === score.healthyPlanned
       && score.detailPassed === score.detailPlanned && score.failedMandatory.length === 0 && score.safetyFailures === 0 ? "PASS" : "FAIL" };
     const scopedReplayPassed = replayOnly && score.passedTurns === 1 && score.healthyFullSchemaValid === 1 && score.detailPassed === score.detailPlanned && score.safetyFailures === 0 && score.failedMandatory.length === 0;
-    if ((!scopedReplayPassed && score.gate !== "PASS") || !canaryPassed || score.actualDispatches !== httpCount() || applicationLlmCalls !== httpCount()) stop("CAMPAIGN_GATE_FAILED");
+    if (turnZeroOnly) stop("SINGLE_REPLAY_TERMINAL");
+    else if ((!scopedReplayPassed && score.gate !== "PASS") || !canaryPassed || score.actualDispatches !== httpCount() || applicationLlmCalls !== httpCount()) stop("CAMPAIGN_GATE_FAILED");
     else completeCampaign(input.directory, { runId: input.runId, at: now() });
   } catch { stop("EXECUTION_FAILED"); }
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
+    ...(turnZeroOnly ? { executionKind: "SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: "R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
     actualProviderCalls: httpCount(), responses, applicationEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
@@ -285,6 +306,8 @@ async function runLockedAuthorizedContextCampaign(intent: FutureLiveIntent, read
   return { kind: "EXECUTED" as const, result };
 }
 
+/** Quarantined predecessor: its disabled admission never accesses credentials.
+ * The executable launcher now uses loadTrustedSingleReplay/runSingleReplay. */
 export async function runAuthorizedR01Replay(intent: FutureLiveIntent, readSecret: () => string) {
   const authorization = admitR01ReplayIntent(intent);
   if (execFileSync("git", ["-C", intent.root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim()) throw new Error("SOURCE_NOT_CLEAN");
