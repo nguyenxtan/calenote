@@ -7,7 +7,7 @@ import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINAN
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
-import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, type CampaignProfile, type ContextManifest } from "./context-contract";
+import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
@@ -25,7 +25,7 @@ interface ResponseEvidence { call: number; runId: string; fixtureId: string; tur
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
-  listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; }
+  listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   accountingPolicy?: "CONFIRMED_COST_V1";
   boundedPilot?: { manifestSha256: string; maxRequests: number;
@@ -235,7 +235,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
           downstreamDiagnostics: DownstreamTraceSchema.parse(observed.downstreamDiagnostics ?? []),
           listStoreReads: observed.listStoreReads ?? null, mutations: observed.mutations,
           queryRange: observed.queryRange ? { start: observed.queryRange.start, end: observed.queryRange.end } : null,
-          oracle: accepted ? "PASS" : "FAIL" });
+          oracle: accepted ? "PASS" : "FAIL", oracleDiagnostics:diagnoseContextTurn(turn,observed,true) });
         writeFileSync(join(input.directory, "application-evidence.json"), JSON.stringify(applicationEvidence), { mode: 0o600 });
         if (replayOnly && index === 0) {
           offlineSeedExecutions++;

@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
 import type { DownstreamDiagnostic } from "../../src/modules/conversation/context-contract/downstream";
 
 export type CampaignProfile = "PILOT" | "FULL";
@@ -122,6 +123,68 @@ export function admitCanonicalCampaign(manifest: ContextManifest, profile: Campa
 }
 
 const falseClaim = (text: string): boolean => /(?:đã\s+(?:lưu|tạo|đặt|hủy|huỷ)|lời\s+nhắc\s+(?:đã\s+)?(?:được\s+)?lưu|tôi\s+đã\s+(?:lưu|đặt)|hằng\s+năm\s+(?:đã\s+)?(?:được\s+)?hỗ\s+trợ)/iu.test(text.normalize("NFC"));
+const factKeys = ["occurrences", "pendingField", "contextRevision", "draftRevision", "idleExpiresAt", "absoluteExpiresAt", "draftExpiresAt", "queryRange", "childCount", "transactionCommits", "sendAttempts", "previewFields", "canonicalReminders"] as const;
+type TurnObservation = ContextObservation["turns"][number];
+type TurnAssertion = { path:string; assertionKind:"DEEP_EQUAL"|"STRICT_EQUAL"|"KEY_PRESENCE"|"TRUTHY"|"SAFETY"|"PRESENT"|"CONTAINS"|"EXCLUDES"; expected:unknown; actual:unknown; passed:boolean };
+/** This is the existing turn oracle, not a new acceptance policy. Values stay
+ * private to evaluation; only the allowlisted projection below is persisted. */
+function contextTurnAssertions(turn:ContextTurn,actual:TurnObservation|undefined,requireActualDispatch=false):TurnAssertion[] {
+  const checks:TurnAssertion[]=[];
+  const add=(path:string,expected:unknown,observed:unknown,assertionKind:TurnAssertion["assertionKind"]="DEEP_EQUAL",passed=assertionKind==="STRICT_EQUAL"?expected===observed:isDeepStrictEqual(expected,observed))=>checks.push({path,assertionKind,expected,actual:observed,passed});
+  add("observation",true,!!actual,"PRESENT");
+  if(!actual)return checks;
+  add("safety.reportedFailures",false,!!actual.safetyFailures,"SAFETY");
+  add("safety.mutations",false,actual.mutations>turn.expect.mutations,"SAFETY");
+  for(const key of ["childCount","transactionCommits","sendAttempts"] as const)if(turn.expect[key]!==undefined)add(`safety.${key}`,false,(actual[key]??0)>turn.expect[key]! ,"SAFETY");
+  add("safety.falseClaim",false,actual.mutations===0&&falseClaim(actual.selectedText??""),"SAFETY");
+  if(turn.model==="HEALTHY") { add("fullSchemaValid",true,actual.fullSchemaValid);if(requireActualDispatch)add("actualDispatches",1,actual.actualDispatches); }
+  add("applicationStatus",turn.expect.status,actual.status,"STRICT_EQUAL");add("dispatchCount",turn.expect.dispatches,actual.dispatches,"STRICT_EQUAL");add("mutationCount",turn.expect.mutations,actual.mutations,"STRICT_EQUAL");
+  for(const [key,value]of Object.entries(turn.expect.fields))add(`fields.${key}`,value,actual.fields[key]);
+  for(const key of ["source","kind","decisionKind","apiPreviews","delivery"] as const)if(turn.expect[key]!==undefined)add(key,turn.expect[key],actual[key],"STRICT_EQUAL");
+  for(const [i,text]of (turn.expect.replyIncludes??[]).entries())add(`replyIncludes.${i}`,true,(actual.selectedText??"").includes(text),"CONTAINS");
+  for(const [i,text]of (turn.expect.replyExcludes??[]).entries())add(`replyExcludes.${i}`,false,(actual.selectedText??"").includes(text),"EXCLUDES");
+  for(const [key,value]of Object.entries(actual.assertions??{}))add(`assertions.${key}`,true,!!value,"TRUTHY");
+  for(const key of factKeys)if(turn.expect[key]!==undefined)add(key,turn.expect[key],actual[key]);
+  for(const [key,value]of Object.entries(turn.expect.detailFields??{}))add(`detailFields.${key}`,value,actual.detailFields?.[key]);
+  return checks;
+}
+const safePathKeys=new Set(["observation","safety","reportedFailures","mutations","falseClaim","fullSchemaValid","actualDispatches","applicationStatus","dispatchCount","mutationCount","fields","detailFields","source","kind","decisionKind","apiPreviews","delivery","replyIncludes","replyExcludes","assertions","persistedSelectedText","completeLogicalRoundTrip","encryptedStateBoundary","persistedDeliveryReceipt",...factKeys,"title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate","day","month","year","leapMonth","hour","minute","qualifier","start","end","scheduled"]);
+const digestOracleValue=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)??"undefined").digest("hex");
+function safeOraclePath(path:string){return path.split(".").map(key=>safePathKeys.has(key)||/^\d{1,6}$/u.test(key)?key:`key_${digestOracleValue(key).slice(0,16)}`).join(".").slice(0,256);}
+const safeEnums:Record<string,readonly string[]>={applicationStatus:["CLARIFICATION_REQUESTED","REMINDERS_LISTED","DRAFT_CREATED","CONFIRMED","REJECTED","CANCELLED","IGNORED","STALE"],pendingField:["title","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate","queryRange"],source:["BACKEND","MODEL_GUIDANCE"],kind:["CLARIFICATION","QUERY_RESULT","PREVIEW","CONFIRMATION","REJECTION","GREETING","CAPABILITY"],delivery:["SENT","FAILED","UNCERTAIN"],frequency:["ONCE","DAILY","WEEKLY","MONTHLY","YEARLY","UNKNOWN"],eventRelation:["BEFORE_EVENT","INCLUDING_EVENT","STARTING_ON"],calendar:["GREGORIAN","LUNAR_VN"],qualifier:["H24","AM","PM"]};
+const safeNumbers=new Set(["dispatchCount","mutationCount","actualDispatches","apiPreviews","contextRevision","draftRevision","childCount","transactionCommits","sendAttempts","occurrenceCount","leadOffsetDays"]);
+export interface OracleValueSummary {type:string;value?:string|number|boolean;sha256?:string;count?:number;}
+function summarizeOracleValue(path:string,value:unknown):OracleValueSummary {
+  const type=value===null?"null":Array.isArray(value)?"array":typeof value;
+  if(value===null||value===undefined)return {type};
+  if(typeof value==="boolean")return {type,value};
+  const name=path.split(".").at(-1)!;
+  if(typeof value==="string"&&Object.hasOwn(safeEnums,name)&&safeEnums[name].includes(value))return {type,value};
+  if(typeof value==="number"&&safeNumbers.has(name)&&Number.isSafeInteger(value)&&value>=0&&value<=1000000)return {type,value};
+  return {type,sha256:digestOracleValue(value),...(Array.isArray(value)?{count:value.length}:{})};
+}
+export interface OracleFailedAssertion {path:string;assertionKind:TurnAssertion["assertionKind"];expected:OracleValueSummary;actual:OracleValueSummary;}
+export interface OracleDiagnostics {passed:boolean;failedAssertionCount:number;failedAssertions:OracleFailedAssertion[];truncated:boolean;}
+/** Content-free, bounded explanation of the same oracle. Unknown keys and
+ * strings are digested; nested objects never enter diagnostic artifacts. */
+export function diagnoseContextTurn(turn:ContextTurn,actual:TurnObservation|undefined,requireActualDispatch=false):OracleDiagnostics {
+  const failures:OracleFailedAssertion[]=[];
+  const report=(check:TurnAssertion,path:string,expected:unknown,observed:unknown,depth=0)=>{
+    if(depth<8&&check.assertionKind==="DEEP_EQUAL"&&expected!==null&&observed!==null&&typeof expected==="object"&&typeof observed==="object"&&!Array.isArray(expected)&&!Array.isArray(observed)){
+      const left=expected as Record<string,unknown>,right=observed as Record<string,unknown>;
+      const keys=[...new Set([...Object.keys(left),...Object.keys(right)])].sort();
+      const priorCount=failures.length;
+      for(const key of keys){
+        if(Object.hasOwn(left,key)!==Object.hasOwn(right,key))report({...check,assertionKind:"KEY_PRESENCE"},`${path}.${key}`,Object.hasOwn(left,key),Object.hasOwn(right,key),depth+1);
+        else if(!isDeepStrictEqual(left[key],right[key]))report(check,`${path}.${key}`,left[key],right[key],depth+1);
+      }
+      if(failures.length>priorCount)return;
+    }
+    failures.push({path:safeOraclePath(path),assertionKind:check.assertionKind,expected:summarizeOracleValue(path,expected),actual:summarizeOracleValue(path,observed)});
+  };
+  for(const check of contextTurnAssertions(turn,actual,requireActualDispatch))if(!check.passed)report(check,check.path,check.expected,check.actual);
+  return {passed:failures.length===0,failedAssertionCount:failures.length,failedAssertions:failures.slice(0,128),truncated:failures.length>128};
+}
 export function scoreContextCampaign(planned: readonly PlannedContextCase[], observations: readonly ContextObservation[]) {
   const seen = new Map(observations.map(o => [o.id, o]));
   if (seen.size !== observations.length || observations.some(o => !planned.some(p => p.executionId === o.id))) fail("UNPLANNED_OR_DUPLICATE_OBSERVATION");
@@ -147,30 +210,14 @@ export function scoreContextCampaign(planned: readonly PlannedContextCase[], obs
         detailPlanned++;
         if (actual && isDeepStrictEqual(actual.detailFields?.[field], expected)) detailPassed++;
       }
-      const factKeys = ["occurrences", "pendingField", "contextRevision", "draftRevision", "idleExpiresAt", "absoluteExpiresAt", "draftExpiresAt", "queryRange", "childCount", "transactionCommits", "sendAttempts", "previewFields", "canonicalReminders"] as const;
       for (const key of factKeys) if (turn.expect[key] !== undefined) {
         detailPlanned++;
         if (actual && isDeepStrictEqual(actual[key], turn.expect[key])) detailPassed++;
       }
-      const selected = actual?.selectedText ?? "";
-      const safe = !actual?.safetyFailures && !(actual && actual.mutations > turn.expect.mutations)
-        && !(actual && turn.expect.childCount !== undefined && (actual.childCount ?? 0) > turn.expect.childCount)
-        && !(actual && turn.expect.transactionCommits !== undefined && (actual.transactionCommits ?? 0) > turn.expect.transactionCommits)
-        && !(actual && turn.expect.sendAttempts !== undefined && (actual.sendAttempts ?? 0) > turn.expect.sendAttempts)
-        && !(actual && actual.mutations === 0 && falseClaim(selected));
+      const checks=contextTurnAssertions(turn,actual);
+      const safe=checks.filter(check=>check.assertionKind==="SAFETY").every(check=>check.passed);
       if (!safe) safetyFailures++;
-      const equalFields = Object.entries(turn.expect.fields).every(([name, value]) => actual && isDeepStrictEqual(actual.fields[name], value));
-      const passed = !!actual && safe && (turn.model !== "HEALTHY" || actual.fullSchemaValid === true) && actual.status === turn.expect.status && actual.dispatches === turn.expect.dispatches && actual.mutations === turn.expect.mutations
-        && equalFields && (turn.expect.source === undefined || actual.source === turn.expect.source)
-        && (turn.expect.kind === undefined || actual.kind === turn.expect.kind)
-        && (turn.expect.decisionKind === undefined || actual.decisionKind === turn.expect.decisionKind)
-        && (turn.expect.apiPreviews === undefined || actual.apiPreviews === turn.expect.apiPreviews)
-        && (turn.expect.delivery === undefined || actual.delivery === turn.expect.delivery)
-        && (turn.expect.replyIncludes ?? []).every(s => selected.includes(s))
-        && (turn.expect.replyExcludes ?? []).every(s => !selected.includes(s))
-        && Object.values(actual.assertions ?? {}).every(Boolean)
-        && factKeys.every(key => turn.expect[key] === undefined || isDeepStrictEqual(actual[key], turn.expect[key]))
-        && Object.entries(turn.expect.detailFields ?? {}).every(([field, value]) => isDeepStrictEqual(actual.detailFields?.[field], value));
+      const passed=checks.every(check=>check.passed);
       if (passed) passedTurns++; else scriptPassed = false;
       for (const action of turn.actionsAfter ?? []) {
         plannedActions++;

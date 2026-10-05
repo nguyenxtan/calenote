@@ -34,6 +34,7 @@ it("exact evidence failure survives the application gateway and durable runner w
       } });
     expect(requests).toBe(1);
     expect(result).toMatchObject({ status: "STOP", applicationLlmCalls: 1, providerHttpRequests: 1 });
+    expect(result.applicationEvidence[0]).toMatchObject({oracleDiagnostics:{passed:false,failedAssertions:expect.arrayContaining([expect.objectContaining({path:"applicationStatus"})])}});
     expect(result.applicationEvidence[0]).toMatchObject({ mutations: 0, listStoreReads: 0,
       downstreamDiagnostics: expect.arrayContaining([expect.objectContaining({ stage: "EVIDENCE", reason: "EVIDENCE_QUOTE_NOT_FOUND",
         evidenceFailure: expect.objectContaining({ field: "queryRange", path: ["query", "evidence"], referenceOrdinal: 0, reason: "QUOTE_NOT_FOUND", matchCount: 0 }) })]) });
