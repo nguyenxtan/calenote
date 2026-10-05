@@ -12,7 +12,9 @@ let cleanRoot: string;
 beforeAll(() => {
   cleanRoot = realpathSync(mkdtempSync(join(tmpdir(), "t11-clean-git-")));
   execFileSync("git", ["clone", "--local", "--shared", "--no-hardlinks", "--quiet", process.cwd(), cleanRoot], { env: safeEnv });
-  for (const path of ["context-contract-live.ts", "context-contract-runner.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
+  // Snapshot the runner's changed tooling dependencies together. A hybrid of
+  // working runner and historical oracle/probe is not a runnable clean fixture.
+  for (const path of ["context-contract.ts", "context-contract-probe.ts", "context-contract-live.ts", "context-contract-runner.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
     copyFileSync(join(process.cwd(), "tools", "benchmark", path), join(cleanRoot, "tools", "benchmark", path));
   execFileSync("git", ["-C", cleanRoot, "add", "tools/benchmark"], { env: safeEnv });
   execFileSync("git", ["-C", cleanRoot, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "--quiet", "-m", "Synthetic local orchestration fixture"], { env: safeEnv });

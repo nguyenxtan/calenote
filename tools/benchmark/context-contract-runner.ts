@@ -7,7 +7,7 @@ import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINAN
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
-import { admitCanonicalCampaign, scoreContextCampaign, type CampaignProfile, type ContextManifest } from "./context-contract";
+import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
@@ -28,6 +28,10 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   accountingPolicy?: "CONFIRMED_COST_V1";
+  boundedPilot?: { manifestSha256: string; maxRequests: number;
+    beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void;
+    settled(target: {fixtureId:string;turnIndex:number}, reservationId:string, costMicrounits:number|null): void;
+    outcome(target: {fixtureId:string;turnIndex:number}, accepted:boolean): void; };
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
   httpRequestCount?: () => number; expiresAt?: number;
@@ -108,7 +112,8 @@ export async function executeObservableR01Turn0Replay(input: ObservableExecution
   return executeObservable(input, false, true);
 }
 async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false) {
-  if (input.accountingPolicy && (!turnZeroOnly || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
+  if (input.accountingPolicy && ((!turnZeroOnly && !input.boundedPilot) || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
+  if (input.boundedPilot && (input.accountingPolicy !== "CONFIRMED_COST_V1" || input.profile !== "PILOT" || turnZeroOnly || replayOnly || input.pilotPrefix)) throw new Error("INVALID_BOUNDED_PILOT_SCOPE");
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
   const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
   const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
@@ -120,6 +125,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
+    ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
     ...(replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
@@ -143,6 +149,8 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const httpCount = () => input.httpRequestCount?.() ?? providerHttpRequests;
   const responses: ResponseEvidence[] = [];
   const applicationEvidence: ApplicationTurnEvidence[] = [];
+  const actionEvidence: Array<{fixtureId:string;turnIndex:number;actionIndex:number;oracle:string;unsafe:boolean}> = [];
+  const pendingTargetOutcomes = new Map<string,{fixtureId:string;turnIndex:number}>();
   const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
   const providerWire = googleLiteEuContextWireSchemaV3();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
@@ -163,12 +171,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
   const stop = (reason: string) => { if (!stopped()) appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
+  let activeTarget: {fixtureId:string;turnIndex:number}|undefined;
   const gateway: SemanticGateway<ParsedInterpretation, ContextInput> = { prepare(tier, context) {
+    const preparedTarget=activeTarget;
     const prepared = actual.prepare(tier, context); if (prepared.status !== "READY") return prepared;
     return { ...prepared, async dispatch() {
       if ((turnZeroOnly && applicationLlmCalls >= 1) || (replayOnly && (!seed || applicationLlmCalls >= 1))) throw new Error("REPLAY_SEED_OR_CALL_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       const reservationId = `call-${applicationLlmCalls + 1}`;
+      if(input.boundedPilot){if(!preparedTarget)throw new Error("BOUNDED_TARGET_MISSING");input.boundedPilot.beforeDispatch(preparedTarget,reservationId);}
       const reserved = reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
         reservationId, maximumMicrounits: input.accountingPolicy ? 0 : prepared.maximumCostMicrounits, now: now(), startedAt });
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
@@ -178,8 +189,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
       try { parsed = await prepared.dispatch(); }
       catch (error) {
-        if (turnZeroOnly) {
+        if (turnZeroOnly || input.boundedPilot) {
           finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: null });
+          if(input.boundedPilot&&preparedTarget){input.boundedPilot.settled(preparedTarget,reservationId,null);input.boundedPilot.outcome(preparedTarget,false);}
           stop("SINGLE_REPLAY_PROVIDER_EXCEPTION");
         }
         throw error;
@@ -190,6 +202,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes, canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : parsed;
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
+      if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
@@ -201,7 +214,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   let score: ReturnType<typeof scoreContextCampaign> | null = null;
   try {
     const observations = await runContextFixtureCampaign(planned, { sourceSha: input.sourceSha, referenceNow: Date.parse("2026-10-05T01:00:00Z"), ...(replayOnly ? { offlineSeedTurns: 1 } : {}) },
-      (context, id, index) => { if (!replayOnly || id !== "R01" || index !== 0) throw new Error("LIVE_FIXTURE_FORBIDDEN"); const value = frozenContextProposal(context, id, index); offlineFixtureDigest = digest(JSON.stringify(value)); return value; }, { gateway, async onTurn(script, index, observed) {
+      (context, id, index) => { if (!replayOnly || id !== "R01" || index !== 0) throw new Error("LIVE_FIXTURE_FORBIDDEN"); const value = frozenContextProposal(context, id, index); offlineFixtureDigest = digest(JSON.stringify(value)); return value; }, { gateway, beforeTurn(script,index){activeTarget={fixtureId:script.executionId,turnIndex:index};}, async onTurn(script, index, observed) {
         const turn = script.turns[index];
         if (turn.model === "INJECTED_REFUSAL") syntheticFaultTurnsCompleted++;
         if (now() >= deadline) stop("TIME_OR_AUTHORIZATION_CAP");
@@ -209,6 +222,11 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         const proof = scoreContextCampaign([single], [{ id: script.executionId, turns: [observed], actions: [] }]);
         const accepted = proof.passedTurns === 1 && proof.detailPassed === proof.detailPlanned && proof.safetyFailures === 0
           && (turn.model !== "HEALTHY" || observed.actualDispatches === 1);
+        if(input.boundedPilot&&turn.model==="HEALTHY"){
+          const target={fixtureId:script.executionId,turnIndex:index};
+          if(accepted&&(turn.deferResponse||(turn.actionsAfter?.length??0)>0))pendingTargetOutcomes.set(`${script.executionId}:${index}`,target);
+          else input.boundedPilot.outcome(target,accepted);
+        }
         // Explicit projection of trusted application observations only. Persist
         // each completed turn before an oracle stop can discard aggregate score.
         // No proposal, selected text, receipt, business value or reply enters it.
@@ -243,6 +261,20 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         }
         if (!accepted && (!canaryPassed || !toleratedQuality)) stop("APPLICATION_ORACLE_FAILED");
         if (stopped()) throw new Error("CAMPAIGN_STOPPED");
+      }, async onAction(script,index,actionIndex,actual,releasedTurnIndex) {
+        const expected = script.turns[index].actionsAfter?.[actionIndex];
+        if (!expected) throw new Error("ACTION_MANIFEST_MISSING");
+        const proof = scoreContextAction(expected, actual);
+        const targetIndex=expected.kind==="RELEASE_DELAYED"?releasedTurnIndex:index;
+        if(targetIndex===undefined)throw new Error("ACTION_RELEASE_TARGET_MISSING");
+        const pendingKey=`${script.executionId}:${targetIndex}`,pending=pendingTargetOutcomes.get(pendingKey);
+        if(pending&&(!proof.passed||proof.unsafe||actionIndex===script.turns[index].actionsAfter!.length-1)){
+          input.boundedPilot!.outcome(pending,proof.passed&&!proof.unsafe);
+          pendingTargetOutcomes.delete(pendingKey);
+        }
+        actionEvidence.push({fixtureId:script.executionId,turnIndex:index,actionIndex,oracle:proof.passed?"PASS":"FAIL",unsafe:proof.unsafe});
+        writeFileSync(join(input.directory,"action-evidence.json"),JSON.stringify(actionEvidence),{mode:0o600});
+        if (!proof.passed || proof.unsafe) { stop("APPLICATION_ACTION_ORACLE_FAILED"); throw new Error("CAMPAIGN_STOPPED"); }
       } });
     score = replayOnly ? scoreContextCampaign([{ ...planned[0], turns: [planned[0].turns[1]] }], [{ ...observations[0], turns: [observations[0].turns[1]] }]) : scoreContextCampaign(planned, observations);
     // Report suffix measurements as suffix measurements. The composite gate
@@ -262,7 +294,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     ...(turnZeroOnly ? { executionKind: "SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: "R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
-    actualProviderCalls: httpCount(), responses, applicationEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
+    actualProviderCalls: httpCount(), responses, applicationEvidence, actionEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
     syntheticFaultTurnsCompleted, providerReportedUsdTotal: responses.reduce((sum, r) => sum + (r.usage?.reportedCostUsd ?? 0), 0),
     retainedMicrounits: finalLedger.filter(r => r.event === "RESERVE").reduce((sum, reservation) => {
       const finish = finalLedger.find(r => r.event === "FINISH" && r.reservationId === reservation.reservationId);

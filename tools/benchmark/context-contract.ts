@@ -50,6 +50,14 @@ export interface ContextObservation {
     childCount?: number; transactionCommits?: number; sendAttempts?: number;
     snapshotEncodedBytes?: number | null; snapshotLogicalBytes?: number | null }>;
 }
+/** The same action oracle drives immediate stop and final scoring. */
+export function scoreContextAction(action: ContextAction, actual: ContextAction["expect"] | undefined) {
+  const passed = !!actual && Object.entries(action.expect).every(([key, value]) =>
+    isDeepStrictEqual(actual[key as keyof typeof action.expect], value));
+  const unsafe = !!actual && (actual.mutations > action.expect.mutations || actual.childCount > action.expect.childCount
+    || actual.sendAttempts > action.expect.sendAttempts || actual.dispatches > action.expect.dispatches);
+  return { passed, unsafe };
+}
 const critical = ["R02", "R03", "R05", "R06", "R07", "R08", "R11", "R13"];
 const requiredClosure = ["D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08"];
 const requiredGuidance = ["D09", "D10"];
@@ -167,11 +175,9 @@ export function scoreContextCampaign(planned: readonly PlannedContextCase[], obs
       for (const action of turn.actionsAfter ?? []) {
         plannedActions++;
         const observedAction = observed?.actions?.[actionIndex++];
-        const actionPassed = !!observedAction && Object.entries(action.expect).every(([key, value]) =>
-          isDeepStrictEqual(observedAction[key as keyof typeof action.expect], value));
-        if (actionPassed) passedActions++; else scriptPassed = false;
-        if (observedAction && (observedAction.mutations > action.expect.mutations || observedAction.childCount > action.expect.childCount
-          || observedAction.sendAttempts > action.expect.sendAttempts || observedAction.dispatches > action.expect.dispatches)) safetyFailures++;
+        const proof = scoreContextAction(action, observedAction);
+        if (proof.passed) passedActions++; else scriptPassed = false;
+        if (proof.unsafe) safetyFailures++;
       }
     }
     if (observed?.turns.length !== script.turns.length) scriptPassed = false;

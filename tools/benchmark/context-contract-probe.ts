@@ -227,6 +227,8 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
  * always come from service outputs and read-back. */
 export interface LiveProbeCampaignHooks {
   gateway: SemanticGateway<ParsedInterpretation, ContextInput>;
+  beforeTurn?(script: PlannedContextCase, turnIndex: number): void;
+  onAction?(script: PlannedContextCase, turnIndex: number, actionIndex: number, actual: NonNullable<ContextObservation["actions"]>[number], releasedTurnIndex?: number): Promise<void>;
   onTurn(script: PlannedContextCase, turnIndex: number, actual: ContextObservation["turns"][number]): Promise<void>;
 }
 export async function runContextFixtureCampaign(planned: readonly PlannedContextCase[], config: ProbeConfig,
@@ -256,6 +258,7 @@ export async function runContextFixtureCampaign(planned: readonly PlannedContext
           });
         }
         turnIndex = index;
+        live?.beforeTurn?.(script,index);
         const issuedToken = turn.text.includes("{{ISSUED_TOKEN}}") ? probe.issuedControlToken() : null;
         const text = issuedToken ? turn.text.replaceAll("{{ISSUED_TOKEN}}", issuedToken) : turn.text;
         if (turn.deferResponse) {
@@ -270,16 +273,19 @@ export async function runContextFixtureCampaign(planned: readonly PlannedContext
             && !turns.at(-1)!.selectedText?.includes(issuedToken);
         }
         if (!turn.deferResponse) await live?.onTurn(script, index, turns[index]);
-        for (const action of turn.actionsAfter ?? []) {
+        for (const [actionIndex, action] of (turn.actionsAfter ?? []).entries()) {
+          let releasedTurnIndex: number | undefined;
           if (action.kind === "REPLAY_LAST") actions.push(await probe.replayLastInbound(action.at));
           else {
             if (!held) throw new Error("NO_DEFERRED_TURN");
             const pending = held;
+            releasedTurnIndex = heldIndex;
             actions.push(await probe.releaseDeferredTurn(pending, action.at));
             turns[heldIndex] = await pending.pending;
             await live?.onTurn(script, heldIndex, turns[heldIndex]);
             held = null;
           }
+          await live?.onAction?.(script, index, actionIndex, actions.at(-1)!, releasedTurnIndex);
         }
       }
       if (held) throw new Error("UNRELEASED_DEFERRED_TURN");

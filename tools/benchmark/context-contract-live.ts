@@ -375,7 +375,8 @@ type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: Campai
   accountingPolicy?: "CONFIRMED_COST_V1";
   requestExposureBoundMicrounits?: number;
   version?: "context-contract-live-3"; method?: "OBSERVABLE_CANARY"; campaignRoot?: string; approvedAt?: number;
-  executionKind?: "R01_REPLAY" | "R02_CONTINUATION"; pilotPrefixDigest?: string;
+  executionKind?: "R01_REPLAY" | "R02_CONTINUATION" | "BOUNDED_PILOT"; pilotPrefixDigest?: string;
+  targetManifestSha256?: string; maxTargetRequests?: number;
   authorizationSha256?: string; historicalCalls?: number; historicalUnknownReservations?: number;
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; startedAt: number; observableAdmission?: boolean; expiresAt?: number };
 type Reserve = { event: "RESERVE"; runId: string; profile: CampaignProfile; provenanceDigest: string;
@@ -407,15 +408,16 @@ function validateCampaign(rows: readonly Stored[]) {
   if (!begin) return { begin: undefined, reserves, dispatches, finishes, retained, unknown, stopped, completed };
   if (begin.event !== "BEGIN" || !closed(begin, ["event", "runId", "sourceSha", "profile", "provenanceDigest", "executionKind", "pilotPrefixDigest",
     "authorizationSha256", "historicalCalls", "historicalUnknownReservations", "cumulativeAuthorizedMicrounits", "cumulativeRetainedMicrounits",
-    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits"])
+    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits", "targetManifestSha256", "maxTargetRequests"])
     || !id(begin.runId) || !["PILOT", "FULL"].includes(begin.profile) || !digest(begin.sourceSha, 40) || !digest(begin.provenanceDigest, 64)
     || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits) || begin.cumulativeAuthorizedMicrounits <= 0
     || begin.cumulativeAuthorizedMicrounits > cumulativeAuthorizedMicrounits || !integer(begin.cumulativeRetainedMicrounits)
     || begin.cumulativeRetainedMicrounits > begin.cumulativeAuthorizedMicrounits
     || (begin.observableAdmission !== undefined && typeof begin.observableAdmission !== "boolean")
     || (begin.expiresAt !== undefined && !integer(begin.expiresAt))
-    || (begin.executionKind !== undefined && !["R01_REPLAY", "R02_CONTINUATION"].includes(begin.executionKind))
-    || (begin.accountingPolicy !== undefined && (begin.accountingPolicy !== "CONFIRMED_COST_V1" || begin.executionKind !== "R01_REPLAY" || begin.profile !== "PILOT" || begin.authorizationSha256 !== undefined || !integer(begin.requestExposureBoundMicrounits) || begin.requestExposureBoundMicrounits! <= 0))
+    || (begin.executionKind !== undefined && !["R01_REPLAY", "R02_CONTINUATION", "BOUNDED_PILOT"].includes(begin.executionKind))
+    || (begin.accountingPolicy !== undefined && (begin.accountingPolicy !== "CONFIRMED_COST_V1" || !["R01_REPLAY","BOUNDED_PILOT"].includes(begin.executionKind??"") || begin.profile !== "PILOT" || begin.authorizationSha256 !== undefined || !integer(begin.requestExposureBoundMicrounits) || begin.requestExposureBoundMicrounits! <= 0))
+    || (begin.executionKind === "BOUNDED_PILOT" ? (begin.accountingPolicy!=="CONFIRMED_COST_V1"||!digest(begin.targetManifestSha256,64)||!integer(begin.maxTargetRequests)||begin.maxTargetRequests!<=0||begin.maxTargetRequests!>192) : (begin.targetManifestSha256!==undefined||begin.maxTargetRequests!==undefined))
     || (begin.accountingPolicy === undefined && begin.requestExposureBoundMicrounits !== undefined)
     || (begin.executionKind === "R02_CONTINUATION" ? !digest(begin.pilotPrefixDigest, 64) : begin.pilotPrefixDigest !== undefined)
     || (begin.authorizationSha256 !== undefined && (!digest(begin.authorizationSha256, 64) || !integer(begin.historicalCalls)
@@ -436,7 +438,7 @@ function validateCampaign(rows: readonly Stored[]) {
       if (!closed(row, ["event", "runId", "profile", "provenanceDigest", "reservationId", "maximumMicrounits", "at"])
         || stopped || row.at >= deadline || row.profile !== begin.profile || row.provenanceDigest !== begin.provenanceDigest
         || !id(row.reservationId) || reserves.has(row.reservationId) || !integer(row.maximumMicrounits) || (confirmedPolicy ? row.maximumMicrounits !== 0 : row.maximumMicrounits <= 0)
-        || safeCampaignSum(begin.historicalCalls ?? 0, reserves.size) >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)
+        || safeCampaignSum(begin.historicalCalls ?? 0, reserves.size) >= (begin.executionKind === "R01_REPLAY" ? 1 : begin.maxTargetRequests??cap.calls)
         || retained + BigInt(row.maximumMicrounits) > BigInt(cap.cost)
         || BigInt(begin.cumulativeRetainedMicrounits) + retained + BigInt(row.maximumMicrounits) > BigInt(begin.cumulativeAuthorizedMicrounits)
         || (begin.observableAdmission && dispatches.size > 0 && (!canary || dispatches.size !== finishes.size))) return fail();
@@ -587,7 +589,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
   }
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.reservationId) || reservations.some(r => r.reservationId === input.reservationId)
     || !Number.isSafeInteger(input.maximumMicrounits) || (begin.accountingPolicy === "CONFIRMED_COST_V1" ? input.maximumMicrounits !== 0 : input.maximumMicrounits <= 0)) throw new Error("INVALID_RESERVATION");
-  if (input.now - input.startedAt >= cap.ms || (begin.historicalCalls ?? 0) + reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)) {
+  if (input.now - input.startedAt >= cap.ms || (begin.historicalCalls ?? 0) + reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : begin.maxTargetRequests ?? cap.calls)) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "TIME_OR_CALL_CAP" });
     return { status: "STOPPED", reason: "TIME_OR_CALL_CAP" } as const;
   }
