@@ -17,7 +17,8 @@ import type {ContextInput} from "../../src/modules/conversation/context-contract
 import type {ConversationInterpretation} from "../../src/modules/conversation/context-contract/contracts";
 import type {ContextAction,PlannedContextCase} from "./context-contract";
 
-const candidate="bb233e9ee0740a673acebb7523c81b3e5a96b858";
+import { currentFixtureCandidate } from "./current-candidate.test-support";
+const candidate=currentFixtureCandidate();
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 function setup(knownMicrounits=0){
  const root=process.cwd(),accountRoot=realpathSync(mkdtempSync(join(tmpdir(),"pilot-authority-"))),campaignRoot=join(accountRoot,"existing-T11"),history=join(campaignRoot,"PILOT");mkdirSync(history,{recursive:true});

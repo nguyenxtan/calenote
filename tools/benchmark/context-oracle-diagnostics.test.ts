@@ -7,6 +7,22 @@ import regressions from "../../src/modules/conversation/context-contract/benchma
 import * as oracle from "./context-contract";
 import {ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
 
+it("R02 unsupported BEFORE_EVENT proposal preserves all 43 frozen turn-zero assertions", async () => {
+  const corpus = {version:"context-contract-corpus-1",cases:regressions.cases.filter(c=>c.id==="R02")} as ContextManifest;
+  const planned = expandContextCampaign(corpus,"FULL",[]);
+  const observed = await runContextFixtureCampaign(planned,{sourceSha:"bb233e9ee0740a673acebb7523c81b3e5a96b858",referenceNow:Date.parse("2026-09-28T03:00:00Z")},(input,id,index)=>{
+    const proposal = ConversationInterpretationV3Schema.parse(frozenContextProposal(input,id,index));
+    if(index===0) proposal.changes.push({field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence:[{kind:"USER_QUOTE",turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}]});
+    return proposal;
+  });
+  const actual = observed[0].turns[0];
+  expect(actual).toMatchObject({status:"CLARIFICATION_REQUESTED",pendingField:"reminderTime",listStoreReads:0,mutations:0,fields:{eventRelation:null}});
+  const diagnostic = oracle.captureContextOracleState(planned[0].turns[0],actual,true);
+  expect(diagnostic.assertions).toHaveLength(43);
+  expect(diagnostic.assertions.every(a=>a.passed)).toBe(true);
+  expect(scoreContextCampaign(planned,observed)).toMatchObject({passedScripts:1,passedTurns:3,failedMandatory:[],safetyFailures:0});
+});
+
 it("model semantic state exposes only validated controls, counts and value digests",()=>{
   const semantic=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"HELP",requestTarget:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
   const core={schemaVersion:semantic.schemaVersion,intent:semantic.intent,requestTarget:semantic.requestTarget,changes:semantic.changes,query:semantic.query,uncertainties:semantic.uncertainties};

@@ -3,6 +3,7 @@ import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, Leg
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 import { verifyListRangeEvidence } from "./list-range-evidence";
+import { supportsEventRelation, type EventRelation } from "./event-relation-evidence";
 import { observeDownstream, evidenceReason, type DownstreamObserver, type EvidenceFailureDiagnostic } from "./downstream";
 import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
@@ -17,6 +18,8 @@ export interface ValidatedFieldEvidence {
   current: boolean;
   provenance: EvidenceProvenance;
   referenceTime: string;
+  /** Internal resolver proof, never supplied by the model. */
+  factBound?: boolean;
 }
 export type ValidatedPatch = {
   readonly [validatedPatchBrand]: true;
@@ -46,7 +49,7 @@ type ResolvedEvidence = ValidatedFieldEvidence & { resolvedValue: unknown };
 function evidenceMetadata(resolved: ResolvedEvidence): ValidatedFieldEvidence {
   return {
     field: resolved.field, sources: resolved.sources, current: resolved.current,
-    provenance: resolved.provenance, referenceTime: resolved.referenceTime,
+    provenance: resolved.provenance, referenceTime: resolved.referenceTime, factBound: resolved.factBound,
   };
 }
 
@@ -186,7 +189,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
     // reach that verifier so it can discard the range while retaining intent.
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
-    return { field, sources: distinct, current, provenance, referenceTime, resolvedValue };
+    return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   try {
     const resolvedChanges: FieldChange[] = [];
@@ -382,7 +385,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     // reach that verifier so it can discard the range while retaining intent.
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
-    return { field, sources: distinct, current, provenance, referenceTime, resolvedValue };
+    return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   try {
     const resolvedChanges: FieldChangeV3[] = [];
@@ -496,21 +499,45 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     });
     resolvedUncertainties.push(...retainedUncertainties);
     alternativeEvidence.push(...retainedAlternativeEvidence);
-    if (rangeIssue) resolvedUncertainties = [...resolvedUncertainties.filter(u => u.field !== "queryRange"), rangeIssue];
+    const relationSupported = (field: string, requested: unknown, bound: ValidatedFieldEvidence) => {
+      if (field !== "eventRelation" || requested === null) return true;
+      // Only the existing resolver's exact alias/scope/value check can grant
+      // inherited authority. A same-valued USER_QUOTE does not become a fact.
+      const old = internal.snapshot?.slots.eventRelation;
+      const inherited = value.requestTarget?.kind !== "NEW" && bound.factBound === true
+        && old?.state === "RESOLVED" && equal(old.value, requested);
+      const retainedEvent = value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.eventDate.state === "RESOLVED";
+      return inherited || supportsEventRelation(requested as EventRelation, bound.sources, built.evidenceIndex, retainedEvent);
+    };
+    const keptChanges = resolvedChanges.map((change, index) => ({ change, bound: changeEvidence[index] }))
+      .filter(({ change, bound }) => relationSupported(change.field, change.value, bound));
+    let alternativeIndex = 0;
+    const keptAlternativeEvidence: ValidatedFieldEvidence[] = [];
+    resolvedUncertainties = resolvedUncertainties.flatMap(u => {
+      const alternatives = u.alternatives.filter(a => {
+        const bound = alternativeEvidence[alternativeIndex++];
+        if (rangeIssue && u.field === "queryRange") return false;
+        if (!relationSupported(u.field, a.value, bound)) return false;
+        keptAlternativeEvidence.push(bound);
+        return true;
+      });
+      return rangeIssue && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
+    });
+    if (rangeIssue) resolvedUncertainties.push(rangeIssue);
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,
       proposal: value,
-      resolvedChanges,
+      resolvedChanges: keptChanges.map(p => p.change),
       resolvedQuery,
       resolvedUncertainties,
       queryReferenceTime: query?.referenceTime ?? null,
-      changeEvidence,
+      changeEvidence: keptChanges.map(p => p.bound),
       queryEvidence: query?.sources ?? [],
       requestTarget: value.requestTarget,
       requestTargetEvidence: target?.sources ?? [],
       adoptedCandidate,
-      adoptedChangeFields,
-      alternativeEvidence,
+      adoptedChangeFields: adoptedChangeFields.filter(field => keptChanges.some(p => p.change.field === field)),
+      alternativeEvidence: keptAlternativeEvidence,
       observation: built.observation,
       candidateSnapshot: built.candidateSnapshot,
     });

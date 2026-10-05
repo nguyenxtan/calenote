@@ -283,7 +283,7 @@ it("A4 repeating an undelivered operation question preserves one stable outbound
 
 it.each([1, 2])( "A4 successor %i occurrence preview rejects stale proof and legacy replay", async count => {
   const h = await setupSuccessor();
-  const a = await h.semantic(0, { ...complete, frequency: count === 1 ? "ONCE" : "DAILY", ...(count === 2 ? { occurrenceCount: 2, eventRelation: "STARTING_ON" } : {}) });
+  const a = await h.semantic(0, { ...complete, frequency: count === 1 ? "ONCE" : "DAILY", ...(count === 2 ? { occurrenceCount: 2, eventRelation: "STARTING_ON" } : {}) }, "NEW", "SET", undefined, "Nhắc đi thi 8h hai ngày liên tiếp, bắt đầu từ ngày 8/10/2026.");
   const first = await h.persist(a.turn, a.result);
   const receipt = first.snapshot.previewReceipt!, d = first.snapshot.pendingDecision!;
   const stale = { operationKey: "old-preview", contextId: first.snapshot.id, contextRevision: first.snapshot.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId, draftRevision: d.draftRevision, draftHash: receipt.draftHash, response: { kind: "TOKEN" as const, handle: d.tokenHandle! } };
