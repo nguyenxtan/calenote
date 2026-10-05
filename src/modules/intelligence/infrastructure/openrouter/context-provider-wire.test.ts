@@ -14,6 +14,57 @@ const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTa
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it.each(["THIS_MONTH", "private title location secret", "A".repeat(1000)])("retains only safe finite-control diagnostics (%#)", token => {
+  const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as { query: { period: { kind: string } } };
+  wire.query.period.kind = token;
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "period", "kind"], constraint: "CONTROL_ENUM", acceptedDomainId: expect.stringMatching(/^CONTROL_DOMAIN_SHA256:/), acceptedValueCount: 8, actualType: "string", actualLength: token.length, actualDigest: createHash("sha256").update(token).digest("hex") }] }]);
+  if (token === "THIS_MONTH") expect(diagnostics).toMatchObject([{ issues: [{ actualSafeToken: token }] }]);
+  else { expect(JSON.stringify(diagnostics)).not.toContain(token); expect(diagnostics).toMatchObject([{ issues: [expect.not.objectContaining({ actualSafeToken: expect.anything() })] }]); }
+});
+it("diagnoses another finite control domain without changing valid decoding", () => {
+  const wire = encodeGoogleLiteEuContextV3(v3Help as never) as Record<string, unknown>;
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("PARSED");
+  expect(diagnostics).toEqual([]);
+  wire.intent = "INVALID_INTENT";
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["intent"], constraint: "CONTROL_ENUM", actualSafeToken: "INVALID_INTENT", acceptedValueCount: expect.any(Number) }] }]);
+});
+it("accepts valid MONTH without diagnostic capture", () => {
+  const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(encodeGoogleLiteEuContextV3(canonical as never), selectedV3, undefined, value => diagnostics.push(value)).status).toBe("PARSED");
+  expect(diagnostics).toEqual([]);
+});
+it.each(["SECRET VALUE", "SECRET\nVALUE", "âm_lịch", "TOKEN@EMAIL.COM", "x".repeat(49)])("does not retain unsafe control strings in scalar enums (%#)", token => {
+  const wire = encodeGoogleLiteEuContextV3(v3Help as never) as Record<string, unknown>;
+  wire.intent = token;
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
+  expect(JSON.stringify(diagnostics)).not.toContain(token);
+  expect(diagnostics).toMatchObject([{ issues: [{ constraint: "CONTROL_ENUM", actualLength: token.length, actualDigest: createHash("sha256").update(token).digest("hex") }] }]);
+});
+it("diagnoses invalid compact control code without retaining arbitrary values", () => {
+  const wire = encodeGoogleLiteEuContextV3(v3Help as never) as Record<string, unknown>;
+  wire.uncertainties = [{ fieldCode: "BAD_CODE", reason: "private reason", alternatives: [] }];
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["uncertainties", 0, "fieldCode"], constraint: "CONTROL_ENUM", actualSafeToken: "BAD_CODE", acceptedValueCount: 16 }] }]);
+  expect(JSON.stringify(diagnostics)).not.toContain("private reason");
+});
+it.each(["primaryEvidence", "additionalEvidenceJson"] as const)("retains decoded control type and structural path inside %s", slot => {
+  const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as { query: { evidence: { primaryEvidence: { kind: string }; additionalEvidenceJson: string } } };
+  if (slot === "primaryEvidence") wire.query.evidence.primaryEvidence.kind = "BAD_EVIDENCE_KIND";
+  else wire.query.evidence.additionalEvidenceJson = JSON.stringify([{ kind: "BAD_EVIDENCE_KIND", turn: 0, quote: "private", occurrence: 1, ref: null }]);
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "evidence", slot, ...(slot === "additionalEvidenceJson" ? [0] : []), "kind"], classification: "value", actualType: "string", actualSafeToken: "BAD_EVIDENCE_KIND" }] }]);
+  expect(JSON.stringify(diagnostics)).not.toContain("private");
+});
 it("observes decoded canonical query before a root constraint rejects the envelope", () => {
   const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "PRIVATE_QUERY", occurrence: 1 }] } };
   const wire = encodeGoogleLiteEuContextV3(canonical as never) as Record<string, unknown>;

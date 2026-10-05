@@ -59,11 +59,11 @@ describe("immutable uncertainty field codebook V1", () => {
       expect(wire.legacyV2ParseGoogleLiteEuContextSections({ ...wire.legacyV2EncodeGoogleLiteEuContext(base) as object, uncertainties: [item] }).status).toBe("REFUSED");
     }
   });
-  it("identifies the new structural code path without retaining invalid values", () => {
+  it("identifies the new structural code path without retaining free-text values", () => {
     const diagnostics: unknown[] = [];
-    const encoded = { ...wire.legacyV2EncodeGoogleLiteEuContext(base) as object, uncertainties: [{ fieldCode: "sensitive-code-value", reason: "MISSING", alternatives: [] }] };
+    const encoded = { ...wire.legacyV2EncodeGoogleLiteEuContext(base) as object, uncertainties: [{ fieldCode: "sensitive code value", reason: "MISSING", alternatives: [] }] };
     expect(wire.legacyV2ParseGoogleLiteEuContextSections(encoded, undefined, d => diagnostics.push(d)).status).toBe("REFUSED");
     expect(JSON.stringify(diagnostics)).toContain('"uncertainties",0,"fieldCode"');
-    expect(JSON.stringify(diagnostics)).not.toContain("sensitive-code-value");
+    expect(JSON.stringify(diagnostics)).not.toContain("sensitive code value");
   });
 });

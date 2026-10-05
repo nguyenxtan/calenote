@@ -1,14 +1,24 @@
 import type { z } from "zod";
+import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId } from "./canonical-constraints";
 
-const keys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
+const keys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
 export interface CanonicalValidationIssue {
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
-  constraint?: "ARRAY_CARDINALITY"; actualCount?: number; minItems?: number; maxItems?: number;
+  constraint?: "ARRAY_CARDINALITY" | "CONTROL_ENUM"; actualCount?: number; minItems?: number; maxItems?: number;
+  acceptedDomainId?: string; acceptedValueCount?: number; actualSafeToken?: string; actualDigest?: string; actualLength?: number;
   constraintId?: CanonicalConstraintId; participatingFields?: string[]; expectedCategory?: string; actualCategory?: string;
+}
+/** Only the decoder's trusted finite domains may call this projector. Never
+ * infer control authority from an arbitrary string's shape. */
+export function projectControlEnum(domain: readonly unknown[], actual: unknown): Pick<CanonicalValidationIssue, "constraint" | "acceptedDomainId" | "acceptedValueCount" | "actualSafeToken" | "actualDigest" | "actualLength" | "actualType" | "classification"> {
+  const values = [...new Set(domain.map(value => JSON.stringify(value)))].sort();
+  return { constraint: "CONTROL_ENUM", acceptedDomainId: `CONTROL_DOMAIN_SHA256:${createHash("sha256").update(JSON.stringify(values)).digest("hex")}`, acceptedValueCount: values.length, actualType: jsonType(actual), classification: actual === undefined ? "missing" : "value",
+    ...(typeof actual === "string" ? { actualLength: actual.length, actualDigest: createHash("sha256").update(actual, "utf8").digest("hex"),
+      ...(/^[A-Za-z0-9_:.\-]{1,48}$/.test(actual) ? { actualSafeToken: actual } : {}) } : {}) };
 }
 export interface CanonicalValidationDiagnostics {
   schemaVersion: "calenote-context-2" | "calenote-context-3"; issues: CanonicalValidationIssue[];
@@ -55,7 +65,7 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
   };
   visit(issues, 0); return result;
 }
-export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2", cardinality?: { actualCount: number; minItems?: number; maxItems?: number }): CanonicalValidationDiagnostics {
+export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2", cardinality?: { actualCount: number; minItems?: number; maxItems?: number }, control?: ReturnType<typeof projectControlEnum>): CanonicalValidationDiagnostics {
   const result = projectCanonicalValidation(raw, [{ code: "custom", path, message: "" }], schemaVersion);
   result.issues[0].code = "WIRE_SHAPE_INVALID";
   if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY"].includes(expected)) result.issues[0].expected = expected;
@@ -67,5 +77,6 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     if (cardinality.minItems !== undefined) result.issues[0].minItems = cardinality.minItems;
     if (cardinality.maxItems !== undefined) result.issues[0].maxItems = cardinality.maxItems;
   }
+  if (expected === "CONTROL_ENUM" && control) Object.assign(result.issues[0], control);
   return result;
 }

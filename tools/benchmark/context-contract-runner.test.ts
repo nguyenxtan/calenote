@@ -254,9 +254,10 @@ it.each([
   expect(diagnostics).toMatchObject({ issues: [expect.objectContaining({ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
 });
 
-it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "core", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
+it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "core", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
   const directory = mkdtempSync(join(tmpdir(), "context-canonical-diagnostics-"));
-  const sentinel = "PRIVATE_MODEL_KEY_AND_VALUE_SENTINEL";
+  // Free text is never retained, including when placed in a finite control field.
+  const sentinel = "PRIVATE MODEL KEY AND VALUE SENTINEL";
   try {
     const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "test",
       profile: "PILOT", cumulativeAuthorizedMicrounits: 650000, cumulativeRetainedMicrounits: 0, now: () => 100,
@@ -272,7 +273,7 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
         else if (mode === "missing") delete wire.intent;
         else if (mode === "unexpected-key") wire[sentinel] = sentinel;
         else if (mode === "nested-evidence") ((wire.query as { evidence: { primaryEvidence: Record<string, unknown> } }).evidence.primaryEvidence).occurrence = sentinel;
-        else wire.intent = sentinel;
+        else wire.intent = mode === "control-safe" ? "UNSUPPORTED_INTENT" : sentinel;
         return { status: 200, ...(mode === "oversized" ? { oversized: true } : {}), body: mode === "oversized" ? sentinel.repeat(4000) : JSON.stringify({ model: request.model, provider: "Google", id: "gen-canonical-test",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mode === "primitive" ? 42 : wire) } }] }) };
       } });
@@ -281,6 +282,7 @@ it.each(["operation-invalid", "operation-missing", "missing", "primitive", "unex
     const artifact = readFileSync(join(directory, "responses.json"), "utf8");
     expect(artifact).not.toContain(sentinel);
     expect(artifact.length).toBeLessThan(14000);
+    if (mode === "control-safe") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [{ constraint: "CONTROL_ENUM", actualSafeToken: "UNSUPPORTED_INTENT", actualLength: 18, acceptedValueCount: 7 }] } });
     if (mode !== "oversized") expect(artifact).toMatch(/payloadSha256/);
     if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["intent"], classification: "missing" })] } });
     if (mode === "unexpected-key") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ classification: "extra", extraKeyCount: 1 })], unknownTopLevelKeyCount: 1 } });

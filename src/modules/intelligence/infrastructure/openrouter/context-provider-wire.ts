@@ -1,5 +1,5 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
-import { projectCanonicalValidation, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, projectControlEnum, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
@@ -200,7 +200,8 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
 }
 class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
-    readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number }) { super("WIRE_SHAPE_INVALID"); }
+    readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
+    readonly control?: ReturnType<typeof projectControlEnum>) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -218,7 +219,9 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       // be blamed when a later operation tag is the sole failed discriminator.
       const closest = plan.tags.map(tag => Object.entries(tag).filter(([key, values]) => !values.some(option => equal(object[key], option))).map(([key]) => key))
         .sort((a, b) => a.length - b.length)[0];
-      throw new WireShapeFailure([...path, closest[0] ?? Object.keys(plan.tags[0])[0]], "CONTROL_ENUM");
+      const key = closest[0] ?? Object.keys(plan.tags[0])[0];
+      throw new WireShapeFailure([...path, key], "CONTROL_ENUM", undefined, undefined,
+        projectControlEnum(plan.tags.flatMap(tag => tag[key] ?? []), object[key]));
     }
     const branch = plan.branches[matches[0]];
     if (direction === "decode") {
@@ -282,7 +285,12 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     requireWireKeys(value as Record<string, unknown>, node.required!, node.required!, path);
     return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction, [...path, key], root)]));
   }
-  requireShape(predicate(node, value, root)); return structuredClone(value);
+  if (!predicate(node, value, root)) {
+    const domain = node.enum ?? (Object.hasOwn(node, "const") ? [node.const] : undefined);
+    if (domain && !domain.some(option => equal(value, option))) throw new WireShapeFailure(path, "CONTROL_ENUM", undefined, undefined, projectControlEnum(domain, value));
+    requireShape(false);
+  }
+  return structuredClone(value);
 }
 export function legacyV2EncodeGoogleLiteEuContext(canonical: unknown): unknown {
   requireShape(ConversationInterpretationSchema.safeParse(canonical).success);
@@ -298,9 +306,10 @@ function decodeUncertainties(raw: unknown, successor = false): unknown {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
     requireWireKeys(item, ["fieldCode", "reason", "alternatives"], ["fieldCode", "reason", "alternatives"], path);
     if (typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
-    if (typeof item.fieldCode !== "number" || !Number.isSafeInteger(item.fieldCode) || !uncertaintyFieldByCode.has(item.fieldCode)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM");
+    const allowedCodes = [...uncertaintyFieldByCode].filter(([, field]) => (successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)).map(([code]) => code);
+    if (typeof item.fieldCode !== "number" || !Number.isSafeInteger(item.fieldCode) || !uncertaintyFieldByCode.has(item.fieldCode)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
     const field = uncertaintyFieldByCode.get(item.fieldCode)!;
-    if (!(successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM");
+    if (!(successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
     return { field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
       if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
       try { return JSON.parse(text) as unknown; } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }
@@ -317,13 +326,13 @@ export function legacyV2ParseGoogleLiteEuContextSections(raw: unknown, observeIn
     const decoded = Object.fromEntries(coreKeys.map(key => [key, key === "uncertainties" ? decodeUncertainties(object[key]) : codec(original.properties![key], object[key], "decode", [key])]));
     decoded.schemaVersion = applicationSchemaVersion;
     try { decoded.conversationDirective = codec(original.properties!.conversationDirective, object.conversationDirective, "decode", ["conversationDirective"]); }
-    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality, error.control)); decoded.conversationDirective = { kind: "INVALID_PROVIDER_WIRE" }; }
     // Reply has no flattened tagged union. Retaining an invalid original reply
     // preserves the canonical parser's REPLY_TOO_LONG vs REPLY_INVALID reason.
     try { decoded.replyProposal = codec(original.properties!.replyProposal, object.replyProposal, "decode", ["replyProposal"]); }
-    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality)); decoded.replyProposal = object.replyProposal; }
+    catch (error) { if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality, error.control)); decoded.replyProposal = object.replyProposal; }
     return parseInterpretationSections(decoded, observeInvalid);
-  } catch (error) { observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality) : projectCanonicalValidation(raw, [])); return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
+  } catch (error) { observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-2", error.cardinality, error.control) : projectCanonicalValidation(raw, [])); return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" }; }
 }
 
 function omitOwnedV3(node: Schema): Schema {
@@ -380,7 +389,7 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
     for (const key of guidance) {
       try { decoded[key] = codec(originalV3.properties![key], object[key], "decode", [key], originalV3); }
       catch (error) {
-        if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality));
+        if (error instanceof WireShapeFailure) observeWireInvalid?.(projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control));
         decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key];
       }
     }
@@ -389,7 +398,7 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
     if (observeDecoded) try { observeDecoded(structuredClone(decoded)); } catch { /* Observation is non-authoritative. */ }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
-    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality) : projectCanonicalValidation(raw, [], "calenote-context-3"));
+    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3"));
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }
