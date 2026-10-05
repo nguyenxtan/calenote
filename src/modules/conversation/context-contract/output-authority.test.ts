@@ -50,7 +50,7 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
   }
 });
 it("provider query evidence slots remain untrusted selections without execution authority", () => {
-  for (const slot of ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"]) {
+  for (const slot of ["primaryEvidence", "additionalEvidenceJson"]) {
     const prefix = `query.evidence.${slot}`;
     for (const path of [prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}`), `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]) {
       expect(authority.classifyOutputPathV3(path as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({

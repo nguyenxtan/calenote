@@ -66,10 +66,10 @@ it.each([1, 2, 3])("query evidence slots enforce and roundtrip %i canonical refs
   const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
     query: { kind: "LIST", period: { kind: "UPCOMING" }, statusScope: "DEFAULT", evidence: refs }, uncertainties: [], conversationDirective: null, replyProposal: null });
   const wire = encodeGoogleLiteEuContextV3(canonical) as { query: { evidence: Record<string, unknown> } };
-  expect(wire.query.evidence).toEqual({ primaryEvidence: { ...refs[0], ref: null }, secondaryEvidence: count >= 2 ? { ...refs[1], ref: null } : null, tertiaryEvidence: count === 3 ? { ...refs[2], ref: null } : null });
+  expect(wire.query.evidence).toEqual({ primaryEvidence: { ...refs[0], ref: null }, additionalEvidenceJson: JSON.stringify(refs.slice(1).map(ref => ({ ...ref, ref: null }))) });
   expect(successorValidator.safeParse(wire).success).toBe(true);
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
-  for (const invalid of [[], {}, { ...wire.query.evidence, primaryEvidence: null }, { secondaryEvidence: null, tertiaryEvidence: null }, { ...wire.query.evidence, fourthEvidence: wire.query.evidence.primaryEvidence }]) {
+  for (const invalid of [[], {}, { ...wire.query.evidence, primaryEvidence: null }, { additionalEvidenceJson: "[]" }, { ...wire.query.evidence, fourthEvidence: wire.query.evidence.primaryEvidence }]) {
     const changed = { ...wire, query: { ...wire.query, evidence: invalid } };
     expect(successorValidator.safeParse(changed).success).toBe(false);
     expect(parseGoogleLiteEuContextSectionsV3(changed, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");

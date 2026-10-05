@@ -10,7 +10,19 @@ import { appendCampaignEvent, reserveCampaignCall, markCampaignDispatched, readC
 import { encodeFixtureV3, frozenContextProposal } from "./context-contract-fixtures";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 
-const candidate = "9c3bc72263ff791c0d45c8874b420e50819197e0";
+// Immutable local test-only candidate snapshot: application evolution must not
+// relabel an old grant or require committing unverified runtime code first.
+function currentFixtureCandidate() {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "candidate-index-"));
+  const env = { ...process.env, GIT_INDEX_FILE: join(fixtureRoot, "index") };
+  try {
+    execFileSync("git", ["read-tree", "HEAD"], { env });
+    execFileSync("git", ["add", "src", "migrations", "wrangler.jsonc", "package.json", "pnpm-lock.yaml", "tools/calendar/reference-vectors.json"], { env });
+    const tree = execFileSync("git", ["write-tree"], { env, encoding: "utf8" }).trim();
+    return execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit-tree", tree, "-p", "HEAD", "-m", "Immutable test-only candidate"], { env, encoding: "utf8" }).trim();
+  } finally { rmSync(fixtureRoot, { recursive: true, force: true }); }
+}
+const candidate = currentFixtureCandidate();
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 function setup() {
   const accountRoot = realpathSync(mkdtempSync(join(tmpdir(), "candidate-validation-"))), parentCampaignRoot = join(accountRoot, "existing-T11");
@@ -43,12 +55,13 @@ it("proves actual candidate bytes independently of harness identity", () => {
   const proof = candidateValidationProof(process.cwd(), candidate);
   expect(proof.evaluationCandidateSha).toBe(candidate);
   expect(proof.candidateProofSha256).toMatch(/^[a-f0-9]{64}$/);
-  expect(() => candidateValidationProof(process.cwd(), "0631ba97ae237711c10568ed16a4cb697cf5a621")).toThrow("VALIDATION_APPLICATION_CHANGED");
+  expect(() => candidateValidationProof(process.cwd(), "0631ba97ae237711c10568ed16a4cb697cf5a621")).toThrow(/VALIDATION_APPLICATION_(?:FILES_)?CHANGED/u);
 });
 it("rejects a changed loaded application rather than accepting its SHA label", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "candidate-proof-")));
   try {
     execFileSync("git", ["clone", "--quiet", "--local", "--shared", "--no-hardlinks", process.cwd(), root]);
+    execFileSync("git", ["-C", root, "checkout", "--quiet", "--detach", candidate]);
     writeFileSync(join(root, "src/modules/conversation/context-contract/protocol.ts"), "changed runtime");
     expect(() => candidateValidationProof(root, candidate)).toThrow("VALIDATION_APPLICATION_CHANGED");
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -138,6 +151,7 @@ it("tooling-only commit may differ from any immutable application candidate", ()
   const root = realpathSync(mkdtempSync(join(tmpdir(), "harness-proof-")));
   try {
     execFileSync("git", ["clone", "--quiet", "--local", "--shared", "--no-hardlinks", process.cwd(), root]);
+    execFileSync("git", ["-C", root, "checkout", "--quiet", "--detach", candidate]);
     execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "--allow-empty", "-m", "Tooling fixture"]);
     const proof = candidateValidationProof(root, candidate);
     expect(proof.harnessRevisionSha).not.toBe(candidate);

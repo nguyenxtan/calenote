@@ -12,7 +12,7 @@ type BranchPath<T, P extends string> = T extends { kind: infer K extends string 
   : T extends { field: infer F extends string } ? `${P}{field=${F}}` : never;
 type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]` | Paths<E, `${P}[]`>
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
-type QueryEvidenceSlotPath = `query.evidence.${"primaryEvidence" | "secondaryEvidence" | "tertiaryEvidence"}`;
+type QueryEvidenceSlotPath = `query.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
   | QueryEvidenceSlotPath | Paths<EvidenceRef, QueryEvidenceSlotPath>
   | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping";
@@ -32,7 +32,7 @@ function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", 
 for (const prefix of ["requestTarget.evidence", "changes[].evidence", "query.evidence", "uncertainties[].alternatives[].evidence"]) refs(prefix);
 // Provider slots propose the same untrusted refs as canonical evidence arrays.
 // Register exact paths; new slots or fields cannot inherit authority silently.
-for (const slot of ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"] as const) {
+for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
   const prefix = `query.evidence.${slot}` as const;
   add([prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}` as OutputFieldPathV3),
     `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]);

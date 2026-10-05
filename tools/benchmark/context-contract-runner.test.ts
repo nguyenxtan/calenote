@@ -173,7 +173,7 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "one", "two", "three", "fabricated", "unsupported-operand", "inactive-padding"] as const)("R01 actual path retains evidence authority for %s", async mode => {
+it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "one", "two", "three", "fabricated", "fabricated-extra", "unknown-ref", "excess-extras", "unsupported-operand", "inactive-padding"] as const)("R01 actual path retains evidence authority for %s", async mode => {
   const directory = mkdtempSync(join(tmpdir(), "r01-slotted-evidence-")); let calls = 0;
   try {
     const result = await runner.executeObservableR01Turn0Replay({ directory, root: process.cwd(), sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "offline-evidence-regression",
@@ -189,9 +189,12 @@ it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "on
         if (mode === "missing-primary") delete refs.primaryEvidence;
         if (mode === "null-primary") refs.primaryEvidence = null;
         if (mode === "four-slots") refs.fourthEvidence = refs.primaryEvidence;
-        if (mode === "two" || mode === "three") refs.secondaryEvidence = refs.primaryEvidence;
-        if (mode === "three") refs.tertiaryEvidence = refs.primaryEvidence;
+        if (mode === "two" || mode === "three") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence]);
+        if (mode === "three") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence, refs.primaryEvidence]);
         if (mode === "fabricated") (refs.primaryEvidence as Record<string, unknown>).quote = "PRIVATE_FABRICATED_QUOTE";
+        if (mode === "fabricated-extra") refs.additionalEvidenceJson = JSON.stringify([{ ...(refs.primaryEvidence as object), quote: "PRIVATE_FABRICATED_QUOTE" }]);
+        if (mode === "unknown-ref") refs.additionalEvidenceJson = JSON.stringify([{ kind: "CONTEXT_FACT", ref: "f999", turn: null, quote: null, occurrence: null }]);
+        if (mode === "excess-extras") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence, refs.primaryEvidence, refs.primaryEvidence]);
         if (mode === "unsupported-operand") wire.query.period = { kind: "MONTH", offset: 0, date: null, from: null, through: null };
         if (mode === "inactive-padding") wire.query.date = { evidence: [], calendar: "LUNAR_VN", privatePadding: "PRIVATE_INACTIVE_CONTENT" };
         return { status: 200, body: JSON.stringify({ model: request.model, provider: "Google", id: "gen-offline-slots", usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 },
@@ -201,11 +204,11 @@ it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "on
     expect(result.applicationEvidence).toHaveLength(1);
     const observed = result.applicationEvidence[0];
     expect(observed).toMatchObject({ listStoreReads: 0, mutations: 0, queryRange: null });
-    const wireInvalid = ["old-empty-array", "missing-primary", "null-primary", "four-slots"].includes(mode);
+    const wireInvalid = ["old-empty-array", "missing-primary", "null-primary", "four-slots", "excess-extras"].includes(mode);
     expect(result.responses[0].status).toBe(wireInvalid ? "FAILURE" : "SUCCESS");
     if (wireInvalid) expect(result.responses[0].canonicalValidationDiagnostics?.inputRepresentation).toBe("PROVIDER_WIRE");
     if (["one", "two", "three", "unsupported-operand", "inactive-padding"].includes(mode)) expect(observed).toMatchObject({ status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", oracle: "PASS" });
-    if (mode === "fabricated") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED" }));
+    if (["fabricated", "fabricated-extra", "unknown-ref"].includes(mode)) expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED" }));
     if (mode === "unsupported-operand") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "LIST_RANGE", result: "UNSUPPORTED" }));
     for (const file of ["responses.json", "application-evidence.json"]) {
       const persisted = readFileSync(join(directory, file), "utf8");
@@ -392,8 +395,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "6092054ed374d5e1ee936cbf2087588bbcd5502b92521d75fcdb9e1f1f3e3a3f",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-11" });
+      providerWireSchemaDigest: "eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-compact-12" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

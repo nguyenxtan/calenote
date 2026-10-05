@@ -75,7 +75,7 @@ function wireFixture(value: unknown): unknown {
     : wireFixture(child)]));
   if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
   if (["LIST", "CALENDAR_DATE", "CAPABILITY"].includes(String(object.kind)) && Array.isArray(object.evidence)) {
-    result.evidence = { primaryEvidence: wireFixture(object.evidence[0]), secondaryEvidence: object.evidence.length >= 2 ? wireFixture(object.evidence[1]) : null, tertiaryEvidence: object.evidence.length >= 3 ? wireFixture(object.evidence[2]) : null };
+    result.evidence = { primaryEvidence: wireFixture(object.evidence[0]), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1).map(wireFixture)) };
   }
   if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
@@ -96,7 +96,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("6092054ed374d5e1ee936cbf2087588bbcd5502b92521d75fcdb9e1f1f3e3a3f");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -137,8 +137,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-11");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6092054ed374d5e1ee936cbf2087588bbcd5502b92521d75fcdb9e1f1f3e3a3f");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-compact-12");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

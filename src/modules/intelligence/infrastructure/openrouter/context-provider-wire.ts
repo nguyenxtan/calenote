@@ -242,11 +242,12 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     // V3 query evidence uses bounded slots on the provider wire. Canonical
     // arrays and all other evidence locations keep their original contract.
     if (root === originalV3 && path.length === 2 && path[0] === "query" && path[1] === "evidence") {
-      const keys = ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"];
+      const keys = ["primaryEvidence", "additionalEvidenceJson"];
       if (direction === "encode") {
         requireShape(Array.isArray(value) && predicate(node, value, root));
-        return Object.fromEntries(keys.map((key, index) => [key, index < (value as unknown[]).length
-          ? codec(node.items!, (value as unknown[])[index], direction, [...path, key], root) : null]));
+        const refs = value as unknown[];
+        return { primaryEvidence: codec(node.items!, refs[0], direction, [...path, keys[0]], root),
+          additionalEvidenceJson: JSON.stringify(refs.slice(1).map((ref, index) => codec(node.items!, ref, direction, [...path, keys[1], index], root))) };
       }
       // Preserve sanitized diagnostics for the old observed invalid array;
       // no legacy array (including a valid-sized one) is accepted as V3 slots.
@@ -258,7 +259,13 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       requireWireKeys(object, keys, keys, path);
       // primary is always traversed: null/absent/invalid cannot supply evidence.
       const refs = [codec(node.items!, object.primaryEvidence, direction, [...path, keys[0]], root)];
-      for (const key of keys.slice(1)) if (object[key] !== null) refs.push(codec(node.items!, object[key], direction, [...path, key], root));
+      const extraPath = [...path, keys[1]];
+      if (typeof object.additionalEvidenceJson !== "string" || new TextEncoder().encode(object.additionalEvidenceJson).length > 32768) throw new WireShapeFailure(extraPath, "BOUNDED_JSON_ARRAY");
+      let extras: unknown;
+      try { extras = JSON.parse(object.additionalEvidenceJson); } catch { throw new WireShapeFailure(extraPath, "JSON_ARRAY"); }
+      if (!Array.isArray(extras)) throw new WireShapeFailure(extraPath, "array");
+      if (extras.length > 2) throw new WireShapeFailure(extraPath, "array", undefined, { actualCount: extras.length, minItems: 0, maxItems: 2 });
+      for (const [index, extra] of extras.entries()) refs.push(codec(node.items!, extra, direction, [...extraPath, index], root));
       return refs;
     }
     requireShape(Array.isArray(value));
@@ -336,9 +343,8 @@ function queryEvidenceSlots(root: Schema): Schema {
       requireShape(evidence.type === "array" && evidence.items);
       result.properties!.evidence = { type: "object", properties: {
         primaryEvidence: structuredClone(evidence.items),
-        secondaryEvidence: { anyOf: [structuredClone(evidence.items), { type: "null" }] },
-        tertiaryEvidence: { anyOf: [structuredClone(evidence.items), { type: "null" }] },
-      }, required: ["primaryEvidence", "secondaryEvidence", "tertiaryEvidence"], additionalProperties: false };
+        additionalEvidenceJson: { type: "string" },
+      }, required: ["primaryEvidence", "additionalEvidenceJson"], additionalProperties: false };
     }
     return result;
   };
