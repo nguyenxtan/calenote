@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { projectCanonicalConstraint, type CanonicalConstraintId } from "./canonical-constraints";
 
 const keys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
@@ -7,6 +8,7 @@ export interface CanonicalValidationIssue {
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
   constraint?: "ARRAY_CARDINALITY"; actualCount?: number; minItems?: number; maxItems?: number;
+  constraintId?: CanonicalConstraintId; participatingFields?: string[]; expectedCategory?: string; actualCategory?: string;
 }
 export interface CanonicalValidationDiagnostics {
   schemaVersion: "calenote-context-2" | "calenote-context-3"; issues: CanonicalValidationIssue[];
@@ -39,7 +41,8 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
       result.issues.push({ path, code: issue.code, actualType: jsonType(value), unknownPathSegments,
         classification: issue.code === "unrecognized_keys" ? "extra" : value === undefined && issue.code === "invalid_type" ? "missing" : "value",
         ...(issue.code === "invalid_type" && types.has(issue.expected) ? { expected: issue.expected } : issue.code === "invalid_value" ? { expected: "CONTROL_ENUM" } : {}),
-        ...(issue.code === "unrecognized_keys" ? { extraKeyCount: issue.keys.length } : {}) });
+        ...(issue.code === "unrecognized_keys" ? { extraKeyCount: issue.keys.length } : {}),
+        ...(issue.code === "custom" ? projectCanonicalConstraint(issue.params) : {}) });
       if (issue.code === "invalid_union") {
         // Prefer branches whose trusted control discriminants matched. Otherwise
         // the first text branch can consume the budget before a later date or

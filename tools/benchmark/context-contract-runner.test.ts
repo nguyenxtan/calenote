@@ -15,6 +15,28 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
+it("R01 turn-one custom constraint identity persists through real gateway and terminal runner", async()=>{
+  const directory=mkdtempSync(join(tmpdir(),"context-root-constraint-"));let calls=0;
+  try {
+    const result=await runner.executeObservableCampaign({directory,sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),runId:"root-constraint",profile:"PILOT",cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,now:()=>100,
+      transport:async request=>{
+        const turn=calls++,input=JSON.parse(request.messages[1].content) as ContextInput;
+        const wire=encodeFixtureV3(frozenContextProposal(input,"R01",turn)) as Record<string,unknown>;
+        // Synthetic known mismatch, NOT reconstruction of the historical output.
+        if(turn===1)wire.intent="HELP";
+        return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-root-constraint-local",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(wire)}}]})};
+      }});
+    expect(calls).toBe(2);
+    expect(result.applicationEvidence[0]).toMatchObject({oracle:"PASS",pendingField:"queryRange"});
+    expect(result.applicationEvidence[1]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
+    expect(result.responses[1].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"CANONICAL",validation:{issues:[expect.objectContaining({path:[],code:"custom",constraintId:"QUERY_INTENT_OWNERSHIP",participatingFields:["intent","query","changes"],expectedCategory:"MATCHING_QUERY_BRANCH_WITHOUT_CHANGES",actualCategory:"OWNERSHIP_MISMATCH"})]}});
+    const durable=JSON.parse(readFileSync(join(directory,"responses.json"),"utf8"));
+    expect(durable[1].canonicalValidationDiagnostics).toEqual(result.responses[1].canonicalValidationDiagnostics);
+    expect(readFileSync(join(directory,"responses.json"),"utf8")).not.toContain("Tháng này có lịch gì ko?");
+    expect(result.status).toBe("STOP");
+  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
 it("exact evidence failure survives the application gateway and durable runner without quote leakage", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-evidence-diagnostics-"));
   const sentinel = "PRIVATE_ABSENT_EVIDENCE_SENTINEL";

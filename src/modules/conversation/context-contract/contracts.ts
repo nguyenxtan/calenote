@@ -1,23 +1,24 @@
 import { z } from "zod";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
+import { canonicalConstraint, type CanonicalConstraintId } from "./canonical-constraints";
 
 /** Dormant canonical successor contract. No execution or confirmation authority. */
 export const SLOT_NAMES = ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const;
 export const SlotNameSchema = z.enum(SLOT_NAMES);
 export const CalendarSchema = z.enum(["GREGORIAN", "LUNAR_VN"]);
 const positive = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-const nfcText = (max: number) => z.string().min(1).max(max * 2).refine(s => s.isWellFormed() && s === s.normalize("NFC") && [...s].length <= max && s.trim().length > 0, "Expected nonblank NFC Unicode scalar text within code-point limit").meta({ maxLength: max });
+const nfcText = (max: number) => z.string().min(1).max(max * 2).refine(s => s.isWellFormed() && s === s.normalize("NFC") && [...s].length <= max && s.trim().length > 0, canonicalConstraint("NFC_SCALAR_TEXT", "Expected nonblank NFC Unicode scalar text within code-point limit")).meta({ maxLength: max });
 const text1800 = nfcText(1800);
 const text2000 = nfcText(2000);
 export const DateOperandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("CIVIL_DATE"), calendar: CalendarSchema, day: z.number().int().min(1).max(31), month: z.number().int().min(1).max(12), year: z.number().int().min(1).max(9999).nullable(), leapMonth: z.boolean().nullable() })
-    .refine(v => v.calendar !== "GREGORIAN" || v.leapMonth === null, "Gregorian leapMonth must be null"),
+    .refine(v => v.calendar !== "GREGORIAN" || v.leapMonth === null, canonicalConstraint("GREGORIAN_LEAP_MONTH", "Gregorian leapMonth must be null")),
   z.strictObject({ kind: z.literal("RELATIVE_DAY"), offsetDays: z.number().int().min(-366).max(366) }),
   z.strictObject({ kind: z.literal("WEEKDAY"), weekday: z.number().int().min(1).max(7), qualifier: z.enum(["THIS_WEEK", "NEXT_WEEK", "UNRESOLVED"]) }),
 ]);
 export type DateOperand = z.infer<typeof DateOperandSchema>;
 export const ClockOperandSchema = z.strictObject({ hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59), qualifier: z.enum(["H24", "AM", "PM", "UNKNOWN"]) })
-  .refine(v => !["AM", "PM"].includes(v.qualifier) || (v.hour >= 1 && v.hour <= 12), "AM/PM hours must be 1–12");
+  .refine(v => !["AM", "PM"].includes(v.qualifier) || (v.hour >= 1 && v.hour <= 12), canonicalConstraint("CLOCK_QUALIFIER_HOUR", "AM/PM hours must be 1–12"));
 export const EvidenceRefSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("USER_QUOTE"), turn: z.number().int().min(0).max(11), quote: text2000, occurrence: positive }),
   z.strictObject({ kind: z.literal("CONTEXT_FACT"), ref: z.string().regex(/^f[1-9][0-9]*$/u).max(16) }),
@@ -72,15 +73,15 @@ export const LegacyV2SemanticPatchProposalSchema = z.strictObject({
   continuation: z.enum(["YES", "NO", "UNCERTAIN"]), changes: z.array(LegacyV2FieldChangeSchema).max(13),
   query: QueryOperandSchema.nullable(), uncertainties: z.array(LegacyV2UncertaintySchema).max(4), controlEvidence: z.array(EvidenceRefSchema).max(3),
 }).superRefine((v, ctx) => {
-  const fail = (message: string) => ctx.addIssue({ code: "custom", message });
-  if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("Duplicate field rejects whole patch");
+  const fail = (id: CanonicalConstraintId, message: string) => ctx.addIssue({ code: "custom", ...canonicalConstraint(id, message) });
+  if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("DUPLICATE_CHANGE_FIELD", "Duplicate field rejects whole patch");
   const queryKinds: Record<string, string> = { LIST_REMINDERS: "LIST", CALENDAR_QUERY: "CALENDAR_DATE", CAPABILITY_QUERY: "CAPABILITY" };
   const queryKind = queryKinds[v.intent];
-  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("Query/intent ownership mismatch");
-  if ((["HELP", "UNSUPPORTED"].includes(v.intent) || v.dialogueAct === "ABANDON_PENDING") && v.changes.length) fail("Non-mutating proposal cannot carry changes");
-  if (v.changes.some(c => c.operation === "CLEAR" && !c.evidence.some(e => e.kind === "USER_QUOTE"))) fail("CLEAR requires user evidence");
-  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
-  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || !v.controlEvidence.some(e => e.kind === "USER_QUOTE"))) fail("Combined actions must be ambiguous and grounded without executable changes");
+  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("QUERY_INTENT_OWNERSHIP", "Query/intent ownership mismatch");
+  if ((["HELP", "UNSUPPORTED"].includes(v.intent) || v.dialogueAct === "ABANDON_PENDING") && v.changes.length) fail("LEGACY_NON_MUTATING_CHANGES", "Non-mutating proposal cannot carry changes");
+  if (v.changes.some(c => c.operation === "CLEAR" && !c.evidence.some(e => e.kind === "USER_QUOTE"))) fail("MUTATING_OPERATION_USER_EVIDENCE", "CLEAR requires user evidence");
+  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("UNRESOLVED_QUERY_TARGETED_UNCERTAINTY", "Unresolved query requires targeted uncertainty");
+  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || !v.controlEvidence.some(e => e.kind === "USER_QUOTE"))) fail("LEGACY_COMBINED_ACTIONS_NON_EXECUTABLE", "Combined actions must be ambiguous and grounded without executable changes");
 });
 export type LegacyV2SemanticPatchProposal = z.infer<typeof LegacyV2SemanticPatchProposalSchema>;
 export const ConversationDirectiveSchema = z.discriminatedUnion("kind", [
@@ -140,11 +141,11 @@ export function contextFactSchema<M extends z.ZodRawShape>(metadata: M) {
 const slot = <T extends z.ZodType>(value: T) => z.strictObject({ state: z.enum(["MISSING", "PROPOSED", "RESOLVED", "CONFLICT"]), value: value.nullable(), fact: factAlias.nullable() }).refine(s => {
   const v = "value" in s ? s.value : undefined;
   return s.state === "MISSING" ? v === null && s.fact === null : s.state !== "RESOLVED" || (v !== null && s.fact !== null);
-}, "Slot state/value/fact mismatch");
+}, canonicalConstraint("SLOT_STATE_VALUE_FACT", "Slot state/value/fact mismatch"));
 export const LegacyV2ContextInputSchema = z.strictObject({
   schemaVersion: z.literal("calenote-context-input-1"),
   reference: z.strictObject({ instant: z.iso.datetime(), localDate: z.iso.date(), timezone: z.literal("Asia/Ho_Chi_Minh") }),
-  turns: z.array(z.strictObject({ role: z.enum(["USER", "ASSISTANT"]), text: z.string().refine(s => s.isWellFormed() && s === s.normalize("NFC"), "NFC scalar semantic view required") })).min(1).max(12), currentTurn: z.number().int().min(0).max(11),
+  turns: z.array(z.strictObject({ role: z.enum(["USER", "ASSISTANT"]), text: z.string().refine(s => s.isWellFormed() && s === s.normalize("NFC"), canonicalConstraint("CONTEXT_NFC_SCALAR_TEXT", "NFC scalar semantic view required")) })).min(1).max(12), currentTurn: z.number().int().min(0).max(11),
   activeRequest: z.strictObject({ lifecycle: z.enum(["CLARIFYING", "AWAITING_CONFIRMATION"]), slots: z.strictObject({
     title: slot(values.title), location: slot(values.location), notes: slot(values.notes), eventDate: slot(values.eventDate), eventTime: slot(values.eventTime), reminderDate: slot(values.reminderDate), reminderTime: slot(values.reminderTime), calendar: slot(values.calendar), frequency: slot(values.frequency), occurrenceCount: slot(values.occurrenceCount), eventRelation: slot(values.eventRelation), leadOffsetDays: slot(values.leadOffsetDays), endDate: slot(values.endDate),
   }) }).nullable(),
@@ -153,8 +154,8 @@ export const LegacyV2ContextInputSchema = z.strictObject({
   ambiguities: z.array(LegacyV2UncertaintySchema).max(4),
   capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(5), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
 }).superRefine((v, ctx) => {
-  if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", message: "Invalid current turn or role bounds" });
-  if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", message: "Duplicate fact alias" });
+  if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
+  if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });
 });
 export type LegacyV2ContextInput = z.infer<typeof LegacyV2ContextInputSchema>;
 // Reused definitions retain every branch. Semantic refinements are local gates,
@@ -184,20 +185,20 @@ export const SemanticPatchProposalV3Schema = z.strictObject({
   schemaVersion: z.literal("calenote-context-3"), intent: IntentSchema, requestTarget: RequestTargetV3Schema.nullable(),
   changes: z.array(FieldChangeV3Schema).max(13), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
 }).superRefine((v, ctx) => {
-  const fail = (message: string) => ctx.addIssue({ code: "custom", message });
+  const fail = (id: CanonicalConstraintId, message: string) => ctx.addIssue({ code: "custom", ...canonicalConstraint(id, message) });
   const hasUser = (refs: EvidenceRef[]) => refs.some(ref => ref.kind === "USER_QUOTE");
-  if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("Duplicate field rejects whole patch");
+  if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("DUPLICATE_CHANGE_FIELD", "Duplicate field rejects whole patch");
   const queryKinds: Record<string, string> = { LIST_REMINDERS: "LIST", CALENDAR_QUERY: "CALENDAR_DATE", CAPABILITY_QUERY: "CAPABILITY" };
   const queryKind = queryKinds[v.intent];
-  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("Query/intent ownership mismatch");
-  if (["HELP", "UNSUPPORTED"].includes(v.intent) && v.changes.length) fail("Non-mutating proposal cannot carry changes");
+  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("QUERY_INTENT_OWNERSHIP", "Query/intent ownership mismatch");
+  if (["HELP", "UNSUPPORTED"].includes(v.intent) && v.changes.length) fail("NON_MUTATING_CHANGES", "Non-mutating proposal cannot carry changes");
   const targeted = v.uncertainties.some(u => u.field === "operation");
-  if (v.intent === "CREATE_REMINDER" ? v.requestTarget === null : v.requestTarget !== null && (v.intent !== "AMBIGUOUS" || !targeted)) fail("Request target/intent ownership mismatch");
-  if (v.requestTarget && !v.requestTarget.evidence.every(ref => ref.kind === "USER_QUOTE")) fail("Request targeting requires current user evidence");
-  if (v.changes.some(c => c.operation !== "SET" && !hasUser(c.evidence))) fail("REPLACE/CLEAR requires user evidence");
-  if (v.uncertainties.some(u => u.field === "operation" && u.alternatives.some(a => !hasUser(a.evidence)))) fail("Operation alternatives require user evidence");
-  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("Unresolved query requires targeted uncertainty");
-  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("Combined actions must be ambiguous and grounded without executable changes");
+  if (v.intent === "CREATE_REMINDER" ? v.requestTarget === null : v.requestTarget !== null && (v.intent !== "AMBIGUOUS" || !targeted)) fail("REQUEST_TARGET_INTENT_OWNERSHIP", "Request target/intent ownership mismatch");
+  if (v.requestTarget && !v.requestTarget.evidence.every(ref => ref.kind === "USER_QUOTE")) fail("REQUEST_TARGET_USER_EVIDENCE", "Request targeting requires current user evidence");
+  if (v.changes.some(c => c.operation !== "SET" && !hasUser(c.evidence))) fail("MUTATING_OPERATION_USER_EVIDENCE", "REPLACE/CLEAR requires user evidence");
+  if (v.uncertainties.some(u => u.field === "operation" && u.alternatives.some(a => !hasUser(a.evidence)))) fail("OPERATION_ALTERNATIVE_USER_EVIDENCE", "Operation alternatives require user evidence");
+  if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("UNRESOLVED_QUERY_TARGETED_UNCERTAINTY", "Unresolved query requires targeted uncertainty");
+  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("COMBINED_ACTIONS_NON_EXECUTABLE", "Combined actions must be ambiguous and grounded without executable changes");
 });
 export type SemanticPatchProposalV3 = z.infer<typeof SemanticPatchProposalV3Schema>;
 // Null is explicit absence of advice, not an inferred model directive.
@@ -228,8 +229,8 @@ export function parseInterpretationSectionsV3(raw: unknown, observeInvalid?: (va
   } };
 }
 export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape, schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
-  if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", message: "Invalid current turn or role bounds" });
-  if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", message: "Duplicate fact alias" });
+  if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
+  if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });
 });
 export type ContextInputV2 = z.infer<typeof ContextInputV2Schema>;
 export const InterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema, { target: "draft-07", reused: "ref" });
