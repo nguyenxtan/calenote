@@ -24,6 +24,8 @@ import type { ContextObservationEvent } from "../../src/modules/conversation/con
 import type { ContextObservation, PlannedContextCase } from "./context-contract";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { encodeFixtureV3 } from "./context-contract-fixtures";
+import type { CheckpointState } from "./context-seed";
+import { contextContractEncryptionIdentity } from "../../src/modules/conversation/context-contract/store";
 
 const gatewayConfig: ContextGatewayConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
@@ -34,7 +36,7 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
 export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
-  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; }
+  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
   if (!/^[0-9a-f]{40}$/u.test(config.sourceSha) || !Number.isSafeInteger(config.referenceNow)) throw new TypeError("INVALID_PROBE_CONFIG");
@@ -101,6 +103,36 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
       list: query => { listStoreReads++; queryRange = query.range; return new D1SemanticReminderQueryStore(db).listContext(query); }, observe: event => events.push(event),
       reply: async plan => { selected = plan; delivery = deliveryFault ? { status: deliveryFault } : { status: "SENT", messageRef: `synthetic-receipt-${index}` }; sends.push({ plan, receipt: delivery }); return delivery; } });
     const scope = (id: string, claimMarker: string) => ({ ownerId: "owner", chatIdentityId: "identity", sourceInboundId: id, claimMarker, now });
+    if (config.contextSeed) {
+      const seed = config.contextSeed;
+      if (seed.snapshot && (seed.snapshot.scope.ownerId !== "owner" || seed.snapshot.scope.chatIdentityId !== "identity" || seed.snapshot.pendingDecision || seed.snapshot.previewReceipt || seed.snapshot.pendingSemanticCandidate)) throw Error("CONTEXT_SEED_SCOPE_OR_DEPENDENCY_INVALID");
+      for (const row of seed.inbounds) {
+        await db.prepare("INSERT INTO inbound_updates(rowid,id,connection_id,provider,provider_message_id,provider_user_id,private_chat_id,message_ciphertext,message_iv,message_key_version,state,received_at,transition_marker) VALUES(?,?,'connection','telegram',?,'provider-user','chat',x'01',zeroblob(12),1,?,?,?)")
+          .bind(row.rowid, row.id, row.id, row.state, row.received_at, row.transition_marker).run();
+      }
+      for (const row of seed.contexts) {
+        const active = row.status === "CLARIFYING";
+        if (row.status === "DRAFT_READY" || active && seed.snapshot?.id !== row.id) throw Error("CONTEXT_SEED_DEPENDENCY_UNSUPPORTED");
+        const encrypted = active ? await keyring.encryptSensitive("context-contract-state", contextContractEncryptionIdentity(seed.snapshot!.scope, String(row.id), CONTEXT_PROTOCOL_V3), 1, encodeContextSnapshotV2(seed.snapshot!)) : null;
+        await db.prepare("INSERT INTO conversation_contract_write_permits(chat_identity_id,context_id,marker,operation) VALUES('identity',?,'seed-import','APPLY')").bind(row.id).run();
+        await db.prepare("INSERT INTO conversation_contexts(id,owner_id,chat_identity_id,source_inbound_id,last_inbound_id,claim_marker,revision,status,created_at,updated_at,expires_at,payload_ciphertext,payload_iv,key_version,contract_version,write_marker) VALUES(?,'owner','identity',?,?,?,?,?,?,?,?,?,?,?,2,'seed-import')")
+          .bind(row.id, row.source_inbound_id, row.last_inbound_id, row.claim_marker, row.revision, row.status, row.created_at, row.updated_at, row.expires_at, encrypted?.ciphertext ?? null, encrypted?.iv ?? null, active ? 1 : null).run();
+        await db.prepare("DELETE FROM conversation_contract_write_permits WHERE marker='seed-import'").run();
+      }
+      for (const row of seed.outcomes) await db.prepare("INSERT INTO conversation_context_outcomes(rowid,context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash,result_json,web_session_id) VALUES(?,?,?,?,?,?,?,?,?,?)")
+        .bind(row.rowid, row.context_id, row.revision, row.source_inbound_id, row.operation, row.created_at, row.operation_key, row.proof_hash, row.result_json, row.web_session_id).run();
+      for (const row of seed.ownership) {
+        if (row.owner_id !== "owner" || row.chat_identity_id !== "identity" || row.contract_version !== 2) throw Error("CONTEXT_SEED_SCOPE_INVALID");
+        await db.prepare("INSERT INTO conversation_contract_ownership VALUES(?,?,?,?)").bind(row.chat_identity_id, row.owner_id, row.context_id, row.contract_version).run();
+      }
+      const read = seed.inbounds.at(-1);
+      if (!read || typeof read.id !== "string" || typeof read.transition_marker !== "string" || typeof read.received_at !== "number") throw Error("CONTEXT_SEED_READ_BINDING_INVALID");
+      now = read.received_at + 1;
+      const observed = await store.observeSuccessor(scope(read.id, read.transition_marker));
+      if ("failure" in observed || !isDeepStrictEqual(observed.snapshot, seed.snapshot)) throw Error("CONTEXT_SEED_APPLICATION_READBACK_FAILED");
+      lastSnapshot = observed.snapshot;
+      index = seed.completedTurns;
+    }
     return {
       inputs, events,
       async turn(text: string, receipt: string, fault?: "FAILED" | "UNCERTAIN", processingAt = receipt): Promise<ContextObservation["turns"][number]> {
@@ -177,6 +209,21 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
       },
       issuedControlToken() { if (!issuedToken) throw new Error("NO_ISSUED_CONTROL_TOKEN"); return issuedToken; },
       snapshot() { return structuredClone(lastSnapshot); },
+      /** Offline checkpoint preparation only. This captures application-owned
+       * state, not an interpretation/provider envelope. Unsupported dependent
+       * preview/reminder state fails closed rather than exporting a partial DB. */
+      async checkpoint() {
+        for (const table of ["command_drafts", "reminder_series_proposals", "reminders", "semantic_contexts"])
+          if ((sqlite.sqlite.prepare(`SELECT count(*) n FROM ${table}`).get() as { n: number }).n !== 0)
+            throw new Error("CONTEXT_SEED_DEPENDENCY_UNSUPPORTED");
+        if (lastSnapshot?.pendingDecision || lastSnapshot?.previewReceipt || lastSnapshot?.pendingSemanticCandidate)
+          throw new Error("CONTEXT_SEED_DEPENDENCY_UNSUPPORTED");
+        const inbounds = sqlite.sqlite.prepare("SELECT rowid,id,received_at,transition_marker,state FROM inbound_updates ORDER BY rowid").all();
+        const contexts = sqlite.sqlite.prepare("SELECT id,source_inbound_id,last_inbound_id,claim_marker,revision,status,created_at,updated_at,expires_at,contract_version FROM conversation_contexts ORDER BY rowid").all();
+        const outcomes = sqlite.sqlite.prepare("SELECT rowid,context_id,revision,source_inbound_id,operation,created_at,operation_key,proof_hash,result_json,web_session_id FROM conversation_context_outcomes ORDER BY rowid").all();
+        const ownership = sqlite.sqlite.prepare("SELECT * FROM conversation_contract_ownership ORDER BY rowid").all();
+        return { snapshot: structuredClone(lastSnapshot), inbounds, contexts, outcomes, ownership, completedTurns: index };
+      },
       async beginDeferredTurn(text: string, receipt: string) {
         if (delayed) throw new TypeError("ALREADY_DEFERRED");
         let signalStarted!: () => void, release!: () => void;

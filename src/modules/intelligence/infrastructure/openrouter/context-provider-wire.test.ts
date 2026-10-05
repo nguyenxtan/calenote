@@ -14,6 +14,17 @@ const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTa
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it("observes decoded canonical query before a root constraint rejects the envelope", () => {
+  const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "PRIVATE_QUERY", occurrence: 1 }] } };
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as Record<string, unknown>;
+  wire.intent = "HELP";
+  let observed: unknown;
+  const parse = parseGoogleLiteEuContextSectionsV3 as unknown as (raw: unknown, protocol: typeof CONTEXT_PROTOCOL_V3, invalid: undefined, wireInvalid: undefined, decoded: (value: unknown) => void) => { status: string };
+  expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, value => { observed = value; }).status).toBe("REFUSED");
+  expect(observed).toMatchObject({ intent: "HELP", query: { kind: "LIST", period: { kind: "MONTH", offset: 0 } } });
+  expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, () => { throw Error("diagnostic observer failure"); }).status).toBe("REFUSED");
+  expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, value => { (value as { intent: string }).intent = "LIST_REMINDERS"; }).status).toBe("REFUSED");
+});
 it.each([
   [42, "number"], [null, "null"], [["SENSITIVE_PRIVATE_VALUE"], "array"], ["SENSITIVE_PRIVATE_VALUE".repeat(10000), "string"], [false, "boolean"],
 ] as const)("selected primitive envelope diagnostics remain bounded and private (case %#)", (raw, actualType) => {

@@ -10,6 +10,8 @@ import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, Semantic
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
+import { deriveContextSeed } from "./context-seed";
+import { captureQueryDiagnostics } from "./context-query-diagnostics";
 import { validateFrozenContextCorpus } from "./context-contract-live";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
@@ -24,13 +26,14 @@ export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_M
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   semanticState?:ReturnType<typeof captureValidationSemanticState>;
+  queryDiagnostics?:ReturnType<typeof captureQueryDiagnostics>;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
   oracleState?:ReturnType<typeof captureContextOracleState>;
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
-  singleTarget?: {fixture:string;turn:number;manifestSha256:string};
+  singleTarget?: {fixture:string;turn:number;manifestSha256:string;contextSeedDigest?:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
   boundedPilot?: { manifestSha256: string; maxRequests: number;
     beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void;
@@ -121,9 +124,8 @@ export function resolveSingleValidationTarget(root:string,target:{fixture:string
   const planned=admitCanonicalCampaign({version:"context-contract-corpus-1",cases:manifests.flatMap(m=>m.cases)},"PILOT");
   const script=planned.find(s=>s.executionId===target.fixture);
   if(!script||!Number.isSafeInteger(target.turn)||target.turn<0||!script.turns[target.turn])throw Error("SINGLE_TARGET_NOT_FOUND");
-  if(target.turn!==0)throw Error("SINGLE_TARGET_CONTEXT_REQUIRED");
   if(script.turns[target.turn].model!=="HEALTHY"||(script.turns[target.turn].actionsAfter?.length??0)>0)throw Error("SINGLE_TARGET_NOT_STANDALONE");
-  return {...target,manifestSha256:digest(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests,planned})),script:{...script,turns:[script.turns[target.turn]]}};
+  return {...target,...deriveContextSeed(root,script,target.turn),manifestSha256:digest(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests,planned})),script:{...script,turns:[script.turns[target.turn]]}};
 }
 export async function executeObservableSingleTargetValidation(input:ObservableExecution) {
   if(!input.singleTarget||input.profile!=="PILOT"||input.accountingPolicy!=="CONFIRMED_COST_V1"||input.pilotPrefix||input.boundedPilot)throw Error("INVALID_SINGLE_TARGET_SCOPE");
@@ -141,12 +143,13 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const admitted = admitCanonicalCampaign(manifest, input.profile);
   const selected=input.singleTarget?resolveSingleValidationTarget(root,input.singleTarget):undefined;
   if(selected&&selected.manifestSha256!==input.singleTarget!.manifestSha256)throw Error("SINGLE_TARGET_MANIFEST_MISMATCH");
+  if(selected&&((selected.turn>0&&!input.singleTarget!.contextSeedDigest)||(input.singleTarget!.contextSeedDigest&&input.singleTarget!.contextSeedDigest!==selected.contextSeedDigest)))throw Error("SINGLE_TARGET_CONTEXT_SEED_BINDING");
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
-    ...(input.singleTarget ? {executionKind:"SINGLE_TARGET_VALIDATION" as const,targetManifestSha256:selected!.manifestSha256,maxTargetRequests:1,targetFixture:selected!.fixture,targetTurn:selected!.turn} : replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
+    ...(input.singleTarget ? {executionKind:"SINGLE_TARGET_VALIDATION" as const,targetManifestSha256:selected!.manifestSha256,maxTargetRequests:1,targetFixture:selected!.fixture,targetTurn:selected!.turn,...(input.singleTarget.contextSeedDigest?{contextSeedDigest:input.singleTarget.contextSeedDigest}:{})} : replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
     provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
@@ -155,7 +158,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const planned = selected ? [selected.script] : turnZeroOnly ? admitted.filter(script => script.executionId === "R01").map(script => ({ ...script, turns: [{ ...script.turns[0], actionsAfter: [] }] }))
     : replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
   if (turnZeroOnly && (planned.length !== 1 || planned[0].turns.length !== 1 || planned[0].turns[0].model !== "HEALTHY")) throw new Error("R01_MANIFEST_MISMATCH");
-  const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: index }] : []));
+  const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: selected?.turn??index }] : []));
   if (replayOnly && (planned.length !== 1 || planned[0].turns.length !== 2)) throw new Error("R01_MANIFEST_MISMATCH");
   let offlineSeedExecutions = 0;
   let offlineFixtureDigest = "";
@@ -166,6 +169,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   let applicationLlmCalls = 0, providerHttpRequests = 0, canaryPassed = false;
   let syntheticFaultTurnsCompleted = 0;
   let outboundDigest: string | null = null, httpStatus: number | null = null;
+  let queryDiagnostics:ReturnType<typeof captureQueryDiagnostics>|undefined;
   const httpCount = () => input.httpRequestCount?.() ?? providerHttpRequests;
   const responses: ResponseEvidence[] = [];
   const applicationEvidence: ApplicationTurnEvidence[] = [];
@@ -186,7 +190,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
     const response = await input.transport(request, { ...options, signal: AbortSignal.any([options.signal, AbortSignal.timeout(Math.min(30000, remaining))]) });
-    httpStatus = response.status; return response;
+    httpStatus = response.status;
+    if(selected)queryDiagnostics=captureQueryDiagnostics(response.body);
+    return response;
   },
     { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
@@ -205,7 +211,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
-      outboundDigest = null; httpStatus = null;
+      outboundDigest = null; httpStatus = null; queryDiagnostics=undefined;
       let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
       try { parsed = await prepared.dispatch(); }
       catch (error) {
@@ -225,6 +231,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         ...(selected&&result.status==="SUCCESS"?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
+        ...(queryDiagnostics?{queryDiagnostics}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
       writeFileSync(join(input.directory, "responses.json"), JSON.stringify(responses), { mode: 0o600 });
@@ -234,8 +241,8 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   } };
   let score: ReturnType<typeof scoreContextCampaign> | null = null;
   try {
-    const observations = await runContextFixtureCampaign(planned, { sourceSha: input.sourceSha, referenceNow: Date.parse("2026-10-05T01:00:00Z"), ...(replayOnly ? { offlineSeedTurns: 1 } : {}) },
-      (context, id, index) => { if (!replayOnly || id !== "R01" || index !== 0) throw new Error("LIVE_FIXTURE_FORBIDDEN"); const value = frozenContextProposal(context, id, index); offlineFixtureDigest = digest(JSON.stringify(value)); return value; }, { gateway, beforeTurn(script,index){activeTarget={fixtureId:script.executionId,turnIndex:index};}, async onTurn(script, index, observed) {
+    const observations = await runContextFixtureCampaign(planned, { sourceSha: input.sourceSha, referenceNow: Date.parse("2026-10-05T01:00:00Z"), ...(selected?{contextSeed:selected.contextSeed.state}:{}), ...(replayOnly ? { offlineSeedTurns: 1 } : {}) },
+      (context, id, index) => { if (!replayOnly || id !== "R01" || index !== 0) throw new Error("LIVE_FIXTURE_FORBIDDEN"); const value = frozenContextProposal(context, id, index); offlineFixtureDigest = digest(JSON.stringify(value)); return value; }, { gateway, beforeTurn(script,index){activeTarget={fixtureId:script.executionId,turnIndex:selected?.turn??index};}, async onTurn(script, index, observed) {
         const turn = script.turns[index];
         if (turn.model === "INJECTED_REFUSAL") syntheticFaultTurnsCompleted++;
         if (now() >= deadline) stop("TIME_OR_AUTHORIZATION_CAP");
@@ -251,7 +258,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         // Explicit projection of trusted application observations only. Persist
         // each completed turn before an oracle stop can discard aggregate score.
         // No proposal, selected text, receipt, business value or reply enters it.
-        applicationEvidence.push({ fixtureId: script.executionId, turnIndex: index, status: observed.status,
+        applicationEvidence.push({ fixtureId: script.executionId, turnIndex: selected?.turn??index, status: observed.status,
           ...(selected?{oracleState:captureContextOracleState(turn,observed,true)}:{}),
           fullSchemaValid: observed.fullSchemaValid === true, pendingField: observed.pendingField ?? null,
           downstreamDiagnostics: DownstreamTraceSchema.parse(observed.downstreamDiagnostics ?? []),
@@ -313,6 +320,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
+    ...(selected ? {contextSeedProof:{version:selected.contextSeed.version,digest:selected.contextSeedDigest,semanticBaselineSha:selected.contextSeed.semanticBaselineSha,fixture:selected.fixture,turn:selected.turn,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}} : {}),
     ...(turnZeroOnly ? { executionKind: selected?"SINGLE_TARGET_VALIDATION":"SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),

@@ -364,7 +364,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
   return output;
 }
-export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1]): InterpretationSectionsV3 {
+export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   if (!isContextProtocolV3(selected)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     observeWireInvalid?.(projectWireValidation(raw, [], "object", undefined, "calenote-context-3"));
@@ -384,6 +384,9 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
         decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key];
       }
     }
+    // Diagnostic observers receive a detached copy and cannot alter acceptance.
+    // Runtime callers omit this hook; canonical predicates remain authoritative.
+    if (observeDecoded) try { observeDecoded(structuredClone(decoded)); } catch { /* Observation is non-authoritative. */ }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
     observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality) : projectCanonicalValidation(raw, [], "calenote-context-3"));

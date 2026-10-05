@@ -15,7 +15,7 @@ import {inspectConfirmedCampaignCost} from "./context-confirmed-cost";
 import { currentFixtureCandidate } from "./current-candidate.test-support";
 const candidate = currentFixtureCandidate();
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-function setup(confirmedCost = false, targetFixture?: string) {
+function setup(confirmedCost = false, targetFixture?: string, targetTurn = 0) {
   const accountRoot = realpathSync(mkdtempSync(join(tmpdir(), "candidate-validation-"))), parentCampaignRoot = join(accountRoot, "existing-T11");
   const history = join(parentCampaignRoot, "PILOT"); mkdirSync(history, { recursive: true });
   appendCampaignEvent(history, { event: "BEGIN", runId: "old-terminal", profile: "PILOT", sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 1 });
@@ -24,8 +24,9 @@ function setup(confirmedCost = false, targetFixture?: string) {
   const ownerMessagePath = join(accountRoot, "direct-owner.txt"); writeFileSync(ownerMessagePath, "fresh direct scoped owner authorization test fixture");
   const scope = { campaignRoot: parentCampaignRoot, evaluationCandidateSha: candidate, fixture: "R01", turn: 0, maxProviderHttpRequests: 1,
     model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", retry: 0, fallback: "none" };
-  const target = targetFixture ? runner.resolveSingleValidationTarget(process.cwd(), { fixture:targetFixture, turn:0 }) : undefined;
-  const authorization = { version: target ? "candidate-validation-authority-3" : confirmedCost ? "candidate-validation-authority-2" : "candidate-validation-authority-1", ...(confirmedCost || target ? { accountingPolicy: "CONFIRMED_COST_V1" } : {}), operation: target ? "SINGLE_TARGET_VALIDATION" : "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
+  const target = targetFixture ? runner.resolveSingleValidationTarget(process.cwd(), { fixture:targetFixture, turn:targetTurn }) : undefined;
+  const seedBinding = target && targetTurn > 0 ? {semanticBaselineSha:target.contextSeed.semanticBaselineSha,contextSeedVersion:target.contextSeed.version,contextSeedDigest:target.contextSeedDigest,runtimeRevisionSha:candidate} : {};
+  const authorization = { version: targetTurn > 0 ? "candidate-validation-authority-4" : target ? "candidate-validation-authority-3" : confirmedCost ? "candidate-validation-authority-2" : "candidate-validation-authority-1", ...seedBinding, ...(confirmedCost || target ? { accountingPolicy: "CONFIRMED_COST_V1" } : {}), operation: target ? "SINGLE_TARGET_VALIDATION" : "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
     ...(target ? {fixture:target.fixture,turn:target.turn,manifestSha256:target.manifestSha256,harnessRevisionSha:candidateValidationProof(process.cwd(),candidate).harnessRevisionSha} : {}),
     ownerMessagePath, ownerMessageSha256: hash(readFileSync(ownerMessagePath, "utf8")) };
   const authorizationPath = join(accountRoot, "authorization.json"); writeFileSync(authorizationPath, JSON.stringify(authorization));
@@ -34,7 +35,7 @@ function setup(confirmedCost = false, targetFixture?: string) {
     authorizationSha256: hash(JSON.stringify(authorization)), historicalInventorySha256: auditCampaignAccountRoot(accountRoot).inventoryDigest };
   const recordPath = join(accountRoot, "admission.json");
   const trusted = { accountRoot, parentCampaignRoot, expectedCandidateSha: candidate, reviewedAuthorizationSha256: record.authorizationSha256,
-    ...(target ? {expectedTarget:{fixture:target.fixture,turn:target.turn,manifestSha256:target.manifestSha256}} : {}),
+    ...(target ? {expectedTarget:{fixture:target.fixture,turn:target.turn,manifestSha256:target.manifestSha256,...seedBinding}} : {}),
     reviewedOwnerMessageSha256: authorization.ownerMessageSha256, reviewedRecordSha256: hash(JSON.stringify(record)) };
   function load(value = record, grant = authorization, pins = trusted) {
     writeFileSync(recordPath, JSON.stringify(value)); writeFileSync(authorizationPath, JSON.stringify(grant));
@@ -44,6 +45,39 @@ function setup(confirmedCost = false, targetFixture?: string) {
     directory: join(parentCampaignRoot, "candidate-validations", validationExecutionKey(authorization.ownerMessageSha256), "PILOT"),
     cleanup: () => rmSync(accountRoot, { recursive: true, force: true }) };
 }
+
+it("fresh seed-bound R01 turn one authority dispatches only the selected continuation", async () => {
+  const s = setup(true, "R01", 1); let calls = 0;
+  try {
+    const old = readFileSync(join(s.history, "campaign.jsonl"), "utf8");
+    const authority = s.load();
+    const result = await runCandidateValidation(authority, async request => {
+      calls++;
+      const context = JSON.parse(request.messages[1].content) as ContextInput;
+      expect(context.pendingQuestion?.field).toBe("queryRange");
+      expect(context.turns[context.currentTurn].text).toBe("Tháng này có lịch gì ko?");
+      return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-seeded-local",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(encodeFixtureV3(frozenContextProposal(context,"R01",1)))}}]})};
+    }, { now: () => 100 });
+    expect(calls).toBe(1);
+    expect(result).toMatchObject({applicationLlmCalls:1,providerHttpRequests:1,replayTarget:"R01_TURN_1",terminal:true});
+    expect(result.applicationEvidence).toMatchObject([{fixtureId:"R01",turnIndex:1,oracle:"PASS",listStoreReads:1,mutations:0}]);
+    expect(result.responses).toMatchObject([{fixtureId:"R01",turnIndex:1,status:"SUCCESS"}]);
+    expect(result.responses[0]).toHaveProperty("queryDiagnostics.canonicalPrevalidation.query.period.kind", "MONTH");
+    await expect(runCandidateValidation(authority,async()=>{calls++;throw Error("duplicate");})).rejects.toThrow("VALIDATION_ALREADY_CONSUMED");
+    expect(calls).toBe(1);
+    expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(old);
+  } finally { s.cleanup(); }
+});
+
+it.each(["contextSeedDigest","contextSeedVersion","semanticBaselineSha","runtimeRevisionSha"] as const)("seed-bound authority rejects changed %s even with new record digests", field => {
+  const s = setup(true,"R01",1);
+  try {
+    const grant = {...s.authorization,[field]:field==="contextSeedDigest"?"a".repeat(64):field==="contextSeedVersion"?"unknown-seed-version":"a".repeat(40)};
+    const record = {...s.record,authorizationSha256:hash(JSON.stringify(grant))};
+    expect(()=>s.load(record,grant,{...s.trusted,reviewedAuthorizationSha256:record.authorizationSha256,reviewedRecordSha256:hash(JSON.stringify(record))})).toThrow();
+    expect(existsSync(s.directory)).toBe(false);
+  } finally {s.cleanup();}
+});
 
 it.each(["PASS","HTTP_FAILURE","THROW","ORACLE_FAILURE"])("single canonical R02 turn zero %s is isolated, settled and terminal",async outcome=>{
   const s=setup(true,"R02");let calls=0;
@@ -76,7 +110,7 @@ it.each(["fixture","turn","manifestSha256","harnessRevisionSha","maxProviderHttp
   }finally{s.cleanup();}
 });
 it("canonical single target rejects missing, injected and context-dependent turns before records",()=>{
-  expect(()=>runner.resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1})).toThrow("SINGLE_TARGET_CONTEXT_REQUIRED");
+  expect(()=>runner.resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:2})).toThrow("CONTEXT_SEED_CHECKPOINT_UNAVAILABLE");
   expect(()=>runner.resolveSingleValidationTarget(process.cwd(),{fixture:"not-canonical",turn:0})).toThrow("SINGLE_TARGET_NOT_FOUND");
 });
 
@@ -168,12 +202,13 @@ it.each([false,true].flatMap(confirmedCost=>["PASS", "HTTP_FAILURE", "THROW", "W
     expect(auditCampaignAccountRoot(s.accountRoot).bindings).toHaveLength(2);
   } finally { s.cleanup(); }
 });
-it.each([false,true].flatMap(singleTarget=>[false,true].map(dispatched=>({singleTarget,dispatched}))))("reservation crash with dispatched=$dispatched singleTarget=$singleTarget cannot be resumed", async ({dispatched,singleTarget}) => {
-  const s = setup(singleTarget,singleTarget?"R02":undefined); let calls = 0;
+it.each(["legacy","initial","seeded"].flatMap(mode=>[false,true].map(dispatched=>({mode,dispatched}))))("reservation crash with dispatched=$dispatched mode=$mode cannot be resumed", async ({dispatched,mode}) => {
+  const singleTarget = mode !== "legacy", seeded = mode === "seeded";
+  const s = setup(singleTarget,singleTarget?(seeded?"R01":"R02"):undefined,seeded?1:0); let calls = 0;
   try {
     mkdirSync(s.directory, { recursive: true }); writeFileSync(join(s.directory, "execution.json"), "{}");
     appendCampaignEvent(s.directory, { event: "BEGIN", runId: "crashed", profile: "PILOT", sourceSha: candidate, provenanceDigest: s.record.candidateProofSha256, cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: singleTarget?0:10000, startedAt: 1,
-      ...(singleTarget?{executionKind:"SINGLE_TARGET_VALIDATION",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472,targetFixture:"R02",targetTurn:0,maxTargetRequests:1,targetManifestSha256:s.trusted.expectedTarget!.manifestSha256}: {}) });
+      ...(singleTarget?{executionKind:"SINGLE_TARGET_VALIDATION",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472,targetFixture:seeded?"R01":"R02",targetTurn:seeded?1:0,maxTargetRequests:1,targetManifestSha256:s.trusted.expectedTarget!.manifestSha256,...(seeded?{contextSeedDigest:s.trusted.expectedTarget!.contextSeedDigest}: {})}: {}) });
     reserveCampaignCall(s.directory, { runId: "crashed", profile: "PILOT", provenanceDigest: s.record.candidateProofSha256, reservationId: "crash-call", maximumMicrounits: singleTarget?0:105472, now: 1, startedAt: 1 });
     if (dispatched) markCampaignDispatched(s.directory, { runId: "crashed", reservationId: "crash-call", at: 1 });
     const record = { ...s.record, historicalInventorySha256: auditCampaignAccountRoot(s.accountRoot, s.directory).inventoryDigest };
@@ -207,8 +242,8 @@ it("tooling-only commit may differ from any immutable application candidate", ()
     expect(candidateValidationProof(root, nextCandidate).evaluationCandidateSha).toBe(nextCandidate);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-it("duplicate concurrent invocation cannot reserve twice before dispatch", async () => {
-  const s = setup(); let calls = 0;
+it.each([false,true])("duplicate concurrent invocation with seed=%s cannot reserve twice before dispatch", async seeded => {
+  const s = seeded ? setup(true,"R01",1) : setup(); let calls = 0;
   try {
     const authority = s.load();
     let release!: () => void;

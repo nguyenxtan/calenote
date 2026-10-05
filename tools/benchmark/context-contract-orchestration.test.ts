@@ -14,8 +14,10 @@ beforeAll(() => {
   execFileSync("git", ["clone", "--local", "--shared", "--no-hardlinks", "--quiet", process.cwd(), cleanRoot], { env: safeEnv });
   // Snapshot the runner's changed tooling dependencies together. A hybrid of
   // working runner and historical oracle/probe is not a runnable clean fixture.
-  for (const path of ["context-contract.ts", "context-contract-probe.ts", "context-contract-live.ts", "context-contract-runner.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
+  for (const path of ["context-contract.ts", "context-contract-probe.ts", "context-contract-live.ts", "context-contract-runner.ts", "context-seed.ts", "context-query-diagnostics.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
     copyFileSync(join(process.cwd(), "tools", "benchmark", path), join(cleanRoot, "tools", "benchmark", path));
+  mkdirSync(join(cleanRoot,"tools/benchmark/fixtures"),{recursive:true});
+  copyFileSync(join(process.cwd(),"tools/benchmark/fixtures/trusted-context-checkpoints.json"),join(cleanRoot,"tools/benchmark/fixtures/trusted-context-checkpoints.json"));
   execFileSync("git", ["-C", cleanRoot, "add", "tools/benchmark"], { env: safeEnv });
   execFileSync("git", ["-C", cleanRoot, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "--quiet", "-m", "Synthetic local orchestration fixture"], { env: safeEnv });
   // Local installed dependencies only; clone has no workstation bootstrap.
