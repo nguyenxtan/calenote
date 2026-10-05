@@ -4,6 +4,25 @@ import {diagnoseContextTurn,type ContextTurn,type ContextObservation,expandConte
 import {runContextFixtureCampaign} from "./context-contract-probe";
 import {frozenContextProposal} from "./context-contract-fixtures";
 import regressions from "../../src/modules/conversation/context-contract/benchmark/regressions.json";
+import * as oracle from "./context-contract";
+import {ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
+
+it("model semantic state exposes only validated controls, counts and value digests",()=>{
+  const semantic=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"HELP",requestTarget:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+  const core={schemaVersion:semantic.schemaVersion,intent:semantic.intent,requestTarget:semantic.requestTarget,changes:semantic.changes,query:semantic.query,uncertainties:semantic.uncertainties};
+  expect(oracle.captureValidationSemanticState(core)).toMatchObject({intent:"HELP",changes:[],query:null,uncertainties:[]});
+  expect(()=>oracle.captureValidationSemanticState({...core,intent:"PRIVATE_CONTENT"})).toThrow();
+});
+
+it("complete oracle state preserves passed and failed assertions without sensitive content",()=>{
+  const actual=observation();actual.pendingField="eventRelation";
+  const state=oracle.captureContextOracleState(expected,actual,true);
+  expect(state.controlState).toMatchObject({effectiveDirective:{type:"undefined"},pendingField:{value:"eventRelation"}});
+  expect(state.assertions).toContainEqual(expect.objectContaining({path:"pendingField",passed:false}));
+  expect(state.assertions).toContainEqual(expect.objectContaining({path:"applicationStatus",passed:true}));
+  expect(JSON.stringify(state)).not.toContain("PRIVATE_EXPECTED_TITLE");expect(JSON.stringify(state)).not.toContain("private input");
+  expect(state.truncated).toBe(false);
+});
 
 const expected:ContextTurn={text:"private input",receipt:"2026-09-28T03:00:00Z",model:"HEALTHY",expect:{status:"CLARIFICATION_REQUESTED",dispatches:1,mutations:0,fields:{title:"PRIVATE_EXPECTED_TITLE",eventDate:{kind:"CIVIL_DATE",year:null}},pendingField:"reminderTime"}};
 const observation=():ContextObservation["turns"][number]=>({status:"CLARIFICATION_REQUESTED",dispatches:1,actualDispatches:1,mutations:0,fullSchemaValid:true,fields:{title:"PRIVATE_EXPECTED_TITLE",eventDate:{kind:"CIVIL_DATE",year:null}},pendingField:"reminderTime"});

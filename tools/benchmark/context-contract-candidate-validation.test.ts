@@ -9,6 +9,8 @@ import { candidateValidationProof, createCandidateValidationLoader, inspectCandi
 import { appendCampaignEvent, reserveCampaignCall, markCampaignDispatched, readCampaignLedger, auditCampaignAccountRoot } from "./context-contract-live";
 import { encodeFixtureV3, frozenContextProposal } from "./context-contract-fixtures";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import * as runner from "./context-contract-runner";
+import {inspectConfirmedCampaignCost} from "./context-confirmed-cost";
 
 // Immutable local test-only candidate snapshot: application evolution must not
 // relabel an old grant or require committing unverified runtime code first.
@@ -24,7 +26,7 @@ function currentFixtureCandidate() {
 }
 const candidate = currentFixtureCandidate();
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-function setup(confirmedCost = false) {
+function setup(confirmedCost = false, targetFixture?: string) {
   const accountRoot = realpathSync(mkdtempSync(join(tmpdir(), "candidate-validation-"))), parentCampaignRoot = join(accountRoot, "existing-T11");
   const history = join(parentCampaignRoot, "PILOT"); mkdirSync(history, { recursive: true });
   appendCampaignEvent(history, { event: "BEGIN", runId: "old-terminal", profile: "PILOT", sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 1 });
@@ -33,7 +35,9 @@ function setup(confirmedCost = false) {
   const ownerMessagePath = join(accountRoot, "direct-owner.txt"); writeFileSync(ownerMessagePath, "fresh direct scoped owner authorization test fixture");
   const scope = { campaignRoot: parentCampaignRoot, evaluationCandidateSha: candidate, fixture: "R01", turn: 0, maxProviderHttpRequests: 1,
     model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", retry: 0, fallback: "none" };
-  const authorization = { version: confirmedCost ? "candidate-validation-authority-2" : "candidate-validation-authority-1", ...(confirmedCost ? { accountingPolicy: "CONFIRMED_COST_V1" } : {}), operation: "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
+  const target = targetFixture ? runner.resolveSingleValidationTarget(process.cwd(), { fixture:targetFixture, turn:0 }) : undefined;
+  const authorization = { version: target ? "candidate-validation-authority-3" : confirmedCost ? "candidate-validation-authority-2" : "candidate-validation-authority-1", ...(confirmedCost || target ? { accountingPolicy: "CONFIRMED_COST_V1" } : {}), operation: target ? "SINGLE_TARGET_VALIDATION" : "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
+    ...(target ? {fixture:target.fixture,turn:target.turn,manifestSha256:target.manifestSha256,harnessRevisionSha:candidateValidationProof(process.cwd(),candidate).harnessRevisionSha} : {}),
     ownerMessagePath, ownerMessageSha256: hash(readFileSync(ownerMessagePath, "utf8")) };
   const authorizationPath = join(accountRoot, "authorization.json"); writeFileSync(authorizationPath, JSON.stringify(authorization));
   const proof = candidateValidationProof(process.cwd(), candidate);
@@ -41,6 +45,7 @@ function setup(confirmedCost = false) {
     authorizationSha256: hash(JSON.stringify(authorization)), historicalInventorySha256: auditCampaignAccountRoot(accountRoot).inventoryDigest };
   const recordPath = join(accountRoot, "admission.json");
   const trusted = { accountRoot, parentCampaignRoot, expectedCandidateSha: candidate, reviewedAuthorizationSha256: record.authorizationSha256,
+    ...(target ? {expectedTarget:{fixture:target.fixture,turn:target.turn,manifestSha256:target.manifestSha256}} : {}),
     reviewedOwnerMessageSha256: authorization.ownerMessageSha256, reviewedRecordSha256: hash(JSON.stringify(record)) };
   function load(value = record, grant = authorization, pins = trusted) {
     writeFileSync(recordPath, JSON.stringify(value)); writeFileSync(authorizationPath, JSON.stringify(grant));
@@ -50,6 +55,41 @@ function setup(confirmedCost = false) {
     directory: join(parentCampaignRoot, "candidate-validations", validationExecutionKey(authorization.ownerMessageSha256), "PILOT"),
     cleanup: () => rmSync(accountRoot, { recursive: true, force: true }) };
 }
+
+it.each(["PASS","HTTP_FAILURE","THROW","ORACLE_FAILURE"])("single canonical R02 turn zero %s is isolated, settled and terminal",async outcome=>{
+  const s=setup(true,"R02");let calls=0;
+  try{
+    const old=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),authority=s.load();
+    const result=await runCandidateValidation(authority,async request=>{
+      calls++;expect(readCampaignLedger(s.directory).filter(r=>r.event==="RESERVE")).toMatchObject([{maximumMicrounits:0}]);
+      if(outcome==="THROW")throw Error("fake provider failure");
+      const context=JSON.parse(request.messages[1].content) as ContextInput;
+      const body=JSON.stringify({model:request.model,provider:"Google",id:"gen-local",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(encodeFixtureV3(frozenContextProposal(context,outcome==="ORACLE_FAILURE"?"R01":"R02",0)))}}]});
+      return {status:outcome==="HTTP_FAILURE"?500:200,body,rawResponseBytes:Buffer.byteLength(body)};
+    },{now:()=>100});
+    expect(calls).toBe(1);expect(result.providerHttpRequests).toBe(1);
+    expect(result).toMatchObject({executionKind:"SINGLE_TARGET_VALIDATION",replayTarget:"R02_TURN_0",terminal:true,fullPilotGate:"NOT_RUN"});
+    expect(result.applicationEvidence.every(r=>r.fixtureId==="R02"&&r.turnIndex===0)).toBe(true);
+    if(outcome==="PASS")expect(result.applicationEvidence).toMatchObject([{oracle:"PASS",oracleDiagnostics:{failedAssertionCount:0},oracleState:{truncated:false}}]);
+    if(outcome==="ORACLE_FAILURE")expect(result.applicationEvidence[0].oracleDiagnostics.failedAssertionCount).toBeGreaterThan(0);
+    expect(readCampaignLedger(s.directory).filter(r=>r.event==="FINISH")).toMatchObject([{observedMicrounits:outcome==="THROW"?null:1000}]);
+    expect(readCampaignLedger(s.directory).at(-1)?.event).toBe("STOP");
+    expect(JSON.parse(readFileSync(join(s.directory,"terminal.json"),"utf8"))).toMatchObject({terminal:true,providerRequests:1});
+    expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(old);
+    await expect(runCandidateValidation(authority,async()=>{calls++;throw Error("duplicate");})).rejects.toThrow("VALIDATION_ALREADY_CONSUMED");expect(calls).toBe(1);
+  }finally{s.cleanup();}
+});
+it.each(["fixture","turn","manifestSha256","harnessRevisionSha","maxProviderHttpRequests"])("single target rejects digest-pinned wrong %s",field=>{
+  const s=setup(true,"R02");try{
+    const grant={...s.authorization,[field]:field==="fixture"?"R01":field==="turn"?1:field==="maxProviderHttpRequests"?2:"a".repeat(field==="harnessRevisionSha"?40:64)};
+    const record={...s.record,authorizationSha256:hash(JSON.stringify(grant))};
+    expect(()=>s.load(record,grant,{...s.trusted,reviewedAuthorizationSha256:record.authorizationSha256,reviewedRecordSha256:hash(JSON.stringify(record))})).toThrow();
+  }finally{s.cleanup();}
+});
+it("canonical single target rejects missing, injected and context-dependent turns before records",()=>{
+  expect(()=>runner.resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1})).toThrow("SINGLE_TARGET_CONTEXT_REQUIRED");
+  expect(()=>runner.resolveSingleValidationTarget(process.cwd(),{fixture:"not-canonical",turn:0})).toThrow("SINGLE_TARGET_NOT_FOUND");
+});
 
 it("fresh cost-policy authority persists a zero-dollar claim before its only dispatch", async () => {
   const s = setup(true); let calls = 0;
@@ -139,18 +179,20 @@ it.each([false,true].flatMap(confirmedCost=>["PASS", "HTTP_FAILURE", "THROW", "W
     expect(auditCampaignAccountRoot(s.accountRoot).bindings).toHaveLength(2);
   } finally { s.cleanup(); }
 });
-it.each([false, true])("reservation crash with dispatched=%s cannot be resumed", async dispatched => {
-  const s = setup(); let calls = 0;
+it.each([false,true].flatMap(singleTarget=>[false,true].map(dispatched=>({singleTarget,dispatched}))))("reservation crash with dispatched=$dispatched singleTarget=$singleTarget cannot be resumed", async ({dispatched,singleTarget}) => {
+  const s = setup(singleTarget,singleTarget?"R02":undefined); let calls = 0;
   try {
     mkdirSync(s.directory, { recursive: true }); writeFileSync(join(s.directory, "execution.json"), "{}");
-    appendCampaignEvent(s.directory, { event: "BEGIN", runId: "crashed", profile: "PILOT", sourceSha: candidate, provenanceDigest: s.record.candidateProofSha256, cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 10000, startedAt: 1 });
-    reserveCampaignCall(s.directory, { runId: "crashed", profile: "PILOT", provenanceDigest: s.record.candidateProofSha256, reservationId: "crash-call", maximumMicrounits: 105472, now: 1, startedAt: 1 });
+    appendCampaignEvent(s.directory, { event: "BEGIN", runId: "crashed", profile: "PILOT", sourceSha: candidate, provenanceDigest: s.record.candidateProofSha256, cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: singleTarget?0:10000, startedAt: 1,
+      ...(singleTarget?{executionKind:"SINGLE_TARGET_VALIDATION",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472,targetFixture:"R02",targetTurn:0,maxTargetRequests:1,targetManifestSha256:s.trusted.expectedTarget!.manifestSha256}: {}) });
+    reserveCampaignCall(s.directory, { runId: "crashed", profile: "PILOT", provenanceDigest: s.record.candidateProofSha256, reservationId: "crash-call", maximumMicrounits: singleTarget?0:105472, now: 1, startedAt: 1 });
     if (dispatched) markCampaignDispatched(s.directory, { runId: "crashed", reservationId: "crash-call", at: 1 });
     const record = { ...s.record, historicalInventorySha256: auditCampaignAccountRoot(s.accountRoot, s.directory).inventoryDigest };
     const authority = s.load(record, s.authorization, { ...s.trusted, reviewedRecordSha256: hash(JSON.stringify(record)) });
     await expect(runCandidateValidation(authority, async () => { calls++; throw new Error("no restart dispatch"); })).rejects.toThrow("VALIDATION_ALREADY_CONSUMED");
     expect(calls).toBe(0);
-    expect(auditCampaignAccountRoot(s.accountRoot).totals.PILOT.unknownMicrounits).toBe(115472);
+    expect(auditCampaignAccountRoot(s.accountRoot).totals.PILOT.unknownMicrounits).toBe(singleTarget?10000:115472);
+    if(singleTarget){expect(inspectConfirmedCampaignCost(s.accountRoot,1500000,105472,false)).toMatchObject({confirmedMicrounits:0,prospectiveUnknownCount:1,unknownSafetyReady:false,historicalUnknownExposureMicrounits:10000});expect(()=>inspectConfirmedCampaignCost(s.accountRoot,1500000,105472)).toThrow("CONFIRMED_COST_UNKNOWN_SAFETY_LIMIT");}
     expect(readCampaignLedger(s.directory).some(row => row.event === "FINISH")).toBe(false);
   } finally { s.cleanup(); }
 });

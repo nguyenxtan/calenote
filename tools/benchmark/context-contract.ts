@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import type { DownstreamDiagnostic } from "../../src/modules/conversation/context-contract/downstream";
+import {SemanticPatchProposalV3Schema} from "../../src/modules/conversation/context-contract/contracts";
 
 export type CampaignProfile = "PILOT" | "FULL";
 export type ContextCaseGroup = "ORIGINAL" | "DEVELOPMENT" | "HELDOUT";
@@ -165,6 +166,20 @@ function summarizeOracleValue(path:string,value:unknown):OracleValueSummary {
 }
 export interface OracleFailedAssertion {path:string;assertionKind:TurnAssertion["assertionKind"];expected:OracleValueSummary;actual:OracleValueSummary;}
 export interface OracleDiagnostics {passed:boolean;failedAssertionCount:number;failedAssertions:OracleFailedAssertion[];truncated:boolean;}
+export function captureContextOracleState(turn:ContextTurn,actual:TurnObservation|undefined,requireActualDispatch=false){
+  const checks=contextTurnAssertions(turn,actual,requireActualDispatch);
+  const controls=["coreValidity","directiveValidity","replyValidity","effectiveDirective","directiveMatch","replyEligibility","pendingField","decisionKind","contextRevision","draftRevision","apiPreviews","source","kind"] as const;
+  return {controlState:Object.fromEntries(controls.map(key=>[key,summarizeOracleValue(key,actual?.[key])])),assertionCount:checks.length,truncated:checks.length>128,assertions:checks.slice(0,128).map(check=>({path:safeOraclePath(check.path),assertionKind:check.assertionKind,passed:check.passed,expected:summarizeOracleValue(check.path,check.expected),actual:summarizeOracleValue(check.path,check.actual)}))};
+}
+export function captureValidationSemanticState(value:unknown){
+  const parsed=SemanticPatchProposalV3Schema.safeParse(value);
+  if(!parsed.success)throw Error("DIAGNOSTIC_SEMANTIC_STRUCTURE_INVALID");
+  const s=parsed.data;
+  return {intent:s.intent,requestTarget:s.requestTarget?.kind??null,
+    changes:s.changes.map(c=>({field:c.field,operation:c.operation,valueSha256:digestOracleValue(c.value),evidenceCount:c.evidence.length})),
+    query:s.query?{kind:s.query.kind,sha256:digestOracleValue(s.query),evidenceCount:s.query.evidence.length}:null,
+    uncertainties:s.uncertainties.map(u=>({field:u.field,reason:u.reason,alternatives:u.alternatives.length}))};
+}
 /** Content-free, bounded explanation of the same oracle. Unknown keys and
  * strings are digested; nested objects never enter diagnostic artifacts. */
 export function diagnoseContextTurn(turn:ContextTurn,actual:TurnObservation|undefined,requireActualDispatch=false):OracleDiagnostics {

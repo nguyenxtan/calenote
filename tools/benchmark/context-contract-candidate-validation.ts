@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { immutableApplicationProof } from "./context-contract-single-replay";
 import { auditCampaignAccountRoot, preflightContextCampaign, withAccountRootLock, contextCampaignGitEnvironment } from "./context-contract-live";
-import { contextCampaignMaximumReservation, contextCampaignGatewayConfig, executeObservableR01Turn0Replay } from "./context-contract-runner";
+import { contextCampaignMaximumReservation, contextCampaignGatewayConfig, executeObservableR01Turn0Replay, executeObservableSingleTargetValidation, resolveSingleValidationTarget } from "./context-contract-runner";
 import type { SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { inspectConfirmedCampaignCost } from "./context-confirmed-cost";
@@ -17,7 +17,7 @@ const legacyScopeSchema = z.strictObject({ version: z.literal("candidate-validat
   authorizationId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/u), campaignRoot: z.string(), evaluationCandidateSha: sha,
   fixture: z.literal("R01"), turn: z.literal(0), maxProviderHttpRequests: z.literal(1), model: z.literal("google/gemini-2.5-flash-lite"),
   provider: z.literal("google-vertex/eu"), retry: z.literal(0), fallback: z.literal("none"), ownerMessagePath: z.string(), ownerMessageSha256: digest });
-const scopeSchema = z.discriminatedUnion("version", [legacyScopeSchema, legacyScopeSchema.extend({ version:z.literal("candidate-validation-authority-2"), accountingPolicy:z.literal("CONFIRMED_COST_V1") })]);
+const scopeSchema = z.discriminatedUnion("version", [legacyScopeSchema, legacyScopeSchema.extend({ version:z.literal("candidate-validation-authority-2"), accountingPolicy:z.literal("CONFIRMED_COST_V1") }),legacyScopeSchema.extend({version:z.literal("candidate-validation-authority-3"),operation:z.literal("SINGLE_TARGET_VALIDATION"),fixture:z.string().regex(/^[A-Za-z0-9_-]{1,100}$/u),turn:z.number().int().nonnegative(),manifestSha256:digest,harnessRevisionSha:sha,accountingPolicy:z.literal("CONFIRMED_COST_V1")})]);
 const admissionSchema = z.strictObject({ version: z.literal("candidate-validation-admission-1"), accountRoot: z.string(),
   evaluationCandidateSha: sha, harnessRevisionSha: sha, candidateProofSha256: digest, harnessProofSha256: digest,
   authorizationPath: z.string(), authorizationSha256: digest, historicalInventorySha256: digest });
@@ -28,6 +28,7 @@ type Scope = z.infer<typeof scopeSchema>;
 export interface CandidateValidationTrust {
   accountRoot: string; parentCampaignRoot: string; expectedCandidateSha: string;
   reviewedRecordSha256: string; reviewedAuthorizationSha256: string; reviewedOwnerMessageSha256: string;
+  expectedTarget?: {fixture:string;turn:number;manifestSha256:string};
 }
 const brand: unique symbol = Symbol("CandidateValidationAuthority");
 export interface CandidateValidationAuthority { readonly [brand]: true }
@@ -71,6 +72,11 @@ function verify(recordPath: string, root: string, trust: CandidateValidationTrus
   const authorityText = boundedRead(record.authorizationPath);
   if (hash(authorityText) !== trust.reviewedAuthorizationSha256 || record.authorizationSha256 !== trust.reviewedAuthorizationSha256) throw new Error("VALIDATION_AUTHORIZATION_BINDING");
   const scope = scopeSchema.parse(JSON.parse(authorityText));
+  if(scope.version==="candidate-validation-authority-3"){
+    const target=trust.expectedTarget;
+    if(!target||scope.fixture!==target.fixture||scope.turn!==target.turn||scope.manifestSha256!==target.manifestSha256||scope.harnessRevisionSha!==record.harnessRevisionSha)throw Error("VALIDATION_TARGET_BINDING");
+    if(resolveSingleValidationTarget(root,scope).manifestSha256!==scope.manifestSha256)throw Error("VALIDATION_MANIFEST_BINDING");
+  }else if(trust.expectedTarget)throw Error("VALIDATION_TARGET_AUTHORITY_VERSION");
   if (scope.campaignRoot !== trust.parentCampaignRoot || scope.evaluationCandidateSha !== trust.expectedCandidateSha) throw new Error("VALIDATION_SCOPE_BINDING");
   contained(trust.accountRoot, scope.ownerMessagePath);
   if (scope.ownerMessageSha256 !== trust.reviewedOwnerMessageSha256 || hash(boundedRead(scope.ownerMessagePath)) !== trust.reviewedOwnerMessageSha256) throw new Error("VALIDATION_OWNER_BINDING");
@@ -81,7 +87,7 @@ function verify(recordPath: string, root: string, trust: CandidateValidationTrus
   return { record, scope, trust: Object.freeze({ ...trust }), root, recordPath };
 }
 export function createCandidateValidationLoader(trust: CandidateValidationTrust) {
-  const pins = Object.freeze({ ...trust });
+  const pins = Object.freeze({ ...trust,...(trust.expectedTarget?{expectedTarget:Object.freeze({...trust.expectedTarget})}:{}) });
   return (recordPath: string, root: string): CandidateValidationAuthority => {
     const value = verify(recordPath, root, pins), authority = Object.freeze({}) as CandidateValidationAuthority;
     grants.set(authority, value); return authority;
@@ -104,34 +110,36 @@ function accounting(root: string, accountRoot: string, confirmedCost = false) {
 }
 export function inspectCandidateValidation(authority: CandidateValidationAuthority | undefined) {
   const { record, scope, root } = grant(authority); assertUnconsumed(record, scope);
-  return accounting(root, record.accountRoot, scope.version === "candidate-validation-authority-2");
+  return accounting(root, record.accountRoot, scope.version !== "candidate-validation-authority-1");
 }
 /** Read-only readiness is not a grant. Fixed physical anchor prevents copied
  * worktrees from advertising a fresh namespace/budget. */
-export function prepareCandidateValidation(root: string, candidate: string) {
+export function prepareCandidateValidation(root: string, candidate: string, target?:{fixture:string;turn:number}) {
   assertExecutingRoot(root);
   if (execFileSync("git", ["-C", root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim()) throw new Error("SOURCE_NOT_CLEAN");
   const accountRoot = "/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2/.superpowers/sdd/2026-09-28-llm-context-contract-implementation";
   const parentCampaignRoot = join(accountRoot, "t11-inference-resume-03b8896-20261003");
   contained(accountRoot, parentCampaignRoot);
   const proof = candidateValidationProof(root, candidate), derived = accounting(root, accountRoot, true);
+  const selected=target?resolveSingleValidationTarget(root,target):undefined;
   if (!auditCampaignAccountRoot(accountRoot).bindings.some(b => b.directory === join(parentCampaignRoot, "PILOT"))) throw new Error("VALIDATION_PARENT_MISSING");
-  return { ...proof, ...derived, accountRoot, parentCampaignRoot, target: "R01_TURN_0" as const, maxProviderHttpRequests: 1 as const,
+  return { ...proof, ...derived, accountRoot, parentCampaignRoot, target:selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0",...(selected?{targetBinding:{fixture:selected.fixture,turn:selected.turn,manifestSha256:selected.manifestSha256}}:{}), maxProviderHttpRequests: 1 as const,
     authorityMechanism: "READY_FOR_FRESH_DIRECT_OWNER_GRANT" as const, paidAuthorityPresent: false as const };
 }
 /** Live orchestration pins must be reviewed from the fresh direct message,
  * not copied out of an untrusted admission JSON. No CLI/file-only grant. */
 export async function loadTrustedCandidateValidation(root: string, candidate: string, pins: {
   recordPath: string; reviewedRecordSha256: string; reviewedAuthorizationSha256: string; reviewedOwnerMessageSha256: string;
+  expectedTarget?:{fixture:string;turn:number;manifestSha256:string};
 }) {
-  const prepared = prepareCandidateValidation(root, candidate);
+  const prepared = prepareCandidateValidation(root, candidate,pins.expectedTarget);
   // This same preload was installed before ANY application import. Its closed
   // registry detects stale cached modules even after disk bytes are restored.
   const loader = await import("./register-conversation-loader.mjs");
   const loadedCheck = () => { loader.assertLoadedCandidateModules(root, candidate, prepared.harnessRevisionSha); };
   loadedCheck();
   const authority = createCandidateValidationLoader({ accountRoot: prepared.accountRoot, parentCampaignRoot: prepared.parentCampaignRoot,
-    expectedCandidateSha: candidate, reviewedRecordSha256: pins.reviewedRecordSha256,
+    expectedCandidateSha: candidate, expectedTarget:pins.expectedTarget, reviewedRecordSha256: pins.reviewedRecordSha256,
     reviewedAuthorizationSha256: pins.reviewedAuthorizationSha256, reviewedOwnerMessageSha256: pins.reviewedOwnerMessageSha256 })(pins.recordPath, root);
   inspectCandidateValidation(authority); trustedLoadedChecks.set(authority, loadedCheck); return authority;
 }
@@ -186,7 +194,10 @@ export async function runCandidateValidation(authority: CandidateValidationAutho
     const leaf = directory(scope); mkdirSync(leaf, { recursive: true, mode: 0o700 }); contained(record.accountRoot, leaf);
     durableExclusive(join(leaf, "execution.json"), { ...record, scope, accounting: derived }); syncChain(record.accountRoot, leaf);
     let requests = 0; const now = options.now ?? Date.now, startedAt = now(), expiresAt = startedAt + 1200000;
-    return executeObservableR01Turn0Replay({ root, directory: leaf, sourceSha: record.evaluationCandidateSha, provenanceDigest: record.candidateProofSha256,
+    const singleTarget=scope.version==="candidate-validation-authority-3"?{fixture:scope.fixture,turn:scope.turn,manifestSha256:scope.manifestSha256}:undefined;
+    const execute=singleTarget?executeObservableSingleTargetValidation:executeObservableR01Turn0Replay;
+    const result=await execute({ root, directory: leaf, sourceSha: record.evaluationCandidateSha, provenanceDigest: record.candidateProofSha256,
+      ...(singleTarget?{singleTarget}:{}),
       profile: "PILOT", runId: validationExecutionKey(scope.ownerMessageSha256), cumulativeAuthorizedMicrounits: derived.capMicrounits,
       ...("policy" in derived ? {accountingPolicy:derived.policy} : {}),
       // Authorization belongs to execution.json, not a new campaign grant.
@@ -194,9 +205,11 @@ export async function runCandidateValidation(authority: CandidateValidationAutho
       httpRequestCount: () => requests, transport: async (request, requestOptions) => {
         if (requests !== 0 || now() >= expiresAt || requestOptions.signal.aborted) throw new Error("VALIDATION_DISPATCH_FENCE");
         if (request.model !== contextCampaignGatewayConfig.primary.model || request.stream !== false || request.provider.only.join("|") !== scope.provider
-          || request.provider.allow_fallbacks !== false || request.provider.require_parameters !== true || request.provider.zdr !== true) throw new Error("VALIDATION_ROUTE_MISMATCH");
+          || request.provider.allow_fallbacks !== false || request.provider.require_parameters !== true || request.provider.zdr !== true || request.provider.data_collection!=="deny") throw new Error("VALIDATION_ROUTE_MISMATCH");
         grant(authority); trustedLoadedChecks.get(authority!)?.(); syncChain(record.accountRoot, leaf);
         requests++; return transport(request, requestOptions);
       } });
+    durableExclusive(join(leaf,"terminal.json"),{terminal:true,providerRequests:requests,target:singleTarget??{fixture:"R01",turn:0},status:result.status});syncChain(record.accountRoot,leaf);
+    return result;
   });
 }

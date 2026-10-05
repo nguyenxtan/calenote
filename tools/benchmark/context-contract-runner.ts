@@ -7,9 +7,10 @@ import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINAN
 import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
-import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
+import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
+import { validateFrozenContextCorpus } from "./context-contract-live";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
   settleCampaignCanary, completeCampaign, admitR01ReplayIntent, withAuthorizedAccountRootLock, contextCampaignGitEnvironment, revalidateCampaignPaidAdmission, type FutureLiveIntent } from "./context-contract-live";
@@ -22,11 +23,14 @@ export const contextCampaignAdvertisedContextTokens = 1048576;
 export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
+  semanticState?:ReturnType<typeof captureValidationSemanticState>;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
+  oracleState?:ReturnType<typeof captureContextOracleState>;
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
+  singleTarget?: {fixture:string;turn:number;manifestSha256:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
   boundedPilot?: { manifestSha256: string; maxRequests: number;
     beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void;
@@ -111,6 +115,20 @@ export async function executeObservableR01Turn0Replay(input: ObservableExecution
   if (input.profile !== "PILOT" || input.pilotPrefix) throw new Error("INVALID_SINGLE_REPLAY_SCOPE");
   return executeObservable(input, false, true);
 }
+export function resolveSingleValidationTarget(root:string,target:{fixture:string;turn:number}) {
+  const manifests=["regressions","development","heldout"].map(name=>JSON.parse(readFileSync(join(root,`src/modules/conversation/context-contract/benchmark/${name}.json`),"utf8")) as ContextManifest);
+  validateFrozenContextCorpus(root,manifests);
+  const planned=admitCanonicalCampaign({version:"context-contract-corpus-1",cases:manifests.flatMap(m=>m.cases)},"PILOT");
+  const script=planned.find(s=>s.executionId===target.fixture);
+  if(!script||!Number.isSafeInteger(target.turn)||target.turn<0||!script.turns[target.turn])throw Error("SINGLE_TARGET_NOT_FOUND");
+  if(target.turn!==0)throw Error("SINGLE_TARGET_CONTEXT_REQUIRED");
+  if(script.turns[target.turn].model!=="HEALTHY"||(script.turns[target.turn].actionsAfter?.length??0)>0)throw Error("SINGLE_TARGET_NOT_STANDALONE");
+  return {...target,manifestSha256:digest(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests,planned})),script:{...script,turns:[script.turns[target.turn]]}};
+}
+export async function executeObservableSingleTargetValidation(input:ObservableExecution) {
+  if(!input.singleTarget||input.profile!=="PILOT"||input.accountingPolicy!=="CONFIRMED_COST_V1"||input.pilotPrefix||input.boundedPilot)throw Error("INVALID_SINGLE_TARGET_SCOPE");
+  return executeObservable(input,false,true);
+}
 async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false) {
   if (input.accountingPolicy && ((!turnZeroOnly && !input.boundedPilot) || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
   if (input.boundedPilot && (input.accountingPolicy !== "CONFIRMED_COST_V1" || input.profile !== "PILOT" || turnZeroOnly || replayOnly || input.pilotPrefix)) throw new Error("INVALID_BOUNDED_PILOT_SCOPE");
@@ -121,18 +139,20 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
     (JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest).cases) };
   const admitted = admitCanonicalCampaign(manifest, input.profile);
+  const selected=input.singleTarget?resolveSingleValidationTarget(root,input.singleTarget):undefined;
+  if(selected&&selected.manifestSha256!==input.singleTarget!.manifestSha256)throw Error("SINGLE_TARGET_MANIFEST_MISMATCH");
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
-    ...(replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
+    ...(input.singleTarget ? {executionKind:"SINGLE_TARGET_VALIDATION" as const,targetManifestSha256:selected!.manifestSha256,maxTargetRequests:1,targetFixture:selected!.fixture,targetTurn:selected!.turn} : replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
     provenanceDigest: input.provenanceDigest, cumulativeAuthorizedMicrounits: input.cumulativeAuthorizedMicrounits,
     cumulativeRetainedMicrounits: input.cumulativeRetainedMicrounits, startedAt, observableAdmission: true, expiresAt: ownerDeadline });
   if (pilotPrefix) writeFileSync(join(input.directory, "pilot-prefix-proof.json"), JSON.stringify(pilotPrefix), { mode: 0o600 });
-  const planned = turnZeroOnly ? admitted.filter(script => script.executionId === "R01").map(script => ({ ...script, turns: [{ ...script.turns[0], actionsAfter: [] }] }))
+  const planned = selected ? [selected.script] : turnZeroOnly ? admitted.filter(script => script.executionId === "R01").map(script => ({ ...script, turns: [{ ...script.turns[0], actionsAfter: [] }] }))
     : replayOnly ? admitted.filter(script => script.executionId === "R01") : pilotPrefix ? admitted.slice(1) : admitted;
   if (turnZeroOnly && (planned.length !== 1 || planned[0].turns.length !== 1 || planned[0].turns[0].model !== "HEALTHY")) throw new Error("R01_MANIFEST_MISMATCH");
   const healthyTurns = planned.flatMap(script => script.turns.flatMap((turn, index) => turn.model === "HEALTHY" && (!replayOnly || index === 1) ? [{ fixtureId: script.executionId, turnIndex: index }] : []));
@@ -204,6 +224,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
+        ...(selected&&result.status==="SUCCESS"?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
       writeFileSync(join(input.directory, "responses.json"), JSON.stringify(responses), { mode: 0o600 });
@@ -231,6 +252,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         // each completed turn before an oracle stop can discard aggregate score.
         // No proposal, selected text, receipt, business value or reply enters it.
         applicationEvidence.push({ fixtureId: script.executionId, turnIndex: index, status: observed.status,
+          ...(selected?{oracleState:captureContextOracleState(turn,observed,true)}:{}),
           fullSchemaValid: observed.fullSchemaValid === true, pendingField: observed.pendingField ?? null,
           downstreamDiagnostics: DownstreamTraceSchema.parse(observed.downstreamDiagnostics ?? []),
           listStoreReads: observed.listStoreReads ?? null, mutations: observed.mutations,
@@ -291,7 +313,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
-    ...(turnZeroOnly ? { executionKind: "SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: "R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
+    ...(turnZeroOnly ? { executionKind: selected?"SINGLE_TARGET_VALIDATION":"SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
     actualProviderCalls: httpCount(), responses, applicationEvidence, actionEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
