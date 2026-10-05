@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 it.each([["application", false], ["application", true], ["harness", false], ["harness", true]] as const)("module-load proof rejects restored %s disk with stale cache=%s", (kind, stale) => {
+  const candidate = execFileSync("git", ["rev-parse", "HEAD"], {encoding:"utf8"}).trim();
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loaded-candidate-")));
   try {
     execFileSync("git", ["clone", "--quiet", "--local", "--shared", "--no-hardlinks", process.cwd(), root]);
@@ -21,7 +22,7 @@ it.each([["application", false], ["application", true], ["harness", false], ["ha
       await import('./'+path);
       await import('./src/modules/conversation/context-contract/protocol.ts');
       writeFileSync(path,original);
-      try{assertLoadedCandidateModules(process.cwd(),'9c3bc72263ff791c0d45c8874b420e50819197e0',${JSON.stringify(harness)});console.log('PASS')}
+      try{assertLoadedCandidateModules(process.cwd(),${JSON.stringify(candidate)},${JSON.stringify(harness)});console.log('PASS')}
       catch(e){console.log(e.message)}`;
     const programPath = join(root, "probe.mjs"); writeFileSync(programPath, program);
     const output = execFileSync(process.execPath, ["--experimental-strip-types", "--import", "./tools/benchmark/register-conversation-loader.mjs", programPath], {

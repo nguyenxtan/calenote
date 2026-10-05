@@ -9,13 +9,15 @@ import { auditCampaignAccountRoot, preflightContextCampaign, withAccountRootLock
 import { contextCampaignMaximumReservation, contextCampaignGatewayConfig, executeObservableR01Turn0Replay } from "./context-contract-runner";
 import type { SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { inspectConfirmedCampaignCost } from "./context-confirmed-cost";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u), sha = z.string().regex(/^[a-f0-9]{40}$/u);
 const hash = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
-const scopeSchema = z.strictObject({ version: z.literal("candidate-validation-authority-1"), operation: z.literal("SINGLE_T11_R01_VALIDATION"),
+const legacyScopeSchema = z.strictObject({ version: z.literal("candidate-validation-authority-1"), operation: z.literal("SINGLE_T11_R01_VALIDATION"),
   authorizationId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/u), campaignRoot: z.string(), evaluationCandidateSha: sha,
   fixture: z.literal("R01"), turn: z.literal(0), maxProviderHttpRequests: z.literal(1), model: z.literal("google/gemini-2.5-flash-lite"),
   provider: z.literal("google-vertex/eu"), retry: z.literal(0), fallback: z.literal("none"), ownerMessagePath: z.string(), ownerMessageSha256: digest });
+const scopeSchema = z.discriminatedUnion("version", [legacyScopeSchema, legacyScopeSchema.extend({ version:z.literal("candidate-validation-authority-2"), accountingPolicy:z.literal("CONFIRMED_COST_V1") })]);
 const admissionSchema = z.strictObject({ version: z.literal("candidate-validation-admission-1"), accountRoot: z.string(),
   evaluationCandidateSha: sha, harnessRevisionSha: sha, candidateProofSha256: digest, harnessProofSha256: digest,
   authorizationPath: z.string(), authorizationSha256: digest, historicalInventorySha256: digest });
@@ -90,7 +92,8 @@ function grant(authority: CandidateValidationAuthority | undefined) {
   if (!prior) throw new Error("VALIDATION_AUTHORIZATION_REQUIRED");
   return verify(prior.recordPath, prior.root, prior.trust);
 }
-function accounting(root: string, accountRoot: string) {
+function accounting(root: string, accountRoot: string, confirmedCost = false) {
+  if (confirmedCost) return inspectConfirmedCampaignCost(accountRoot,preflightContextCampaign({root}).pilot.maxMicrounits,contextCampaignMaximumReservation);
   const audit = auditCampaignAccountRoot(accountRoot), capMicrounits = preflightContextCampaign({ root }).pilot.maxMicrounits;
   const { retainedMicrounits, unknownMicrounits } = audit.totals.PILOT;
   const remainingMicrounits = capMicrounits - retainedMicrounits;
@@ -101,7 +104,7 @@ function accounting(root: string, accountRoot: string) {
 }
 export function inspectCandidateValidation(authority: CandidateValidationAuthority | undefined) {
   const { record, scope, root } = grant(authority); assertUnconsumed(record, scope);
-  return accounting(root, record.accountRoot);
+  return accounting(root, record.accountRoot, scope.version === "candidate-validation-authority-2");
 }
 /** Read-only readiness is not a grant. Fixed physical anchor prevents copied
  * worktrees from advertising a fresh namespace/budget. */
@@ -111,7 +114,7 @@ export function prepareCandidateValidation(root: string, candidate: string) {
   const accountRoot = "/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2/.superpowers/sdd/2026-09-28-llm-context-contract-implementation";
   const parentCampaignRoot = join(accountRoot, "t11-inference-resume-03b8896-20261003");
   contained(accountRoot, parentCampaignRoot);
-  const proof = candidateValidationProof(root, candidate), derived = accounting(root, accountRoot);
+  const proof = candidateValidationProof(root, candidate), derived = accounting(root, accountRoot, true);
   if (!auditCampaignAccountRoot(accountRoot).bindings.some(b => b.directory === join(parentCampaignRoot, "PILOT"))) throw new Error("VALIDATION_PARENT_MISSING");
   return { ...proof, ...derived, accountRoot, parentCampaignRoot, target: "R01_TURN_0" as const, maxProviderHttpRequests: 1 as const,
     authorityMechanism: "READY_FOR_FRESH_DIRECT_OWNER_GRANT" as const, paidAuthorityPresent: false as const };
@@ -185,8 +188,9 @@ export async function runCandidateValidation(authority: CandidateValidationAutho
     let requests = 0; const now = options.now ?? Date.now, startedAt = now(), expiresAt = startedAt + 1200000;
     return executeObservableR01Turn0Replay({ root, directory: leaf, sourceSha: record.evaluationCandidateSha, provenanceDigest: record.candidateProofSha256,
       profile: "PILOT", runId: validationExecutionKey(scope.ownerMessageSha256), cumulativeAuthorizedMicrounits: derived.capMicrounits,
+      ...("policy" in derived ? {accountingPolicy:derived.policy} : {}),
       // Authorization belongs to execution.json, not a new campaign grant.
-      cumulativeRetainedMicrounits: derived.retainedMicrounits, startedAt, expiresAt, now,
+      cumulativeRetainedMicrounits: "policy" in derived ? derived.confirmedMicrounits : derived.retainedMicrounits, startedAt, expiresAt, now,
       httpRequestCount: () => requests, transport: async (request, requestOptions) => {
         if (requests !== 0 || now() >= expiresAt || requestOptions.signal.aborted) throw new Error("VALIDATION_DISPATCH_FENCE");
         if (request.model !== contextCampaignGatewayConfig.primary.model || request.stream !== false || request.provider.only.join("|") !== scope.provider

@@ -24,7 +24,7 @@ function currentFixtureCandidate() {
 }
 const candidate = currentFixtureCandidate();
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-function setup() {
+function setup(confirmedCost = false) {
   const accountRoot = realpathSync(mkdtempSync(join(tmpdir(), "candidate-validation-"))), parentCampaignRoot = join(accountRoot, "existing-T11");
   const history = join(parentCampaignRoot, "PILOT"); mkdirSync(history, { recursive: true });
   appendCampaignEvent(history, { event: "BEGIN", runId: "old-terminal", profile: "PILOT", sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, startedAt: 1 });
@@ -33,7 +33,7 @@ function setup() {
   const ownerMessagePath = join(accountRoot, "direct-owner.txt"); writeFileSync(ownerMessagePath, "fresh direct scoped owner authorization test fixture");
   const scope = { campaignRoot: parentCampaignRoot, evaluationCandidateSha: candidate, fixture: "R01", turn: 0, maxProviderHttpRequests: 1,
     model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", retry: 0, fallback: "none" };
-  const authorization = { version: "candidate-validation-authority-1", operation: "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
+  const authorization = { version: confirmedCost ? "candidate-validation-authority-2" : "candidate-validation-authority-1", ...(confirmedCost ? { accountingPolicy: "CONFIRMED_COST_V1" } : {}), operation: "SINGLE_T11_R01_VALIDATION", authorizationId: "fresh-owner-message-1", ...scope,
     ownerMessagePath, ownerMessageSha256: hash(readFileSync(ownerMessagePath, "utf8")) };
   const authorizationPath = join(accountRoot, "authorization.json"); writeFileSync(authorizationPath, JSON.stringify(authorization));
   const proof = candidateValidationProof(process.cwd(), candidate);
@@ -51,6 +51,21 @@ function setup() {
     cleanup: () => rmSync(accountRoot, { recursive: true, force: true }) };
 }
 
+it("fresh cost-policy authority persists a zero-dollar claim before its only dispatch", async () => {
+  const s = setup(true); let calls = 0;
+  try {
+    const old = readFileSync(join(s.history,"campaign.jsonl"),"utf8"), authority = s.load();
+    expect(inspectCandidateValidation(authority)).toMatchObject({ policy:"CONFIRMED_COST_V1",confirmedMicrounits:0,executionClaimMicrounits:0 });
+    await runCandidateValidation(authority,async()=>{
+      expect(readCampaignLedger(s.directory).filter(r=>r.event==="RESERVE")).toMatchObject([{maximumMicrounits:0}]);
+      expect(readCampaignLedger(s.directory)[0]).toMatchObject({requestExposureBoundMicrounits:105472});
+      calls++;return {status:500,body:"{}",rawResponseBytes:2};
+    });
+    await expect(runCandidateValidation(authority,async()=>{calls++;throw new Error("duplicate");})).rejects.toThrow("VALIDATION_ALREADY_CONSUMED");
+    expect(calls).toBe(1);expect(readCampaignLedger(s.directory).at(-1)?.event).toBe("STOP");
+    expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(old);
+  }finally{s.cleanup();}
+});
 it("proves actual candidate bytes independently of harness identity", () => {
   const proof = candidateValidationProof(process.cwd(), candidate);
   expect(proof.evaluationCandidateSha).toBe(candidate);
@@ -100,12 +115,13 @@ it("repackaged consumed legacy owner message cannot open a fresh candidate execu
     expect(calls).toBe(0); expect(existsSync(s.directory)).toBe(false);
   } finally { s.cleanup(); }
 });
-it.each(["PASS", "HTTP_FAILURE", "THROW", "WIRE_FAILURE"] as const)("one %s outcome is terminal with durable reservation and no next turn", async outcome => {
-  const s = setup(); let calls = 0;
+it.each([false,true].flatMap(confirmedCost=>["PASS", "HTTP_FAILURE", "THROW", "WIRE_FAILURE"].map(outcome=>({confirmedCost,outcome}))))("one $outcome outcome with confirmedCost=$confirmedCost is terminal with durable claim and no next turn", async ({outcome,confirmedCost}) => {
+  const s = setup(confirmedCost); let calls = 0;
   try {
     const before = readFileSync(join(s.history, "campaign.jsonl"), "utf8"), authority = s.load();
     const result = await runCandidateValidation(authority, async request => {
       expect(readCampaignLedger(s.directory).map(row => row.event)).toEqual(["BEGIN", "RESERVE", "DISPATCH"]);
+      expect(readCampaignLedger(s.directory).find(row=>row.event==="RESERVE")).toMatchObject({maximumMicrounits:confirmedCost?0:105472});
       calls++;
       if (outcome === "THROW") throw new Error("fake network failure");
       const context = JSON.parse(request.messages[1].content) as ContextInput;

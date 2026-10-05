@@ -372,6 +372,8 @@ export function admitHistoricalR01ReplayIntentReference(input: FutureLiveIntent)
 }
 
 type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
+  accountingPolicy?: "CONFIRMED_COST_V1";
+  requestExposureBoundMicrounits?: number;
   version?: "context-contract-live-3"; method?: "OBSERVABLE_CANARY"; campaignRoot?: string; approvedAt?: number;
   executionKind?: "R01_REPLAY" | "R02_CONTINUATION"; pilotPrefixDigest?: string;
   authorizationSha256?: string; historicalCalls?: number; historicalUnknownReservations?: number;
@@ -379,7 +381,7 @@ type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: Campai
 type Reserve = { event: "RESERVE"; runId: string; profile: CampaignProfile; provenanceDigest: string;
   reservationId: string; maximumMicrounits: number; at: number };
 type Dispatch = { event: "DISPATCH"; runId: string; reservationId: string; at: number };
-type Finish = { event: "FINISH"; runId: string; reservationId: string; at: number; observedMicrounits?: number | null };
+type Finish = { event: "FINISH"; runId: string; reservationId: string; at: number; observedMicrounits?: number | null; reportedCostUsd?: number };
 type Stop = { event: "STOP"; runId: string; at: number; reason: string };
 type Canary = { event: "CANARY_PASS"; runId: string; at: number };
 type Complete = { event: "COMPLETE"; runId: string; at: number; gate: "PASS"; retainedMicrounits: number };
@@ -405,7 +407,7 @@ function validateCampaign(rows: readonly Stored[]) {
   if (!begin) return { begin: undefined, reserves, dispatches, finishes, retained, unknown, stopped, completed };
   if (begin.event !== "BEGIN" || !closed(begin, ["event", "runId", "sourceSha", "profile", "provenanceDigest", "executionKind", "pilotPrefixDigest",
     "authorizationSha256", "historicalCalls", "historicalUnknownReservations", "cumulativeAuthorizedMicrounits", "cumulativeRetainedMicrounits",
-    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt"])
+    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits"])
     || !id(begin.runId) || !["PILOT", "FULL"].includes(begin.profile) || !digest(begin.sourceSha, 40) || !digest(begin.provenanceDigest, 64)
     || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits) || begin.cumulativeAuthorizedMicrounits <= 0
     || begin.cumulativeAuthorizedMicrounits > cumulativeAuthorizedMicrounits || !integer(begin.cumulativeRetainedMicrounits)
@@ -413,6 +415,8 @@ function validateCampaign(rows: readonly Stored[]) {
     || (begin.observableAdmission !== undefined && typeof begin.observableAdmission !== "boolean")
     || (begin.expiresAt !== undefined && !integer(begin.expiresAt))
     || (begin.executionKind !== undefined && !["R01_REPLAY", "R02_CONTINUATION"].includes(begin.executionKind))
+    || (begin.accountingPolicy !== undefined && (begin.accountingPolicy !== "CONFIRMED_COST_V1" || begin.executionKind !== "R01_REPLAY" || begin.profile !== "PILOT" || begin.authorizationSha256 !== undefined || !integer(begin.requestExposureBoundMicrounits) || begin.requestExposureBoundMicrounits! <= 0))
+    || (begin.accountingPolicy === undefined && begin.requestExposureBoundMicrounits !== undefined)
     || (begin.executionKind === "R02_CONTINUATION" ? !digest(begin.pilotPrefixDigest, 64) : begin.pilotPrefixDigest !== undefined)
     || (begin.authorizationSha256 !== undefined && (!digest(begin.authorizationSha256, 64) || !integer(begin.historicalCalls)
       || !integer(begin.historicalUnknownReservations) || begin.historicalUnknownReservations! > begin.historicalCalls!))
@@ -423,6 +427,7 @@ function validateCampaign(rows: readonly Stored[]) {
     || (begin.approvedAt !== undefined && (!integer(begin.approvedAt) || begin.approvedAt > begin.startedAt))) return fail();
   const cap = begin.profile === "PILOT" ? { cost: pilotAuthorizedMicrounits, calls: 192, ms: 1200000 } : { cost: fullAuthorizedMicrounits, calls: 480, ms: 2700000 };
   const deadline = Math.min(begin.expiresAt ?? Number.MAX_SAFE_INTEGER, safeCampaignSum(begin.startedAt, cap.ms));
+  const confirmedPolicy = begin.accountingPolicy === "CONFIRMED_COST_V1";
   let lastAt = begin.startedAt;
   for (const row of rows.slice(1)) {
     if (row.event === "BEGIN" || row.runId !== begin.runId || completed || !integer(row.at) || row.at < lastAt) return fail();
@@ -430,7 +435,7 @@ function validateCampaign(rows: readonly Stored[]) {
     if (row.event === "RESERVE") {
       if (!closed(row, ["event", "runId", "profile", "provenanceDigest", "reservationId", "maximumMicrounits", "at"])
         || stopped || row.at >= deadline || row.profile !== begin.profile || row.provenanceDigest !== begin.provenanceDigest
-        || !id(row.reservationId) || reserves.has(row.reservationId) || !integer(row.maximumMicrounits) || row.maximumMicrounits <= 0
+        || !id(row.reservationId) || reserves.has(row.reservationId) || !integer(row.maximumMicrounits) || (confirmedPolicy ? row.maximumMicrounits !== 0 : row.maximumMicrounits <= 0)
         || safeCampaignSum(begin.historicalCalls ?? 0, reserves.size) >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)
         || retained + BigInt(row.maximumMicrounits) > BigInt(cap.cost)
         || BigInt(begin.cumulativeRetainedMicrounits) + retained + BigInt(row.maximumMicrounits) > BigInt(begin.cumulativeAuthorizedMicrounits)
@@ -443,12 +448,13 @@ function validateCampaign(rows: readonly Stored[]) {
       dispatches.set(row.reservationId, row);
     } else if (row.event === "FINISH") {
       const reserve = reserves.get(row.reservationId);
-      if (!closed(row, ["event", "runId", "reservationId", "at", "observedMicrounits"]) || !reserve || !dispatches.has(row.reservationId)
+      if (!closed(row, ["event", "runId", "reservationId", "at", "observedMicrounits", ...(confirmedPolicy ? ["reportedCostUsd"] : [])]) || !reserve || !dispatches.has(row.reservationId)
         || finishes.has(row.reservationId) || (row.observedMicrounits != null && !integer(row.observedMicrounits))) return fail();
+      if (row.reportedCostUsd !== undefined && (typeof row.reportedCostUsd !== "number" || !Number.isFinite(row.reportedCostUsd) || row.reportedCostUsd < 0 || Math.ceil(row.reportedCostUsd * 1000000) !== row.observedMicrounits)) return fail();
       finishes.set(row.reservationId, row);
       if (row.observedMicrounits != null) {
         retained = retained - BigInt(reserve.maximumMicrounits) + BigInt(row.observedMicrounits); unknown--;
-        if (row.observedMicrounits > reserve.maximumMicrounits || retained > BigInt(cap.cost)
+        if ((!confirmedPolicy && row.observedMicrounits > reserve.maximumMicrounits) || retained > BigInt(cap.cost)
           || BigInt(begin.cumulativeRetainedMicrounits) + retained > BigInt(begin.cumulativeAuthorizedMicrounits)) stopped = true;
       } else if (begin.observableAdmission) stopped = true;
     } else if (row.event === "STOP") {
@@ -580,7 +586,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
     throw new Error("UNKNOWN_DISPATCH_OUTCOME");
   }
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.reservationId) || reservations.some(r => r.reservationId === input.reservationId)
-    || !Number.isSafeInteger(input.maximumMicrounits) || input.maximumMicrounits <= 0) throw new Error("INVALID_RESERVATION");
+    || !Number.isSafeInteger(input.maximumMicrounits) || (begin.accountingPolicy === "CONFIRMED_COST_V1" ? input.maximumMicrounits !== 0 : input.maximumMicrounits <= 0)) throw new Error("INVALID_RESERVATION");
   if (input.now - input.startedAt >= cap.ms || (begin.historicalCalls ?? 0) + reservations.length >= (begin.executionKind === "R01_REPLAY" ? 1 : cap.calls)) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "TIME_OR_CALL_CAP" });
     return { status: "STOPPED", reason: "TIME_OR_CALL_CAP" } as const;
@@ -610,10 +616,10 @@ function markDispatchedUnlocked(directory: string, input: { runId: string; reser
     || input.at - begin.startedAt >= maximumMs || (begin.expiresAt !== undefined && input.at >= begin.expiresAt)) throw new Error("DISPATCH_DEADLINE");
   return appendUnlocked(directory, { event: "DISPATCH", ...input });
 }
-export function finishCampaignCall(directory: string, input: { runId: string; reservationId: string; at: number; observedMicrounits: number | null }) {
+export function finishCampaignCall(directory: string, input: { runId: string; reservationId: string; at: number; observedMicrounits: number | null; reportedCostUsd?: number }) {
   return withLedgerLock(directory, () => finishUnlocked(directory, input));
 }
-function finishUnlocked(directory: string, input: { runId: string; reservationId: string; at: number; observedMicrounits: number | null }) {
+function finishUnlocked(directory: string, input: { runId: string; reservationId: string; at: number; observedMicrounits: number | null; reportedCostUsd?: number }) {
   const rows = ledger(directory);
   if (!rows.some(r => r.event === "DISPATCH" && r.runId === input.runId && r.reservationId === input.reservationId)
     || rows.some(r => r.event === "FINISH" && r.reservationId === input.reservationId)) throw new Error("MISSING_OR_DUPLICATE_DISPATCH");
@@ -622,7 +628,7 @@ function finishUnlocked(directory: string, input: { runId: string; reservationId
   const dispatch = rows.find((r): r is Stored & Dispatch => r.event === "DISPATCH" && r.reservationId === input.reservationId)!;
   if (!Number.isSafeInteger(input.at) || input.at < dispatch.at) throw new Error("INVALID_FINISH_CLOCK");
   const finished = appendUnlocked(directory, { event: "FINISH", ...input });
-  if (input.observedMicrounits !== null && input.observedMicrounits > maximum && !rows.some(r => r.event === "STOP"))
+  if ((rows[0] as Begin).accountingPolicy !== "CONFIRMED_COST_V1" && input.observedMicrounits !== null && input.observedMicrounits > maximum && !rows.some(r => r.event === "STOP"))
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.at, reason: "RESERVATION_EXCEEDED" });
   if ((rows[0] as Begin).observableAdmission && input.observedMicrounits === null && !rows.some(r => r.event === "STOP"))
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.at, reason: "UNKNOWN_USAGE" });

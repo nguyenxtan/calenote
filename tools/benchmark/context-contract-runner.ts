@@ -27,6 +27,7 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
+  accountingPolicy?: "CONFIRMED_COST_V1";
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
   httpRequestCount?: () => number; expiresAt?: number;
@@ -107,6 +108,7 @@ export async function executeObservableR01Turn0Replay(input: ObservableExecution
   return executeObservable(input, false, true);
 }
 async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false) {
+  if (input.accountingPolicy && (!turnZeroOnly || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
   const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
   const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
@@ -117,6 +119,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
+    ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),
     ...(pilotPrefix ? { executionKind: "R02_CONTINUATION" as const, pilotPrefixDigest: digest(JSON.stringify(pilotPrefix)) } : {}),
     ...(input.authorizationSha256 ? { authorizationSha256: input.authorizationSha256, historicalCalls: input.historicalCalls, historicalUnknownReservations: input.historicalUnknownReservations } : {}),
@@ -167,7 +170,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       const reservationId = `call-${applicationLlmCalls + 1}`;
       const reserved = reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
-        reservationId, maximumMicrounits: prepared.maximumCostMicrounits, now: now(), startedAt });
+        reservationId, maximumMicrounits: input.accountingPolicy ? 0 : prepared.maximumCostMicrounits, now: now(), startedAt });
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
@@ -185,7 +188,8 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       // application. Runtime T5 core/guidance quarantine remains unchanged.
       const result = parsed.status === "SUCCESS" && !parsed.interpretation.fullSchemaValid
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes, canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : parsed;
-      finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null });
+      finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
+        ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
