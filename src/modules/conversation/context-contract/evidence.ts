@@ -2,7 +2,7 @@ import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./
 import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, QueryOperandSchema, LegacyV2UncertaintySchema as UncertaintySchema, SLOT_NAMES, type LegacyV2SemanticPatchProposal as SemanticPatchProposal, type EvidenceRef, type LegacyV2FieldChange as FieldChange, type QueryOperand, type LegacyV2ContextInput as ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
-import { verifyListRangeEvidence } from "./list-range-evidence";
+import { explicitListPeriod, verifyListRangeEvidence } from "./list-range-evidence";
 import { supportsEventRelation, type EventRelation } from "./event-relation-evidence";
 import { observeDownstream, evidenceReason, type DownstreamObserver, type EvidenceFailureDiagnostic } from "./downstream";
 import { createHash } from "node:crypto";
@@ -397,13 +397,27 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       resolvedChanges.push(resolved);
       return evidenceMetadata(evidence);
     });
-    const query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, ["query", "evidence"], false, value.query.kind === "LIST") : null;
+    let query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, ["query", "evidence"], false, value.query.kind === "LIST") : null;
     if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) fail("CURRENT_USER_EVIDENCE_REQUIRED");
     let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
+    let deterministicRange = false;
+    if (resolvedQuery?.kind === "LIST" && query?.current && value.intent === "LIST_REMINDERS") {
+      const turn = built.evidenceIndex[built.input.currentTurn];
+      const explicit = explicitListPeriod(turn, turn.receivedAt);
+      const canonical = explicit ? QueryOperandSchema.safeParse({...resolvedQuery, period: explicit.period}) : null;
+      if (explicit && canonical?.success) {
+        const source = quoteSource({kind: "USER_QUOTE", turn: built.input.currentTurn, quote: explicit.quote, occurrence: explicit.occurrence}, {field: "queryRange", path: ["query", "evidence"], referenceOrdinal: 0});
+        if (verifyListRangeEvidence({candidateRange: explicit.period, evidence: [source], turns: [turn], currentTurnId: turn.id, referenceTime: turn.receivedAt}) === "SUPPORTED") {
+          resolvedQuery = canonical.data;
+          query = {...query, sources: [source], referenceTime: turn.receivedAt};
+          deterministicRange = true;
+        }
+      }
+    }
     if (resolvedQuery?.kind !== "LIST" || !resolvedQuery.period) observeDownstream(observe, { stage: "LIST_RANGE", result: resolvedQuery?.kind === "LIST" ? "UNSPECIFIED" : "NOT_APPLICABLE", reason: "NONE" });
     let rangeIssue: SemanticPatchProposalV3["uncertainties"][number] | null = null;
     if (resolvedQuery?.kind === "LIST" && resolvedQuery.period) {
-      const inherited = value.query!.evidence.some(e => e.kind === "CONTEXT_FACT");
+      const inherited = !deterministicRange && value.query!.evidence.some(e => e.kind === "CONTEXT_FACT");
       const scopedContinuation = built.input.pendingQuestion?.scope === "QUERY" && built.input.pendingQuestion.field === "queryRange" && value.intent === "LIST_REMINDERS" && query!.current && built.candidateSnapshot.pendingQueryQuestion?.deliveryState === "SENT";
       const support = inherited && !scopedContinuation ? "UNSUPPORTED" : verifyListRangeEvidence({ candidateRange: resolvedQuery.period, evidence: query!.sources, turns: built.evidenceIndex, currentTurnId: built.evidenceIndex[built.input.currentTurn].id, referenceTime: query!.referenceTime });
       observeDownstream(observe, { stage: "LIST_RANGE", result: support, reason: "NONE", candidateRange: resolvedQuery.period.kind, field: "queryRange" });
@@ -516,12 +530,12 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     resolvedUncertainties = resolvedUncertainties.flatMap(u => {
       const alternatives = u.alternatives.filter(a => {
         const bound = alternativeEvidence[alternativeIndex++];
-        if (rangeIssue && u.field === "queryRange") return false;
+        if ((rangeIssue || deterministicRange) && u.field === "queryRange") return false;
         if (!relationSupported(u.field, a.value, bound)) return false;
         keptAlternativeEvidence.push(bound);
         return true;
       });
-      return rangeIssue && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
+      return (rangeIssue || deterministicRange) && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
     });
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
     const patch: ValidatedPatchV3 = freeze({

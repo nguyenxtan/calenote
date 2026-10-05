@@ -96,6 +96,29 @@ function unsafeUsage(text: string, match: Match): boolean {
     || /(?:^|[^\p{L}])(?:nếu|ví dụ|giả sử)(?:[^\p{L}]|$)/u.test(suffix);
 }
 
+/** Current USER temporal truth, independent of a model operand or its quotes.
+ * Reuses the verifier's maximal productions and usage vetoes. The caller must
+ * source-map validate this newly derived quote before granting query authority.
+ */
+export function explicitListPeriod(turn: TranscriptEntry, referenceTime: string): {period: Period; quote: string; occurrence: number} | null {
+  if (turn.role !== "USER") return null;
+  const text = [...turn.semanticView].map(c => { const lower = c.toLocaleLowerCase("vi"); return [...lower].length === 1 ? lower : c; }).join("");
+  const found = temporalMatches(text, referenceTime);
+  if (!found.length || found.some(m => m.value === null || unsafeUsage(text, m)) || new Set(found.map(m => JSON.stringify(m.value))).size !== 1) return null;
+  const match = found[0];
+  // Civil DAY/WEEKDAY and absolute date bounds retain the old operand gates.
+  // Month productions (including adjacent numeric months) reuse the existing
+  // full calendar/year/qualifier grammar, never a keyword-only replacement.
+  if (match.value?.kind === "DATE_BOUNDS" || (match.value?.kind === "DAY" && match.value.date?.kind !== "RELATIVE_DAY")) return null;
+  const start = [...text.slice(0, match.start)].length, end = [...text.slice(0, match.end)].length;
+  if (turn.sourceMap.segments.some(s => s.kind === "CONTROL_REPLACEMENT" && s.viewStart < end && s.viewEnd > start)) return null;
+  const quote = [...turn.semanticView].slice(start, end).join("");
+  const before = [...turn.semanticView].slice(0, start).join("");
+  let occurrence = 1, at = 0;
+  while ((at = before.indexOf(quote, at)) >= 0) { occurrence++; at += quote.length; }
+  return {period: match.value!, quote, occurrence};
+}
+
 /** Requires already source-map validated evidence; no model-owned authority bit.
  * Full cited turns expose conflicting/quoted/negated ranges, but only a range
  * fully covered by the accepted quote spans can authorize this candidate.

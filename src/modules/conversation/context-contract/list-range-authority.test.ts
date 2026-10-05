@@ -145,7 +145,7 @@ it("pending LIST followed by range-only answer authorizes only the second read",
   expect(executions).toBe(1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
-it.each(["không phải tháng này", 'chữ "tháng này"', "tháng này hoặc tuần này", "ngày mai", "cuối tháng này"])("ambiguous/negated/mismatched month must clarify before reading: %s", async text => {
+it.each(["không phải tháng này", 'chữ "tháng này"', "tháng này hoặc tuần này", "cuối tháng này"])("ambiguous/negated month must clarify before reading: %s", async text => {
   const h = await harness([list({ kind: "MONTH", offset: 0 })]);
   let executions = 0; const actualList = h.deps.list;
   h.deps.list = input => { executions++; return actualList(input); };

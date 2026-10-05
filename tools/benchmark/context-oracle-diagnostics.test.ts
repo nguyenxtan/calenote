@@ -7,6 +7,20 @@ import regressions from "../../src/modules/conversation/context-contract/benchma
 import * as oracle from "./context-contract";
 import {ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
 
+it("R01 conflicting model remaining-month operand preserves every frozen application assertion",async()=>{
+  const corpus={version:"context-contract-corpus-1",cases:regressions.cases.filter(c=>c.id==="R01")} as ContextManifest;
+  const planned=expandContextCampaign(corpus,"FULL",[]);
+  const observed=await runContextFixtureCampaign(planned,{sourceSha:"3640e7c038257fbec10e068319ce4547550c3bcf",referenceNow:Date.parse("2026-09-28T03:00:00Z")},(input,id,index)=>{
+    const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,id,index));
+    if(index===1&&proposal.query?.kind==="LIST")proposal.query.period={kind:"REST_OF_MONTH"};
+    return proposal;
+  });
+  expect(scoreContextCampaign(planned,observed)).toMatchObject({passedScripts:1,passedTurns:2,failedMandatory:[],safetyFailures:0});
+  for(const [index,turn]of planned[0].turns.entries())expect(diagnoseContextTurn(turn,observed[0].turns[index])).toMatchObject({passed:true,failedAssertionCount:0});
+  expect(observed[0].turns[0]).toMatchObject({status:"CLARIFICATION_REQUESTED",pendingField:"queryRange",listStoreReads:0,mutations:0});
+  expect(observed[0].turns[1]).toMatchObject({status:"REMINDERS_LISTED",pendingField:null,listStoreReads:1,mutations:0});
+});
+
 it("R02 unsupported BEFORE_EVENT proposal preserves all 43 frozen turn-zero assertions", async () => {
   const corpus = {version:"context-contract-corpus-1",cases:regressions.cases.filter(c=>c.id==="R02")} as ContextManifest;
   const planned = expandContextCampaign(corpus,"FULL",[]);
