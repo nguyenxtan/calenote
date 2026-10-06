@@ -407,3 +407,14 @@ Candidate `fa5241ab3460d2ad71e4a9ef0ff772764c907eb5` stopped on its first R01 tu
 - [x] Independent review C0/I0/M0.
 - [x] Full serial local verification and docs/typecheck/lint/build/Worker types/dry-run PASS.
 - Wire version 17; emitted bytes 12491 to 12507, schema SHA256 `d6ba953e5e677d00a9d3f151077953238c2704f8e00a7c6322c241e035f2a888`. Finite domains unchanged. Live compiler/state-limit admission remains required under the unchanged root cap.
+
+### V18 query-only discriminator dialect isolation
+
+V17 candidate `66e419d071e3a75dc1c80a2e2cdf8c978ed48ea6` canary terminal-stopped after one HTTP 400 with `Schema state limit exceeded`. No authoritative cost was returned; the existing conservative policy retained UNKNOWN 105472 microunits. Historical records remain immutable. This does not prove the provider's private internal state calculation.
+
+Restrict the outgoing equivalent singleton-enum conversion to LIST/CALENDAR_DATE/CAPABILITY query discriminators only. Restore all other outgoing string constants to the previously compiler-admitted representation, without changing the original decoder, canonical/evidence validators, prompt, or oracle. This is a minimal compiler-isolation hypothesis, not a live acceptance claim.
+
+- [x] RED scoped outgoing-schema regression: one fail/103 PASS; GREEN focused 320 PASS.
+- [x] Independent delta review C0/I0/M0; generated singleton enums occur only at the three query-kind paths.
+- [x] Full serial offline suite 171 files/8267 PASS/2 existing skips; docs/typecheck/build/Worker types/local dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Wire version 18; outgoing schema 12494 bytes, SHA256 `efd4d8ff583f332cb42d407a9f172cd2a8ae34949c2e276169be4b0b89dc2dee`. Continue one canonical-wire canary, then fresh Formal Pilot only if admitted, under unchanged root authorization/accounting.

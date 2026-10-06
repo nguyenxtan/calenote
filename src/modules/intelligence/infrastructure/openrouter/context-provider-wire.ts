@@ -376,15 +376,15 @@ function semanticEvidenceSlots(root: Schema): Schema {
   return visit(root);
 }
 const slottedV3 = semanticEvidenceSlots(originalV3);
-function outgoingStringConstantEnums(node: Schema): Schema {
-  const result=mapSchemas(node,outgoingStringConstantEnums);
-  if(typeof result.const==="string"){
+function outgoingQueryKindEnums(node: Schema): Schema {
+  const result=mapSchemas(node,outgoingQueryKindEnums);
+  if(typeof result.const==="string" && ["LIST","CALENDAR_DATE","CAPABILITY"].includes(result.const)){
     requireShape(!result.enum || result.enum.includes(result.const));
     result.enum=[result.const];delete result.const;
   }
   return result;
 }
-const providerSchemaV3 = outgoingStringConstantEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3)))))))));
+const providerSchemaV3 = outgoingQueryKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3)))))))));
 export function googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3 {
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: structuredClone(providerSchemaV3) as typeof InterpretationJsonSchemaV3 };
 }

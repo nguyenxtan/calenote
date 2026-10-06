@@ -41,5 +41,5 @@ it("unsupported token diagnostics retain only structure and digest, not the toke
  expect(JSON.stringify(readListTransport(decoded.value))).not.toContain("PRIVATE_SENTINEL");
 });
 it("emitted provider schema binds the selected semantic evidence representation",()=>{
- expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("d6ba953e5e677d00a9d3f151077953238c2704f8e00a7c6322c241e035f2a888");
+ expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("efd4d8ff583f332cb42d407a9f172cd2a8ae34949c2e276169be4b0b89dc2dee");
 });
