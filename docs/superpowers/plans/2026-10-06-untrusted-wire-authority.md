@@ -270,3 +270,13 @@ Explicitly guide query continuations to retain query intent and null requestTarg
 - [x] RED prompt-policy test; GREEN focused prompt/fit/oracle regressions 90 PASS/two existing skips.
 - [x] Independent review C0/I0/M0; full `pnpm check` 171 files / 8,250 PASS/two existing skips, documentation/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
 - Prompt SHA256 `242a67e5376c055dc5069fde62e6b19fad3b15f37f1dffe017bdf2055982e2d4`. Public provider schema remains unchanged; continue fresh Formal Pilot within the existing conservative USD 5 debug cap.
+
+### Optional event-clock clarification
+
+Candidate `b0b0f57d3f1a798ff861af3ed2ad210c3a195249` stopped after three requests at R02 turn zero. Generation `gen-1791277008-E6ROjdzuOhbQPzq9igzn` returned HTTP 200 with grounded reminder facts but a model-authored eventTime MISSING uncertainty. The sole frozen assertion failure was pendingField eventTime instead of reminderTime. An absent event clock is optional for this day-based operation, not a missing required notification clock. Preserve the terminal failure and its accounting.
+
+Clarify MISSING as a required operand preventing the operation, not every absent optional property. Preserve genuine optional-value ambiguity and explicit lunar year/leap requirements. Canonical/evidence/oracle and resolver behavior remain unchanged.
+
+- [x] RED prompt-policy test; GREEN focused 91 PASS/two existing skips.
+- [x] Independent review C0/I0/M0; full `pnpm check` PASS including documentation/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
+- Prompt SHA256 `d2dd7f73a33e2eaf7c1954b78d38f32cad74f36bf214f3f588dd3fd3e699a26a`; continue fresh Formal Pilot within the existing debug cap without retrying the terminal execution.

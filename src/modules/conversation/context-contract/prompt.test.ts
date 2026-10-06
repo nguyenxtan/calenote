@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("absent optional event clock does not manufacture a required clarification", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("For day-based reminder schedules, eventTime is optional; its absence alone must not create a MISSING uncertainty or a question about the event hour.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("MISSING means a required operand prevents the requested operation, not every unspecified optional field.");
+});
+
 it("query continuation never borrows reminder request targeting", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A LIST or calendar query continuation is still a query, never a CURRENT reminder target.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("For LIST_REMINDERS, CALENDAR_QUERY, CAPABILITY_QUERY, HELP and UNSUPPORTED, requestTarget must be null, even when activeRequest or pendingQuestion is present.");
