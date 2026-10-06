@@ -15,6 +15,13 @@ const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTa
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it.each([["reason", "MISSING"], ["field", "INVALID_FIELD"]])("diagnoses invalid %s in the selected valid directive branch, not its valid kind", (key, token) => {
+  const wire = encodeGoogleLiteEuContextV3({ ...v3Help, conversationDirective: {kind:"ASK_FOR_DISAMBIGUATION",field:"title",reason:"AMBIGUOUS"} } as never) as {conversationDirective:Record<string,unknown>};
+  wire.conversationDirective[key] = token;
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value=>diagnostics.push(value)).status).toBe("PARSED");
+  expect(diagnostics).toMatchObject([{issues:[{path:["conversationDirective",key],constraint:"CONTROL_ENUM",actualDigest:createHash("sha256").update(token).digest("hex") }]}]);
+});
 it.each(["THIS_MONTH", "private title location secret", "A".repeat(1000)])("retains only safe finite-control diagnostics (%#)", token => {
   const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
   const wire = encodeGoogleLiteEuContextV3(canonical as never) as { query: { period: { kind: string } } };

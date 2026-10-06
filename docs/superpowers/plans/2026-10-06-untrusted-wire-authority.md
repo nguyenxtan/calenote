@@ -291,3 +291,13 @@ Clarify that a genuinely missing LIST range with period=null requires queryRange
 - [x] Independent review found and closed one Important overbroad-MISSING instruction; final C0/I0/M0. The interrupted earlier full run is not final evidence.
 - [x] Frozen final full `pnpm check` 171 files / 8,252 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
 - Prompt SHA256 `7ca87117863d61e7f5e1b6298a43bec10408cc973b3c388e833c7797e92d5da5`; public provider schema remains unchanged. Continue fresh Formal Pilot under the same conservative debug cap.
+
+### Selected directive-branch diagnostics
+
+Candidate `56ab6af7ebe2a01187607a3bb26de15295e3fe26` stopped after one R01 turn-zero request, generation `gen-1791278279-C8MqYStmBAumxxYUyqIh`, HTTP 200. Its diagnostic blamed conversationDirective.kind while reporting the valid ASK_FOR_DISAMBIGUATION token. The raw payload was not retained, so the actual historical invalid reason/field is not recoverable.
+
+Offline RED reproduction proves closest-tag ties can choose an unrelated directive branch and blame a valid kind when the selected branch has an invalid reason. Prefer the uniquely selected primary-discriminator branch for diagnostic failure projection only. Neither rejection/quarantine logic nor schema/prompt/canonical/evidence/oracle behavior changes. Historical results remain terminal and immutable.
+
+- [x] RED reproduction; GREEN wire/parity focused 3,092 PASS.
+- [x] Independent review C0/I0/M0; full `pnpm check` PASS with documentation/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
+- Continue controlled live validation under the existing root debug authority; do not claim the historical invalid reason was MISSING merely because the offline example used it.

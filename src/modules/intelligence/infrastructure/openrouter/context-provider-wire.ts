@@ -218,7 +218,14 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     if (matches.length !== 1) {
       // Compare only trusted schema discriminants. A matching field must not
       // be blamed when a later operation tag is the sole failed discriminator.
-      const closest = plan.tags.map(tag => Object.entries(tag).filter(([key, values]) => !values.some(option => equal(object[key], option))).map(([key]) => key))
+      // Prefer a uniquely selected branch when its primary discriminator is
+      // valid. Otherwise an equally close unrelated branch can blame a valid
+      // kind instead of the invalid reason in the actual directive branch.
+      // This affects diagnostics only: matches.length remains invalid above.
+      const selectorKeys = Object.keys(plan.tags[0]).filter(key => plan.tags.every((tag, i) => tag[key]
+        && plan.tags.every((other, j) => i === j || other[key] && !tag[key].some(value => other[key].some(candidate => equal(value, candidate))))));
+      const selectedTags = plan.tags.filter(tag => selectorKeys.some(key => tag[key].some(value => equal(object[key], value))));
+      const closest = (selectedTags.length ? selectedTags : plan.tags).map(tag => Object.entries(tag).filter(([key, values]) => !values.some(option => equal(object[key], option))).map(([key]) => key))
         .sort((a, b) => a.length - b.length)[0];
       const key = closest[0] ?? Object.keys(plan.tags[0])[0];
       throw new WireShapeFailure([...path, key], "CONTROL_ENUM", undefined, undefined,
