@@ -473,3 +473,13 @@ Add a continuation example with three preceding USER/ASSISTANT pairs, explicitly
 - [x] Independent review C0/I0/M0.
 - [x] Full serial offline suite 171 files/8272 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `e8d124ac78cd64b1bde2403a447cfbc5773f366dd92284b2634209e8778be5b1`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the same root authorization.
+
+### Provider-envelope rejection observability
+
+Candidate `680143d2b28c64b37c6b1877d7c2179aecc354a0` passed R01/R02/R03 and stopped after eight requests at R04 turn zero, generation `gen-1791304352-zIB7CP1eeA1Fa2hErbdY`. HTTP 200 was not application acceptance: SCHEMA_INVALID occurred before canonical/wire diagnostics were populated. The bounded raw response was 1187 bytes; no raw payload was retained. Execution terminal, provider-reported zero cost settled, no query reads or reminder mutations. A subsequent read-only generation metadata request confirmed total_cost zero but exposed no finish reason; it does not prove the rejected envelope shape.
+
+Retain bounded structural validation diagnostics at the provider-envelope boundary, using the existing sanitized projection and payload digest. Preserve hard rejection, response category, usage accounting, one-call behavior, canonical/evidence/oracle and prompt/wire unchanged. Trusted envelope path names are allowed; unknown keys and user values remain redacted.
+
+- [x] RED two failing tests/133 PASS; GREEN focused validator/gateway/runner regressions 199 PASS.
+- [x] Independent delta review C0/I0/M0.
+- [x] Serial offline full verification completed with exit zero: 171 files/8274 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Continue fresh Formal Pilot after the local diagnostic commit under the unchanged root grant/accounting.

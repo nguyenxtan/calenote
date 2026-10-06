@@ -47,6 +47,18 @@ const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contex
 describe("observable successor route", () => {
   const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
   it.each([
+    [null,"stop",["choices",0,"message","content"],"invalid_type","null"],
+    ["SYNTHETIC_PRIVATE_CONTENT","error",["choices",0,"finish_reason"],"invalid_value","string"],
+  ])("retains sanitized rejected provider-envelope structure without content", async (content,finish,path,code,actualType) => {
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-synthetic",usage:{cost:0,prompt_tokens:0,completion_tokens:0},choices:[{message:{content},finish_reason:finish}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",contextInput);
+    if(attempt.status!=="READY")throw Error("not ready");
+    const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",usage:{costMicrounits:0},canonicalValidationDiagnostics:{state:"PROVIDER_ENVELOPE_FAILED",inputRepresentation:"PROVIDER_ENVELOPE",payloadByteCount:Buffer.byteLength(body),validation:{issues:[expect.objectContaining({path,code,actualType})]}}});
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE_CONTENT");
+    expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
+  });
+  it.each([
     ["x-request-id", "req-53594e5448455449435f43524544454e5449414c", "SYNTHETIC_CREDENTIAL"],
     ["traceparent", "00-53594e5448455449435f534543524554-0123456789abcdef-01", "SYNTHETIC_SECRET"],
     ["traceparent", "00-0123456789abcdef0123456789abcdef-53594e54484b4559-01", "SYNTHKEY"],

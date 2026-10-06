@@ -11,7 +11,7 @@ import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptRes
 import { projectProviderFailure } from "./failure-diagnostics";
 import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, decodeGoogleLiteEuContextTransportV3 as parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
-import type { CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 
 async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
@@ -30,7 +30,21 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
     ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
   });
   const result = decodeResponse(response, config, maximum, output, true);
-  if (!validation && !wireValidation) return result;
+  if (!validation && !wireValidation) {
+    if (response.status === 200 && result.status === "FAILURE" && result.category === "SCHEMA_INVALID") {
+      const raw: unknown = JSON.parse(response.body);
+      const envelope = envelopeSchema.safeParse(raw);
+      if (!envelope.success) {
+        const bytes = new TextEncoder().encode(response.body);
+        const hash = await crypto.subtle.digest("SHA-256", bytes);
+        return { ...result, canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", schemaVersion: "calenote-context-3",
+          providerWireSchemaVersion: version, inputRepresentation: "PROVIDER_ENVELOPE", payloadByteCount: bytes.byteLength,
+          payloadSha256: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join(""),
+          validation: projectCanonicalValidation(raw, envelope.error.issues, "calenote-context-3") } };
+      }
+    }
+    return result;
+  }
   // Outer HTTP bytes are bounded before parsing; hash the original bounded
   // model content, never a recursively serialized model-controlled object.
   const content: string = JSON.parse(response.body).choices[0].message.content;
