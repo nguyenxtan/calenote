@@ -43,10 +43,24 @@ export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  const s=structuredClone(input) as Node;
  if(mode==="R02_TURN0"||mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
  const change=s.properties?.changes?.items,definition=change?.$ref?s.$defs?.[change.$ref.split("/").at(-1)!]:undefined;
- const keepChange=(index:number)=>mode==="NO_REQUEST_TARGET"||mode==="CHANGE_TEXT_ONLY"&&index===0||mode==="CHANGE_DATE_ONLY"&&index===1||mode==="CHANGE_TIME_ONLY"&&index===2||mode==="CHANGE_SCALAR_ONLY"&&index>=3&&index<=6||mode==="CHANGE_CLEAR_ONLY"&&index===7;
+ const groups:Record<string,string[]>={CHANGE_TEXT_ONLY:["title","location","notes"],CHANGE_DATE_ONLY:["eventDate","reminderDate","endDate"],CHANGE_TIME_ONLY:["eventTime","reminderTime"],CHANGE_SCALAR_ONLY:["calendar","frequency","occurrenceCount","leadOffsetDays","eventRelation"]};
  const unslot=(n:Node)=>{const e=n.properties?.evidence;if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");n.properties!.evidence={type:"array",items:e.properties.primaryEvidence}};
  if(mode!=="NO_CHANGE_EVIDENCE") {const target=s.properties?.requestTarget?.anyOf?.[0];if(!target)throw Error("DEBUG_PROBE_SHAPE");unslot(target)}
- if(!definition?.anyOf||definition.anyOf.length!==8)throw Error("DEBUG_PROBE_SHAPE");definition.anyOf.forEach((n,i)=>{if(!keepChange(i))unslot(n)});
+ if(!definition?.anyOf?.length)throw Error("DEBUG_PROBE_SHAPE");
+ definition.anyOf=definition.anyOf.flatMap(n=>{
+  const field=n.properties?.field,operation=n.properties?.operation;
+  const fields=Array.isArray(field?.enum)?field.enum:typeof field?.const==="string"?[field.const]:undefined;
+  if(!fields?.length||!fields.every(f=>typeof f==="string")||!operation)throw Error("DEBUG_PROBE_SHAPE");
+  const clear=operation.const==="CLEAR";
+  const keep=(f:unknown)=>mode==="NO_REQUEST_TARGET"||mode==="CHANGE_CLEAR_ONLY"&&clear||!clear&&(groups[mode]?.includes(String(f))??false);
+  const retained=fields.filter(keep),ablated=fields.filter(f=>!keep(f));
+  return [retained,ablated].filter(part=>part.length).map(part=>{
+   const branch=structuredClone(n);
+   if(part.length!==fields.length)branch.properties!.field={type:"string",enum:part};
+   if(!keep(part[0]))unslot(branch);
+   return branch;
+  });
+ });
  return s as T;
 }
 export async function loadTrustedDebugLoop(root:string,path:string,trust:DebugLoopTrust,candidate:string){

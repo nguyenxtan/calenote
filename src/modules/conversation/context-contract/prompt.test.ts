@@ -5,9 +5,9 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
-it("wire instructions distinguish compact date tags from canonical uncertainty JSON", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("On the provider wire, date operand kind codes are C=CIVIL_DATE, R=RELATIVE_DAY, W=WEEKDAY.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("JSON-encoded uncertainty alternatives remain canonical and use the full date kind names, not C/R/W.");
+it("wire instructions require encoded canonical dates rather than padded date objects", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("On the provider wire, each active date operand is a JSON string encoding exactly one canonical DateOperand object.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('For example, the wire value for a two-day relative operand is "{\\"kind\\":\\"RELATIVE_DAY\\",\\"offsetDays\\":2}".');
 });
 
 it("serialized query policy delivers current continuation evidence ownership", () => {

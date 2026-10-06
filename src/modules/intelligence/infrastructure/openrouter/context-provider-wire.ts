@@ -1,7 +1,7 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
 import { projectCanonicalValidation, projectControlEnum, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
-import { ConversationInterpretationV3Schema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
+import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
@@ -375,19 +375,32 @@ function semanticEvidenceSlots(root: Schema): Schema {
   };
   return visit(root);
 }
-const slottedV3 = semanticEvidenceSlots(originalV3);
-const dateKindCodes = Object.freeze({ CIVIL_DATE: "C", RELATIVE_DAY: "R", WEEKDAY: "W" } as const);
-const dateKindsByCode = new Map(Object.entries(dateKindCodes).map(([kind, code]) => [code, kind]));
+function encodedDateSchemas(node: Schema, root: Schema): Schema {
+  const plan=taggedPlan(node,root);
+  if(plan && plan.tags.length===3 && plan.tags.every(tag=>tag.kind?.length===1 && ["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(tag.kind[0]))))return {type:"string"};
+  return mapSchemas(node,child=>encodedDateSchemas(child,root));
+}
+const evidenceSlottedV3 = semanticEvidenceSlots(originalV3);
+const slottedV3 = encodedDateSchemas(evidenceSlottedV3,evidenceSlottedV3);
 // Only known date operand positions are transformed. Business strings and
 // JSON-encoded canonical uncertainty alternatives are never traversed.
-function dateCodeOperands(object: Record<string, unknown>, mode: "encode" | "decode"): Record<string, unknown> {
+function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "decode"): Record<string, unknown> {
   const date = (value: unknown, path: (string | number)[]): unknown => {
-    if (!value || typeof value !== "object" || Array.isArray(value) || !Object.hasOwn(value,"kind")) return value;
-    const item=value as Record<string,unknown>,kind=mode==="encode"
-      ? dateKindCodes[item.kind as keyof typeof dateKindCodes]
-      : dateKindsByCode.get(item.kind as "C" | "R" | "W");
-    if (!kind) throw new WireShapeFailure([...path,"kind"],"CONTROL_ENUM");
-    return {...item,kind};
+    if(value===null)return null;
+    let candidate:unknown;
+    if(mode==="decode"){
+      if(typeof value!=="string" || new TextEncoder().encode(value).byteLength>32768)throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
+      try{candidate=JSON.parse(value);}catch{throw new WireShapeFailure(path,"DATE_OPERAND_JSON");}
+    }else{
+      if(!value || typeof value!=="object" || Array.isArray(value))throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
+      const item=value as Record<string,unknown>;
+      const keys=item.kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:item.kind==="RELATIVE_DAY"?["kind","offsetDays"]:["kind","weekday","qualifier"];
+      candidate=Object.fromEntries(keys.map(key=>[key,item[key]]));
+    }
+    const parsed=DateOperandSchema.safeParse(candidate);
+    if(!parsed.success)throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON");
+    if(mode==="encode")return JSON.stringify(parsed.data);
+    return {...Object.fromEntries(["calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"].map(key=>[key,null])),...parsed.data};
   };
   const result={...object};
   if(Array.isArray(object.changes))result.changes=object.changes.map((raw,index)=>{
@@ -412,9 +425,9 @@ function dateCodeOperands(object: Record<string, unknown>, mode: "encode" | "dec
 }
 function outgoingSemanticKindEnums(node: Schema): Schema {
   const result=mapSchemas(node,outgoingSemanticKindEnums);
-  if(typeof result.const==="string" && ["LIST","CALENDAR_DATE","CAPABILITY","CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(result.const)){
+  if(typeof result.const==="string" && ["LIST","CALENDAR_DATE","CAPABILITY"].includes(result.const)){
     requireShape(!result.enum || result.enum.includes(result.const));
-    result.enum=[dateKindCodes[result.const as keyof typeof dateKindCodes] ?? result.const];delete result.const;
+    result.enum=[result.const];delete result.const;
   }
   return result;
 }
@@ -429,7 +442,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
-  return dateCodeOperands(output,"encode");
+  return dateJsonOperands(output,"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -446,7 +459,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const object = dateCodeOperands(raw as Record<string,unknown>,"decode");
+    const object = dateJsonOperands(raw as Record<string,unknown>,"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;
