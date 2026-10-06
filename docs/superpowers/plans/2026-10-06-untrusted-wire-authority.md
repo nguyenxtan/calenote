@@ -280,3 +280,14 @@ Clarify MISSING as a required operand preventing the operation, not every absent
 - [x] RED prompt-policy test; GREEN focused 91 PASS/two existing skips.
 - [x] Independent review C0/I0/M0; full `pnpm check` PASS including documentation/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
 - Prompt SHA256 `d2dd7f73a33e2eaf7c1954b78d38f32cad74f36bf214f3f588dd3fd3e699a26a`; continue fresh Formal Pilot within the existing debug cap without retrying the terminal execution.
+
+### Required unresolved-query uncertainty
+
+Candidate `671684955618e1a14c2733a4e5268036a546469a` stopped after one request at R01 turn zero. Generation `gen-1791277541-HMTwXW8ak0fvhUvh0PCt` returned HTTP 200 but canonical rejected UNRESOLVED_QUERY_TARGETED_UNCERTAINTY: incomplete query without the required semantic uncertainty. No LIST read or reminder mutation occurred; accounting settled known USD 0.0003743 and the execution is terminal.
+
+Clarify that a genuinely missing LIST range with period=null requires queryRange uncertainty on the provider wire, fieldCode14/reasonMISSING/alternatives[]. Conversational advice cannot substitute for semantic uncertainty. Supplied ambiguous/conflicting ranges retain their appropriate targeted reasons and grounded alternatives; resolved ranges do not retain stale MISSING. This preserves canonical/evidence/oracle behavior.
+
+- [x] RED prompt-policy test; GREEN focused 92 PASS/two existing skips.
+- [x] Independent review found and closed one Important overbroad-MISSING instruction; final C0/I0/M0. The interrupted earlier full run is not final evidence.
+- [x] Frozen final full `pnpm check` 171 files / 8,252 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
+- Prompt SHA256 `7ca87117863d61e7f5e1b6298a43bec10408cc973b3c388e833c7797e92d5da5`; public provider schema remains unchanged. Continue fresh Formal Pilot under the same conservative debug cap.

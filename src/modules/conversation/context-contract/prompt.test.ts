@@ -5,6 +5,12 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("unresolved query requires a wire uncertainty independently of conversational advice", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A LIST with a genuinely missing range and period=null must include an uncertainty with fieldCode=14 (queryRange), reason=MISSING and alternatives=[] on the provider wire.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A clarification directive or reply never substitutes for this semantic uncertainty.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("If a supplied range is ambiguous or conflicting, retain its appropriate targeted reason and grounded alternatives instead of relabeling it MISSING.");
+});
+
 it("absent optional event clock does not manufacture a required clarification", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("For day-based reminder schedules, eventTime is optional; its absence alone must not create a MISSING uncertainty or a question about the event hour.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("MISSING means a required operand prevents the requested operation, not every unspecified optional field.");
