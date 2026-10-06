@@ -40,6 +40,12 @@ it("serialized policy requires grounding before choosing an optional relation", 
  expect(CONTEXT_CONTRACT_PROMPT).toContain("No explicit relation substring and no eligible retained relation fact means omit eventRelation, even when BEFORE_EVENT seems useful or likely.");
 });
 
+it("query continuation preserves matching list ownership rather than calendar conversion", () => {
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Asking which saved reminders exist in a period is LIST_REMINDERS with query.kind LIST, including a short period answer to a pending queryRange question.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("CALENDAR_QUERY is only a civil/lunar date-information or conversion request, never the intent for viewing saved reminders.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Before returning a query, check the pair: LIST_REMINDERS/LIST, CALENDAR_QUERY/CALENDAR_DATE, CAPABILITY_QUERY/CAPABILITY; mismatched pairs are invalid.");
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
 });

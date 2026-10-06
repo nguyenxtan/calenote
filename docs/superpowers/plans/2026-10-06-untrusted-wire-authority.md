@@ -553,3 +553,14 @@ Add an early grounding-first precondition: locate a real entailing source substr
 - [x] Independent review C0/I0/M0; reviewer checks 89 PASS/2 skips; diff check PASS.
 - [x] Full serial offline verification exit zero: 171 files/8286 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Next new Formal Pilot under existing root grant. No Full/release.
 - Prompt SHA256 `5672b7d219759c511c44bb169694b59d26f67109c1a5fdf50c350a976bfdde72`.
+
+### Query intent/branch ownership delivery
+
+Candidate `eb253488eb436e4015a6b171b7e9a5eaf4c8e0fc` Formal Pilot stopped after two requests at R01 turn one, generation `gen-1791312664-mZ6bnYPtWQKtHPGrawt0`. Wire decoded but canonical QUERY_INTENT_OWNERSHIP rejected intent CALENDAR_QUERY with query LIST, zero changes and a missing-range uncertainty. No reads/mutations; request known cost settled and execution terminal. Remaining conservative allowance derived 2788192 microunits, all UNKNOWN history retained. No decoder repair is allowed.
+
+Clarify the existing query distinction in the dispatched policy: viewing saved reminders is LIST_REMINDERS/LIST, including a short explicit period answer to pending queryRange; date information/conversion is CALENDAR_QUERY/CALENDAR_DATE. Require the three existing intent/query pairs to match before returning, and do not leave range missing merely because the user did not repeat the earlier verb. No schema, validator, evidence, oracle, accounting or routing change.
+
+- [x] RED one failure/24 PASS; focused 123 PASS/2 existing skips, instruction delivery only.
+- [x] Independent review C0/I0/M0; reviewer checks 90 PASS/2 skips; diff PASS.
+- [x] Full serial offline verification exit zero: 171 files/8287 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS. Next new Formal Pilot. No Full/release.
+- Prompt SHA256 `a1fc232b5f303018b9b29d3b3628a4bede65ab2569e77b992ece22cc538164df`; wire v21 unchanged.
