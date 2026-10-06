@@ -5,6 +5,13 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("serialized policy specifies normalized exam task titles without changing evidence", () => {
+  const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Tôi thi ngày 11/10 lúc 8h."}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+  const request = serializeContextRequest(input);
+  expect(request.messages[0].content).toContain("An exam predicate thi normalizes to the task title đi thi, not the bare predicate thi.");
+  expect(JSON.parse(request.messages[1].content)).toEqual(input);
+});
+
 it("final target evidence check distinguishes targeting from historical operand sources", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: parse each requestTarget evidence JSON string before returning.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Its turn must equal the integer input.currentTurn, including for CURRENT and NEW; do not reuse the turn from an old field source.");

@@ -418,3 +418,14 @@ Restrict the outgoing equivalent singleton-enum conversion to LIST/CALENDAR_DATE
 - [x] Independent delta review C0/I0/M0; generated singleton enums occur only at the three query-kind paths.
 - [x] Full serial offline suite 171 files/8267 PASS/2 existing skips; docs/typecheck/build/Worker types/local dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Wire version 18; outgoing schema 12494 bytes, SHA256 `efd4d8ff583f332cb42d407a9f172cd2a8ae34949c2e276169be4b0b89dc2dee`. Continue one canonical-wire canary, then fresh Formal Pilot only if admitted, under unchanged root authorization/accounting.
+
+### Exam task title normalization
+
+V18 candidate `9ab5404c6a265a7caeae7e1fb3fb86eb0ea8fb0e` canary passed canonical/evidence/application R01 turn zero (generation `gen-1791300213-Jm88RxdaiyIubPYT6OrH`, confirmed USD 0.0007243). Formal Pilot then terminal-stopped after eight requests at R04 turn zero (generation `gen-1791300266-UmfnjCOpdov8eSfa1smt`). Wire/canonical/evidence passed, dates/clock remained correctly scoped, but frozen title equality failed. Offline hashing of synthetic candidate phrases proves the observed value digest matches the bare exam predicate, not the expected normalized task phrase. Do not change that oracle or rewrite history.
+
+Clarify the existing model instruction: normalize the exam predicate to the concise task phrase, while keeping evidence verbatim and prohibiting invented details. No runtime repair, canonical/evidence/oracle relaxation or wire change.
+
+- [x] RED serialized-policy delivery test one fail/15 PASS; GREEN focused 136 PASS. This test proves instruction delivery only, not real-model compliance.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial offline suite 171 files/8268 PASS/2 existing skips; docs/typecheck/build/Worker types/local dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `4a9953202090cceae8a3685163d623d775f344b6e5103046d379ee94e2772962`. Continue fresh Formal Pilot under the same conservative root grant; all earlier failed executions remain terminal.
