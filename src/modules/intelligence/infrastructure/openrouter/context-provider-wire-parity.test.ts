@@ -65,7 +65,7 @@ it.each([1, 2, 3])("all active semantic evidence collections use primary-plus-bo
   const refs = Array.from({ length: count }, (_, index) => ({ ...successorEvidence[0], occurrence: index + 1 }));
   const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: refs }, changes: [{ field: "leadOffsetDays", operation: "SET", value: 2, evidence: refs }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
   const wire = encodeGoogleLiteEuContextV3(canonical) as { requestTarget: { evidence: Record<string, unknown> }; changes: Array<{ evidence: Record<string, unknown> }> };
-  const expected = { primaryEvidence: { ...refs[0], ref: null }, additionalEvidenceJson: JSON.stringify(refs.slice(1).map(ref => ({ ...ref, ref: null }))) };
+  const expected = { primaryEvidence: JSON.stringify({ ...refs[0], ref: null }), additionalEvidenceJson: JSON.stringify(refs.slice(1).map(ref => ({ ...ref, ref: null }))) };
   expect(wire.requestTarget.evidence).toEqual(expected);
   expect(wire.changes[0].evidence).toEqual(expected);
   expect(successorValidator.safeParse(wire).success).toBe(true);
@@ -84,7 +84,7 @@ it.each([1, 2, 3])("query evidence slots enforce and roundtrip %i canonical refs
   const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
     query: { kind: "LIST", period: { kind: "UPCOMING" }, statusScope: "DEFAULT", evidence: refs }, uncertainties: [], conversationDirective: null, replyProposal: null });
   const wire = encodeGoogleLiteEuContextV3(canonical) as { query: { evidence: Record<string, unknown> } };
-  expect(wire.query.evidence).toEqual({ primaryEvidence: { ...refs[0], ref: null }, additionalEvidenceJson: JSON.stringify(refs.slice(1).map(ref => ({ ...ref, ref: null }))) });
+  expect(wire.query.evidence).toEqual({ primaryEvidence: JSON.stringify({ ...refs[0], ref: null }), additionalEvidenceJson: JSON.stringify(refs.slice(1).map(ref => ({ ...ref, ref: null }))) });
   expect(successorValidator.safeParse(wire).success).toBe(true);
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
   for (const invalid of [[], {}, { ...wire.query.evidence, primaryEvidence: null }, { additionalEvidenceJson: "[]" }, { ...wire.query.evidence, fourthEvidence: wire.query.evidence.primaryEvidence }]) {

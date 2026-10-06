@@ -117,8 +117,8 @@ it("selected build-time oversized refusal preserves pending candidate source and
   const h = await selectedHarness({ title: "đi thi", reminderDate: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 8, month: 10, year: 2026, leapMonth: null }, reminderTime: { hour: 8, minute: 0, qualifier: "H24" } });
   expect(await h.run(0, "nhắc đi thi 8/10/2026 8h")).toEqual({ status: "DRAFT_CREATED" });
   h.setWireMutation(wire => {
-    const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: { turn: number; quote: string; occurrence: number }; additionalEvidenceJson: string } };
-    const evidence = [target.evidence.primaryEvidence, ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
+    const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
+    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
     return { ...object, requestTarget: { ...target, kind: "UNRESOLVED" }, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(1, "nhắc đi thi 8/10/2026 8h");
@@ -149,8 +149,8 @@ it.each(["SCHEMA", "EVIDENCE", "PROVIDER", "BUDGET", "SIZE"] as const)("selected
   if (failure === "PROVIDER") h.setFail();
   if (failure === "SCHEMA") h.setWireMutation(wire => ({ ...(wire as object), intent: "UNKNOWN" }));
   if (failure === "EVIDENCE") h.setWireMutation(wire => {
-    const object = wire as { changes: Array<{ evidence: { primaryEvidence: Record<string, unknown>; additionalEvidenceJson: string } }> };
-    return { ...object, changes: object.changes.map(change => ({ ...change, evidence: { ...change.evidence, primaryEvidence: { ...change.evidence.primaryEvidence, quote: "not present in the current user turn" } } })) };
+    const object = wire as { changes: Array<{ evidence: { primaryEvidence: string; additionalEvidenceJson: string } }> };
+    return { ...object, changes: object.changes.map(change => ({ ...change, evidence: { ...change.evidence, primaryEvidence: JSON.stringify({ ...JSON.parse(change.evidence.primaryEvidence), quote: "not present in the current user turn" }) } })) };
   });
   expect(await h.run(0, failure === "SIZE" ? "x".repeat(1801) : "nhắc đi thi")).toEqual({ status: "REJECTED" });
   expect(h.getRequests()).toBe(failure === "SIZE" || failure === "BUDGET" ? 0 : 1);
@@ -168,8 +168,8 @@ it.each(["SCHEMA", "EVIDENCE", "PROVIDER", "BUDGET", "SIZE"] as const)("selected
 it("selected prior no-A grounded candidate survives operational refusal with original source and TTL", async () => {
   const h = await selectedHarness();
   h.setWireMutation(wire => {
-    const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: { turn: number; quote: string; occurrence: number }; additionalEvidenceJson: string } };
-    const evidence = [target.evidence.primaryEvidence, ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
+    const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
+    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
     return { ...object, requestTarget: { ...target, kind: "UNRESOLVED" }, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(0, "nhắc đi thi");

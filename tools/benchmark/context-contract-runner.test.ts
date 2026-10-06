@@ -235,10 +235,10 @@ it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "on
         if (mode === "missing-primary") delete refs.primaryEvidence;
         if (mode === "null-primary") refs.primaryEvidence = null;
         if (mode === "four-slots") refs.fourthEvidence = refs.primaryEvidence;
-        if (mode === "two" || mode === "three") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence]);
-        if (mode === "three") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence, refs.primaryEvidence]);
-        if (mode === "fabricated") (refs.primaryEvidence as Record<string, unknown>).quote = "PRIVATE_FABRICATED_QUOTE";
-        if (mode === "fabricated-extra") refs.additionalEvidenceJson = JSON.stringify([{ ...(refs.primaryEvidence as object), quote: "PRIVATE_FABRICATED_QUOTE" }]);
+        if (mode === "two" || mode === "three") refs.additionalEvidenceJson = JSON.stringify([JSON.parse(refs.primaryEvidence as string)]);
+        if (mode === "three") refs.additionalEvidenceJson = JSON.stringify([JSON.parse(refs.primaryEvidence as string), JSON.parse(refs.primaryEvidence as string)]);
+        if (mode === "fabricated") refs.primaryEvidence=JSON.stringify({...JSON.parse(refs.primaryEvidence as string),quote:"PRIVATE_FABRICATED_QUOTE"});
+        if (mode === "fabricated-extra") refs.additionalEvidenceJson = JSON.stringify([{ ...JSON.parse(refs.primaryEvidence as string), quote: "PRIVATE_FABRICATED_QUOTE" }]);
         if (mode === "unknown-ref") refs.additionalEvidenceJson = JSON.stringify([{ kind: "CONTEXT_FACT", ref: "f999", turn: null, quote: null, occurrence: null }]);
         if (mode === "excess-extras") refs.additionalEvidenceJson = JSON.stringify([refs.primaryEvidence, refs.primaryEvidence, refs.primaryEvidence]);
         if (mode === "unsupported-operand") wire.query.period = { kind: "MONTH", offset: 0, date: null, from: null, through: null };
@@ -295,7 +295,7 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
         else if (mode === "guidance") wire.replyProposal = { text: sentinel, [sentinel]: sentinel };
         else if (mode === "missing") delete wire.intent;
         else if (mode === "unexpected-key") wire[sentinel] = sentinel;
-        else if (mode === "nested-evidence") ((wire.query as { evidence: { primaryEvidence: Record<string, unknown> } }).evidence.primaryEvidence).occurrence = sentinel;
+        else if (mode === "nested-evidence") {const evidence=(wire.query as {evidence:{primaryEvidence:string}}).evidence;evidence.primaryEvidence=JSON.stringify({...JSON.parse(evidence.primaryEvidence),occurrence:sentinel});}
         else wire.intent = mode === "control-safe" ? "UNSUPPORTED_INTENT" : sentinel;
         return { status: 200, ...(mode === "oversized" ? { oversized: true } : {}), body: mode === "oversized" ? sentinel.repeat(4000) : JSON.stringify({ model: request.model, provider: "Google", id: "gen-canonical-test",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mode === "primitive" ? 42 : wire) } }] }) };
@@ -443,8 +443,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "b17e442e441628b1909c65b7dbeec20761936a3124d9c9859f2e66e1e8fc75d3",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-semantic-evidence-slots-14" });
+      providerWireSchemaDigest: "5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-primary-evidence-json-15" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

@@ -61,10 +61,11 @@ it("final canonical ownership remains strict",()=>{
 });
 it.each(["wrong-role","wrong-occurrence","wrong-fact","bad-alternative"])("explicit month cannot rescue %s",mode=>{
  const {built,value}=setup("tháng này","tháng này","LIST_REMINDERS","DATE",wire=>{
-  const query=wire.query as {evidence:{primaryEvidence:Record<string,unknown>}};
-  if(mode==="wrong-role")query.evidence.primaryEvidence.turn=11;
-  if(mode==="wrong-occurrence")query.evidence.primaryEvidence.occurrence=2;
-  if(mode==="wrong-fact")query.evidence.primaryEvidence={kind:"CONTEXT_FACT",ref:"f999",turn:null,quote:null,occurrence:null};
+  const query=wire.query as {evidence:{primaryEvidence:string}};
+  const primary=JSON.parse(query.evidence.primaryEvidence);
+  if(mode==="wrong-role")query.evidence.primaryEvidence=JSON.stringify({...primary,turn:11});
+  if(mode==="wrong-occurrence")query.evidence.primaryEvidence=JSON.stringify({...primary,occurrence:2});
+  if(mode==="wrong-fact")query.evidence.primaryEvidence=JSON.stringify({kind:"CONTEXT_FACT",ref:"f999",turn:null,quote:null,occurrence:null});
   if(mode==="bad-alternative")wire.uncertainties=[{fieldCode:14,reason:"AMBIGUOUS",alternatives:[JSON.stringify({value:{kind:"MONTH",offset:0},evidence:[{kind:"USER_QUOTE",turn:0,quote:"not present",occurrence:1}]})]}];
  });
  expect(reconciliation.reconcileListPeriodV3(value,built).status).toBe("REFUSED");

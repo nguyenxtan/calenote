@@ -58,8 +58,8 @@ it("diagnoses invalid compact control code without retaining arbitrary values", 
 });
 it.each(["primaryEvidence", "additionalEvidenceJson"] as const)("retains decoded control type and structural path inside %s", slot => {
   const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
-  const wire = encodeGoogleLiteEuContextV3(canonical as never) as { query: { evidence: { primaryEvidence: { kind: string }; additionalEvidenceJson: string } } };
-  if (slot === "primaryEvidence") wire.query.evidence.primaryEvidence.kind = "BAD_EVIDENCE_KIND";
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as { query: { evidence: { primaryEvidence: string; additionalEvidenceJson: string } } };
+  if (slot === "primaryEvidence") wire.query.evidence.primaryEvidence = JSON.stringify({...JSON.parse(wire.query.evidence.primaryEvidence),kind:"BAD_EVIDENCE_KIND"});
   else wire.query.evidence.additionalEvidenceJson = JSON.stringify([{ kind: "BAD_EVIDENCE_KIND", turn: 0, quote: "private", occurrence: 1, ref: null }]);
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
@@ -138,7 +138,7 @@ function wireFixture(value: unknown): unknown {
     : wireFixture(child)]));
   if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
   if (Array.isArray(object.evidence)) {
-    result.evidence = { primaryEvidence: wireFixture(object.evidence[0]), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1).map(wireFixture)) };
+    result.evidence = { primaryEvidence: JSON.stringify(wireFixture(object.evidence[0])), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1).map(wireFixture)) };
   }
   if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
@@ -159,7 +159,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("b17e442e441628b1909c65b7dbeec20761936a3124d9c9859f2e66e1e8fc75d3");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -208,8 +208,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-semantic-evidence-slots-14");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("b17e442e441628b1909c65b7dbeec20761936a3124d9c9859f2e66e1e8fc75d3");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-primary-evidence-json-15");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
@@ -266,7 +266,8 @@ it("discards inactive evidence and guidance at the HTTP boundary without changin
   const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
   const raw = wireFixture(canonical) as Record<string, unknown>;
   (raw.conversationDirective as Record<string, unknown>).field = "title";
-  (((raw.changes as Array<Record<string, unknown>>)[0].evidence as { primaryEvidence: Record<string, unknown> }).primaryEvidence).ref = "f999";
+  const changedEvidence=(raw.changes as Array<Record<string,unknown>>)[0].evidence as {primaryEvidence:string};
+  changedEvidence.primaryEvidence=JSON.stringify({...JSON.parse(changedEvidence.primaryEvidence),ref:"f999"});
   expect(await dispatch(raw)).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes: canonical.changes }, directive: { status: "VALID", value: minimal.conversationDirective }, fullSchemaValid: true } });
 });
 

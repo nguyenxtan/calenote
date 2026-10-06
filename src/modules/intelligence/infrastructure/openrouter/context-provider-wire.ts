@@ -250,7 +250,7 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       if (direction === "encode") {
         requireShape(Array.isArray(value) && predicate(node, value, root));
         const refs = value as unknown[];
-        return { primaryEvidence: codec(node.items!, refs[0], direction, [...path, keys[0]], root),
+        return { primaryEvidence: JSON.stringify(codec(node.items!, refs[0], direction, [...path, keys[0]], root)),
           additionalEvidenceJson: JSON.stringify(refs.slice(1).map((ref, index) => codec(node.items!, ref, direction, [...path, keys[1], index], root))) };
       }
       // Preserve sanitized diagnostics for the old observed invalid array;
@@ -261,8 +261,13 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       requireShape(value && typeof value === "object" && !Array.isArray(value), "object");
       const object = value as Record<string, unknown>;
       requireWireKeys(object, keys, keys, path);
-      // primary is always traversed: null/absent/invalid cannot supply evidence.
-      const refs = [codec(node.items!, object.primaryEvidence, direction, [...path, keys[0]], root)];
+      // Avoid nested provider evidence unions while preserving the exact
+      // canonical reference language. This is parsing, never repair/coercion.
+      const primaryPath=[...path,keys[0]];
+      if(typeof object.primaryEvidence!=="string"||new TextEncoder().encode(object.primaryEvidence).length>32768)throw new WireShapeFailure(primaryPath,"BOUNDED_JSON_OBJECT");
+      let primary:unknown;
+      try{primary=JSON.parse(object.primaryEvidence)}catch{throw new WireShapeFailure(primaryPath,"JSON_OBJECT")}
+      const refs = [codec(node.items!, primary, direction, primaryPath, root)];
       const extraPath = [...path, keys[1]];
       if (typeof object.additionalEvidenceJson !== "string" || new TextEncoder().encode(object.additionalEvidenceJson).length > 32768) throw new WireShapeFailure(extraPath, "BOUNDED_JSON_ARRAY");
       let extras: unknown;
@@ -352,7 +357,7 @@ function semanticEvidenceSlots(root: Schema): Schema {
       const evidence = deref(node.properties.evidence, root);
       requireShape(evidence.type === "array" && evidence.items);
       result.properties!.evidence = { type: "object", properties: {
-        primaryEvidence: structuredClone(evidence.items),
+        primaryEvidence: { type: "string" },
         additionalEvidenceJson: { type: "string" },
       }, required: ["primaryEvidence", "additionalEvidenceJson"], additionalProperties: false };
     }

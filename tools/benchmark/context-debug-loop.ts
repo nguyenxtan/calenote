@@ -33,7 +33,7 @@ function verify(g:{root:string;path:string;trust:DebugLoopTrust}){
 function grant(a:DebugLoopAuthority|undefined){const g=a&&grants.get(a);if(!g)throw Error("DEBUG_AUTHORITY_REQUIRED");return verify(g)}
 export function createDebugLoopLoader(trust:DebugLoopTrust){const pins=Object.freeze({...trust});return(path:string,root:string):DebugLoopAuthority=>{const g={root,path,trust:pins};verify(g);const a=Object.freeze({})as DebugLoopAuthority;grants.set(a,g);return a}}
 export function inspectDebugLoop(a:DebugLoopAuthority|undefined){const {record:r}=grant(a);return inspectConservativeDebugCost(r.accountRoot,r.hardCapMicrounits,contextCampaignMaximumReservation)}
-export const DEBUG_PROBE_MODES=["V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
+export const DEBUG_PROBE_MODES=["CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
@@ -41,11 +41,12 @@ type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Nod
 export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  const s=structuredClone(input) as Node;
+ if(mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
  const change=s.properties?.changes?.items,definition=change?.$ref?s.$defs?.[change.$ref.split("/").at(-1)!]:undefined;
- const keepChange=(index:number)=>mode==="V14"||mode==="NO_REQUEST_TARGET"||mode==="CHANGE_TEXT_ONLY"&&index===0||mode==="CHANGE_DATE_ONLY"&&index===1||mode==="CHANGE_TIME_ONLY"&&index===2||mode==="CHANGE_SCALAR_ONLY"&&index>=3&&index<=6||mode==="CHANGE_CLEAR_ONLY"&&index===7;
+ const keepChange=(index:number)=>mode==="NO_REQUEST_TARGET"||mode==="CHANGE_TEXT_ONLY"&&index===0||mode==="CHANGE_DATE_ONLY"&&index===1||mode==="CHANGE_TIME_ONLY"&&index===2||mode==="CHANGE_SCALAR_ONLY"&&index>=3&&index<=6||mode==="CHANGE_CLEAR_ONLY"&&index===7;
  const unslot=(n:Node)=>{const e=n.properties?.evidence;if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");n.properties!.evidence={type:"array",items:e.properties.primaryEvidence}};
- if(mode!=="V14"&&mode!=="NO_CHANGE_EVIDENCE") {const target=s.properties?.requestTarget?.anyOf?.[0];if(!target)throw Error("DEBUG_PROBE_SHAPE");unslot(target)}
- if(mode!=="V14") {if(!definition?.anyOf||definition.anyOf.length!==8)throw Error("DEBUG_PROBE_SHAPE");definition.anyOf.forEach((n,i)=>{if(!keepChange(i))unslot(n)})}
+ if(mode!=="NO_CHANGE_EVIDENCE") {const target=s.properties?.requestTarget?.anyOf?.[0];if(!target)throw Error("DEBUG_PROBE_SHAPE");unslot(target)}
+ if(!definition?.anyOf||definition.anyOf.length!==8)throw Error("DEBUG_PROBE_SHAPE");definition.anyOf.forEach((n,i)=>{if(!keepChange(i))unslot(n)});
  return s as T;
 }
 export async function loadTrustedDebugLoop(root:string,path:string,trust:DebugLoopTrust,candidate:string){
