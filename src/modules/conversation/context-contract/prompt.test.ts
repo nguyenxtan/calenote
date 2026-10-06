@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("retained finite series is completed by relation without duplicating count into offset", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("For example, accepted frequency=DAILY and occurrenceCount=3 plus a continuation requesting the three days before the event means SET eventRelation=BEFORE_EVENT only; keep occurrenceCount=3 and leadOffsetDays absent.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("The backend expands the N preceding notification dates from count+relation; no leadOffsetDays is needed to represent that N-day span.");
+});
+
 it("unresolved query requires a wire uncertainty independently of conversational advice", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A LIST with a genuinely missing range and period=null must include an uncertainty with fieldCode=14 (queryRange), reason=MISSING and alternatives=[] on the provider wire.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A clarification directive or reply never substitutes for this semantic uncertainty.");

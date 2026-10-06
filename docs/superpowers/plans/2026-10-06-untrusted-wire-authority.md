@@ -301,3 +301,13 @@ Offline RED reproduction proves closest-tag ties can choose an unrelated directi
 - [x] RED reproduction; GREEN wire/parity focused 3,092 PASS.
 - [x] Independent review C0/I0/M0; full `pnpm check` PASS with documentation/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
 - Continue controlled live validation under the existing root debug authority; do not claim the historical invalid reason was MISSING merely because the offline example used it.
+
+### Series state-transition worked example
+
+Candidate `808f0b41eb14e40d013bc366e60601c9bb64dd6a` single R01 canary passed (generation `gen-1791278966-gIT2WhDTooTz5Kp2vbMR`, USD 0.0004258); it earns no Pilot credit. Its separate Formal Pilot then stopped after four requests at R02 turn one. Generation `gen-1791279035-brakWclnFfywTYR76778` proposed BEFORE_EVENT and leadOffsetDays=2 for the retained DAILY/count2 series. The frozen oracle rejects the duplicate offset and resulting leadOffsetDays clarification. Both executions are separately terminal and their history is retained.
+
+Expand the general series guidance with an abstract three-day worked state transition: accepted DAILY/count3 plus the three preceding notification days means relation only, not count copied into offset. Backend still expands dates, and independently supplied start offsets keep their own evidence/conflict handling. Canonical/evidence/oracle/provider schema remain unchanged.
+
+- [x] RED prompt-policy test; GREEN focused 93 PASS/two existing skips.
+- [x] Independent review C0/I0/M0; full `pnpm check` PASS including docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
+- Prompt SHA256 `8fa39d2984472a557b2f7f85506d6e34c6183210df4a02e25068a103ed8d66e0`. Continue fresh Formal Pilot under the existing conservative debug cap, not the terminal failed execution.
