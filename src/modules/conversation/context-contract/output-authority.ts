@@ -13,8 +13,9 @@ type BranchPath<T, P extends string> = T extends { kind: infer K extends string 
 type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]` | Paths<E, `${P}[]`>
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
 type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]"}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
+type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through"}{kind=${"C" | "R" | "W"}}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
-  | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath>
+  | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath
   | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping";
 const semantic: OutputAuthorityRule = Object.freeze({ class: "SEMANTIC_UNTRUSTED", modelAuthorshipReason: "Proposed user meaning, operand, instruction, ambiguity or supporting source selection.", evidencePolicy: "Validate exact scoped source identity; targeting/replacement/removal require current USER_QUOTE evidence.", mergePolicy: "Only validated semantic candidates enter merge; backend derives conflicts, completeness and admission.", canAffectMerge: true, canCauseHardReject: true, canCauseClarify: true, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const advisory: OutputAuthorityRule = Object.freeze({ class: "ADVISORY", modelAuthorshipReason: "Optional phrasing associated with one of four compatible backend issues.", evidencePolicy: "No mandatory semantic evidence; validate eligibility independently.", mergePolicy: "Quarantine invalid hints; never affect factual merge or manufacture clarification.", canAffectMerge: false, canCauseHardReject: false, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
@@ -50,6 +51,9 @@ for (const kind of ["LIST", "CALENDAR_DATE", "CAPABILITY"] as const) add([`query
 for (const prefix of ["changes[].value", "query.date", "query.period.date", "query.period.from", "query.period.through", "uncertainties[].alternatives[].value", "uncertainties[].alternatives[].value.date", "uncertainties[].alternatives[].value.from", "uncertainties[].alternatives[].value.through"]) {
   for (const kind of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 }
+// Compact transport selections have the same untrusted authority as canonical
+// date kinds. The fixed mapping itself remains application-owned.
+for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through"] as const)for(const kind of ["C","R","W"] as const)add([`${prefix}{kind=${kind}}`]);
 for (const prefix of ["query.period", "uncertainties[].alternatives[].value"]) for (const kind of ["DAY", "WEEK", "MONTH", "WEEKEND", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING", "DATE_BOUNDS"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 for (const kind of ["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP"] as const) add([`conversationDirective{kind=${kind}}`], advisory);
 const registry: Partial<Record<OutputFieldPathV3, OutputAuthorityRule>> = {};

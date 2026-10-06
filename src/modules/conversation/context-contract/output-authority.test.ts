@@ -49,6 +49,13 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });
+it("compact date selections remain untrusted while their mapping is application owned", () => {
+  for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through"])for(const kind of ["C","R","W"]){
+    expect(authority.classifyOutputPathV3(`${prefix}{kind=${kind}}` as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",canAuthorizeRead:false,canAuthorizeWrite:false,applicationDerivable:false});
+  }
+  expect(authority.classifyOutputPathV3("transport.codebookMapping").class).toBe("APPLICATION_OWNED");
+  expect(()=>authority.classifyOutputPathV3("query.date{kind=X}" as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
+});
 it("provider query evidence slots remain untrusted selections without execution authority", () => {
   for (const slot of ["primaryEvidence", "additionalEvidenceJson"]) {
     const prefix = `query.evidence.${slot}`;

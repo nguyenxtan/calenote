@@ -505,3 +505,15 @@ Actual outgoing schema inspection shows CIVIL_DATE permits null offset padding, 
 - [x] Independent delta review C0/I0/M0.
 - [x] Full serial offline checks exit zero: 171 files/8275 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Next one route canary before Formal Pilot.
 - Wire v19 SHA256 `71e1afa28f0fea91877e8605ee3cef67bda466c20dea41c015a28374d6f3bcd6`, 12497 bytes (v18 12494). Byte increase is not proof of Google compiler-state cost. Root grant and conservative accounting unchanged; no Full/release.
+
+### Compact date discriminator codebook
+
+Candidate `3b2944bcd2ff2e99ede3c6ca88309e18e807c59f` route canary returned HTTP 400, upstream Google Schema state limit exceeded. Execution terminal; no inference acceptance, reads or mutations. Cost unavailable, so append the existing conservative 105472-microunit UNKNOWN bound; retain all prior history/holds. Latest derived remaining conservative allowance was 2901432 microunits under the same 5000000-microunit root cap.
+
+Replace only the three long date singleton literals with the versioned one-to-one C=CIVIL_DATE, R=RELATIVE_DAY, W=WEEKDAY codebook. Encode/decode only active known date operand positions; preserve canonical uncertainty JSON and all business/evidence strings. Unknown or full-name wire tags reject. Original selected-branch codec continues to validate active operands and discard inactive padding without authority. Query tags and legacy V2 remain unchanged. The hypothesis is reduced provider enum-literal compiler cost, not proven private state accounting.
+
+- [x] RED compact mapping two failures/103 PASS; prompt delivery one failure/21 PASS; inactive query padding one failure/105 PASS. GREEN focused six files/395 PASS/2 existing skips.
+- [x] Independent delta review C0/I0/M0.
+- [x] Initial full suite caught missing explicit compact-date authority registry coverage: 8277 PASS/1 FAIL/2 existing skips. Added exact C/R/W SEMANTIC_UNTRUSTED branch paths; mapping stays APPLICATION_OWNED, unknown paths fail closed. Authority RED two failures/two PASS, final focused 399 PASS/2 skips; supplemental independent review C0/I0/M0.
+- [x] Final full serial offline checks exit zero: 171 files/8279 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Next one route canary before Formal Pilot.
+- Wire v20 SHA256 `94593b98cc72410c4b183b1abcf6aa063c932fec568a79bd3ab41f8a1a52c95e`, 12471 bytes; prompt SHA256 `0ce0d5e0f59d2629f1f58cfb545791b4233fda4b21814421fe59cd185387258e`. Canonical/evidence/oracle unchanged. No Full/release.

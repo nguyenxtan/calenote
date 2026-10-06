@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("wire instructions distinguish compact date tags from canonical uncertainty JSON", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("On the provider wire, date operand kind codes are C=CIVIL_DATE, R=RELATIVE_DAY, W=WEEKDAY.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("JSON-encoded uncertainty alternatives remain canonical and use the full date kind names, not C/R/W.");
+});
+
 it("serialized query policy delivers current continuation evidence ownership", () => {
   const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"xem lịch"},{role:"ASSISTANT",text:"Bạn muốn xem khoảng nào?"},{role:"USER",text:"tuần sau"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const request = serializeContextRequest(input);

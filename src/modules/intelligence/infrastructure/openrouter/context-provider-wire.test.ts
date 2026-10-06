@@ -7,7 +7,7 @@ import { createContextContractGateway, createContextHttpTransport, type Semantic
 import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 import * as wireModule from "./context-provider-wire";
 
-it("outgoing V3 query and date discriminators use equivalent singleton enums", () => {
+it("outgoing V3 query and compact date discriminators use singleton enums", () => {
   const schema=googleLiteEuContextWireSchema().schema;
   let constants=0;const singletonValues:string[]=[];
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;
@@ -18,7 +18,29 @@ it("outgoing V3 query and date discriminators use equivalent singleton enums", (
     Object.values(node).forEach(walk);
   };walk(schema);
   expect(constants).toBeGreaterThan(0);
-  expect(singletonValues.sort()).toEqual(["CALENDAR_DATE","CAPABILITY","LIST","CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].sort());
+  expect(singletonValues.sort()).toEqual(["CALENDAR_DATE","CAPABILITY","LIST","C","R","W"].sort());
+});
+it("compact date discriminator round trip preserves strict active payload authority", () => {
+  const canonical = ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
+  const encoded=encodeGoogleLiteEuContextV3(canonical) as {changes:{value:Record<string,unknown>}[]};
+  expect(encoded.changes[0].value).toMatchObject({kind:"R",offsetDays:2});
+  expect(parseGoogleLiteEuContextSectionsV3(encoded,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
+  for(const mutate of [(v:Record<string,unknown>)=>{v.offsetDays=null;},(v:Record<string,unknown>)=>{v.kind="RELATIVE_DAY";},(v:Record<string,unknown>)=>{v.kind="INVALID";}]) {
+    const raw=structuredClone(encoded);mutate(raw.changes[0].value);
+    expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  }
+  const padding=structuredClone(encoded);padding.changes[0].value.day=2;
+  const decoded=parseGoogleLiteEuContextSectionsV3(padding,CONTEXT_PROTOCOL_V3);
+  expect(decoded).toMatchObject({status:"PARSED",value:{semantic:{changes:[{value:{kind:"RELATIVE_DAY",offsetDays:2}}]}}});
+  expect(JSON.stringify(decoded)).not.toContain('"day":2');
+});
+it("compact date mapping never inspects inactive query date padding", () => {
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"LIST_REMINDERS",requestTarget:null,changes:[],query:{kind:"LIST",period:{kind:"MONTH",offset:0},statusScope:"DEFAULT",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}});
+  const raw=encodeGoogleLiteEuContextV3(canonical) as {query:{date:unknown;period:Record<string,unknown>}};
+  raw.query.date={kind:"PRIVATE_PADDING",payload:"PRIVATE_SENTINEL"};raw.query.period.date={kind:"PRIVATE_PADDING"};raw.query.period.from={kind:"PRIVATE_PADDING"};raw.query.period.through={kind:"PRIVATE_PADDING"};
+  const parsed=parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3);
+  expect(parsed).toMatchObject({status:"PARSED",value:{semantic:{query:{kind:"LIST",period:{kind:"MONTH",offset:0}}}}});
+  expect(JSON.stringify(parsed)).not.toContain("PRIVATE_");
 });
 import {isUnreconciledListInterpretation,readListTransport} from "../../../conversation/context-contract/list-period-transport";
 
@@ -163,6 +185,9 @@ function wireFixture(value: unknown): unknown {
   }
   if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
+  if (object.kind === "CIVIL_DATE") result.kind = "C";
+  if (object.kind === "RELATIVE_DAY") result.kind = "R";
+  if (object.kind === "WEEKDAY") result.kind = "W";
   return result;
 }
 async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) {
@@ -180,7 +205,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("71e1afa28f0fea91877e8605ee3cef67bda466c20dea41c015a28374d6f3bcd6");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("94593b98cc72410c4b183b1abcf6aa063c932fec568a79bd3ab41f8a1a52c95e");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -229,8 +254,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-semantic-kind-enums-19");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("71e1afa28f0fea91877e8605ee3cef67bda466c20dea41c015a28374d6f3bcd6");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-date-kind-codebook-20");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("94593b98cc72410c4b183b1abcf6aa063c932fec568a79bd3ab41f8a1a52c95e");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
