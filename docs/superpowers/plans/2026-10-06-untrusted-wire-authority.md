@@ -599,3 +599,14 @@ The emitted schema placed operationCode last although required keys and prompt l
 - V23 schema SHA256 `e214a02a9c8e69b64e6fd9b71fa276e2c27f2d0a09a3cefb42fa8cd6badd2e2b`; prompt unchanged.
 - [x] Full offline verification exit zero: 172 files/8312 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings, diff PASS.
 - [ ] Local commit and one new wire canary; Formal Pilot only if the canary passes. No Full/release.
+
+### V24 single query carrier isolation
+
+V23 candidate `7b87e40d8007db8f1a79f5520bd7e3cf0e8bb008` canary returned the same empty-object digest, HTTP 200, generation `gen-1791317333-7I20A1lKs7S91NZG33O4`; cost 0.000659 USD settled KNOWN, zero reads/mutations, terminal. Ordering alone did not resolve the failure. UNKNOWN/history retained; conservative remaining derived 2782620 microunits. No Pilot credit.
+
+Offline inspection confirms three query object alternatives accept the identical all-null operand carrier once kind is removed. Valid JSON Schema anyOf overlap is not itself a canonical defect, and private provider transformation is unknown. Consolidate those alternatives into one nullable carrier, retaining required operand/evidence keys and each property's existing domain. This broadens outgoing structural combinations, not accepted semantic authority: operationCode still selects the original active-branch codec; canonical validation and inactive-padding policy remain unchanged. No repair, evidence synthesis or permission is introduced.
+
+- [x] RED carrier regression one failure/23 PASS; GREEN focused 278 PASS/2 skips; operation tests 28 PASS including active wrong types and inactive-padding authority exclusion.
+- Wire v24 SHA256 `33c317dfdf0dab2c2e009c9cbaa317f449adc9121af1a9629ebad849d9dbc7b7`; serialized bytes 9291. Prompt unchanged.
+- [x] Independent review C0/I0/M0, reviewer 199 PASS/2 skips. Full offline tests 172 files/8317 PASS/2 existing skips, docs PASS. Typecheck found test-only JSON Schema boolean-union narrowing, fixed with explicit object guards; affected 28 tests rerun PASS, typecheck/lint/build/types/dry-run exit zero, lint zero errors/168 existing warnings. No runtime edit after the full suite.
+- [ ] Local commit and one new wire canary; Formal Pilot only if accepted. No Full/release.

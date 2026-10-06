@@ -41,6 +41,30 @@ it("schema emits the operation selector before its dependent carriers in require
  expect(Object.keys(schema.properties!)).toEqual(schema.required);
  expect(Object.keys(schema.properties!)[0]).toBe("operationCode");
 });
+it("query schema has one nullable carrier rather than overlapping selectorless object alternatives",()=>{
+ const query=googleLiteEuContextWireSchemaV3().schema.properties!.query;
+ if(typeof query!=="object")throw Error("query schema is not an object");
+ expect(query.anyOf).toHaveLength(2);
+ const carrier=query.anyOf![0];
+ if(typeof carrier!=="object")throw Error("query carrier is not an object");
+ expect(carrier.type).toBe("object");
+ expect(carrier.required).toEqual(["period","evidence","date","outputCalendar","topic"]);
+ expect(carrier).not.toHaveProperty("anyOf");
+});
+it.each([[3,"period"],[4,"date"],[5,"topic"]] as const)("query code %i retains strict active %s type validation",(index,key)=>{
+ const wire=encodeGoogleLiteEuContextV3(canonical(index)) as {query:Record<string,unknown>};
+ wire.query[key]=17;
+ expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it("consolidated carrier does not promote inactive query padding into semantic authority",()=>{
+ const wire=encodeGoogleLiteEuContextV3(canonical(3)) as {query:Record<string,unknown>};
+ wire.query.date='{"kind":"RELATIVE_DAY","offsetDays":1}';
+ wire.query.outputCalendar="LUNAR_VN";wire.query.topic="ANNUAL";
+ const parsed=parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3);
+ expect(parsed.status).toBe("PARSED");
+ if(parsed.status!=="PARSED")throw Error("unexpected refusal");
+ expect(parsed.value.semantic.query).toEqual(canonical(3).query);
+});
 it("operation mapping does not bypass canonical conditional uncertainty requirements",()=>{
  const wire=encodeGoogleLiteEuContextV3(canonical(9)) as Record<string,unknown>;
  wire.uncertainties=[];

@@ -450,6 +450,20 @@ function operationSchema(root:Schema):Schema{
   for(const branch of node.anyOf??[])strip(branch);
  };
  strip(result.properties!.requestTarget);strip(result.properties!.query);
+ // The operation code already selects the semantic query branch. Keeping
+ // three tagless object alternatives makes their all-null forms overlap.
+ // Consolidate only the carrier domains; the original branch codec remains
+ // authoritative for active operands and the existing inactive-padding policy.
+ const query=result.properties!.query;
+ const branches=query.anyOf?.[0]?.anyOf;
+ if(!branches||branches.length!==3||branches.some(branch=>branch.type!=="object"||!branch.properties||!branch.required))throw Error("OPERATION_QUERY_SCHEMA_SHAPE");
+ const properties:Record<string,Schema>={};
+ for(const key of branches[0].required!){
+  const alternatives=branches.flatMap(branch=>{const value=branch.properties![key];return value.anyOf??[value];});
+  const unique=[...new Map(alternatives.map(value=>[JSON.stringify(value),value])).values()];
+  properties[key]=unique.length===1?unique[0]:{anyOf:unique};
+ }
+ result.properties!.query={anyOf:[{type:"object",properties,required:[...branches[0].required!],additionalProperties:false},{type:"null"}]};
  return prune(result);
 }
 const providerSchemaV3 = operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))))));
