@@ -277,20 +277,9 @@ export type ValidatedPatchV3 = {
 export type EvidenceValidationV3 = { status: "VALID"; patch: ValidatedPatchV3 } | { status: "REFUSED"; reason: string };
 const issuedPatchesV3 = new WeakSet<object>();
 export function isValidatedPatchV3(value: unknown): value is ValidatedPatchV3 { return typeof value === "object" && value !== null && issuedPatchesV3.has(value); }
-export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: ReadyContextV2, observe?: DownstreamObserver): EvidenceValidationV3 {
-  let evidenceFailure: EvidenceFailureDiagnostic | undefined;
-  const refused = (reason: string): EvidenceValidationV3 => {
-    observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason), ...(evidenceFailure ? { evidenceFailure } : {}) });
-    observeDownstream(observe, { stage: "PATCH", result: "REJECTED", reason: "PATCH_REJECTED" });
-    return { status: "REFUSED", reason };
-  };
-  const internal = evidenceContextForV2(built);
-  if (!internal) return refused("CONTEXT_NOT_BUILT");
-  if (built.input.schemaVersion !== "calenote-context-input-2" || built.candidateSnapshot.schemaVersion !== "calenote-context-state-2") return refused("CONTEXT_PROTOCOL_MISMATCH");
-  const parsed = SemanticPatchProposalV3Schema.safeParse(proposal);
-  if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
-  if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
-  const value = parsed.data;
+function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void) {
+  const internal=evidenceContextForV2(built);
+  if(!internal) return fail("CONTEXT_NOT_BUILT");
   type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal">;
   // Failure-only identity telemetry. Hashes never participate in acceptance.
   const traceFailure = (reason: string, code: EvidenceFailureDiagnostic["reason"], ref: EvidenceRef, site: Site, sourceMapStatus: EvidenceFailureDiagnostic["sourceMapStatus"] = "NOT_CHECKED"): never => {
@@ -301,7 +290,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
         for (;;) { const at = turn.semanticView.indexOf(ref.quote, from); if (at < 0) break; matchCount++; from = at + ref.quote.length; }
       }
       const hash = (text: string) => createHash("sha256").update(text.normalize("NFC"), "utf8").digest("hex");
-      evidenceFailure = {
+      onFailure({
         ...site, sourceAlias: ref.kind === "USER_QUOTE" ? `t${ref.turn}` : ref.ref,
         expectedSourceRole: ref.kind === "USER_QUOTE" ? "USER" : "CONTEXT_FACT",
         resolvedSourceRole: ref.kind === "USER_QUOTE" ? turn?.role ?? "UNKNOWN" : internal.facts.has(ref.ref) ? "CONTEXT_FACT" : "UNKNOWN",
@@ -314,7 +303,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
         sourceViewSha256: turn ? hash(turn.semanticView) : null,
         sourceMapStatus, reason: code === "QUOTE_NOT_FOUND" && matchCount > 0 ? "QUOTE_OCCURRENCE_OUT_OF_RANGE" : code,
         ...(ref.kind === "USER_QUOTE" ? { quoteClassification: classifyQuoteMismatch(ref.quote, ref.turn, built.evidenceIndex, built.candidateSnapshot.transcript) } : {}),
-      };
+      });
     } catch { /* Telemetry must not change the public rejection or authority. */ }
     return fail(reason);
   };
@@ -387,6 +376,56 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     if (!listRangeCandidate) checkYear(requested);
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
+  return {resolve,quoteSource};
+}
+export function resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST"}>,uncertainties:SemanticPatchProposalV3["uncertainties"],built:ReadyContextV2,observe?:DownstreamObserver) {
+  let failure:EvidenceFailureDiagnostic|undefined;
+  try {
+    const {resolve,quoteSource}=createEvidenceResolverV3(built,diagnostic=>{failure=diagnostic;});
+    const bound=resolve(query.evidence,"QUERY","queryRange",query,["query","evidence"],false,true);
+    if(!bound.current && !query.evidence.some(ref=>ref.kind==="CONTEXT_FACT"))fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    // Check every alternative before any obsolete query-range instruction is
+    // discarded. Preserve the same field/path/reference ordinals as V3.
+    for(const [index,raw] of uncertainties.entries()) {
+      const u=UncertaintyV3Schema.parse(raw);
+      const scope=u.field==="queryRange"?"QUERY":SLOT_NAMES.includes(u.field as typeof SLOT_NAMES[number])?"REMINDER":"CONTROL";
+      for(const [ordinal,a] of u.alternatives.entries()) {
+        resolve(a.evidence,scope,u.field,a.value,["uncertainties",index,"alternatives",ordinal,"evidence"]);
+        if(u.field==="operation" && a.evidence.some(ref=>ref.kind!=="USER_QUOTE" || ref.turn!==built.input.currentTurn))fail("CURRENT_USER_EVIDENCE_REQUIRED");
+      }
+    }
+    const resolved=QueryOperandSchema.parse(bound.resolvedValue);
+    if(resolved.kind!=="LIST")fail("EVIDENCE_FACT_SCOPE_OR_VALUE");
+    const turn=built.evidenceIndex[built.input.currentTurn];
+    const explicit=bound.current?explicitListPeriod(turn,turn.receivedAt):null;
+    let deterministicPeriod:Extract<QueryOperand,{kind:"LIST"}>["period"]=null;
+    if(explicit) {
+      const valid=QueryOperandSchema.safeParse({...resolved,period:explicit.period});
+      const source=quoteSource({kind:"USER_QUOTE",turn:built.input.currentTurn,quote:explicit.quote,occurrence:explicit.occurrence},{field:"queryRange",path:["query","evidence"],referenceOrdinal:0});
+      if(valid.success && verifyListRangeEvidence({candidateRange:explicit.period,evidence:[source],turns:[turn],currentTurnId:turn.id,referenceTime:turn.receivedAt})==="SUPPORTED")deterministicPeriod=explicit.period;
+    }
+    return {status:"VALID" as const,query:resolved,deterministicPeriod};
+  } catch(error) {
+    const reason=error instanceof EvidenceFailure?error.message:"EVIDENCE_INVALID";
+    observeDownstream(observe,{stage:"EVIDENCE",result:"REJECTED",reason:evidenceReason(reason),...(failure?{evidenceFailure:failure}:{})});
+    return {status:"REFUSED" as const,reason};
+  }
+}
+export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: ReadyContextV2, observe?: DownstreamObserver): EvidenceValidationV3 {
+  let evidenceFailure: EvidenceFailureDiagnostic | undefined;
+  const refused = (reason: string): EvidenceValidationV3 => {
+    observeDownstream(observe, { stage: "EVIDENCE", result: "REJECTED", reason: evidenceReason(reason), ...(evidenceFailure ? { evidenceFailure } : {}) });
+    observeDownstream(observe, { stage: "PATCH", result: "REJECTED", reason: "PATCH_REJECTED" });
+    return { status: "REFUSED", reason };
+  };
+  const internal = evidenceContextForV2(built);
+  if (!internal) return refused("CONTEXT_NOT_BUILT");
+  if (built.input.schemaVersion !== "calenote-context-input-2" || built.candidateSnapshot.schemaVersion !== "calenote-context-state-2") return refused("CONTEXT_PROTOCOL_MISMATCH");
+  const parsed = SemanticPatchProposalV3Schema.safeParse(proposal);
+  if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
+  if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
+  const value = parsed.data;
+  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; });
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {

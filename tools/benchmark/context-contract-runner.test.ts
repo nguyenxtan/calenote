@@ -192,7 +192,7 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
       { fixtureId: "R01", turnIndex: 0, status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", listStoreReads: 0, mutations: 0, queryRange: null, oracle: "PASS" },
       { fixtureId: "R01", turnIndex: 1, status: "REMINDERS_LISTED", fullSchemaValid: true, pendingField: null, listStoreReads: 1, mutations: 0, queryRange: { start: Date.parse("2026-08-31T17:00:00Z"), end: Date.parse("2026-09-30T17:00:00Z") }, oracle: "PASS" },
     ]);
-    expect(turns[0].downstreamDiagnostics.map((d: { stage: string }) => d.stage)).toEqual(["CANONICAL", "LIST_RANGE", "EVIDENCE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]);
+    expect(turns[0].downstreamDiagnostics.map((d: { stage: string }) => d.stage)).toEqual(["TRANSPORT", "PERIOD_RECONCILIATION", "CANONICAL", "LIST_RANGE", "EVIDENCE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]);
     expect(turns[0].downstreamDiagnostics).toContainEqual({ stage: "QUERY_RESOLUTION", result: "CLARIFY", reason: "MISSING_RANGE" });
     expect(turns[1].downstreamDiagnostics).toContainEqual({ stage: "LIST_RANGE", result: "SUPPORTED", reason: "NONE", candidateRange: "MONTH", field: "queryRange" });
     expect(text.length).toBeLessThan(8000);
@@ -201,6 +201,22 @@ it("discards inactive padding through R01 and persists actual reads/mutations be
     for (const response of result.responses.slice(0, 2)) expect(response).not.toHaveProperty("canonicalValidationDiagnostics");
     expect(readFileSync(join(directory, "responses.json"), "utf8")).not.toContain("PRIVATE_INACTIVE_PADDING_SENTINEL");
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+it("formal runner admits post-reconciliation R01 DATE output without weakening the frozen oracle",async()=>{
+ const directory=mkdtempSync(join(tmpdir(),"context-r01-period-ordering-"));let calls=0;
+ try {
+  const result=await runner.executeObservableCampaign({directory,sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),runId:"period-ordering",profile:"PILOT",cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,now:()=>100,
+   transport:async request=>{
+    const turn=calls++;if(turn>=2)return {status:400,body:"{}"};
+    const input=JSON.parse(request.messages[1].content) as ContextInput;
+    const wire=encodeFixtureV3(frozenContextProposal(input,"R01",turn)) as {query:{period:{kind:string}|null}};
+    if(turn===1)wire.query.period!.kind="DATE";
+    return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-date-period",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(wire)}}]})};
+   }});
+  expect(calls).toBe(3);expect(result.applicationEvidence.slice(0,2)).toMatchObject([{oracle:"PASS",fullSchemaValid:true,listStoreReads:0,mutations:0},{oracle:"PASS",fullSchemaValid:true,status:"REMINDERS_LISTED",listStoreReads:1,mutations:0}]);
+  expect(result.applicationEvidence[1].queryRange).toEqual({start:Date.parse("2026-08-31T17:00:00Z"),end:Date.parse("2026-09-30T17:00:00Z")});
+  expect(readFileSync(join(directory,"application-evidence.json"),"utf8")).not.toContain('"DATE"');
+ } finally {rmSync(directory,{recursive:true,force:true});}
 });
 
 it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "one", "two", "three", "fabricated", "fabricated-extra", "unknown-ref", "excess-extras", "unsupported-operand", "inactive-padding"] as const)("R01 actual path retains evidence authority for %s", async mode => {
@@ -428,7 +444,7 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
       providerWireSchemaDigest: "eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-compact-12" });
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-list-period-reconciliation-13" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

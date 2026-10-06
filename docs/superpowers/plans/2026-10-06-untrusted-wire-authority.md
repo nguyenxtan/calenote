@@ -1,0 +1,161 @@
+# Optional LIST Period Authority Ordering Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for native inline implementation with one independent whole-amendment architecture review. Steps use checkbox syntax. This document authorizes no implementation or provider execution by itself.
+
+**Goal:** Let independently grounded backend LIST-period authority run before a structurally safe unknown model period can cause final canonical rejection, without giving that model token authority.
+
+**Architecture:** Introduce a bounded transport-level LIST interpretation, separate from canonical `ParsedInterpretationV3`. Reconcile its optional period using the existing source resolver and USER grammar before unchanged strict canonical validation. Keep every other model field, evidence identity, operation, final state and execution boundary strict.
+
+**Tech Stack:** TypeScript, Zod 4, Vitest, local workerd/D1 fixtures, existing OpenRouter gateway and canonical benchmark harness.
+
+**Spec:** `docs/superpowers/specs/2026-10-06-untrusted-wire-authority-design.md`, documentation commit `2c1a1b1032b94dd1f436cf7380bcb2bdd84e9cd3`; written Option A approval supplied by the owner in this planning turn. The spec's old status line does not override that direct approval.
+
+## Global constraints
+
+- Optional primary LIST period only. No generic tolerant semantic decoder, aliases, fuzzy matching, new grammar, intent inheritance or eventRelation change.
+- Model/runtime `google/gemini-2.5-flash-lite` / `google-vertex/eu`; stream=false, retry=0, fallback=none, strict=true, require_parameters=true, ZDR/data_collection=deny; input<=12000 tokens, output<=1536 tokens, raw response<=32768 bytes.
+- Canonical schemas/refinement predicates, codebook and storage versions are unchanged. Unknown model tokens never enter canonical state.
+- Existing v12 emitted Google schema remains byte-for-byte unchanged. This correction must tolerate nonconforming provider output locally, not enlarge the provider language. Preserve required evidence slots and inactive-padding behavior.
+- Version the application decoder/wire contract as `google-gemini-2.5-flash-lite-vertex-eu-context-list-period-reconciliation-13`; record unchanged emitted-schema digest separately. This is not a claim of live v13 route acceptance.
+- Current semantic baseline: `7db3fb3b9f4e0cde6a0c09519a242740b08758d8`; diagnostics/runtime baseline: `27cf8f4b6bda4e4ec9ebc79dda563878b33511a4`. Planning HEAD: `2c1a1b1032b94dd1f436cf7380bcb2bdd84e9cd3`.
+- Fake/local transport only. Deny external network and Keychain during implementation checks; allow localhost for disposable D1 fixtures. No authority creation, accounting/history rewrites, UNKNOWN release, Pilot/Full, push, merge, migration or deployment.
+- Native implementation, TDD at every boundary, one final independent review C0/I0. Do not dispatch implementer/reviewer per mechanical step.
+- One final local runtime commit after all tasks pass and review findings are resolved; task commit boundaries below are integration checkpoints, not permission to ship incomplete interfaces.
+
+## Current source map and ordering
+
+`context-provider-wire.ts::codec` rejects unsupported period discriminants; `parseGoogleLiteEuContextSectionsV3` immediately invokes `contracts.ts::parseInterpretationSectionsV3`. `semantic-gateway.ts::decodeContextResponse` therefore exposes only canonical-parsed success. `service.ts::handle` reaches `evidence.ts::validateEvidenceV3` only afterward. That function calls `list-range-evidence.ts::explicitListPeriod` / `verifyListRangeEvidence`, then brands `ValidatedPatchV3`; `mergePatchV3` / `resolveQuery` drive the authorized read. `list-range-evidence.ts::temporalMatches` is private and must remain unchanged.
+
+The runner additionally rejects a successful gateway result with `!interpretation.fullSchemaValid` before service execution. `context-contract-probe.ts` and service test support also type their gateways as `SemanticGateway<ParsedInterpretation,ContextInput>`. These consumers must accept the new staged result without treating transport validity as canonical acceptance.
+
+New order for LIST: bounded transport -> period classification -> mandatory exact evidence/context validation -> deterministic/trusted period reconciliation -> unchanged strict canonical validation -> validated evidence patch -> existing merge/query admission/transition. Non-LIST order remains unchanged.
+
+## File ownership / dependency graph
+
+| Task | Runtime ownership | Test / integration ownership |
+| --- | --- | --- |
+| 1 | New `src/modules/conversation/context-contract/list-period-transport.ts`; `context-provider-wire.ts`; `protocol.ts`; `provider-wire-schema.ts` (derive version type from protocol) | New transport tests; existing ProviderWire parity/schema tests |
+| 2 | New `src/modules/conversation/context-contract/list-period-reconciliation.ts`; narrow shared-source extraction in `evidence.ts` | New reconciliation tests; existing evidence/list-range/ownership tests |
+| 3 | OpenRouter `semantic-gateway.ts`; context `service.ts`; `downstream.ts`; context `observability.ts` if event typing requires it | `service-test-support.ts`; new actual-path test; `context-contract-runner.ts`; `context-contract-probe.ts` and runner/oracle tests |
+| 4 | No unrelated runtime changes; only fixes proven by verification/review | Complete regressions, review, documentation evidence and final local commit; downstream trace/version tests, coherent orchestration runtime fixture, historical seed comparison metadata normalization |
+
+Dependencies: 1 -> 2 -> 3 -> 4. Task 1's new parser is dormant until Task 3; no intermediate candidate is evaluated. Evidence resolver extraction in Task 2 must be shared by reconciliation and existing validator, not copied.
+
+## Interfaces and implementation decisions
+
+All following new names are explicit planned additions, not claims that they already exist.
+
+`list-period-transport.ts` owns:
+
+- `type ListPeriod = Extract<QueryOperand,{kind:"LIST"}>["period"]`.
+- `type ListPeriodProposal = {status:"KNOWN";value:NonNullable<ListPeriod>} | {status:"ABSENT"} | {status:"UNSUPPORTED";diagnostic:CanonicalValidationDiagnostics}`. Unsupported representation stores no raw token/operands and carries no canonical value.
+- `type DecodedListCore = Omit<SemanticPatchProposalV3,"query"> & {query:Omit<Extract<QueryOperand,{kind:"LIST"}>,"period">}`; values are structurally decoded, not an admitted semantic patch. Ownership refinement still must run later.
+- Opaque `UnreconciledListInterpretation`, issued by the decoder's factory and checked with `isUnreconciledListInterpretation(value:unknown):value is UnreconciledListInterpretation`; a private identity registry prevents forged transport wrappers.
+- `type ContextGatewayInterpretation = ParsedInterpretationV3 | UnreconciledListInterpretation`. Only non-LIST uses the already-parsed arm; every LIST uses the staged arm, including known/absent periods.
+- A closed decoder factory receives `DecodedListCore`, period classification and bounded raw guidance, and returns the opaque wrapper. The public accessor supplies detached core/period/guidance to reconciliation only. No cast makes this wrapper a canonical proposal or `ValidatedPatchV3`.
+
+`context-provider-wire.ts` adds `decodeGoogleLiteEuContextTransportV3(raw,selected,observeInvalid?,observeWireInvalid?):{status:"PARSED";value:ContextGatewayInterpretation}|{status:"REFUSED";reason:"ENVELOPE_INVALID"|"SEMANTIC_PATCH_INVALID"}`. Keep existing strict `parseGoogleLiteEuContextSectionsV3` for compatibility/security tests and historical callers; the application gateway selects the new transport parser explicitly.
+
+For `query.kind=LIST`, decode all non-period fields using existing codecs. Period null is ABSENT. Known period uses the existing exact branch codec. Only unknown **string discriminator** reaches quarantine; known-kind bad operands, non-string kind, missing slot, unknown key and wrong primitive shape remain hard failures. The unknown period must have exactly the existing flattened padding keys (`kind`, `date`, `offset`, `from`, `through`): offset null or finite JSON number, date/from/through null or structurally valid current date operand. Never derive date meaning or select a branch from unknown kind. Kind is bounded to 48 ASCII codepoints for safe-control quarantine; whitespace/free-text/control/oversized strings reject without echo. Other semantic discriminants, including uncertainty alternatives, retain existing strict decoding.
+
+Use current `projectControlEnum`/`projectWireValidation` for diagnostics. Store only structural projected output; arbitrary free-text tokens are never retained. Preserve the existing sanitizer rather than defining a second one.
+
+`evidence.ts` exports a narrow `resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST"}>,uncertainties:SemanticPatchProposalV3["uncertainties"],built:ReadyContextV2,observe?:DownstreamObserver)` returning a resolved query and independently verified deterministic period or the existing refused reason. Implement by extracting/reusing the existing V3 resolver closure (`quoteSource`, source/fact binding, `resolve`), not by reimplementing quote matching. Exact source/currentness/fact binding is checked internally; the result has no execution authority and only final `validateEvidenceV3` can brand an admitted patch.
+
+For an unknown period, source validation uses the period-absent query; it must not invent a model ref or silently accept a CONTEXT_FACT that cannot bind that exact query. Current USER grounding allows deterministic replacement. Known period retains existing exact fact restoration/re-verification. No blind adoption of a previous range or pending intent; pending QUERY scope is checked under the existing sent/revision/expiry policy. If an unknown period cannot be bound from the existing refs, reject rather than borrow context.
+
+`list-period-reconciliation.ts` adds `reconcileListPeriodV3(value:UnreconciledListInterpretation,built:ReadyContextV2,observe?:DownstreamObserver):InterpretationSectionsV3`. Resolve mandatory sources first. Reuse `explicitListPeriod` and exact span verifier for backend-derived current USER period. Otherwise keep a known proposal for the existing evidence verifier, or use null plus queryRange MISSING for unsupported/absent period. Missing-range uncertainty is backend-computed; do not fabricate alternatives.
+
+Validate every supplied queryRange alternative's source even if deterministic authority later makes it obsolete. Remove only verified-obsolete queryRange alternatives/uncertainties; unrelated uncertainties remain unchanged. Construct the resulting canonical object, independently parse advice, and call unchanged `parseInterpretationSectionsV3`. Existing `validateEvidenceV3` still validates the retained result and alone creates `ValidatedPatchV3`. No read/write/confirmation or mutation inside reconciliation.
+
+## Review focus
+
+1. A forged transport wrapper or alternate root mutation intent cannot gain LIST admission (Tasks 1/2).
+2. Valid temporal words cannot rescue fabricated mandatory evidence or stale/cross-scope facts (Task 2).
+3. Discarded queryRange alternatives still undergo identity validation; source indices for other fields cannot shift (Tasks 2/3).
+4. Known inactive padding stays discarded; unknown-kind padding must not smuggle fields into canonical state (Task 1).
+5. Harness observes post-reconciliation canonical acceptance without ignoring malformed advice or weakening frozen oracles (Task 3).
+
+### Task 1 — Typed optional-period transport quarantine
+
+**Files:** create `list-period-transport.ts` and `list-period-transport.test.ts` in `src/modules/conversation/context-contract/`; modify `src/modules/intelligence/infrastructure/openrouter/context-provider-wire.ts`, its `context-provider-wire-parity.test.ts`, and `src/modules/conversation/context-contract/protocol.ts`.
+
+**Purpose/behavior:** permit only the selected safe unknown period subtree as noncanonical data; retain strict transport/security and unchanged emitted Google schema.
+
+- [x] RED: test `DATE yields UNSUPPORTED with no canonical period`; test known MONTH/REST_OF_MONTH/NEXT_7_DAYS and null classification; forged wrapper is rejected. Assert strict compatibility parser still rejects DATE.
+- [x] RED security matrix: missing padding/primary evidence, extra/prototype key, kind number/object, whitespace/private/control/49-character token, known MONTH invalid offset and unknown reminder frequency all refuse. Valid known inactive padding remains ignored as before.
+- [x] Run `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/list-period-transport.test.ts src/modules/intelligence/infrastructure/openrouter/context-provider-wire-parity.test.ts`. Expected RED: new transport parser/classification is absent or rejects DATE, not unrelated fixture encoding errors. Mutate a valid encoded wire object after encoding; never pass invalid canonical input to `encodeFixtureV3`.
+- [x] Implement the interfaces and narrow codec hook above; do not relax generic `codec` or strict parser. Build period classification before canonical semantic refinement only for LIST.
+- [x] Assert provider schema SHA256 remains `eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08`; canonical digest remains `43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b`. Measure bytes/definition/branch/enum counts equal to v12. Stamp decoder contract v13 without modifying emitted schema or codebook/storage versions.
+- [x] GREEN: focused command above plus `pnpm exec vitest run --maxWorkers=1 src/modules/intelligence/infrastructure/openrouter/provider-wire-schema.test.ts src/modules/intelligence/infrastructure/openrouter/context-query-evidence-compact.test.ts src/modules/conversation/context-contract/authority-contract.test.ts`; expected zero failures. Refactor only after green.
+- [x] Commit boundary: stage this coherent transport slice for the final amendment commit; do not activate gateway or publish an intermediate candidate.
+
+### Task 2 — Grounded reconciliation before final canonical validation
+
+**Files:** create `list-period-reconciliation.ts` and `.test.ts` under context-contract; modify `evidence.ts` for the shared narrow source resolver; test existing `evidence.test.ts`, `list-range-evidence.test.ts`, `list-range-authority.test.ts`, `ownership-value-diagnostics.test.ts`.
+
+**Purpose/behavior:** independently prove period authority from existing sources/grammar, then build and strictly validate the canonical proposal; unsupported token itself contributes nothing.
+
+- [x] RED: `DATE plus current authenticated tháng này produces MONTH(0)`; assert resulting canonical parse succeeds, original unknown token absent, and source provenance corresponds to the actual current USER phrase.
+- [x] RED: `DATE without supported range produces null plus queryRange MISSING`; `genuine remaining-month wording remains REST_OF_MONTH`; valid supported MONTH/NEXT_7_DAYS remain valid. No aliasing from the token.
+- [x] RED: forged quote, wrong role/alias/occurrence, missing/cross-scope evidence, stale pending context and invalid alternative ref each reject despite explicit month words. Wrong root intent/requestTarget ownership and still-invalid final canonical state reject unchanged.
+- [x] RED: quoted/negated/ambiguous month creates no deterministic authority; discarded range alternatives cannot erase another field's failure or shift provenance.
+- [x] Run `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/list-period-reconciliation.test.ts`; expected RED due to absent reconciliation, not an intentionally invalid canonical encoder.
+- [x] Extract shared V3 exact-source resolution without semantic changes, implement the specified resolver/reconciler, and validate mandatory refs before dropping obsolete range proposals. Reuse private grammar via its existing public functions; do not export or rewrite `temporalMatches`.
+- [x] GREEN: `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/list-period-reconciliation.test.ts src/modules/conversation/context-contract/evidence.test.ts src/modules/conversation/context-contract/list-range-evidence.test.ts src/modules/conversation/context-contract/list-range-authority.test.ts src/modules/conversation/context-contract/ownership-value-diagnostics.test.ts`; expected all pass, source/scope failures unchanged.
+- [x] Commit boundary: stage the resolver/reconciler slice; no independent runtime candidate or paid request.
+
+### Task 3 — Actual gateway/service path and truthful harness acceptance
+
+**Files:** modify `src/modules/intelligence/infrastructure/openrouter/semantic-gateway.ts`, `src/modules/conversation/context-contract/service.ts`, `downstream.ts`, `service-test-support.ts`; update event typing in `observability.ts` only if needed; create `src/modules/conversation/context-contract/list-period-ordering.integration.test.ts`; modify `tools/benchmark/context-contract-runner.ts`, `context-contract-probe.ts`, `context-contract-runner.test.ts`, `context-oracle-diagnostics.test.ts`. Preserve all manifest/fixture expectations.
+
+**Interfaces:** gateway/probe/runner generic becomes `SemanticGateway<ContextGatewayInterpretation,ContextInput>`; service checks the opaque transport guard and calls Task 2's reconciler for LIST, leaving parsed non-LIST unchanged. The generic `SemanticAttemptResult` need not change.
+
+- [x] RED actual-path two-turn R01: encode valid turn 0 / turn 1, mutate turn 1 wire period.kind to DATE, use existing fake HTTP response through the real gateway/service. Assert CLARIFICATION_REQUESTED then REMINDERS_LISTED; range exactly September 1–October 1 2026 in Asia/Ho_Chi_Minh, one LIST read, zero reminders, two eligible dispatches total and no repair call.
+- [x] RED twin: unsupported token with no supported temporal phrase yields clarification or existing hard evidence rejection, range null, reads/mutations zero. REST_OF_MONTH conflict yields MONTH(0); genuine remaining-month wording stays REST_OF_MONTH.
+- [x] RED ordering trace: add bounded downstream stages `TRANSPORT`, `PERIOD_RECONCILIATION` before `CANONICAL`; successful recovery records model authority NONE and backend selection, not raw unknown text. Still-invalid canonical result rejects before read. No duplicate/second model dispatch.
+- [x] RED harness: a staged transport result is not prematurely marked SCHEMA_INVALID; post-reconciliation canonical full-envelope status is still required by the frozen oracle. Invalid directive/reply does not acquire Pilot acceptance merely because period recovery succeeded. Existing direct canonical failure artifact remains retained.
+- [x] Run `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/list-period-ordering.integration.test.ts tools/benchmark/context-contract-runner.test.ts`; expected RED at current early decoder/harness boundary.
+- [x] Switch context gateway to the new transport parser. Retain usage/provider evidence and response bounds; store quarantine diagnostics as diagnostic-only data, not a canonical-failure status. Service performs reconciliation after dispatch/settlement and before canonical/evidence events. Keep budget/claim/failure settlement unchanged.
+- [x] Replace runner's pre-service fullSchemaValid check for LIST with post-reconciliation full-envelope acceptance captured from existing service observation. Do not force it true or remove frozen assertions. Non-LIST/advisory/security failures retain current campaign stopping policy. Single-target semantic-state diagnostics only read an actual canonical result, never transport core.
+- [x] Add a **test-only** optional wire-output transformer to `scriptedGateway`/`harness` so malformed wire fixtures can use real transport without failing the strict canonical encoder first. Runtime factories get no test hooks.
+- [x] GREEN: preceding focused command plus `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/deterministic-period-authority.test.ts src/modules/conversation/context-contract/service.test.ts src/modules/conversation/context-contract/transition-boundary-service.test.ts tools/benchmark/context-oracle-diagnostics.test.ts src/worker/composition-root.test.ts`; expected all pass; R02 frozen turn-zero 43/43 remains eventRelation=null, pendingField=reminderTime.
+- [x] Commit boundary: stage complete gateway/service/harness integration; no schema-oracle weakening, historical output rewrite or campaign execution.
+
+### Task 4 — Final compatibility gate, architecture review and one local candidate
+
+**Files:** runtime changes only for proven review/test findings inside Tasks 1–3; this plan's evidence section; no unrelated historical plan or ledger edits.
+
+**Purpose:** verify the whole amendment, including unchanged eventRelation, authority/accounting mechanisms, canonical strictness, schema complexity and complete local acceptance.
+
+- [x] RED for any uncovered boundary finding before fixing it; name the failure, verify its expected failure and implement the minimal scoped correction. Never fix an unrelated product feature to make the suite green.
+- [x] Run `pnpm exec vitest run --maxWorkers=1 src/modules/conversation/context-contract/event-relation-evidence.test.ts src/modules/conversation/context-contract/event-relation-integration.test.ts src/modules/conversation/context-contract/output-authority.test.ts src/modules/conversation/context-contract/authority-contract.test.ts src/modules/conversation/context-contract/canonical-constraints.test.ts src/modules/conversation/context-contract/confirmation.test.ts tools/benchmark/context-contract-single-replay.test.ts tools/benchmark/context-contract-candidate-validation.test.ts tools/benchmark/context-bounded-pilot.test.ts tools/benchmark/context-seed.test.ts`; expected zero failures, count-only relation absent and explicit BEFORE_EVENT still supported, historical authority/accounting unchanged.
+- [x] Run normal `pnpm check` under external-network/Keychain denial with localhost enabled for fixtures; expected full tests including R01–R16 PASS with existing skips only, documentation/typecheck/lint/build/Worker types/deploy dry-run PASS. Dry-run is local and cannot upload/promote. Do not increase test timeouts; if contention recreates the known prefix timeout, run full suite with `--maxWorkers=1`, then the exact remaining check stages.
+- [x] Serial alternative: `pnpm exec vitest run --maxWorkers=1 && node --test docs/architecture/current-state.test.mjs && pnpm typecheck && pnpm lint && pnpm build && pnpm exec wrangler types --check && pnpm exec wrangler deploy --dry-run`. Read every exit/result; never combine a failed latest gate with a passing stale claim.
+- [x] Run `git diff --check`; inspect exact changed file set and canonical/provider-schema hashes. No prompts, bindings, migrations, workflow/accounting, manifest expectations or reminder/confirmation semantics may change.
+- [x] Independent whole-amendment architecture review: transport versus semantic validation, exact evidence before recovery, strict canonical afterward, no-support fail-closed, unknown privacy, schema identity/complexity, R01/R02 and harness acceptance. Require C0/I0; fix C/I inside this task with RED->GREEN and rerun appropriate/full checks. Review and test evidence are local, not provider acceptance.
+- [x] Record verification, rulings and actual file ownership. Selectively stage plan plus actual task-owned changes; commit once as `fix(context): reconcile optional LIST period before canonical admission`. The resulting immutable runtime SHA is the NEW evaluation candidate; harness SHA is the same unless a later tooling-only commit is separately recorded. Preserve historical labels and consumed grants.
+Post-commit required gate, per the owner's subsequent execution instruction: continue immediately into read-only `prepareBoundedPilot` plus `assertLoadedCandidateModules` preflight. No credential access, network, paid request, authority record or reservation. Ask once for fresh Formal Pilot authority only if every readiness gate passes. Historical runs never receive new acceptance credit. Record that post-commit evidence in the execution ledger so the candidate stays immutable.
+
+## Self-review / handoff coverage
+
+- Spec Option A covered by Tasks 1–3; B/C not reintroduced. Transport factory is opaque and cannot admit reads/writes.
+- Required DATE, conflicting REST_OF_MONTH, genuine remaining month, no-support, valid period and final-strictness cases map to Tasks 1–3. R02 43/43 and relation/security siblings map to Tasks 3–4.
+- Every task has RED reason, exact interface, focused command, expected GREEN and commit boundary. New file names are declared additions; existing source symbols/paths were inspected.
+- Provider schema complexity/digests unchanged; decoder contract version changes explicitly. Canonical authority, grammar and evidence matching remain unchanged.
+- Historical candidate/authority/accounting tests map to Task 4; runner correction does not reset budgets or weaken frozen Pilot assertions.
+- This approved offline execution ends at `FRESH_FORMAL_PILOT_OWNER_AUTHORIZATION` only after the corrected local candidate and read-only readiness PASS; otherwise report the exact engineering/preflight blocker. Fresh paid execution requires separate authority.
+
+## Implementation evidence and review rulings
+
+- Transport RED->GREEN: 11 initial failures; provider parity group 2997 PASS. Privacy regression failed before unsupported raw-token projection was removed. Final transport suite: 13 PASS.
+- Reconciliation RED->GREEN: seven initially rejected valid cases; reconciliation/evidence/range/ownership group 1759 PASS. Review added three fact-binding regressions; final reconciliation suite: 16 PASS.
+- Actual gateway/service R01 DATE regression failed before activation, then passed with exactly one authorized read and zero reminder mutations. Frozen runner/oracle remains strict; fake transports are not live acceptance.
+- Independent review identified C0/I1: reconstructing a query changed key order and replacing a period invalidated old exact fact references. Fixed by unchanged QueryOperandSchema normalization before original source validation, then retaining only already-authenticated current USER references for an independently derived period replacement. No validator changes. Rereview: C0/I0, no Minor findings.
+- Preliminary root ownership uses the original strict canonical parser. Optional-period reconciliation cannot rescue a different intent, requestTarget or changes. A future broader ownership amendment requires a separate boundary.
+- Invalid guidance remains independently rejected for frozen full-envelope evaluation; runtime guidance remains advisory. This does not grant semantic authority to guidance.
+- Historical seed content is immutable. Only the decoder-dependent observation hash is normalized in semantic checkpoint comparison, alongside pre-existing attemptId/proof normalization; its hexadecimal assertion does not independently prove the binding digest. Dedicated identity/binding tests remain authoritative.
+- Emitted v12 schema remains hash-identical: 11655 bytes, 18 definitions, 51 union branches, 105 enum members, unchanged before/after. Canonical schema hash remains unchanged. Decoder contract label is v13, not a claim of live provider admission.
+- First full run: 8130 PASS / 34 FAIL / 2 existing skips. Failures included stale decoder/trace assertions, hybrid runtime/tooling fixtures, decoder-bound historical observation hashes, and candidate source changes during immutable snapshot execution. Evidence retained; this run is not acceptance credit. Final verification uses frozen runtime bytes.
+- Live provider acceptance, credentials, deployment and production behavior were outside this offline review; they remain unverified. No declined offline behavior or Minor finding is silently deferred.
+- Final focused suite: 9 files / 4786 PASS. Final full serial suite: 167 files / 8167 PASS / 2 existing skips. Documentation check, typecheck, lint (zero errors, 168 pre-existing ignored-scratch warnings), build, Worker types check, local deployment dry-run and diff check PASS under credential/network denial. R01 DATE recovery, conflicting/genuine REST_OF_MONTH, no-range fail-closed and frozen R02 expectations PASS locally.

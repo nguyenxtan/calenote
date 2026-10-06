@@ -1,3 +1,4 @@
+import type {ContextGatewayInterpretation} from "../../src/modules/conversation/context-contract/list-period-transport";
 /** Isolated synthetic D1 probe through the production successor service and
  * gateway. The only substituted boundaries are the provider exchange and the
  * outbound messaging receipt. No semantic outcome is reconstructed here. */
@@ -17,7 +18,6 @@ import { decodeContextSnapshotV2, encodeContextSnapshotV2, type ContextSnapshotV
 import { isDeepStrictEqual } from "node:util";
 import { persistedD1Blob } from "../../src/modules/db/persisted-blob";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
-import type { ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
 import type { SemanticGateway } from "../../src/modules/intelligence/semantic-gateway";
 import type { ReplyPlan, ReplyReceipt } from "../../src/modules/conversation/context-contract/responses";
 import type { ContextObservationEvent } from "../../src/modules/conversation/context-contract/observability";
@@ -36,7 +36,7 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
 export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
-  liveGateway?: SemanticGateway<ParsedInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null; }
+  liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
   if (!/^[0-9a-f]{40}$/u.test(config.sourceSha) || !Number.isSafeInteger(config.referenceNow)) throw new TypeError("INVALID_PROBE_CONFIG");
@@ -273,7 +273,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
  * The fixture callback supplies proposed wire data only; observed decisions
  * always come from service outputs and read-back. */
 export interface LiveProbeCampaignHooks {
-  gateway: SemanticGateway<ParsedInterpretation, ContextInput>;
+  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput>;
   beforeTurn?(script: PlannedContextCase, turnIndex: number): void;
   onAction?(script: PlannedContextCase, turnIndex: number, actionIndex: number, actual: NonNullable<ContextObservation["actions"]>[number], releasedTurnIndex?: number): Promise<void>;
   onTurn(script: PlannedContextCase, turnIndex: number, actual: ContextObservation["turns"][number]): Promise<void>;

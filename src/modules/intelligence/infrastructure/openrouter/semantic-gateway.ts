@@ -1,5 +1,6 @@
+import type {ContextGatewayInterpretation} from "../../../conversation/context-contract/list-period-transport";
 import { z } from "zod";
-import { ContextInputSchema, InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../../conversation/context-contract/contracts";
+import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../../conversation/context-contract/contracts";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { containsForbiddenControl } from "../../../conversation/context-contract/projection";
 import { ConversationModelSchema, ConversationModelJsonSchema, type ConversationModel } from "../../../conversation/contracts";
@@ -8,12 +9,12 @@ import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchem
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
 import { projectProviderFailure } from "./failure-diagnostics";
-import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 as parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, decodeGoogleLiteEuContextTransportV3 as parseGoogleLiteEuContextSections } from "./context-provider-wire";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 import type { CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 
-async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number): Promise<SemanticAttemptResult<ParsedInterpretation>> {
+async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const version = googleLiteEuContextWireSchema().version;
   if (response.oversized || response.body.length > config.maxResponseBytes || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
     return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null }, canonicalValidationDiagnostics: {
@@ -23,7 +24,7 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   }
   let validation: CanonicalValidationDiagnostics | undefined, wireValidation: CanonicalValidationDiagnostics | undefined;
   const observe = (value: CanonicalValidationDiagnostics) => { validation = value; };
-  const output = z.unknown().transform((raw, ctx): ParsedInterpretation => {
+  const output = z.unknown().transform((raw, ctx): ContextGatewayInterpretation => {
     const parsed = parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; });
     if (parsed.status === "PARSED") return parsed.value;
     ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
@@ -321,7 +322,7 @@ export function createContextHttpTransport(apiKey: string,
     } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
   };
 }
-async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): Promise<SemanticAttemptResult<ParsedInterpretation>> {
+async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
   if (response.status !== 200 && response.failureDiagnostics) {
     let rawUsage: unknown;
@@ -346,7 +347,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   const tokens = z.object({ prompt_tokens: z.number().int().nonnegative(), completion_tokens: z.number().int().nonnegative() })
     .safeParse(accounting.success ? accounting.data.usage : undefined);
   const usage: SemanticUsage = { costMicrounits, ...(cost.success ? { reportedCostUsd: cost.data.cost } : {}), ...(tokens.success ? { promptTokens: tokens.data.prompt_tokens, completionTokens: tokens.data.completion_tokens } : {}) };
-  const fail = (category: import("../../semantic-gateway").SemanticFailureCategory): SemanticAttemptResult<ParsedInterpretation> => ({ status: "FAILURE", category, usage });
+  const fail = (category: import("../../semantic-gateway").SemanticFailureCategory): SemanticAttemptResult<ContextGatewayInterpretation> => ({ status: "FAILURE", category, usage });
   if (response.status !== 200) return fail(response.status === 408 ? "TIMEOUT" : response.status === 429 ? "RATE_LIMITED" : "PROVIDER_FAILURE");
   if (!tokens.success || costMicrounits === null || costMicrounits > maximum || tokens.data.prompt_tokens > 12000 || tokens.data.completion_tokens > 1536) return fail("SCHEMA_INVALID");
   const observed = z.object({ model: z.literal("google/gemini-2.5-flash-lite"), provider: z.enum(["Google", "google-vertex", "google-vertex/eu"]),
@@ -383,7 +384,7 @@ const offlineSchema = z.strictObject({ kind: z.literal("OFFLINE_FIXTURE"), excha
  * T7 still owns original-source/snapshot admission, evidence, budgets and events. */
 export type ContextGatewayConfig = SemanticGatewayConfig & { protocol: ContextProtocolV3 };
 export function createContextContractGateway(rawConfig: ContextGatewayConfig,
-  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ParsedInterpretation, ContextInput> {
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
   const { protocol, ...configuration } = rawConfig;
   if (!isContextProtocolV3(protocol)) throw new TypeError("Selected context protocol required");
   const config = configSchema.parse(configuration);
@@ -426,7 +427,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
                 ...await decodeObservableResponse(response, config), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               })),
-              new Promise<SemanticAttemptResult<ParsedInterpretation>>(resolve => { timer = setTimeout(() => {
+              new Promise<SemanticAttemptResult<ContextGatewayInterpretation>>(resolve => { timer = setTimeout(() => {
                 controller.abort(); resolve({ status: "FAILURE", category: "TIMEOUT", usage: { costMicrounits: null } });
               }, config.timeoutMs); }),
             ]);

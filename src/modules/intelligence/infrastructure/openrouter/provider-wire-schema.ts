@@ -1,6 +1,6 @@
 export const GOOGLE_LITE_EU_WIRE_SCHEMA_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-defs-1" as const;
 export interface ProviderWireSchema<T> { version: typeof GOOGLE_LITE_EU_WIRE_SCHEMA_VERSION; schema: T; }
-export interface ProviderWireSchemaV3 { version: "google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-compact-12"; schema: ReturnType<typeof import("../../../conversation/context-contract/contracts").ConversationInterpretationV3Schema.toJSONSchema>; }
+export interface ProviderWireSchemaV3 { version: import("../../../conversation/context-contract/protocol").ContextProtocolV3["wireVersion"]; schema: ReturnType<typeof import("../../../conversation/context-contract/contracts").ConversationInterpretationV3Schema.toJSONSchema>; }
 const maps = new Set(["properties", "patternProperties", "definitions", "$defs", "dependentSchemas"]);
 const singles = new Set(["additionalProperties", "additionalItems", "unevaluatedProperties", "unevaluatedItems", "contains", "propertyNames", "not", "if", "then", "else"]);
 const arrays = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);

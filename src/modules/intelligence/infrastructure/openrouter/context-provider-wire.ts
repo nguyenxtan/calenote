@@ -4,6 +4,7 @@ import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
+import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -374,6 +375,12 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   return output;
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
+  return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
+}
+export function decodeGoogleLiteEuContextTransportV3(raw:unknown,selected:ContextProtocolV3,observeInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1],observeWireInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1]) {
+  return decodeContextSectionsV3(raw,selected,true,observeInvalid,observeWireInvalid);
+}
+function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, staged:boolean, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): {status:"PARSED";value:ContextGatewayInterpretation}|{status:"REFUSED";reason:"ENVELOPE_INVALID"|"SEMANTIC_PATCH_INVALID"} {
   if (!isContextProtocolV3(selected)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     observeWireInvalid?.(projectWireValidation(raw, [], "object", undefined, "calenote-context-3"));
@@ -383,7 +390,32 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
-    const decoded = Object.fromEntries(coreKeys.map(key => [key, key === "uncertainties" ? decodeUncertainties(object[key], true) : codec(originalV3.properties![key], object[key], "decode", [key], originalV3)]));
+    let period:ListPeriodProposal|undefined;
+    let queryWire=object.query;
+    if(staged && queryWire && typeof queryWire==="object" && !Array.isArray(queryWire) && "kind" in queryWire && queryWire.kind==="LIST") {
+      const query=queryWire as Record<string,unknown>, proposal=query.period;
+      if(proposal===null)period={status:"ABSENT"};
+      else if(proposal && typeof proposal==="object" && !Array.isArray(proposal)) {
+        const p=proposal as Record<string,unknown>;
+        const known=["DAY","DATE_BOUNDS","WEEK","WEEKEND","MONTH","REST_OF_MONTH","NEXT_7_DAYS","UPCOMING"];
+        if(!known.includes(String(p.kind))) {
+          requireWireKeys(p,["kind","date","offset","from","through"],["kind","date","offset","from","through"],["query","period"]);
+          if(typeof p.kind!=="string" || !/^[A-Za-z0-9_:.-]{1,48}$/u.test(p.kind))throw new WireShapeFailure(["query","period","kind"],"CONTROL_ENUM");
+          if(p.offset!==null && (typeof p.offset!=="number" || !Number.isFinite(p.offset)))throw new WireShapeFailure(["query","period","offset"],"number");
+          // Validate unknown operands structurally through the existing date codec;
+          // the temporary known branch is never a semantic proposal.
+          for(const key of ["date","from","through"]) {
+            codec(originalV3.properties!.query,{...query,period:{...p,kind:"DAY",date:p[key]}},"decode",["query"],originalV3);
+          }
+          period={status:"UNSUPPORTED",diagnostic:projectWireValidation(raw,["query","period","kind"],"CONTROL_ENUM",undefined,"calenote-context-3",undefined,projectControlEnum(known,p.kind))};
+          // Unsupported tokens are not approved finite literals. Keep the
+          // existing structural projection, but never retain its raw token.
+          for(const issue of period.diagnostic.issues)delete issue.actualSafeToken;
+          queryWire={...query,period:null};
+        }
+      }
+    }
+    const decoded = Object.fromEntries(coreKeys.map(key => [key, key === "uncertainties" ? decodeUncertainties(object[key], true) : codec(originalV3.properties![key], key==="query"?queryWire:object[key], "decode", [key], originalV3)]));
     decoded.schemaVersion = selected.canonicalVersion;
     if (decoded.query && typeof decoded.query === "object" && "kind" in decoded.query && decoded.query.kind === "LIST") decoded.query = { ...decoded.query, statusScope: "DEFAULT" };
     for (const key of guidance) {
@@ -396,6 +428,14 @@ export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: Conte
     // Diagnostic observers receive a detached copy and cannot alter acceptance.
     // Runtime callers omit this hook; canonical predicates remain authoritative.
     if (observeDecoded) try { observeDecoded(structuredClone(decoded)); } catch { /* Observation is non-authoritative. */ }
+    if(staged && decoded.query && typeof decoded.query==="object" && "kind" in decoded.query && decoded.query.kind==="LIST") {
+      // Root ownership is outside this amendment. Preserve its canonical
+      // rejection diagnostics instead of staging an unrelated invalid action.
+      if(decoded.intent!=="LIST_REMINDERS" || decoded.requestTarget!==null || !Array.isArray(decoded.changes) || decoded.changes.length!==0)return parseInterpretationSectionsV3(decoded,observeInvalid);
+      const {period:canonicalPeriod,...query}=decoded.query as Extract<ConversationInterpretationV3["query"],{kind:"LIST"}>;
+      const {conversationDirective,replyProposal,...core}=decoded;
+      return {status:"PARSED",value:issueListTransport({core:{...core,query} as DecodedListCore,period:period??{status:"KNOWN",value:canonicalPeriod!},guidance:{conversationDirective,replyProposal}})};
+    }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
     observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3"));

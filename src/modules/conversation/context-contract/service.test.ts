@@ -196,7 +196,7 @@ it.each(["budget", "mark", "ceiling", "timeout", "evidence", "invalid core"])("%
     const gateway = h.deps.gateway;
     h.deps.gateway = { prepare: (tier, input) => { const p = gateway.prepare(tier, input); return p.status !== "READY" ? p : { ...p, dispatch: async () => {
       const r = await p.dispatch(); if (r.status === "SUCCESS") {
-        if (fault === "evidence") r.interpretation.semantic.changes[0].evidence = [{ kind: "USER_QUOTE", turn: 999, quote: "fabricated", occurrence: 1 }];
+        if (fault === "evidence" && "semantic" in r.interpretation) r.interpretation.semantic.changes[0].evidence = [{ kind: "USER_QUOTE", turn: 999, quote: "fabricated", occurrence: 1 }];
         else return { status: "FAILURE", category: "SCHEMA_INVALID" };
       } return r;
     } }; } };

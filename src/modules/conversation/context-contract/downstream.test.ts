@@ -11,7 +11,7 @@ it("valid LIST with ungrounded executable explicit-year range retains intent and
   const h = await harness([list]);
   expect(await h.turn(0, "Có lịch nào ko?")).toEqual({ status: "CLARIFICATION_REQUESTED" });
   const trace = h.events.filter(e => e.event === "POST_CANONICAL_STAGE").map(e => e.diagnostic);
-  expect(trace.map(d => d.stage)).toEqual(["CANONICAL", "LIST_RANGE", "EVIDENCE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]);
+  expect(trace.map(d => d.stage)).toEqual(["TRANSPORT", "PERIOD_RECONCILIATION", "CANONICAL", "LIST_RANGE", "EVIDENCE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]);
   expect(trace).toContainEqual({ stage: "LIST_RANGE", result: "UNSUPPORTED", reason: "NONE", candidateRange: "DAY", field: "queryRange" });
   expect(trace).toContainEqual({ stage: "QUERY_RESOLUTION", result: "CLARIFY", reason: "MISSING_RANGE" });
   expect(trace).toContainEqual({ stage: "DIRECTIVE", result: "CLARIFY", reason: "NONE", directive: "ASK_FOR_FIELD", field: "queryRange" });

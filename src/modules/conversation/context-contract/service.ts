@@ -1,3 +1,5 @@
+import {isUnreconciledListInterpretation, type ContextGatewayInterpretation} from "./list-period-transport";
+import {reconcileListPeriodV3} from "./list-period-reconciliation";
 import type { BoundChatContext, BoundChatMessage, ProcessBoundChatResult } from "@/modules/reminders/command-service";
 import type { Keyring } from "@/modules/security/keyring";
 import type { SemanticBudgetStore } from "@/modules/semantic/budget-store";
@@ -5,7 +7,7 @@ import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
 import type { LunarCalendarAdapter } from "../lunar-calendar";
 import type { ContextContractStoreV3 } from "./store";
 import type { ContextRuntimeStore } from "./runtime-store";
-import type { ContextInput, ParsedInterpretation } from "./contracts";
+import type { ContextInput } from "./contracts";
 import type { ContextReminderQuery, ContextQueryResult } from "./query";
 import type { ReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
@@ -36,7 +38,7 @@ import type { ContextObservation } from "./state";
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
-  gateway: SemanticGateway<ParsedInterpretation, ContextInput>; budgetStore: SemanticBudgetStore;
+  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput>; budgetStore: SemanticBudgetStore;
   keyring: Pick<Keyring, "decryptSensitive">; calendar: LunarCalendarAdapter;
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
   now(): number; reply(plan: ReplyPlan): Promise<ReplyReceipt>;
@@ -193,7 +195,9 @@ export function createContextContractService(deps: ContextContractServiceDepende
           emit({ event: "RESPONSE_RECEIVED", outcome: result.status, latencyMs: Math.round(performance.now() - started), observedModel: providerEvidence?.model ?? "UNKNOWN", observedProvider: providerEvidence?.provider ?? "UNKNOWN",
             promptTokens: usage?.promptTokens ?? null, completionTokens: usage?.completionTokens ?? null, costMicrounits: usage?.costMicrounits ?? null, ...(result.status === "FAILURE" ? { reason: result.category } : {}) });
           if (result.status !== "SUCCESS") { if (result.category === "SCHEMA_INVALID") downstream({ stage: "CANONICAL", result: "REJECTED", reason: "SCHEMA_INVALID" }); return finish("PROVIDER"); }
-          const parsed = result.interpretation;
+          const reconciled=isUnreconciledListInterpretation(result.interpretation)?reconcileListPeriodV3(result.interpretation,built,downstream):{status:"PARSED" as const,value:result.interpretation};
+          if(reconciled.status!=="PARSED") {downstream({stage:"CANONICAL",result:"REJECTED",reason:"SCHEMA_INVALID"});return finish("SEMANTIC");}
+          const parsed = reconciled.value;
           downstream({ stage: "CANONICAL", result: parsed.fullSchemaValid ? "PASS" : "QUARANTINED_GUIDANCE", reason: parsed.fullSchemaValid ? "NONE" : "SCHEMA_INVALID" });
           emit({ event: "STRUCTURE_VALIDATED", fullSchemaValid: parsed.fullSchemaValid, semanticPatchValidation: "VALID", directiveValidation: parsed.directive.status, replyEligibility: parsed.reply.status });
           const evidence = validateEvidenceV3(parsed.semantic, built, downstream);

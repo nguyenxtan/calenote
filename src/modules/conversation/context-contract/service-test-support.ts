@@ -25,14 +25,14 @@ export const limits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits:
 export type Proposal = (input: ContextInput) => unknown;
 // Test-only fixture assembly copies the actual projected request into T6's
 // declarative script. It never evaluates a domain result or calls a transport.
-export function scriptedGateway(proposals: Proposal[], inputs: ContextInput[]) {
+export function scriptedGateway(proposals: Proposal[], inputs: ContextInput[], transformWire?: (wire:unknown)=>unknown) {
   return { prepare(tier: "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK", input: ContextInput) {
     inputs.push(structuredClone(input));
     const value = proposals.shift()?.(input);
     const request = { model: gatewayConfig.primary.model, ...serializeContextRequest(input), provider: {
       only: [gatewayConfig.primary.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } };
     return createContextContractGateway(gatewayConfig, { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
-      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(value)) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
+      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(transformWire?transformWire(encodeFixtureV3(value)):encodeFixtureV3(value)) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
   } };
 }
 export function proposal(values: Record<string, unknown>, target: "NEW" | "CURRENT" = "NEW", guidance: unknown = null, reply: unknown = null, replacements: string[] = []): Proposal {
@@ -40,10 +40,10 @@ export function proposal(values: Record<string, unknown>, target: "NEW" | "CURRE
     changes: Object.entries(values).map(([field, value]) => ({ field, value, operation: replacements.includes(field) ? "REPLACE" : "SET", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] })),
     query: null, uncertainties: [], conversationDirective: guidance, replyProposal: reply });
 }
-export async function harness(proposals: Proposal[]) {
+export async function harness(proposals: Proposal[], transformWire?: (wire:unknown)=>unknown) {
   const original = await setup(), f = { ...original, store: { ...createD1ContextContractStoreV3({ db: original.db, keyring: original.keyring, protocol: CONTEXT_PROTOCOL_V3 }) } }, inputs: ContextInput[] = [], events: ContextObservationEvent[] = [], replies: ReadyReplyPlan[] = [];
   let index = 0, delivery: ReplyReceipt = { status: "SENT", messageRef: "provider-ref" };
-  const deps: ContextContractServiceDependencies = { store: f.store, runtimeStore: createD1ContextRuntimeStoreV3({ db: f.db, keyring: f.keyring, protocol: CONTEXT_PROTOCOL_V3 }), gateway: scriptedGateway(proposals, inputs),
+  const deps: ContextContractServiceDependencies = { store: f.store, runtimeStore: createD1ContextRuntimeStoreV3({ db: f.db, keyring: f.keyring, protocol: CONTEXT_PROTOCOL_V3 }), gateway: scriptedGateway(proposals, inputs, transformWire),
     budgetStore: new D1SemanticBudgetStore(f.db, limits), keyring: f.keyring, calendar: lunarCalendar, now: () => f.scope(index).now,
     channel: "TELEGRAM", mode: "OFFLINE_FIXTURE", sourceSha: "3cc856535dcdc8da4bf21cd27b9f7958b3c458d9",
     list: input => new D1SemanticReminderQueryStore(f.db).listContext(input), observe: e => events.push(e),

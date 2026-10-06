@@ -1,10 +1,11 @@
+import {isUnreconciledListInterpretation, listTransportGuidanceValid, type ContextGatewayInterpretation} from "../../src/modules/conversation/context-contract/list-period-transport";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { InterpretationJsonSchema, type ContextInput, type ParsedInterpretation } from "../../src/modules/conversation/context-contract/contracts";
+import { InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
@@ -198,7 +199,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
   const stop = (reason: string) => { if (!stopped()) appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
   let activeTarget: {fixtureId:string;turnIndex:number}|undefined;
-  const gateway: SemanticGateway<ParsedInterpretation, ContextInput> = { prepare(tier, context) {
+  const gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> = { prepare(tier, context) {
     const preparedTarget=activeTarget;
     const prepared = actual.prepare(tier, context); if (prepared.status !== "READY") return prepared;
     return { ...prepared, async dispatch() {
@@ -224,13 +225,13 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       }
       // Evaluation requires the canonical full envelope before entering the
       // application. Runtime T5 core/guidance quarantine remains unchanged.
-      const result = parsed.status === "SUCCESS" && !parsed.interpretation.fullSchemaValid
+      const result = parsed.status === "SUCCESS" && (isUnreconciledListInterpretation(parsed.interpretation)?!listTransportGuidanceValid(parsed.interpretation):!parsed.interpretation.fullSchemaValid)
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes, canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : parsed;
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
-        ...(selected&&result.status==="SUCCESS"?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
+        ...(selected&&result.status==="SUCCESS"&&!isUnreconciledListInterpretation(result.interpretation)?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
         ...(queryDiagnostics?{queryDiagnostics}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.

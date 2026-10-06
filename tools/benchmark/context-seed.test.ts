@@ -55,9 +55,17 @@ it.each([["R01",1],["R02",1],["R05",2]] as const)("fixture-owned %s/%s checkpoin
       expect(diagnoseContextTurn(prior, observed).failedAssertionCount).toBe(0);
     }
     const actual = await probe.checkpoint();
+    const expected=deriveContextSeed(process.cwd(), script, targetTurn).contextSeed.state;
+    // Attempt observation hashes bind the decoder protocol, not semantic
+    // checkpoint content. The immutable seed retains its historical protocol;
+    // compare semantic state while separately requiring a valid current hash.
+    if(actual.snapshot?.modelAttemptBinding && expected?.snapshot?.modelAttemptBinding) {
+      expect(actual.snapshot.modelAttemptBinding.observationId).toMatch(/^[a-f0-9]{64}$/u);
+      actual.snapshot.modelAttemptBinding.observationId=expected.snapshot.modelAttemptBinding.observationId;
+    }
     if (actual.snapshot?.modelAttemptBinding) actual.snapshot.modelAttemptBinding.attemptId = "seed-attempt";
     for (const row of actual.outcomes) row.proof_hash = null;
-    expect(actual).toEqual(deriveContextSeed(process.cwd(), script, targetTurn).contextSeed.state);
+    expect(actual).toEqual(expected);
   } finally { probe.dispose(); }
 });
 

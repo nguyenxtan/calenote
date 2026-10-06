@@ -6,6 +6,7 @@ import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/prot
 import { createContextContractGateway, createContextHttpTransport, type SemanticJsonRequest } from "./semantic-gateway";
 import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 import * as wireModule from "./context-provider-wire";
+import {isUnreconciledListInterpretation,readListTransport} from "../../../conversation/context-contract/list-period-transport";
 
 const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
@@ -184,7 +185,15 @@ it.each([
   ["CALENDAR_QUERY", { kind: "CALENDAR_DATE", date: civil, outputCalendar: "LUNAR_VN", evidence }],
   ["CAPABILITY_QUERY", { kind: "CAPABILITY", topic: "LUNAR", evidence }],
 ])("reconstructs query ownership for %s", async (intent, query) => {
-  expect(await dispatch(wireFixture({ ...minimal, intent, query }))).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { intent, query }, fullSchemaValid: true } });
+  const result=await dispatch(wireFixture({ ...minimal, intent, query }));
+  if(intent==="LIST_REMINDERS") {
+    if(!("period" in query))throw Error("fixture query ownership");
+    expect(result.status).toBe("SUCCESS");if(result.status!=="SUCCESS")throw Error(result.category);
+    expect(isUnreconciledListInterpretation(result.interpretation)).toBe(true);
+    const staged=readListTransport(result.interpretation);
+    expect(staged.core).toMatchObject({intent,query:{kind:"LIST",statusScope:query.statusScope,evidence:query.evidence}});
+    expect(staged.period).toEqual({status:"KNOWN",value:query.period});
+  } else expect(result).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { intent, query }, fullSchemaValid: true } });
 });
 it("versioned encoder matches independent fixtures and reconstructs every typed canonical field", () => {
   const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: Object.entries(values).map(([field, value]) => ({ field, operation: "SET", value, evidence })) };
@@ -199,7 +208,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-query-evidence-compact-12");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-list-period-reconciliation-13");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
