@@ -363,3 +363,14 @@ Add tooling-only bounded targetEvidence diagnostics: finite kind and numeric tur
 - [x] Valid canonical fixture RED missing targetEvidence; GREEN focused 37 PASS. Initial invalid fixture and interrupted full run retained separately.
 - [x] Independent review C0/I0/M0.
 - [x] Full serial local verification PASS: docs/typecheck/lint/build/Worker types/local dry-run included. Continue new Formal Pilot within existing root authority/accounting.
+
+### Pending relation question and retained count
+
+Candidate `a27ae60941fcec583d524dc6d9b7f53c33ed41e5` stopped at R02 turn one after four requests, generation `gen-1791295267-FC4Fs2TId0R6ahOy5iig`. Target ordinal was correct, but the model emitted relation plus offset copied from the preceding series count. Canonical/evidence accepted its explicit phrase; backend conflict clarification preserved safety, while the frozen oracle failed two assertions. Historical execution remains terminal.
+
+Strengthen contextual guidance: a short relation answer matching retained DAILY/count fills relation only, whereas independent start offsets/corrections remain grounded operands and genuine ambiguity stays uncertainty. No canonical/evidence/oracle changes.
+
+- [x] RED prompt-policy test; GREEN focused 132 PASS.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial local suite and docs/typecheck/lint/build/Worker types/dry-run PASS.
+- Prompt SHA256 `d789dffc54291e6ccd34a21bdf76b25416033d89f51116ddd1d1bf0e7004e37c`. Continue fresh Formal Pilot in the same debug accounting root.

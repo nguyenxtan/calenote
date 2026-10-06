@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("a scoped relation answer does not introduce a second numeric operand", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("When pendingQuestion.field is eventRelation and accepted facts already contain DAILY plus occurrenceCount=N, a short answer requesting N preceding days fills eventRelation only.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not emit leadOffsetDays SET merely because that relation answer contains a number equal to N.");
+});
+
 it("encoded USER_QUOTE retains every required active key", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("occurrence is required even when the quote appears only once; use its verified one-based match index, never omit it.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example canonical ref: {"kind":"USER_QUOTE","turn":0,"quote":"literal user fragment","occurrence":1}.');
