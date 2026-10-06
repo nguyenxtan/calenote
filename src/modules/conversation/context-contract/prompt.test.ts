@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("final target evidence check distinguishes targeting from historical operand sources", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: parse each requestTarget evidence JSON string before returning.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Its turn must equal the integer input.currentTurn, including for CURRENT and NEW; do not reuse the turn from an old field source.");
+});
+
 it("pending proposed slot values remain usable conversation context", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("PROPOSED and RESOLVED non-conflicting slot values are retained semantic context, not missing merely because confirmation has not occurred.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Read the series count from activeRequest.slots.occurrenceCount.value and cadence from activeRequest.slots.frequency.value.");

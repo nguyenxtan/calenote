@@ -385,3 +385,14 @@ Make the actual activeRequest.slots paths and PROPOSED/RESOLVED meanings explici
 - [x] Independent review C0/I0/M0.
 - [x] Full serial local verification, docs/typecheck/lint/build/Worker types/dry-run PASS.
 - Prompt SHA256 `cae2669c1c64b3ec15928a0e23b85c4fd826c699fa05f0e5edde9cc0d0cbd0fa`. Fresh live acceptance remains required; no canonical/evidence/oracle change.
+
+### Final targeting source check
+
+Candidate `58f11db71d99162942a1fa22729ef75e7bbc5a1e` stopped after four requests at R02 turn one, generation `gen-1791297086-rBXtggw9fzuCKQ1sGHrr`. Offset was absent, but targetEvidence reported USER_QUOTE turn zero instead of the current second USER turn at index two. Canonical validation passed and strict evidence correctly rejected CURRENT_USER_EVIDENCE_REQUIRED.
+
+The authority matrix classifies source selection SEMANTIC_UNTRUSTED and not application-derivable. Therefore do not auto-substitute the target turn in decoding. Add a final source check in the model instruction, independently for primary/extras, preserving eligible historical non-target operand sources.
+
+- [x] RED prompt-policy test; GREEN focused 134 PASS.
+- [x] Independent review C0/I0/M0.
+- [x] Full local suite and docs/typecheck/lint/build/Worker types/dry-run PASS.
+- Prompt SHA256 `493d6ed6632a056feefaf1422d483d6c09238b6ffe72561f7544c279fe1dd191`. No authority/schema/validator/oracle relaxation; continue fresh live validation under the same root budget.
