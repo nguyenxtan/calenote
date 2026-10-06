@@ -226,7 +226,7 @@ it("invalid core cannot be rescued by persuasive eligible guidance", async () =>
 it.each(["SENT", "FAILED", "UNCERTAIN"] as const)("actual %s model clarification preserves encrypted outbound receipt and source/view mapping", async delivery => {
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, input => frozenContextProposal(input, "D09", 0));
   try {
-    const actual = await probe.turn("Ngày 11/10 đi thi ở Quang Trung. e\u0301😀", "2026-09-28T03:00:00Z", delivery === "SENT" ? undefined : delivery);
+    const actual = await probe.turn("Ngày 11/10 đi thi ở Quang Trung, nhắc hai ngày trước hôm thi. e\u0301😀", "2026-09-28T03:00:00Z", delivery === "SENT" ? undefined : delivery);
     const snapshot = probe.snapshot()!;
     expect(snapshot.transcript[0].text).toContain("e\u0301😀");
     expect(snapshot.transcript[0].semanticView).toContain("é😀");

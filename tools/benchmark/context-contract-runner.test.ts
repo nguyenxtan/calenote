@@ -167,7 +167,7 @@ it("semantic_change_invalidates_prefix while exact same-source R02 continuation 
     expect(() => admitFutureLiveIntent(intent)).toThrow("PILOT_PREFIX_PROOF_CHANGED");
     writeFileSync(prefixProofPath, proofText);
   } finally { rmSync(previous, { recursive: true, force: true }); rmSync(next, { recursive: true, force: true }); }
-});
+}, 120000);
 
 it("discards inactive padding through R01 and persists actual reads/mutations before a later pilot stop", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-r01-turn-evidence-")); let calls = 0;

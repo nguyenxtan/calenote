@@ -276,7 +276,7 @@ it("CO-F retains offset without manufacturing daily count and keeps approximate 
     input => ({ ...(proposal({ reminderTime: time() }, "CURRENT")(input) as object), uncertainties: [{ field: "reminderTime", reason: "AMBIGUOUS", alternatives: [] }] }),
   ]);
   await h.turn(0, "11/10 tui thi ở Quang Trung, nhắc tui trước đó nha.");
-  await h.turn(1, "2 ngày.");
+  await h.turn(1, "Nhắc trước 2 ngày.");
   await h.turn(2, "sáng, khoảng 8h.");
   const state = await h.read(3);
   expect(state?.slots.occurrenceCount.value).toBeNull();

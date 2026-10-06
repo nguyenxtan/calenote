@@ -7,6 +7,7 @@ import { supportsEventRelation, type EventRelation } from "./event-relation-evid
 import { observeDownstream, evidenceReason, type DownstreamObserver, type EvidenceFailureDiagnostic } from "./downstream";
 import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
+import { supportsLeadOffset } from "./lead-offset-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
@@ -189,6 +190,8 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
     // reach that verifier so it can discard the range while retaining intent.
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
+    if (field === "leadOffsetDays" && requested !== null && !firstFact
+      && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   try {
@@ -374,6 +377,8 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     // reach that verifier so it can discard the range while retaining intent.
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
+    if (field === "leadOffsetDays" && requested !== null && !firstFact
+      && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   return {resolve,quoteSource};
