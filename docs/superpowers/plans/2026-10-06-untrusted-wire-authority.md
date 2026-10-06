@@ -588,3 +588,14 @@ Replace the three redundant wire selectors with one untrusted integer operationC
 - Wire v22 SHA256 `5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe`; serialized bytes 10183 (v21 10516). Prompt SHA256 `e150430ed3efe493b232bd1417a616932a68f85ecea3f45a385ff64dfe1f9c3e`.
 - [x] Full serial offline checks exit zero: 172 files/8311 PASS/2 existing skips; documentation checks/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff check PASS.
 - [ ] Local commit; then one material-wire canary and fresh Formal Pilot under the existing bounded debug authority. Live compiler/model compliance and Pilot PASS are not yet proven. No Full/release.
+
+### V23 selector-first schema ordering isolation
+
+V22 candidate `26f43c28e6463cb813b2a2d649ff90ad3b6a698a` single canary stopped terminally at R01 turn zero. HTTP 200, generation `gen-1791316516-o9vjyr00tCviBOVpfDcb`, cost 0.000659 USD settled KNOWN. Wire decode rejected missing operationCode; five-byte payload digest proves an empty object with whitespace, not output truncation. Zero reads/mutations. Historical UNKNOWN unchanged; conservative remaining derived 2783279 microunits. No Formal Pilot started for this candidate.
+
+The emitted schema placed operationCode last although required keys and prompt list it first. Google documents schema-key output ordering at https://ai.google.dev/gemini-api/docs/structured-output. Move the selector first, preserving every field domain, decoder, canonical/evidence validator, prompt and oracle. This isolates a proven ordering mismatch; causation of the empty response remains a hypothesis until live evidence. No private upstream transformation is claimed.
+
+- [x] RED ordering regression one failure/22 PASS; GREEN focused 194 PASS/2 existing skips; independent review C0/I0/M0 with 194 PASS/2 skips.
+- V23 schema SHA256 `e214a02a9c8e69b64e6fd9b71fa276e2c27f2d0a09a3cefb42fa8cd6badd2e2b`; prompt unchanged.
+- [x] Full offline verification exit zero: 172 files/8312 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings, diff PASS.
+- [ ] Local commit and one new wire canary; Formal Pilot only if the canary passes. No Full/release.

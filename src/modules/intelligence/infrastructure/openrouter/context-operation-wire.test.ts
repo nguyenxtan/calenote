@@ -36,6 +36,11 @@ it("provider schema exposes a single finite operation selector",()=>{
  const properties=googleLiteEuContextWireSchemaV3().schema.properties!;
  expect(properties.operationCode).toEqual({type:"integer",enum:[0,1,2,3,4,5,6,7,8,9,10,11]});expect(properties).not.toHaveProperty("intent");
 });
+it("schema emits the operation selector before its dependent carriers in required prompt order",()=>{
+ const schema=googleLiteEuContextWireSchemaV3().schema;
+ expect(Object.keys(schema.properties!)).toEqual(schema.required);
+ expect(Object.keys(schema.properties!)[0]).toBe("operationCode");
+});
 it("operation mapping does not bypass canonical conditional uncertainty requirements",()=>{
  const wire=encodeGoogleLiteEuContextV3(canonical(9)) as Record<string,unknown>;
  wire.uncertainties=[];

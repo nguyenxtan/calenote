@@ -442,7 +442,7 @@ const operationTuples = Object.freeze([
 function operationSchema(root:Schema):Schema{
  const result=structuredClone(root);
  delete result.properties!.intent;
- result.properties!.operationCode={type:"integer",enum:operationTuples.map((_,index)=>index)};
+ result.properties={operationCode:{type:"integer",enum:operationTuples.map((_,index)=>index)},...result.properties!};
  result.required=result.required!.filter(key=>key!=="intent");result.required.unshift("operationCode");
  const strip=(node:Schema):void=>{
   if(node.$ref){strip(at(result,node.$ref));return;}

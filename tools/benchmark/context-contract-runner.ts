@@ -187,7 +187,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "e150430ed3efe493b232bd1417a616932a68f85ecea3f45a385ff64dfe1f9c3e"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe"
+    if (providerWireSchemaDigest !== "e214a02a9c8e69b64e6fd9b71fa276e2c27f2d0a09a3cefb42fa8cd6badd2e2b"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
