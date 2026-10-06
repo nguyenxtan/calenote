@@ -564,3 +564,14 @@ Clarify the existing query distinction in the dispatched policy: viewing saved r
 - [x] Independent review C0/I0/M0; reviewer checks 90 PASS/2 skips; diff PASS.
 - [x] Full serial offline verification exit zero: 171 files/8287 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS. Next new Formal Pilot. No Full/release.
 - Prompt SHA256 `a1fc232b5f303018b9b29d3b3628a4bede65ab2569e77b992ece22cc538164df`; wire v21 unchanged.
+
+### First-request target ownership
+
+Candidate `2fb31958d6d068e2446803e870be9053440aa675` Formal Pilot stopped after three requests at R02 turn zero, generation `gen-1791313489-mQBpKWgrsmqntFaMsue2`. Wire/canonical/evidence passed but target CURRENT with no retained request reached the existing CLARIFY_OPERATION guard; no fields were merged and no reminders mutated. Existing evidence reconciliation independently filters unsupported event relations. Terminal execution and confirmed costs preserved; conservative remaining derived 2785599 microunits, UNKNOWN unchanged.
+
+Explicitly document the existing target semantics in the model policy: null activeRequest plus a grounded first reminder task uses NEW; a grounded answer/correction to an existing activeRequest uses CURRENT; genuine targeting ambiguity stays UNRESOLVED. Do not retarget in the backend, manufacture authority or change merge/oracle semantics.
+
+- [x] RED one failure/25 PASS; focused 124 PASS/2 existing skips, policy delivery only.
+- [x] Independent review C0/I0/M0; reviewer 91 PASS/2 skips; diff PASS.
+- [x] Full serial offline checks exit zero: 171 files/8288 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff PASS. Next new Formal Pilot under existing root authority. No Full/release.
+- Prompt SHA256 `445523f904edf4ab62a0f0d3688a2abb254474a7dc873861e21f64baf598d6a7`; wire v21 unchanged.

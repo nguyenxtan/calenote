@@ -46,6 +46,11 @@ it("query continuation preserves matching list ownership rather than calendar co
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Before returning a query, check the pair: LIST_REMINDERS/LIST, CALENDAR_QUERY/CALENDAR_DATE, CAPABILITY_QUERY/CAPABILITY; mismatched pairs are invalid.");
 });
 
+it("first reminder targets NEW only when no retained request exists", () => {
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("When activeRequest is null and the USER states a first reminder task, use NEW; CURRENT cannot address a nonexistent retained request.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("For a grounded answer or correction to an existing activeRequest, use CURRENT; do not start a new request merely because the answer is short.");
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
 });
