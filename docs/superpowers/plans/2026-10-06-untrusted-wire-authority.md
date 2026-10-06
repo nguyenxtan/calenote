@@ -260,3 +260,13 @@ Add contextual prompt guidance distinguishing preceding notification count from 
 - [x] RED prompt-policy test; GREEN focused prompt/fit/oracle regressions 89 PASS/two existing skips.
 - [x] Independent review C0/I0/M0; full `pnpm check` 171 files / 8,249 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
 - Prompt SHA256 `05a802a5dd24c3fb145570c290f26a95843797b46697a8b9d881a4258ac10aee`. Fresh Formal Pilot remains necessary; no failed execution is relabeled or resumed.
+
+### Query continuation ownership prompt clarification
+
+Candidate `4715f1185980db16a0ccd59f37970d2a7f14ee10` stopped after two requests. R01 turn one generation `gen-1791276507-9pZ3xxHyzAvNv2lu05XN` returned HTTP 200 but canonical validation correctly rejected REQUEST_TARGET_INTENT_OWNERSHIP: LIST_REMINDERS, CURRENT target, LIST query, zero changes/uncertainties. No database read or reminder mutation occurred. The failed execution is terminal; no schema/evidence/oracle relaxation is justified.
+
+Explicitly guide query continuations to retain query intent and null requestTarget even when application context is present. Period answers fill query.period, not a reminder target. This mirrors the existing canonical ownership rule without changing runtime authority.
+
+- [x] RED prompt-policy test; GREEN focused prompt/fit/oracle regressions 90 PASS/two existing skips.
+- [x] Independent review C0/I0/M0; full `pnpm check` 171 files / 8,250 PASS/two existing skips, documentation/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
+- Prompt SHA256 `242a67e5376c055dc5069fde62e6b19fad3b15f37f1dffe017bdf2055982e2d4`. Public provider schema remains unchanged; continue fresh Formal Pilot within the existing conservative USD 5 debug cap.

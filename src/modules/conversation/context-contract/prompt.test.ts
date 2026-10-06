@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("query continuation never borrows reminder request targeting", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A LIST or calendar query continuation is still a query, never a CURRENT reminder target.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("For LIST_REMINDERS, CALENDAR_QUERY, CAPABILITY_QUERY, HELP and UNSUPPORTED, requestTarget must be null, even when activeRequest or pendingQuestion is present.");
+});
+
 it("series continuation distinguishes preceding notification count from a single lead offset", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("For a retained DAILY consecutive series, a continuation specifying the preceding days establishes BEFORE_EVENT, retaining its occurrenceCount; do not reinterpret that same count as leadOffsetDays.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A separate leadOffsetDays requires an independently specified single offset, not the series duration/count restated with before.");
