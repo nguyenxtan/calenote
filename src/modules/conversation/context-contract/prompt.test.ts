@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("pending proposed slot values remain usable conversation context", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("PROPOSED and RESOLVED non-conflicting slot values are retained semantic context, not missing merely because confirmation has not occurred.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Read the series count from activeRequest.slots.occurrenceCount.value and cadence from activeRequest.slots.frequency.value.");
+});
+
 it("a scoped relation answer does not introduce a second numeric operand", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("When pendingQuestion.field is eventRelation and accepted facts already contain DAILY plus occurrenceCount=N, a short answer requesting N preceding days fills eventRelation only.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not emit leadOffsetDays SET merely because that relation answer contains a number equal to N.");

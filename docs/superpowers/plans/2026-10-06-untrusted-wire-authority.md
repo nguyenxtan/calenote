@@ -374,3 +374,14 @@ Strengthen contextual guidance: a short relation answer matching retained DAILY/
 - [x] Independent review C0/I0/M0.
 - [x] Full serial local suite and docs/typecheck/lint/build/Worker types/dry-run PASS.
 - Prompt SHA256 `d789dffc54291e6ccd34a21bdf76b25416033d89f51116ddd1d1bf0e7004e37c`. Continue fresh Formal Pilot in the same debug accounting root.
+
+### Concrete proposed-slot context
+
+Candidate `a1823fede287cd7d54c1cfff4c421fc9ffcf2742` again stopped after four requests at R02 turn one, generation `gen-1791296166-TroyKBsCQeWaH7DQCMA0`, with the same count/offset over-inference and safe backend conflict clarification. Preserve that terminal result.
+
+Make the actual activeRequest.slots paths and PROPOSED/RESOLVED meanings explicit. Non-conflicting proposed draft values supply conversation context without waiting for confirmation; CONFLICT stays unresolved, and no slot use authorizes persistence. Whether this distinction explains the previous model behavior remains a hypothesis, not a claim about hidden reasoning.
+
+- [x] RED prompt-policy test; GREEN focused 133 PASS.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial local verification, docs/typecheck/lint/build/Worker types/dry-run PASS.
+- Prompt SHA256 `cae2669c1c64b3ec15928a0e23b85c4fd826c699fa05f0e5edde9cc0d0cbd0fa`. Fresh live acceptance remains required; no canonical/evidence/oracle change.
