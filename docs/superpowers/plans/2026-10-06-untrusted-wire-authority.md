@@ -220,3 +220,13 @@ V16 keeps the successfully compiled public schema unchanged, but declares encode
 - [x] GREEN: exact canonical JSON encode/decode plus missing-active-key, bad-discriminator and unexpected-key rejection; focused wire/parity tests 3,102 PASS.
 - [x] Independent delta review C0/I0; frozen full `pnpm check` 171 files / 8,245 PASS / two existing skips, documentation, typecheck, lint, build, Worker types check and local deployment dry-run PASS under network/credential denial. An interrupted earlier run changed fixtures during execution and is not accepted verification evidence.
 - V16 prompt SHA256: `67a47b298367b2f223c5a6a27762c711d0cec8f92c25d2fab20ec8cc706f7b6e`; schema remains `5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906`. Fresh Formal Pilot, not a redundant compiler probe, is the next acceptance gate under the same USD 5 root authority.
+
+### First V16 Formal Pilot and numeric-clock prompt correction
+
+Candidate `e7d2df2b7ea67da9c4972e394f3cff61ba586ad4` Formal Pilot issued five provider requests, all HTTP 200. R01 turns zero/one and R02 turns zero/one passed the frozen application oracle. R02 turn two created a preview but failed the sole assertion `fields.reminderTime.qualifier`: expected H24, actual AM for the frozen `8h.` operand. Generation `gen-1791274228-XxYrfoiR4NpG57i33IpZ`; total five-request confirmed cost USD 0.0021525. The failed execution remains terminal with no Pilot acceptance credit.
+
+The approved spec/frozen canonical example treats numeric clock notation as H24; the prompt did not explicitly distinguish it from a model-inferred meridiem. Add a general rule: numeric h/HH:mm without an explicit day-part uses H24; AM/PM requires a scoped explicit user operand or exact retained fact. Genuinely approximate/ambiguous operands remain unresolved. No live result is rewritten or repaired and schema/canonical/evidence/oracle semantics are unchanged.
+
+- [x] RED prompt-policy regression; GREEN focused 68 PASS/two existing skips.
+- [x] Final independent review C0/I0 including explicit day-part exception; final source-frozen `pnpm check` 171 files / 8,246 PASS/two existing skips, documentation/typecheck/lint/build/Worker type check/local dry-run PASS. Earlier pre-final-wording workflow was interrupted, not accepted as final evidence.
+- Current prompt SHA256 `e6b55e019a392baf7e796de01d63689d6bb74df41780eeaaf745b098600a41d5`; provider schema and V16 protocol unchanged. Continue fresh immutable-candidate Formal Pilot under the existing debug grant and current conservative accounting.

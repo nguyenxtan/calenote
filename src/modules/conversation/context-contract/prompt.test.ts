@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("numeric clock notation preserves canonical H24 rather than inventing a meridiem qualifier", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit numeric h/HH:mm clock notation without an explicit day-part uses H24, not an inferred AM/PM qualifier.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("AM/PM requires an explicit meridiem/day-part operand in user evidence or exact retained fact.");
+});
+
 it("selected dispatch policy permits explicit null advice without granting backend authority", () => {
   const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "nhắc đi thi" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
   const request = serializeContextRequest(input), policy = request.messages[0].content;
