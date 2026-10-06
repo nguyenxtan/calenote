@@ -122,13 +122,18 @@ export function inspectCandidateValidation(authority: CandidateValidationAuthori
 }
 /** Read-only readiness is not a grant. Fixed physical anchor prevents copied
  * worktrees from advertising a fresh namespace/budget. */
-export function prepareCandidateValidation(root: string, candidate: string, target?:{fixture:string;turn:number}) {
+export function prepareCandidateIdentity(root: string, candidate: string) {
   assertExecutingRoot(root);
   if (execFileSync("git", ["-C", root, "status", "--porcelain", "--untracked-files=normal"], { encoding: "utf8", env: contextCampaignGitEnvironment }).trim()) throw new Error("SOURCE_NOT_CLEAN");
   const accountRoot = "/Users/bichtuyen/code/calenote/.worktrees/product-experience-v2/.superpowers/sdd/2026-09-28-llm-context-contract-implementation";
   const parentCampaignRoot = join(accountRoot, "t11-inference-resume-03b8896-20261003");
   contained(accountRoot, parentCampaignRoot);
-  const proof = candidateValidationProof(root, candidate), derived = accounting(root, accountRoot, true);
+  const proof = candidateValidationProof(root, candidate);
+  if (!auditCampaignAccountRoot(accountRoot).bindings.some(b => b.directory === join(parentCampaignRoot, "PILOT"))) throw new Error("VALIDATION_PARENT_MISSING");
+  return {...proof,accountRoot,parentCampaignRoot};
+}
+export function prepareCandidateValidation(root: string, candidate: string, target?:{fixture:string;turn:number}) {
+  const {accountRoot,parentCampaignRoot,...proof}=prepareCandidateIdentity(root,candidate),derived=accounting(root,accountRoot,true);
   const selected=target?resolveSingleValidationTarget(root,target):undefined;
   if (!auditCampaignAccountRoot(accountRoot).bindings.some(b => b.directory === join(parentCampaignRoot, "PILOT"))) throw new Error("VALIDATION_PARENT_MISSING");
   return { ...proof, ...derived, accountRoot, parentCampaignRoot, target:selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0",...(selected?{targetBinding:{fixture:selected.fixture,turn:selected.turn,manifestSha256:selected.manifestSha256,semanticBaselineSha:selected.contextSeed.semanticBaselineSha,runtimeRevisionSha:candidate,contextSeedVersion:selected.contextSeed.version,contextSeedDigest:selected.contextSeedDigest}}:{}), maxProviderHttpRequests: 1 as const,

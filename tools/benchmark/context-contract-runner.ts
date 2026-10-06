@@ -34,6 +34,7 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
+  debugBudgetAuthoritySha256?: string;
   singleTarget?: {fixture:string;turn:number;manifestSha256:string;contextSeedDigest?:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
   boundedPilot?: { manifestSha256: string; maxRequests: number;
@@ -148,6 +149,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
   appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
+    ...(input.debugBudgetAuthoritySha256 ? {debugBudgetAuthoritySha256:input.debugBudgetAuthoritySha256} : {}),
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
     ...(input.singleTarget ? {executionKind:"SINGLE_TARGET_VALIDATION" as const,targetManifestSha256:selected!.manifestSha256,maxTargetRequests:1,targetFixture:selected!.fixture,targetTurn:selected!.turn,...(input.singleTarget.contextSeedDigest?{contextSeedDigest:input.singleTarget.contextSeedDigest}:{})} : replayOnly || turnZeroOnly ? { executionKind: "R01_REPLAY" as const } : {}),

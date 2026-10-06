@@ -1,6 +1,20 @@
 import { auditCampaignAccountRoot, readCampaignLedger } from "./context-contract-live";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+/** Opt-in owner-authorized debug policy. UNKNOWN stays UNKNOWN; its full
+ * recorded upper bound consumes headroom instead of a one-UNKNOWN veto.
+ * Include all historical exposure as well, conservatively, without rebasing
+ * accounting or creating money under a new execution identity. */
+export function inspectConservativeDebugCost(accountRoot:string,capMicrounits:number,maximumRequestExposureMicrounits:number,enforce=true) {
+  const state=inspectConfirmedCampaignCost(accountRoot,capMicrounits,maximumRequestExposureMicrounits,false,true);
+  const unknownExposureMicrounits=state.historicalUnknownExposureMicrounits+state.prospectiveUnknownExposureBoundMicrounits;
+  const conservativeRetainedMicrounits=state.confirmedMicrounits+unknownExposureMicrounits;
+  if(!Number.isSafeInteger(conservativeRetainedMicrounits))throw Error("DEBUG_COST_INVALID_ACCOUNTING");
+  const remainingConservativeMicrounits=capMicrounits-conservativeRetainedMicrounits;
+  const hardCapReady=remainingConservativeMicrounits>=maximumRequestExposureMicrounits;
+  if(enforce&&!hardCapReady)throw Error("DEBUG_COST_HARD_CAP");
+  return {...state,policy:"CONSERVATIVE_DEBUG_V1" as const,unknownExposureMicrounits,conservativeRetainedMicrounits,remainingConservativeMicrounits,hardCapReady};
+}
 function historicalReportedCosts(directory:string,runId:string,singletonReservationId?:string) {
   const path=join(directory,"responses.json"),costs=new Map<string,number>();
   if(!existsSync(path))return costs;
@@ -30,11 +44,11 @@ function historicalReportedCosts(directory:string,runId:string,singletonReservat
 /** Prospective policy: legacy UNKNOWN stays immutable/visible. One unresolved
  * new claim (including a pre-dispatch crash) blocks every later run in this
  * account namespace, independently of authorization/run identifiers. */
-export function inspectConfirmedCampaignCost(accountRoot: string, capMicrounits: number, maximumRequestExposureMicrounits: number, enforce = true) {
+export function inspectConfirmedCampaignCost(accountRoot: string, capMicrounits: number, maximumRequestExposureMicrounits: number, enforce = true, includeFull = false) {
   const audit = auditCampaignAccountRoot(accountRoot);
   const costs: number[] = [], exactUsd: number[] = [];
   let unknownCount = 0, prospectiveUnknownCount = 0, historicalUnknownExposureMicrounits = 0, prospectiveUnknownExposureBoundMicrounits = 0, roundedOnlyCount = 0;
-  for (const binding of audit.bindings.filter(b => b.account === "PILOT")) {
+  for (const binding of audit.bindings.filter(b => includeFull || b.account === "PILOT")) {
     const rows = readCampaignLedger(binding.directory), first = rows[0];
     const prospective = first?.event === "BEGIN" && first.accountingPolicy === "CONFIRMED_COST_V1";
     const claims=rows.filter(r=>r.event==="RESERVE");

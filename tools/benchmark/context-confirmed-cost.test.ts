@@ -4,13 +4,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, realpathSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendCampaignEvent, reserveCampaignCall, markCampaignDispatched, finishCampaignCall, readCampaignLedger } from "./context-contract-live";
-import { inspectConfirmedCampaignCost } from "./context-confirmed-cost";
+import { inspectConfirmedCampaignCost, inspectConservativeDebugCost } from "./context-confirmed-cost";
 function fixture() {
  const root=realpathSync(mkdtempSync(join(tmpdir(),"confirmed-cost-")));
- function execution(id:string,cost:number|null,prospective=false,reportedCostUsd?:number) {
-  const dir=join(root,id,"PILOT");mkdirSync(dir,{recursive:true});
-  appendCampaignEvent(dir,{event:"BEGIN",runId:id,profile:"PILOT",sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1,...(prospective?{executionKind:"R01_REPLAY",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472}as const:{})});
-  reserveCampaignCall(dir,{runId:id,profile:"PILOT",provenanceDigest:"b".repeat(64),reservationId:id,maximumMicrounits:prospective?0:100000,now:1,startedAt:1});
+ function execution(id:string,cost:number|null,prospective=false,reportedCostUsd?:number,profile:"PILOT"|"FULL"="PILOT") {
+  const dir=join(root,id,profile);mkdirSync(dir,{recursive:true});
+  appendCampaignEvent(dir,{event:"BEGIN",runId:id,profile,sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1,...(prospective?{executionKind:"R01_REPLAY",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472}as const:{})});
+  reserveCampaignCall(dir,{runId:id,profile,provenanceDigest:"b".repeat(64),reservationId:id,maximumMicrounits:prospective?0:100000,now:1,startedAt:1});
   markCampaignDispatched(dir,{runId:id,reservationId:id,at:1});
   finishCampaignCall(dir,{runId:id,reservationId:id,at:1,observedMicrounits:cost,...(reportedCostUsd===undefined?{}:{reportedCostUsd})});
   if(!readCampaignLedger(dir).some(r=>r.event==="STOP"))appendCampaignEvent(dir,{event:"STOP",runId:id,at:1,reason:"TERMINAL"});
@@ -18,6 +18,21 @@ function fixture() {
  }
  return {root,execution,cleanup:()=>rmSync(root,{recursive:true,force:true})};
 }
+it("total debug cap also accounts historical FULL exposure without granting Full execution",()=>{const f=fixture();try{f.execution("full-unknown",null,false,undefined,"FULL");f.execution("full-known",10,false,undefined,"FULL");expect(inspectConservativeDebugCost(f.root,5000000,105472)).toMatchObject({confirmedMicrounits:10,unknownExposureMicrounits:100000,remainingConservativeMicrounits:4899990});expect(inspectConfirmedCampaignCost(f.root,1500000,105472).confirmedCount).toBe(0)}finally{f.cleanup()}});
+it("debug admission charges historical and prospective UNKNOWN conservatively without settling or releasing either",()=>{
+ const f=fixture();try{const old=f.execution("old",null),fresh=f.execution("fresh",null,true);f.execution("known",315,true,.0003146);
+ const snapshots=[old,fresh].map(d=>readFileSync(join(d,"campaign.jsonl"),"utf8"));
+ expect(inspectConservativeDebugCost(f.root,5000000,105472)).toMatchObject({confirmedMicrounits:315,unknownExposureMicrounits:205472,conservativeRetainedMicrounits:205787,remainingConservativeMicrounits:4794213,hardCapReady:true});
+ expect([old,fresh].map(d=>readFileSync(join(d,"campaign.jsonl"),"utf8"))).toEqual(snapshots);
+ expect(()=>inspectConfirmedCampaignCost(f.root,1500000,105472)).toThrow("CONFIRMED_COST_UNKNOWN_SAFETY_LIMIT");
+ }finally{f.cleanup();}
+});
+it("debug admission stops when UNKNOWN plus the next request bound exceed the cap",()=>{
+ const f=fixture();try{f.execution("unknown",null,true);
+ expect(()=>inspectConservativeDebugCost(f.root,210943,105472)).toThrow("DEBUG_COST_HARD_CAP");
+ expect(inspectConservativeDebugCost(f.root,210944,105472).remainingConservativeMicrounits).toBe(105472);
+ }finally{f.cleanup();}
+});
 it("confirmed metrics use actual settlements, not historical UNKNOWN reservations",()=>{
  const f=fixture();try{
   const old=f.execution("old",null),before=readFileSync(join(old,"campaign.jsonl"),"utf8");
