@@ -440,3 +440,14 @@ Add a compact typed example with different synthetic date/hour operands to disti
 - [x] Independent delta review C0/I0/M0; no source-level title/evidence contradiction proven.
 - [x] Full serial offline suite 171 files/8269 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `fc6ad68e0d9c610896f8e0f20debf609268186f616666097961fb1859458cbd8`; wire v18 and canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the existing root debug grant/accounting.
+
+### Explicit one-time cadence versus lead distance
+
+Candidate `8b61122749c5720aeda6a0e73f00b34412bb4994` passed R04 turn zero but stopped after nine requests at R04 turn one, generation `gen-1791301902-JAJJvfgLJEEaOXmPSs1H`. Observed controls were DAILY/count1/BEFORE_EVENT/offset2 for an explicit one-time lead reminder. Canonical/evidence passed; backend rejected the unsupported schedule and no reminder mutation occurred. Execution is terminal and confirmed cost settled.
+
+Clarify the existing single-offset rule with a different synthetic meeting example: explicit one-time cadence is ONCE, lead distance is leadOffsetDays, and it must not manufacture DAILY/count1. Preserve retained series context, independently evidenced conflicts, exact evidence and the frozen oracle.
+
+- [x] RED policy test one fail/17 PASS; GREEN focused/fit 203 PASS/2 existing skips, delivery-only assertions.
+- [x] Independent delta review C0/I0/M0.
+- [x] Full serial offline suite 171 files/8270 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `882fc4e46082d75008f779741bf5188f8f53d6627c0d7c8ac4210c5aa23efc15`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the existing root cap.

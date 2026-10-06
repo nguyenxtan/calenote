@@ -5,6 +5,10 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("single lead reminder policy does not manufacture a daily series", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
+});
+
 it("exam task normalization example separates typed title from event operands", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example of an event-only exam statement: Em thi ngày 20/12 lúc 9h. gives title="đi thi", eventDate={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:12,year:null,leapMonth:null}, eventTime={hour:9,minute:0,qualifier:"H24"}; reminderDate and reminderTime remain absent.');
 });
