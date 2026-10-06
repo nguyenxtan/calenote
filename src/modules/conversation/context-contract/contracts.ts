@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
-import { canonicalConstraint, type CanonicalConstraintId } from "./canonical-constraints";
+import { canonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
 
 /** Dormant canonical successor contract. No execution or confirmation authority. */
 export const SLOT_NAMES = ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const;
@@ -185,20 +185,25 @@ export const SemanticPatchProposalV3Schema = z.strictObject({
   schemaVersion: z.literal("calenote-context-3"), intent: IntentSchema, requestTarget: RequestTargetV3Schema.nullable(),
   changes: z.array(FieldChangeV3Schema).max(13), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
 }).superRefine((v, ctx) => {
-  const fail = (id: CanonicalConstraintId, message: string) => ctx.addIssue({ code: "custom", ...canonicalConstraint(id, message) });
+  const fail = (id: CanonicalConstraintId, message: string, ownership = false) => {
+    const state: OwnershipControlState | undefined = ownership ? {intent: v.intent, requestTargetKind: v.requestTarget?.kind ?? null,
+      queryKind: v.query?.kind ?? null, changeCount: v.changes.length, uncertaintyCount: v.uncertainties.length,
+      uncertainties: v.uncertainties.map(u => ({field: u.field, reason: u.reason, alternativeCount: u.alternatives.length}))} : undefined;
+    ctx.addIssue({ code: "custom", ...canonicalConstraint(id, message, state) });
+  };
   const hasUser = (refs: EvidenceRef[]) => refs.some(ref => ref.kind === "USER_QUOTE");
   if (new Set(v.changes.map(c => c.field)).size !== v.changes.length) fail("DUPLICATE_CHANGE_FIELD", "Duplicate field rejects whole patch");
   const queryKinds: Record<string, string> = { LIST_REMINDERS: "LIST", CALENDAR_QUERY: "CALENDAR_DATE", CAPABILITY_QUERY: "CAPABILITY" };
   const queryKind = queryKinds[v.intent];
-  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("QUERY_INTENT_OWNERSHIP", "Query/intent ownership mismatch");
+  if (queryKind ? v.query?.kind !== queryKind || v.changes.length !== 0 : v.query !== null) fail("QUERY_INTENT_OWNERSHIP", "Query/intent ownership mismatch", true);
   if (["HELP", "UNSUPPORTED"].includes(v.intent) && v.changes.length) fail("NON_MUTATING_CHANGES", "Non-mutating proposal cannot carry changes");
   const targeted = v.uncertainties.some(u => u.field === "operation");
-  if (v.intent === "CREATE_REMINDER" ? v.requestTarget === null : v.requestTarget !== null && (v.intent !== "AMBIGUOUS" || !targeted)) fail("REQUEST_TARGET_INTENT_OWNERSHIP", "Request target/intent ownership mismatch");
+  if (v.intent === "CREATE_REMINDER" ? v.requestTarget === null : v.requestTarget !== null && (v.intent !== "AMBIGUOUS" || !targeted)) fail("REQUEST_TARGET_INTENT_OWNERSHIP", "Request target/intent ownership mismatch", true);
   if (v.requestTarget && !v.requestTarget.evidence.every(ref => ref.kind === "USER_QUOTE")) fail("REQUEST_TARGET_USER_EVIDENCE", "Request targeting requires current user evidence");
   if (v.changes.some(c => c.operation !== "SET" && !hasUser(c.evidence))) fail("MUTATING_OPERATION_USER_EVIDENCE", "REPLACE/CLEAR requires user evidence");
   if (v.uncertainties.some(u => u.field === "operation" && u.alternatives.some(a => !hasUser(a.evidence)))) fail("OPERATION_ALTERNATIVE_USER_EVIDENCE", "Operation alternatives require user evidence");
   if (v.query && ((v.query.kind === "LIST" && (v.query.period === null || (v.query.period.kind === "DAY" && v.query.period.date === null) || (v.query.period.kind === "DATE_BOUNDS" && (v.query.period.from === null || v.query.period.through === null)))) || (v.query.kind === "CALENDAR_DATE" && (v.query.date === null || v.query.outputCalendar === null)) || (v.query.kind === "CAPABILITY" && v.query.topic === null)) && !v.uncertainties.some(u => u.field === (v.query?.kind === "CAPABILITY" ? "intent" : "queryRange"))) fail("UNRESOLVED_QUERY_TARGETED_UNCERTAINTY", "Unresolved query requires targeted uncertainty");
-  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("COMBINED_ACTIONS_NON_EXECUTABLE", "Combined actions must be ambiguous and grounded without executable changes");
+  if (v.uncertainties.some(u => u.field === "operation" && u.reason === "UNSUPPORTED_COMBINATION") && (v.intent !== "AMBIGUOUS" || v.changes.length > 0 || v.requestTarget?.kind !== "UNRESOLVED")) fail("COMBINED_ACTIONS_NON_EXECUTABLE", "Combined actions must be ambiguous and grounded without executable changes", true);
 });
 export type SemanticPatchProposalV3 = z.infer<typeof SemanticPatchProposalV3Schema>;
 // Null is explicit absence of advice, not an inferred model directive.

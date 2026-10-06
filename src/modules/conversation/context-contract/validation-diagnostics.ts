@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { createHash } from "node:crypto";
-import { projectCanonicalConstraint, type CanonicalConstraintId } from "./canonical-constraints";
+import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
 
 const keys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
@@ -11,6 +11,7 @@ export interface CanonicalValidationIssue {
   constraint?: "ARRAY_CARDINALITY" | "CONTROL_ENUM"; actualCount?: number; minItems?: number; maxItems?: number;
   acceptedDomainId?: string; acceptedValueCount?: number; actualSafeToken?: string; actualDigest?: string; actualLength?: number;
   constraintId?: CanonicalConstraintId; participatingFields?: string[]; expectedCategory?: string; actualCategory?: string;
+  ownershipState?: OwnershipControlState;
 }
 /** Only the decoder's trusted finite domains may call this projector. Never
  * infer control authority from an arbitrary string's shape. */

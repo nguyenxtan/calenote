@@ -15,7 +15,7 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
-it("R01 turn-one custom constraint identity persists through real gateway and terminal runner", async()=>{
+it.each(["query","requestTarget"])("R01 turn-one %s ownership state persists through real gateway and terminal runner", async mode=>{
   const directory=mkdtempSync(join(tmpdir(),"context-root-constraint-"));let calls=0;
   try {
     const result=await runner.executeObservableCampaign({directory,sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),runId:"root-constraint",profile:"PILOT",cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,now:()=>100,
@@ -23,13 +23,20 @@ it("R01 turn-one custom constraint identity persists through real gateway and te
         const turn=calls++,input=JSON.parse(request.messages[1].content) as ContextInput;
         const wire=encodeFixtureV3(frozenContextProposal(input,"R01",turn)) as Record<string,unknown>;
         // Synthetic known mismatch, NOT reconstruction of the historical output.
-        if(turn===1)wire.intent="HELP";
+        if(turn===1) {
+          if(mode==="query")wire.intent="HELP";
+          else {
+            const q=wire.query as {evidence:{primaryEvidence:unknown}};
+            wire.requestTarget={kind:"CURRENT",evidence:[q.evidence.primaryEvidence]};
+          }
+        }
         return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-root-constraint-local",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(wire)}}]})};
       }});
     expect(calls).toBe(2);
     expect(result.applicationEvidence[0]).toMatchObject({oracle:"PASS",pendingField:"queryRange"});
     expect(result.applicationEvidence[1]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
-    expect(result.responses[1].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"CANONICAL",validation:{issues:[expect.objectContaining({path:[],code:"custom",constraintId:"QUERY_INTENT_OWNERSHIP",participatingFields:["intent","query","changes"],expectedCategory:"MATCHING_QUERY_BRANCH_WITHOUT_CHANGES",actualCategory:"OWNERSHIP_MISMATCH"})]}});
+    expect(result.responses[1].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"CANONICAL",validation:{issues:[expect.objectContaining({path:[],code:"custom",constraintId:mode==="query"?"QUERY_INTENT_OWNERSHIP":"REQUEST_TARGET_INTENT_OWNERSHIP",actualCategory:"OWNERSHIP_MISMATCH",
+      ownershipState:{intent:mode==="query"?"HELP":"LIST_REMINDERS",requestTargetKind:mode==="query"?null:"CURRENT",queryKind:"LIST",changeCount:0,uncertaintyCount:0,uncertainties:[]}})]}});
     const durable=JSON.parse(readFileSync(join(directory,"responses.json"),"utf8"));
     expect(durable[1].canonicalValidationDiagnostics).toEqual(result.responses[1].canonicalValidationDiagnostics);
     expect(readFileSync(join(directory,"responses.json"),"utf8")).not.toContain("Tháng này có lịch gì ko?");

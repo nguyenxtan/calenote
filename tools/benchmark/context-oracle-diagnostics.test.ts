@@ -12,6 +12,8 @@ it("R01 conflicting model remaining-month operand preserves every frozen applica
   const planned=expandContextCampaign(corpus,"FULL",[]);
   const observed=await runContextFixtureCampaign(planned,{sourceSha:"3640e7c038257fbec10e068319ce4547550c3bcf",referenceNow:Date.parse("2026-09-28T03:00:00Z")},(input,id,index)=>{
     const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,id,index));
+    expect(proposal).toMatchObject({intent:"LIST_REMINDERS",requestTarget:null,uncertainties:index===0?[{field:"queryRange",reason:"MISSING",alternatives:[]}]:[]});
+    if(index===1)expect(input.pendingQuestion).toMatchObject({scope:"QUERY",field:"queryRange"});
     if(index===1&&proposal.query?.kind==="LIST")proposal.query.period={kind:"REST_OF_MONTH"};
     return proposal;
   });
