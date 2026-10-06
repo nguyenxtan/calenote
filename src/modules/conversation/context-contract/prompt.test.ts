@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("encoded USER_QUOTE retains every required active key", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("occurrence is required even when the quote appears only once; use its verified one-based match index, never omit it.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example canonical ref: {"kind":"USER_QUOTE","turn":0,"quote":"literal user fragment","occurrence":1}.');
+});
+
 it("request target evidence uses the supplied current-turn index, including assistant turns", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Every requestTarget evidence ref must be USER_QUOTE with turn exactly equal to input.currentTurn.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Turn indexes count every USER and ASSISTANT entry in input.turns, not just USER messages.");

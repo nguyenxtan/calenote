@@ -342,3 +342,14 @@ Project only safe type/classification through bounded, known evidence JSON trans
 - [x] Independent delta review C0/I0/M0.
 - [x] Full verification with one worker: 171 files / 8261 PASS / two existing skips; docs/typecheck/lint/build/Worker types/local dry-run PASS. Initial concurrent run had 13 timeout/local connection-reset failures; preserved as failed evidence, not relabeled PASS. No timeout/assertion relaxed.
 - [x] Continue a new immutable candidate Formal Pilot under the existing conservative debug cap; historical execution remains terminal.
+
+### Complete encoded USER_QUOTE keys
+
+Candidate `585570ce333957e51b1af9b6f6ccc274f7419e82` Formal Pilot stopped after one provider timeout; its conservative UNKNOWN bound remains retained. An independently admitted canonical-wire diagnostic execution then returned HTTP 200, generation `gen-1791293313-giQPqbFvR9xuY6g54cGy`, and safely rejected missing `query.evidence.primaryEvidence.occurrence` (REQUIRED_PROPERTY). No database reads or mutations occurred. Both executions remain terminal; diagnostic execution earns no Pilot credit.
+
+Make required occurrence explicit even for a single match, with a non-fixture structural example and verification instruction for all active keys. Extra evidence must be complete, distinct grounded references, never null/primitives/nested encoded strings. No backend fabrication, schema relaxation or oracle change.
+
+- [x] RED prompt-policy test; GREEN focused 131 PASS.
+- [x] Independent review C0/I0/M0; prompt-policy assertions do not prove model compliance.
+- [x] Full local verification: 171 files / 8262 PASS / two existing skips; docs/typecheck/lint/build/Worker types/local dry-run PASS.
+- Prompt SHA256 `0d75f8e52eb7726e64719c2ecaf01b7436f67579093c4258e7f5282bbcdb3751`. Continue fresh Formal Pilot within the unchanged root debug cap.
