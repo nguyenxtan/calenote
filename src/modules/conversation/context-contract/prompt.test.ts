@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("request target evidence uses the supplied current-turn index, including assistant turns", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Every requestTarget evidence ref must be USER_QUOTE with turn exactly equal to input.currentTurn.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Turn indexes count every USER and ASSISTANT entry in input.turns, not just USER messages.");
+});
+
 it("event-clause clock and subject stay distinct from notification clock", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A clock attached to the event predicate belongs to eventTime, not reminderTime; only a notification instruction or an answer to the reminderTime question supplies reminderTime.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A first-person event predicate supplies the task subject even without a separate noun title.");

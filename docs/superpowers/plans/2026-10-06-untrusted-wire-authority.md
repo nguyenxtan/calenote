@@ -321,3 +321,13 @@ Clarify clause ownership: event predicates supply eventTime and a concise ground
 - [x] RED prompt-policy test; GREEN focused 94 PASS/two existing skips.
 - [x] Independent review C0/I0/M0; full `pnpm check` PASS with docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
 - Prompt SHA256 `d5ca906ef8af24624dd01b979b8704b6264daee602c549035b7ad5e0513e6a8c`. Continue fresh Formal Pilot under the existing conservative debug cap.
+
+### Current-turn request targeting index
+
+Candidate `f82c5273f90c2705294089c7b90af6fb53b4c087` stopped after five requests at R02 turn two, generation `gen-1791280165-B6IfjKlDpjwYN3Oi58mQ`, HTTP 200. Semantic state had one SET reminderTime, CURRENT target, null query and no uncertainties. The prior R02 turns both passed with pending reminderTime, so operation-candidate adoption is inapplicable. The sole applicable CURRENT_USER_EVIDENCE_REQUIRED branch is requestTarget evidence not referring exclusively to the supplied current USER turn. The exact historical index/quote is not retained.
+
+Clarify target ref turn=input.currentTurn, counting USER and ASSISTANT entries and grounding short continuations in their current fragment rather than earlier subject/date facts. No evidence/validator/schema/oracle semantics change.
+
+- [x] RED prompt-policy test; GREEN focused 95 PASS/two existing skips.
+- [x] Independent review C0/I0/M0 with adoption-path qualification verified; full `pnpm check` PASS with docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
+- Prompt SHA256 `f8ea2883d9b53fb3c25231cb895f42e5519ed04a1770ee0a579655af305d1f74`. Continue fresh Formal Pilot under the same debug cap, preserving terminal failures and UNKNOWN exposure.
