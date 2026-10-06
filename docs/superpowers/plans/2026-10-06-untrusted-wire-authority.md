@@ -331,3 +331,14 @@ Clarify target ref turn=input.currentTurn, counting USER and ASSISTANT entries a
 - [x] RED prompt-policy test; GREEN focused 95 PASS/two existing skips.
 - [x] Independent review C0/I0/M0 with adoption-path qualification verified; full `pnpm check` PASS with docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
 - Prompt SHA256 `f8ea2883d9b53fb3c25231cb895f42e5519ed04a1770ee0a579655af305d1f74`. Continue fresh Formal Pilot under the same debug cap, preserving terminal failures and UNKNOWN exposure.
+
+### Encoded evidence structural diagnostics
+
+Candidate `0b154b309509b520c85cd053294c9f41b7366aad` stopped after four requests at R02 turn one, generation `gen-1791280696-OFXDZ9cptw4BJ9NHakcZ`, HTTP 200. Wire decode rejected `requestTarget.evidence.additionalEvidenceJson[0]`; existing telemetry incorrectly traversed the encoded JSON string as an object and reported undefined. The historical element value/type is not reconstructible.
+
+Project only safe type/classification through bounded, known evidence JSON transport slots. No decoding acceptance, canonical/evidence semantics, prompt, or oracle changes. Never persist the decoded values.
+
+- [x] RED four type-projection regressions; GREEN focused 129 PASS, sensitive sentinel absent from diagnostics.
+- [x] Independent delta review C0/I0/M0.
+- [x] Full verification with one worker: 171 files / 8261 PASS / two existing skips; docs/typecheck/lint/build/Worker types/local dry-run PASS. Initial concurrent run had 13 timeout/local connection-reset failures; preserved as failed evidence, not relabeled PASS. No timeout/assertion relaxed.
+- [x] Continue a new immutable candidate Formal Pilot under the existing conservative debug cap; historical execution remains terminal.

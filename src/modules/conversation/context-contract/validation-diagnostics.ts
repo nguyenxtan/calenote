@@ -68,6 +68,22 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
 }
 export function projectWireValidation(raw: unknown, path: PropertyKey[], expected: string, extraKeyCount?: number, schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2", cardinality?: { actualCount: number; minItems?: number; maxItems?: number }, control?: ReturnType<typeof projectControlEnum>): CanonicalValidationDiagnostics {
   const result = projectCanonicalValidation(raw, [{ code: "custom", path, message: "" }], schemaVersion);
+  // These two trusted transport slots encode evidence JSON. Traverse the
+  // bounded decoded structure only for type telemetry, never retain values.
+  // Canonical projection and all acceptance predicates remain unchanged.
+  let structural: unknown = raw, decodedBoundary = false;
+  for (const segment of path.slice(0, 8)) {
+    structural = structural && typeof structural === "object" && Object.hasOwn(structural, segment)
+      ? (structural as Record<PropertyKey, unknown>)[segment] : undefined;
+    if ((segment === "primaryEvidence" || segment === "additionalEvidenceJson") && typeof structural === "string"
+      && new TextEncoder().encode(structural).length <= 32768) {
+      try { structural = JSON.parse(structural); decodedBoundary = true; } catch { /* Invalid JSON stays a string. */ }
+    }
+  }
+  if (decodedBoundary) {
+    result.issues[0].actualType = jsonType(structural);
+    result.issues[0].classification = structural === undefined ? "missing" : "value";
+  }
   result.issues[0].code = "WIRE_SHAPE_INVALID";
   if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
