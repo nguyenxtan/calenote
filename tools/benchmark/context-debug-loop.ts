@@ -6,7 +6,7 @@ import {candidateValidationProof,appendCandidateValidationRecord} from "./contex
 import {auditCampaignAccountRoot,withAccountRootLock} from "./context-contract-live";
 import {inspectConservativeDebugCost} from "./context-confirmed-cost";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {executeObservableCampaign,executeObservableR01Turn0Replay,contextCampaignMaximumReservation} from "./context-contract-runner";
+import {executeObservableCampaign,executeObservableR01Turn0Replay,executeObservableSingleTargetValidation,resolveSingleValidationTarget,contextCampaignMaximumReservation} from "./context-contract-runner";
 import {createContextHttpTransport,type SemanticTransport} from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -33,7 +33,7 @@ function verify(g:{root:string;path:string;trust:DebugLoopTrust}){
 function grant(a:DebugLoopAuthority|undefined){const g=a&&grants.get(a);if(!g)throw Error("DEBUG_AUTHORITY_REQUIRED");return verify(g)}
 export function createDebugLoopLoader(trust:DebugLoopTrust){const pins=Object.freeze({...trust});return(path:string,root:string):DebugLoopAuthority=>{const g={root,path,trust:pins};verify(g);const a=Object.freeze({})as DebugLoopAuthority;grants.set(a,g);return a}}
 export function inspectDebugLoop(a:DebugLoopAuthority|undefined){const {record:r}=grant(a);return inspectConservativeDebugCost(r.accountRoot,r.hardCapMicrounits,contextCampaignMaximumReservation)}
-export const DEBUG_PROBE_MODES=["CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
+export const DEBUG_PROBE_MODES=["R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
@@ -41,7 +41,7 @@ type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Nod
 export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  const s=structuredClone(input) as Node;
- if(mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
+ if(mode==="R02_TURN0"||mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
  const change=s.properties?.changes?.items,definition=change?.$ref?s.$defs?.[change.$ref.split("/").at(-1)!]:undefined;
  const keepChange=(index:number)=>mode==="NO_REQUEST_TARGET"||mode==="CHANGE_TEXT_ONLY"&&index===0||mode==="CHANGE_DATE_ONLY"&&index===1||mode==="CHANGE_TIME_ONLY"&&index===2||mode==="CHANGE_SCALAR_ONLY"&&index>=3&&index<=6||mode==="CHANGE_CLEAR_ONLY"&&index===7;
  const unslot=(n:Node)=>{const e=n.properties?.evidence;if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");n.properties!.evidence={type:"array",items:e.properties.primaryEvidence}};
@@ -63,19 +63,20 @@ export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candi
  if(existsSync(leaf))throw Error("DEBUG_EXECUTION_CONSUMED");
  const before=inspectDebugLoop(a);mkdirSync(leaf,{recursive:true,mode:0o700});
  appendCandidateValidationRecord(r.accountRoot,join(leaf,"execution.json"),{authoritySha256:g.trust.reviewedRecordSha256,...proof,mode,manifestSha256:r.manifestSha256,accounting:before});
- let attempts=0,next=0;const targets=mode==="FORMAL_PILOT"?manifest.targets:[{fixtureId:"R01",turnIndex:0}];
+ let attempts=0,next=0;const targets=mode==="FORMAL_PILOT"?manifest.targets:[{fixtureId:mode==="R02_TURN0"?"R02":"R01",turnIndex:0}];
+ const singleTarget=mode==="R02_TURN0"?resolveSingleValidationTarget(g.root,{fixture:"R02",turn:0}):undefined;
  const check=()=>{grant(a);const p=candidateValidationProof(g.root,candidate);if(JSON.stringify(p)!==JSON.stringify(proof))throw Error("DEBUG_SOURCE_BINDING");loadedChecks.get(a!)?.(candidate,proof.harnessRevisionSha)};
  const hooks={manifestSha256:r.manifestSha256,maxRequests:targets.length,beforeDispatch(t:{fixtureId:string;turnIndex:number},reservationId:string){check();if(JSON.stringify(t)!==JSON.stringify(targets[next])||attempts!==next)throw Error("DEBUG_TARGET_FENCE");inspectDebugLoop(a);appendCandidateValidationRecord(r.accountRoot,join(leaf,`target-${next}.claim.json`),{target:t,reservationId});next++},settled(){},outcome(){}};
  const input={root:g.root,directory:leaf,profile:"PILOT" as const,sourceSha:candidate,provenanceDigest:proof.candidateProofSha256,runId:id,accountingPolicy:"CONFIRMED_COST_V1" as const,debugBudgetAuthoritySha256:g.trust.reviewedRecordSha256,cumulativeAuthorizedMicrounits:r.hardCapMicrounits,cumulativeRetainedMicrounits:before.confirmedMicrounits,now:options.now,
  transport:async(request:Parameters<SemanticTransport>[0],requestOptions:Parameters<SemanticTransport>[1])=>{
  check();if(attempts>=targets.length||request.model!==r.model||request.provider.only.join("|")!==r.provider||request.stream!==false||request.provider.allow_fallbacks!==false||request.provider.require_parameters!==true||request.provider.zdr!==true||request.provider.data_collection!=="deny"||request.max_tokens!==1536||request.response_format.json_schema.strict!==true)throw Error("DEBUG_HTTP_ROUTE_FENCE");
  // For probes the runner has already durably marked DISPATCH. It contains
- // exactly R01 turn 0; check budget again without counting its own pending
+ // exactly one selected frozen turn; check budget without counting its pending
  // claim twice (the before-execution inspection reserved full headroom).
  const outbound=mode==="FORMAL_PILOT"?request:{...request,response_format:{...request.response_format,json_schema:{...request.response_format.json_schema,schema:debugProbeSchema(request.response_format.json_schema.schema,mode)}}};
  appendCandidateValidationRecord(r.accountRoot,join(leaf,`http-${attempts}.json`),{requestSha256:hash(JSON.stringify(outbound)),schemaSha256:hash(JSON.stringify(outbound.response_format.json_schema.schema)),mode});attempts++;return transport(outbound,requestOptions);
  }};
- try{const result=mode==="FORMAL_PILOT"?await executeObservableCampaign({...input,boundedPilot:hooks}):await executeObservableR01Turn0Replay(input);
+ try{const result=mode==="FORMAL_PILOT"?await executeObservableCampaign({...input,boundedPilot:hooks}):singleTarget?await executeObservableSingleTargetValidation({...input,singleTarget:{fixture:singleTarget.fixture,turn:0,manifestSha256:singleTarget.manifestSha256}}):await executeObservableR01Turn0Replay(input);
  const passed=mode==="FORMAL_PILOT"&&result.status==="PASS"&&result.score?.gate==="PASS"&&attempts===targets.length;
  appendCandidateValidationRecord(r.accountRoot,join(leaf,"terminal.json"),{status:passed?"PASS":"STOP",attempts,mode,pilotCredit:passed});
  return {...result,directory:leaf,providerHttpAttempts:attempts,terminal:true,pilotCredit:passed,accounting:inspectConservativeDebugCost(r.accountRoot,r.hardCapMicrounits,contextCampaignMaximumReservation,false)};

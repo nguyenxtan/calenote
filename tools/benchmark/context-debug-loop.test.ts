@@ -12,6 +12,21 @@ import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/in
 import {frozenContextProposal,encodeFixtureV3} from "./context-contract-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
+it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no Pilot credit",async()=>{
+ const s=setup();let calls=0;
+ try{
+  const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
+   calls++;const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0));
+   const body=JSON.stringify({model:request.model,provider:"Google",id:"gen-local-diagnostic",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]});
+   return {status:200,body,rawResponseBytes:Buffer.byteLength(body)};
+  },{now:()=>100});
+  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});
+  expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:0,semanticState:{intent:"CREATE_REMINDER"}});
+  expect(JSON.stringify(result.responses[0].semanticState)).not.toContain("Quang Trung");
+  await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
+  expect(calls).toBe(1);
+ }finally{s.cleanup()}
+});
 function setup(){
  const root=process.cwd(),accountRoot=realpathSync(mkdtempSync(join(tmpdir(),"debug-loop-"))),campaignRoot=join(accountRoot,"existing"),history=join(campaignRoot,"PILOT");mkdirSync(history,{recursive:true});
  appendCampaignEvent(history,{event:"BEGIN",runId:"old",sourceSha:"a".repeat(40),profile:"PILOT",provenanceDigest:"b".repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1,executionKind:"R01_REPLAY",accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472});

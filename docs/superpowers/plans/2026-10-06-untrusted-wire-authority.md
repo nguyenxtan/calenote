@@ -230,3 +230,13 @@ The approved spec/frozen canonical example treats numeric clock notation as H24;
 - [x] RED prompt-policy regression; GREEN focused 68 PASS/two existing skips.
 - [x] Final independent review C0/I0 including explicit day-part exception; final source-frozen `pnpm check` 171 files / 8,246 PASS/two existing skips, documentation/typecheck/lint/build/Worker type check/local dry-run PASS. Earlier pre-final-wording workflow was interrupted, not accepted as final evidence.
 - Current prompt SHA256 `e6b55e019a392baf7e796de01d63689d6bb74df41780eeaaf745b098600a41d5`; provider schema and V16 protocol unchanged. Continue fresh immutable-candidate Formal Pilot under the existing debug grant and current conservative accounting.
+
+### R02 title-omission diagnostic preparation
+
+Clock candidate `cf6dec61eb8720a31155058f2803e98463afa5cf` fresh Formal Pilot passed both R01 turns, then stopped after its third provider call: R02 turn zero retained other expected fields but title was null and pending field was title. Generation `gen-1791274856-ciss0Ow8JtfF8rG8pr32`, HTTP 200. Historical artifact lacks the semantic patch/uncertainty summary, so it cannot establish whether title was omitted or made uncertain. No speculative runtime fix is justified.
+
+Enable the existing bounded `captureValidationSemanticState` (finite field/operation/intent/uncertainty controls, counts and value digests only) for all successful evaluated semantic outputs. Add a single R02 turn-zero diagnostic mode through the existing frozen single-target executor under the same root debug authority. This is an intentional one-request diagnostic, not a retry, cannot earn Pilot credit, and keeps duplicate consumption, actual candidate proof, immutable history and conservative accounting.
+
+- [x] RED unavailable-mode regression; GREEN 17 debug-loop tests including one request/terminal/duplicate/sanitized summary and full 76-request fake Pilot.
+- [x] Independent review C0/I0; full `pnpm check` 171 files / 8,247 PASS/two existing skips, docs/typecheck/lint/build/Worker type check/local dry-run PASS. Application runtime, wire, canonical/evidence/oracle and prompt remain unchanged for this tooling commit.
+- Evaluate the already-committed application candidate `cf6dec61eb8720a31155058f2803e98463afa5cf` with the new separate harness revision. Preserve the three-call failed Formal Pilot as terminal; use the new sanitized evidence before any further semantic correction.

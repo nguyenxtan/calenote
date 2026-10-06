@@ -233,7 +233,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
-        ...(selected&&result.status==="SUCCESS"&&!isUnreconciledListInterpretation(result.interpretation)?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
+        ...(result.status==="SUCCESS"&&!isUnreconciledListInterpretation(result.interpretation)?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
         ...(queryDiagnostics?{queryDiagnostics}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });
       // Content-free evidence persists even if application acceptance then fails.
