@@ -462,3 +462,14 @@ Strengthen the final source-copy check across all USER_QUOTE refs, with a differ
 - [x] Independent delta review C0/I0/M0.
 - [x] Full serial offline suite 171 files/8271 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `a793647e34f8c7ad6ede4de193e8a74d64b5e062c4a63640aace3adede1d244e`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the unchanged root grant/accounting.
+
+### Current-turn continuation target example
+
+Candidate `29e548a203a60a9c9bf2196c72c86b3d8679d95a` passed R02 turns zero/one but stopped after five requests at turn two, generation `gen-1791303486-O1FlVJFmFivEB9pFgEgF`. Model target evidence referenced turn zero instead of the current fourth payload entry and the quote still differed by case. Strict evidence rejected it; no DB reads or mutations. Execution terminal, known cost settled.
+
+Add a continuation example with three preceding USER/ASSISTANT pairs, explicitly separating current targeting evidence from retained old task facts. The earlier turn-zero structural example must not become a default. Use actual request indices and clock, never the example operands. Do not rewrite model indices in backend.
+
+- [x] RED policy test one fail/19 PASS; GREEN focused/fit 205 PASS/2 existing skips, instruction delivery only.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial offline suite 171 files/8272 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `e8d124ac78cd64b1bde2403a447cfbc5773f366dd92284b2634209e8778be5b1`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the same root authorization.

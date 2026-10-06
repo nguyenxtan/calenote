@@ -5,6 +5,10 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("target continuation example binds latest USER rather than the original task", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example with currentTurn=6 and latest USER text "6h.": CURRENT target evidence quotes "6h." at turn 6, not the original task at turn 0; reminderTime evidence also uses turn 6.');
+});
+
 it("final evidence check preserves lowercase literal source rather than grammatical capitalization", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('For source text "mai nhắc gọi bạn", the literal quote "mai nhắc" is valid; "Mai nhắc" is invalid.');
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Before returning, verify every USER_QUOTE as a case-sensitive contiguous substring of the referenced USER turn; do not capitalize, spell-correct, trim internally or paraphrase it.");
