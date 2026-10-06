@@ -9,9 +9,36 @@ import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
 import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema} from "./context-debug-loop";
 import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {parseGoogleLiteEuContextSectionsV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
 import {frozenContextProposal,encodeFixtureV3} from "./context-contract-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
+it("string-selector diagnostic changes only wire enum representation without runtime repair",()=>{
+ const original=googleLiteEuContextWireSchemaV3().schema,before=JSON.stringify(original);
+ const probe=debugProbeSchema(original,"OPERATION_STRING");
+ expect(probe.properties!.operationCode).toEqual({type:"string",enum:Array.from({length:12},(_,i)=>String(i))});
+ expect({...probe,properties:{...probe.properties,operationCode:original.properties!.operationCode}}).toEqual(original);
+ expect(JSON.stringify(original)).toBe(before);
+ const raw=encodeFixtureV3(frozenContextProposal({turns:[{role:"USER",text:"Có lịch nào ko?"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R01",0)) as Record<string,unknown>;
+ raw.operationCode="3";
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it("string-selector probe remains one terminal request with no Pilot credit",async()=>{
+ const s=setup();let calls=0;
+ try{
+  const a=s.load(),result=await runDebugLoopExecution(a,candidate,"OPERATION_STRING",async request=>{
+   calls++;expect(request.response_format.json_schema.schema.properties?.operationCode).toMatchObject({type:"string"});
+   const raw=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R01",0)) as Record<string,unknown>;raw.operationCode="3";
+   const body=JSON.stringify({model:request.model,provider:"Google",id:"gen-local-selector-probe",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]});
+   return {status:200,body,rawResponseBytes:Buffer.byteLength(body)};
+  },{now:()=>100});
+  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});
+  expect(result.responses[0].status).toBe("FAILURE");
+  await expect(runDebugLoopExecution(a,candidate,"OPERATION_STRING",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
+  expect(calls).toBe(1);
+ }finally{s.cleanup()}
+});
 it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no Pilot credit",async()=>{
  const s=setup();let calls=0;
  try{

@@ -610,3 +610,12 @@ Offline inspection confirms three query object alternatives accept the identical
 - Wire v24 SHA256 `33c317dfdf0dab2c2e009c9cbaa317f449adc9121af1a9629ebad849d9dbc7b7`; serialized bytes 9291. Prompt unchanged.
 - [x] Independent review C0/I0/M0, reviewer 199 PASS/2 skips. Full offline tests 172 files/8317 PASS/2 existing skips, docs PASS. Typecheck found test-only JSON Schema boolean-union narrowing, fixed with explicit object guards; affected 28 tests rerun PASS, typecheck/lint/build/types/dry-run exit zero, lint zero errors/168 existing warnings. No runtime edit after the full suite.
 - [ ] Local commit and one new wire canary; Formal Pilot only if accepted. No Full/release.
+
+### Diagnostic-only root selector representation probe
+
+V24 candidate `9bb24173347a167c5cda88604d4ca8e13be3e75f` canary again returned the same empty-object digest, HTTP 200, generation `gen-1791318135-FfHIYR8vghjsdf0OJM6V`, cost 0.000659 USD settled KNOWN, zero reads/mutations and terminal. Query-carrier consolidation alone did not resolve the response defect. Conservative remaining derived 2781961 microunits; UNKNOWN unchanged.
+
+Add tooling-only OPERATION_STRING probe: clone the current wire schema, verify the exact integer selector domain 0..11, then change that one provider property to finite string codes. Application runtime/decoder remain v24 and reject string codes; no repair or Pilot credit. Existing trusted execution fencing/accounting still permits exactly one R01 turn zero attempt for this probe. Unchanged prompt still requests integer, so results alone cannot establish private model reasoning or provider transformation.
+
+- [x] RED new mode fails scope admission; GREEN debug tests 24 PASS, candidate/accounting/debug regressions 92 PASS, typecheck/diff/lint PASS (168 existing warnings). Independent review C0/I0/M0. Reviewer observed one concurrent formal-fake failure; unchanged serial replay passed all 76 fake requests without increasing timeout or changing assertions. Transient cause not proven.
+- Application full-suite evidence remains the unchanged v24 runtime's 8317 PASS/2 skips; this tooling probe is not a runtime product fix and has not yet made a live request.

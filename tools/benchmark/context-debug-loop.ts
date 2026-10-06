@@ -33,7 +33,7 @@ function verify(g:{root:string;path:string;trust:DebugLoopTrust}){
 function grant(a:DebugLoopAuthority|undefined){const g=a&&grants.get(a);if(!g)throw Error("DEBUG_AUTHORITY_REQUIRED");return verify(g)}
 export function createDebugLoopLoader(trust:DebugLoopTrust){const pins=Object.freeze({...trust});return(path:string,root:string):DebugLoopAuthority=>{const g={root,path,trust:pins};verify(g);const a=Object.freeze({})as DebugLoopAuthority;grants.set(a,g);return a}}
 export function inspectDebugLoop(a:DebugLoopAuthority|undefined){const {record:r}=grant(a);return inspectConservativeDebugCost(r.accountRoot,r.hardCapMicrounits,contextCampaignMaximumReservation)}
-export const DEBUG_PROBE_MODES=["R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
+export const DEBUG_PROBE_MODES=["OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
@@ -41,6 +41,12 @@ type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Nod
 export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  const s=structuredClone(input) as Node;
+ if(mode==="OPERATION_STRING"){
+  const selector=s.properties?.operationCode;
+  if(selector?.type!=="integer"||!Array.isArray(selector.enum)||selector.enum.length!==12||selector.enum.some((value,index)=>value!==index))throw Error("DEBUG_PROBE_SHAPE");
+  s.properties!.operationCode={type:"string",enum:selector.enum.map(String)};
+  return s as T;
+ }
  if(mode==="R02_TURN0"||mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
  const change=s.properties?.changes?.items,definition=change?.$ref?s.$defs?.[change.$ref.split("/").at(-1)!]:undefined;
  const groups:Record<string,string[]>={CHANGE_TEXT_ONLY:["title","location","notes"],CHANGE_DATE_ONLY:["eventDate","reminderDate","endDate"],CHANGE_TIME_ONLY:["eventTime","reminderTime"],CHANGE_SCALAR_ONLY:["calendar","frequency","occurrenceCount","leadOffsetDays","eventRelation"]};
