@@ -12,9 +12,9 @@ type BranchPath<T, P extends string> = T extends { kind: infer K extends string 
   : T extends { field: infer F extends string } ? `${P}{field=${F}}` : never;
 type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]` | Paths<E, `${P}[]`>
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
-type QueryEvidenceSlotPath = `query.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
+type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]"}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
-  | QueryEvidenceSlotPath | Paths<EvidenceRef, QueryEvidenceSlotPath>
+  | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath>
   | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping";
 const semantic: OutputAuthorityRule = Object.freeze({ class: "SEMANTIC_UNTRUSTED", modelAuthorshipReason: "Proposed user meaning, operand, instruction, ambiguity or supporting source selection.", evidencePolicy: "Validate exact scoped source identity; targeting/replacement/removal require current USER_QUOTE evidence.", mergePolicy: "Only validated semantic candidates enter merge; backend derives conflicts, completeness and admission.", canAffectMerge: true, canCauseHardReject: true, canCauseClarify: true, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const advisory: OutputAuthorityRule = Object.freeze({ class: "ADVISORY", modelAuthorshipReason: "Optional phrasing associated with one of four compatible backend issues.", evidencePolicy: "No mandatory semantic evidence; validate eligibility independently.", mergePolicy: "Quarantine invalid hints; never affect factual merge or manufacture clarification.", canAffectMerge: false, canCauseHardReject: false, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
@@ -32,8 +32,8 @@ function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", 
 for (const prefix of ["requestTarget.evidence", "changes[].evidence", "query.evidence", "uncertainties[].alternatives[].evidence"]) refs(prefix);
 // Provider slots propose the same untrusted refs as canonical evidence arrays.
 // Register exact paths; new slots or fields cannot inherit authority silently.
-for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
-  const prefix = `query.evidence.${slot}` as const;
+for (const collection of ["query", "requestTarget", "changes[]"] as const) for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
+  const prefix = `${collection}.evidence.${slot}` as const;
   add([prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}` as OutputFieldPathV3),
     `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]);
 }

@@ -27,7 +27,7 @@ it.each(["query","requestTarget"])("R01 turn-one %s ownership state persists thr
           if(mode==="query")wire.intent="HELP";
           else {
             const q=wire.query as {evidence:{primaryEvidence:unknown}};
-            wire.requestTarget={kind:"CURRENT",evidence:[q.evidence.primaryEvidence]};
+            wire.requestTarget={kind:"CURRENT",evidence:{primaryEvidence:q.evidence.primaryEvidence,additionalEvidenceJson:"[]"}};
           }
         }
         return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-root-constraint-local",usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(wire)}}]})};
@@ -443,8 +443,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-list-period-reconciliation-13" });
+      providerWireSchemaDigest: "b17e442e441628b1909c65b7dbeec20761936a3124d9c9859f2e66e1e8fc75d3",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-semantic-evidence-slots-14" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

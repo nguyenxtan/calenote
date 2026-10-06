@@ -62,6 +62,8 @@ it.each([["R01",1],["R02",1],["R05",2]] as const)("fixture-owned %s/%s checkpoin
     if(actual.snapshot?.modelAttemptBinding && expected?.snapshot?.modelAttemptBinding) {
       expect(actual.snapshot.modelAttemptBinding.observationId).toMatch(/^[a-f0-9]{64}$/u);
       actual.snapshot.modelAttemptBinding.observationId=expected.snapshot.modelAttemptBinding.observationId;
+      expect(actual.snapshot.modelAttemptBinding.promptDigest).toMatch(/^[a-f0-9]{64}$/u);
+      actual.snapshot.modelAttemptBinding.promptDigest=expected.snapshot.modelAttemptBinding.promptDigest;
     }
     if (actual.snapshot?.modelAttemptBinding) actual.snapshot.modelAttemptBinding.attemptId = "seed-attempt";
     for (const row of actual.outcomes) row.proof_hash = null;

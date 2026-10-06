@@ -40,6 +40,6 @@ it("unsupported token diagnostics retain only structure and digest, not the toke
  const {readListTransport}=await import("./list-period-transport");
  expect(JSON.stringify(readListTransport(decoded.value))).not.toContain("PRIVATE_SENTINEL");
 });
-it("emitted provider and canonical schema identities remain unchanged",()=>{
- expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("eb1dd33768911fdad7cd1e957c427882515b0dee56a6256102a0e96d0c8cca08");
+it("emitted provider schema binds the selected semantic evidence representation",()=>{
+ expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("b17e442e441628b1909c65b7dbeec20761936a3124d9c9859f2e66e1e8fc75d3");
 });

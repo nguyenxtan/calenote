@@ -243,9 +243,9 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
   }
   if (node.type === "array") {
-    // V3 query evidence uses bounded slots on the provider wire. Canonical
-    // arrays and all other evidence locations keep their original contract.
-    if (root === originalV3 && path.length === 2 && path[0] === "query" && path[1] === "evidence") {
+    // Active V3 semantic evidence uses the same bounded wire representation.
+    // Canonical arrays and JSON-encoded uncertainty alternatives stay strict.
+    if (root === originalV3 && path.at(-1) === "evidence") {
       const keys = ["primaryEvidence", "additionalEvidenceJson"];
       if (direction === "encode") {
         requireShape(Array.isArray(value) && predicate(node, value, root));
@@ -345,10 +345,10 @@ function omitOwnedV3(node: Schema): Schema {
   return result;
 }
 const originalV3 = omitOwnedV3(googleLiteEuProviderWireSchema(InterpretationJsonSchemaV3).schema as Schema);
-function queryEvidenceSlots(root: Schema): Schema {
+function semanticEvidenceSlots(root: Schema): Schema {
   const visit = (node: Schema): Schema => {
     const result = mapSchemas(node, visit);
-    if (node.properties?.evidence && node.properties.kind && ["LIST", "CALENDAR_DATE", "CAPABILITY"].includes(String(deref(node.properties.kind, root).const))) {
+    if (node.properties?.evidence) {
       const evidence = deref(node.properties.evidence, root);
       requireShape(evidence.type === "array" && evidence.items);
       result.properties!.evidence = { type: "object", properties: {
@@ -360,7 +360,7 @@ function queryEvidenceSlots(root: Schema): Schema {
   };
   return visit(root);
 }
-const slottedV3 = queryEvidenceSlots(originalV3);
+const slottedV3 = semanticEvidenceSlots(originalV3);
 const providerSchemaV3 = simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))));
 export function googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3 {
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: structuredClone(providerSchemaV3) as typeof InterpretationJsonSchemaV3 };
