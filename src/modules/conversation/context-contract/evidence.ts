@@ -54,6 +54,46 @@ function evidenceMetadata(resolved: ResolvedEvidence): ValidatedFieldEvidence {
   };
 }
 
+/** Observe the existing resolver's outcome, without re-running a verifier or
+ * making any admission decision. Never retain raw evidence or business text. */
+function traceLeadOffsetResolution(field: string, refs: EvidenceRef[], requested: unknown,
+  path: EvidenceFailureDiagnostic["path"], built: ReadyContext | ReadyContextV2,
+  validatorBranch: "LEGACY_V2_RESOLVER" | "V3_RESOLVER", observe: DownstreamObserver | undefined,
+  run: () => ResolvedEvidence): ResolvedEvidence {
+  if (field !== "leadOffsetDays") return run();
+  let resolved: ResolvedEvidence | undefined, failure: unknown;
+  try { resolved = run(); return resolved; }
+  catch (error) { failure = error; throw error; }
+  finally {
+    try {
+      const code = failure instanceof EvidenceFailure ? failure.message : null;
+      const checkedFailure = code === "LEAD_OFFSET_NOT_SUPPORTED";
+      const sourceFailure = ["EVIDENCE_NOT_USER", "EVIDENCE_QUOTE_NOT_FOUND", "EVIDENCE_REMOVED_SPAN", "EVIDENCE_NORMALIZATION_BOUNDARY", "EVIDENCE_SOURCE_MISMATCH"].includes(code ?? "");
+      const kinds = refs.map(ref => ref.kind);
+      // Fact/mixed failures can short-circuit before comparison, or fail a
+      // later source after an exact fact comparison. Final error alone cannot
+      // distinguish those milestones: report UNKNOWN rather than inventing one.
+      const ambiguousFactFailure = !resolved && kinds.includes("CONTEXT_FACT");
+      const turns = [...new Set([
+        ...refs.flatMap(ref => ref.kind === "USER_QUOTE" ? [ref.turn] : []),
+        ...(resolved?.sources ?? []).map(s => built.evidenceIndex.findIndex(t => t.id === s.sourceTurnId)).filter(i => i >= 0),
+      ])];
+      observeDownstream(observe, {
+        stage: "EVIDENCE_BINDING", result: resolved ? "PASS" : "REJECTED", reason: resolved ? "NONE" : evidenceReason(code ?? "EVIDENCE_INVALID"),
+        offsetBinding: {
+          field: "leadOffsetDays", path, valueType: requested === null ? "null" : "number",
+          numericValue: typeof requested === "number" && Number.isSafeInteger(requested) && requested >= 1 && requested <= 366 ? requested : null,
+          evidenceKinds: kinds, sourceTurnOrdinals: turns, validatorBranch,
+          bindingBranch: kinds.every(k => k === "USER_QUOTE") ? "USER_QUOTE" : kinds.every(k => k === "CONTEXT_FACT") ? "CONTEXT_FACT" : "MIXED",
+          sourceIdentityValidated: !!resolved || code === "LEAD_OFFSET_NOT_SUPPORTED",
+          fieldValueCheckExecuted: requested === null ? false : ambiguousFactFailure ? null : resolved || checkedFailure ? true : sourceFailure ? false : null,
+          fieldValueCheckResult: requested === null ? "NOT_APPLICABLE" : ambiguousFactFailure ? "UNKNOWN" : resolved ? "PASS" : checkedFailure ? "FAIL" : sourceFailure ? "NOT_RUN" : "UNKNOWN",
+        },
+      });
+    } catch { /* Instrumentation never changes return, rejection, or authority. */ }
+  }
+}
+
 function needsTemporalAnchor(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const object = value as Record<string, unknown>;
@@ -145,7 +185,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
     if ([...turn.text].slice(sourceStart, sourceEnd).join("").normalize("NFC") !== ref.quote) return traceFailure("EVIDENCE_SOURCE_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", ref, site, "INVALID");
     return { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: ref.quote, occurrence: ref.occurrence, sourceSpan: { start: sourceStart, end: sourceEnd }, viewSpan: { start, end }, normalizationVersion: "nfc-codepoint-v1" };
   };
-  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: EvidenceFailureDiagnostic["field"], requested: unknown, path: Site["path"], editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
+  const rawResolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: EvidenceFailureDiagnostic["field"], requested: unknown, path: Site["path"], editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
     const quotes: SourceEvidence[] = [];
     const factBindings: BoundContextFact[] = [];
     for (const [referenceOrdinal, ref] of refs.entries()) {
@@ -194,6 +234,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
+  const resolve: typeof rawResolve = (...args) => traceLeadOffsetResolution(args[2], args[0], args[3], args[4], built, "LEGACY_V2_RESOLVER", observe, () => rawResolve(...args));
   try {
     const resolvedChanges: FieldChange[] = [];
     const changeEvidence = value.changes.map((change, index) => {
@@ -280,7 +321,7 @@ export type ValidatedPatchV3 = {
 export type EvidenceValidationV3 = { status: "VALID"; patch: ValidatedPatchV3 } | { status: "REFUSED"; reason: string };
 const issuedPatchesV3 = new WeakSet<object>();
 export function isValidatedPatchV3(value: unknown): value is ValidatedPatchV3 { return typeof value === "object" && value !== null && issuedPatchesV3.has(value); }
-function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void) {
+function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver) {
   const internal=evidenceContextForV2(built);
   if(!internal) return fail("CONTEXT_NOT_BUILT");
   type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal">;
@@ -332,7 +373,7 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if ([...turn.text].slice(sourceStart, sourceEnd).join("").normalize("NFC") !== ref.quote) return traceFailure("EVIDENCE_SOURCE_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", ref, site, "INVALID");
     return { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: ref.quote, occurrence: ref.occurrence, sourceSpan: { start: sourceStart, end: sourceEnd }, viewSpan: { start, end }, normalizationVersion: "nfc-codepoint-v1" };
   };
-  const resolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: EvidenceFailureDiagnostic["field"], requested: unknown, path: Site["path"], editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
+  const rawResolve = (refs: EvidenceRef[], scope: "REMINDER" | "QUERY" | "CONTROL", field: EvidenceFailureDiagnostic["field"], requested: unknown, path: Site["path"], editsExistingOperand = false, listRangeCandidate = false): ResolvedEvidence => {
     const quotes: SourceEvidence[] = [];
     const factBindings: BoundContextFact[] = [];
     for (const [referenceOrdinal, ref] of refs.entries()) {
@@ -381,12 +422,13 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
+  const resolve: typeof rawResolve = (...args) => traceLeadOffsetResolution(args[2], args[0], args[3], args[4], built, "V3_RESOLVER", observe, () => rawResolve(...args));
   return {resolve,quoteSource};
 }
 export function resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST"}>,uncertainties:SemanticPatchProposalV3["uncertainties"],built:ReadyContextV2,observe?:DownstreamObserver) {
   let failure:EvidenceFailureDiagnostic|undefined;
   try {
-    const {resolve,quoteSource}=createEvidenceResolverV3(built,diagnostic=>{failure=diagnostic;});
+    const {resolve,quoteSource}=createEvidenceResolverV3(built,diagnostic=>{failure=diagnostic;},observe);
     const bound=resolve(query.evidence,"QUERY","queryRange",query,["query","evidence"],false,true);
     if(!bound.current && !query.evidence.some(ref=>ref.kind==="CONTEXT_FACT"))fail("CURRENT_USER_EVIDENCE_REQUIRED");
     // Check every alternative before any obsolete query-range instruction is
@@ -430,7 +472,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
-  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; });
+  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe);
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {

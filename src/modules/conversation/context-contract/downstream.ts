@@ -38,9 +38,25 @@ export const EvidenceFailureDiagnosticSchema = z.strictObject({
 });
 export type EvidenceFailureDiagnostic = z.infer<typeof EvidenceFailureDiagnosticSchema>;
 
+// Offset-only admission telemetry. Numeric operand is a bounded control value,
+// never a title, quote, alias, identifier, or arbitrary model string.
+export const OffsetBindingDiagnosticSchema = z.strictObject({
+  field: z.literal("leadOffsetDays"),
+  path: EvidenceFailureDiagnosticSchema.shape.path,
+  valueType: z.enum(["number", "null"]),
+  numericValue: z.number().int().min(1).max(366).nullable(),
+  evidenceKinds: z.array(z.enum(["USER_QUOTE", "CONTEXT_FACT"])).min(1).max(3),
+  sourceTurnOrdinals: z.array(z.number().int().min(0).max(11)).max(6),
+  validatorBranch: z.enum(["LEGACY_V2_RESOLVER", "V3_RESOLVER"]),
+  bindingBranch: z.enum(["USER_QUOTE", "CONTEXT_FACT", "MIXED"]),
+  sourceIdentityValidated: z.boolean(),
+  fieldValueCheckExecuted: z.boolean().nullable(),
+  fieldValueCheckResult: z.enum(["PASS", "FAIL", "NOT_APPLICABLE", "NOT_RUN", "UNKNOWN"]),
+});
+
 // Closed vocabulary only: never persist an exception message or operand value.
 export const DownstreamDiagnosticSchema = z.strictObject({
-  stage: z.enum(["TRANSPORT", "PERIOD_RECONCILIATION", "CANONICAL", "EVIDENCE", "LIST_RANGE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]),
+  stage: z.enum(["TRANSPORT", "PERIOD_RECONCILIATION", "CANONICAL", "EVIDENCE", "EVIDENCE_BINDING", "LIST_RANGE", "PATCH", "MERGE", "QUERY_RESOLUTION", "QUERY_RANGE", "DIRECTIVE", "TRANSITION", "REPLY"]),
   modelPeriodAuthority: z.enum(["NONE","PROPOSAL"]).optional(),
   result: z.enum(["PASS", "QUARANTINED_GUIDANCE", "REJECTED", "CLARIFY", "SUPPORTED", "UNSUPPORTED", "AMBIGUOUS", "UNSPECIFIED", "NOT_APPLICABLE"]),
   reason: z.enum(["NONE", "CONTEXT_NOT_BUILT", "PROPOSAL_SCHEMA_INVALID", "CONTROL_IN_PROPOSAL", "EVIDENCE_NOT_USER", "EVIDENCE_QUOTE_NOT_FOUND", "EVIDENCE_REMOVED_SPAN", "EVIDENCE_NORMALIZATION_BOUNDARY", "EVIDENCE_SOURCE_MISMATCH", "EVIDENCE_FACT_SCOPE_OR_VALUE", "EVIDENCE_FACT_VALUE_CONFLICT", "EVIDENCE_PLACEHOLDER_VALUE", "EVIDENCE_FACT_INVALID", "EVIDENCE_ANCHOR_CONFLICT", "EVIDENCE_SOURCE_LIMIT", "YEAR_NOT_EXPLICIT", "CURRENT_USER_EVIDENCE_REQUIRED", "NOTES_LOSS_REQUIRES_CLARIFICATION", "EVIDENCE_INVALID", "MISSING_RANGE", "INVALID_QUERY", "QUERY_RANGE_AMBIGUOUS", "RESOLUTION_REJECTED", "PATCH_REJECTED", "TRANSITION_REJECTED", "DIRECTIVE_MISMATCH", "DIRECTIVE_INVALID",
@@ -49,6 +65,7 @@ export const DownstreamDiagnosticSchema = z.strictObject({
     "CONTEXT", "EXPIRED", "SEMANTIC", "STALE", "CANDIDATE_EVIDENCE", "UNKNOWN_DIRECTIVE", "CONFIG", "PREVIEW_CHANNEL_REQUIRED", "SIZE", "TRANSITION_STATE_INVALID", "SCHEMA_INVALID", "PROVIDER", "BUDGET"]),
   field: IssueFieldSchema.optional(),
   evidenceFailure: EvidenceFailureDiagnosticSchema.optional(),
+  offsetBinding: OffsetBindingDiagnosticSchema.optional(),
   candidateRange: z.enum(["DAY", "DATE_BOUNDS", "WEEK", "WEEKEND", "MONTH", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING"]).optional(),
   directive: z.enum(["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP", "PRESENT_PREVIEW", "ANSWER_QUERY", "BACKEND_ONLY"]).optional(),
   transition: z.enum(["REPLY_ONLY", "STORED", "CONFIRMATION"]).optional(),
