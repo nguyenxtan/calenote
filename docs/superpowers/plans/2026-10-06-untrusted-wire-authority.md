@@ -429,3 +429,14 @@ Clarify the existing model instruction: normalize the exam predicate to the conc
 - [x] Independent review C0/I0/M0.
 - [x] Full serial offline suite 171 files/8268 PASS/2 existing skips; docs/typecheck/build/Worker types/local dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `4a9953202090cceae8a3685163d623d775f344b6e5103046d379ee94e2772962`. Continue fresh Formal Pilot under the same conservative root grant; all earlier failed executions remain terminal.
+
+### Typed event-only normalization example
+
+Candidate `ae6e0fc94a7817a083a6f2907c3142e030a280cf` again stopped after eight requests at R04 turn zero, generation `gen-1791301110-e125TUmpSEeML8wRN8kj`, with the same bare-predicate title digest and otherwise valid event operands. It is terminal and settled. Source consistency review found no concrete prompt/wire instruction forcing title to equal the evidence substring; do not invent an internal model-reasoning explanation.
+
+Add a compact typed example with different synthetic date/hour operands to distinguish normalized task title, eventDate/eventTime, and absent reminder clock. Require verbatim original evidence and forbid copying example operands. This tests a guidance hypothesis, not a backend normalization rule.
+
+- [x] RED policy example test one fail/16 PASS; GREEN focused/fit 202 PASS/2 existing skips; tests prove instruction delivery only.
+- [x] Independent delta review C0/I0/M0; no source-level title/evidence contradiction proven.
+- [x] Full serial offline suite 171 files/8269 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `fc6ad68e0d9c610896f8e0f20debf609268186f616666097961fb1859458cbd8`; wire v18 and canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the existing root debug grant/accounting.

@@ -5,6 +5,10 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("exam task normalization example separates typed title from event operands", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example of an event-only exam statement: Em thi ngày 20/12 lúc 9h. gives title="đi thi", eventDate={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:12,year:null,leapMonth:null}, eventTime={hour:9,minute:0,qualifier:"H24"}; reminderDate and reminderTime remain absent.');
+});
+
 it("serialized policy specifies normalized exam task titles without changing evidence", () => {
   const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Tôi thi ngày 11/10 lúc 8h."}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const request = serializeContextRequest(input);
