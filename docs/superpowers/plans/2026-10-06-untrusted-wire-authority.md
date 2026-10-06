@@ -483,3 +483,14 @@ Retain bounded structural validation diagnostics at the provider-envelope bounda
 - [x] RED two failing tests/133 PASS; GREEN focused validator/gateway/runner regressions 199 PASS.
 - [x] Independent delta review C0/I0/M0.
 - [x] Serial offline full verification completed with exit zero: 171 files/8274 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Continue fresh Formal Pilot after the local diagnostic commit under the unchanged root grant/accounting.
+
+### Query continuation current-source instruction
+
+Candidate `f047a7093eed9e6234840c12fe3ac910effd105d` stopped after two requests at R01 turn one, generation `gen-1791305219-Q96pTGcdqw0RFklm1MbC`. HTTP/wire passed, evidence rejected CURRENT_USER_EVIDENCE_REQUIRED. Zero reads/mutations; execution terminal and known costs settled. This proves missing current-source authority, not the private model reasoning or the envelope shape of the earlier generation.
+
+The existing query resolver requires current USER evidence or exact eligible CONTEXT_FACT reuse. Clarify that a newly supplied query period must cite the current USER fragment rather than only the earlier generic request. Add a different synthetic week example; preserve fact reuse, historical reminder operands and strict validation. No backend/evidence/oracle change.
+
+- [x] RED one failure/20 PASS; GREEN focused policy/transport/evidence/fit 132 PASS/2 existing skips. Serialized-policy assertions prove delivery only.
+- [x] Independent delta review C0/I0/M0.
+- [x] Full serial offline verification exit zero: 171 files/8275 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `536b0f00744e62f05538c46ee65c0220315a4bc1de9105e59885f52444b81fda`; wire v18 unchanged. Continue under the existing root debug authority; no retry of terminal executions and no Full/release.

@@ -5,6 +5,14 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("serialized query policy delivers current continuation evidence ownership", () => {
+  const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"xem lịch"},{role:"ASSISTANT",text:"Bạn muốn xem khoảng nào?"},{role:"USER",text:"tuần sau"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+  const request = serializeContextRequest(input);
+  expect(request.messages[0].content).toContain("A query continuation must include current USER evidence for its newly supplied period, not only the earlier generic LIST request.");
+  expect(request.messages[0].content).toContain('For currentTurn=2 and current text "tuần sau", query primaryEvidence quotes "tuần sau" at turn 2; an old "xem lịch" quote alone cannot authorize the new period.');
+  expect(JSON.parse(request.messages[1].content)).toEqual(input);
+});
+
 it("target continuation example binds latest USER rather than the original task", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example with currentTurn=6 and latest USER text "6h.": CURRENT target evidence quotes "6h." at turn 6, not the original task at turn 0; reminderTime evidence also uses turn 6.');
 });
