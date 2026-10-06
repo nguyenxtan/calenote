@@ -575,3 +575,16 @@ Explicitly document the existing target semantics in the model policy: null acti
 - [x] Independent review C0/I0/M0; reviewer 91 PASS/2 skips; diff PASS.
 - [x] Full serial offline checks exit zero: 171 files/8288 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff PASS. Next new Formal Pilot under existing root authority. No Full/release.
 - Prompt SHA256 `445523f904edf4ab62a0f0d3688a2abb254474a7dc873861e21f64baf598d6a7`; wire v21 unchanged.
+
+### V22 lossless operation-tuple transport
+
+Candidate `9239bdab11a0ef8856034f0c3904400cb69e92ca` Formal Pilot stopped after two requests at R01 turn one, generation `gen-1791314330-Tj2znV7bnhtmr8rXQtSm`. Canonical REQUEST_TARGET_INTENT_OWNERSHIP rejected LIST_REMINDERS/LIST plus NEW reminder target. Zero reads/mutations, known costs settled, terminal history preserved. Conservative remaining derived 2783938 microunits, UNKNOWN unchanged. Prompt-only assertions did not eliminate independently selected contradictory control tags.
+
+Replace the three redundant wire selectors with one untrusted integer operationCode spanning all twelve existing canonical ownership tuples. Fixed application mapping reconstructs intent/requestTarget.kind/query.kind before existing codecs and canonical validation. Carrier mismatches, unknown codes, extra legacy tags and structural failures reject without repair. No supplied active carrier is silently discarded. Conditional operation uncertainty and unsupported-combination requirements remain canonical; query code alone grants no read or write authority. Directive/reply remain independently advisory. No canonical/evidence/oracle/accounting/provider changes.
+
+- [x] RED operation roundtrip/schema tests (14 failures), authority classification (one failure), structural diagnostic whitelist (one failure), prompt delivery (one failure).
+- [x] GREEN 22 operation tests including all twelve roundtrips, invalid codes/carriers, preserved conditional uncertainty, query-change prohibition and unsupported-combination guard.
+- [x] Independent implementation delta review C0/I0/M0; reviewer verification 156 PASS, followup 76 PASS and fixture migration 43 PASS. Legacy test wire mutations were migrated without weakening oracle/evidence/TTL assertions.
+- Wire v22 SHA256 `5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe`; serialized bytes 10183 (v21 10516). Prompt SHA256 `e150430ed3efe493b232bd1417a616932a68f85ecea3f45a385ff64dfe1f9c3e`.
+- [x] Full serial offline checks exit zero: 172 files/8311 PASS/2 existing skips; documentation checks/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff check PASS.
+- [ ] Local commit; then one material-wire canary and fresh Formal Pilot under the existing bounded debug authority. Live compiler/model compliance and Pilot PASS are not yet proven. No Full/release.

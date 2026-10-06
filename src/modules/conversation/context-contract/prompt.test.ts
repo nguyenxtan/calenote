@@ -51,6 +51,11 @@ it("first reminder targets NEW only when no retained request exists", () => {
  expect(CONTEXT_CONTRACT_PROMPT).toContain("For a grounded answer or correction to an existing activeRequest, use CURRENT; do not start a new request merely because the answer is short.");
 });
 
+it("operation wire uses one semantic selector and never duplicates ownership tags", () => {
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Wire root keys are operationCode, requestTarget, changes, query, uncertainties, conversationDirective, replyProposal. Do not emit intent or kind inside requestTarget/query.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("0=CREATE_REMINDER/CURRENT, 1=CREATE_REMINDER/NEW, 2=CREATE_REMINDER/UNRESOLVED, 3=LIST_REMINDERS/LIST, 4=CALENDAR_QUERY/CALENDAR_DATE, 5=CAPABILITY_QUERY/CAPABILITY, 6=HELP, 7=UNSUPPORTED, 8=AMBIGUOUS/null, 9=AMBIGUOUS/CURRENT, 10=AMBIGUOUS/NEW, 11=AMBIGUOUS/UNRESOLVED.");
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
 });

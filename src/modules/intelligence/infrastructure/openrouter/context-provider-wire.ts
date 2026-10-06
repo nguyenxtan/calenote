@@ -431,7 +431,53 @@ function outgoingSemanticKindEnums(node: Schema): Schema {
   }
   return result;
 }
-const providerSchemaV3 = outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3)))))))));
+// A single untrusted selection losslessly carries the canonical ownership
+// tuple. Its immutable application mapping does not confer execution authority.
+const operationTuples = Object.freeze([
+ ["CREATE_REMINDER","CURRENT",null],["CREATE_REMINDER","NEW",null],["CREATE_REMINDER","UNRESOLVED",null],
+ ["LIST_REMINDERS",null,"LIST"],["CALENDAR_QUERY",null,"CALENDAR_DATE"],["CAPABILITY_QUERY",null,"CAPABILITY"],
+ ["HELP",null,null],["UNSUPPORTED",null,null],["AMBIGUOUS",null,null],
+ ["AMBIGUOUS","CURRENT",null],["AMBIGUOUS","NEW",null],["AMBIGUOUS","UNRESOLVED",null],
+].map(tuple=>Object.freeze(tuple)));
+function operationSchema(root:Schema):Schema{
+ const result=structuredClone(root);
+ delete result.properties!.intent;
+ result.properties!.operationCode={type:"integer",enum:operationTuples.map((_,index)=>index)};
+ result.required=result.required!.filter(key=>key!=="intent");result.required.unshift("operationCode");
+ const strip=(node:Schema):void=>{
+  if(node.$ref){strip(at(result,node.$ref));return;}
+  if(node.properties?.kind){delete node.properties.kind;node.required=node.required?.filter(key=>key!=="kind");}
+  for(const branch of node.anyOf??[])strip(branch);
+ };
+ strip(result.properties!.requestTarget);strip(result.properties!.query);
+ return prune(result);
+}
+const providerSchemaV3 = operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))))));
+function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Record<string,unknown>{
+ const result={...raw};
+ if(mode==="encode"){
+  const target=raw.requestTarget as Record<string,unknown>|null,query=raw.query as Record<string,unknown>|null;
+  const code=operationTuples.findIndex(([intent,targetKind,queryKind])=>intent===raw.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null));
+  if(code<0)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM");
+  result.operationCode=code;delete result.intent;
+  for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
+ }else{
+  requireWireKeys(raw,providerSchemaV3.required!.filter(key=>key!=="conversationDirective"&&key!=="replyProposal"),Object.keys(providerSchemaV3.properties!),[]);
+  const code=raw.operationCode;
+  if(typeof code!=="number"||!Number.isInteger(code)||code<0||code>=operationTuples.length)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(operationTuples.map((_,i)=>i),code));
+  const [intent,targetKind,queryKind]=operationTuples[code];result.intent=intent;delete result.operationCode;
+  for(const [key,kind,keys] of [["requestTarget",targetKind,["evidence"]],["query",queryKind,["period","evidence","date","outputCalendar","topic"]]] as const){
+   const carrier=raw[key];
+   if(kind===null){if(carrier!==null)throw new WireShapeFailure([key],"null");}
+   else{
+    if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([key],"object");
+    requireWireKeys(carrier as Record<string,unknown>,[...keys],[...keys],[key]);
+    result[key]={...(carrier as Record<string,unknown>),kind};
+   }
+  }
+ }
+ return result;
+}
 export function googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3 {
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: structuredClone(providerSchemaV3) as typeof InterpretationJsonSchemaV3 };
 }
@@ -442,7 +488,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
-  return dateJsonOperands(output,"encode");
+  return operationValues(dateJsonOperands(output,"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -459,7 +505,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const object = dateJsonOperands(raw as Record<string,unknown>,"decode");
+    const object = dateJsonOperands(operationValues(raw as Record<string,unknown>,"decode"),"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;

@@ -15,7 +15,7 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
-it.each(["query","requestTarget"])("R01 turn-one %s ownership state persists through real gateway and terminal runner", async mode=>{
+it.each(["query","requestTarget"])("R01 turn-one %s conflicting legacy tag rejects at wire boundary and terminal runner", async mode=>{
   const directory=mkdtempSync(join(tmpdir(),"context-root-constraint-"));let calls=0;
   try {
     const result=await runner.executeObservableCampaign({directory,sourceSha:"a".repeat(40),provenanceDigest:"b".repeat(64),runId:"root-constraint",profile:"PILOT",cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,now:()=>100,
@@ -35,8 +35,7 @@ it.each(["query","requestTarget"])("R01 turn-one %s ownership state persists thr
     expect(calls).toBe(2);
     expect(result.applicationEvidence[0]).toMatchObject({oracle:"PASS",pendingField:"queryRange"});
     expect(result.applicationEvidence[1]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
-    expect(result.responses[1].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"CANONICAL",validation:{issues:[expect.objectContaining({path:[],code:"custom",constraintId:mode==="query"?"QUERY_INTENT_OWNERSHIP":"REQUEST_TARGET_INTENT_OWNERSHIP",actualCategory:"OWNERSHIP_MISMATCH",
-      ownershipState:{intent:mode==="query"?"HELP":"LIST_REMINDERS",requestTargetKind:mode==="query"?null:"CURRENT",queryKind:"LIST",changeCount:0,uncertaintyCount:0,uncertainties:[]}})]}});
+    expect(result.responses[1].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"PROVIDER_WIRE",validation:{issues:[expect.objectContaining({path:mode==="query"?[]:["requestTarget"],code:"WIRE_SHAPE_INVALID",classification:mode==="query"?"extra":"value"})]}});
     const durable=JSON.parse(readFileSync(join(directory,"responses.json"),"utf8"));
     expect(durable[1].canonicalValidationDiagnostics).toEqual(result.responses[1].canonicalValidationDiagnostics);
     expect(readFileSync(join(directory,"responses.json"),"utf8")).not.toContain("Tháng này có lịch gì ko?");
@@ -293,10 +292,10 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
           if (mode === "operation-invalid") changed.changes[0].operation = sentinel; else delete changed.changes[0].operation;
         }
         else if (mode === "guidance") wire.replyProposal = { text: sentinel, [sentinel]: sentinel };
-        else if (mode === "missing") delete wire.intent;
+        else if (mode === "missing") delete wire.operationCode;
         else if (mode === "unexpected-key") wire[sentinel] = sentinel;
         else if (mode === "nested-evidence") {const evidence=(wire.query as {evidence:{primaryEvidence:string}}).evidence;evidence.primaryEvidence=JSON.stringify({...JSON.parse(evidence.primaryEvidence),occurrence:sentinel});}
-        else wire.intent = mode === "control-safe" ? "UNSUPPORTED_INTENT" : sentinel;
+        else wire.operationCode = mode === "control-safe" ? 12 : sentinel;
         return { status: 200, ...(mode === "oversized" ? { oversized: true } : {}), body: mode === "oversized" ? sentinel.repeat(4000) : JSON.stringify({ model: request.model, provider: "Google", id: "gen-canonical-test",
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mode === "primitive" ? 42 : wire) } }] }) };
       } });
@@ -305,9 +304,9 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
     const artifact = readFileSync(join(directory, "responses.json"), "utf8");
     expect(artifact).not.toContain(sentinel);
     expect(artifact.length).toBeLessThan(14000);
-    if (mode === "control-safe") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [{ constraint: "CONTROL_ENUM", actualSafeToken: "UNSUPPORTED_INTENT", actualLength: 18, acceptedValueCount: 7 }] } });
+    if (mode === "control-safe") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [{ constraint: "CONTROL_ENUM", actualType: "number", acceptedValueCount: 12 }] } });
     if (mode !== "oversized") expect(artifact).toMatch(/payloadSha256/);
-    if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["intent"], classification: "missing" })] } });
+    if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["operationCode"], classification: "missing" })] } });
     if (mode === "unexpected-key") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ classification: "extra", extraKeyCount: 1 })], unknownTopLevelKeyCount: 1 } });
     if (mode === "primitive") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: [], expected: "object", actualType: "number" })] } });
     if (mode.startsWith("operation-")) expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["changes", 0, "operation"], expected: "CONTROL_ENUM", classification: mode === "operation-missing" ? "missing" : "value" })] } });
@@ -443,8 +442,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "6112219d4b8c69d1d37685744dd699d4832c25bf1b97108d835db600c0ff10a1",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-date-json-21" });
+      providerWireSchemaDigest: "5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-22" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

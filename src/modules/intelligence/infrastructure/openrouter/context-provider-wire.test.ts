@@ -18,7 +18,7 @@ it("outgoing V3 dates do not multiply query discriminator enum states", () => {
     Object.values(node).forEach(walk);
   };walk(schema);
   expect(constants).toBeGreaterThan(0);
-  expect(singletonValues.sort()).toEqual(["CALENDAR_DATE","CAPABILITY","LIST"].sort());
+  expect(singletonValues).toEqual([]);
 });
 it("encoded canonical date round trip preserves strict active payload authority", () => {
   const canonical = ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
@@ -71,9 +71,9 @@ it("diagnoses another finite control domain without changing valid decoding", ()
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("PARSED");
   expect(diagnostics).toEqual([]);
-  wire.intent = "INVALID_INTENT";
+  wire.operationCode = 12;
   expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject([{ issues: [{ path: ["intent"], constraint: "CONTROL_ENUM", actualSafeToken: "INVALID_INTENT", acceptedValueCount: expect.any(Number) }] }]);
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["operationCode"], constraint: "CONTROL_ENUM", acceptedValueCount: 12 }] }]);
 });
 it("accepts valid MONTH without diagnostic capture", () => {
   const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "private", occurrence: 1 }] } };
@@ -83,7 +83,7 @@ it("accepts valid MONTH without diagnostic capture", () => {
 });
 it.each(["SECRET VALUE", "SECRET\nVALUE", "âm_lịch", "TOKEN@EMAIL.COM", "x".repeat(49)])("does not retain unsafe control strings in scalar enums (%#)", token => {
   const wire = encodeGoogleLiteEuContextV3(v3Help as never) as Record<string, unknown>;
-  wire.intent = token;
+  wire.operationCode = token;
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
   expect(JSON.stringify(diagnostics)).not.toContain(token);
@@ -107,16 +107,16 @@ it.each(["primaryEvidence", "additionalEvidenceJson"] as const)("retains decoded
   expect(diagnostics).toMatchObject([{ issues: [{ path: ["query", "evidence", slot, ...(slot === "additionalEvidenceJson" ? [0] : []), "kind"], classification: "value", actualType: "string", actualSafeToken: "BAD_EVIDENCE_KIND" }] }]);
   expect(JSON.stringify(diagnostics)).not.toContain("private");
 });
-it("observes decoded canonical query before a root constraint rejects the envelope", () => {
-  const canonical = { ...v3Help, intent: "LIST_REMINDERS", conversationDirective: null, query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "PRIVATE_QUERY", occurrence: 1 }] } };
+it("observes decoded canonical target before a conditional constraint rejects the envelope", () => {
+  const canonical = { ...v3Help, intent: "AMBIGUOUS", requestTarget:{kind:"CURRENT",evidence:[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_QUERY",occurrence:1}]},conversationDirective:null,uncertainties:[{field:"operation",reason:"AMBIGUOUS",alternatives:[]}] };
   const wire = encodeGoogleLiteEuContextV3(canonical as never) as Record<string, unknown>;
-  wire.intent = "HELP";
+  wire.uncertainties = [];
   let observed: unknown;
   const parse = parseGoogleLiteEuContextSectionsV3 as unknown as (raw: unknown, protocol: typeof CONTEXT_PROTOCOL_V3, invalid: undefined, wireInvalid: undefined, decoded: (value: unknown) => void) => { status: string };
   expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, value => { observed = value; }).status).toBe("REFUSED");
-  expect(observed).toMatchObject({ intent: "HELP", query: { kind: "LIST", period: { kind: "MONTH", offset: 0 } } });
+  expect(observed).toMatchObject({ intent: "AMBIGUOUS", requestTarget: {kind:"CURRENT"},uncertainties:[] });
   expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, () => { throw Error("diagnostic observer failure"); }).status).toBe("REFUSED");
-  expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, value => { (value as { intent: string }).intent = "LIST_REMINDERS"; }).status).toBe("REFUSED");
+  expect(parse(wire, CONTEXT_PROTOCOL_V3, undefined, undefined, value => { (value as { intent: string }).intent = "CREATE_REMINDER"; }).status).toBe("REFUSED");
 });
 it.each([
   [42, "number"], [null, "null"], [["SENSITIVE_PRIVATE_VALUE"], "array"], ["SENSITIVE_PRIVATE_VALUE".repeat(10000), "string"], [false, "boolean"],
@@ -178,7 +178,15 @@ function wireFixture(value: unknown): unknown {
   const object = value as Record<string, unknown>, result = Object.fromEntries(Object.entries(object).map(([key, child]) => [key, key === "uncertainties" && Array.isArray(child)
     ? child.map((item: { field: unknown; reason: unknown; alternatives: unknown[] }) => ({ fieldCode: ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "intent", "queryRange", "operation"].indexOf(String(item.field)), reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }))
     : wireFixture(child)]));
-  if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
+  if (Object.hasOwn(object, "schemaVersion")) {
+    delete result.schemaVersion;
+    const target=object.requestTarget as Record<string,unknown>|null;
+    const query=object.query as Record<string,unknown>|null;
+    const tuples=[["CREATE_REMINDER","CURRENT",null],["CREATE_REMINDER","NEW",null],["CREATE_REMINDER","UNRESOLVED",null],["LIST_REMINDERS",null,"LIST"],["CALENDAR_QUERY",null,"CALENDAR_DATE"],["CAPABILITY_QUERY",null,"CAPABILITY"],["HELP",null,null],["UNSUPPORTED",null,null],["AMBIGUOUS",null,null],["AMBIGUOUS","CURRENT",null],["AMBIGUOUS","NEW",null],["AMBIGUOUS","UNRESOLVED",null]];
+    result.operationCode=tuples.findIndex(([intent,targetKind,queryKind])=>intent===object.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null));
+    delete result.intent;
+    for(const key of ["requestTarget","query"])if(result[key])delete (result[key] as Record<string,unknown>).kind;
+  }
   if (Array.isArray(object.evidence)) {
     result.evidence = { primaryEvidence: JSON.stringify(object.evidence[0]), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1)) };
   }
@@ -202,7 +210,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("6112219d4b8c69d1d37685744dd699d4832c25bf1b97108d835db600c0ff10a1");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -251,8 +259,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-date-json-21");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6112219d4b8c69d1d37685744dd699d4832c25bf1b97108d835db600c0ff10a1");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-22");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("5f2efbb3f2253e4141e3c2aa40b024d303fdb3045d8f6aa4c4762dc6ff03a3fe");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
@@ -300,7 +308,7 @@ it.each([
   ["four evidence", (raw: Record<string, unknown>) => { ((raw.changes as Array<Record<string, unknown>>)[0].evidence as Record<string, unknown>).additionalEvidenceJson = JSON.stringify([wireFixture(quote), wireFixture(quote), wireFixture(quote)]); }],
   ["duplicate field", (raw: Record<string, unknown>) => { (raw.changes as unknown[]).push(structuredClone((raw.changes as unknown[])[0])); }],
   ["unknown root", (raw: Record<string, unknown>) => { raw.extra = null; }],
-  ["missing core", (raw: Record<string, unknown>) => { delete raw.intent; }],
+  ["missing core", (raw: Record<string, unknown>) => { delete raw.operationCode; }],
 ] as const)("rejects invalid core atomically: %s", async (_label, mutate) => {
   const raw = wireFixture({ ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] }) as Record<string, unknown>; mutate(raw);
   expect(await dispatch(raw)).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });

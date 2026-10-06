@@ -119,7 +119,7 @@ it("selected build-time oversized refusal preserves pending candidate source and
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
     const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
-    return { ...object, requestTarget: { ...target, kind: "UNRESOLVED" }, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
+    return { ...object, operationCode: 2, requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(1, "nhắc đi thi 8/10/2026 8h");
   const before = await h.store.observe(h.f.scope(2)); if ("failure" in before || !before.snapshot) throw new Error("missing retained proposal");
@@ -170,7 +170,7 @@ it("selected prior no-A grounded candidate survives operational refusal with ori
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
     const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
-    return { ...object, requestTarget: { ...target, kind: "UNRESOLVED" }, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
+    return { ...object, operationCode: 2, requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(0, "nhắc đi thi");
   const before = await h.store.observe(h.f.scope(1)); if ("failure" in before || !before.snapshot) throw new Error("missing no-A staged candidate");
