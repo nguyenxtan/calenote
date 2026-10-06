@@ -138,7 +138,7 @@ function wireFixture(value: unknown): unknown {
     : wireFixture(child)]));
   if (Object.hasOwn(object, "schemaVersion")) delete result.schemaVersion;
   if (Array.isArray(object.evidence)) {
-    result.evidence = { primaryEvidence: JSON.stringify(wireFixture(object.evidence[0])), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1).map(wireFixture)) };
+    result.evidence = { primaryEvidence: JSON.stringify(object.evidence[0]), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1)) };
   }
   if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
@@ -208,7 +208,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-primary-evidence-json-15");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-canonical-evidence-json-16");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

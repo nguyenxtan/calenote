@@ -209,7 +209,7 @@ function requireWireKeys(object: Record<string, unknown>, required: string[], al
   const extra = Object.keys(object).filter(key => !allowed.includes(key)).length;
   if (extra) throw new WireShapeFailure(path, "object", extra);
 }
-function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path: PropertyKey[] = [], root: Schema = original): unknown {
+function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path: PropertyKey[] = [], root: Schema = original, canonicalEvidenceJson = false): unknown {
   const node = deref(raw, root), plan = taggedPlan(node, root);
   const requireShape = (condition: unknown, expected = node.type ?? "UNION") => { if (!condition) throw new WireShapeFailure(path, expected); };
   if (plan) {
@@ -226,7 +226,10 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     }
     const branch = plan.branches[matches[0]];
     if (direction === "decode") {
-      requireWireKeys(object, plan.keys, plan.keys, path);
+      requireWireKeys(object, canonicalEvidenceJson ? branch.required! : plan.keys, plan.keys, path);
+      // Encoded evidence uses canonical refs: only selected active keys are
+      // required. Optional known legacy padding is never authority. All other
+      // provider objects still require their declared transport keys.
       // Known inactive keys are transport padding. Check their presence, but
       // never read or traverse their values; only the selected branch supplies
       // canonical fields. Its active values still pass codec and validation.
@@ -250,8 +253,8 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       if (direction === "encode") {
         requireShape(Array.isArray(value) && predicate(node, value, root));
         const refs = value as unknown[];
-        return { primaryEvidence: JSON.stringify(codec(node.items!, refs[0], direction, [...path, keys[0]], root)),
-          additionalEvidenceJson: JSON.stringify(refs.slice(1).map((ref, index) => codec(node.items!, ref, direction, [...path, keys[1], index], root))) };
+        return { primaryEvidence: JSON.stringify(refs[0]),
+          additionalEvidenceJson: JSON.stringify(refs.slice(1)) };
       }
       // Preserve sanitized diagnostics for the old observed invalid array;
       // no legacy array (including a valid-sized one) is accepted as V3 slots.
@@ -267,14 +270,14 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       if(typeof object.primaryEvidence!=="string"||new TextEncoder().encode(object.primaryEvidence).length>32768)throw new WireShapeFailure(primaryPath,"BOUNDED_JSON_OBJECT");
       let primary:unknown;
       try{primary=JSON.parse(object.primaryEvidence)}catch{throw new WireShapeFailure(primaryPath,"JSON_OBJECT")}
-      const refs = [codec(node.items!, primary, direction, primaryPath, root)];
+      const refs = [codec(node.items!, primary, direction, primaryPath, root, true)];
       const extraPath = [...path, keys[1]];
       if (typeof object.additionalEvidenceJson !== "string" || new TextEncoder().encode(object.additionalEvidenceJson).length > 32768) throw new WireShapeFailure(extraPath, "BOUNDED_JSON_ARRAY");
       let extras: unknown;
       try { extras = JSON.parse(object.additionalEvidenceJson); } catch { throw new WireShapeFailure(extraPath, "JSON_ARRAY"); }
       if (!Array.isArray(extras)) throw new WireShapeFailure(extraPath, "array");
       if (extras.length > 2) throw new WireShapeFailure(extraPath, "array", undefined, { actualCount: extras.length, minItems: 0, maxItems: 2 });
-      for (const [index, extra] of extras.entries()) refs.push(codec(node.items!, extra, direction, [...extraPath, index], root));
+      for (const [index, extra] of extras.entries()) refs.push(codec(node.items!, extra, direction, [...extraPath, index], root, true));
       return refs;
     }
     requireShape(Array.isArray(value));

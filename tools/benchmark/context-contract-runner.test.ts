@@ -444,7 +444,7 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
       providerWireSchemaDigest: "5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-primary-evidence-json-15" });
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-canonical-evidence-json-16" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

@@ -185,7 +185,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const actual = createContextContractGateway(config, async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "fbe0c29b71b504b8151c4bb103440e4e4e24444479deba77f3dbf5268b8958e1"
+    if (digest(request.messages[0].content) !== "67a47b298367b2f223c5a6a27762c711d0cec8f92c25d2fab20ec8cc706f7b6e"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "5ae993826dffda6629ee599b5c9bd21353192b10a088d5adc1a2822ea070e906"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");

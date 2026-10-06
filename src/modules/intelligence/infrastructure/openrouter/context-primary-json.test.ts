@@ -4,6 +4,16 @@ import {encodeGoogleLiteEuContextV3,parseGoogleLiteEuContextSectionsV3,googleLit
 import {ConversationInterpretationV3Schema,parseInterpretationSectionsV3} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 const refs=[{kind:"USER_QUOTE",turn:0,quote:"literal quote",occurrence:1},{kind:"USER_QUOTE",turn:0,quote:"second quote",occurrence:1},{kind:"USER_QUOTE",turn:0,quote:"third quote",occurrence:1}];
+it.each([refs[0],{kind:"CONTEXT_FACT",ref:"f3"}])("encoded canonical evidence needs no inactive protocol padding (%#)",ref=>{
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"LIST_REMINDERS",requestTarget:null,changes:[],query:{kind:"LIST",period:{kind:"MONTH",offset:0},statusScope:"DEFAULT",evidence:[ref,ref]},uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {query:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}};
+ wire.query.evidence={primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:JSON.stringify([ref])};
+ expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+ for(const invalid of [{...ref,kind:"INVALID"},{kind:ref.kind},{...ref,unexpected:true}]){
+  wire.query.evidence.primaryEvidence=JSON.stringify(invalid);
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ }
+});
 it.each([1,2,3])("required primary JSON reconstructs exactly %i canonical refs without nested provider evidence unions",count=>{
  const evidence=refs.slice(0,count),canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation:"SET",value:"literal quote",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
  const wire=encodeGoogleLiteEuContextV3(canonical) as {requestTarget:{evidence:{primaryEvidence:string}},changes:Array<{evidence:{primaryEvidence:string}}>};
