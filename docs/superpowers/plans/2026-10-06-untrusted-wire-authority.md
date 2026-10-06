@@ -311,3 +311,13 @@ Expand the general series guidance with an abstract three-day worked state trans
 - [x] RED prompt-policy test; GREEN focused 93 PASS/two existing skips.
 - [x] Independent review C0/I0/M0; full `pnpm check` PASS including docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
 - Prompt SHA256 `8fa39d2984472a557b2f7f85506d6e34c6183210df4a02e25068a103ed8d66e0`. Continue fresh Formal Pilot under the existing conservative debug cap, not the terminal failed execution.
+
+### Event versus notification clock ownership
+
+Candidate `0782290cf9a920a94685b827fa2711fe9f73bd9d` Formal Pilot passed R01–R03 then stopped after eight requests at R04 turn zero. Generation `gen-1791279603-sKmBYq5BsbbKkvndZDSq` returned HTTP 200 but omitted the event-predicate subject and put its event-owned clock into reminderTime instead of eventTime. The application safely clarified; the frozen oracle failed four assertions. The execution is settled and terminal.
+
+Clarify clause ownership: event predicates supply eventTime and a concise grounded task subject; only notification instructions or answers to the reminderTime question supply reminderTime. Illustrative distinct exam/meeting subjects and 9h-event/7h-notification clocks do not authorize invented detail or backend duplication. Canonical/evidence/oracle/schema remain unchanged.
+
+- [x] RED prompt-policy test; GREEN focused 94 PASS/two existing skips.
+- [x] Independent review C0/I0/M0; full `pnpm check` PASS with docs/typecheck/lint/build/Worker types/local dry-run under network/credential denial.
+- Prompt SHA256 `d5ca906ef8af24624dd01b979b8704b6264daee602c549035b7ad5e0513e6a8c`. Continue fresh Formal Pilot under the existing conservative debug cap.

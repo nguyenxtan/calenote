@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("event-clause clock and subject stay distinct from notification clock", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A clock attached to the event predicate belongs to eventTime, not reminderTime; only a notification instruction or an answer to the reminderTime question supplies reminderTime.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A first-person event predicate supplies the task subject even without a separate noun title.");
+});
+
 it("retained finite series is completed by relation without duplicating count into offset", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("For example, accepted frequency=DAILY and occurrenceCount=3 plus a continuation requesting the three days before the event means SET eventRelation=BEFORE_EVENT only; keep occurrenceCount=3 and leadOffsetDays absent.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("The backend expands the N preceding notification dates from count+relation; no leadOffsetDays is needed to represent that N-day span.");
