@@ -396,3 +396,14 @@ The authority matrix classifies source selection SEMANTIC_UNTRUSTED and not appl
 - [x] Independent review C0/I0/M0.
 - [x] Full local suite and docs/typecheck/lint/build/Worker types/dry-run PASS.
 - Prompt SHA256 `493d6ed6632a056feefaf1422d483d6c09238b6ffe72561f7544c279fe1dd191`. No authority/schema/validator/oracle relaxation; continue fresh live validation under the same root budget.
+
+### V17 string constant dialect equivalence
+
+Candidate `fa5241ab3460d2ad71e4a9ef0ff772764c907eb5` stopped on its first R01 turn, generation `gen-1791298077-LieHpjaTNQHxDEU31KSe`: query.kind was LIST_REMINDERS, whereas emitted branches constrain LIST/CALENDAR_DATE/CAPABILITY through string const. Strict decoding rejected it without DB reads or mutations.
+
+[Google's structured-output documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/control-generated-output) lists string enums, not const, and warns unsupported schema fields can be ignored. This motivates an equivalent outgoing V3-only const-to-singleton-enum conversion after normalization; it does not establish OpenRouter's private transformation. Canonical decoder predicates, evidence validation and legacy V2 stay unchanged.
+
+- [x] RED outgoing dialect test: one fail/103 PASS; GREEN focused/parity 3122 PASS.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial local verification and docs/typecheck/lint/build/Worker types/dry-run PASS.
+- Wire version 17; emitted bytes 12491 to 12507, schema SHA256 `d6ba953e5e677d00a9d3f151077953238c2704f8e00a7c6322c241e035f2a888`. Finite domains unchanged. Live compiler/state-limit admission remains required under the unchanged root cap.
