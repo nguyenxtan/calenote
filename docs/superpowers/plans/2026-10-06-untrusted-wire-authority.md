@@ -542,3 +542,14 @@ Strengthen existing minimal-patch guidance: omit unchanged retained fields and d
 - [x] Independent review C0/I0/M0; reviewer verification 88 PASS/2 skips.
 - [x] Full serial offline verification exit zero: 171 files/8285 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff check PASS. Next a new Formal Pilot execution under the existing root authority; wire unchanged, no additional canary. No same-candidate retry or Full/release.
 - Prompt SHA256 `7a09f74e7f6e9f3c6c06df11dab8cf1e85d52778a38379619d2a57dfd70e2303`; wire v21 unchanged.
+
+### Ground before choosing semantic changes
+
+Candidate `7afbe24c32c58bcb798cfcdf08af19a4e668ab86` Formal Pilot stopped after three requests at R02 turn zero, generation `gen-1791311834-cVnQ8C7EpY58wkR6yYDC`. Wire/canonical passed; eventRelation BEFORE_EVENT had a quote absent from USER t0. Structural comparison classified it UNRELATED_QUOTE with no exact/case-folded/normalization match and a valid source map. Backend correctly rejected the patch, zero reads/mutations. All requests settled known; execution terminal. Latest conservative remaining 2789812 microunits; holds/history preserved. The output defect is proven, private reasoning is not.
+
+Add an early grounding-first precondition: locate a real entailing source substring before choosing a field; never synthesize plausible evidence for a chosen value. Without explicit relation wording or an eligible retained relation fact omit eventRelation, even if a preceding schedule seems likely. Counts/dates are not relation evidence, examples are not source text. Preserve existing context interpretation, explicit corrections and backend authority. Canonical/evidence/oracle/wire/accounting unchanged.
+
+- [x] RED one failure/23 PASS; focused 122 PASS/2 existing skips, instruction delivery only.
+- [x] Independent review C0/I0/M0; reviewer checks 89 PASS/2 skips; diff check PASS.
+- [x] Full serial offline verification exit zero: 171 files/8286 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Next new Formal Pilot under existing root grant. No Full/release.
+- Prompt SHA256 `5672b7d219759c511c44bb169694b59d26f67109c1a5fdf50c350a976bfdde72`.

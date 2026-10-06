@@ -35,6 +35,11 @@ it("serialized continuation policy does not redundantly replace retained count",
  expect(JSON.parse(request.messages[1].content)).toEqual(input);
 });
 
+it("serialized policy requires grounding before choosing an optional relation", () => {
+ expect(serializeContextRequest(ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc việc này"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}})).messages[0].content).toContain("Ground first, then choose the change: locate a real USER substring entailing the field value before adding that field. Never choose a value first and write a plausible quote afterward.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("No explicit relation substring and no eligible retained relation fact means omit eventRelation, even when BEFORE_EVENT seems useful or likely.");
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
 });
