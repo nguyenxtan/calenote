@@ -27,6 +27,14 @@ it("final evidence check preserves lowercase literal source rather than grammati
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Before returning, verify every USER_QUOTE as a case-sensitive contiguous substring of the referenced USER turn; do not capitalize, spell-correct, trim internally or paraphrase it.");
 });
 
+it("serialized continuation policy does not redundantly replace retained count", () => {
+ const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc việc này"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+ const request=serializeContextRequest(input);
+ expect(request.messages[0].content).toContain("Omit unchanged retained fields from changes; do not redundantly REPLACE the retained count when answering the relation question.");
+ expect(request.messages[0].content).toContain("Prefer the shortest exact contiguous USER fragment that actually entails the proposed field value; copy its original casing, never a rewritten sentence.");
+ expect(JSON.parse(request.messages[1].content)).toEqual(input);
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
 });

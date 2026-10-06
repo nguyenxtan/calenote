@@ -529,3 +529,16 @@ Remove the date union from the outgoing provider schema, replacing each active d
 - [x] Initial full check: 8276 PASS/3 FAIL/2 existing skips. Two failures proved diagnostic probe coupling to eight ordinal branches; v21 coalesces text/date branches. Added five RED field-group regressions, then split probe branches by semantic field domain, preserving selected evidence only. Focused probe/orchestration 50 PASS; isolated orchestration timeout did not reproduce, timeout unchanged. Supplemental independent review C0/I0/M0, reviewer focused 22 PASS.
 - [x] Final serial offline full check, docs/typecheck/lint/build/Worker types/dry-run passed before local commit. Route canary and Formal Pilot remain live gates, not local acceptance claims.
 - Wire v21 SHA256 `6112219d4b8c69d1d37685744dd699d4832c25bf1b97108d835db600c0ff10a1`, 10516 bytes (v20 12471); prompt SHA256 `df50c3b367611829aa441c5adcec64d8715e1349dd3bfcb46cb26c39b4a24c4d`. Reduced public union complexity is measurable; private compiler-state reduction remains a live gate. Canonical/evidence/oracle unchanged; same root cap and no Full/release.
+
+### Minimal retained-count continuation patch
+
+Candidate `843de20949e989712354e16b06f096fe69cd96ca` final offline suite: 171 files/8284 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings. Route canary passed with HTTP 200 and accepted R01 turn zero, generation `gen-1791310906-mpyDOy9FcQXmNfu8RCwf`, confirmed cost 0.0007747 USD. Wire v21 compilation admission is now observed, not inferred from local checks.
+
+Its separate Formal Pilot stopped after four requests at R02 turn one, generation `gen-1791310957-xLvemUKYzMlVF9KXtOpv`. Wire/canonical passed; occurrenceCount evidence rejected QUOTE_NOT_FOUND against USER t0. Sanitized diagnostics show exact false, case-folded match true, source map valid. Zero reads/mutations; known cost settled, terminal execution preserved. This establishes a formatting mismatch for this quote, not the private model reasoning. Conservative remaining derived as 2792326 microunits; historical UNKNOWN unchanged.
+
+Strengthen existing minimal-patch guidance: omit unchanged retained fields and do not redundantly REPLACE count while answering the relation question; preserve explicit current-user corrections and require shortest exact field-entailing original-case fragments. No matcher, canonical schema, wire, oracle or accounting change.
+
+- [x] RED one failure/22 PASS; focused prompt/evidence/fit 121 PASS/2 skips. These assertions verify instruction delivery, not model compliance.
+- [x] Independent review C0/I0/M0; reviewer verification 88 PASS/2 skips.
+- [x] Full serial offline verification exit zero: 171 files/8285 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings; diff check PASS. Next a new Formal Pilot execution under the existing root authority; wire unchanged, no additional canary. No same-candidate retry or Full/release.
+- Prompt SHA256 `7a09f74e7f6e9f3c6c06df11dab8cf1e85d52778a38379619d2a57dfd70e2303`; wire v21 unchanged.
