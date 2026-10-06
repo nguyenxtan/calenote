@@ -353,3 +353,13 @@ Make required occurrence explicit even for a single match, with a non-fixture st
 - [x] Independent review C0/I0/M0; prompt-policy assertions do not prove model compliance.
 - [x] Full local verification: 171 files / 8262 PASS / two existing skips; docs/typecheck/lint/build/Worker types/local dry-run PASS.
 - Prompt SHA256 `0d75f8e52eb7726e64719c2ecaf01b7436f67579093c4258e7f5282bbcdb3751`. Continue fresh Formal Pilot within the unchanged root debug cap.
+
+### Target evidence ordinal projection
+
+Candidate `edda8efe48ee118feae6f7a3e865f480bf310a4d` passed R01 and R02 turns zero/one, then stopped on R02 turn two after five requests. Generation `gen-1791294209-Z0NbDlfrR1XC9uUzGCmy` was canonical-valid but rejected CURRENT_USER_EVIDENCE_REQUIRED. Its precise target ordinal was not retained.
+
+Add tooling-only bounded targetEvidence diagnostics: finite kind and numeric turn/occurrence, excluding quotes and fact identities. This does not change validation, evidence matching or oracle behavior.
+
+- [x] Valid canonical fixture RED missing targetEvidence; GREEN focused 37 PASS. Initial invalid fixture and interrupted full run retained separately.
+- [x] Independent review C0/I0/M0.
+- [x] Full serial local verification PASS: docs/typecheck/lint/build/Worker types/local dry-run included. Continue new Formal Pilot within existing root authority/accounting.

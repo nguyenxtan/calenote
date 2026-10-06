@@ -46,6 +46,14 @@ it("model semantic state exposes only validated controls, counts and value diges
   expect(()=>oracle.captureValidationSemanticState({...core,intent:"PRIVATE_CONTENT"})).toThrow();
 });
 
+it("target evidence diagnostics expose ordinal and kind without quote or fact identity",()=>{
+  const core={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[{kind:"USER_QUOTE",turn:2,quote:"PRIVATE_QUOTE_SENTINEL",occurrence:1}]},changes:[],query:null,uncertainties:[]};
+  const state=oracle.captureValidationSemanticState(core);
+  expect(state).toMatchObject({targetEvidence:[{kind:"USER_QUOTE",turn:2,occurrence:1}]});
+  expect(JSON.stringify(state)).not.toContain("PRIVATE_QUOTE_SENTINEL");
+  expect(JSON.stringify(state)).not.toContain('"ref"');
+});
+
 it("complete oracle state preserves passed and failed assertions without sensitive content",()=>{
   const actual=observation();actual.pendingField="eventRelation";
   const state=oracle.captureContextOracleState(expected,actual,true);

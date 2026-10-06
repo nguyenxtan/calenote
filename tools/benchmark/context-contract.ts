@@ -176,6 +176,7 @@ export function captureValidationSemanticState(value:unknown){
   if(!parsed.success)throw Error("DIAGNOSTIC_SEMANTIC_STRUCTURE_INVALID");
   const s=parsed.data;
   return {intent:s.intent,requestTarget:s.requestTarget?.kind??null,
+    targetEvidence:s.requestTarget?.evidence.map(ref=>ref.kind==="USER_QUOTE"?{kind:ref.kind,turn:ref.turn,occurrence:ref.occurrence}:{kind:ref.kind})??[],
     changes:s.changes.map(c=>({field:c.field,operation:c.operation,valueSha256:digestOracleValue(c.value),evidenceCount:c.evidence.length})),
     query:s.query?{kind:s.query.kind,sha256:digestOracleValue(s.query),evidenceCount:s.query.evidence.length}:null,
     uncertainties:s.uncertainties.map(u=>({field:u.field,reason:u.reason,alternatives:u.alternatives.length}))};
