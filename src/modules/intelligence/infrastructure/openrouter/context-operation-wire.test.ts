@@ -18,13 +18,13 @@ function canonical(index:number){
 }
 it.each(tuples.map((_,index)=>index))("losslessly encodes canonical operation tuple %i once",index=>{
  const value=canonical(index),wire=encodeGoogleLiteEuContextV3(value) as Record<string,unknown>;
- expect(wire.operationCode).toBe(index);expect(wire).not.toHaveProperty("intent");
+ expect(wire.operationCode).toBe(String(index));expect(wire).not.toHaveProperty("intent");
  if(wire.requestTarget)expect(wire.requestTarget).not.toHaveProperty("kind");
  if(wire.query)expect(wire.query).not.toHaveProperty("kind");
  const {conversationDirective,replyProposal,...semantic}=value;
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic,fullSchemaValid:true,directive:{status:"VALID",value:conversationDirective},reply:{status:"VALID",value:replyProposal}}});
 });
-it.each([-1,12,1.5,"3",null])("rejects invalid operation code %j without repairing",code=>{
+it.each([-1,12,1.5,3,"12","03",null])("rejects invalid operation code %j without repairing",code=>{
  const wire=encodeGoogleLiteEuContextV3(canonical(3)) as Record<string,unknown>;
  expect(parseGoogleLiteEuContextSectionsV3({...wire,operationCode:code},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
@@ -34,7 +34,7 @@ it("rejects carrier mismatch and duplicated tags instead of discarding them",()=
 });
 it("provider schema exposes a single finite operation selector",()=>{
  const properties=googleLiteEuContextWireSchemaV3().schema.properties!;
- expect(properties.operationCode).toEqual({type:"integer",enum:[0,1,2,3,4,5,6,7,8,9,10,11]});expect(properties).not.toHaveProperty("intent");
+ expect(properties.operationCode).toEqual({type:"string",enum:["0","1","2","3","4","5","6","7","8","9","10","11"]});expect(properties).not.toHaveProperty("intent");
 });
 it("schema emits the operation selector before its dependent carriers in required prompt order",()=>{
  const schema=googleLiteEuContextWireSchemaV3().schema;

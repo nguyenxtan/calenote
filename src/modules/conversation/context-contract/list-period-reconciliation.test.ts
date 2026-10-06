@@ -12,8 +12,8 @@ const setup=(text:string,quote=text,intent="LIST_REMINDERS",kind="DATE",transfor
  const msg=message(text),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
  if(built.status!=="READY")throw Error(built.reason);
  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"LIST_REMINDERS",requestTarget:null,changes:[],query:{kind:"LIST",period:{kind:"MONTH",offset:0},statusScope:"DEFAULT",evidence:[{kind:"USER_QUOTE",turn:built.input.currentTurn,quote,occurrence:1}]},uncertainties:[],conversationDirective:null,replyProposal:null});
- const wire=encodeGoogleLiteEuContextV3(canonical) as {operationCode:number;query:{period:{kind:string}}};wire.query.period.kind=kind;
- if(intent!=="LIST_REMINDERS")wire.operationCode=1;
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {operationCode:string;query:{period:{kind:string}}};wire.query.period.kind=kind;
+ if(intent!=="LIST_REMINDERS")wire.operationCode="1";
  transform?.(wire);
  const decoded=decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3);
  if(decoded.status!=="PARSED")throw Error(decoded.reason);

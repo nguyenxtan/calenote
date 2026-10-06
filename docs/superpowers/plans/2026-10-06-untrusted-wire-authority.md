@@ -619,3 +619,14 @@ Add tooling-only OPERATION_STRING probe: clone the current wire schema, verify t
 
 - [x] RED new mode fails scope admission; GREEN debug tests 24 PASS, candidate/accounting/debug regressions 92 PASS, typecheck/diff/lint PASS (168 existing warnings). Independent review C0/I0/M0. Reviewer observed one concurrent formal-fake failure; unchanged serial replay passed all 76 fake requests without increasing timeout or changing assertions. Transient cause not proven.
 - Application full-suite evidence remains the unchanged v24 runtime's 8317 PASS/2 skips; this tooling probe is not a runtime product fix and has not yet made a live request.
+
+### V25 finite string operation selector
+
+The separate diagnostic probe against unchanged v24 candidate `9bb24173347a167c5cda88604d4ca8e13be3e75f`, harness `f9433936a7560e6254c5a3cef127f834802c7a6a`, changed only the provider root selector schema from integer codes to string codes. HTTP 200, generation `gen-1791318364-6REtKHim5IjcYx9iPCHi`, 710-byte output containing all seven root keys and operationCode string 3. The unchanged v24 decoder correctly rejected the string; cost 0.0008123 USD settled KNOWN, zero reads/mutations, terminal/no Pilot credit. Numeric v24 and this string probe differ observably; no private provider mechanism or semantic acceptance is inferred. Remaining conservative allowance derived 2781148 microunits, UNKNOWN unchanged.
+
+Change the actual transport to twelve exact finite string codes, preserving fixed tuple mapping and all canonical/evidence/oracle authority. Encoding maps the tuple to its exact string code; decoding looks up that exact string only, rejects numbers/unknown/leading-zero forms, and reconstructs the original active codecs. Update dispatched wording to explicitly request JSON strings. Historical integer-only probe becomes inapplicable to the string runtime and fails closed before HTTP rather than issuing a redundant probe.
+
+- [x] RED operation regressions 14 failures/16 PASS plus prompt requirement failure; GREEN focused 344 PASS/2 existing skips, typecheck PASS. Independent review C0/I0/M0, hash/diff verification PASS.
+- Wire v25 SHA256 `c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0`, 9314 bytes; prompt SHA256 `87ed8785a164c369b86f73d4cb2af8abc1eee3fa90f10106e36906da9408d822`.
+- [x] Full serial offline verification exit zero: 172 files/8321 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings, diff PASS.
+- [ ] Local commit, material-wire canary, then fresh Formal Pilot only if accepted. No Full/release.

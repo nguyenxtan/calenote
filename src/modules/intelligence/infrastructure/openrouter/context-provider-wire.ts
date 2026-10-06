@@ -439,10 +439,11 @@ const operationTuples = Object.freeze([
  ["HELP",null,null],["UNSUPPORTED",null,null],["AMBIGUOUS",null,null],
  ["AMBIGUOUS","CURRENT",null],["AMBIGUOUS","NEW",null],["AMBIGUOUS","UNRESOLVED",null],
 ].map(tuple=>Object.freeze(tuple)));
+const operationWireCodes=Object.freeze(operationTuples.map((_,index)=>String(index)));
 function operationSchema(root:Schema):Schema{
  const result=structuredClone(root);
  delete result.properties!.intent;
- result.properties={operationCode:{type:"integer",enum:operationTuples.map((_,index)=>index)},...result.properties!};
+ result.properties={operationCode:{type:"string",enum:[...operationWireCodes]},...result.properties!};
  result.required=result.required!.filter(key=>key!=="intent");result.required.unshift("operationCode");
  const strip=(node:Schema):void=>{
   if(node.$ref){strip(at(result,node.$ref));return;}
@@ -473,13 +474,14 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
   const target=raw.requestTarget as Record<string,unknown>|null,query=raw.query as Record<string,unknown>|null;
   const code=operationTuples.findIndex(([intent,targetKind,queryKind])=>intent===raw.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null));
   if(code<0)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM");
-  result.operationCode=code;delete result.intent;
+  result.operationCode=operationWireCodes[code];delete result.intent;
   for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
  }else{
   requireWireKeys(raw,providerSchemaV3.required!.filter(key=>key!=="conversationDirective"&&key!=="replyProposal"),Object.keys(providerSchemaV3.properties!),[]);
   const code=raw.operationCode;
-  if(typeof code!=="number"||!Number.isInteger(code)||code<0||code>=operationTuples.length)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(operationTuples.map((_,i)=>i),code));
-  const [intent,targetKind,queryKind]=operationTuples[code];result.intent=intent;delete result.operationCode;
+  const index=typeof code==="string"?operationWireCodes.indexOf(code):-1;
+  if(index<0)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(operationWireCodes,code));
+  const [intent,targetKind,queryKind]=operationTuples[index];result.intent=intent;delete result.operationCode;
   for(const [key,kind,keys] of [["requestTarget",targetKind,["evidence"]],["query",queryKind,["period","evidence","date","outputCalendar","topic"]]] as const){
    const carrier=raw[key];
    if(kind===null){if(carrier!==null)throw new WireShapeFailure([key],"null");}

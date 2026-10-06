@@ -183,7 +183,7 @@ function wireFixture(value: unknown): unknown {
     const target=object.requestTarget as Record<string,unknown>|null;
     const query=object.query as Record<string,unknown>|null;
     const tuples=[["CREATE_REMINDER","CURRENT",null],["CREATE_REMINDER","NEW",null],["CREATE_REMINDER","UNRESOLVED",null],["LIST_REMINDERS",null,"LIST"],["CALENDAR_QUERY",null,"CALENDAR_DATE"],["CAPABILITY_QUERY",null,"CAPABILITY"],["HELP",null,null],["UNSUPPORTED",null,null],["AMBIGUOUS",null,null],["AMBIGUOUS","CURRENT",null],["AMBIGUOUS","NEW",null],["AMBIGUOUS","UNRESOLVED",null]];
-    result.operationCode=tuples.findIndex(([intent,targetKind,queryKind])=>intent===object.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null));
+    result.operationCode=String(tuples.findIndex(([intent,targetKind,queryKind])=>intent===object.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null)));
     delete result.intent;
     for(const key of ["requestTarget","query"])if(result[key])delete (result[key] as Record<string,unknown>).kind;
   }
@@ -210,7 +210,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("33c317dfdf0dab2c2e009c9cbaa317f449adc9121af1a9629ebad849d9dbc7b7");
+  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });
@@ -259,8 +259,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-24");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("33c317dfdf0dab2c2e009c9cbaa317f449adc9121af1a9629ebad849d9dbc7b7");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-25");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
