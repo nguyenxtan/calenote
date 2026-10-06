@@ -250,3 +250,13 @@ Add general prompt guidance to account for an explicitly supplied task/event sub
 - [x] RED prompt-policy test; GREEN focused 69 PASS/two existing skips.
 - [x] Independent delta review C0/I0/M0. Frozen full `pnpm check`: 171 files / 8,248 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
 - Prompt SHA256 `ab8e1c6d76d1958c28257f5cfc51e5b7cb817133c2662fa2f5d687ff8696d665`; accepted V16 schema remains unchanged. Continue a fresh immutable-candidate Formal Pilot under the same USD 5 root authority, with freshly derived conservative accounting and immutable failed execution history.
+
+### Retained-series continuation semantics
+
+Candidate `37fe0ed1a82f1d0d3cedd5442029546456bacdd6` issued four requests before its Formal Pilot stopped at R02 turn one. R01 and R02 turn zero passed. Generation `gen-1791275923-aw7xLs2deqZ8cpcyVMDx` returned HTTP 200 with a semantic proposal containing only leadOffsetDays=2; BEFORE_EVENT was omitted. Canonical/evidence validation passed but the frozen oracle rejected the offset and missing relation. The retained DAILY/count=2 conversation expects the preceding consecutive series, not a separately authored single-offset schedule. This failed execution remains terminal.
+
+Add contextual prompt guidance distinguishing preceding notification count from an independently specified lead offset. Preserve genuinely separate offset/count operands for backend conflict computation; do not infer either from a bare number. Canonical/evidence/oracle behavior is unchanged.
+
+- [x] RED prompt-policy test; GREEN focused prompt/fit/oracle regressions 89 PASS/two existing skips.
+- [x] Independent review C0/I0/M0; full `pnpm check` 171 files / 8,249 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
+- Prompt SHA256 `05a802a5dd24c3fb145570c290f26a95843797b46697a8b9d881a4258ac10aee`. Fresh Formal Pilot remains necessary; no failed execution is relabeled or resumed.

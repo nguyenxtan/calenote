@@ -5,6 +5,11 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 
+it("series continuation distinguishes preceding notification count from a single lead offset", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("For a retained DAILY consecutive series, a continuation specifying the preceding days establishes BEFORE_EVENT, retaining its occurrenceCount; do not reinterpret that same count as leadOffsetDays.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A separate leadOffsetDays requires an independently specified single offset, not the series duration/count restated with before.");
+});
+
 it("numeric clock notation preserves canonical H24 rather than inventing a meridiem qualifier", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit numeric h/HH:mm clock notation without an explicit day-part uses H24, not an inferred AM/PM qualifier.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("AM/PM requires an explicit meridiem/day-part operand in user evidence or exact retained fact.");
