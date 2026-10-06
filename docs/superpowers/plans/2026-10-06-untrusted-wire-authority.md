@@ -451,3 +451,14 @@ Clarify the existing single-offset rule with a different synthetic meeting examp
 - [x] Independent delta review C0/I0/M0.
 - [x] Full serial offline suite 171 files/8270 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `882fc4e46082d75008f779741bf5188f8f53d6627c0d7c8ac4210c5aa23efc15`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the existing root cap.
+
+### Literal quote case-preservation guidance
+
+Candidate `003e9a38057e9581550ca3f4578ca955abe01657` stopped after three requests at R02 turn zero, generation `gen-1791302688-qEz8ey0Rro3a4KjNq8qa`. Strict target evidence rejected QUOTE_NOT_FOUND; diagnostics show case-folded match true and exact match false, with valid retained USER binding. Do not claim raw quote contents or weaken matching. Execution terminal, cost settled, zero mutations.
+
+Strengthen the final source-copy check across all USER_QUOTE refs, with a different synthetic lowercase/capitalized example. Keep semantic normalization distinct from literal evidence, require independently supported shortest exact spans and correct occurrences, and prohibit any source-index repair.
+
+- [x] RED policy test one fail/18 PASS; GREEN focused/fit 204 PASS/2 existing skips; instruction delivery only.
+- [x] Independent delta review C0/I0/M0.
+- [x] Full serial offline suite 171 files/8271 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
+- Prompt SHA256 `a793647e34f8c7ad6ede4de193e8a74d64b5e062c4a63640aace3adede1d244e`; wire/canonical/evidence/oracle unchanged. Continue fresh Formal Pilot under the unchanged root grant/accounting.
