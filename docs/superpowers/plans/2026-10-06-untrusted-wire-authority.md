@@ -494,3 +494,14 @@ The existing query resolver requires current USER evidence or exact eligible CON
 - [x] Independent delta review C0/I0/M0.
 - [x] Full serial offline verification exit zero: 171 files/8275 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS.
 - Prompt SHA256 `536b0f00744e62f05538c46ee65c0220315a4bc1de9105e59885f52444b81fda`; wire v18 unchanged. Continue under the existing root debug authority; no retry of terminal executions and no Full/release.
+
+### Date branch discriminator dialect parity
+
+Candidate `fecbb0ed6165d293f0f4b02cf4554a2bd1a57ae8` passed R01/R02 and stopped after seven requests at R03 turn one, generation `gen-1791306116-zXoCqVyWlsMdKeF2aE0x`. Wire diagnostics prove `changes[1].value.offsetDays` was null where the selected relative-day decoder requires integer. HTTP 200 was not acceptance; execution terminal, known cost settled, no reads/mutations.
+
+Actual outgoing schema inspection shows CIVIL_DATE permits null offset padding, while RELATIVE_DAY requires integer, with date tags still using const. As with the earlier query fix, test the supported singleton-enum dialect for the three date tags only. The hypothesis is branch misselection under unsupported const; private provider transformation is not observable, so do not claim this hypothesis as proven provider internals. Retain identical finite domains, decoder, padding, canonical/evidence/oracle and prompt. Do not broaden to all string constants again.
+
+- [x] RED one failure/103 PASS; GREEN focused actual-wire/gateway/transport/runner 306 PASS.
+- [x] Independent delta review C0/I0/M0.
+- [x] Full serial offline checks exit zero: 171 files/8275 PASS/2 existing skips; docs/typecheck/build/Worker types/dry-run PASS; lint zero errors/168 existing warnings; diff check PASS. Next one route canary before Formal Pilot.
+- Wire v19 SHA256 `71e1afa28f0fea91877e8605ee3cef67bda466c20dea41c015a28374d6f3bcd6`, 12497 bytes (v18 12494). Byte increase is not proof of Google compiler-state cost. Root grant and conservative accounting unchanged; no Full/release.
