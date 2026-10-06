@@ -240,3 +240,13 @@ Enable the existing bounded `captureValidationSemanticState` (finite field/opera
 - [x] RED unavailable-mode regression; GREEN 17 debug-loop tests including one request/terminal/duplicate/sanitized summary and full 76-request fake Pilot.
 - [x] Independent review C0/I0; full `pnpm check` 171 files / 8,247 PASS/two existing skips, docs/typecheck/lint/build/Worker type check/local dry-run PASS. Application runtime, wire, canonical/evidence/oracle and prompt remain unchanged for this tooling commit.
 - Evaluate the already-committed application candidate `cf6dec61eb8720a31155058f2803e98463afa5cf` with the new separate harness revision. Preserve the three-call failed Formal Pilot as terminal; use the new sanitized evidence before any further semantic correction.
+
+### R02 explicit-subject completeness correction
+
+The single diagnostic at application `cf6dec61eb8720a31155058f2803e98463afa5cf` / harness `38d1b791acbe33a265792abdb7815556756098fd` returned HTTP 200, generation `gen-1791275398-EGGk9w3x1RJTRebI8jcg`, confirmed cost USD 0.0005534. Its sanitized semantic summary proves the model omitted title and emitted no uncertainty; other date/location/cadence/count proposals survived merge. This is new diagnostic evidence, not reconstruction of the historical provider payload. The execution remains terminal and earns no Pilot credit.
+
+Add general prompt guidance to account for an explicitly supplied task/event subject independently of missing scheduling information. No backend subject fabrication, schema/evidence/oracle change or phrase-specific fixture logic is introduced.
+
+- [x] RED prompt-policy test; GREEN focused 69 PASS/two existing skips.
+- [x] Independent delta review C0/I0/M0. Frozen full `pnpm check`: 171 files / 8,248 PASS/two existing skips, docs/typecheck/lint/build/Worker types/local dry-run PASS under network/credential denial.
+- Prompt SHA256 `ab8e1c6d76d1958c28257f5cfc51e5b7cb817133c2662fa2f5d687ff8696d665`; accepted V16 schema remains unchanged. Continue a fresh immutable-candidate Formal Pilot under the same USD 5 root authority, with freshly derived conservative accounting and immutable failed execution history.
