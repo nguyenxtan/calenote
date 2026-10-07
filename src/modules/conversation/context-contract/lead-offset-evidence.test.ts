@@ -6,6 +6,7 @@ import { validateEvidenceV3 } from "./evidence";
 import { harness, proposal } from "./service-test-support";
 import { date, time } from "./resolution-test-support";
 import { supportsLeadOffset } from "./lead-offset-evidence";
+import { supportsEventRelation } from "./event-relation-evidence";
 import { turn } from "./context-test-fixtures";
 
 function check(text: string, value = 2, quote = text, turn?: number) {
@@ -14,6 +15,12 @@ function check(text: string, value = 2, quote = text, turn?: number) {
   const evidence = [{ kind: "USER_QUOTE", turn: turn ?? built.input.currentTurn, quote, occurrence: 1 }];
   return validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "leadOffsetDays", operation: "SET", value, evidence }], query: null, uncertainties: [] }), built);
 }
+it.each([["nhắc trước sự kiện 5 ngày", true], ["nhắc 5 ngày liên tiếp trước sự kiện", false]] as const)("prompt distance/series contrast preserves exact evidence admission: %s", (text, offsetSupported) => {
+  const source = turn(text), n = [...text].length;
+  const evidence = [{ kind: "USER_QUOTE" as const, sourceTurnId: source.id, sourceMapTurnId: source.id, quote: text, occurrence: 1, sourceSpan: { start: 0, end: n }, viewSpan: { start: 0, end: n }, normalizationVersion: "nfc-codepoint-v1" as const }];
+  expect(supportsEventRelation("BEFORE_EVENT", evidence, [source])).toBe(true);
+  expect(supportsLeadOffset(5, evidence, [source])).toBe(offsetSupported);
+});
 it.each(["Nhắc trước 2 ngày.", "Nhắc trước hai ngày.", "Nhắc 2 ngày trước ngày thi.", "Nhắc một lần trước ngày thi 2 ngày."])("exact offset accepted: %s", text => expect(check(text).status).toBe("VALID"));
 it.each(["2 lần", "Nhắc 2 ngày liên tiếp.", "Nhắc trước ngày thi 2 ngày liên tiếp.", "mang 2 cây bút", "Phòng số 2", "Nhắc trước 3 ngày.", "Đừng nhắc trước 2 ngày.", "Ví dụ nhắc trước 2 ngày.", "Tôi đổi giờ trước 2 ngày."])("unrelated or mismatched offset rejected: %s", text => expect(check(text).status).toBe("REFUSED"));
 it("quote cannot borrow offset outside its span", () => expect(check("Nhắc trước 2 ngày; mang 2 cây bút", 2, "mang 2 cây bút").status).toBe("REFUSED"));
