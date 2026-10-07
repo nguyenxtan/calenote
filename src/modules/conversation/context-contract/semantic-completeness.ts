@@ -1,0 +1,71 @@
+import type { FieldChangeV3, SemanticPatchProposalV3 } from "./contracts";
+import type { ValidatedFieldEvidence } from "./evidence";
+import type { TranscriptEntry } from "./state";
+
+type CoverageInput = {
+  intent: SemanticPatchProposalV3["intent"];
+  target: SemanticPatchProposalV3["requestTarget"];
+  currentTurn: TranscriptEntry;
+  changes: readonly FieldChangeV3[];
+  changeEvidence: readonly ValidatedFieldEvidence[];
+  uncertainties: SemanticPatchProposalV3["uncertainties"];
+  alternativeEvidence: readonly ValidatedFieldEvidence[];
+  retainedLocation: string | null;
+};
+
+const continuationBoundary = /^(?:$|[,;.!\n]|\s+(?:[Nn]gày\s+(?:\d{1,2}[/-]\d{1,2}|mai|kia)|[Ll]úc\s+\d{1,2}(?:h|:)|[Vv]ào\s+(?:ngày\s+)?\d{1,2}[/-]\d{1,2}|nhớ\s+(?:mang|đem|gọi|chuẩn bị)|nhắc\s+(?:\d+|tôi|mình|tui|lúc)|nhé|nha|rồi\s+(?:về|đi|ăn)|và\s+(?:ăn|về|đi|nhắc))(?:[^\p{L}]|$))/u;
+
+/** Bounded omission check only. Never returns, fills or persists an operand.
+ * Unknown linguistic forms remain outside this narrow coverage obligation. */
+export function locationCoverageComplete(input: CoverageInput): boolean {
+  if (input.intent !== "CREATE_REMINDER" || input.currentTurn.role !== "USER") return true;
+  const text = input.currentTurn.semanticView;
+  // Do not treat quoted, hypothetical, removed-control or question language as
+  // an asserted venue. No normalization changes the immutable source.
+  if (/["'“”‘’`?]/u.test(text) || text.includes("[CONTROL]")
+    || /(?:^|[^\p{L}])(?:nếu|ví dụ|giả sử|hay là)(?:[^\p{L}]|$)/iu.test(text)) return true;
+  const pattern = /(?:^|[^\p{L}])(?:đi thi|thi|họp|khám|gặp|đi làm)\s+(?:ở|tại)\s+([\p{L}\p{N}][\p{L}\p{N}\s-]{0,299}?)(?=\s+(?:nhớ|nhắc|nhé|nha|rồi|và|ngày\s+(?:\d{1,2}[/-]\d{1,2}|mai|kia)|lúc\s+\d{1,2}(?:h|:)|vào\s+(?:ngày\s+)?\d{1,2}[/-]\d{1,2})(?:[^\p{L}]|$)|[,;.!\n]|$)/giu;
+  for (const match of text.matchAll(pattern)) {
+    const prefix = text.slice(0, match.index).split(/[,;.!\n]/u).at(-1) ?? "";
+    if (/(?:^|[^\p{L}])(?:không|ko|chẳng|đừng|chưa|cụm từ|từ ngữ|tên|chữ|trích dẫn)(?:[^\p{L}]|$)/iu.test(prefix)
+      || /(?:^|[^\p{L}])(?:không|ko|chẳng|chưa|đâu|nào|hay|hoặc)(?:[^\p{L}]|$)/iu.test(match[1])) continue;
+    const place = match[1].trimEnd();
+    const end = [...text.slice(0, match.index! + match[0].length)].length - [...match[1]].length + [...place].length;
+    const start = end - [...place].length;
+    const discoveredTail = [...text].slice(end).join("");
+    // An unrecognized lower-case discourse continuation is ambiguous, not a
+    // proven venue boundary. Discovery and coverage share the same eligibility.
+    if (/^\s+(?:nhớ|nhắc|rồi|và)(?:[^\p{L}]|$)/u.test(discoveredTail) && !continuationBoundary.test(discoveredTail)) continue;
+    // Validate the model's own literal at the locative start before considering
+    // a finite continuation marker. A marker inside a proper venue name must
+    // not truncate a grounded proposed value (e.g. Công ty Ngày Mới).
+    const literalSpan = (value: unknown): {end:number} | null => {
+      if (typeof value !== "string" || value.length === 0) return null;
+      const suffix = [...text].slice(start).join("");
+      if (!suffix.startsWith(value)) return null;
+      const tail = suffix.slice(value.length);
+      // Scheduling markers require an actual date/clock continuation, not a
+      // bare word occurring in a venue. Discourse markers are case-sensitive;
+      // an uppercase proper-name word cannot authorize a truncated prefix.
+      if (!continuationBoundary.test(tail)) return null;
+      return {end:start+[...value].length};
+    };
+    const covered = (value: unknown, bound: ValidatedFieldEvidence | undefined) => {
+      const span = literalSpan(value);
+      return span !== null && bound?.current === true && bound.sources.some(source => source.sourceTurnId === input.currentTurn.id
+        && source.viewSpan.start <= start && source.viewSpan.end >= span.end);
+    };
+    const locations = input.changes.map((change,index) => ({change,bound:input.changeEvidence[index]})).filter(p => p.change.field === "location");
+    if (locations.some(p => p.change.operation !== "CLEAR" && covered(p.change.value,p.bound))) continue;
+    let index = 0;
+    let uncertainCoverage = false;
+    for (const uncertainty of input.uncertainties) for (const alternative of uncertainty.alternatives) {
+      const bound = input.alternativeEvidence[index++];
+      if (uncertainty.field === "location" && covered(alternative.value,bound)) uncertainCoverage = true;
+    }
+    if (uncertainCoverage && locations.length === 0) continue;
+    if (input.target?.kind === "CURRENT" && locations.length === 0 && literalSpan(input.retainedLocation)) continue;
+    return false;
+  }
+  return true;
+}

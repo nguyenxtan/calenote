@@ -677,3 +677,12 @@ Offline materializer probe and actual source inspection prove pointer expansion 
 - Pilot remains FAIL; no Full or release. Total calls in this amendment continuation: 22 (one canary plus 10/8/3 terminal Pilot requests), all settled KNOWN; UNKNOWN unchanged.
 - Trusted cap 5000000 microunits, confirmed retained 133639, UNKNOWN exposure 2109440, conservative remaining 2756921; ledger hash chain PASS.
 - NEXT_GATE = OWNER_DECISION_ON_SEMANTIC_COMPLETENESS_AMENDMENT.
+
+### Owner-approved bounded semantic-completeness amendment
+
+Owner approved current-turn grounded venue coverage before branded evidence patch admission. Backend only rejects omitted facts; it never fills a location. Preserve pointer v26, canonical/evidence validators and frozen oracle. Scope is finite affirmative locative productions with conservative exclusion of ambiguous/negated/quoted language, not a general parser. Exact grounded changes, genuine alternatives or CURRENT retained resolved location may cover the fact; NEW cannot inherit prior location.
+
+- Local RED/GREEN and final independent review C0/I0/M0; focused 193 PASS/2 skips plus final coverage/offset regression 51 PASS.
+- Full offline exit zero: 174 files/8393 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings. No live calls during implementation.
+- Prompt digest `00b68c53c543714948323366e1c6e1940f0b5d0c7526f23b6e7925499744f941`; wire/canonical/pointer unchanged.
+- Continue fresh Formal Pilot under the existing cumulative $5 conservative debug authority after immutable local commit and derived accounting/identity preflight. Historical terminal FAILs and UNKNOWN remain unchanged; no Full/release.

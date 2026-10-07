@@ -8,6 +8,7 @@ import { observeDownstream, evidenceReason, type DownstreamObserver, type Eviden
 import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
+import { locationCoverageComplete } from "./semantic-completeness";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
@@ -624,6 +625,12 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       return (rangeIssue || deterministicRange) && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
     });
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
+    if (!locationCoverageComplete({ intent: value.intent, target: value.requestTarget,
+      currentTurn: built.evidenceIndex[built.input.currentTurn],
+      changes: keptChanges.map(p => p.change), changeEvidence: keptChanges.map(p => p.bound),
+      uncertainties: resolvedUncertainties, alternativeEvidence: keptAlternativeEvidence,
+      retainedLocation: internal.snapshot?.slots.location.state === "RESOLVED" && typeof internal.snapshot.slots.location.value === "string" ? internal.snapshot.slots.location.value : null,
+    })) fail("SEMANTIC_LOCATION_OMITTED");
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,
       proposal: value,

@@ -99,7 +99,7 @@ it("closed diagnostic schema rejects arbitrary text, extra content and unbounded
   for (const bad of [{ ...good, quote: "SECRET" }, { ...good, numericValue: "SECRET" }, { ...good, numericValue: 367 }, { ...good, field: "SECRET" }, { ...good, validatorBranch: "SECRET" }, { ...good, sourceTurnOrdinals: [12] }, { ...good, evidenceKinds: Array(4).fill("USER_QUOTE") }]) expect(OffsetBindingDiagnosticSchema.safeParse(bad).success).toBe(false);
 });
 it("actual R02 direct wording admits offset while count conflict remains application-owned", async () => {
-  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }, "CURRENT")]);
+  const h = await harness([proposal({ title: "đi thi", location: "Quang Trung", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }, "CURRENT")]);
   await h.turn(0, "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   expect((await h.read(1))?.slots.leadOffsetDays.value).toBeNull();
   await h.turn(1, "Nhắc trước 2 ngày.");
