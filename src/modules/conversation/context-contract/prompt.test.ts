@@ -69,6 +69,12 @@ it("a preceding distance cannot supply an unstated consecutive cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("nhắc 5 ngày liên tiếp trước sự kiện supplies DAILY/occurrenceCount5/BEFORE_EVENT with leadOffsetDays omitted");
 });
 
+it("final ownership check separates fresh distance requests from retained series answers", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final numeric ownership decision: first check the actual activeRequest, not an example or a previous request.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('For NEW with no retained DAILY/count, a task plus nhắc tôi trước N ngày means changes for eventRelation="BEFORE_EVENT" and leadOffsetDays=N; omit frequency and occurrenceCount entirely.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not apply the CURRENT series rule to NEW: absence of repeated/consecutive notification meaning cannot be replaced with DAILY/countN.");
+});
+
 it("exam task normalization example separates typed title from event operands", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example of an event-only exam statement: Em thi ngày 20/12 lúc 9h. gives title="đi thi", eventDate={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:12,year:null,leapMonth:null}, eventTime={hour:9,minute:0,qualifier:"H24"}; reminderDate and reminderTime remain absent.');
 });
