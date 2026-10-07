@@ -1,5 +1,15 @@
 # Count/offset ownership implementation plan
 
+## Fact-versus-MISSING follow-up execution
+
+- [x] Reproduce merge accepting a grounded fact plus same-field MISSING (RED), and unchanged CURRENT resolved fact plus MISSING (RED).
+- [x] Add atomic consistency rejection before merge mutation in `merge.ts`; closed diagnostic reason in `downstream.ts`; preserve CLEAR/null, different-field missingness and all existing ambiguity/conflict handling.
+- [x] Add merge and actual offline service regressions in `merge.test.ts` and `fact-missing-consistency.test.ts`; generic `prompt.ts` instruction with runner/fit digest pins.
+- [x] Run focused regressions, full offline suite/static/build/types/dry-run and independent C0/I0 review; fix findings and commit locally. Focused: 225 PASS / 2 existing skips. Full: 177 files / 8465 PASS / 2 existing skips; typecheck, build, Worker type check, offline dry-run and diff check PASS; lint 0 errors / 168 existing warnings. Independent delta review C0/I0/M0. RED artifacts and full log remain local under `.superpowers/sdd/2026-10-07-count-offset-ownership/`.
+- [ ] Derive accounting and run a fresh frozen Pilot through the trusted existing debug launcher under cumulative $5 authority. Stop the paid run at its first failure; continue only approved narrow offline fixes before a new reviewed candidate. No Full/push/merge/deploy, UNKNOWN release or history rewrite.
+
+Focused command: `pnpm test src/modules/conversation/context-contract/merge.test.ts src/modules/conversation/context-contract/fact-missing-consistency.test.ts src/modules/conversation/context-contract/resolve.test.ts tools/benchmark/context-contract-fit.test.ts tools/benchmark/context-contract-runner.test.ts --maxWorkers=1`.
+
 > **For agentic workers:** Use superpowers:executing-plans inline. Owner authorizes continuous execution and one independent whole-delta review, without routine approval pauses.
 
 **Goal:** Prevent retained series count from granting an independent equal lead offset.

@@ -30,6 +30,40 @@ function successorPatch(text: string, state: ContextSnapshotV2 | null, target: "
 }
 const successorNotes = () => ContextSnapshotV2Schema.parse({ ...withNotes(), schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
 describe("successor grounded semantic merge", () => {
+  it("CURRENT MISSING cannot contradict a retained resolved fact with no change", () => {
+    const state = successorNotes(), built = successorBuild("Giữ yêu cầu hiện tại.", state);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "Giữ yêu cầu hiện tại.", occurrence: 1 }];
+    const checked = successorEvidence.validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence }, changes: [], query: null, uncertainties: [{ field: "notes", reason: "MISSING", alternatives: [] }] }), built);
+    if (checked.status !== "VALID") throw Error(checked.reason);
+    const before = JSON.stringify(state);
+    expect(successorMerge.mergePatchV3(state, checked.patch)).toEqual({ status: "REJECTED", reason: "FACT_MISSING_CONTRADICTION" });
+    expect(JSON.stringify(state)).toBe(before);
+  });
+  it("CLEAR and MISSING remain consistent and do not synthesize a fact", () => {
+    const state = successorNotes(), built = successorBuild("Xóa ghi chú.", state);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "Xóa ghi chú.", occurrence: 1 }];
+    const checked = successorEvidence.validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence }, changes: [{ field: "notes", operation: "CLEAR", value: null, evidence }], query: null, uncertainties: [{ field: "notes", reason: "MISSING", alternatives: [] }] }), built);
+    if (checked.status !== "VALID") throw Error(checked.reason);
+    expect(successorMerge.mergePatchV3(state, checked.patch)).toMatchObject({ status: "MERGED", candidate: { slots: { notes: { value: null, state: "MISSING" } } } });
+  });
+  it("rejects grounded fact plus same-field MISSING atomically without rewriting proposal", () => {
+    const built = successorBuild("Nhắc trước ngày thi.");
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "Nhắc trước ngày thi.", occurrence: 1 }];
+    const semantic = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "eventRelation", operation: "SET", value: "BEFORE_EVENT", evidence }], query: null, uncertainties: [{ field: "eventRelation", reason: "MISSING", alternatives: [] }] });
+    const checked = successorEvidence.validateEvidenceV3(semantic, built);
+    if (checked.status !== "VALID") throw Error(checked.reason);
+    const before = JSON.stringify(checked.patch);
+    expect(successorMerge.mergePatchV3(null, checked.patch)).toEqual({ status: "REJECTED", reason: "FACT_MISSING_CONTRADICTION" });
+    expect(JSON.stringify(checked.patch)).toBe(before);
+    expect(built.candidateSnapshot.requestId).toBeNull();
+  });
+  it("grounded fact and a different actually missing field remain mergeable", () => {
+    const built = successorBuild("Nhắc trước ngày thi.");
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: "Nhắc trước ngày thi.", occurrence: 1 }];
+    const checked = successorEvidence.validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "eventRelation", operation: "SET", value: "BEFORE_EVENT", evidence }], query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }] }), built);
+    if (checked.status !== "VALID") throw Error(checked.reason);
+    expect(successorMerge.mergePatchV3(null, checked.patch)).toMatchObject({ status: "MERGED", candidate: { slots: { eventRelation: { value: "BEFORE_EVENT" } }, ambiguities: [{ field: "reminderTime", reason: "MISSING" }] } });
+  });
   function delayedNoAAdoption() {
     const original = successorBuild("nhắc gọi mẹ");
     const refs = [{ kind: "USER_QUOTE", turn: original.input.currentTurn, quote: "nhắc gọi mẹ", occurrence: 1 }];

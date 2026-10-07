@@ -1,5 +1,11 @@
 # Contextual count/lead-offset ownership amendment
 
+## Fact-versus-MISSING consistency amendment
+
+The owner-approved follow-up addresses the terminal R03 turn-zero failure: grounded eventRelation BEFORE_EVENT and eventRelation MISSING survived the same proposal; merge restored the model uncertainty after accepting the fact, and resolution asked the contradictory field. Historical results remain unchanged.
+
+At the validated semantic merge boundary, reject the entire proposal with FACT_MISSING_CONTRADICTION when a slot has a non-null SET/REPLACE and a same-field MISSING uncertainty. Also reject a MISSING claim against an unchanged resolved CURRENT slot. No uncertainty deletion, partial fact adoption, model rewrite or inferred operand is permitted. CLEAR/null may legitimately remove a fact; genuinely ambiguous/conflicting operands and different-field missingness retain existing behavior. Evidence validation remains prerequisite, canonical/evidence validators and frozen oracle remain unchanged. Generic prompt guidance requires facts/uncertainties to be coherent, without fixture-specific answers. Existing deterministic rejection wording and unchanged state are the safe outcome.
+
 Owner authorizes continuous narrow semantic-ownership implementation and Fresh Pilot debugging within the existing cumulative $5 conservative debug authority.
 
 ## Evidence and authority

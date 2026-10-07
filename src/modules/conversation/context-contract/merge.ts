@@ -19,6 +19,15 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   const reject = (reason: string): MergeResultV3 => ({ status: "REJECTED", reason });
   const observation = patch.observation.observed;
   if (previous ? observation.presence !== "PRESENT" || previous.id !== observation.contextId || previous.contextRevision !== observation.contextRevision || !equal(previous.scope, patch.observation.scope) : observation.presence !== "ABSENT") return reject("STALE_BASE");
+  // A MISSING claim is not permission to erase or contradict a grounded
+  // operand. Reject the entire proposal; never repair its facts/uncertainties.
+  for (const uncertainty of patch.resolvedUncertainties) {
+    if (uncertainty.reason !== "MISSING" || !SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number])) continue;
+    const change = patch.resolvedChanges.find(change => change.field === uncertainty.field);
+    if (change && change.operation !== "CLEAR" && change.value !== null) return reject("FACT_MISSING_CONTRADICTION");
+    const retained = previous?.slots[uncertainty.field as typeof SLOT_NAMES[number]];
+    if (!change && patch.requestTarget?.kind === "CURRENT" && retained?.state === "RESOLVED" && retained.value !== null) return reject("FACT_MISSING_CONTRADICTION");
+  }
   const candidate = structuredClone(patch.candidateSnapshot), proposal = patch.proposal;
   const changedFields: typeof SLOT_NAMES[number][] = [];
   const policyConflicts = new Set<typeof SLOT_NAMES[number]>();
