@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete } from "./semantic-completeness";
+import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
@@ -427,6 +428,18 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if (!listRangeCandidate) checkYear(requested);
     if (field === "leadOffsetDays" && requested !== null && !firstFact
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
+    // Necessary source-presence veto only: never turn scanner output into a
+    // proposed value or assign event/reminder ownership. Exact fact bindings
+    // already prove their value and do not need a fresh clock in the text.
+    if ((field === "eventTime" || field === "reminderTime") && requested !== null && !firstFact
+      && distinct.every(source => {
+        // Complete named clocks are expressions, not absence. The existing
+        // scanner's bounded numeric grammar does not cover these; this cue
+        // supplies no value and cannot independently authorize a clock.
+        if (/(?:^|[^\p{L}\p{M}\p{N}_])(?:nửa\s+đêm|midnight|noon)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(source.quote)) return false;
+        const time = extractTemporalEvidence({ text: source.quote, referenceNow: Date.parse(referenceTime) }).time;
+        return time.state === "MISSING" || (time.state === "AMBIGUOUS" && time.reason === "DAYPART_WITHOUT_EXACT_TIME");
+      })) fail("CLOCK_SOURCE_MISSING");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   const resolve: typeof rawResolve = (...args) => traceLeadOffsetResolution(args[2], args[0], args[3], args[4], built, "V3_RESOLVER", observe, () => rawResolve(...args));

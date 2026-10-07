@@ -25,7 +25,7 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("912eb1933a141efa01ad5e1b23483edf80ec7ad0efe4bfff26544dfce4fe75f4");
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("21df6a39ff0ec2ff8eaf3b5d8cdfb7e58f40be15fca8b6da01a995b124afd6ff");
 });
 
 function schemaMetrics(schema: unknown) {

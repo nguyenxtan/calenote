@@ -2,6 +2,19 @@
 
 ## Clock representation consistency follow-up
 
+### Actual live result and source-presence follow-up
+
+`3aa89fe92b1c1c85606b04643c7b091dbc1b1e92` fresh Pilot: 17 provider attempts / 17 application dispatches; R04 passed, terminal R06 turn-one oracle failure. HTTP 200 / wire/canonical/evidence PASS; model newly supplied reminderTime 08:00, preview created where unresolved-clock clarification is required; zero LIST reads and zero reminder mutations. Generation `gen-1791380099-em4p12manI8Ejyg8M0WP`, reported cost $0.0010643. Historical results remain unchanged. Cumulative confirmed exact recorded cost $0.29894872; conservative remaining $2.591442, UNKNOWN $2.109440 unchanged, ledger hash chain PASS.
+
+- [x] Reproduce no-clock quote acceptance and unintended preview by offline TDD (8 RED / 4 PASS); day-part-only numeric fabrication separately RED (1 failure / 13 PASS).
+- [x] Review found scanner MISSING for complete named midnight/noon expressions. Stop the first full run (exit 130, not acceptance), add 3 RED named-clock preservation tests, then exempt only complete cues from the absence veto without supplying any clock value or changing the scanner.
+- [x] Independent review found an Important cue-boundary issue: embedded identifiers/digits/marks could bypass the veto. Stop the second full run before edits (exit 130, not acceptance), add 6 RED regressions, exclude Unicode letters/marks/numbers/underscore at both boundaries, and re-review C0/I0/M0. Focused: 183 PASS / 2 existing skips.
+- [x] Add a necessary no-clock-source veto to V3 `evidence.ts`, reusing existing `semantic/temporal-evidence.ts` without editing the scanner or manufacturing values. Add closed diagnostic reason in `downstream.ts` and generic existing-contract guidance in `prompt.ts` with runner/fit digest pins.
+- [x] Verify `clock-source-presence.test.ts`, actual service continuation protection, exact canonical fact reuse, clock-equivalence and relevant scorer/service regressions. Stable-source full offline: 179 files / 8513 PASS / 2 existing skips; documentation/typecheck/lint/build/Worker types/offline dry-run exit 0, lint zero errors and 168 existing warnings. Independent review C0/I0/M0; diff check PASS. Local commit precedes live validation.
+- [ ] Fresh preflight/accounting and actual frozen Pilot through existing continuous debug authority; no retry/fallback/Full/push/merge/deploy. Preserve all prior terminal history and UNKNOWN.
+
+Scope remains clock consistency under the existing no-manufactured-clock contract, not a new generic parser or clock default. The presence veto is necessary, not a claim of complete field-value or event/reminder ownership verification.
+
 **Goal:** Evaluate valid equivalent clock operands semantically without rewriting the application or weakening factual/safety expectations.
 **Architecture:** One private `equalContextField(field:string, expected:unknown, actual:unknown):boolean` in `tools/benchmark/context-contract.ts`; ClockOperandSchema remains authoritative. Apply only to the two clock slot assertions and the matching detail-score counter; diagnostics/capture reuse the assertion stream.
 **Tech stack:** Existing TypeScript/Zod/Vitest evaluation tooling. Spec: clock evaluation interpretation above in `docs/superpowers/specs/2026-10-07-count-offset-ownership.md`.
