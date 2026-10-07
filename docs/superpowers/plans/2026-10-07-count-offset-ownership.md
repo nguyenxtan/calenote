@@ -71,6 +71,12 @@ Freshefd30de:15HTTP/dispatches. R01–R04 and R05turn0(offset)/turn1(cancel) PAS
 Date transport delta acceptance: focused323PASS/2existing skips; independent C0/I0/M0. Fresh fixed-source full176files/8447PASS/2skips, docs/typecheck/lint/build/types/dry-run exit0, lint0errors168existingwarnings, diffPASS. Runtime acceptance predicates unchanged; only safe diagnostic family and model delivery instruction changed. Commit and fresh actual Pilot next.
 # Notification-date ownership follow-up
 
+## Title fidelity follow-up
+
+- Fresh `feca390b7a3bbe53c8a2a831206ac2e7c5f8dbcd` execution terminated at R05 TURN 2 after 15 attempts: notification-date ownership and draft creation passed; three oracle assertions failed on expanded title wording. Offline exact digest reproduction identifies the expanded task phrase. No historical result was changed.
+- Generic title-fidelity instruction added after a RED delivery test; existing narrow exam normalization is preserved. No automatic title rewriting, validator/oracle relaxation or schema change.
+- Focused prompt/fit: 99 PASS / 2 existing skips. Independent delta review C0/I0/M0. Full offline verification and all chained static/build/dry-run checks exited 0. UNKNOWN exposure unchanged at 2,109,440 microunits; accounting is derived again before the next live attempt.
+
 - Actual `33c71019fefc93491b86412923d7498cb25f49a1` Fresh Pilot stopped at R05 TURN 2 after 15 provider attempts. Wire, canonical and evidence validation passed, but the model assigned a direct notification date to eventDate rather than reminderDate. Historical failure remains unchanged; no automatic field rewrite was performed.
 - Added a RED prompt-delivery regression, then a generic notification-versus-event date ownership instruction. Canonical/evidence validators, oracle and ProviderWire remain unchanged.
 - Independent delta review: Critical=0 / Important=0 / Minor=0. Focused prompt/fit: 98 PASS / 2 existing skips. Offline full verification, documentation check, typecheck, lint, build, Worker types check and dry-run exited 0. Live compliance remains unproven until the next Fresh Pilot.

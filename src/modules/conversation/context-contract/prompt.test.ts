@@ -200,3 +200,8 @@ it("notification-owned date does not become an event date by field-order default
   expect(CONTEXT_CONTRACT_PROMPT).toContain("ngày kia 6h nhắc tưới cây gives reminderDate RELATIVE_DAY offsetDays2 and reminderTime06:00 H24; eventDate/eventTime remain absent.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not choose eventDate merely because it is the first date field in the schema.");
 });
+
+it("keeps an already concise explicit task phrase without stylistic expansion", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve an already concise USER task phrase verbatim as title; do not expand it with synonymous verbs, objects or prepositions merely to sound natural.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("đọc sách stays đọc sách, not đọc một cuốn sách");
+});
