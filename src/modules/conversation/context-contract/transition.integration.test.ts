@@ -36,7 +36,7 @@ async function setupSuccessor() {
   const semantic = async (i: number, values: Record<string, unknown>, target: "NEW" | "CURRENT" | "UNRESOLVED" = "NEW", operation = "SET", guidance?: Parameters<typeof successorTransition.transitionConversationV3>[0]["guidance"], text = "nhắc đi thi gọi mẹ giỗ 2026 8h 9h 2 lần", receivedAt?: number) => {
     const turn = await read(i, text, receivedAt);
     const evidence = [{ kind: "USER_QUOTE", turn: turn.built.input.currentTurn, quote: text, occurrence: 1 }];
-    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: target, evidence }, changes: Object.entries(values).map(([field, value]) => ({ field, operation, value, evidence })), query: null, uncertainties: [] });
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: target, evidence }, changes: Object.entries(values).map(([field, value]) => ({ field, operation, value, evidence })), query: null, uncertainties: target === "UNRESOLVED" && Object.keys(values).length === 0 ? [{ field: "operation", reason: "AMBIGUOUS", alternatives: [] }] : [] });
     const checked = validateEvidenceV3(proposal, turn.built);
     if (checked.status !== "VALID") throw new Error(checked.reason);
     const merge = mergePatchV3(turn.observed.snapshot, checked.patch);
@@ -112,7 +112,7 @@ it.each((["PROVIDER", "BUDGET", "SIZE"] as const).flatMap(failure => (["SENT", "
   if ("failure" in retained) throw new Error(retained.failure);
   expect(retained.snapshot?.pendingReminderQuestion).toEqual(original.pendingReminderQuestion);
   expect(retained.snapshot?.pendingSemanticCandidate).toEqual(failed.snapshot.pendingSemanticCandidate);
-  const retry = await h.semantic(2, {}, delivery === "SENT" ? "NEW" : "CURRENT", "SET", undefined, "tạo yêu cầu mới");
+  const retry = await h.semantic(2, {}, delivery === "SENT" ? "NEW" : "UNRESOLVED", "SET", undefined, "tạo yêu cầu mới");
   const next = await h.persist(retry.turn, retry.result, "UNCERTAIN");
   if (delivery === "SENT") {
     expect(next.snapshot.pendingSemanticCandidate).toBeNull();
@@ -262,7 +262,7 @@ it("A4 exact abandon cancels an unresolved candidate with no accepted draft", as
 it("A4 repeating an undelivered operation question preserves one stable outbound identity", async () => {
   const h = await setupSuccessor(), pending = await h.semantic(0, { title: "đi thi" }, "UNRESOLVED");
   const original = await h.persist(pending.turn, pending.result, "UNCERTAIN");
-  const answer = await h.semantic(1, {}, "CURRENT");
+  const answer = await h.semantic(1, {}, "UNRESOLVED");
   expect(answer.result, JSON.stringify(answer.result)).not.toHaveProperty("kind", "REPLY_ONLY");
   if ("kind" in answer.result) throw new Error(answer.result.reason ?? "retained clarification");
   const q = answer.result.snapshot.pendingReminderQuestion!;

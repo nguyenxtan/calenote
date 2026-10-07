@@ -96,10 +96,9 @@ describe("successor grounded semantic merge", () => {
   it("new_candidate_cannot_copy_A_facts", () => {
     expect(successorPatch("lịch mới", successorNotes(), "NEW", "SET", "mang giấy tờ", "fact")).toEqual({ status: "REFUSED", reason: "NEW_REQUEST_FACT_REUSE" });
   });
-  it("current_without_existing_target_clarifies", () => {
+  it("current_without_existing_target_rejects_before_merge", () => {
     const checked = successorPatch("8h", null, "CURRENT");
-    expect(checked.status).toBe("VALID"); if (checked.status !== "VALID") throw new Error(checked.reason);
-    expect(successorMerge.mergePatchV3(null, checked.patch).status).toBe("CLARIFY_OPERATION");
+    expect(checked).toEqual({ status: "REFUSED", reason: "REQUEST_TARGET_NOT_AVAILABLE" });
   });
   it("brand_cannot_be_reconstructed_from_JSON", () => {
     const checked = successorPatch("ghi chú", null, "NEW");

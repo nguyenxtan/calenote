@@ -515,6 +515,15 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     }
     const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["requestTarget", "evidence"]) : null;
     if (target && value.requestTarget!.evidence.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    // Current USER evidence grounds the instruction, not target existence.
+    // Only the builder's privately retained, scope/revision/lifetime-checked
+    // draft grants CURRENT. Never reinterpret an unavailable target as NEW.
+    if (value.requestTarget?.kind === "CURRENT") {
+      const retained = internal.snapshot;
+      if (!retained?.requestId || retained.draftRevision === null || retained.draftCreatedAt === null
+        || retained.draftExpiresAt === null || !["CLARIFYING", "AWAITING_CONFIRMATION"].includes(retained.lifecycle)
+        || Date.parse(retained.draftExpiresAt) <= Date.parse(built.candidateSnapshot.inbound.receivedAt)) fail("REQUEST_TARGET_NOT_AVAILABLE");
+    }
     // Fresh B operands, including alternatives, cannot borrow A's sources.
     // Original pending-candidate adoption is revalidated separately below.
     const freshOperandEvidence = [
