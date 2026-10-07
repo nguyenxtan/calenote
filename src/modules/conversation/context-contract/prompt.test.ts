@@ -58,7 +58,8 @@ it("operation wire uses one semantic selector and never duplicates ownership tag
 });
 
 it("single lead reminder policy does not manufacture a daily series", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4; omit occurrenceCount and never emit DAILY/count=1.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4 because the USER explicitly says một lần; omit occurrenceCount and never emit DAILY/count=1.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Without the explicit một lần instruction, omit frequency too.");
 });
 
 it("exam task normalization example separates typed title from event operands", () => {

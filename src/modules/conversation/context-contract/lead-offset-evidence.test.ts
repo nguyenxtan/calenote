@@ -4,7 +4,7 @@ import { chat, message, observation } from "./context-test-fixtures";
 import { SemanticPatchProposalV3Schema } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
 import { harness, proposal } from "./service-test-support";
-import { date } from "./resolution-test-support";
+import { date, time } from "./resolution-test-support";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { turn } from "./context-test-fixtures";
 
@@ -113,4 +113,21 @@ it("a grounded relation-only continuation preserves count and asks for the actua
   expect(state?.slots.eventRelation.value).toBe("BEFORE_EVENT");
   expect(state?.slots.occurrenceCount.value).toBe(2);
   expect(state?.pendingReminderQuestion?.field).toBe("reminderTime");
+});
+
+it("offset alone leaves cadence absent until backend schedule readiness applies its default", async () => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }), proposal({ reminderTime: time() }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc tôi trước 2 ngày.");
+  const pending = await h.read(1);
+  expect(pending?.slots.frequency.value).toBeNull();
+  expect(pending?.slots.occurrenceCount.value).toBeNull();
+  expect(pending?.slots.leadOffsetDays.value).toBe(2);
+  expect(pending?.pendingReminderQuestion?.field).toBe("reminderTime");
+  await h.turn(1, "8h.");
+  expect((await h.read(2))?.slots.frequency.value).toBe("ONCE");
+});
+it("an independently explicit single cadence remains a supplied fact before clock readiness", async () => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), eventRelation: "BEFORE_EVENT", leadOffsetDays: 2, frequency: "ONCE" })]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc một lần trước 2 ngày.");
+  expect((await h.read(1))?.slots.frequency.value).toBe("ONCE");
 });
