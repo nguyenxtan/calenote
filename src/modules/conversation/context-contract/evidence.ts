@@ -10,6 +10,7 @@ import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete } from "./semantic-completeness";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
+import { supportsCadenceOperand, leadDistanceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
@@ -428,6 +429,10 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if (!listRangeCandidate) checkYear(requested);
     if (field === "leadOffsetDays" && requested !== null && !firstFact
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
+    if ((field === "frequency" || field === "occurrenceCount") && requested !== null && !firstFact
+      && !supportsCadenceOperand(field, requested, distinct, built.evidenceIndex,
+        target?.kind === "CURRENT" && internal.snapshot?.pendingReminderQuestion?.field === "occurrenceCount" ? built.evidenceIndex[built.input.currentTurn].id : undefined,
+        target?.kind === "CURRENT" ? built.evidenceIndex[built.input.currentTurn].id : undefined)) fail("CADENCE_COUNT_NOT_SUPPORTED");
     // Necessary source-presence veto only: never turn scanner output into a
     // proposed value or assign event/reminder ownership. Exact fact bindings
     // already prove their value and do not need a fresh clock in the text.
@@ -659,6 +664,10 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       uncertainties: resolvedUncertainties, alternativeEvidence: keptAlternativeEvidence,
       retainedLocation: internal.snapshot?.slots.location.state === "RESOLVED" && typeof internal.snapshot.slots.location.value === "string" ? internal.snapshot.slots.location.value : null,
     })) fail("SEMANTIC_LOCATION_OMITTED");
+    if (value.intent === "CREATE_REMINDER" && !leadDistanceCovered(built.evidenceIndex[built.input.currentTurn],
+      keptChanges.map(p => p.change), resolvedUncertainties.flatMap(u => u.alternatives.map(a => ({ field: u.field, value: a.value }))),
+      value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.leadOffsetDays.state !== "CONFLICT" ? internal.snapshot?.slots.leadOffsetDays.value : null,
+      value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.frequency.value === "DAILY" && internal.snapshot.slots.frequency.state !== "CONFLICT" && internal.snapshot.slots.occurrenceCount.state !== "CONFLICT" ? internal.snapshot.slots.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,
       proposal: value,

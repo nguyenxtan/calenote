@@ -54,7 +54,7 @@ export async function harness(proposals: Proposal[], transformWire?: (wire:unkno
       replies.push(plan); return delivery;
     } };
   const service = createContextContractService(deps);
-  const turn = async (i: number, text = "nhắc đi thi ngày 11/10/2026 trước 2 ngày 8h ở Quang Trung nhớ giấy tờ") => {
+  const turn = async (i: number, text = "nhắc đi thi ngày 11/10/2026 lúc 8h ở Quang Trung nhớ giấy tờ") => {
     index = i; const scope = f.scope(i);
     const rowid = await f.db.prepare("SELECT rowid FROM inbound_updates WHERE id=?").bind(scope.sourceInboundId).first<number>("rowid");
     return service.handle({ ...message(text), id: scope.sourceInboundId, receivedAt: scope.now, claimMarker: scope.claimMarker }, { ...chat, inboundRowId: rowid! });
@@ -62,4 +62,4 @@ export async function harness(proposals: Proposal[], transformWire?: (wire:unkno
   const read = async (i: number) => { const observed = await f.store.observe(f.scope(i)); if ("failure" in observed) throw new Error(observed.failure); return observed.snapshot; };
   return { f, deps, inputs, events, replies, service, turn, read, setIndex: (i: number) => { index = i; }, setDelivery: (receipt: ReplyReceipt) => { delivery = receipt; } };
 }
-export const complete = { title: "đi thi", reminderDate: date(8, 10, 2026), reminderTime: time(), frequency: "ONCE" };
+export const complete = { title: "đi thi", reminderDate: date(8, 10, 2026), reminderTime: time() };

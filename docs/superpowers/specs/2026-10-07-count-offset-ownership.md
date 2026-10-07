@@ -1,5 +1,15 @@
 # Contextual count/lead-offset ownership amendment
 
+## Cadence/count semantic ownership extension
+
+Owner approves a bounded extension of the existing V3 evidence boundary. Exact USER pointer identity alone cannot authorize a recurrence enum or notification count. Proposed frequency and occurrenceCount changes/alternatives require their own field/value support; exact eligible CONTEXT_FACT reuse keeps the existing scope/value/provenance gate. A lead-distance phrase supplies no recurrence/count authority. A retained DAILY/count relation answer remains the already-approved contextual case, not a new offset or count change.
+
+Add a narrow finite support verifier, not an intent/date/reminder parser: it returns only a boolean for an already-proposed cadence/count, uses immutable USER sources and codepoint spans, checks surrounding negation/hypothetical/quoted language, and never fills, rewrites, truncates or persists operands. Explicit single, daily/consecutive, weekly, monthly and yearly cues support only their corresponding enum; a number supports count only in an explicit notification-count expression or a current application-bound count question. A count expression's numeric value must equal the proposed count. Unknown/unsupported wording grants no field-value authority. USER quotes cannot borrow a cue outside the selected span or a lead-distance number beside a recurrence cue.
+
+Reject unsupported cadence/count atomically with a closed structural reason; do not filter it into an accepted partial patch. Preserve unsupported-but-explicit cadence for existing capability resolution. Null/CLEAR and exact fact reuse retain existing rules. Frozen acceptance expectations, pointer/wire/canonical schemas, existing lead verifier, location completeness, target/fact consistency and clock comparison stay unchanged.
+
+The explicit-distance omission check is separate: a bounded lead expression already recognized by supportsLeadOffset must be covered by the model's grounded lead change/alternative or an equal retained CURRENT value, unless the existing retained DAILY/count contextual rule applies. This check returns no operand and cannot auto-fill the missing distance. Real acceptance still requires a fresh frozen Pilot after local evidence, never reinterpret a historical failure as PASS.
+
 ## Clock representation consistency — evaluation interpretation
 
 Owner-approved follow-up: the R04 turn-two model operand `{hour:8,minute:0,qualifier:AM}` and frozen `{hour:8,minute:0,qualifier:H24}` resolve to the same 08:00. The normative clock contract (`2026-09-28-llm-context-contract-design.md`, clock operand section) explicitly permits H24/AM/PM; `ClockOperandSchema` enforces ranges and `resolveRequest` converts these representations to the same clock. H24 is a prompt preference, not an additional product validity requirement. The scorer's raw deep equality incorrectly treats this valid equivalence as lost detail.

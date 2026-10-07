@@ -91,7 +91,7 @@ it("malformed current targeting evidence cannot issue RESUME or save", async () 
 it.each(["ONCE", "YEARLY"] as const)("fresh %s NEW replacement offer has its own original TTL independent of A", async frequency => {
   const h = await harness([proposal(complete), proposal({ ...complete, title: "gọi mẹ", frequency })]);
   await h.turn(0); const a = (await h.read(1))!;
-  await h.turn(1, "nhắc gọi mẹ 8/10/2026 8h hằng năm"); const offered = (await h.read(2))!;
+  await h.turn(1, `nhắc gọi mẹ 8/10/2026 8h ${frequency === "YEARLY" ? "hằng năm" : "một lần"}`); const offered = (await h.read(2))!;
   expect(offered.slots).toEqual(a.slots); expect(offered.draftExpiresAt).toBe(a.draftExpiresAt);
   expect(offered.pendingDecision?.candidate).toMatchObject({ createdAt: "2026-09-28T03:00:00.001Z", expiresAt: "2026-09-28T03:10:00.001Z" });
   expect(offered.pendingDecision?.kind).toBe(frequency === "ONCE" ? "REPLACE_PENDING" : "ACCEPT_ONE_TIME_ALTERNATIVE");

@@ -42,7 +42,7 @@ it("R02 unsupported offset never enters merge; count and pending time survive", 
   expect(state?.pendingReminderQuestion?.field).toBe("reminderTime");
 });
 it("explicit offset and omitted canonical carry-forward remain valid", async () => {
-  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "ONCE", eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }), proposal({ notes: "giấy tờ" }, "CURRENT")]);
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }), proposal({ notes: "giấy tờ" }, "CURRENT")]);
   await h.turn(0, "Nhắc đi thi ngày 11/10 trước 2 ngày.");
   expect((await h.read(1))?.slots.leadOffsetDays.value).toBe(2);
   await h.turn(1, "Mang giấy tờ.");
@@ -50,7 +50,7 @@ it("explicit offset and omitted canonical carry-forward remain valid", async () 
 });
 it("exact offset CONTEXT_FACT reuse remains accepted without a new numeric quote", async () => {
   const reuse = proposal({ leadOffsetDays: 2 }, "CURRENT");
-  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "ONCE", eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }), input => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }), input => {
     const raw = reuse(input) as { changes: Array<{ evidence: unknown[] }> };
     const fact = input.facts.find(f => f.field === "leadOffsetDays");
     if (!fact) throw new Error("OFFSET_FACT_MISSING");

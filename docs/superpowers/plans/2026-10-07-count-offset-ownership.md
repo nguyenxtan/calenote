@@ -1,5 +1,20 @@
 # Count/offset ownership implementation plan
 
+## Cadence/count ownership extension execution
+
+**Goal:** Reject manufactured recurrence/count from lead-distance evidence and preserve explicitly supplied lead facts without automatic repair.
+**Architecture:** Extend only V3 raw evidence resolution plus bounded completeness after exact source binding. `cadence-count-evidence.ts` exports `supportsCadenceOperand(field, value, sources, turns, pendingCountTurnId?) : boolean`; a separate boolean coverage check reuses `supportsLeadOffset`. No provider schema/config or frozen oracle change.
+**Tech stack:** TypeScript, Vitest, existing V3 context/service and local D1 harness.
+**Spec:** `docs/superpowers/specs/2026-10-07-count-offset-ownership.md`, cadence/count extension.
+**Review focus:** distance/count collision; exact source span versus surrounding negation; bare numbers with wrong pending field; independently explicit cadence/count plus separate offset; exact retained facts and atomic refusal.
+
+- [x] RED integrated V3 tests: 19 behavioral failures / 11 PASS before implementation. Numeric component safety RED5/33PASS; corrected review matrix RED7/40PASS (two initial count-question fixtures lacked clock and asked reminderTime, corrected setup before using RED). CURRENT consecutive-count-plus-clock preservation RED1/47PASS. Coordinated-negation/unrelated-action regressions RED4/49PASS. Quote-clipping has a direct helper assertion so the omission guard cannot mask it. No external calls.
+- [x] Implement boolean verifier and coverage in `cadence-count-evidence.ts`; integrate in `evidence.ts`; closed reasons in `downstream.ts`. Review found shared-negation and cross-action marker borrowing; fixed with bounded clause binding. Preserve H10 weekday recurrence, H12 consecutive-day wording and D10 whole CURRENT count/clock answer; frozen oracle unchanged. Two legacy lead-offset fixtures removed only ungrounded fake ONCE setup, preserving all carry-forward assertions. First full run interrupted 130 before review fixes (not acceptance).
+- [x] Run focused clock/fact/count/offset/frozen-script regressions: 227 PASS. Additional direct-clause RED3/54PASS; 57 new ownership cases GREEN. Stable full exposed 63 failures in old fake service setups (8507 PASS / 2 existing skips); that run is FAIL, not acceptance. Shared fixtures now omit unstated model ONCE (backend derives default), remove uncovered default lead distance, and supply explicit independent cadence/count language only where needed. No assertions or frozen oracle changed. Six affected/ownership suites: 207 PASS after fixture correction.
+- [x] Independent read-only whole-delta review C0/I0/M0, including corrected fixtures; reviewer independently verified six suites / 207 PASS and diff check. No assertions or frozen scoring expectations relaxed.
+- [x] Stable offline full: 180 files / 8570 PASS / 2 existing skips; documentation checks, typecheck, build and diff check PASS; lint 0 errors / 168 existing warnings. Log `cadence-full-accepted.log`. Selective local commit is the next identity boundary; trusted current accounting/candidate/schema preflight follows without changing historical records.
+- [ ] Fresh Formal Pilot through existing conservative $5 authority; settle every attempt; no retry/fallback/history rewrite/Full/push/merge/deploy. Continue scoped defects only after evidence-backed reviewed local fixes.
+
 ## Clock representation consistency follow-up
 
 ### Actual live result and source-presence follow-up

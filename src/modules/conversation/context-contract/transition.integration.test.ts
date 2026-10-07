@@ -33,7 +33,7 @@ async function setupSuccessor() {
     if (built.status !== "READY") throw new Error(built.reason);
     return { scope, observed, built };
   };
-  const semantic = async (i: number, values: Record<string, unknown>, target: "NEW" | "CURRENT" | "UNRESOLVED" = "NEW", operation = "SET", guidance?: Parameters<typeof successorTransition.transitionConversationV3>[0]["guidance"], text = "nhắc đi thi gọi mẹ giỗ 2026 8h 9h 2 lần", receivedAt?: number) => {
+  const semantic = async (i: number, values: Record<string, unknown>, target: "NEW" | "CURRENT" | "UNRESOLVED" = "NEW", operation = "SET", guidance?: Parameters<typeof successorTransition.transitionConversationV3>[0]["guidance"], text = "nhắc đi thi gọi mẹ giỗ 2026 8h 9h", receivedAt?: number) => {
     const turn = await read(i, text, receivedAt);
     const evidence = [{ kind: "USER_QUOTE", turn: turn.built.input.currentTurn, quote: text, occurrence: 1 }];
     const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: target, evidence }, changes: Object.entries(values).map(([field, value]) => ({ field, operation, value, evidence })), query: null, uncertainties: target === "UNRESOLVED" && Object.keys(values).length === 0 ? [{ field: "operation", reason: "AMBIGUOUS", alternatives: [] }] : [] });
@@ -86,7 +86,7 @@ it("sole grounded A resumes without dropping an unrelated retained field conflic
 
 it.each(["ONCE", "YEARLY"] as const)("fresh %s replacement candidate retains its own minute-later expiry", async frequency => {
   const h = await setupSuccessor(), first = await h.semantic(0, complete); const a = await h.persist(first.turn, first.result);
-  const next = await h.semantic(1, { ...complete, title: "gọi mẹ", frequency }, "NEW", "SET", undefined, "nhắc gọi mẹ 2026 8h hằng năm", h.f.scope(0).now + 60000);
+  const next = await h.semantic(1, { ...complete, title: "gọi mẹ", frequency }, "NEW", "SET", undefined, `nhắc gọi mẹ 2026 8h ${frequency === "YEARLY" ? "hằng năm" : "một lần"}`, h.f.scope(0).now + 60000);
   const offered = await h.persist(next.turn, next.result);
   expect(offered.snapshot.slots).toEqual(a.snapshot.slots); expect(offered.snapshot.draftExpiresAt).toBe("2026-09-28T03:10:00.000Z");
   expect(offered.snapshot.pendingDecision?.candidate).toMatchObject({ createdAt: "2026-09-28T03:01:00.000Z", expiresAt: "2026-09-28T03:11:00.000Z" });
@@ -218,7 +218,7 @@ it("A4 unresolved_target_without_prior_draft_clarifies exact candidate/question/
 
 it("A4 one_time_acceptance_then_replacement_then_save remains three distinct decisions", async () => {
   const h = await setupSuccessor(); const a = await h.semantic(0, complete); await h.persist(a.turn, a.result);
-  const b = await h.semantic(1, { ...complete, title: "giỗ", frequency: "YEARLY" }); const annual = await h.persist(b.turn, b.result);
+  const b = await h.semantic(1, { ...complete, title: "giỗ", frequency: "YEARLY" }, "NEW", "SET", undefined, "nhắc giỗ hằng năm 2026 8h"); const annual = await h.persist(b.turn, b.result);
   expect(annual.snapshot.pendingDecision?.kind).toBe("ACCEPT_ONE_TIME_ALTERNATIVE");
   const alternative = await h.control(2, "Có."); const replace = await h.persist(alternative.turn, alternative.result);
   expect(replace.snapshot.pendingDecision?.kind).toBe("REPLACE_PENDING");
@@ -283,7 +283,7 @@ it("A4 repeating an undelivered operation question preserves one stable outbound
 
 it.each([1, 2])( "A4 successor %i occurrence preview rejects stale proof and legacy replay", async count => {
   const h = await setupSuccessor();
-  const a = await h.semantic(0, { ...complete, frequency: count === 1 ? "ONCE" : "DAILY", ...(count === 2 ? { occurrenceCount: 2, eventRelation: "STARTING_ON" } : {}) }, "NEW", "SET", undefined, "Nhắc đi thi 8h hai ngày liên tiếp, bắt đầu từ ngày 8/10/2026.");
+  const a = await h.semantic(0, { ...complete, frequency: count === 1 ? "ONCE" : "DAILY", ...(count === 2 ? { occurrenceCount: 2, eventRelation: "STARTING_ON" } : {}) }, "NEW", "SET", undefined, `Nhắc đi thi 8h ${count === 1 ? "một lần" : "hai ngày liên tiếp"}, bắt đầu từ ngày 8/10/2026.`);
   const first = await h.persist(a.turn, a.result);
   const receipt = first.snapshot.previewReceipt!, d = first.snapshot.pendingDecision!;
   const stale = { operationKey: "old-preview", contextId: first.snapshot.id, contextRevision: first.snapshot.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId, draftRevision: d.draftRevision, draftHash: receipt.draftHash, response: { kind: "TOKEN" as const, handle: d.tokenHandle! } };
@@ -392,7 +392,7 @@ async function setup() {
   };
   return { f, read, persist, semantic, control };
 }
-const complete = { title: "đi thi", reminderDate: date(8, 10, 2026), reminderTime: time(), frequency: "ONCE" };
+const complete = { title: "đi thi", reminderDate: date(8, 10, 2026), reminderTime: time() };
 it.each([
   ["direct", "TOKEN"], ["direct", "REPLY"], ["annual one-off", "TOKEN"], ["annual one-off", "REPLY"],
 ] as const)("replacement binding: %s rejects bare save and permits exact B via %s", async (replacementKind, boundKind) => {

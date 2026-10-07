@@ -58,6 +58,7 @@ it("durable attempt rejects an observed absence after a request is accepted", as
   expect(await runtime.claimAttempt(f.scope(1), observed.observation, "a".repeat(64))).toBe(false);
 });
 const missingTime = { title: "đi thi", eventDate: date(), location: "Quang Trung", notes: "nhớ giấy tờ", frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT" };
+const missingTimeText = "Ngày 11/10/2026 đi thi ở Quang Trung, nhớ giấy tờ; nhắc hai ngày liên tiếp trước hôm thi.";
 it.each([
   ["CO-A", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "Bạn muốn mình nhắc lúc mấy giờ?" }, "MODEL_GUIDANCE"],
   ["CO-B", { kind: "ASK_FOR_FIELD", field: "eventDate" }, { text: "Bạn thi ngày nào?" }, "BACKEND"],
@@ -67,7 +68,7 @@ it.each([
   ["oversized reply", { kind: "ASK_FOR_FIELD", field: "reminderTime" }, { text: "x".repeat(401) }, "BACKEND"],
 ] as const)("%s retains grounded facts and captures only actual selected reply", async (_name, directive, reply, source) => {
   const h = await harness([proposal(missingTime, "NEW", directive, reply)]);
-  expect(await h.turn(0)).toEqual({ status: "CLARIFICATION_REQUESTED" });
+  expect(await h.turn(0, missingTimeText)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   const state = await h.read(1);
   expect(state?.slots).toMatchObject({ title: { value: "đi thi" }, location: { value: "Quang Trung" }, notes: { value: "nhớ giấy tờ" }, reminderTime: { state: "MISSING" } });
   expect(h.replies[0].source).toBe(source);
@@ -87,7 +88,7 @@ it.each(["SENT", "FAILED", "UNCERTAIN"] as const)("actual %s query clarification
 });
 it.each(["SENT", "FAILED", "UNCERTAIN"] as const)("actual %s reminder clarification receipt settles the exact question", async status => {
   const h = await harness([proposal(missingTime)]); h.setDelivery(status === "SENT" ? { status, messageRef: null } : { status });
-  expect(await h.turn(0)).toEqual({ status: "CLARIFICATION_REQUESTED" });
+  expect(await h.turn(0, missingTimeText)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   const state = (await h.read(1))!;
   expect(state.pendingReminderQuestion).toMatchObject({ questionId: state.transcript.at(-1)!.id, field: "reminderTime", deliveryState: status });
 });
@@ -105,7 +106,7 @@ it("replacement_yes_never_saves_A_or_B through actual service", async () => {
 });
 it("R02 R07 R08 CO-E progressive facts then mixed correction never confirms", async () => {
   const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT"), proposal({ reminderTime: time(9) }, "CURRENT", null, null, ["reminderTime"])]);
-  await h.turn(0); await h.turn(1, "8h");
+  await h.turn(0, missingTimeText); await h.turn(1, "8h");
   const before = await h.read(2);
   expect(before?.previewReceipt?.deliveryState).toBe("SENT");
   await h.turn(2, "Có, nhưng đổi sang 9h.");
@@ -133,7 +134,7 @@ it("R11 query interruption retains exact draft expiry and suspends save", async 
 });
 it("R13 delayed old edit loses to a later accepted abandon without stale outbound", async () => {
   const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
-  await h.turn(0);
+  await h.turn(0, missingTimeText);
   const gateway = h.deps.gateway;
   let release!: () => void, started!: () => void;
   const waiting = new Promise<void>(resolve => { release = resolve; }), dispatched = new Promise<void>(resolve => { started = resolve; });
@@ -149,7 +150,7 @@ it("R13 delayed old edit loses to a later accepted abandon without stale outboun
 });
 it("R14 duplicate confirmation after lost send creates exactly one set of children", async () => {
   const h = await harness([proposal({ ...missingTime, reminderTime: time() })]);
-  await h.turn(0); h.setDelivery({ status: "UNCERTAIN" });
+  await h.turn(0, `${missingTimeText} Nhắc lúc 8h.`); h.setDelivery({ status: "UNCERTAIN" });
   const state = await h.read(1);
   expect(await h.turn(1, `xác nhận ${state!.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
   const count = h.replies.length;
@@ -171,7 +172,7 @@ it.each(["greeting", "help", "no pending abandon"])("%s is a zero-call bounded b
 });
 it("process restart reloads encrypted accepted facts and never exposes identities to gateway/events", async () => {
   const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
-  await h.turn(0);
+  await h.turn(0, missingTimeText);
   h.deps.store = createD1ContextContractStoreV3({ db: h.f.db, keyring: h.f.keyring, protocol: CONTEXT_PROTOCOL_V3 });
   const restarted = createContextContractService(h.deps); h.setIndex(1);
   const s = h.f.scope(1);
@@ -249,7 +250,7 @@ it.each(["owner", "chat", "claim", "workspace"])("forged %s cannot dispatch or m
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it.each(["expired", "corrupt"])("%s context cannot fall back to another parser", async fault => {
-  const h = await harness([proposal(missingTime)]); await h.turn(0);
+  const h = await harness([proposal(missingTime)]); await h.turn(0, missingTimeText);
   if (fault === "expired") h.deps.now = () => h.f.scope().now + 600001;
   else {
     // Encryption fault at the actual reader boundary, without weakening D1's
@@ -288,7 +289,7 @@ it("CO-F retains offset without manufacturing daily count and keeps approximate 
 it("a fresh request after abandonment can continue past its first accepted turn", async () => {
   const h = await harness([proposal({ title: "đi thi" }), proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT")]);
   await h.turn(0); await h.turn(1, "Bỏ.");
-  expect(await h.turn(2)).toEqual({ status: "CLARIFICATION_REQUESTED" });
+  expect(await h.turn(2, missingTimeText)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   expect(await h.turn(3, "8h")).toEqual({ status: "DRAFT_CREATED" });
 });
 it("R02 exact three-turn series preserves count while accepting relation then clock", async () => {
@@ -378,7 +379,7 @@ it.each(["save", "abandon"])("local %s remains available after six retained USER
 });
 it.each([1, 2])("I1 numeric clarification answer %s reaches one semantic turn rather than unscoped control", async count => {
   const h = await harness([proposal({ title: "đi thi", eventDate: date(), reminderTime: time(), eventRelation: "BEFORE_EVENT", frequency: "DAILY" }), proposal({ occurrenceCount: count }, "CURRENT")]);
-  await h.turn(0);
+  await h.turn(0, "Ngày 11/10/2026 đi thi; nhắc hằng ngày lúc 8h trước hôm thi.");
   expect((await h.read(1))?.pendingReminderQuestion?.field).toBe("occurrenceCount");
   expect(await h.turn(1, String(count))).toEqual({ status: count === 2 ? "DRAFT_CREATED" : "CLARIFICATION_REQUESTED" });
   if (count === 2) expect((await h.read(2))?.slots.occurrenceCount.value).toBe(count);
