@@ -39,3 +39,10 @@ it("retains malformed evidence in a late field union branch", () => {
   parseInterpretationSections({ ...valid, changes: [{ field: "endDate", operation: "SET", value: { kind: "RELATIVE_DAY", offsetDays: 1 }, evidence: [{ kind: "USER_QUOTE", turn: 0, quote: sentinel, occurrence: sentinel }] }] }, value => { diagnostics = value; });
   expect((diagnostics as { issues: Array<{ path: Array<string | number> }> }).issues.some(issue => issue.path.join(".") === "changes.0.evidence.0.occurrence")).toBe(true);
 });
+import { projectWireValidation } from "./validation-diagnostics";
+
+it("retains the trusted date-encoding failure family without operand content", () => {
+  const diagnostic = projectWireValidation({ changes: [{ field: "reminderDate", value: "SYNTHETIC_PRIVATE_DATE" }] }, ["changes", 0, "value"], "DATE_OPERAND_JSON", undefined, "calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({ path: ["changes", 0, "value"], expected: "DATE_OPERAND_JSON", actualType: "string" });
+  expect(JSON.stringify(diagnostic)).not.toContain("SYNTHETIC_PRIVATE_DATE");
+});

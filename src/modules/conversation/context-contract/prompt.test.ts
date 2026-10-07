@@ -191,3 +191,7 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(request.stream).toBe(false);
   expect(JSON.stringify(input)).toBe(before);
 });
+it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final date transport check: eventDate, reminderDate and endDate SET/REPLACE values must encode a complete canonical DateOperand object as a JSON string.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Relative tomorrow uses kind RELATIVE_DAY with offsetDays1, never the raw words mai/tomorrow, an ISO date string, or a JSON-encoded bare string.");
+});
