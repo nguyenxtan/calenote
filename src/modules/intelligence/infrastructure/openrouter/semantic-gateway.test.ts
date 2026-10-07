@@ -10,6 +10,7 @@ import { googleLiteEuContextWireSchemaV3 } from "./context-provider-wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
+import { numericOwnershipCatalogue } from "../../../conversation/context-contract/wire";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
@@ -36,7 +37,7 @@ const contextOutput = { schemaVersion: "calenote-context-3", intent: "CREATE_REM
   conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
 const materializedChanges=contextOutput.changes.map(change=>({...change,evidence:[{kind:"USER_QUOTE",turn:0,quote:contextInput.turns[0].text,occurrence:1}]}));
 const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
-  messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify(value) }],
+  messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify({ ...value, numericOwnership: numericOwnershipCatalogue(value) }) }],
   response_format: { type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
   stream: false, max_tokens: 1536,
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });

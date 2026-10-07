@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import { numericOwnershipCatalogue } from "../../src/modules/conversation/context-contract/wire";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
@@ -185,10 +186,13 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const actual = createContextContractGateway(config, async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "b1dd6e0fdddb28798e5c1d3011a6bec8922fa7676c004f2bfa3af4604ecb91c6"
+    if (digest(request.messages[0].content) !== "79c762d4a6e6394fb0bc662189f982bbb3c18f3b2490ac997dcf4aee6963acf5"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+    const canonicalInput = JSON.parse(request.messages[1].content), numericOwnership = canonicalInput.numericOwnership;
+    delete canonicalInput.numericOwnership; delete canonicalInput.evidenceSources;
+    if (digest(JSON.stringify(numericOwnership)) !== digest(JSON.stringify(numericOwnershipCatalogue(ContextInputSchema.parse(canonicalInput))))) throw new Error("NUMERIC_OWNERSHIP_CATALOGUE_CHANGED");
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
