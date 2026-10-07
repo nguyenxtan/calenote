@@ -322,9 +322,15 @@ export type ValidatedPatchV3 = {
 export type EvidenceValidationV3 = { status: "VALID"; patch: ValidatedPatchV3 } | { status: "REFUSED"; reason: string };
 const issuedPatchesV3 = new WeakSet<object>();
 export function isValidatedPatchV3(value: unknown): value is ValidatedPatchV3 { return typeof value === "object" && value !== null && issuedPatchesV3.has(value); }
-function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver) {
+function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver,target?:SemanticPatchProposalV3["requestTarget"]) {
   const internal=evidenceContextForV2(built);
   if(!internal) return fail("CONTEXT_NOT_BUILT");
+  const frequency = internal.snapshot?.slots.frequency;
+  const count = internal.snapshot?.slots.occurrenceCount;
+  const seriesCount = target?.kind === "CURRENT" && frequency && count
+    && ["PROPOSED", "RESOLVED"].includes(frequency.state) && frequency.value === "DAILY"
+    && ["PROPOSED", "RESOLVED"].includes(count.state) && typeof count.value === "number"
+    ? count.value : undefined;
   type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal">;
   // Failure-only identity telemetry. Hashes never participate in acceptance.
   const traceFailure = (reason: string, code: EvidenceFailureDiagnostic["reason"], ref: EvidenceRef, site: Site, sourceMapStatus: EvidenceFailureDiagnostic["sourceMapStatus"] = "NOT_CHECKED"): never => {
@@ -420,7 +426,7 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
     if (field === "leadOffsetDays" && requested !== null && !firstFact
-      && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript)) fail("LEAD_OFFSET_NOT_SUPPORTED");
+      && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   const resolve: typeof rawResolve = (...args) => traceLeadOffsetResolution(args[2], args[0], args[3], args[4], built, "V3_RESOLVER", observe, () => rawResolve(...args));
@@ -473,7 +479,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
-  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe);
+  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe,value.requestTarget);
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {

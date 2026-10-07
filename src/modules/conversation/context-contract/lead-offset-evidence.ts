@@ -3,7 +3,7 @@ import type { SourceEvidence, TranscriptEntry } from "./state";
 
 /** Support for an already-proposed day offset only. Never derives an offset
  * from count, an arbitrary number, or a general date expression. */
-export function supportsLeadOffset(value: number, evidence: readonly SourceEvidence[], turns: readonly Pick<TranscriptEntry, "id" | "role" | "semanticView">[]): boolean {
+export function supportsLeadOffset(value: number, evidence: readonly SourceEvidence[], turns: readonly Pick<TranscriptEntry, "id" | "role" | "semanticView">[], seriesCount?: number): boolean {
   if (!Number.isSafeInteger(value) || value < 1 || value > 366) return false;
   const words: Record<string, number> = { một: 1, hai: 2, ba: 3 };
   let supported = false;
@@ -29,6 +29,14 @@ export function supportsLeadOffset(value: number, evidence: readonly SourceEvide
       if (!supportsEventRelation("BEFORE_EVENT", [{ ...source, viewSpan: { start, end } }], turns, true)) continue;
       const token = match[1] ?? match[2], offset = words[token] ?? Number(token);
       if (offset !== value) return false;
+      // In a retained DAILY/count-N request the same N-day answer can select
+      // the preceding series, not an independent start distance. Require a
+      // separately stated start/single-reminder instruction in this exact
+      // evidence clause. Count itself never supplies a new operand.
+      if (seriesCount === offset) {
+        const prefix = quote.slice(0, match.index).split(/[;,.!?]/u).at(-1) ?? "";
+        if (!/(?:^|[^\p{L}])(?:bắt đầu nhắc|nhắc (?:một|1) lần)\s*$/u.test(prefix)) return false;
+      }
       supported = true;
     }
   }

@@ -5,6 +5,8 @@ import { SemanticPatchProposalV3Schema } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
 import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
+import { supportsLeadOffset } from "./lead-offset-evidence";
+import { turn } from "./context-test-fixtures";
 
 function check(text: string, value = 2, quote = text, turn?: number) {
   const msg = message(text), built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
@@ -54,4 +56,61 @@ it("exact offset CONTEXT_FACT reuse remains accepted without a new numeric quote
 });
 it("absence of mandatory evidence remains a structural rejection", () => {
   expect(SemanticPatchProposalV3Schema.safeParse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [] }, changes: [{ field: "leadOffsetDays", operation: "SET", value: 2, evidence: [] }], query: null, uncertainties: [] }).success).toBe(false);
+});
+
+it.each(["Nhắc trước 2 ngày.", "Nhắc trước hai ngày.", "Nhắc 2 ngày trước ngày thi.", "Nhắc 2 ngày liên tiếp.", "mang 2 cây bút"])("retained count does not own offset: %s", async text => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ leadOffsetDays: 2 }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");
+  await h.turn(1, text);
+  const state = await h.read(2);
+  expect(state?.slots.leadOffsetDays.value).toBeNull();
+  expect(state?.slots.occurrenceCount.value).toBe(2);
+});
+it.each(["Bắt đầu nhắc trước 2 ngày.", "Nhắc một lần trước ngày thi 2 ngày."])("independent start offset survives retained count: %s", async text => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");
+  await h.turn(1, text);
+  expect((await h.read(2))?.slots.leadOffsetDays.value).toBe(2);
+});
+it("different explicit offset remains grounded and enters count conflict computation", async () => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ eventRelation: "BEFORE_EVENT", leadOffsetDays: 3 }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");
+  await h.turn(1, "Nhắc trước 3 ngày.");
+  const state = await h.read(2);
+  expect(state?.slots.leadOffsetDays.value).toBe(3);
+  expect(state?.pendingReminderQuestion?.field).toBe("leadOffsetDays");
+});
+it("NEW explicit offset never borrows the retained request's count", async () => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ title: "họp", eventDate: date(), eventRelation: "BEFORE_EVENT", leadOffsetDays: 2 }, "NEW")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");
+  await h.turn(1, "Việc mới: nhắc họp ngày 11/10 trước 2 ngày.");
+  const lastEvidence = h.events.filter(e => e.event === "POST_CANONICAL_STAGE" && e.diagnostic.stage === "EVIDENCE").at(-1);
+  expect(lastEvidence).toMatchObject({ diagnostic: { result: "PASS" } });
+});
+
+it.each(["Bắt đầu nhắc; nhắc trước 2 ngày.", "Nhắc một lần; nhắc trước 2 ngày.", "Đừng bắt đầu nhắc trước 2 ngày.", "Ví dụ bắt đầu nhắc trước 2 ngày.", "Bắt đầu nhắc 2 ngày liên tiếp và nhắc trước 2 ngày.", "Bắt đầu nhắc ở nhà rồi nhắc trước 2 ngày.", "Nhắc một lần khi về nhà và nhắc trước 2 ngày."])("independent offset cannot borrow another or non-executable clause: %s", text => {
+  const source = turn(text), n = [...text].length;
+  const evidence = [{ kind: "USER_QUOTE" as const, sourceTurnId: source.id, sourceMapTurnId: source.id, quote: text, occurrence: 1, sourceSpan: { start: 0, end: n }, viewSpan: { start: 0, end: n }, normalizationVersion: "nfc-codepoint-v1" as const }];
+  expect(supportsLeadOffset(2, evidence, [source], 2)).toBe(false);
+});
+it.each(["Bắt đầu nhắc 2 ngày liên tiếp và nhắc trước 2 ngày.", "Bắt đầu nhắc ở nhà rồi nhắc trước 2 ngày.", "Nhắc một lần khi về nhà và nhắc trước 2 ngày."])("V3 proposal cannot borrow an unrelated independent marker: %s", async text => {
+  const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ leadOffsetDays: 2 }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");
+  await h.turn(1, text);
+  expect((await h.read(2))?.slots.leadOffsetDays.value).toBeNull();
+});
+it("narrow quote cannot borrow an independent-start instruction outside its span", () => {
+  const source = turn("Bắt đầu nhắc trước 2 ngày."), quote = "trước 2 ngày", start = 13, end = 24;
+  const evidence = [{ kind: "USER_QUOTE" as const, sourceTurnId: source.id, sourceMapTurnId: source.id, quote, occurrence: 1, sourceSpan: { start, end }, viewSpan: { start, end }, normalizationVersion: "nfc-codepoint-v1" as const }];
+  expect(supportsLeadOffset(2, evidence, [source], 2)).toBe(false);
+});
+it("a grounded relation-only continuation preserves count and asks for the actual missing clock", async () => {
+  const h = await harness([proposal({ title: "đi thi", location: "Quang Trung", eventDate: date(), frequency: "DAILY", occurrenceCount: 2 }), proposal({ eventRelation: "BEFORE_EVENT" }, "CURRENT")]);
+  await h.turn(0, "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+  await h.turn(1, "Nhắc trước 2 ngày.");
+  const state = await h.read(2);
+  expect(state?.slots.leadOffsetDays.value).toBeNull();
+  expect(state?.slots.eventRelation.value).toBe("BEFORE_EVENT");
+  expect(state?.slots.occurrenceCount.value).toBe(2);
+  expect(state?.pendingReminderQuestion?.field).toBe("reminderTime");
 });

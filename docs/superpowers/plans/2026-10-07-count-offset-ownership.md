@@ -1,0 +1,37 @@
+# Count/offset ownership implementation plan
+
+> **For agentic workers:** Use superpowers:executing-plans inline. Owner authorizes continuous execution and one independent whole-delta review, without routine approval pauses.
+
+**Goal:** Prevent retained series count from granting an independent equal lead offset.
+**Architecture:** Add optional trusted series context to the existing boolean offset support verifier. V3 evidence admission supplies it only for CURRENT from the private snapshot. Keep all exact-source protections and exact inherited fact reuse; reject whole invalid proposals, never rewrite.
+**Tech stack:** TypeScript, Zod, Vitest, existing application/D1 and debug harness.
+**Spec:** `docs/superpowers/specs/2026-10-07-count-offset-ownership.md`.
+
+## Constraints and review focus
+
+Preserve wire/canonical/oracle, pointer/completeness/target guards, model/provider and $5 accounting/history/UNKNOWN. Review equal-count ambiguity, explicit independent offset, different-offset conflict, exact fact carry-forward, NEW isolation, negated/different-clause wording, uncertainty alternatives and no partial mutation.
+
+## Task 1 — Contextual admission
+
+Files: `src/modules/conversation/context-contract/lead-offset-evidence.ts`, `evidence.ts`, `lead-offset-evidence.test.ts`, `offset-admission-diagnostics.test.ts`, `prompt.ts`; prompt digest pins in `tools/benchmark/context-contract-runner.ts`, `context-contract-fit.test.ts`.
+
+Interface: `supportsLeadOffset(value,evidence,turns,seriesCount?:number):boolean`; `validateEvidenceV3` supplies count only for a trusted CURRENT DAILY series. Existing valid-patch and refusal contracts unchanged.
+
+- [ ] RED actual R02 count2/context + bare before2 rejects; count alone/unrelated2 reject; explicit independent offset accepted, distinct offset3 reaches conflict, carry-forward and NEW isolated.
+- [ ] Run `pnpm test src/modules/conversation/context-contract/lead-offset-evidence.test.ts src/modules/conversation/context-contract/offset-admission-diagnostics.test.ts --maxWorkers=1`, verify expected RED.
+- [ ] Implement narrow contextual gate preserving exact span/clause/source checks and inherited facts; update early prompt instruction and actual digest pins.
+- [ ] GREEN focused command above plus `pnpm test src/modules/conversation/context-contract tools/benchmark/context-contract-fit.test.ts --maxWorkers=1`.
+- [ ] Independent whole-delta review C0/I0; fix findings with TDD.
+- [ ] Full no-network verification: `pnpm test --maxWorkers=1 && node --test docs/architecture/current-state.test.mjs && pnpm typecheck && pnpm lint && pnpm build && pnpm exec wrangler types --check && pnpm exec wrangler deploy --dry-run`; `git diff --check`. No edits during the suite.
+- [ ] Selective local commit and truthful progress evidence.
+
+## Task 2 — Fresh Pilot
+
+- [ ] Existing debug executor preflight derives immutable loaded-source identity and cumulative conservative accounting; no reset/release.
+- [ ] Fresh frozen Formal Pilot through approved executor, max76 requests/one per eligible turn, retry0/fallbacknone, terminal at first failure.
+- [ ] Settle actual known cost or conservative UNKNOWN. Same-scope failure: offline TDD/review/check/new candidate then fresh execution; never reopen history.
+- [ ] Stop at Pilot PASS or owner-defined scope/security/budget/production gate. Record actual evidence; no release.
+
+## Local acceptance evidence
+
+Actual R02 and three lexical variants RED: canonical offset2 appeared despite retained series context. Contextual gate GREEN. Reviewer initially C0/I1 for unrelated marker borrowing across conjunction; six helper/service regressions RED, immediate marker attachment GREEN. Final independent review C0/I0/M0, focused130 PASS/2 existing skips. Full fixed-source no-network run exit0:175 files/8429 PASS/2 existing skips; documentation/typecheck/lint/build/Worker types/dry-run PASS, lint0errors/168 existingwarnings. Diff check PASS. First full run deliberately stopped before review-fix edits and is not acceptance evidence. No credentials or provider calls during implementation. Wire/canonical/oracle unchanged; prompt digest86f00c1c5fca9855f5ae20b164b94e30caa127e8d342b2c8dc1a3c39ae99a18f.
