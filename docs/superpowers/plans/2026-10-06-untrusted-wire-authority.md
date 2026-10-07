@@ -686,3 +686,9 @@ Owner approved current-turn grounded venue coverage before branded evidence patc
 - Full offline exit zero: 174 files/8393 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings. No live calls during implementation.
 - Prompt digest `00b68c53c543714948323366e1c6e1940f0b5d0c7526f23b6e7925499744f941`; wire/canonical/pointer unchanged.
 - Continue fresh Formal Pilot under the existing cumulative $5 conservative debug authority after immutable local commit and derived accounting/identity preflight. Historical terminal FAILs and UNKNOWN remain unchanged; no Full/release.
+
+### Semantic-completeness live checkpoint and scope gate
+
+Runtime/harness `18a496e061da2853cccf5ff6fd253b5d4022d8db` passed trusted preflight and credential metadata gate. Fresh Formal Pilot terminally stopped after eight calls: R01 turns 0–1, R02 turns 0–2 and R03 turns 0–1 PASS. R02's explicit location was retained. R04 turn zero FAIL: HTTP 200, generation `gen-1791350958-rDW1uQypQHcqujKj21Zk`, cost 0.0008911 USD KNOWN. Proposal had the expected title/date/time digests but requestTarget CURRENT. Merge correctly clarifies operation when no previous request exists (`merge.ts` CURRENT/no previous request guard), leaving fields/draft unresolved; frozen oracle requires NEW-request reminderTime clarification. This is request-target ownership, not location coverage or pointer materialization. No automatic CURRENT→NEW conversion or oracle change is authorized by this narrow amendment.
+
+All eight requests settled KNOWN: authoritative total 0.0072169 USD. Cumulative confirmed retained 140859 microunits; UNKNOWN 2109440 unchanged; conservative remaining 2749701 of 5000000; hash chain PASS. Zero LIST reads/reminder mutations at failed turn. Historical executions remain immutable. No Full/push/merge/deploy. Stop at explicit outside-semantic-completeness architecture gate; NEXT_GATE = OWNER_DECISION_ON_REQUEST_TARGET_OWNERSHIP_SCOPE.
