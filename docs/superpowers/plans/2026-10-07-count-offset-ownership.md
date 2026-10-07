@@ -71,6 +71,13 @@ Freshefd30de:15HTTP/dispatches. R01–R04 and R05turn0(offset)/turn1(cancel) PAS
 Date transport delta acceptance: focused323PASS/2existing skips; independent C0/I0/M0. Fresh fixed-source full176files/8447PASS/2skips, docs/typecheck/lint/build/types/dry-run exit0, lint0errors168existingwarnings, diffPASS. Runtime acceptance predicates unchanged; only safe diagnostic family and model delivery instruction changed. Commit and fresh actual Pilot next.
 # Notification-date ownership follow-up
 
+## Latest terminal provider-envelope gate
+
+- Candidate/harness `d6729bffbaf272a3ba00baa96dc8b15e3a46ceef`: Fresh Pilot made exactly one request, then terminal-stopped at R01 TURN 0. HTTP 200 / generation `gen-1791365156-w9SMAtZ4fEV7VwoL0Chx`; provider reported cost USD 0.
+- Existing structural diagnostics: PROVIDER_ENVELOPE_FAILED, `choices[0].finish_reason`, invalid_value / CONTROL_ENUM. Envelope requires literal stop; the actual invalid literal was not retained. No assertion about truncation, refusal or provider error is justified. No semantic proposal was admitted; zero DB reads or reminder mutations.
+- Confirmed cumulative exact cost USD 0.26362793 (ledger ceiling 263780 microunits), unchanged UNKNOWN exposure 2109440 microunits, conservative remaining 2626780 microunits. Hash chain PASS; history preserved.
+- Pilot remains FAIL, not PASS. No retry, Full, push, merge or deployment. Provider-envelope failure is outside the current count/offset semantic-ownership correction; report this distinct gate before changing provider protocol handling or issuing another diagnostic request.
+
 ## Explicit single cadence consistency
 
 - Actual `13ce8ac1302b9531c35152db0110f170d5f3b99e` stopped at R04 TURN 1 after nine requests: grounded relation/offset passed, but explicit single cadence was omitted. No historical result changed.
