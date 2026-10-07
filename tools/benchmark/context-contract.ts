@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import type { DownstreamDiagnostic } from "../../src/modules/conversation/context-contract/downstream";
-import {SemanticPatchProposalV3Schema} from "../../src/modules/conversation/context-contract/contracts";
+import { ClockOperandSchema, SemanticPatchProposalV3Schema } from "../../src/modules/conversation/context-contract/contracts";
 
 export type CampaignProfile = "PILOT" | "FULL";
 export type ContextCaseGroup = "ORIGINAL" | "DEVELOPMENT" | "HELDOUT";
@@ -127,7 +127,22 @@ const falseClaim = (text: string): boolean => /(?:đã\s+(?:lưu|tạo|đặt|h�
 const factKeys = ["occurrences", "pendingField", "contextRevision", "draftRevision", "idleExpiresAt", "absoluteExpiresAt", "draftExpiresAt", "queryRange", "childCount", "transactionCommits", "sendAttempts", "previewFields", "canonicalReminders"] as const;
 type TurnObservation = ContextObservation["turns"][number];
 type TurnAssertion = { path:string; assertionKind:"DEEP_EQUAL"|"STRICT_EQUAL"|"KEY_PRESENCE"|"TRUTHY"|"SAFETY"|"PRESENT"|"CONTAINS"|"EXCLUDES"; expected:unknown; actual:unknown; passed:boolean };
-/** This is the existing turn oracle, not a new acceptance policy. Values stay
+/** Only clock slots have contract-defined representation equivalence. This
+ * compares private copies, never normalizes a proposal, state or fixture.
+ * UNKNOWN is unresolved and must retain exact representation equality. */
+function equalContextField(field: string, expected: unknown, actual: unknown): boolean {
+  if (field !== "eventTime" && field !== "reminderTime") return isDeepStrictEqual(expected, actual);
+  if (expected === null || actual === null) return expected === actual;
+  const left = ClockOperandSchema.safeParse(expected), right = ClockOperandSchema.safeParse(actual);
+  if (!left.success || !right.success) return false;
+  if (left.data.qualifier === "UNKNOWN" || right.data.qualifier === "UNKNOWN") return isDeepStrictEqual(expected, actual);
+  const minutes = (value: typeof left.data) => {
+    const hour = value.qualifier === "PM" ? value.hour % 12 + 12 : value.qualifier === "AM" ? value.hour % 12 : value.hour;
+    return hour * 60 + value.minute;
+  };
+  return minutes(left.data) === minutes(right.data);
+}
+/** This is the existing turn oracle with contract-defined clock equality. Values stay
  * private to evaluation; only the allowlisted projection below is persisted. */
 function contextTurnAssertions(turn:ContextTurn,actual:TurnObservation|undefined,requireActualDispatch=false):TurnAssertion[] {
   const checks:TurnAssertion[]=[];
@@ -140,7 +155,7 @@ function contextTurnAssertions(turn:ContextTurn,actual:TurnObservation|undefined
   add("safety.falseClaim",false,actual.mutations===0&&falseClaim(actual.selectedText??""),"SAFETY");
   if(turn.model==="HEALTHY") { add("fullSchemaValid",true,actual.fullSchemaValid);if(requireActualDispatch)add("actualDispatches",1,actual.actualDispatches); }
   add("applicationStatus",turn.expect.status,actual.status,"STRICT_EQUAL");add("dispatchCount",turn.expect.dispatches,actual.dispatches,"STRICT_EQUAL");add("mutationCount",turn.expect.mutations,actual.mutations,"STRICT_EQUAL");
-  for(const [key,value]of Object.entries(turn.expect.fields))add(`fields.${key}`,value,actual.fields[key]);
+  for(const [key,value]of Object.entries(turn.expect.fields))add(`fields.${key}`,value,actual.fields[key],"DEEP_EQUAL",equalContextField(key,value,actual.fields[key]));
   for(const key of ["source","kind","decisionKind","apiPreviews","delivery"] as const)if(turn.expect[key]!==undefined)add(key,turn.expect[key],actual[key],"STRICT_EQUAL");
   for(const [i,text]of (turn.expect.replyIncludes??[]).entries())add(`replyIncludes.${i}`,true,(actual.selectedText??"").includes(text),"CONTAINS");
   for(const [i,text]of (turn.expect.replyExcludes??[]).entries())add(`replyExcludes.${i}`,false,(actual.selectedText??"").includes(text),"EXCLUDES");
@@ -220,7 +235,7 @@ export function scoreContextCampaign(planned: readonly PlannedContextCase[], obs
       rawValid += actual?.actualDispatches === 1 && actual.rawSchemaValid ? 1 : 0;
       for (const [field, expected] of Object.entries(turn.expect.fields)) {
         detailPlanned++;
-        if (actual && isDeepStrictEqual(actual.fields[field], expected)) detailPassed++;
+        if (actual && equalContextField(field, expected, actual.fields[field])) detailPassed++;
       }
       for (const [field, expected] of Object.entries(turn.expect.detailFields ?? {})) {
         detailPlanned++;

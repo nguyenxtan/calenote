@@ -1,5 +1,20 @@
 # Count/offset ownership implementation plan
 
+## Clock representation consistency follow-up
+
+**Goal:** Evaluate valid equivalent clock operands semantically without rewriting the application or weakening factual/safety expectations.
+**Architecture:** One private `equalContextField(field:string, expected:unknown, actual:unknown):boolean` in `tools/benchmark/context-contract.ts`; ClockOperandSchema remains authoritative. Apply only to the two clock slot assertions and the matching detail-score counter; diagnostics/capture reuse the assertion stream.
+**Tech stack:** Existing TypeScript/Zod/Vitest evaluation tooling. Spec: clock evaluation interpretation above in `docs/superpowers/specs/2026-10-07-count-offset-ownership.md`.
+
+- [x] Verify normative clock ranges, resolver conversion and failing R04 assertion; preserve original fixture and historical failure.
+- [x] RED: `tools/benchmark/context-clock-oracle.test.ts` proves valid AM/H24, noon/midnight and PM equivalences rejected (6 failures / 18 passes before change).
+- [x] Implement scoped semantic comparison; GREEN 24 boundary tests. Include wrong-hour/minute, UNKNOWN, invalid range/type, absent/extra keys, null, unrelated fields and unchanged unsafe-write/schedule assertions.
+- [x] Run actual offline R04 AM-proposal service regression and scorer/diagnostic/runner regressions. Command: `pnpm test tools/benchmark/context-clock-oracle.test.ts tools/benchmark/context-oracle-diagnostics.test.ts tools/benchmark/context-contract.test.ts tools/benchmark/context-contract-runner.test.ts --maxWorkers=1`. 167 PASS, including all six frozen R04 turns with AM retained, exact 08:00 occurrence and no mutation.
+- [x] Run stable-source full offline suite, typecheck/lint/build/Worker types/dry-run/diff check; independent C0/I0 review; commit locally. 178 files / 8490 PASS / 2 existing skips; all static/build/types/dry-run checks PASS; lint 0 errors / 168 existing warnings. Independent review C0/I0/M0. Logs: `clock-oracle-red.log`, `clock-oracle-focused.log`, `clock-oracle-full.log` under the local count-offset scratch directory.
+- [ ] Derive unchanged conservative $5 debug accounting, preflight and run new Fresh Pilot through trusted launcher. Settle and terminal-stop each failed run; continue only owner-approved scoped fixes, never reuse terminal execution/history. No Full/push/merge/deploy.
+
+Review focus: twelve AM/PM conversion; UNKNOWN must not become resolved; malformed values cannot gain equality; immediate and final score agree; equivalent fields cannot mask schedule/safety failures. Runtime/schema/evidence/prompt/model/provider/configuration and frozen manifest are unchanged.
+
 ## Fact-versus-MISSING follow-up execution
 
 - [x] Reproduce merge accepting a grounded fact plus same-field MISSING (RED), and unchanged CURRENT resolved fact plus MISSING (RED).

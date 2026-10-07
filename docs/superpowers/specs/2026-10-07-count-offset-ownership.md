@@ -1,5 +1,11 @@
 # Contextual count/lead-offset ownership amendment
 
+## Clock representation consistency — evaluation interpretation
+
+Owner-approved follow-up: the R04 turn-two model operand `{hour:8,minute:0,qualifier:AM}` and frozen `{hour:8,minute:0,qualifier:H24}` resolve to the same 08:00. The normative clock contract (`2026-09-28-llm-context-contract-design.md`, clock operand section) explicitly permits H24/AM/PM; `ClockOperandSchema` enforces ranges and `resolveRequest` converts these representations to the same clock. H24 is a prompt preference, not an additional product validity requirement. The scorer's raw deep equality incorrectly treats this valid equivalence as lost detail.
+
+Only semantic `fields.eventTime` and `fields.reminderTime` compare equal when both operands pass the unchanged strict ClockOperandSchema and resolve to the same minute of day. Noon/midnight follow existing resolver semantics. UNKNOWN remains unresolved and uses exact equality; null remains null, absent/invalid/extra-key operands fail closed. All other fields, preview schedules, persisted canonical reminders, evidence, safety/status/dispatch/mutation/confirmation assertions remain unchanged and strict. Immediate diagnostics, assertion capture and final detail scoring use the same comparison. Do not mutate model proposals, source observations, frozen fixtures or historical outcomes. This interprets the existing product contract, not a format exemption for arbitrary qualified values.
+
 ## Fact-versus-MISSING consistency amendment
 
 The owner-approved follow-up addresses the terminal R03 turn-zero failure: grounded eventRelation BEFORE_EVENT and eventRelation MISSING survived the same proposal; merge restored the model uncertainty after accepting the fact, and resolution asked the contradictory field. Historical results remain unchanged.
