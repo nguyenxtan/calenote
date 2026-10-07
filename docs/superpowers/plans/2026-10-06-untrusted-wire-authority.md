@@ -642,3 +642,16 @@ Owner approved a narrow pointer-only evidence amendment. Current transport accep
 - [x] Independent whole-delta and migration review C0/I0/M0.
 - Provider schema digest unchanged `c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0`; wire version evidence-pointer-26. Prompt digest `c090810946045290e7ff9f7544c2fb697bc79af36daa750fa7760e3a298c3b02`.
 - [ ] Commit local, read-only derived-budget/identity preflight, one canary, then Fresh Formal Pilot under existing total $5 conservative debug authority. No Full/release.
+
+### Evidence-pointer live admission and explicit clock representation preference
+
+V26 candidate `97f39c016b2795e15bce742b7c7cb71c2adfd559` canary passed its one R01 turn zero, HTTP 200 generation `gen-1791339460-m54QMQ8chWIjXwxTvnsP`, cost 0.0008033 USD KNOWN. Pointer decoding, canonical/evidence validation and missing-range clarification passed, zero reads/mutations. Canary has no Pilot credit.
+
+Fresh Formal Pilot then stopped terminally after ten provider calls at R04 turn two. R01–R03 passed, including the formerly failing quote case. HTTP 200 generation `gen-1791339510-ViAfVQ5u1LuRBqzmiAPN`, cost 0.0008846 USD KNOWN. All application validation passed; only oracle `fields.reminderTime.qualifier` expected H24 but actual AM for explicit 8h sáng. Both represent 08:00, but the frozen object expectation is not weakened. Historical run remains FAIL. Conservative remaining derived 2766634 microunits, UNKNOWN unchanged.
+
+Add prompt-only preference for equivalent H24 representation when a Vietnamese numeric day-part clock is explicit and unambiguous; absent clocks and ambiguity remain unresolved. AM/PM domain, canonical/evidence validators, wire schema, source materialization and oracle remain unchanged; backend never rewrites the output. This is instruction delivery, not proof of model compliance.
+
+- [x] RED one failure/27 PASS; focused GREEN 187 PASS/2 existing skips; independent review C0/I0/M0 (93 reviewer tests/2 skips).
+- [x] Full offline exit zero: 173 files/8358 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS.
+- Prompt digest `641cc14bcb5e470c939dc12eee5bd5ca19265e9d08fa04a9ea21d9a17bac94e4`; schema/protocol unchanged.
+- [ ] Commit local and fresh Formal Pilot under the same conservative $5 debug authority. No Full/release.

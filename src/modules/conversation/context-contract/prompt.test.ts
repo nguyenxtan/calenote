@@ -132,6 +132,10 @@ it("numeric clock notation preserves canonical H24 rather than inventing a merid
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit numeric h/HH:mm clock notation without an explicit day-part uses H24, not an inferred AM/PM qualifier.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("AM/PM requires an explicit meridiem/day-part operand in user evidence or exact retained fact.");
 });
+it("explicit resolved Vietnamese day-part clocks prefer the equivalent H24 representation", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("For an explicit numeric clock with an unambiguous Vietnamese day-part, prefer its equivalent H24 representation: 8h sáng is {hour:8,minute:0,qualifier:H24}, 8h tối is {hour:20,minute:0,qualifier:H24}, and 12h trưa is {hour:12,minute:0,qualifier:H24}.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("This preference never supplies an absent numeric clock or resolves an ambiguous day-part; keep UNKNOWN/uncertainty when the source is ambiguous.");
+});
 
 it("explicit task subject is retained independently of missing scheduling operands", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("When a USER explicitly names the task/event subject and title is missing, propose that grounded subject as title.");
