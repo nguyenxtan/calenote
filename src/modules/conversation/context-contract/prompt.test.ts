@@ -205,3 +205,8 @@ it("keeps an already concise explicit task phrase without stylistic expansion", 
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve an already concise USER task phrase verbatim as title; do not expand it with synonymous verbs, objects or prepositions merely to sound natural.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("đọc sách stays đọc sách, not đọc một cuốn sách");
 });
+
+it("continuation-only turns do not manufacture missing operands", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A continuation-only or negated-abandonment turn without new task operands must emit no semantic changes or alternatives; KEEP existing slots and ask for the still-missing field.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Never manufacture an AMBIGUOUS clock object merely because reminderTime is missing.");
+});

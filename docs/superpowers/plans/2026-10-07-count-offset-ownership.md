@@ -71,6 +71,11 @@ Freshefd30de:15HTTP/dispatches. R01–R04 and R05turn0(offset)/turn1(cancel) PAS
 Date transport delta acceptance: focused323PASS/2existing skips; independent C0/I0/M0. Fresh fixed-source full176files/8447PASS/2skips, docs/typecheck/lint/build/types/dry-run exit0, lint0errors168existingwarnings, diffPASS. Runtime acceptance predicates unchanged; only safe diagnostic family and model delivery instruction changed. Commit and fresh actual Pilot next.
 # Notification-date ownership follow-up
 
+## Continuation ownership follow-up
+
+- Fresh `ed21396e3ff2b1c8ddb4b2e2ec2e4fe324647d9a` Pilot stopped after 17 requests at R06 TURN 1: negated abandonment retained the draft but proposed a new clock despite no new supplied clock. Historical output and settled accounting remain immutable.
+- RED prompt-delivery regression followed by generic continuation/no-operand guidance. No rewrite, validator/oracle/schema change. Focused: 100 PASS / 2 existing skips; independent review C0/I0/M0; full offline and all chained checks exit 0.
+
 ## Title fidelity follow-up
 
 - Fresh `feca390b7a3bbe53c8a2a831206ac2e7c5f8dbcd` execution terminated at R05 TURN 2 after 15 attempts: notification-date ownership and draft creation passed; three oracle assertions failed on expanded title wording. Offline exact digest reproduction identifies the expanded task phrase. No historical result was changed.
