@@ -81,6 +81,7 @@ export interface SemanticJsonRequest {
   stream: false;
   messages: Array<{ role: "system" | "user"; content: string }>;
   max_tokens: number;
+  temperature?: number;
   response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
     zdr?: true; max_price: { prompt: number; completion: number } };

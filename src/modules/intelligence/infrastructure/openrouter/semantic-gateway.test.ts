@@ -73,7 +73,7 @@ const materializedChanges=contextOutput.changes.map(change=>({...change,evidence
 const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
   messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify({ ...value, numericOwnership: numericOwnershipCatalogue(value) }) }],
   response_format: { type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
-  stream: false, max_tokens: 1536,
+  stream: false, max_tokens: 1536, temperature: 0,
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
 const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
   choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload,contextInput)) }, finish_reason: finish }] }) });
@@ -82,6 +82,20 @@ const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contex
 
 describe("observable successor route", () => {
   const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  it("actual context dispatch pins extraction sampling and remains single-attempt", async () => {
+    const captured: SemanticJsonRequest[] = [];
+    const attempt = gateways.createContextContractGateway(contextConfig, async request => {
+      captured.push(request);
+      return contextResponse();
+    }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    await attempt.dispatch();
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({ temperature: 0, stream: false, max_tokens: 1536,
+      provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, zdr: true, data_collection: "deny" } });
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(captured).toHaveLength(1);
+  });
   it("materializes source pointers from the validated dispatch snapshot, not mutable caller input",async()=>{
     const original=structuredClone(contextInput);
     const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},changes:Array<{evidence:{primaryEvidence:string}}>};

@@ -2,6 +2,16 @@
 
 ## Cadence/count ownership extension execution
 
+### Bounded proposal-sampling follow-up
+
+Owner requested continued fixes after the generation-boundary stop. Before changing schema/authority architecture, inspect an unpinned request-generation parameter: selected Calenote serialization currently omits temperature. Vertex documents Flash-Lite's temperature default as 1.0 and permits 0.0 (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/2-5-flash-lite). This proves only the outbound omission and documented default, not OpenRouter's unexposed internal parameter or causation of the R02 failure.
+
+Hypothesis: explicitly requesting temperature 0 lowers extraction variance without weakening semantic ownership. This is a bounded sampling-policy experiment, not a proven semantic fix or deterministic-output guarantee. Keep model/provider, prompt, wire/canonical schema, strict evidence validators, one-call-per-turn, retry 0, fallback none and the existing conservative $5 authority. Do not repair invalid proposals.
+
+- [x] TDD actual serialization and observable gateway transport boundary: 2 behavioral RED failures / 154 PASS; failures identify omitted outbound sampling policy, not model accuracy. Pin temperature 0 in selected V3 serialization, preserve generic/legacy routes, and bind live benchmark admission to that request property.
+- [x] Focused: 333 PASS. Independent read-only review C0/I0/M0, reviewer verification 210 PASS. Stable-source full: 180 files / 8572 PASS / 2 existing skips; documentation/typecheck/build/diff PASS; lint 0 errors / 168 existing warnings. Logs `sampling-boundary-red.log`, `sampling-focused.log`, `sampling-full.log`. No semantic improvement or provider determinism claimed; local commit establishes the next fresh candidate identity.
+- [ ] Fresh Formal Pilot through current trusted debug accounting; terminal-stop at first invalidating failure. Compare result without replacing historical failures; a PASS does not prove temperature caused it or make generation deterministic. Do not replay unchanged terminal candidate or add repair/retry calls.
+
 **Goal:** Reject manufactured recurrence/count from lead-distance evidence and preserve explicitly supplied lead facts without automatic repair.
 **Architecture:** Extend only V3 raw evidence resolution plus bounded completeness after exact source binding. `cadence-count-evidence.ts` exports `supportsCadenceOperand(field, value, sources, turns, pendingCountTurnId?) : boolean`; a separate boolean coverage check reuses `supportsLeadOffset`. No provider schema/config or frozen oracle change.
 **Tech stack:** TypeScript, Vitest, existing V3 context/service and local D1 harness.

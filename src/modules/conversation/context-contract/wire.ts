@@ -15,7 +15,7 @@ export function serializeContextRequest(input: ContextInput) {
   return {
     messages: [{ role: "system" as const, content: CONTEXT_CONTRACT_PROMPT }, { role: "user" as const, content: JSON.stringify({ ...input, ...(evidenceSources.length ? { evidenceSources } : {}), numericOwnership: numericOwnershipCatalogue(input) }) }],
     response_format: { type: "json_schema" as const, json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
-    stream: false as const, max_tokens: 1536 as const,
+    stream: false as const, max_tokens: 1536 as const, temperature: 0 as const,
   };
 }
 

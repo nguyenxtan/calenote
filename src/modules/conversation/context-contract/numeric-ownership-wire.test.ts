@@ -35,3 +35,10 @@ it("a missing count never borrows a number from current USER text", () => {
   context.activeRequest!.slots.occurrenceCount = { state: "MISSING", value: null, fact: null };
   expect(numericOwnershipCatalogue(context).currentSeriesCount).toBeNull();
 });
+it("semantic extraction pins low-variance sampling without changing evidence or state", () => {
+  const context = input("PROPOSED"), before = JSON.stringify(context);
+  const request = serializeContextRequest(context);
+  expect(request).toMatchObject({ temperature: 0, stream: false, max_tokens: 1536 });
+  expect(JSON.parse(request.messages[1].content).numericOwnership.currentSeriesCount).toBe(2);
+  expect(JSON.stringify(context)).toBe(before);
+});
