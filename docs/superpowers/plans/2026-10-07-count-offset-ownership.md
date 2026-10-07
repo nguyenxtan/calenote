@@ -73,6 +73,15 @@ Date transport delta acceptance: focused323PASS/2existing skips; independent C0/
 
 ## Approved provider-envelope diagnostics extension
 
+### Verified diagnostics and controlled live result
+
+- Diagnostics commit `785fc9177d4a64094d568fbab2d48cb2039ad604`; focused gateway/validation/runner 209 PASS. Full: 176 files / 8459 PASS / 2 existing skips; documentation/typecheck/lint/build/types-check/offline dry-run exit 0. Lint has 168 existing warnings, zero errors. Independent review C0/I0/M0; diff check PASS.
+- Initial test setup failures did not count as RED. The corrected real-gateway fixture includes required route and usage fields; removal of the diagnostic hook produced seven expected missing-telemetry failures, followed by GREEN. Oversized response protection also passed.
+- Fresh Pilot `785fc91` terminal-stopped after six provider requests. All six passed envelope/wire/canonical validation; no original finish-reason failure recurred. This does not prove the unretained historical literal or cause.
+- New stop: R03 TURN 0, generation `gen-1791374879-fYtdkg33SB8GNHnSD0l6`, HTTP 200, cost USD 0.0011806. Model supplies eventRelation BEFORE_EVENT and simultaneously declares that field MISSING. Oracle reports only pendingField mismatch: expected reminderDate, actual eventRelation. This is a semantic proposal/uncertainty inconsistency, not adapter/decoder normalization. No semantic/canonical/evidence/oracle changes were made in this diagnostics task.
+- Latest accounting derived: exact confirmed cumulative USD 0.27011033 (ledger ceiling 270265 microunits), UNKNOWN unchanged 2109440, conservative remaining 2620295 microunits, hash chain PASS. All requests settled; execution terminal, Pilot FAIL, Full not run. No push/merge/migration/deploy.
+- Current owner instruction explicitly prohibits semantic changes. Continuing this new semantic inconsistency requires resolving that scope boundary; no blind retry or speculative semantic patch is performed.
+
 - Historical d6729bf HTTP body is not retained; exact invalid finish literal cannot be reconstructed from the old structural issue. Read-only generation metadata returns HTTP 200, finish_reason=null, native_finish_reason=null, prompt tokens 9385, completion tokens 6, cost 0. These metadata values are not substituted for the original envelope (whose issue had string type).
 - Trace: transport returns bounded original UTF-8 JSON; observable adapter checks route/accounting then decodeContextResponse applies the unchanged envelopeSchema finish_reason=stop requirement. The old telemetry copied path/type but lost the actual control reason. No response normalization was found on this path.
 - Add bounded diagnostics only at rejected-envelope boundary: exact finite control literals, unknown string length/digest, choices type/count, content type/byte count, numeric finite error code/presence. No content, error prose, IDs, raw keys or headers. Rejection, semantic/canonical/evidence/oracle contracts remain unchanged.
