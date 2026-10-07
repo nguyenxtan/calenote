@@ -655,3 +655,14 @@ Add prompt-only preference for equivalent H24 representation when a Vietnamese n
 - [x] Full offline exit zero: 173 files/8358 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS.
 - Prompt digest `641cc14bcb5e470c939dc12eee5bd5ca19265e9d08fa04a9ea21d9a17bac94e4`; schema/protocol unchanged.
 - [ ] Commit local and fresh Formal Pilot under the same conservative $5 debug authority. No Full/release.
+
+### Existing title convention instruction delivery
+
+Candidate `4cff3e21b6cee8628a38face007cc64df5e03d1f` fresh Formal Pilot stopped after eight calls at R04 turn zero. HTTP 200 generation `gen-1791340379-zvQOHfq7rZ84Q9VDTOGA`, cost 0.0008731 USD KNOWN; canonical/evidence/application clarification passed, zero reads/mutations. Only title oracle differed. Offline hashing of the public synthetic fixture's candidate strings establishes actual bare predicate thi versus required action phrase đi thi. The existing prompt already states this convention; the live model did not comply. Historical failure remains immutable. Current conservative remaining 2759520 microunits; UNKNOWN unchanged.
+
+Deliver the existing action-phrase convention earlier, before wire serialization instructions, retaining named subjects/qualifiers and prohibiting invention. No backend title normalization, validator/schema/evidence/oracle change. Improved model compliance is not assumed.
+
+- [x] RED one failure/28 PASS; focused GREEN 148 PASS/2 existing skips; independent review C0/I0/M0 (94 tests/2 skips).
+- [x] Full offline exit zero: 173 files/8359 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS.
+- Prompt digest `784a41f612c918f53c2e3fb507cfe5f4532fc5f8c7b26fb075831fd93e17bcc2`; wire/canonical/evidence unchanged.
+- [ ] Commit local and fresh Formal Pilot under existing $5 conservative debug authority. No Full/release.

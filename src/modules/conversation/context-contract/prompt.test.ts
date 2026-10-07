@@ -142,6 +142,11 @@ it("explicit task subject is retained independently of missing scheduling operan
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Date, location, cadence and count are separate fields and never substitute for title.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not omit an explicit subject merely because reminder time or event relation still needs clarification.");
 });
+it("title action-phrase convention is delivered before wire serialization instructions", () => {
+  const rule="Title values are concise task action phrases, not a bare conversational predicate: a grounded exam/thi task is đi thi, not thi; a meeting task is họp. Keep named subjects and meaningful qualifiers supplied by the USER, without inventing them.";
+  expect(CONTEXT_CONTRACT_PROMPT).toContain(rule);
+  expect(CONTEXT_CONTRACT_PROMPT.indexOf(rule)).toBeLessThan(CONTEXT_CONTRACT_PROMPT.indexOf("Canonical semantic fields are"));
+});
 
 it("selected dispatch policy permits explicit null advice without granting backend authority", () => {
   const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "nhắc đi thi" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
