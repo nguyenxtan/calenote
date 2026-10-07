@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, existsSync, rmSync, mkdirSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as orchestration from "./context-contract-orchestration";
-import { encodeFixtureV3, frozenContextProposal } from "./context-contract-fixtures";
+import { encodeFixtureV3, frozenContextProposal } from "./context-pointer-fixtures";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { execFileSync } from "node:child_process";
 const safeEnv = { PATH: "/opt/homebrew/bin:/usr/bin:/bin", TMPDIR: "/tmp", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } as unknown as NodeJS.ProcessEnv;
@@ -17,7 +17,7 @@ beforeAll(() => {
   cpSync(join(process.cwd(), "src"), join(cleanRoot, "src"), { recursive: true });
   // Snapshot the runner's changed tooling dependencies together. A hybrid of
   // working runner and historical oracle/probe is not a runnable clean fixture.
-  for (const path of ["context-contract.ts", "context-contract-probe.ts", "context-contract-live.ts", "context-contract-runner.ts", "context-seed.ts", "context-query-diagnostics.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
+  for (const path of ["context-contract.ts", "context-contract-probe.ts", "context-pointer-fixtures.ts", "context-contract-live.ts", "context-contract-runner.ts", "context-seed.ts", "context-query-diagnostics.ts", "context-contract-orchestration.ts", "context-contract-orchestration.test.ts", "run-context-contract-live.mjs"])
     copyFileSync(join(process.cwd(), "tools", "benchmark", path), join(cleanRoot, "tools", "benchmark", path));
   mkdirSync(join(cleanRoot,"tools/benchmark/fixtures"),{recursive:true});
   copyFileSync(join(process.cwd(),"tools/benchmark/fixtures/trusted-context-checkpoints.json"),join(cleanRoot,"tools/benchmark/fixtures/trusted-context-checkpoints.json"));

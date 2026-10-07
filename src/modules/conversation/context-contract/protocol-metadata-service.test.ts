@@ -6,12 +6,11 @@ import type { ContextObservationEvent } from "./observability";
 import type { ReadyReplyPlan, ReplyReceipt } from "./responses";
 import { D1SemanticBudgetStore } from "../../semantic/infrastructure/d1/budget-store";
 import { createContextContractGateway } from "../../intelligence/infrastructure/openrouter/semantic-gateway";
-import { frozenContextProposal, encodeFixtureV3 } from "../../../../tools/benchmark/context-contract-fixtures";
+import { frozenContextProposal, encodeFixtureV3 } from "../../../../tools/benchmark/context-pointer-fixtures";
 import type { ContextInput } from "./contracts";
 import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
 import { createD1ContextRuntimeStoreV3 } from "./runtime-store";
 import { CONTEXT_PROTOCOL_V3 } from "./protocol";
-import { encodeGoogleLiteEuContextV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { ConversationInterpretationV3Schema, type ContextInputV2 } from "./contracts";
 import { createContextContractService } from "./service";
 
@@ -35,7 +34,7 @@ async function selectedHarness(values: Record<string, unknown> = { title: "đi t
     const evidence = [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }];
     const proposal = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: input.activeRequest ? "CURRENT" : "NEW", evidence },
       changes: Object.entries(values).map(([field, value]) => ({ field, operation: "SET", value, evidence })), query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderDate" }, replyProposal: null });
-    return { status: 200, body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mutateWire(encodeGoogleLiteEuContextV3(proposal))) } }], usage: { cost: .0004, prompt_tokens: 2200, completion_tokens: 500 } }) };
+    return { status: 200, body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(mutateWire(encodeFixtureV3(proposal,input))) } }], usage: { cost: .0004, prompt_tokens: 2200, completion_tokens: 500 } }) };
   }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
   const runtimeStore = createD1ContextRuntimeStoreV3({ db: h.f.db, keyring: h.f.keyring, protocol: CONTEXT_PROTOCOL_V3 });
   const service = createContextContractService({ store, runtimeStore, gateway, keyring: f.keyring, calendar: lunarCalendar, channel: "TELEGRAM", sourceSha: "a".repeat(40), mode: "OFFLINE_FIXTURE",
@@ -118,7 +117,7 @@ it("selected build-time oversized refusal preserves pending candidate source and
   expect(await h.run(0, "nhắc đi thi 8/10/2026 8h")).toEqual({ status: "DRAFT_CREATED" });
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
+    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)];
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(1, "nhắc đi thi 8/10/2026 8h");
@@ -169,7 +168,7 @@ it("selected prior no-A grounded candidate survives operational refusal with ori
   const h = await selectedHarness();
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)].map(ref => ({ kind: "USER_QUOTE", turn: ref.turn, quote: ref.quote, occurrence: ref.occurrence }));
+    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)];
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(0, "nhắc đi thi");

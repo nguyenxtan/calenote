@@ -7,7 +7,7 @@ import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contrac
 import * as gateways from "./semantic-gateway";
 import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
 import { googleLiteEuContextWireSchemaV3 } from "./context-provider-wire";
-import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-contract-fixtures";
+import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
@@ -34,18 +34,32 @@ const contextOutput = { schemaVersion: "calenote-context-3", intent: "CREATE_REM
   changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "gọi mẹ", occurrence: 1 }] }],
   query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }],
   conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
+const materializedChanges=contextOutput.changes.map(change=>({...change,evidence:[{kind:"USER_QUOTE",turn:0,quote:contextInput.turns[0].text,occurrence:1}]}));
 const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
   messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify(value) }],
   response_format: { type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
   stream: false, max_tokens: 1536,
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
 const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
-  choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload)) }, finish_reason: finish }] }) });
+  choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload,contextInput)) }, finish_reason: finish }] }) });
 const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
   admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
 
 describe("observable successor route", () => {
   const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  it("materializes source pointers from the validated dispatch snapshot, not mutable caller input",async()=>{
+    const original=structuredClone(contextInput);
+    const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},changes:Array<{evidence:{primaryEvidence:string}}>};
+    payload.requestTarget.evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:0});
+    payload.changes[0].evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:0});
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-pointer",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",original);
+    if(attempt.status!=="READY")throw Error("not ready");
+    original.turns[0].text="caller changed this after prepare";
+    const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"SUCCESS",interpretation:{semantic:{requestTarget:{evidence:[{kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1}]},changes:[{evidence:[{quote:"nhắc gọi mẹ"}]}]}}});
+    expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
+  });
   it.each([
     [null,"stop",["choices",0,"message","content"],"invalid_type","null"],
     ["SYNTHETIC_PRIVATE_CONTENT","error",["choices",0,"finish_reason"],"invalid_value","string"],
@@ -170,7 +184,7 @@ describe("observable successor route", () => {
     if (attempt.status !== "READY") throw new Error("prepare failed");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
   });
-  const providerPayload = encodeFixtureV3;
+  const providerPayload = (payload:unknown) => encodeFixtureV3(payload,contextInput);
   const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
     id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(providerPayload(payload)).body),
     usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
@@ -220,7 +234,7 @@ describe("observable successor route", () => {
       .prepare("PRIMARY", contextInput);
     if (attempt.status !== "READY") throw new Error("not ready");
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false, directive: { status: "INVALID" },
-      semantic: { changes: contextOutput.changes } }, usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
+      semantic: { changes: materializedChanges } }, usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
   });
   it("reports actual known charge even when it exceeds the financial reservation", async () => {
     const attempt = gateways.createContextContractGateway(contextConfig, async () => response({ usage: { cost: .105473, prompt_tokens: 100, completion_tokens: 100 } }), admission).prepare("PRIMARY", contextInput);
@@ -292,7 +306,7 @@ describe("dormant successor context gateway", () => {
     if (attempt.status !== "READY") throw new Error("not ready");
     expect(attempt.maximumCostMicrounits).toBe(1815);
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true,
-      semantic: { changes: contextOutput.changes, uncertainties: contextOutput.uncertainties },
+      semantic: { changes: materializedChanges, uncertainties: contextOutput.uncertainties },
       directive: { status: "VALID", value: contextOutput.conversationDirective }, reply: { status: "VALID", value: contextOutput.replyProposal } }, usage: { costMicrounits: null } });
   });
   it("prepared_is_not_dispatched_and_dispatch_is_one_shot", async () => {
@@ -331,7 +345,7 @@ describe("dormant successor context gateway", () => {
     const attempt = contextGateway([{ ...exchange(), response: contextResponse(raw) }]).prepare("PRIMARY", contextInput);
     if (attempt.status !== "READY") throw new Error("not ready");
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false,
-      semantic: { changes: contextOutput.changes }, directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } } });
+      semantic: { changes: materializedChanges }, directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } } });
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
   });
   it.each([

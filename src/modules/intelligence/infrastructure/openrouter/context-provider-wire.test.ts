@@ -196,6 +196,16 @@ function wireFixture(value: unknown): unknown {
   return result;
 }
 async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) {
+  // Current provider specimens select sources; the historical encoder parity
+  // specimens above remain literal quotes and use the context-free parser.
+  const pointer=(value:unknown):unknown=>{
+    if(Array.isArray(value))return value.map(pointer);
+    if(!value||typeof value!=="object")return value;
+    const v=value as Record<string,unknown>;
+    if(v.kind==="USER_QUOTE"&&v.quote==="synthetic"&&v.turn===0&&v.occurrence===1&&Object.keys(v).length===4)return {kind:"USER_TURN",turn:0};
+    return Object.fromEntries(Object.entries(v).map(([key,child])=>[key,["primaryEvidence","additionalEvidenceJson"].includes(key)&&typeof child==="string"?JSON.stringify(pointer(JSON.parse(child))):key==="alternatives"&&Array.isArray(child)?child.map(text=>typeof text==="string"?JSON.stringify(pointer(JSON.parse(text))):text):pointer(child)]));
+  };
+  payload=pointer(payload);
   const transport = createContextHttpTransport("SYNTHETIC_CREDENTIAL", async (_url, init) => {
     requests.push(JSON.parse(String(init.body)));
     return new Response(JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", id: "gen-wire-test", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(payload) } }], usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 } }), { headers: { "content-type": "application/json" } });
@@ -259,7 +269,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-25");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-evidence-pointer-26");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
@@ -313,13 +323,13 @@ it.each([
   const raw = wireFixture({ ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] }) as Record<string, unknown>; mutate(raw);
   expect(await dispatch(raw)).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
 });
-it("discards inactive evidence and guidance at the HTTP boundary without changing semantic authority", async () => {
+it("current pointer transport rejects quote-authored evidence padding at the HTTP boundary", async () => {
   const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
   const raw = wireFixture(canonical) as Record<string, unknown>;
   (raw.conversationDirective as Record<string, unknown>).field = "title";
   const changedEvidence=(raw.changes as Array<Record<string,unknown>>)[0].evidence as {primaryEvidence:string};
   changedEvidence.primaryEvidence=JSON.stringify({...JSON.parse(changedEvidence.primaryEvidence),ref:"f999"});
-  expect(await dispatch(raw)).toMatchObject({ status: "SUCCESS", interpretation: { semantic: { changes: canonical.changes }, directive: { status: "VALID", value: minimal.conversationDirective }, fullSchemaValid: true } });
+  expect(await dispatch(raw)).toMatchObject({ status: "FAILURE",category:"SCHEMA_INVALID" });
 });
 
 function encodeGoogleLiteEuContext(value: unknown) { return encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(value)); }

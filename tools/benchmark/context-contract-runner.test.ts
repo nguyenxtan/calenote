@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import * as runner from "./context-contract-runner";
-import { frozenContextProposal, encodeFixtureV3 } from "./context-contract-fixtures";
+import { frozenContextProposal, encodeFixtureV3 } from "./context-pointer-fixtures";
 import { readCampaignLedger } from "./context-contract-live";
 import * as liveAuthority from "./context-contract-live";
 import { preflightContextCampaign, admitHistoricalV2IntentReference as admitFutureLiveIntent } from "./context-contract-live";
@@ -64,8 +64,8 @@ it("exact evidence failure survives the application gateway and durable runner w
     expect(result).toMatchObject({ status: "STOP", applicationLlmCalls: 1, providerHttpRequests: 1 });
     expect(result.applicationEvidence[0]).toMatchObject({oracleDiagnostics:{passed:false,failedAssertions:expect.arrayContaining([expect.objectContaining({path:"applicationStatus"})])}});
     expect(result.applicationEvidence[0]).toMatchObject({ mutations: 0, listStoreReads: 0,
-      downstreamDiagnostics: expect.arrayContaining([expect.objectContaining({ stage: "EVIDENCE", reason: "EVIDENCE_QUOTE_NOT_FOUND",
-        evidenceFailure: expect.objectContaining({ field: "queryRange", path: ["query", "evidence"], referenceOrdinal: 0, reason: "QUOTE_NOT_FOUND", matchCount: 0 }) })]) });
+      downstreamDiagnostics: expect.arrayContaining([expect.objectContaining({ stage: "CANONICAL", reason: "SCHEMA_INVALID" })]) });
+    expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({inputRepresentation:"PROVIDER_WIRE",validation:{issues:[expect.objectContaining({path:["query","evidence","primaryEvidence"],code:"WIRE_SHAPE_INVALID"})]}});
     const durable = JSON.parse(readFileSync(join(directory, "application-evidence.json"), "utf8"));
     expect(durable).toEqual(result.applicationEvidence);
     expect(JSON.parse(readFileSync(join(directory, "report.json"), "utf8")).applicationEvidence).toEqual(durable);
@@ -249,11 +249,12 @@ it.each(["old-empty-array", "missing-primary", "null-primary", "four-slots", "on
     expect(result.applicationEvidence).toHaveLength(1);
     const observed = result.applicationEvidence[0];
     expect(observed).toMatchObject({ listStoreReads: 0, mutations: 0, queryRange: null });
-    const wireInvalid = ["old-empty-array", "missing-primary", "null-primary", "four-slots", "excess-extras"].includes(mode);
+    const wireInvalid = ["old-empty-array", "missing-primary", "null-primary", "four-slots", "excess-extras","fabricated","fabricated-extra"].includes(mode);
     expect(result.responses[0].status).toBe(wireInvalid ? "FAILURE" : "SUCCESS");
     if (wireInvalid) expect(result.responses[0].canonicalValidationDiagnostics?.inputRepresentation).toBe("PROVIDER_WIRE");
     if (["one", "two", "three", "unsupported-operand", "inactive-padding"].includes(mode)) expect(observed).toMatchObject({ status: "CLARIFICATION_REQUESTED", fullSchemaValid: true, pendingField: "queryRange", oracle: "PASS" });
-    if (["fabricated", "fabricated-extra", "unknown-ref"].includes(mode)) expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED" }));
+    if (["fabricated", "fabricated-extra"].includes(mode)) expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "CANONICAL", result: "REJECTED" }));
+    if (mode==="unknown-ref") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED" }));
     if (mode === "unsupported-operand") expect(observed.downstreamDiagnostics).toContainEqual(expect.objectContaining({ stage: "LIST_RANGE", result: "UNSUPPORTED" }));
     for (const file of ["responses.json", "application-evidence.json"]) {
       const persisted = readFileSync(join(directory, file), "utf8");
@@ -287,7 +288,7 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
         const input = JSON.parse(request.messages[1].content) as ContextInput;
         const wire = encodeFixtureV3(frozenContextProposal(input, "R01", 0)) as Record<string, unknown>;
         if (mode.startsWith("operation-")) {
-          const changed = encodeFixtureV3({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
+          const changed = encodeFixtureV3({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] },input) as { changes: Array<Record<string, unknown>> };
           wire.changes = changed.changes;
           if (mode === "operation-invalid") changed.changes[0].operation = sentinel; else delete changed.changes[0].operation;
         }
@@ -443,7 +444,7 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
       providerWireSchemaDigest: "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-operation-code-25" });
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-evidence-pointer-26" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");
@@ -466,7 +467,7 @@ it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases
           choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(frozenContextProposal(context, item.id, item.index))) } }],
           usage: { cost: .001, prompt_tokens: 100, completion_tokens: 100 } }) };
       } });
-    expect(result.status).toBe("PASS"); expect(result.score?.gate).toBe("PASS");
+    expect(result.status,JSON.stringify({last:result.applicationEvidence.at(-1),response:result.responses.at(-1)})).toBe("PASS"); expect(result.score?.gate).toBe("PASS");
     expect(result.score?.plannedTurns).toBe(profile === "PILOT" ? 84 : 158);
     expect(calls).toBe(profile === "PILOT" ? 76 : 144);
     expect(result.score?.actualDispatches).toBe(calls); expect(result.providerHttpRequests).toBe(calls);

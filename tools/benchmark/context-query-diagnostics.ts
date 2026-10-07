@@ -1,5 +1,7 @@
 import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
+import type {ContextInput} from "../../src/modules/conversation/context-contract/contracts";
+import {materializeProviderEvidence} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 
 const object = (v: unknown): Record<string, unknown> | null => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
 const type = (v: unknown) => v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
@@ -12,7 +14,7 @@ function query(v: unknown) {
 }
 /** Only closed finite control literals and JSON types leave this boundary.
  * Never retains evidence, titles, dates, notes, reply text or arbitrary keys. */
-export function captureQueryDiagnostics(body: string) {
+export function captureQueryDiagnostics(body: string,input?:ContextInput) {
   let wire: ReturnType<typeof query> | null = null;
   let canonicalPrevalidation: {intent:string;query:ReturnType<typeof query>} | null = null;
   if(Buffer.byteLength(body)>32768)return {wire,canonicalPrevalidation};
@@ -21,7 +23,7 @@ export function captureQueryDiagnostics(body: string) {
     if(typeof content!=="string"||Buffer.byteLength(content)>32768)return {wire,canonicalPrevalidation};
     const raw=JSON.parse(content),root=object(raw);
     wire=query(root?.query);
-    parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,decoded=>{
+    parseGoogleLiteEuContextSectionsV3(input?materializeProviderEvidence(raw,input,true):raw,CONTEXT_PROTOCOL_V3,undefined,undefined,decoded=>{
       const canonical=object(decoded);
       canonicalPrevalidation={intent:control(canonical?.intent,["CREATE_REMINDER","LIST_REMINDERS","CALENDAR_QUERY","HELP","UNSUPPORTED","ABANDON"]),query:query(canonical?.query)};
     });

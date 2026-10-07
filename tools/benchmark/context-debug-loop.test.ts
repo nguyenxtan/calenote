@@ -11,7 +11,7 @@ import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeS
 import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {parseGoogleLiteEuContextSectionsV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
-import {frozenContextProposal,encodeFixtureV3} from "./context-contract-fixtures";
+import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 it("string-selector diagnostic changes only wire enum representation without runtime repair",()=>{

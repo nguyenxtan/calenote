@@ -14,7 +14,7 @@ import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 
-async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
+async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const version = googleLiteEuContextWireSchema().version;
   if (response.oversized || response.body.length > config.maxResponseBytes || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
     return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null }, canonicalValidationDiagnostics: {
@@ -25,7 +25,7 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   let validation: CanonicalValidationDiagnostics | undefined, wireValidation: CanonicalValidationDiagnostics | undefined;
   const observe = (value: CanonicalValidationDiagnostics) => { validation = value; };
   const output = z.unknown().transform((raw, ctx): ContextGatewayInterpretation => {
-    const parsed = parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; });
+    const parsed = parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; },input);
     if (parsed.status === "PARSED") return parsed.value;
     ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
   });
@@ -336,7 +336,7 @@ export function createContextHttpTransport(apiKey: string,
     } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
   };
 }
-async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
+async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
   if (response.status !== 200 && response.failureDiagnostics) {
     let rawUsage: unknown;
@@ -349,7 +349,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
         ...(cost.success ? { reportedCostUsd: cost.data.cost } : {}), ...(tokens.success ? { promptTokens: tokens.data.prompt_tokens, completionTokens: tokens.data.completion_tokens } : {}) }, failureDiagnostics: response.failureDiagnostics };
   }
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes)
-    return decodeContextResponse(response, config, maximum);
+    return decodeContextResponse(response, config, maximum,input);
   let raw: unknown;
   try { raw = JSON.parse(response.body); } catch { return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" }; }
   const accounting = z.object({ usage: z.unknown().optional() }).safeParse(raw);
@@ -369,7 +369,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   if (!observed.success) return fail("SCHEMA_INVALID");
   const evidence = { model: observed.data.model, provider: observed.data.provider,
     location: observed.data.location ?? "UNEXPOSED" as const, generationId: observed.data.id ?? null };
-  const parsed = await decodeContextResponse(response, config, maximum);
+  const parsed = await decodeContextResponse(response, config, maximum,input);
   // Runtime retains independently valid core and quarantines bad guidance (T5).
   // Strict campaign full-schema admission is a separate evaluation gate.
   if (parsed.status !== "SUCCESS") return { ...fail(parsed.category), providerEvidence: evidence, ...(parsed.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : {}) };
@@ -438,7 +438,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
           try {
             return await Promise.race([
               Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => ({
-                ...await decodeObservableResponse(response, config), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
+                ...await decodeObservableResponse(response, config,input.data), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               })),
               new Promise<SemanticAttemptResult<ContextGatewayInterpretation>>(resolve => { timer = setTimeout(() => {
@@ -465,7 +465,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
       async dispatch() {
         if (dispatched) return { status: "FAILURE", category: "UNAVAILABLE" };
         dispatched = true;
-        return decodeContextResponse(fixture.response, config, maximumCostMicrounits);
+        return decodeContextResponse(fixture.response, config, maximumCostMicrounits,input.data);
       },
     };
   } };

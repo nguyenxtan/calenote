@@ -9,7 +9,7 @@ import { serializeLegacyV2ContextRequestReference as serializeContextRequest } f
 import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
 import { measureLocalTokens, measureLocalTokenArtifacts } from "./local-tokenizer";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
-import { frozenContextProposal, encodeFixtureV3 } from "./context-contract-fixtures";
+import { frozenContextProposal, encodeFixtureV3 } from "./context-pointer-fixtures";
 import { admitContextManifest, expandContextCampaign, type ContextManifest } from "./context-contract";
 import { ConversationInterpretationSchema as SelectedInterpretationSchema, InterpretationJsonSchema as SelectedInterpretationJsonSchema } from "../../src/modules/conversation/context-contract/contracts";
 import { serializeContextRequest as serializeSelectedRequest } from "../../src/modules/conversation/context-contract/wire";
@@ -25,7 +25,7 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("87ed8785a164c369b86f73d4cb2af8abc1eee3fa90f10106e36906da9408d822");
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("c090810946045290e7ff9f7544c2fb697bc79af36daa750fa7760e3a298c3b02");
 });
 
 function schemaMetrics(schema: unknown) {

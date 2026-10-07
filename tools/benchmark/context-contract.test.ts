@@ -4,8 +4,9 @@ import { spawnSync } from "node:child_process";
 import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type ContextManifest, type ContextObservation } from "./context-contract";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { frozenContextProposal, validateContextFixtureCoverage, encodeFixtureV3 } from "./context-contract-fixtures";
+import { frozenContextProposal, validateContextFixtureCoverage, encodeFixtureV3 } from "./context-pointer-fixtures";
 import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {materializeProviderEvidence} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 
 it("all_R01_R16_keep_original_words_and_oracles", () => {
@@ -19,7 +20,7 @@ it("all_R01_R16_keep_original_words_and_oracles", () => {
     changes: [{ field: "reminderTime", operation: "REPLACE" }], conversationDirective: null });
   expect(correction).not.toHaveProperty("dialogueAct");
   const encoded = encodeFixtureV3(correction);
-  expect(parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3), JSON.stringify(encoded)).toMatchObject({ status: "PARSED" });
+  expect(parseGoogleLiteEuContextSectionsV3(materializeProviderEvidence(encoded,input), CONTEXT_PROTOCOL_V3), JSON.stringify(encoded)).toMatchObject({ status: "PARSED" });
 });
 
 it.each(["directive", "reply"])("production observable service retains valid core and backend fallback for bad %s", async section => {

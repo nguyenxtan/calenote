@@ -23,7 +23,7 @@ import type { ReplyPlan, ReplyReceipt } from "../../src/modules/conversation/con
 import type { ContextObservationEvent } from "../../src/modules/conversation/context-contract/observability";
 import type { ContextObservation, PlannedContextCase } from "./context-contract";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
-import { encodeFixtureV3 } from "./context-contract-fixtures";
+import { encodeFixtureV3 } from "./context-pointer-fixtures";
 import type { CheckpointState } from "./context-seed";
 import { contextContractEncryptionIdentity } from "../../src/modules/conversation/context-contract/store";
 
@@ -83,7 +83,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           ? proposed.fixtureFault === "TIMEOUT" ? { status: 408, body: "" }
             : proposed.fixtureFault === "INVALID_JSON" ? { status: 200, body: "not-json" }
               : { status: 200, body: JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }) }
-          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(proposed)) }, finish_reason: "stop" }] }) };
+          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(proposed,input)) }, finish_reason: "stop" }] }) };
         const transport: ContextOfflineTransport = { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
           admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response }] };
         const offlinePrepared = createContextContractGateway(gatewayConfig, transport).prepare(tier, input);

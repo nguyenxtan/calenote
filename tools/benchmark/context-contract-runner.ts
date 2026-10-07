@@ -185,7 +185,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const actual = createContextContractGateway(config, async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "87ed8785a164c369b86f73d4cb2af8abc1eee3fa90f10106e36906da9408d822"
+    if (digest(request.messages[0].content) !== "c090810946045290e7ff9f7544c2fb697bc79af36daa750fa7760e3a298c3b02"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0"
       || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
@@ -194,7 +194,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
     const response = await input.transport(request, { ...options, signal: AbortSignal.any([options.signal, AbortSignal.timeout(Math.min(30000, remaining))]) });
     httpStatus = response.status;
-    if(selected)queryDiagnostics=captureQueryDiagnostics(response.body);
+    if(selected)queryDiagnostics=captureQueryDiagnostics(response.body,JSON.parse(request.messages[1].content));
     return response;
   },
     { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });

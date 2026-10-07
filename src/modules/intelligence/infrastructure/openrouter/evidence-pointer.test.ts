@@ -1,0 +1,114 @@
+// @vitest-environment node
+import {expect,it} from "vitest";
+import {materializeProviderEvidence,evidenceSourceCatalogue} from "./evidence-pointer";
+import {ContextInputSchema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
+import {buildContextInputV2} from "../../../conversation/context-contract/context";
+import {chat,message,observation,snapshot} from "../../../conversation/context-contract/context-test-fixtures";
+import {ContextSnapshotV2Schema} from "../../../conversation/context-contract/state";
+import {validateEvidenceV3} from "../../../conversation/context-contract/evidence";
+import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
+it("materializes only the exact unchanged selected USER source",()=>{
+ const raw={requestTarget:{evidence:carrier({kind:"USER_TURN",turn:2})},changes:[{value:"USER_TURN",evidence:carrier({kind:"USER_TURN",turn:0})}],query:null,uncertainties:[],replyProposal:{text:"untouched"}};
+ const expanded=materializeProviderEvidence(raw,input) as typeof raw;
+ expect(JSON.parse(expanded.requestTarget.evidence.primaryEvidence)).toEqual({kind:"USER_QUOTE",turn:2,quote:"8h sáng",occurrence:1});
+ expect(JSON.parse(expanded.changes[0].evidence.primaryEvidence)).toEqual({kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1});
+ expect(raw.requestTarget.evidence.primaryEvidence).toContain("USER_TURN");expect(expanded.replyProposal).toEqual(raw.replyProposal);
+});
+it.each([{kind:"USER_TURN",turn:1},{kind:"USER_TURN",turn:3},{kind:"USER_TURN",turn:-1},{kind:"USER_TURN",turn:"0"},{kind:"USER_TURN",turn:0,quote:"forged"},{kind:"USER_TURN",turn:0,occurrence:1}])("rejects invalid pointer %j without substitution",ref=>expect(()=>materializeProviderEvidence({operationCode:"3",query:{evidence:carrier(ref)}},input)).toThrow());
+it("pointer without validated dispatch context fails closed",()=>expect(()=>materializeProviderEvidence({operationCode:"3",query:{evidence:carrier({kind:"USER_TURN",turn:0})}})).toThrow());
+it.each(["","x".repeat(2001),"e\u0301","\ud800"])("does not clip or normalize invalid source",text=>expect(()=>materializeProviderEvidence({operationCode:"3",query:{evidence:carrier({kind:"USER_TURN",turn:0})}},{...input,turns:[{role:"USER",text}]})).toThrow());
+it("preserves legacy refs and fact pointers losslessly and expands alternatives",()=>{
+ const refs=[{kind:"CONTEXT_FACT",ref:"f1"},{kind:"USER_QUOTE",turn:0,quote:"gọi mẹ",occurrence:1}];
+ const raw={operationCode:"3",query:{evidence:{primaryEvidence:JSON.stringify(refs[0]),additionalEvidenceJson:JSON.stringify([refs[1],{kind:"USER_TURN",turn:2}])}},uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:[{kind:"USER_TURN",turn:0}]})]}]};
+ const out=materializeProviderEvidence(raw,input) as typeof raw;
+ expect(JSON.parse(out.query.evidence.primaryEvidence)).toEqual(refs[0]);expect(JSON.parse(out.query.evidence.additionalEvidenceJson)[0]).toEqual(refs[1]);
+ expect(JSON.parse(out.uncertainties[0].alternatives[0]).evidence[0].quote).toBe("nhắc gọi mẹ");
+});
+it.each(["Nhắc 2 ngày liên tiếp.","mang 2 cây bút","Đừng nhắc trước 2 ngày.","Ví dụ nhắc trước 2 ngày.","Nhắc trước 3 ngày.","Nhắc trước ngày thi; tôi đi công tác 2 ngày trước."])("pointer cannot authorize unsupported offset: %s",text=>{
+ const msg=message(text),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_TURN",turn:built.input.currentTurn})}},built.input) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
+ expect(validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"leadOffsetDays",operation:"SET",value:2,evidence}],query:null,uncertainties:[]}),built).status).toBe("REFUSED");
+});
+it("grounded offset still passes the unchanged validator",()=>{
+ const msg=message("Nhắc trước 2 ngày."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({operationCode:"3",query:{evidence:carrier({kind:"USER_TURN",turn:built.input.currentTurn})}},built.input) as {operationCode:"3",query:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.query.evidence.primaryEvidence)];
+ expect(validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"leadOffsetDays",operation:"SET",value:2,evidence}],query:null,uncertainties:[]}),built).status).toBe("VALID");
+});
+it("historical USER pointer cannot authorize a current request target",()=>{
+ const state=ContextSnapshotV2Schema.parse({...snapshot(),schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null});
+ const msg=message("nhắc mới"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(snapshot(),msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_TURN",turn:0})}},built.input) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
+ expect(validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[]}),built).status).toBe("REFUSED");
+});
+it("whole-source materialization does not bypass removed control-span protection",()=>{
+ const base=snapshot();base.controlRegistry=[{handle:"CN-AbC123",kind:"TOKEN",ownerId:"owner",chatIdentityId:"identity",chatId:"chat",decisionId:"d",contextRevision:1,draftRevision:1,expiresAt:"2026-09-28T03:10:00.000Z"}];
+ const state=ContextSnapshotV2Schema.parse({...base,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null});
+ const msg=message("đổi CN-AbC123 sang 9h"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(base,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_TURN",turn:built.input.currentTurn})}},built.input) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
+ expect(validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[]}),built)).toEqual({status:"REFUSED",reason:"EVIDENCE_REMOVED_SPAN"});
+});
+it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.","Không nhắc trước ngày thi.","Ví dụ nhắc trước ngày thi.","Nhắc trước ngày thi và tính cả ngày thi."])("source pointer cannot substantiate an unsupported relation: %s",text=>{
+ const msg=message(text),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_TURN",turn:built.input.currentTurn})}},built.input) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
+ const checked=validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[]}),built);
+ expect(checked.status).toBe("VALID");
+ if(checked.status==="VALID")expect(checked.patch.resolvedChanges).toEqual([]);
+});
+it("inactive query padding is never materialized into evidence authority",()=>{
+ const query={evidence:carrier({kind:"USER_TURN",turn:99})};
+ expect((materializeProviderEvidence({operationCode:"1",query},input) as {query:unknown}).query).toBe(query);
+});
+it.each(["primary","extra","alternative"])("current transport rejects model-authored quotes in %s",location=>{
+ const quote={kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1};
+ const raw=location==="alternative"?{uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:[quote]})]}]}:{operationCode:"3",query:{evidence:location==="primary"?carrier(quote):{primaryEvidence:JSON.stringify({kind:"USER_TURN",turn:0}),additionalEvidenceJson:JSON.stringify([quote])}}};
+ expect(()=>materializeProviderEvidence(raw,input,true)).toThrow("EVIDENCE_POINTER_INVALID");
+});
+it("backend catalogues exact segments without trimming and materializes only selected segment",()=>{
+ const selected={...input,turns:[{role:"USER" as const,text:"đổi sang 9h. [CONTROL] ghi chú"}],currentTurn:0};
+ expect(evidenceSourceCatalogue(selected)).toEqual([{kind:"USER_SEGMENT",turn:0,segment:0,text:"đổi sang 9h. "},{kind:"USER_SEGMENT",turn:0,segment:1,text:" ghi chú"}]);
+ const raw={requestTarget:{evidence:carrier({kind:"USER_SEGMENT",turn:0,segment:0})}};
+ const out=materializeProviderEvidence(raw,selected,true) as typeof raw;
+ expect(JSON.parse(out.requestTarget.evidence.primaryEvidence)).toEqual({kind:"USER_QUOTE",turn:0,quote:"đổi sang 9h. ",occurrence:1});
+ for(const segment of [-1,2,"0",null])expect(()=>materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_SEGMENT",turn:0,segment})}},selected,true)).toThrow();
+});
+it("an explicit segment beside a removed control still runs unchanged source-map validation",()=>{
+ const base=snapshot();base.controlRegistry=[{handle:"CN-AbC123",kind:"TOKEN",ownerId:"owner",chatIdentityId:"identity",chatId:"chat",decisionId:"d",contextRevision:1,draftRevision:1,expiresAt:"2026-09-28T03:10:00.000Z"}];
+ const state=ContextSnapshotV2Schema.parse({...base,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null});
+ const msg=message("đổi sang 9h. CN-AbC123"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(base,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_SEGMENT",turn:built.input.currentTurn,segment:0})}},built.input,true) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
+ expect(validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[]}),built).status).toBe("VALID");
+});
+it("repeated segments materialize the selected exact occurrence, never the first matching segment",()=>{
+ const selected={...input,turns:[{role:"USER" as const,text:"x[CONTROL]x"}],currentTurn:0};
+ const raw={requestTarget:{evidence:carrier({kind:"USER_SEGMENT",turn:0,segment:1})}};
+ const out=materializeProviderEvidence(raw,selected,true) as typeof raw;
+ expect(JSON.parse(out.requestTarget.evidence.primaryEvidence)).toEqual({kind:"USER_QUOTE",turn:0,quote:"x",occurrence:2});
+});
+it("catalogue excludes ASSISTANT sources and never renumbers empty segments",()=>{
+ const selected={...input,turns:[{role:"ASSISTANT" as const,text:"a[CONTROL]b"},{role:"USER" as const,text:"[CONTROL]x"}],currentTurn:1};
+ expect(evidenceSourceCatalogue(selected)).toEqual([{kind:"USER_SEGMENT",turn:1,segment:1,text:"x"}]);
+ expect(()=>materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_SEGMENT",turn:1,segment:0})}},selected,true)).toThrow();
+});
+it("fixture conversion preserves the second identical quote's source segment",()=>{
+ const selected={...input,turns:[{role:"USER" as const,text:"x[CONTROL]x"}],currentTurn:0};
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"x",occurrence:2}];
+ const canonical={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null};
+ const wire=encodeFixtureV3(canonical,selected) as {requestTarget:{evidence:{primaryEvidence:string}}};
+ expect(JSON.parse(wire.requestTarget.evidence.primaryEvidence)).toEqual({kind:"USER_SEGMENT",turn:0,segment:1});
+ const expanded=materializeProviderEvidence(wire,selected,true) as typeof wire;
+ expect(JSON.parse(expanded.requestTarget.evidence.primaryEvidence)).toEqual(evidence[0]);
+});

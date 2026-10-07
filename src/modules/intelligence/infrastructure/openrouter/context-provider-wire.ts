@@ -5,6 +5,8 @@ import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJs
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
+import type {ContextInput} from "../../../conversation/context-contract/contracts";
+import {materializeProviderEvidence,EvidencePointerFailure} from "./evidence-pointer";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -509,10 +511,10 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
 }
-export function decodeGoogleLiteEuContextTransportV3(raw:unknown,selected:ContextProtocolV3,observeInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1],observeWireInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1]) {
-  return decodeContextSectionsV3(raw,selected,true,observeInvalid,observeWireInvalid);
+export function decodeGoogleLiteEuContextTransportV3(raw:unknown,selected:ContextProtocolV3,observeInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1],observeWireInvalid?:Parameters<typeof parseInterpretationSectionsV3>[1],input?:ContextInput) {
+  return decodeContextSectionsV3(raw,selected,true,observeInvalid,observeWireInvalid,undefined,input);
 }
-function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, staged:boolean, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): {status:"PARSED";value:ContextGatewayInterpretation}|{status:"REFUSED";reason:"ENVELOPE_INVALID"|"SEMANTIC_PATCH_INVALID"} {
+function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, staged:boolean, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void,input?:ContextInput): {status:"PARSED";value:ContextGatewayInterpretation}|{status:"REFUSED";reason:"ENVELOPE_INVALID"|"SEMANTIC_PATCH_INVALID"} {
   if (!isContextProtocolV3(selected)) return { status: "REFUSED", reason: "ENVELOPE_INVALID" };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     observeWireInvalid?.(projectWireValidation(raw, [], "object", undefined, "calenote-context-3"));
@@ -521,7 +523,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const object = dateJsonOperands(operationValues(raw as Record<string,unknown>,"decode"),"decode");
+    const object = dateJsonOperands(operationValues(materializeProviderEvidence(raw,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;
@@ -571,7 +573,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
-    observeWireInvalid?.(error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3"));
+    observeWireInvalid?.(error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3"));
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }

@@ -14,7 +14,7 @@ import type { ReadyReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
 import { CONTEXT_PROTOCOL_V3 } from "./protocol";
 import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
-import { encodeFixtureV3 } from "../../../../tools/benchmark/context-contract-fixtures";
+import { encodeFixtureV3 } from "../../../../tools/benchmark/context-pointer-fixtures";
 const fixtures: Awaited<ReturnType<typeof fixture>>[] = [];
 afterEach(() => fixtures.splice(0).forEach(f => f.close()));
 export async function setup() { const f = await fixture(); fixtures.push(f); return f; }
@@ -32,7 +32,7 @@ export function scriptedGateway(proposals: Proposal[], inputs: ContextInput[], t
     const request = { model: gatewayConfig.primary.model, ...serializeContextRequest(input), provider: {
       only: [gatewayConfig.primary.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } };
     return createContextContractGateway(gatewayConfig, { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
-      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(transformWire?transformWire(encodeFixtureV3(value)):encodeFixtureV3(value)) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
+      admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(transformWire?transformWire(encodeFixtureV3(value,input)):encodeFixtureV3(value,input)) }, finish_reason: "stop" }] }) } }] }).prepare(tier, input);
   } };
 }
 export function proposal(values: Record<string, unknown>, target: "NEW" | "CURRENT" = "NEW", guidance: unknown = null, reply: unknown = null, replacements: string[] = []): Proposal {

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { candidateValidationProof, createCandidateValidationLoader, inspectCandidateValidation, runCandidateValidation, validationExecutionKey, loadTrustedCandidateValidation, appendCandidateValidationRecord } from "./context-contract-candidate-validation";
 import { appendCampaignEvent, reserveCampaignCall, markCampaignDispatched, readCampaignLedger, auditCampaignAccountRoot } from "./context-contract-live";
-import { encodeFixtureV3, frozenContextProposal } from "./context-contract-fixtures";
+import { encodeFixtureV3, frozenContextProposal } from "./context-pointer-fixtures";
 import type { ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import * as runner from "./context-contract-runner";
 import {inspectConfirmedCampaignCost} from "./context-confirmed-cost";

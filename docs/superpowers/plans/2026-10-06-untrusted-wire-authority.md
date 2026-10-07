@@ -630,3 +630,15 @@ Change the actual transport to twelve exact finite string codes, preserving fixe
 - Wire v25 SHA256 `c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0`, 9314 bytes; prompt SHA256 `87ed8785a164c369b86f73d4cb2af8abc1eee3fa90f10106e36906da9408d822`.
 - [x] Full serial offline verification exit zero: 172 files/8321 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS, lint zero errors/168 existing warnings, diff PASS.
 - [ ] Local commit, material-wire canary, then fresh Formal Pilot only if accepted. No Full/release.
+
+### V26 exact evidence-source pointers
+
+V25 candidate `ce5a963e5f67aded81dbc8f182591106561e0f85` passed its canary, then Formal Pilot stopped after six provider calls at R03 turn zero. HTTP 200, generation `gen-1791319285-ID70z9PzPVr38nYSpWNE`, cost 0.0009875 USD settled KNOWN. Wire/canonical parsed, but eventRelation source quote was not found; zero reads/mutations. Historical failure remains immutable. Exact model reasoning is not inferred.
+
+Owner approved a narrow pointer-only evidence amendment. Current transport accepts USER_TURN or backend-enumerated USER_SEGMENT and existing CONTEXT_FACT references, materializes exact immutable source, then runs unchanged canonical/evidence/source-map/semantic validators. Model-authored USER_QUOTE rejects; context-free historical parser compatibility remains separate. No fuzzy matching, normalization, padding, evidence repair or expanded semantic authority. Segment catalogue was required by unchanged D06 correction-beside-control regression. Fixture adapter is separate from byte-identical historical fixtures, preserving trusted seed hashes.
+
+- [x] TDD: materializer, immutable dispatch capture, strict quote rejection, control-adjacent segments and exact duplicate occurrence. Review provenance finding fixed RED/GREEN; current pointer tests 35 PASS.
+- [x] Full final offline verification exit zero: 173 files/8357 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS. Fake Pilot/Full preserve original oracles; no live credit.
+- [x] Independent whole-delta and migration review C0/I0/M0.
+- Provider schema digest unchanged `c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0`; wire version evidence-pointer-26. Prompt digest `c090810946045290e7ff9f7544c2fb697bc79af36daa750fa7760e3a298c3b02`.
+- [ ] Commit local, read-only derived-budget/identity preflight, one canary, then Fresh Formal Pilot under existing total $5 conservative debug authority. No Full/release.

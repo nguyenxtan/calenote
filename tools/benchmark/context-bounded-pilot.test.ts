@@ -12,7 +12,7 @@ import * as recordModule from "./context-contract-candidate-validation";
 import {inspectConfirmedCampaignCost} from "./context-confirmed-cost";
 import {contextCampaignMaximumReservation} from "./context-contract-runner";
 import {deriveBoundedPilotManifest,createBoundedPilotLoader,runBoundedPilot,inspectBoundedPilot} from "./context-bounded-pilot";
-import {frozenContextProposal,encodeFixtureV3} from "./context-contract-fixtures";
+import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
 import type {ContextInput} from "../../src/modules/conversation/context-contract/contracts";
 import type {ConversationInterpretation} from "../../src/modules/conversation/context-contract/contracts";
 import type {ContextAction,PlannedContextCase} from "./context-contract";

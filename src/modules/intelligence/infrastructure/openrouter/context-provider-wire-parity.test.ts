@@ -10,6 +10,7 @@ import { createContextContractGateway } from "./semantic-gateway";
 import { buildContextInputV2 } from "../../../conversation/context-contract/context";
 import { chat, message, observation } from "../../../conversation/context-contract/context-test-fixtures";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
+import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 
 it("null advice is full-valid through strict canonical, advertised wire and both selected gateway paths", async () => {
   const text = "nhắc đi thi", msg = message(text);
@@ -23,7 +24,7 @@ it("null advice is full-valid through strict canonical, advertised wire and both
   expect(parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3)).toMatchObject({ status: "PARSED", value: { fullSchemaValid: true, directive: { status: "VALID", value: null }, reply: { status: "VALID", value: null } } });
   const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
     primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
-  const response = { status: 200, body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encoded) } }], usage: { cost: .0004, prompt_tokens: 2200, completion_tokens: 500 } }) };
+  const response = { status: 200, body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(encodeFixtureV3(raw,built.input)) } }], usage: { cost: .0004, prompt_tokens: 2200, completion_tokens: 500 } }) };
   const request = { model: config.primary.model, ...serializeContextRequest(built.input), provider: { only: [config.primary.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } };
   const offline = createContextContractGateway(config, { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request), response, admission: { fullInputTokens: 2200, billableOverheadMicrounits: 0 } }] });
   const observable = createContextContractGateway(config, async () => response, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
