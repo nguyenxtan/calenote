@@ -77,6 +77,7 @@ export interface CanonicalResponseDiagnostics {
   providerWireSchemaVersion: string; payloadByteCount: number; payloadSha256: string | null;
   inputRepresentation?: "CANONICAL" | "PROVIDER_WIRE" | "PROVIDER_ENVELOPE"; validation?: CanonicalValidationDiagnostics;
   wireValidation?: CanonicalValidationDiagnostics;
+  providerEnvelope?: import("./infrastructure/openrouter/envelope-diagnostics").ProviderEnvelopeDiagnostics;
   payloadByteCountIsLowerBound?: boolean;
 }
 export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {

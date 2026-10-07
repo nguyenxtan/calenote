@@ -13,6 +13,7 @@ import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, decod
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
+import { projectProviderEnvelope } from "./envelope-diagnostics";
 
 async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const version = googleLiteEuContextWireSchema().version;
@@ -40,7 +41,7 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
         return { ...result, canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", schemaVersion: "calenote-context-3",
           providerWireSchemaVersion: version, inputRepresentation: "PROVIDER_ENVELOPE", payloadByteCount: bytes.byteLength,
           payloadSha256: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join(""),
-          validation: projectCanonicalValidation(raw, envelope.error.issues, "calenote-context-3") } };
+          validation: projectCanonicalValidation(raw, envelope.error.issues, "calenote-context-3"), providerEnvelope: projectProviderEnvelope(raw) } };
       }
     }
     return result;

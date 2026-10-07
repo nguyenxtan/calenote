@@ -71,6 +71,13 @@ Freshefd30de:15HTTP/dispatches. R01–R04 and R05turn0(offset)/turn1(cancel) PAS
 Date transport delta acceptance: focused323PASS/2existing skips; independent C0/I0/M0. Fresh fixed-source full176files/8447PASS/2skips, docs/typecheck/lint/build/types/dry-run exit0, lint0errors168existingwarnings, diffPASS. Runtime acceptance predicates unchanged; only safe diagnostic family and model delivery instruction changed. Commit and fresh actual Pilot next.
 # Notification-date ownership follow-up
 
+## Approved provider-envelope diagnostics extension
+
+- Historical d6729bf HTTP body is not retained; exact invalid finish literal cannot be reconstructed from the old structural issue. Read-only generation metadata returns HTTP 200, finish_reason=null, native_finish_reason=null, prompt tokens 9385, completion tokens 6, cost 0. These metadata values are not substituted for the original envelope (whose issue had string type).
+- Trace: transport returns bounded original UTF-8 JSON; observable adapter checks route/accounting then decodeContextResponse applies the unchanged envelopeSchema finish_reason=stop requirement. The old telemetry copied path/type but lost the actual control reason. No response normalization was found on this path.
+- Add bounded diagnostics only at rejected-envelope boundary: exact finite control literals, unknown string length/digest, choices type/count, content type/byte count, numeric finite error code/presence. No content, error prose, IDs, raw keys or headers. Rejection, semantic/canonical/evidence/oracle contracts remain unchanged.
+- RED gateway integration tests must fail on absent telemetry, then GREEN with sensitive/oversized protection. Review C0/I0 and stable-source full check precede commit and a controlled fresh execution. No blind retry of the terminal historical run.
+
 ## Latest terminal provider-envelope gate
 
 - Candidate/harness `d6729bffbaf272a3ba00baa96dc8b15e3a46ceef`: Fresh Pilot made exactly one request, then terminal-stopped at R01 TURN 0. HTTP 200 / generation `gen-1791365156-w9SMAtZ4fEV7VwoL0Chx`; provider reported cost USD 0.

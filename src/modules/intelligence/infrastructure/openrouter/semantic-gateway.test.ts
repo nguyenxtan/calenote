@@ -24,6 +24,40 @@ const success = { status: 200, body: JSON.stringify({ choices: [{ message: { con
 
 afterEach(() => vi.useRealTimers());
 
+it.each(["error", "length", "content_filter", "tool_calls", null, 17, "SYNTHETIC_SECRET_finish"]) (
+  "captures exact finite finish control without accepting or leaking content (%s)", async finish => {
+    const privateText = "SYNTHETIC_PRIVATE_MODEL_AND_ERROR";
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", id: "gen-synthetic-envelope", choices: [{ finish_reason: finish, native_finish_reason: "SAFETY", message: { content: privateText, error: { code: 503, message: privateText } } }], error: { code: 503, message: privateText }, usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    let calls = 0;
+    const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID", canonicalValidationDiagnostics: {
+      state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { version: "provider-envelope-1", choicesType: "array", choicesCount: 1, errorPresent: true,
+        errorCode: 503, firstChoice: { finishReason: { type: finish === null ? "null" : typeof finish }, nativeFinishReason: { token: "SAFETY" }, contentType: "string", contentByteCount: Buffer.byteLength(privateText), messageErrorPresent: true } }
+    } });
+    if (["error", "length", "content_filter", "tool_calls"].includes(String(finish))) {
+      expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.finishReason.token).toBe(finish);
+    } else expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.finishReason.token).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(privateText);
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET_finish");
+    expect(calls).toBe(1);
+    await attempt.dispatch(); expect(calls).toBe(1);
+  }
+);
+
+it("oversized rejected envelope never runs content diagnostics", async () => {
+  const body = JSON.stringify({ choices: [{ finish_reason: "SYNTHETIC_PRIVATE_FINISH", message: { content: "SYNTHETIC_PRIVATE_CONTENT".repeat(2000) } }] });
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  const attempt = gateways.createContextContractGateway(contextConfig, async () => ({ status: 200, body }), admission).prepare("PRIMARY", contextInput);
+  if (attempt.status !== "READY") throw Error("not ready");
+  const result = await attempt.dispatch();
+  expect(result.status).toBe("FAILURE");
+  expect(result.canonicalValidationDiagnostics?.providerEnvelope).toBeUndefined();
+  expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE");
+});
+
 const contextInput = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2",
   reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" },
   turns: [{ role: "USER", text: "nhắc gọi mẹ" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [],
