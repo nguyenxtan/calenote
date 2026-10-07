@@ -47,11 +47,19 @@ Files: pointer tests, canonical execution ledger documentation. Runtime validato
 - [x] Exercise pointer-materialized evidence through existing validator regression fixtures: target currentness, historical role/scope, source-map gap, negation, unrelated number, count versus offset, conflicting clauses. Duplicate-source fixture conversion has a RED/GREEN regression preserving the selected second occurrence.
 - [x] Full offline command: `pnpm test --maxWorkers=1 && node --test docs/architecture/current-state.test.mjs && pnpm typecheck && pnpm lint && pnpm build && pnpm exec wrangler types --check && pnpm exec wrangler deploy --dry-run`, using existing offline sandbox. Final exit zero: 173 files/8357 PASS/2 existing skips; docs/typecheck/build/types/dry-run PASS; lint zero errors/168 existing warnings.
 - [x] Run `git diff --check`; independent whole-delta review C0/I0; fix findings with TDD. Final review C0/I0/M0, including transport migration and synthetic-clone dependency fix.
-- [ ] Selectively commit local, then continue bounded live execution.
+- [x] Selectively commit local: `97f39c016b2795e15bce742b7c7cb71c2adfd559`; bounded live execution followed.
 
 ### P4 — Bounded live continuation
 
-- [ ] Derive current conservative accounting and prove candidate/harness identity using existing debug launcher.
-- [ ] Run one CANONICAL_WIRE admission canary for material wire change, then new-candidate FORMAL_PILOT only after admission PASS.
+- [x] Derive current conservative accounting and prove candidate/harness identity using existing debug launcher.
+- [x] Run one CANONICAL_WIRE admission canary for material wire change, then new-candidate FORMAL_PILOT only after admission PASS. Canary passed; Formal Pilot reached R04, then equivalent clock representation failed the unchanged oracle. Two reviewed prompt-only instruction-delivery followups were committed and independently tested.
 - [ ] Settle each request; preserve failed historical runs. Continue same-scope offline fixes and reviewed new candidates under owner $5 grant until Pilot PASS or genuine authorized stop gate.
 - [ ] Never run Full or release pipeline.
+
+## Genuine architectural boundary
+
+Latest evaluated candidate `206c8f19dfad6268c34a6eda56bca89df4d4763d` Formal Pilot stopped after three provider requests at R02 turn zero. HTTP 200, generation `gen-1791341208-3Ictwmm09gbLkqbIvjYP`; cost 0.0009227 USD KNOWN. Transport, canonical, evidence and application clarification passed. The model omitted the explicitly supplied location; frozen oracle failed `fields.location` (expected string digest, actual null). Zero reads/mutations. No retry or repair call.
+
+Offline source inspection confirms evidence validation traverses proposed changes only; exact source materialization does not fabricate an omitted field. Independent boundary review confirms robust semantic-completeness enforcement requires a separate amendment beyond this narrow evidence contract. Automatically extracting/filling location would add semantic authority; requiring an optional location always would be incorrect; oracle relaxation/repair inference are prohibited. Existing prompt already requests every explicit detail, so another wording experiment is not a completeness guarantee.
+
+Current trusted accounting: cap 5000000 microunits; confirmed retained 133639; UNKNOWN exposure 2109440 unchanged; conservative retained 2243079; remaining 2756921; hash chain PASS. Latest execution terminal, Pilot FAIL, Full not run. No push/merge/remote migration/deploy. Next gate: OWNER_DECISION_ON_SEMANTIC_COMPLETENESS_AMENDMENT.

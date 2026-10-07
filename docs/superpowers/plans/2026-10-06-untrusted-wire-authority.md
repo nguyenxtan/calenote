@@ -666,3 +666,14 @@ Deliver the existing action-phrase convention earlier, before wire serialization
 - [x] Full offline exit zero: 173 files/8359 PASS/2 existing skips; docs/typecheck/lint/build/types/dry-run PASS; lint zero errors/168 existing warnings; diff PASS.
 - Prompt digest `784a41f612c918f53c2e3fb507cfe5f4532fc5f8c7b26fb075831fd93e17bcc2`; wire/canonical/evidence unchanged.
 - [ ] Commit local and fresh Formal Pilot under existing $5 conservative debug authority. No Full/release.
+
+### Semantic-completeness boundary after accepted pointer transport
+
+Title-delivery candidate `206c8f19dfad6268c34a6eda56bca89df4d4763d` committed clean and passed preflight. Fresh Formal Pilot terminally failed after three calls at R02 turn zero: HTTP 200 generation `gen-1791341208-3Ictwmm09gbLkqbIvjYP`, cost 0.0009227 USD settled KNOWN. Pointer/wire/canonical/evidence/application clarification passed; only `fields.location` was omitted (expected string digest, actual null). Zero reads/mutations. Historical failures are not rewritten.
+
+Offline materializer probe and actual source inspection prove pointer expansion operates on existing carriers, never synthesizes missing semantic changes. Independent boundary review found no safe deterministic fix within evidence-pointer authority: omission/completeness enforcement is a separate semantic architectural amendment. Owner's explicit outside-evidence architecture stop gate applies. No new implementation or provider call was made after this finding.
+
+- Evidence-pointer amendment local/admission PASS, latest runtime full 8359 PASS/2 existing skips and review C0/I0.
+- Pilot remains FAIL; no Full or release. Total calls in this amendment continuation: 22 (one canary plus 10/8/3 terminal Pilot requests), all settled KNOWN; UNKNOWN unchanged.
+- Trusted cap 5000000 microunits, confirmed retained 133639, UNKNOWN exposure 2109440, conservative remaining 2756921; ledger hash chain PASS.
+- NEXT_GATE = OWNER_DECISION_ON_SEMANTIC_COMPLETENESS_AMENDMENT.
