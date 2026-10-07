@@ -71,6 +71,12 @@ Freshefd30de:15HTTP/dispatches. R01–R04 and R05turn0(offset)/turn1(cancel) PAS
 Date transport delta acceptance: focused323PASS/2existing skips; independent C0/I0/M0. Fresh fixed-source full176files/8447PASS/2skips, docs/typecheck/lint/build/types/dry-run exit0, lint0errors168existingwarnings, diffPASS. Runtime acceptance predicates unchanged; only safe diagnostic family and model delivery instruction changed. Commit and fresh actual Pilot next.
 # Notification-date ownership follow-up
 
+## Explicit single cadence consistency
+
+- Actual `13ce8ac1302b9531c35152db0110f170d5f3b99e` stopped at R04 TURN 1 after nine requests: grounded relation/offset passed, but explicit single cadence was omitted. No historical result changed.
+- Removed two inconsistent unconditional cadence-omission instructions; omission now applies only to unstated cadence. No backend fill, validator/oracle/schema change. RED delivery regression; focused 101 PASS / 2 existing skips.
+- Review identified the second contradictory instruction, fixed and re-reviewed C0/I0/M0. Interrupted preliminary full runs are not acceptance evidence. Final stable-source offline full and chained checks exited 0.
+
 ## Continuation ownership follow-up
 
 - Fresh `ed21396e3ff2b1c8ddb4b2e2ec2e4fe324647d9a` Pilot stopped after 17 requests at R06 TURN 1: negated abandonment retained the draft but proposed a new clock despite no new supplied clock. Historical output and settled accounting remain immutable.

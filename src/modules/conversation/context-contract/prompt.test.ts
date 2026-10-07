@@ -71,7 +71,7 @@ it("a preceding distance cannot supply an unstated consecutive cadence", () => {
 
 it("final ownership check separates fresh distance requests from retained series answers", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Final numeric ownership decision: first check the actual activeRequest, not an example or a previous request.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('For NEW with no retained DAILY/count, a task plus nhắc tôi trước N ngày means changes for eventRelation="BEFORE_EVENT" and leadOffsetDays=N; omit frequency and occurrenceCount entirely.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('For NEW with no retained DAILY/count, a task plus nhắc tôi trước N ngày means changes for eventRelation="BEFORE_EVENT" and leadOffsetDays=N; omit frequency and occurrenceCount only when cadence is unstated, preserving independently explicit single or repeated cadence.');
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not apply the CURRENT series rule to NEW: absence of repeated/consecutive notification meaning cannot be replaced with DAILY/countN.");
 });
 
@@ -209,4 +209,10 @@ it("keeps an already concise explicit task phrase without stylistic expansion", 
 it("continuation-only turns do not manufacture missing operands", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A continuation-only or negated-abandonment turn without new task operands must emit no semantic changes or alternatives; KEEP existing slots and ask for the still-missing field.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Never manufacture an AMBIGUOUS clock object merely because reminderTime is missing.");
+});
+
+it("numeric ownership catalogue preserves explicitly single cadence", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("omit frequency and occurrenceCount entirely");
+  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("omit frequency/count unless the USER independently supplied repeated/consecutive cadence");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single occurrence independently grounds frequency ONCE, including when a clock is still missing; do not omit that supplied cadence under the distance-only rule.");
 });
