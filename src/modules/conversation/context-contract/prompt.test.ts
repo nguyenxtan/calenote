@@ -195,3 +195,8 @@ it("final date transport check excludes clock/text shorthand from encoded date o
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Final date transport check: eventDate, reminderDate and endDate SET/REPLACE values must encode a complete canonical DateOperand object as a JSON string.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Relative tomorrow uses kind RELATIVE_DAY with offsetDays1, never the raw words mai/tomorrow, an ISO date string, or a JSON-encoded bare string.");
 });
+it("notification-owned date does not become an event date by field-order default", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("A date modifying the instruction to remind belongs to reminderDate, not eventDate; an explicit event predicate owns its eventDate separately.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("ngày kia 6h nhắc tưới cây gives reminderDate RELATIVE_DAY offsetDays2 and reminderTime06:00 H24; eventDate/eventTime remain absent.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not choose eventDate merely because it is the first date field in the schema.");
+});
