@@ -38,10 +38,16 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
       if (!envelope.success) {
         const bytes = new TextEncoder().encode(response.body);
         const hash = await crypto.subtle.digest("SHA-256", bytes);
-        return { ...result, canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", schemaVersion: "calenote-context-3",
+        const providerEnvelope = projectProviderEnvelope(raw);
+        // An explicit provider error is still a hard rejection, not malformed
+        // semantic output. Preserve usage and bounded diagnostics; never decode
+        // or repair its content or grant another dispatch.
+        const category = providerEnvelope.choicesCount === 1 && providerEnvelope.firstChoice?.finishReason.token === "error"
+          ? "PROVIDER_FAILURE" as const : result.category;
+        return { ...result, category, canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", schemaVersion: "calenote-context-3",
           providerWireSchemaVersion: version, inputRepresentation: "PROVIDER_ENVELOPE", payloadByteCount: bytes.byteLength,
           payloadSha256: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join(""),
-          validation: projectCanonicalValidation(raw, envelope.error.issues, "calenote-context-3"), providerEnvelope: projectProviderEnvelope(raw) } };
+          validation: projectCanonicalValidation(raw, envelope.error.issues, "calenote-context-3"), providerEnvelope } };
       }
     }
     return result;

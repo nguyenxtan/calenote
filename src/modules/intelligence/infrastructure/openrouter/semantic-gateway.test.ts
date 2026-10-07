@@ -33,7 +33,7 @@ it.each(["error", "length", "content_filter", "tool_calls", null, 17, "SYNTHETIC
     const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; }, admission).prepare("PRIMARY", contextInput);
     if (attempt.status !== "READY") throw Error("not ready");
     const result = await attempt.dispatch();
-    expect(result).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID", canonicalValidationDiagnostics: {
+    expect(result).toMatchObject({ status: "FAILURE", category: finish === "error" ? "PROVIDER_FAILURE" : "SCHEMA_INVALID", canonicalValidationDiagnostics: {
       state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { version: "provider-envelope-1", choicesType: "array", choicesCount: 1, errorPresent: true,
         errorCode: 503, firstChoice: { finishReason: { type: finish === null ? "null" : typeof finish }, nativeFinishReason: { token: "SAFETY" }, contentType: "string", contentByteCount: Buffer.byteLength(privateText), messageErrorPresent: true } }
     } });
@@ -96,6 +96,19 @@ describe("observable successor route", () => {
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
     expect(captured).toHaveLength(1);
   });
+  it.each([0, .001])("HTTP200 error finish remains a provider failure with known cost %s and no second dispatch", async cost => {
+    let calls = 0;
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", id: "gen-local-provider-error",
+      usage: { cost, prompt_tokens: 100, completion_tokens: 0 }, choices: [{ message: { content: "SYNTHETIC_PRIVATE_CONTENT" }, finish_reason: "error" }] });
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { reportedCostUsd: cost },
+      canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { firstChoice: { finishReason: { token: "error" } } } } });
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE_CONTENT");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(calls).toBe(1);
+  });
   it("materializes source pointers from the validated dispatch snapshot, not mutable caller input",async()=>{
     const original=structuredClone(contextInput);
     const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},changes:Array<{evidence:{primaryEvidence:string}}>};
@@ -117,7 +130,7 @@ describe("observable successor route", () => {
     const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",contextInput);
     if(attempt.status!=="READY")throw Error("not ready");
     const result=await attempt.dispatch();
-    expect(result).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",usage:{costMicrounits:0},canonicalValidationDiagnostics:{state:"PROVIDER_ENVELOPE_FAILED",inputRepresentation:"PROVIDER_ENVELOPE",payloadByteCount:Buffer.byteLength(body),validation:{issues:[expect.objectContaining({path,code,actualType})]}}});
+    expect(result).toMatchObject({status:"FAILURE",category:finish === "error" ? "PROVIDER_FAILURE" : "SCHEMA_INVALID",usage:{costMicrounits:0},canonicalValidationDiagnostics:{state:"PROVIDER_ENVELOPE_FAILED",inputRepresentation:"PROVIDER_ENVELOPE",payloadByteCount:Buffer.byteLength(body),validation:{issues:[expect.objectContaining({path,code,actualType})]}}});
     expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE_CONTENT");
     expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
   });
