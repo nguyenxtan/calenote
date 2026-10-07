@@ -15,6 +15,14 @@
 - [x] Stable offline full: 180 files / 8570 PASS / 2 existing skips; documentation checks, typecheck, build and diff check PASS; lint 0 errors / 168 existing warnings. Log `cadence-full-accepted.log`. Selective local commit is the next identity boundary; trusted current accounting/candidate/schema preflight follows without changing historical records.
 - [ ] Fresh Formal Pilot through existing conservative $5 authority; settle every attempt; no retry/fallback/history rewrite/Full/push/merge/deploy. Continue scoped defects only after evidence-backed reviewed local fixes.
 
+### Cadence/count candidate live evidence and scope boundary
+
+Implementation candidate/harness `055410533fa4709a16fcc43a9575d41e9f7c21ac`: clean local commit, current identity/accounting preflight PASS, credential metadata PASS. Fresh Formal Pilot terminal FAIL after 4 provider attempts / 4 application dispatches. R01 turns 0/1 and R02 turn 0 PASS. R02 turn 1: HTTP 200 / canonical PASS, model proposed CURRENT eventRelation plus leadOffsetDays 2; exact USER source identity passed but the existing contextual field/value lead guard rejected copied retained count. Failure stage EVIDENCE_BINDING, reason EVIDENCE_INVALID; zero failing-turn LIST reads or canonical reminder mutations. Generation `gen-1791385232-MfSUPVkLxlfo5fIQ1oN9`, reported request cost $0.0011239. This run never reached R05; local R05 ownership protection is not live Pilot acceptance.
+
+All four requests settled with reported known costs, run exact total $0.004364. Cumulative exact recorded confirmed cost $0.31780296; conservative confirmed ledger ceiling $0.317979, unchanged UNKNOWN exposure $2.109440, remaining conservative allowance $2.572581 under existing $5 cap. Ledger hash chain PASS; no history/holds reset or release. Artifact `live-0554105.log`; immutable execution `debug-91ae565d70cc72a0866729ab9cbce556e1d4d1fd`.
+
+Independent read-only failure review found no evidence-backed further cadence/count correction. The prompt and numeric catalogue already specify this retained-series branch, and the guard correctly refuses it. Generic proposal generation permits a combination subsequently rejected by semantic ownership. Reliable progression now needs separately scoped generation-time semantic constraints or demonstrated model qualification; this amendment does not authorize speculative repeated prompt edits, blind replay, partial repair, weaker oracle, or a model/provider change. Stop at the architecture boundary; Pilot remains FAIL, not PASS. No Full/push/merge/migration/deployment.
+
 ## Clock representation consistency follow-up
 
 ### Actual live result and source-presence follow-up
