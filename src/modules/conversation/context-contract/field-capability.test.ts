@@ -115,7 +115,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-3",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-4",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
   expect(fields(context)).not.toContain("title");
 });
@@ -149,7 +149,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-3", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-4", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -164,6 +164,36 @@ it.each(["Đừng bỏ.", "Tiếp tục.", "Nhắc trước 2 ngày.", "Nhắc b
 });
 it.each(["8h.", "08:00.", "nửa đêm", "noon", "midnight"])("clock source presence opens an upper bound, never a value: %s", text => {
   expect(catalogue(input(text)).allowedClockFields).toEqual(["eventTime", "reminderTime"]);
+});
+it.each([["8h.",8,0],["08:00.",8,0],["20:30",20,30],["12h trưa",12,0]] as const)("bound reminder clock answer closes eventTime in the actual request schema: %s",(text,hour,minute)=>{
+ const context=input(text),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.turns=[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi."},{role:"ASSISTANT",text:"Bạn muốn nhắc lúc mấy giờ?"},{role:"USER",text:"Nhắc trước 2 ngày."},{role:"ASSISTANT",text:"Bạn muốn nhắc lúc mấy giờ?"},{role:"USER",text}];context.currentTurn=4;context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={text:"Bạn muốn nhắc lúc mấy giờ?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
+ const evidence=[{kind:"USER_QUOTE" as const,turn:4,quote:text,occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"eventTime",operation:"SET",value:{hour,minute,qualifier:"H24"},evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const check=validator(context);expect(check.safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
+ expect(check.safeParse(encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({...raw,changes:[{...raw.changes[0],field:"reminderTime"}]}))).success).toBe(true);
+ expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+});
+it.each([
+ "Tôi thi lúc 9h.","Ngày 20/12 họp lúc 9h.","Đổi sang 9h.","Đổi giờ thi sang 9h.",
+ "8h giúp tôi.","8h; gọi mẹ.","8h và 9h.","\"8h.\"","8h [CONTROL]","8h?","noon","nửa đêm","24:99",
+ "8h sáng","8h tối","8h30","8 giờ",
+])("unknown or independently owned clock clause preserves original upper bounds: %s",text=>{
+ const context=input(text),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={text:"Mấy giờ nhắc?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
+ expect(catalogue(context).allowedClockFields).toEqual(catalogue(input(text)).allowedClockFields);
+});
+it("clock answer restriction requires bound reminder question and preserves other clock sources/facts",()=>{
+ const context=input("8h."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.pendingQuestion={text:"Mấy giờ?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
+ expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
+ context.activeRequest={lifecycle:"CLARIFYING",slots};expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+ context.pendingQuestion.scope="QUERY";context.pendingQuestion.field="queryRange";expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
+ context.pendingQuestion.scope="REMINDER";context.pendingQuestion.field="eventTime";expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
+ context.pendingQuestion.field="reminderTime";
+ const fact={alias:"f1",scope:"REMINDER" as const,field:"eventTime" as const,value:{hour:9,minute:0,qualifier:"H24" as const},provenance:{kind:"EXPLICIT_USER" as const},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]};context.facts=[fact];
+ for(const state of ["PROPOSED","RESOLVED","CONFLICT"] as const){slots.eventTime={state,value:fact.value,fact:"f1"};expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);}
+ slots.eventTime={state:"MISSING",value:null,fact:null};context.facts=[];context.turns.unshift({role:"USER",text:"Thi lúc 9h."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"});context.currentTurn=2;
+ expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
 });
 it.each(["noon2", "user_midnight_key", "nửa đêm2", "midnight_", "_noon", "noon\u0338"])("embedded clock token does not open branches: %s", text => {
   expect(catalogue(input(text)).allowedClockFields).toEqual([]);

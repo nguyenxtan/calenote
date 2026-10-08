@@ -12,12 +12,19 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-3";
+  version: "generation-field-capability-4";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
   /** Availability from the application-bound occupied CURRENT slot only. */
   titleCorrectionAllowed: boolean;
+}
+/** Whole numeric clock answer only; the scanner validates existing clock
+ * grammar, but its parsed value is never returned or used as a proposal. */
+function isBareNumericClockAnswer(text: string, reference: string): boolean {
+  if (!/^\s*(?:\d{1,2}h(?:\d{1,2})?|\d{1,2}:\d{2})(?:\s+(?:sáng|trưa|chiều|tối))?\s*[.!]?\s*$/iu.test(text)) return false;
+  const time = extractTemporalEvidence({ text, referenceNow: Date.parse(reference) }).time;
+  return time.state === "RESOLVED" && time.source === "EXACT_TIME";
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -26,6 +33,10 @@ export interface GenerationFieldCapability {
 export function deriveGenerationFieldCapability(input: ContextInput): GenerationFieldCapability {
   const allowed = new Set<NumericProposalField>();
   const clocks = new Set<ClockProposalField>();
+  const current = input.turns[input.currentTurn];
+  const reminderClockAnswer = !!input.activeRequest && input.pendingQuestion?.scope === "REMINDER"
+    && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
+    && isBareNumericClockAnswer(current.text, input.reference.instant);
   for (const field of CLOCK_PROPOSAL_FIELDS) {
     const slot = input.activeRequest?.slots[field];
     if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) clocks.add(field);
@@ -33,13 +44,16 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   // CURRENT SET may cite an earlier immutable USER source; NEW and edits
   // still require current/scoped evidence downstream. Excluding all previous
   // sources here would remove existing legal re-proposal behavior.
-  for (const turn of input.turns.slice(0, input.currentTurn + 1)) {
+  for (const [index, turn] of input.turns.slice(0, input.currentTurn + 1).entries()) {
     if (turn.role !== "USER") continue;
     for (const text of turn.text.split(CONTROL_PLACEHOLDER)) {
       const temporal = extractTemporalEvidence({ text, referenceNow: Date.parse(input.reference.instant) }).time;
       const named = /(?:^|[^\p{L}\p{M}\p{N}_])(?:nửa\s+đêm|midnight|noon)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text);
       if (named || (temporal.state !== "MISSING" && !(temporal.state === "AMBIGUOUS" && temporal.reason === "DAYPART_WITHOUT_EXACT_TIME"))) {
-        CLOCK_PROPOSAL_FIELDS.forEach(field => clocks.add(field));
+        // Bound bare answers grant only their requested notification clock.
+        // Occupied slots and earlier eligible sources keep their upper bounds.
+        const fields = reminderClockAnswer && index === input.currentTurn ? ["reminderTime"] as const : CLOCK_PROPOSAL_FIELDS;
+        fields.forEach(field => clocks.add(field));
       }
     }
   }
@@ -50,7 +64,6 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   const frequency = input.activeRequest?.slots.frequency, count = input.activeRequest?.slots.occurrenceCount;
   const seriesCount = frequency && count && ["PROPOSED", "RESOLVED"].includes(frequency.state)
     && ["PROPOSED", "RESOLVED"].includes(count.state) && frequency.value === "DAILY" && typeof count.value === "number" ? count.value : undefined;
-  const current = input.turns[input.currentTurn];
   if (current?.role === "USER") {
     const segments = current.text.split(CONTROL_PLACEHOLDER);
     const fullTurn = { id: "current-user", role: "USER" as const, semanticView: current.text };
@@ -93,7 +106,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-3", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-4", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }
