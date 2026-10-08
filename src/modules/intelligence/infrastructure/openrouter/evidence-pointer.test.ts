@@ -62,9 +62,13 @@ it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.","Không nh�
  if(built.status!=="READY")throw Error(built.reason);
  const out=materializeProviderEvidence({requestTarget:{evidence:carrier({kind:"USER_TURN",turn:built.input.currentTurn})}},built.input) as {requestTarget:{evidence:{primaryEvidence:string}}};
  const evidence=[JSON.parse(out.requestTarget.evidence.primaryEvidence)];
- const checked=validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[]}),built);
+ const title=text.startsWith("Ngày 11/10 đi thi")?[{field:"title",operation:"SET",value:"đi thi",evidence}]:[];
+ const checked=validateEvidenceV3(SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[...title,{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[]}),built);
  expect(checked.status).toBe("VALID");
- if(checked.status==="VALID")expect(checked.patch.resolvedChanges).toEqual([]);
+ if(checked.status==="VALID"){
+  expect(checked.patch.resolvedChanges.filter(change=>change.field==="eventRelation")).toEqual([]);
+  expect(checked.patch.resolvedChanges).toEqual(title);
+ }
 });
 it("inactive query padding is never materialized into evidence authority",()=>{
  const query={evidence:carrier({kind:"USER_TURN",turn:99})};

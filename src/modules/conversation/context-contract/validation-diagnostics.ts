@@ -4,6 +4,8 @@ import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipC
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
+for(const key of ["titleChange","index","change"])keys.add(key);
+rootKeys.add("titleChange");
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);

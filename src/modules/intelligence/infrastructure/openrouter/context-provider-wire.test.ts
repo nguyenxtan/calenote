@@ -47,6 +47,25 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it("indexed title carrier preserves literal evidence and original change order",()=>{
+  const ref={kind:"USER_QUOTE",turn:0,quote:"đi thi",occurrence:1};
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[ref]},changes:[{field:"notes",operation:"SET",value:"literal",evidence:[ref]},{field:"title",operation:"SET",value:"đi thi",evidence:[ref]}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{index:number;change:unknown};changes:unknown[]};
+  expect(wire.titleChange).toMatchObject({index:1,change:{field:"title",operation:"SET",value:"đi thi"}});
+  expect(wire.changes).toHaveLength(1);
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+  for(const index of [-1,3,0.5]) expect(parseGoogleLiteEuContextSectionsV3({...wire,titleChange:{...wire.titleChange,index}},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  expect(parseGoogleLiteEuContextSectionsV3({...wire,changes:[...wire.changes,wire.titleChange.change]},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  const absent:Partial<typeof wire>={...wire};delete absent.titleChange;
+  expect(parseGoogleLiteEuContextSectionsV3(absent,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it.each(["REPLACE","CLEAR"] as const)("non-obligated title %s remains exactly reversible",operation=>{
+  const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:"sửa tiêu đề",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation,value:operation==="CLEAR"?null:"khác",evidence}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:unknown};
+  expect(wire.titleChange).toBeNull();
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+});
 it.each([
   [JSON.stringify({ evidence: { ref: "PRIVATE_TARGET" } }), "object"],
   ["PRIVATE_TARGET", "INVALID_JSON"],
@@ -215,6 +234,10 @@ function wireFixture(value: unknown): unknown {
     result.operationCode=String(tuples.findIndex(([intent,targetKind,queryKind])=>intent===object.intent&&targetKind===(target?.kind??null)&&queryKind===(query?.kind??null)));
     delete result.intent;
     for(const key of ["requestTarget","query"])if(result[key])delete (result[key] as Record<string,unknown>).kind;
+    const changes=result.changes as Array<Record<string,unknown>>;
+    const index=changes.findIndex(change=>change.field==="title"&&change.operation==="SET");
+    result.titleChange=index<0?null:{index,change:changes[index]};
+    if(index>=0)result.changes=changes.filter((_,position)=>position!==index);
   }
   if (Array.isArray(object.evidence)) {
     result.evidence = { primaryEvidence: JSON.stringify(object.evidence[0]), additionalEvidenceJson: JSON.stringify(object.evidence.slice(1)) };
@@ -298,8 +321,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-evidence-pointer-26");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-27");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("51ace0ea17c53b5342c477a87f68f90188c0943d3d1bd46dda31219d6f6b60f1");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
@@ -341,11 +364,11 @@ it.each([
   expect(await dispatch(raw)).toMatchObject({ status: "SUCCESS", interpretation: { ...expected, semantic: { changes: [] }, fullSchemaValid: false } });
 });
 it.each([
-  ["wrong field value", (raw: Record<string, unknown>) => { (raw.changes as Array<Record<string, unknown>>)[0].value = 2; }],
-  ["overlong title", (raw: Record<string, unknown>) => { (raw.changes as Array<Record<string, unknown>>)[0].value = "x".repeat(1801); }],
-  ["empty evidence", (raw: Record<string, unknown>) => { (raw.changes as Array<Record<string, unknown>>)[0].evidence = []; }],
-  ["four evidence", (raw: Record<string, unknown>) => { ((raw.changes as Array<Record<string, unknown>>)[0].evidence as Record<string, unknown>).additionalEvidenceJson = JSON.stringify([wireFixture(quote), wireFixture(quote), wireFixture(quote)]); }],
-  ["duplicate field", (raw: Record<string, unknown>) => { (raw.changes as unknown[]).push(structuredClone((raw.changes as unknown[])[0])); }],
+  ["wrong field value", (raw: Record<string, unknown>) => { (raw.titleChange as {change:Record<string,unknown>}).change.value = 2; }],
+  ["overlong title", (raw: Record<string, unknown>) => { (raw.titleChange as {change:Record<string,unknown>}).change.value = "x".repeat(1801); }],
+  ["empty evidence", (raw: Record<string, unknown>) => { (raw.titleChange as {change:Record<string,unknown>}).change.evidence = []; }],
+  ["four evidence", (raw: Record<string, unknown>) => { ((raw.titleChange as {change:Record<string,unknown>}).change.evidence as Record<string, unknown>).additionalEvidenceJson = JSON.stringify([wireFixture(quote), wireFixture(quote), wireFixture(quote)]); }],
+  ["duplicate field", (raw: Record<string, unknown>) => { (raw.changes as unknown[]).push(structuredClone((raw.titleChange as {change:unknown}).change)); }],
   ["unknown root", (raw: Record<string, unknown>) => { raw.extra = null; }],
   ["missing core", (raw: Record<string, unknown>) => { delete raw.operationCode; }],
 ] as const)("rejects invalid core atomically: %s", async (_label, mutate) => {
@@ -356,7 +379,7 @@ it("current pointer transport rejects quote-authored evidence padding at the HTT
   const canonical = { ...minimal, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [quote] }, changes: [{ field: "title", operation: "SET", value: "synthetic", evidence }] };
   const raw = wireFixture(canonical) as Record<string, unknown>;
   (raw.conversationDirective as Record<string, unknown>).field = "title";
-  const changedEvidence=(raw.changes as Array<Record<string,unknown>>)[0].evidence as {primaryEvidence:string};
+  const changedEvidence=(raw.titleChange as {change:{evidence:{primaryEvidence:string}}}).change.evidence;
   changedEvidence.primaryEvidence=JSON.stringify({...JSON.parse(changedEvidence.primaryEvidence),ref:"f999"});
   expect(await dispatch(raw)).toMatchObject({ status: "FAILURE",category:"SCHEMA_INVALID" });
 });

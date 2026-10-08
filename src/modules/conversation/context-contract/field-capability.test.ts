@@ -14,6 +14,18 @@ function input(text: string): ContextInput {
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
+it("requires a generated title carrier for an asserted exam reminder",()=>{
+  const context=input("Ngày 11/10 đi thi, nhắc tôi trước 2 ngày.");
+  expect(catalogue(context).titlePresenceRequired).toBe(true);
+  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {required:string[];properties:{titleChange:{type?:string}}};
+  expect(schema.required).toContain("titleChange");
+  expect(schema.properties.titleChange.type).toBe("object");
+  expect(fields(context)).not.toContain("title");
+});
+it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
+it.each(["Ngày 11/10 đi thi ở Quang Trung, nhắc tôi chuẩn bị giấy tờ.","Đổi tiêu đề thành đi thi","Sửa title thành đi thi","Thay tên thành đi thi"])("different reminder subject or correction establishes no SET obligation: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
+it.each(["Bạn nghĩ sao về đi thi","bao giờ đi thi","dịch đi thi"])("unknown or interrogative discourse remains outside bounded title assertion: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
+it.each(["Ngày 11/10 đi thi, nhắc tôi uống thuốc lúc 8h.","Ngày 11/10 đi thi, nhắc tôi đóng tiền trước 2 ngày.","đi thi ở đâu","đi thi rồi uống thuốc","đi thi, điều này nghĩa là gì"])("unknown continuation or competing subject cannot force exam title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
 function fields(context: ContextInput) {
   const schema = serializeContextRequest(context).response_format.json_schema.schema as unknown as { properties: { changes: { items: { $ref: string } } }; $defs: Record<string, { anyOf: Array<{ properties: { field: { enum?: string[]; const?: string } } }> }> };
   return schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]);
@@ -151,6 +163,20 @@ it.each(["SET", "REPLACE", "CLEAR"] as const)("wire rejects absent clock %s whil
   const raw = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "reminderTime", operation, value, evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
   expect(check.safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
   expect(check.safeParse(encodeGoogleLiteEuContextV3({ ...raw, changes: [], uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }] })).success).toBe(true);
+});
+it("independent consumer requires exactly one model title carrier, never a retained NEW title",()=>{
+  const context=input("Ngày 11/10 đi thi, nhắc tôi trước 2 ngày."),check=validator(context);
+  const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:unknown;changes:unknown[]};
+  expect(check.safeParse(wire).success).toBe(true);
+  expect(check.safeParse({...wire,titleChange:null}).success).toBe(false);
+  const absent={...wire} as Partial<typeof wire>;delete absent.titleChange;
+  expect(check.safeParse(absent).success).toBe(false);
+  expect(check.safeParse({...wire,changes:[canonical.changes[0]]}).success).toBe(false);
+  const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+  slots.title={state:"RESOLVED",value:"đi thi",fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};
+  expect(catalogue(context).titlePresenceRequired).toBe(true);
 });
 it.each(["SET", "REPLACE", "CLEAR"] as const)("independent schema consumer rejects forbidden field carriers including %s", operation => {
   const context = input("Nhắc trước 2 ngày."), check = validator(context);

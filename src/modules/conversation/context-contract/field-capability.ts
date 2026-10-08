@@ -5,6 +5,7 @@ import { supportsLeadOffset } from "./lead-offset-evidence";
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
+import { examTitleCoverage } from "./semantic-completeness";
 
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
@@ -14,8 +15,9 @@ export interface GenerationFieldCapability {
   version: "generation-field-capability-1";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
+  titlePresenceRequired: boolean;
 }
-/** A generation upper bound only. Probing the existing support predicates
+/** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
  * CURRENT retained slots and NEW proposals still require downstream ownership.
  */
@@ -87,5 +89,5 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
       }
     }
   }
-  return { version: "generation-field-capability-1", allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
+  return { version: "generation-field-capability-1", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null, allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

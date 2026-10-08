@@ -24,8 +24,10 @@ it("wire_complexity_before_after_is_source_bound", () => {
   const golden = immutable.match(/\.toBe\("(840ad[a-f0-9]+)"\)/u)?.[1];
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
-  console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("4543fc00f7eb97139e3a8a00527bf0acfd076fc969d926209d924601a37eaff4");
+  console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)),baseMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3().schema),titleMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema) }));
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("c29cb0942578aefb1419e5b150ff2efdfbb7b848ffd6c4e6c01ae3e769565729");
+  expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({utf8Bytes:9943,rootKeys:8,recursiveObjectArrayNodes:278,maximumDepth:10,unionBranches:42,requiredEntries:115,enumArrays:23,enumValues:102,largestEnum:16,nullableNodes:36,references:20,definitions:11,constantDiscriminators:15});
+  expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema)).toEqual({utf8Bytes:8886,rootKeys:8,recursiveObjectArrayNodes:250,maximumDepth:9,unionBranches:38,requiredEntries:103,enumArrays:20,enumValues:89,largestEnum:16,nullableNodes:35,references:18,definitions:11,constantDiscriminators:14});
 });
 
 function schemaMetrics(schema: unknown) {

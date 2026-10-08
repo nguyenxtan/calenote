@@ -25,8 +25,8 @@ it.each([refs[0],{kind:"CONTEXT_FACT",ref:"f3"}])("encoded canonical evidence ne
 });
 it.each([1,2,3])("required primary JSON reconstructs exactly %i canonical refs without nested provider evidence unions",count=>{
  const evidence=refs.slice(0,count),canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation:"SET",value:"literal quote",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
- const wire=encodeGoogleLiteEuContextV3(canonical) as {requestTarget:{evidence:{primaryEvidence:string}},changes:Array<{evidence:{primaryEvidence:string}}>};
- expect(typeof wire.requestTarget.evidence.primaryEvidence).toBe("string");expect(typeof wire.changes[0].evidence.primaryEvidence).toBe("string");
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {requestTarget:{evidence:{primaryEvidence:string}},titleChange:{change:{evidence:{primaryEvidence:string}}}};
+ expect(typeof wire.requestTarget.evidence.primaryEvidence).toBe("string");expect(typeof wire.titleChange.change.evidence.primaryEvidence).toBe("string");
  expect(JSON.parse(wire.requestTarget.evidence.primaryEvidence)).toMatchObject(refs[0]);
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
  const schema=googleLiteEuContextWireSchemaV3().schema;

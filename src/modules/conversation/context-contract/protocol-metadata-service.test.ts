@@ -148,8 +148,9 @@ it.each(["SCHEMA", "EVIDENCE", "PROVIDER", "BUDGET", "SIZE"] as const)("selected
   if (failure === "PROVIDER") h.setFail();
   if (failure === "SCHEMA") h.setWireMutation(wire => ({ ...(wire as object), intent: "UNKNOWN" }));
   if (failure === "EVIDENCE") h.setWireMutation(wire => {
-    const object = wire as { changes: Array<{ evidence: { primaryEvidence: string; additionalEvidenceJson: string } }> };
-    return { ...object, changes: object.changes.map(change => ({ ...change, evidence: { ...change.evidence, primaryEvidence: JSON.stringify({ ...JSON.parse(change.evidence.primaryEvidence), quote: "not present in the current user turn" }) } })) };
+    const object = wire as { titleChange: {index:number;change:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}} };
+    const change=object.titleChange.change;
+    return { ...object, titleChange:{...object.titleChange,change:{...change,evidence:{...change.evidence,primaryEvidence:JSON.stringify({...JSON.parse(change.evidence.primaryEvidence),quote:"not present in the current user turn"})}}} };
   });
   expect(await h.run(0, failure === "SIZE" ? "x".repeat(1801) : "nhắc đi thi")).toEqual({ status: "REJECTED" });
   expect(h.getRequests()).toBe(failure === "SIZE" || failure === "BUDGET" ? 0 : 1);

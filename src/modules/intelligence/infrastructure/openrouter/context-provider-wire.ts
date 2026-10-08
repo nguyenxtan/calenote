@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -470,7 +470,55 @@ function operationSchema(root:Schema):Schema{
  result.properties!.query={anyOf:[{type:"object",properties,required:[...branches[0].required!],additionalProperties:false},{type:"null"}]};
  return prune(result);
 }
-const providerSchemaV3 = operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))))));
+function indexedTitleSchema(root:Schema):Schema {
+  const result=structuredClone(root);
+  const branches=deref(result.properties!.changes.items!,result).anyOf!;
+  const title=branches.map(branch=>deref(branch,result)).find(branch=>{
+    const field=branch.properties!.field,operation=branch.properties!.operation;
+    return (field.enum??[field.const]).includes("title") && (operation.enum??[operation.const]).includes("SET");
+  });
+  requireShape(title);
+  const change=structuredClone(title);
+  change.properties!.field={type:"string",const:"title"};
+  change.properties!.operation={type:"string",const:"SET"};
+  const carrier:Schema={type:"object",properties:{index:{type:"integer"},change},required:["index","change"],additionalProperties:false};
+  result.properties!.titleChange={anyOf:[carrier,{type:"null"}]};
+  result.required!.push("titleChange");
+  return result;
+}
+const providerSchemaV3 = indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3)))))))))));
+
+/** Move only model-authored SET data; indices and duplicate ownership are
+ * strict transport assertions, never an opportunity to repair a proposal. */
+function titleCarrier(raw:Record<string,unknown>,mode:"encode"|"decode",required=false):Record<string,unknown>{
+  const result={...raw};
+  if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
+  const titles=raw.changes.flatMap((change,index)=>change && typeof change==="object" && !Array.isArray(change) && change.field==="title" ? [{change,index}] : []);
+  if(mode==="encode"){
+    if(titles.length>1)throw new WireShapeFailure(["titleChange"],"UNIQUE_TITLE_OWNER");
+    const title=titles[0];
+    result.titleChange=title?.change.operation==="SET"?{index:title.index,change:title.change}:null;
+    if(result.titleChange)result.changes=raw.changes.filter((_,index)=>index!==title.index);
+  }else{
+    if(!Object.hasOwn(raw,"titleChange"))throw new WireShapeFailure(["titleChange"],"REQUIRED_PROPERTY");
+    const carrier=raw.titleChange;
+    delete result.titleChange;
+    if(carrier===null){if(required)throw new WireShapeFailure(["titleChange"],"object");return result;}
+    if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure(["titleChange"],"object");
+    requireWireKeys(carrier as Record<string,unknown>,["index","change"],["index","change"],["titleChange"]);
+    const {index,change}=carrier as {index:unknown;change:unknown};
+    if(typeof index!=="number"||!Number.isInteger(index)||index<0||index>raw.changes.length)throw new WireShapeFailure(["titleChange","index"],"CHANGE_POSITION");
+    const shape=providerSchemaV3.properties!.titleChange.anyOf![0].properties!.change;
+    if(change && typeof change==="object" && !Array.isArray(change)) {
+      const item=change as Record<string,unknown>;
+      for(const [key,value] of [["field","title"],["operation","SET"]] as const)if(item[key]!==value)throw new WireShapeFailure(["titleChange","change",key],"CONTROL_ENUM",undefined,undefined,projectControlEnum([value],item[key]));
+    }
+    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure(["titleChange","change"],"TITLE_SET_CHANGE");
+    if(titles.length)throw new WireShapeFailure(["titleChange"],"UNIQUE_TITLE_OWNER");
+    const changes=[...raw.changes];changes.splice(index,0,change);result.changes=changes;
+  }
+  return result;
+}
 function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Record<string,unknown>{
  const result={...raw};
  if(mode==="encode"){
@@ -480,7 +528,7 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
   result.operationCode=operationWireCodes[code];delete result.intent;
   for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
  }else{
-  requireWireKeys(raw,providerSchemaV3.required!.filter(key=>key!=="conversationDirective"&&key!=="replyProposal"),Object.keys(providerSchemaV3.properties!),[]);
+  requireWireKeys(raw,providerSchemaV3.required!.filter(key=>!["conversationDirective","replyProposal","titleChange"].includes(key)),Object.keys(providerSchemaV3.properties!).filter(key=>key!=="titleChange"),[]);
   const code=raw.operationCode;
   const index=typeof code==="string"?operationWireCodes.indexOf(code):-1;
   if(index<0)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(operationWireCodes,code));
@@ -500,6 +548,8 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
 export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability): ProviderWireSchemaV3 {
   const schema = structuredClone(providerSchemaV3);
   if (capability) {
+    requireShape(typeof capability.titlePresenceRequired==="boolean");
+    if(capability.titlePresenceRequired)schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
     requireShape(capability.version === "generation-field-capability-1" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
@@ -510,7 +560,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       const branch = deref(raw, schema), field = deref(branch.properties!.field, schema);
       const values = Object.hasOwn(field, "const") ? [field.const] : field.enum;
       requireShape(values?.length);
-      const permitted = values.filter(value => (!numeric(value) || capability.allowedNumericFields.includes(value)) && (!clock(value) || capability.allowedClockFields.includes(value)));
+      const permitted = values.filter(value => !(capability.titlePresenceRequired && value==="title") && (!numeric(value) || capability.allowedNumericFields.includes(value)) && (!clock(value) || capability.allowedClockFields.includes(value)));
       if (!permitted.length) return [];
       branch.properties!.field = Object.hasOwn(field, "const") ? { ...field, const: permitted[0] } : { ...field, enum: permitted };
       return [branch];
@@ -526,7 +576,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
-  return operationValues(dateJsonOperands(output,"encode"),"encode");
+  return titleCarrier(operationValues(dateJsonOperands(output,"encode"),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -543,7 +593,8 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const object = dateJsonOperands(operationValues(materializeProviderEvidence(raw,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
+    const unfolded=titleCarrier(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false);
+    const object = dateJsonOperands(operationValues(materializeProviderEvidence(unfolded,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;

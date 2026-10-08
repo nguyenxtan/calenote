@@ -70,10 +70,11 @@ it("operation mapping does not bypass canonical conditional uncertainty requirem
  wire.uncertainties=[];
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
-it("query operation cannot authorize semantic reminder changes",()=>{
+it.each(["ordinary","titleCarrier"])("query operation cannot authorize semantic reminder changes through %s",representation=>{
  const wire=encodeGoogleLiteEuContextV3(canonical(3)) as Record<string,unknown>;
  const create=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({...canonical(1),changes:[{field:"title",operation:"SET",value:"literal",evidence}]})) as Record<string,unknown>;
- wire.changes=create.changes;
+ if(representation==="titleCarrier")wire.titleChange=create.titleChange;
+ else wire.changes=[(create.titleChange as {change:unknown}).change];
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
 it("unsupported-combination still requires unresolved target rather than any mapped target",()=>{

@@ -13,6 +13,45 @@ type CoverageInput = {
   retainedLocation: string | null;
 };
 
+/** Presence/coverage only for the initial literal complete exam task. Unknown
+ * subjects and ambiguous discourse never create a generation obligation. */
+export function examTitleCoverage(text: string, value?: unknown): boolean | null {
+  if (/["'“”‘’`?]/u.test(text) || text.includes("[CONTROL]")
+    || /(?:^|[^\p{L}])(?:không|ko|chẳng|đừng|chưa|nếu|ví dụ|giả sử|hay là|lịch|xem|liệt kê|giải thích|tiếp tục|bản nháp|giữ|đổi|thay|sửa|bỏ|xóa|cụm từ|từ ngữ|tên|chữ|trích dẫn|đâu|nào|gì)(?:[^\p{L}]|$)/iu.test(text)) return null;
+  const matches=[...text.matchAll(/(?:^|[^\p{L}])(đi thi)(?=$|[,;.!\n]|\s+(?:ở|tại|nhắc|nhé|nha|ngày|lúc|vào)(?:[^\p{L}]|$))/giu)];
+  if(matches.length!==1) return null;
+  const subjectStart=matches[0].index!+matches[0][0].length-matches[0][1].length;
+  // Only finite assertion introductions are admitted. An unknown question,
+  // metalinguistic instruction or discourse prefix is not reminder authority.
+  if(!/^(?:\s*(?:ngày\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{4})?|mai|hôm nay|tôi|nhắc(?:\s+(?:tôi|mình|tui))?)\s+)?$/iu.test(text.slice(0,subjectStart)))return null;
+  // Positively admit only finite venue/scheduling continuations. Merely seeing
+  // a comma, locative or reminder verb cannot admit arbitrary trailing tasks.
+  const count="(?:\\d+|một|hai|ba)",clock="\\d{1,2}(?:h(?:\\d{1,2})?|:\\d{2})(?:\\s+(?:sáng|chiều|tối))?";
+  const schedule=`(?:lúc\\s+${clock}|ngày\\s+\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{4})?|nhắc\\s+(?:(?:tôi|mình|tui)\\s+)?(?:trước\\s+${count}\\s+ngày|${count}\\s+ngày\\s+liên tiếp|lúc\\s+${clock})|giúp tôi|nhé|nha)`;
+  const venue="(?:\\s+(?:ở|tại)\\s+\\p{Lu}[\\p{L}\\p{M}\\p{N}-]*(?:\\s+\\p{Lu}[\\p{L}\\p{M}\\p{N}-]*)*)?";
+  const tail=text.slice(subjectStart+matches[0][1].length);
+  if(!new RegExp(`^${venue}(?:[\\s,;]+${schedule})*[\\s.!]*$`,"u").test(tail))return null;
+  if(typeof value!=="string"||!value.length)return false;
+  const valueStart=text.indexOf(value);
+  return valueStart>=0 && valueStart<=subjectStart && valueStart+value.length>=subjectStart+matches[0][1].length;
+}
+
+export function titleCoverageComplete(input: Omit<CoverageInput,"retainedLocation"> & {retainedTitle:string|null}): boolean {
+  if(input.intent!=="CREATE_REMINDER" || input.currentTurn.role!=="USER" || examTitleCoverage(input.currentTurn.semanticView)===null) return true;
+  const text=input.currentTurn.semanticView;
+  const covered=(value:unknown,bound:ValidatedFieldEvidence|undefined)=>examTitleCoverage(text,value)===true && bound?.current===true
+    && bound.sources.some(source=>source.sourceTurnId===input.currentTurn.id && examTitleCoverage([...text].slice(source.viewSpan.start,source.viewSpan.end).join(""),value)===true);
+  const titles=input.changes.map((change,index)=>({change,bound:input.changeEvidence[index]})).filter(p=>p.change.field==="title");
+  if(titles.some(p=>p.change.operation!=="CLEAR" && covered(p.change.value,p.bound))) return true;
+  let index=0, alternativeCovered=false;
+  for(const uncertainty of input.uncertainties) for(const alternative of uncertainty.alternatives){
+    const bound=input.alternativeEvidence[index++];
+    if(uncertainty.field==="title" && covered(alternative.value,bound)) alternativeCovered=true;
+  }
+  if(titles.length===0 && alternativeCovered) return true;
+  return titles.length===0 && input.target?.kind==="CURRENT" && examTitleCoverage(text,input.retainedTitle)===true;
+}
+
 const continuationBoundary = /^(?:$|[,;.!\n]|\s+(?:[Nn]gày\s+(?:\d{1,2}[/-]\d{1,2}|mai|kia)|[Ll]úc\s+\d{1,2}(?:h|:)|[Vv]ào\s+(?:ngày\s+)?\d{1,2}[/-]\d{1,2}|nhớ\s+(?:mang|đem|gọi|chuẩn bị)|nhắc\s+(?:\d+|tôi|mình|tui|lúc)|nhé|nha|rồi\s+(?:về|đi|ăn)|và\s+(?:ăn|về|đi|nhắc))(?:[^\p{L}]|$))/u;
 
 /** Bounded omission check only. Never returns, fills or persists an operand.

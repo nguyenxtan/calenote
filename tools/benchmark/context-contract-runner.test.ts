@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "51ace0ea17c53b5342c477a87f68f90188c0943d3d1bd46dda31219d6f6b60f1",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+    expect(requestSchemaDigest).not.toBe("51ace0ea17c53b5342c477a87f68f90188c0943d3d1bd46dda31219d6f6b60f1");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -324,7 +324,7 @@ it.each([
 ] as const)("wire discriminant failure uses closest schema branch for field=%s operation=%s", (field, operation, expectedPath) => {
   const raw = encodeGoogleLiteEuContextV3({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] },
     query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null,
-    changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
+    changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
   if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
   if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
   let diagnostics: unknown;
@@ -344,8 +344,9 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
         const wire = encodeFixtureV3(frozenContextProposal(input, "R01", 0)) as Record<string, unknown>;
         if (mode.startsWith("operation-")) {
           const changed = encodeFixtureV3({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] },input) as { changes: Array<Record<string, unknown>> };
-          wire.changes = changed.changes;
-          if (mode === "operation-invalid") changed.changes[0].operation = sentinel; else delete changed.changes[0].operation;
+          const carrier=(changed as unknown as {titleChange:{change:Record<string,unknown>}}).titleChange;
+          wire.titleChange=carrier;
+          if (mode === "operation-invalid") carrier.change.operation = sentinel; else delete carrier.change.operation;
         }
         else if (mode === "guidance") wire.replyProposal = { text: sentinel, [sentinel]: sentinel };
         else if (mode === "missing") delete wire.operationCode;
@@ -365,7 +366,7 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
     if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["operationCode"], classification: "missing" })] } });
     if (mode === "unexpected-key") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ classification: "extra", extraKeyCount: 1 })], unknownTopLevelKeyCount: 1 } });
     if (mode === "primitive") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: [], expected: "object", actualType: "number" })] } });
-    if (mode.startsWith("operation-")) expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["changes", 0, "operation"], expected: "CONTROL_ENUM", classification: mode === "operation-missing" ? "missing" : "value" })] } });
+    if (mode.startsWith("operation-")) expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["titleChange", "change", "operation"], expected: "CONTROL_ENUM", classification: mode === "operation-missing" ? "missing" : "value" })] } });
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -498,8 +499,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-evidence-pointer-26" });
+      providerWireSchemaDigest: "51ace0ea17c53b5342c477a87f68f90188c0943d3d1bd46dda31219d6f6b60f1",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-27" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");
