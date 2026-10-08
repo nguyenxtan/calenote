@@ -115,7 +115,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-5",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-6",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
   expect(fields(context)).not.toContain("title");
 });
@@ -149,7 +149,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-5", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-6", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -164,6 +164,42 @@ it.each(["Đừng bỏ.", "Tiếp tục.", "Nhắc trước 2 ngày.", "Nhắc b
 });
 it.each(["8h.", "08:00.", "nửa đêm", "noon", "midnight"])("clock source presence opens an upper bound, never a value: %s", text => {
   expect(catalogue(input(text)).allowedClockFields).toEqual(["eventTime", "reminderTime"]);
+});
+it.each([
+ ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",8,0],
+ ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 12h trưa.",12,0],
+ ["Nhắc tôi hai ngày liên tiếp lúc 08:00.",8,0],
+] as const)("explicit finite notification clock grants reminder carrier, not eventTime: %s",(text,hour,minute)=>{
+ const context=input(text),before=JSON.stringify(context),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const wire=(field:string,operation:string,value:unknown)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[...(catalogue(context).titlePresenceRequired?[{field:"title",operation:"SET",value:"đi thi",evidence}]:[]),{field,operation,value,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}));
+ const check=validator(context);
+ expect(check.safeParse(wire("eventTime","SET",{hour,minute,qualifier:"H24"})).success).toBe(false);
+ expect(check.safeParse(wire("reminderTime","SET",{hour,minute,qualifier:"H24"})).success).toBe(true);
+ expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+ // Initial multi-fact notification clauses are not bare bound answers:
+ // explicit cadence/count corrections keep their original generation domain.
+ for(const [field,value] of [["frequency","DAILY"],["occurrenceCount",2]] as const)for(const operation of ["REPLACE","CLEAR"])
+  expect(check.safeParse(wire(field,operation,operation==="CLEAR"?null:value)).success).toBe(true);
+ expect(JSON.stringify(context)).toBe(before);
+});
+it.each([
+ "Tôi thi ngày 11/10 lúc 8h.","Ngày 20/12 họp lúc 9h.","Đổi giờ thi sang 9h.",
+ "Nhắc 2 ngày liên tiếp lúc 8h giúp tôi.","Nhắc 2 ngày liên tiếp lúc 8h; gọi mẹ.",
+ "Thi lúc 9h, nhắc 2 ngày liên tiếp lúc 8h.","Thi lúc 8h, nhắc 2 ngày liên tiếp lúc 8h.",
+ "Nhắc 2 ngày liên tiếp lúc 8h và 9h.","Không nhắc 2 ngày liên tiếp lúc 8h.","Nếu nhắc 2 ngày liên tiếp lúc 8h.",
+ "\"Nhắc 2 ngày liên tiếp lúc 8h.\"","Nhắc 2 ngày liên tiếp lúc 8h?","Nhắc 2 ngày liên tiếp lúc 8h [CONTROL]",
+ "Nhắc 2 ngày liên tiếp lúc 8h sáng.","Nhắc 2 ngày liên tiếp lúc 8h30.","Nhắc 2 ngày liên tiếp lúc 8 giờ.",
+ "Nhắc hàng tuần lúc 8h.","Đổi nhắc 2 ngày liên tiếp lúc 8h.",
+])("unknown or independently owned notification clock preserves both original upper bounds: %s",text=>{
+ expect(catalogue(input(text)).allowedClockFields).toEqual(["eventTime","reminderTime"]);
+});
+it("explicit notification ownership preserves earlier USER and occupied eventTime sources",()=>{
+ const context=input("Nhắc 2 ngày liên tiếp lúc 8h."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+ const fact={alias:"f1",scope:"REMINDER" as const,field:"eventTime" as const,value:{hour:9,minute:0,qualifier:"H24" as const},provenance:{kind:"EXPLICIT_USER" as const},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]};context.facts=[fact];context.activeRequest={lifecycle:"CLARIFYING",slots};
+ for(const state of ["PROPOSED","RESOLVED","CONFLICT"] as const){slots.eventTime={state,value:fact.value,fact:"f1"};expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);}
+ slots.eventTime={state:"MISSING",value:null,fact:null};context.facts=[];context.turns.unshift({role:"USER",text:"Thi lúc 9h."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"});context.currentTurn=2;
+ expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
 });
 it.each([["8h.",8,0],["08:00.",8,0],["20:30",20,30],["12h trưa",12,0]] as const)("bound reminder clock answer closes eventTime in the actual request schema: %s",(text,hour,minute)=>{
  const context=input(text),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];

@@ -12,7 +12,7 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-5";
+  version: "generation-field-capability-6";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
@@ -33,6 +33,29 @@ export function isBoundReminderClockAnswer(input: ContextInput): boolean {
     && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
     && isBareNumericClockAnswer(current.text, input.reference.instant);
 }
+/** Finite notification clause owns its single clock, not an event clock.
+ * Cadence/count and full-context checks remain existing predicate probes;
+ * neither the candidate count nor the parsed clock is returned as a value. */
+function isExplicitNotificationClockSource(text: string, reference: string): boolean {
+  if (text.includes(CONTROL_PLACEHOLDER)) return false;
+  const match = /(?:^|[,;])\s*(nhắc(?:\s+(?:tôi|mình|tui))?\s+(\d+|một|hai|ba)\s+ngày\s+liên tiếp\s+lúc\s+(.+?))\s*[.!]?\s*$/iu.exec(text);
+  if (!match || !isBareNumericClockAnswer(match[3], reference)) return false;
+  const time = extractTemporalEvidence({ text, referenceNow: Date.parse(reference) }).time;
+  if (time.state !== "RESOLVED" || time.source !== "EXACT_TIME") return false;
+  const words: Readonly<Record<string, number>> = { một: 1, hai: 2, ba: 3 };
+  const count = words[match[2].toLocaleLowerCase("vi")] ?? Number(match[2]);
+  const clause = { id: "notification-clause", role: "USER" as const, semanticView: match[1] };
+  const full = { id: "notification-user", role: "USER" as const, semanticView: text };
+  const length = [...match[1]].length, start = [...text.slice(0, match.index + match[0].indexOf(match[1]))].length;
+  const source: SourceEvidence = { kind: "USER_QUOTE", sourceTurnId: clause.id, sourceMapTurnId: clause.id, quote: match[1], occurrence: 1,
+    sourceSpan: { start: 0, end: length }, viewSpan: { start: 0, end: length }, normalizationVersion: "nfc-codepoint-v1" };
+  const contextual: SourceEvidence = { ...source, sourceTurnId: full.id, sourceMapTurnId: full.id,
+    sourceSpan: { start, end: start + length }, viewSpan: { start, end: start + length } };
+  return supportsCadenceOperand("frequency", "DAILY", [source], [clause])
+    && supportsCadenceOperand("occurrenceCount", count, [source], [clause])
+    && supportsCadenceOperand("frequency", "DAILY", [contextual], [full])
+    && supportsCadenceOperand("occurrenceCount", count, [contextual], [full]);
+}
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
  * CURRENT retained slots and NEW proposals still require downstream ownership.
@@ -42,6 +65,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   const clocks = new Set<ClockProposalField>();
   const current = input.turns[input.currentTurn];
   const reminderClockAnswer = isBoundReminderClockAnswer(input);
+  const reminderClockSource = current?.role === "USER" && isExplicitNotificationClockSource(current.text, input.reference.instant);
   for (const field of CLOCK_PROPOSAL_FIELDS) {
     const slot = input.activeRequest?.slots[field];
     if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) clocks.add(field);
@@ -55,9 +79,9 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
       const temporal = extractTemporalEvidence({ text, referenceNow: Date.parse(input.reference.instant) }).time;
       const named = /(?:^|[^\p{L}\p{M}\p{N}_])(?:nửa\s+đêm|midnight|noon)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text);
       if (named || (temporal.state !== "MISSING" && !(temporal.state === "AMBIGUOUS" && temporal.reason === "DAYPART_WITHOUT_EXACT_TIME"))) {
-        // Bound bare answers grant only their requested notification clock.
+        // Bound bare answers and finite notification clauses grant only their notification clock.
         // Occupied slots and earlier eligible sources keep their upper bounds.
-        const fields = reminderClockAnswer && index === input.currentTurn ? ["reminderTime"] as const : CLOCK_PROPOSAL_FIELDS;
+        const fields = (reminderClockAnswer || reminderClockSource) && index === input.currentTurn ? ["reminderTime"] as const : CLOCK_PROPOSAL_FIELDS;
         fields.forEach(field => clocks.add(field));
       }
     }
@@ -111,7 +135,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-5", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-6", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }
