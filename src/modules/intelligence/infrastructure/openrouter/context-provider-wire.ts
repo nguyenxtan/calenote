@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, type GenerationFieldCapability, type NumericProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -501,14 +501,16 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   const schema = structuredClone(providerSchemaV3);
   if (capability) {
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
+    const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
     requireShape(capability.version === "generation-field-capability-1" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     const changes = deref(schema.properties!.changes.items!, schema);
     requireShape(changes.anyOf?.length);
     changes.anyOf = changes.anyOf.flatMap(raw => {
       const branch = deref(raw, schema), field = deref(branch.properties!.field, schema);
       const values = Object.hasOwn(field, "const") ? [field.const] : field.enum;
       requireShape(values?.length);
-      const permitted = values.filter(value => !numeric(value) || capability.allowedNumericFields.includes(value));
+      const permitted = values.filter(value => (!numeric(value) || capability.allowedNumericFields.includes(value)) && (!clock(value) || capability.allowedClockFields.includes(value)));
       if (!permitted.length) return [];
       branch.properties!.field = Object.hasOwn(field, "const") ? { ...field, const: permitted[0] } : { ...field, enum: permitted };
       return [branch];

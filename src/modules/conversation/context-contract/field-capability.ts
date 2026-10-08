@@ -4,12 +4,16 @@ import { supportsCadenceOperand } from "./cadence-count-evidence";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
+import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
+export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
+export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
   version: "generation-field-capability-1";
   allowedNumericFields: readonly NumericProposalField[];
+  allowedClockFields: readonly ClockProposalField[];
 }
 /** A generation upper bound only. Probing the existing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -17,6 +21,24 @@ export interface GenerationFieldCapability {
  */
 export function deriveGenerationFieldCapability(input: ContextInput): GenerationFieldCapability {
   const allowed = new Set<NumericProposalField>();
+  const clocks = new Set<ClockProposalField>();
+  for (const field of CLOCK_PROPOSAL_FIELDS) {
+    const slot = input.activeRequest?.slots[field];
+    if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) clocks.add(field);
+  }
+  // CURRENT SET may cite an earlier immutable USER source; NEW and edits
+  // still require current/scoped evidence downstream. Excluding all previous
+  // sources here would remove existing legal re-proposal behavior.
+  for (const turn of input.turns.slice(0, input.currentTurn + 1)) {
+    if (turn.role !== "USER") continue;
+    for (const text of turn.text.split(CONTROL_PLACEHOLDER)) {
+      const temporal = extractTemporalEvidence({ text, referenceNow: Date.parse(input.reference.instant) }).time;
+      const named = /(?:^|[^\p{L}\p{M}\p{N}_])(?:nửa\s+đêm|midnight|noon)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text);
+      if (named || (temporal.state !== "MISSING" && !(temporal.state === "AMBIGUOUS" && temporal.reason === "DAYPART_WITHOUT_EXACT_TIME"))) {
+        CLOCK_PROPOSAL_FIELDS.forEach(field => clocks.add(field));
+      }
+    }
+  }
   for (const field of NUMERIC_PROPOSAL_FIELDS) {
     const slot = input.activeRequest?.slots[field];
     if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) allowed.add(field);
@@ -65,5 +87,5 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
       }
     }
   }
-  return { version: "generation-field-capability-1", allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)) };
+  return { version: "generation-field-capability-1", allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

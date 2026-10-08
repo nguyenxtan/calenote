@@ -16,6 +16,10 @@ The root changes schema covers both CURRENT and NEW. Existing event-relation and
 
 Occupied CONFLICT numeric slots keep their field branches for meaningful CLEAR/correction, without authorizing their values. An already-MISSING or null-valued conflicting slot grants no field capability without independent direct support; this amendment adds no removal-language parser. Uncertainty remains available when wording is unsupported or a field is absent.
 
+## Clock source-presence extension
+
+R06 continuation generated a reminderTime SET with no grounded clock and was correctly rejected by CLOCK_SOURCE_MISSING. Extend the existing generation upper bound with allowedClockFields, reusing the existing temporal scanner and complete named-clock presence grammar only. A source presence cue opens eventTime/reminderTime without choosing a value, field ownership, or materializing evidence. No clock source and no occupied retained clock closes both change branches; a pending time question is not a clock source. Preserve eligible occupied PROPOSED/RESOLVED/CONFLICT clock slots for correction/CLEAR. Preserve immutable prior USER clock sources because existing CURRENT SET may cite them; ASSISTANT and removed control spans never supply presence. Exact target, pointer/span, value and source ownership validators remain unchanged. Missing-clock uncertainties remain available; JSON-encoded alternatives retain the existing downstream clock veto. This extension does not claim to prevent every model error on requests with any clock source.
+
 ## Accounting and evidence
 
 Keep the unchanged base wire digest as the reviewed schema-family identity; additionally capture the exact request-specific schema digest and capability digest. Verify the actual outbound schema equals the request's derived schema, not merely a stored label. No hardcoded fresh digest can authorize an unbound dynamic request. Historical static-wire evidence remains historical; never rewrite it.

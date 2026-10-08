@@ -23,6 +23,14 @@ Commit boundary: one cohesive capability/schema/gateway/accounting-evidence amen
 
 ## Local acceptance, 2026-10-08
 
+## Clock capability correction boundary
+
+- [x] Prove R06 failed at the existing source-presence guard, not canonical parsing; prompt already forbids absent clocks, but upstream clock change branches were unrestricted.
+- [x] RED tests for absent continuation, pending time question, numeric/named expressions, embedded tokens, ASSISTANT exclusion, retained conflict/CLEAR and prior USER compatibility.
+- [x] Extend `field-capability.ts` and `context-provider-wire.ts` only at the existing pre-generation upper-bound specialization. Do not alter evidence validators or oracle.
+- [x] Verify independent schema rejects absent-clock SET/REPLACE/CLEAR while missing-field guidance remains expressible; existing alternative and exact CONTEXT_FACT regressions stay authoritative.
+- [ ] Parent runs full offline check and independent C0/I0 review, then local commit and authorized Fresh Pilot. No live calls in implementation task.
+
 A1–A3 implemented and reviewed as one cohesive boundary. RED/GREEN includes source control-span negation, occupied conflicts, NEW/CURRENT upper-bound continuity and actual transport/proof. Focused 10 files / 3501 PASS; stable full offline 181 files / 8608 PASS / 2 existing skips; architecture test 1 PASS; typecheck/build/diff PASS; lint 0 errors / 168 existing warnings. Independent review C0/I0/M0, reviewed source SHA256 fingerprints match final source. Logs and review evidence retained in the plan's local scratch directory. No paid request occurred before these gates. Live Pilot acceptance remains separate and pending.
 
 ## Live checkpoint

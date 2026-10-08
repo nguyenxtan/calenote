@@ -40,11 +40,42 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toEqual({ version: "generation-field-capability-1", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-1", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).toContain("title");
   expect(JSON.stringify(context)).toBe(before);
+});
+it.each(["Đừng bỏ.", "Tiếp tục.", "Nhắc trước 2 ngày.", "Nhắc buổi sáng."])("absent clocks close generation branches without answering pending clock: %s", text => {
+  const context = input(text);
+  context.pendingQuestion = { text: "Mấy giờ?", scope: "REMINDER", field: "reminderTime", decisionKind: null, reason: "MISSING" };
+  expect(catalogue(context).allowedClockFields).toEqual([]);
+  expect(fields(context)).not.toContain("reminderTime");
+  expect(fields(context)).not.toContain("eventTime");
+});
+it.each(["8h.", "08:00.", "nửa đêm", "noon", "midnight"])("clock source presence opens an upper bound, never a value: %s", text => {
+  expect(catalogue(input(text)).allowedClockFields).toEqual(["eventTime", "reminderTime"]);
+});
+it.each(["noon2", "user_midnight_key", "nửa đêm2", "midnight_", "_noon", "noon\u0338"])("embedded clock token does not open branches: %s", text => {
+  expect(catalogue(input(text)).allowedClockFields).toEqual([]);
+});
+it("assistant clocks cannot lend source presence but prior USER sources preserve legal CURRENT SET", () => {
+  const context = input("Đừng bỏ.");
+  context.turns.unshift({ role: "ASSISTANT", text: "9h." }); context.currentTurn = 1;
+  expect(catalogue(context).allowedClockFields).toEqual([]);
+  context.turns.unshift({ role: "USER", text: "8h." }); context.currentTurn = 2;
+  expect(catalogue(context).allowedClockFields).toEqual(["eventTime", "reminderTime"]);
+});
+it("occupied retained clock keeps correction/CLEAR while null slot does not", () => {
+  const context = input("Giữ như cũ.");
+  const slots = Object.fromEntries(SLOT_NAMES.map(field => [field, { state: "MISSING", value: null, fact: null }])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+  slots.reminderTime = { state: "PROPOSED", value: { hour: 8, minute: 0, qualifier: "H24" }, fact: null };
+  context.activeRequest = { lifecycle: "CLARIFYING", slots };
+  expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+  slots.reminderTime.state = "CONFLICT";
+  expect(catalogue(context).allowedClockFields).toEqual(["reminderTime"]);
+  slots.reminderTime.value = null;
+  expect(catalogue(context).allowedClockFields).toEqual([]);
 });
 it("assistant and unrelated older turns do not open numeric fields", () => {
   const context = input("Giúp tôi.");
@@ -113,6 +144,14 @@ function validator(context: ContextInput) {
   };
   return z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
 }
+it.each(["SET", "REPLACE", "CLEAR"] as const)("wire rejects absent clock %s while keeping clock MISSING expressible", operation => {
+  const context = input("Đừng bỏ."), check = validator(context);
+  const evidence = [{ kind: "USER_QUOTE", turn: 0, quote: context.turns[0].text, occurrence: 1 }];
+  const value = operation === "CLEAR" ? null : { hour: 8, minute: 0, qualifier: "H24" };
+  const raw = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "reminderTime", operation, value, evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
+  expect(check.safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
+  expect(check.safeParse(encodeGoogleLiteEuContextV3({ ...raw, changes: [], uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }] })).success).toBe(true);
+});
 it.each(["SET", "REPLACE", "CLEAR"] as const)("independent schema consumer rejects forbidden field carriers including %s", operation => {
   const context = input("Nhắc trước 2 ngày."), check = validator(context);
   const evidence = [{ kind: "USER_QUOTE", turn: 0, quote: context.turns[0].text, occurrence: 1 }];
