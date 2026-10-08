@@ -3,6 +3,39 @@ import { buildLegacyV2ContextInput as buildContextInput, type ReadyContext } fro
 import { chat, message, observation, snapshot, turn, withNotes } from "./context-test-fixtures";
 import { validateLegacyV2Evidence as validateEvidence } from "./evidence";
 import { DownstreamTraceSchema, type DownstreamDiagnostic } from "./downstream";
+import {buildContextInputV2} from "./context";
+import {validateEvidenceV3} from "./evidence";
+import {ContextSnapshotV2Schema} from "./state";
+import {SemanticPatchProposalV3Schema} from "./contracts";
+
+it.each(["REPLACE","CLEAR"] as const)("V3 historical %s identifies the representative source without changing refusal",operation=>{
+ const old=withNotes("PRIVATE_OLD_NOTE"),state=ContextSnapshotV2Schema.parse({...old,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null});
+ const msg=message("PRIVATE_CURRENT_TASK"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(old,msg)});if(built.status!=="READY")throw Error(built.reason);
+ const current={kind:"USER_QUOTE" as const,turn:built.input.currentTurn,quote:msg.text,occurrence:1};
+ const historical={kind:"USER_QUOTE" as const,turn:0,quote:"PRIVATE_OLD_NOTE",occurrence:1};
+ const proposal=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[current]},changes:[{field:"notes",operation,value:operation==="CLEAR"?null:"PRIVATE_NEW_NOTE",evidence:[historical]}],query:null,uncertainties:[]});
+ const trace:DownstreamDiagnostic[]=[];const before=JSON.stringify(proposal),result=validateEvidenceV3(proposal,built,d=>trace.push(d));
+ expect(result).toEqual({status:"REFUSED",reason:"CURRENT_USER_EVIDENCE_REQUIRED"});
+ expect(trace.find(d=>d.stage==="EVIDENCE")?.evidenceFailure).toMatchObject({reason:"CURRENT_USER_EVIDENCE_REQUIRED",field:"notes",operation,currentTurnOrdinal:built.input.currentTurn,path:["changes",0,"evidence"],referenceOrdinal:0,referenceSelection:"REPRESENTATIVE_NO_CURRENT",sourceAlias:"t0",sourceTurnOrdinal:0,resolvedSourceRole:"USER"});
+ expect(DownstreamTraceSchema.safeParse(trace).success).toBe(true);expect(JSON.stringify(proposal)).toBe(before);expect(JSON.stringify(trace)).not.toContain("PRIVATE_");
+ expect(validateEvidenceV3(proposal,built,()=>{throw Error("PRIVATE_OBSERVER");})).toEqual(result);
+ const supplied={...proposal,changes:[{...proposal.changes[0],evidence:[current]}]};expect(validateEvidenceV3(supplied,built).status).toBe("VALID");
+ const kept=SemanticPatchProposalV3Schema.parse({...proposal,changes:[{...proposal.changes[0],operation:"SET",value:"PRIVATE_OLD_NOTE"}]});expect(validateEvidenceV3(kept,built).status).toBe("VALID");
+});
+it.each(["FACT_REPLACE","TARGET","QUERY","ALTERNATIVE"] as const)("V3 current-source failure diagnostic identifies %s without exposing operands",site=>{
+ const old=withNotes("PRIVATE_OLD_NOTE"),state=ContextSnapshotV2Schema.parse({...old,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null});
+ const msg=message("PRIVATE_CURRENT_TASK"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(old,msg)});if(built.status!=="READY")throw Error(built.reason);
+ const current={kind:"USER_QUOTE" as const,turn:built.input.currentTurn,quote:msg.text,occurrence:1},past={kind:"USER_QUOTE" as const,turn:0,quote:"PRIVATE_OLD_NOTE",occurrence:1};
+ const fact=built.input.facts.find(f=>f.field==="notes")!;
+ const base={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[current]},changes:[],query:null,uncertainties:[]};
+ const raw=site==="FACT_REPLACE"?{...base,changes:[{field:"notes",operation:"REPLACE",value:"PRIVATE_OLD_NOTE",evidence:[{kind:"CONTEXT_FACT",ref:fact.alias},past]}]}:site==="TARGET"?{...base,requestTarget:{kind:"CURRENT",evidence:[current,past]}}:site==="QUERY"?{...base,intent:"LIST_REMINDERS",requestTarget:null,query:{kind:"LIST",period:{kind:"MONTH",offset:0},statusScope:"DEFAULT",evidence:[past]}}:{...base,intent:"AMBIGUOUS",uncertainties:[{field:"operation",reason:"AMBIGUOUS",alternatives:[{value:"CURRENT",evidence:[current,past]}]}]};
+ const proposal=SemanticPatchProposalV3Schema.parse(raw),trace:DownstreamDiagnostic[]=[];
+ expect(validateEvidenceV3(proposal,built,d=>trace.push(d))).toEqual({status:"REFUSED",reason:"CURRENT_USER_EVIDENCE_REQUIRED"});
+ const diagnostic=trace.find(d=>d.stage==="EVIDENCE")?.evidenceFailure;
+ const expected=site==="FACT_REPLACE"?{field:"notes",path:["changes",0,"evidence"],operation:"REPLACE",sourceAlias:fact.alias,resolvedSourceRole:"CONTEXT_FACT",sourceTurnOrdinal:null,referenceOrdinal:0,referenceSelection:"REPRESENTATIVE_NO_CURRENT"}:site==="TARGET"?{field:"operation",path:["requestTarget","evidence"],sourceAlias:"t0",referenceOrdinal:1,referenceSelection:"FIRST_OFFENDING"}:site==="QUERY"?{field:"queryRange",path:["query","evidence"],sourceAlias:"t0",referenceOrdinal:0,referenceSelection:"REPRESENTATIVE_NO_CURRENT"}:{field:"operation",path:["uncertainties",0,"alternatives",0,"evidence"],sourceAlias:"t0",referenceOrdinal:1,referenceSelection:"FIRST_OFFENDING"};
+ expect(diagnostic).toMatchObject({...expected,reason:"CURRENT_USER_EVIDENCE_REQUIRED",currentTurnOrdinal:built.input.currentTurn});
+ expect(DownstreamTraceSchema.safeParse(trace).success).toBe(true);expect(JSON.stringify(trace)).not.toContain("PRIVATE_");
+});
 
 function build(text: string, state = null as ReturnType<typeof snapshot> | null): ReadyContext {
   const msg = message(text);

@@ -333,7 +333,7 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     && ["PROPOSED", "RESOLVED"].includes(frequency.state) && frequency.value === "DAILY"
     && ["PROPOSED", "RESOLVED"].includes(count.state) && typeof count.value === "number"
     ? count.value : undefined;
-  type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal">;
+  type Site = Pick<EvidenceFailureDiagnostic, "field" | "path" | "referenceOrdinal" | "operation" | "currentTurnOrdinal" | "referenceSelection">;
   // Failure-only identity telemetry. Hashes never participate in acceptance.
   const traceFailure = (reason: string, code: EvidenceFailureDiagnostic["reason"], ref: EvidenceRef, site: Site, sourceMapStatus: EvidenceFailureDiagnostic["sourceMapStatus"] = "NOT_CHECKED"): never => {
     try {
@@ -360,6 +360,7 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     } catch { /* Telemetry must not change the public rejection or authority. */ }
     return fail(reason);
   };
+  const traceCurrentFailure=(ref:EvidenceRef,site:Site,referenceSelection:NonNullable<EvidenceFailureDiagnostic["referenceSelection"]>,operation?:EvidenceFailureDiagnostic["operation"]):never=>traceFailure("CURRENT_USER_EVIDENCE_REQUIRED","CURRENT_USER_EVIDENCE_REQUIRED",ref,{...site,currentTurnOrdinal:built.input.currentTurn,referenceSelection,...(operation?{operation}:{})});
   const quoteSource = (ref: Extract<EvidenceRef, { kind: "USER_QUOTE" }>, site: Site): SourceEvidence => {
     const turn = built.evidenceIndex[ref.turn];
     if (!turn || turn.role !== "USER") return traceFailure("EVIDENCE_NOT_USER", !turn ? "SOURCE_ALIAS_UNKNOWN" : "SOURCE_ROLE_NOT_USER", ref, site);
@@ -467,14 +468,14 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     return { field, sources: distinct, current, provenance, referenceTime, resolvedValue, factBound: !!firstFact };
   };
   const resolve: typeof rawResolve = (...args) => traceLeadOffsetResolution(args[2], args[0], args[3], args[4], built, "V3_RESOLVER", observe, () => rawResolve(...args));
-  return {resolve,quoteSource};
+  return {resolve,quoteSource,traceCurrentFailure};
 }
 export function resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST"}>,uncertainties:SemanticPatchProposalV3["uncertainties"],built:ReadyContextV2,observe?:DownstreamObserver) {
   let failure:EvidenceFailureDiagnostic|undefined;
   try {
-    const {resolve,quoteSource}=createEvidenceResolverV3(built,diagnostic=>{failure=diagnostic;},observe);
+    const {resolve,quoteSource,traceCurrentFailure}=createEvidenceResolverV3(built,diagnostic=>{failure=diagnostic;},observe);
     const bound=resolve(query.evidence,"QUERY","queryRange",query,["query","evidence"],false,true);
-    if(!bound.current && !query.evidence.some(ref=>ref.kind==="CONTEXT_FACT"))fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    if(!bound.current && !query.evidence.some(ref=>ref.kind==="CONTEXT_FACT"))traceCurrentFailure(query.evidence[0],{field:"queryRange",path:["query","evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT");
     // Check every alternative before any obsolete query-range instruction is
     // discarded. Preserve the same field/path/reference ordinals as V3.
     for(const [index,raw] of uncertainties.entries()) {
@@ -482,7 +483,8 @@ export function resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST
       const scope=u.field==="queryRange"?"QUERY":SLOT_NAMES.includes(u.field as typeof SLOT_NAMES[number])?"REMINDER":"CONTROL";
       for(const [ordinal,a] of u.alternatives.entries()) {
         resolve(a.evidence,scope,u.field,a.value,["uncertainties",index,"alternatives",ordinal,"evidence"]);
-        if(u.field==="operation" && a.evidence.some(ref=>ref.kind!=="USER_QUOTE" || ref.turn!==built.input.currentTurn))fail("CURRENT_USER_EVIDENCE_REQUIRED");
+        const offending=a.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE" || ref.turn!==built.input.currentTurn);
+        if(u.field==="operation" && offending>=0)traceCurrentFailure(a.evidence[offending],{field:u.field,path:["uncertainties",index,"alternatives",ordinal,"evidence"],referenceOrdinal:offending},"FIRST_OFFENDING");
       }
     }
     const resolved=QueryOperandSchema.parse(bound.resolvedValue);
@@ -516,19 +518,19 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
-  const {resolve,quoteSource} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe,value.requestTarget);
+  const {resolve,quoteSource,traceCurrentFailure} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe,value.requestTarget);
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {
       const old = internal.snapshot?.slots[change.field].value ?? null;
       const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && change.operation === "REPLACE");
       const resolved = FieldChangeV3Schema.parse({ ...change, value: evidence.resolvedValue });
-      if (resolved.operation !== "SET" && !evidence.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+      if (resolved.operation !== "SET" && !evidence.current) traceCurrentFailure(change.evidence[0],{field:change.field,path:["changes",index,"evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT",resolved.operation);
       resolvedChanges.push(resolved);
       return evidenceMetadata(evidence);
     });
     let query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, ["query", "evidence"], false, value.query.kind === "LIST") : null;
-    if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) traceCurrentFailure(value.query!.evidence[0],{field:"queryRange",path:["query","evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT");
     let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
     let deterministicRange = false;
     if (resolvedQuery?.kind === "LIST" && query?.current && value.intent === "LIST_REMINDERS") {
@@ -557,7 +559,8 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       }
     }
     const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["requestTarget", "evidence"]) : null;
-    if (target && value.requestTarget!.evidence.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+    const offendingTarget=value.requestTarget?.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||ref.turn!==built.input.currentTurn)??-1;
+    if (target && offendingTarget>=0) traceCurrentFailure(value.requestTarget!.evidence[offendingTarget],{field:"operation",path:["requestTarget","evidence"],referenceOrdinal:offendingTarget},"FIRST_OFFENDING");
     // Current USER evidence grounds the instruction, not target existence.
     // Only the builder's privately retained, scope/revision/lifetime-checked
     // draft grants CURRENT. Never reinterpret an unavailable target as NEW.
@@ -644,7 +647,8 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
         : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
       const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
         const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value, ["uncertainties", index, "alternatives", alternativeIndex, "evidence"]);
-        if (uncertainty.field === "operation" && alternative.evidence.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn)) fail("CURRENT_USER_EVIDENCE_REQUIRED");
+        const offending=alternative.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||ref.turn!==built.input.currentTurn);
+        if (uncertainty.field === "operation" && offending>=0) traceCurrentFailure(alternative.evidence[offending],{field:uncertainty.field,path:["uncertainties",index,"alternatives",alternativeIndex,"evidence"],referenceOrdinal:offending},"FIRST_OFFENDING");
         alternativeEvidence.push(evidenceMetadata(resolved));
         return { ...alternative, value: resolved.resolvedValue };
       });

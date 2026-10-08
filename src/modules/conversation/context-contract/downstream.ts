@@ -34,7 +34,10 @@ export const EvidenceFailureDiagnosticSchema = z.strictObject({
   sourceViewSha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
   sourceMapStatus: z.enum(["NOT_CHECKED", "VALID", "INVALID", "REMOVED_CONTROL_SPAN", "NORMALIZATION_BOUNDARY"]),
   quoteClassification: QuoteClassificationSchema.optional(),
-  reason: z.enum(["SOURCE_ALIAS_UNKNOWN", "SOURCE_SCOPE_MISMATCH", "SOURCE_ROLE_NOT_USER", "QUOTE_NOT_FOUND", "QUOTE_OCCURRENCE_OUT_OF_RANGE", "QUOTE_NORMALIZATION_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", "QUOTE_REMOVED_CONTROL_SPAN", "EVIDENCE_TARGET_MISMATCH"]),
+  operation: z.enum(["SET", "REPLACE", "CLEAR"]).optional(),
+  currentTurnOrdinal: z.number().int().min(0).max(11).optional(),
+  referenceSelection: z.enum(["REPRESENTATIVE_NO_CURRENT", "FIRST_OFFENDING"]).optional(),
+  reason: z.enum(["SOURCE_ALIAS_UNKNOWN", "SOURCE_SCOPE_MISMATCH", "SOURCE_ROLE_NOT_USER", "QUOTE_NOT_FOUND", "QUOTE_OCCURRENCE_OUT_OF_RANGE", "QUOTE_NORMALIZATION_MISMATCH", "QUOTE_SOURCE_MAP_INVALID", "QUOTE_REMOVED_CONTROL_SPAN", "EVIDENCE_TARGET_MISMATCH", "CURRENT_USER_EVIDENCE_REQUIRED"]),
 });
 export type EvidenceFailureDiagnostic = z.infer<typeof EvidenceFailureDiagnosticSchema>;
 
