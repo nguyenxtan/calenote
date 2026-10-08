@@ -588,7 +588,17 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     });
     requireShape(changes.anyOf.length);
   }
-  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: prune(schema) as typeof InterpretationJsonSchemaV3 };
+  // Provider dialect supports string enums, not const. Apply only after every
+  // builder/specialization; internal decoder predicates remain unchanged.
+  const outgoingStringEnums = (node: Schema): Schema => {
+    const result = mapSchemas(node, outgoingStringEnums);
+    if (typeof result.const === "string") {
+      requireShape(!result.enum || result.enum.includes(result.const));
+      result.enum = [result.const]; delete result.const;
+    }
+    return result;
+  };
+  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);

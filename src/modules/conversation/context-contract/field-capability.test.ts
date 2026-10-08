@@ -27,7 +27,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-1",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("98256f82df3037aef548d5f9c4b5f8cf30ee4270720dcb282614ff244a904324");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("49f808930f2582ea6841d3e33e4931d902ab6f873be421e54718c9f69bc2f67e");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -150,7 +150,7 @@ it("schema specialization never mutates another request and never leaves empty e
   expect(JSON.stringify(googleLiteEuContextWireSchemaV3())).toBe(family);
 });
 
-function validator(context: ContextInput) {
+function validator(context: ContextInput, ignoreUnsupportedConst = false) {
   const schema = serializeContextRequest(context).response_format.json_schema.schema;
   const inline = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(inline);
@@ -160,10 +160,23 @@ function validator(context: ContextInput) {
       const target = node.$ref.slice(2).split("/").reduce((parent, key) => (parent as Record<string, unknown>)[key], schema as unknown);
       return inline(target);
     }
-    return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs").map(([key, child]) => [key, inline(child)]));
+    return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs" && !(ignoreUnsupportedConst && key === "const")).map(([key, child]) => [key, inline(child)]));
   };
   return z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
 }
+it("R04 supported dialect still forbids ordinary title SET when unsupported const is ignored", () => {
+  const context = input("Tôi thi ngày 11/10 lúc 8h."), check = validator(context, true);
+  const evidence = [{ kind: "USER_QUOTE" as const, turn: 0, quote: context.turns[0].text, occurrence: 1 }];
+  const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
+  const wire = encodeGoogleLiteEuContextV3(canonical) as { titleChange: { change: unknown }; changes: unknown[] };
+  expect(check.safeParse(wire).success).toBe(true);
+  const duplicate = { ...wire, changes: [structuredClone(wire.titleChange.change)] };
+  expect(check.safeParse(duplicate).success).toBe(false);
+  for (const operation of ["REPLACE", "CLEAR"] as const) {
+    const correction = ConversationInterpretationV3Schema.parse({ ...canonical, changes: [{ field: "title", operation, value: operation === "CLEAR" ? null : "họp", evidence }] });
+    expect(check.safeParse(encodeGoogleLiteEuContextV3(correction)).success).toBe(true);
+  }
+});
 it.each(["SET", "REPLACE", "CLEAR"] as const)("wire rejects absent clock %s while keeping clock MISSING expressible", operation => {
   const context = input("Đừng bỏ."), check = validator(context);
   const evidence = [{ kind: "USER_QUOTE", turn: 0, quote: context.turns[0].text, occurrence: 1 }];

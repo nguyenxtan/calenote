@@ -8,8 +8,8 @@ import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleL
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 
-it("outgoing V3 dates do not multiply query discriminator enum states", () => {
-  const schema=googleLiteEuContextWireSchema().schema;
+it.each([undefined, {version:"generation-field-capability-1" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false}, {version:"generation-field-capability-1" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
+  const schema=googleLiteEuContextWireSchema(capability).schema;
   let constants=0;const singletonValues:string[]=[];
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;
     if(Array.isArray(value)){value.forEach(walk);return;}
@@ -18,8 +18,10 @@ it("outgoing V3 dates do not multiply query discriminator enum states", () => {
     if(Array.isArray(node.enum)&&node.enum.length===1&&typeof node.enum[0]==="string")singletonValues.push(node.enum[0]);
     Object.values(node).forEach(walk);
   };walk(schema);
-  expect(constants).toBeGreaterThan(0);
-  expect(singletonValues).toEqual([]);
+  expect(constants).toBe(0);
+  expect(singletonValues).toEqual(expect.arrayContaining(["title", "SET", "CLEAR"]));
+  if (!capability?.titlePresenceRequired) expect(singletonValues).toContain("REPLACE");
+  for (const tag of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) expect(singletonValues).not.toContain(tag);
 });
 it("encoded canonical date round trip preserves strict active payload authority", () => {
   const canonical = ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
@@ -362,8 +364,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-28");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("931dea2a079f1e31793fa09fbf8f7fb2410bd435d8677270024cbabeb213ce6a");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-29");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("01b123b1c366deaf4bc2d706e5e3d4419c9f4caf42e2d4322e55e145a4822282");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
