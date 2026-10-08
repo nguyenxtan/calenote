@@ -5,8 +5,8 @@ import { FieldChangeV3Schema } from "./contracts";
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
-for(const key of ["titleChange","index","change"])keys.add(key);
-rootKeys.add("titleChange");
+for(const key of ["titleChange","reminderDateChange","reminderTimeChange","index","change"])keys.add(key);
+for(const key of ["titleChange","reminderDateChange","reminderTimeChange"])rootKeys.add(key);
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
@@ -115,7 +115,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     result.issues[0].classification = structural === undefined ? "missing" : "value";
   }
   result.issues[0].code = "WIRE_SHAPE_INVALID";
-  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED"].includes(expected)) result.issues[0].expected = expected;
+  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED", "UNIQUE_FIELD_OWNER", "FIELD_CARRIER_REQUIRED", "FIELD_CHANGE", "CHANGE_POSITION"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
   if (extraKeyCount !== undefined) { result.issues[0].classification = "extra"; result.issues[0].extraKeyCount = extraKeyCount; }
   if (result.issues[0].actualType === "array" && cardinality && [cardinality.actualCount, cardinality.minItems, cardinality.maxItems].every(value => value === undefined || Number.isSafeInteger(value) && value >= 0)) {

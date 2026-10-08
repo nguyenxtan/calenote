@@ -503,40 +503,76 @@ function indexedTitleSchema(root:Schema):Schema {
   result.required!.push("titleChange");
   return result;
 }
-const providerSchemaV3 = indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3)))))))))));
+function indexedReminderSchema(root:Schema):Schema {
+  const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
+  for(const field of ["reminderDate","reminderTime"] as const){
+    const changes:Schema[]=[];
+    items.anyOf=items.anyOf!.flatMap(raw=>{
+      const branch=deref(raw,result),control=branch.properties!.field,fields=control.enum??[control.const];
+      if(!fields.includes(field))return [raw];
+      const change=structuredClone(branch);change.properties!.field={type:"string",const:field};changes.push(change);
+      const remaining=fields.filter(value=>value!==field);
+      if(!remaining.length)return [];
+      const ordinary=structuredClone(branch);ordinary.properties!.field={type:"string",enum:remaining};return [ordinary];
+    });
+    requireShape(changes.length);
+    result.properties![field+"Change"]={anyOf:[{type:"object",properties:{index:{type:"integer"},change:{anyOf:changes}},required:["index","change"],additionalProperties:false},{type:"null"}]};
+    result.required!.push(field+"Change");
+  }
+  return result;
+}
+const providerSchemaV3 = indexedReminderSchema(indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))))))));
 
-/** Move only model-authored SET data; indices and duplicate ownership are
+/** Move only explicitly model-authored carrier data; indices and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
-function titleCarrier(raw:Record<string,unknown>,mode:"encode"|"decode",required=false):Record<string,unknown>{
+function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false):Record<string,unknown>{
   const result={...raw};
   if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
-  const titles=raw.changes.flatMap((change,index)=>change && typeof change==="object" && !Array.isArray(change) && change.field==="title" ? [{change,index}] : []);
-  if(mode==="encode"){
-    if(titles.length>1)throw new WireShapeFailure(["titleChange"],"UNIQUE_TITLE_OWNER");
-    const title=titles[0];
-    result.titleChange=title?.change.operation==="SET"?{index:title.index,change:title.change}:null;
-    if(result.titleChange)result.changes=raw.changes.filter((_,index)=>index!==title.index);
-  }else{
-    if(!Object.hasOwn(raw,"titleChange"))throw new WireShapeFailure(["titleChange"],"REQUIRED_PROPERTY");
-    const carrier=raw.titleChange;
-    delete result.titleChange;
+  const ordinaryChanges=raw.changes;
+  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false}] as const;
+  const positions=new Map<number,unknown>();
+  for(const definition of definitions){
+    const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);
+    const duplicate=definition.field==="title"?"UNIQUE_TITLE_OWNER":"UNIQUE_FIELD_OWNER";
+    if(mode==="encode"){
+      if(authored.length>1)throw new WireShapeFailure([definition.root],duplicate);
+      const item=authored[0];
+      result[definition.root]=item&&(!definition.setOnly||item.change.operation==="SET")?{index:item.index,change:item.change}:null;
+      if(result[definition.root])positions.set(item.index,item.change);
+      continue;
+    }
+    if(!Object.hasOwn(raw,definition.root))throw new WireShapeFailure([definition.root],"REQUIRED_PROPERTY");
+    const carrier=raw[definition.root];delete result[definition.root];
     if(carrier===null){
-      if(required)throw new WireShapeFailure(["titleChange"],"object");
-      if(titles.some(({change})=>change.operation==="SET"))throw new WireShapeFailure(["titleChange"],"TITLE_SET_CARRIER_REQUIRED");
-      return result;
+      if(definition.field==="title"&&required)throw new WireShapeFailure([definition.root],"object");
+      if(authored.some(({change})=>!definition.setOnly||change.operation==="SET"))throw new WireShapeFailure([definition.root],definition.setOnly?"TITLE_SET_CARRIER_REQUIRED":"FIELD_CARRIER_REQUIRED");
+      continue;
     }
-    if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure(["titleChange"],"object");
-    requireWireKeys(carrier as Record<string,unknown>,["index","change"],["index","change"],["titleChange"]);
+    if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([definition.root],"object");
+    requireWireKeys(carrier as Record<string,unknown>,["index","change"],["index","change"],[definition.root]);
     const {index,change}=carrier as {index:unknown;change:unknown};
-    if(typeof index!=="number"||!Number.isInteger(index)||index<0||index>raw.changes.length)throw new WireShapeFailure(["titleChange","index"],"CHANGE_POSITION");
-    const shape=providerSchemaV3.properties!.titleChange.anyOf![0].properties!.change;
-    if(change && typeof change==="object" && !Array.isArray(change)) {
+    if(typeof index!=="number"||!Number.isInteger(index)||index<0||positions.has(index))throw new WireShapeFailure([definition.root,"index"],"CHANGE_POSITION");
+    const shape=providerSchemaV3.properties![definition.root].anyOf![0].properties!.change;
+    if(change&&typeof change==="object"&&!Array.isArray(change)){
       const item=change as Record<string,unknown>;
-      for(const [key,value] of [["field","title"],["operation","SET"]] as const)if(item[key]!==value)throw new WireShapeFailure(["titleChange","change",key],"CONTROL_ENUM",undefined,undefined,projectControlEnum([value],item[key]));
+      if(item.field!==definition.field){
+        const diagnostic=projectControlEnum([definition.field],item.field);
+        // Carrier field controls are schema-owned finite literals, not arbitrary
+        // token-shaped user values. Unknown field strings retain digest only.
+        if(!definition.setOnly)delete diagnostic.actualSafeToken;
+        throw new WireShapeFailure([definition.root,"change","field"],"CONTROL_ENUM",undefined,undefined,diagnostic);
+      }
+      if(definition.setOnly&&item.operation!=="SET")throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(["SET"],item.operation));
     }
-    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure(["titleChange","change"],"TITLE_SET_CHANGE");
-    if(titles.length)throw new WireShapeFailure(["titleChange"],"UNIQUE_TITLE_OWNER");
-    const changes=[...raw.changes];changes.splice(index,0,change);result.changes=changes;
+    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],definition.setOnly?"TITLE_SET_CHANGE":"FIELD_CHANGE");
+    if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
+    positions.set(index,change);
+  }
+  if(mode==="encode")result.changes=raw.changes.filter((_,index)=>!positions.has(index));
+  else{
+    const total=raw.changes.length+positions.size;
+    for(const index of positions.keys())if(index>=total)throw new WireShapeFailure([definitions.find(item=>(raw[item.root] as {index?:unknown}|null)?.index===index)!.root,"index"],"CHANGE_POSITION");
+    let ordinary=0;result.changes=Array.from({length:total},(_,index)=>positions.has(index)?positions.get(index):ordinaryChanges[ordinary++]);
   }
   return result;
 }
@@ -549,7 +585,8 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
   result.operationCode=operationWireCodes[code];delete result.intent;
   for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
  }else{
-  requireWireKeys(raw,providerSchemaV3.required!.filter(key=>!["conversationDirective","replyProposal","titleChange"].includes(key)),Object.keys(providerSchemaV3.properties!).filter(key=>key!=="titleChange"),[]);
+  const carriers=["titleChange","reminderDateChange","reminderTimeChange"];
+  requireWireKeys(raw,providerSchemaV3.required!.filter(key=>!["conversationDirective","replyProposal",...carriers].includes(key)),Object.keys(providerSchemaV3.properties!).filter(key=>!carriers.includes(key)),[]);
   const code=raw.operationCode;
   const index=typeof code==="string"?operationWireCodes.indexOf(code):-1;
   if(index<0)throw new WireShapeFailure(["operationCode"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(operationWireCodes,code));
@@ -575,6 +612,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
     requireShape(capability.version === "generation-field-capability-2" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
+    if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
     const changes = deref(schema.properties!.changes.items!, schema);
     requireShape(changes.anyOf?.length);
     changes.anyOf = changes.anyOf.flatMap(raw => {
@@ -607,7 +645,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
-  return titleCarrier(operationValues(dateJsonOperands(output,"encode"),"encode"),"encode");
+  return indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode"),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -624,7 +662,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const unfolded=titleCarrier(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false);
+    const unfolded=indexedChangeCarriers(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false);
     const object = dateJsonOperands(operationValues(materializeProviderEvidence(unfolded,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;

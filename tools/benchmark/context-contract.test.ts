@@ -5,22 +5,24 @@ import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { frozenContextProposal, validateContextFixtureCoverage, encodeFixtureV3 } from "./context-pointer-fixtures";
-import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
-import {materializeProviderEvidence} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
+import { decodeGoogleLiteEuContextTransportV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
+import { ContextInputSchema } from "../../src/modules/conversation/context-contract/contracts";
 
 it("all_R01_R16_keep_original_words_and_oracles", () => {
   const original = spawnSync("git", ["show", "68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/regressions.json"], { encoding: "utf8" });
   expect(original.status).toBe(0);
   expect(regressions).toEqual(JSON.parse(original.stdout));
   expect(regressions.cases.map(c => c.id)).toEqual(Array.from({ length: 16 }, (_, i) => `R${String(i + 1).padStart(2, "0")}`));
-  const input = { currentTurn: 0, turns: [{ role: "USER", text: "Đổi sang 9h." }] } as Parameters<typeof frozenContextProposal>[0];
+  const input = ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},currentTurn:0,turns:[{role:"USER",text:"Đổi sang 9h."}],activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["WEEKLY","MONTHLY","YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const correction = frozenContextProposal(input, "R07", 3);
   expect(correction).toMatchObject({ schemaVersion: "calenote-context-3", requestTarget: { kind: "CURRENT" },
     changes: [{ field: "reminderTime", operation: "REPLACE" }], conversationDirective: null });
   expect(correction).not.toHaveProperty("dialogueAct");
   const encoded = encodeFixtureV3(correction);
-  expect(parseGoogleLiteEuContextSectionsV3(materializeProviderEvidence(encoded,input), CONTEXT_PROTOCOL_V3), JSON.stringify(encoded)).toMatchObject({ status: "PARSED" });
+  // Production restores all indexed changes before materializing USER pointers.
+  // Pre-materializing ordinary wire changes cannot reach a singleton carrier.
+  expect(decodeGoogleLiteEuContextTransportV3(encoded, CONTEXT_PROTOCOL_V3, undefined, undefined, input), JSON.stringify(encoded)).toMatchObject({ status: "PARSED", value: { semantic: { changes: (correction as {changes:unknown[]}).changes } } });
 });
 
 it.each(["directive", "reply"])("production observable service retains valid core and backend fallback for bad %s", async section => {

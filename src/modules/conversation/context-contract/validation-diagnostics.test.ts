@@ -78,6 +78,13 @@ it("retains malformed evidence in a late field union branch", () => {
   expect((diagnostics as { issues: Array<{ path: Array<string | number> }> }).issues.some(issue => issue.path.join(".") === "changes.0.evidence.0.occurrence")).toBe(true);
 });
 import { projectWireValidation } from "./validation-diagnostics";
+it.each(["reminderDateChange","reminderTimeChange"])("new singleton path %s is finite and unknown child names remain redacted",root=>{
+  const raw={[root]:{index:null,change:{[sentinel]:sentinel}}};
+  expect(projectWireValidation(raw,[root,"index"],"CHANGE_POSITION",undefined,"calenote-context-3")).toMatchObject({issues:[{path:[root,"index"],expected:"CHANGE_POSITION",actualType:"null",unknownPathSegments:0}],topLevelKeys:[root],unknownTopLevelKeyCount:0});
+  const unknown=projectWireValidation(raw,[root,"change",sentinel],"FIELD_CHANGE",undefined,"calenote-context-3");
+  expect(unknown.issues[0].unknownPathSegments).toBe(1);
+  expect(JSON.stringify(unknown)).not.toContain(sentinel);
+});
 
 it("retains the trusted date-encoding failure family without operand content", () => {
   const diagnostic = projectWireValidation({ changes: [{ field: "reminderDate", value: "SYNTHETIC_PRIVATE_DATE" }] }, ["changes", 0, "value"], "DATE_OPERAND_JSON", undefined, "calenote-context-3");

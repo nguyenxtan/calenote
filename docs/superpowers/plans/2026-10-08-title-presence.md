@@ -44,6 +44,17 @@ Focused command: pnpm exec vitest run src/modules/conversation/context-contract/
 
 Acceptance: grounded title generated with exact USER pointer and required presence; wrong/missing authority rejected; original R01-R16 expectations preserved; full green, independent C0/I0, immutable local commit, then actual Fresh Pilot evidence. Commit is not a stop condition.
 
+R05 reminder singleton follow-up (controller design review before runtime edits):
+
+- [ ] Quick-review the bounded two-field spec amendment.
+- [ ] RED schema permits ordinary reminderDate/reminderTime ownership; require nullable indexed roots, all operations, clock exclusions and reversible original-position reconstruction across title/date/time carriers.
+- [ ] RED missing/malformed/null index, colliding positions, ordinary duplicate/bypass and wrong evidence source; preserve authored values and canonical guards without repair.
+- [ ] Implement three-carrier transport helper, closed ownership paths, wire31 identity/prompt/pins and necessary authored test adapters; no frozen fixture/oracle edits.
+- [ ] Measure base/request complexity and network-denied token fit; focused transport/capability/evidence/gateway/runner regressions, typecheck/diff, then freeze source/tests.
+- [ ] Controller review/full suite/commit/live verification; mitigation remains unverified until Fresh Pilot passes.
+
+Planned files: openrouter/context-provider-wire.ts/.test.ts; context-contract/output-authority.ts/.test.ts, protocol.ts, prompt.ts/.test.ts and validation-diagnostics.ts/.test.ts only for new finite transport paths/reasons; benchmark/context-pointer-fixtures.ts and relevant authored transport fixture tests; benchmark runner/fit identity and complexity pins. Existing field-capability semantics, evidence/canonical validators and frozen scenario/oracle files remain unchanged.
+
 Wire30 availability follow-up: RED actual R04 specialized schema REPLACE/CLEAR on absent CURRENT title; add versioned titleCorrectionAllowed from occupied active title slot only; prune ordinary title branches when unavailable. Preserve real CURRENT PROPOSED/RESOLVED/CONFLICT corrections, missing/null and historical/query-fact exclusions; no claim of target-specific generation ownership across the shared root. Qualify prompt, update exact pins, run focused/date/evidence plus offline token fit/typecheck/diff, then freeze for review/full/live. Decoder still hard-rejects duplicate ownership without repair.
 
 Wire29 dialect follow-up: TDD simulate unsupported const omission at actual specialized R04 schema, reject ordinary title SET using singleton string enums, retain legal non-obligated REPLACE/CLEAR and existing decoder/canonical constraints. Convert outgoing string constants only after specialization; numeric constants unchanged. Update exact version/schema/request digest pins and complexity metrics; run focused, network-denied local token fit and typecheck/diff before freeze/review/full/live. Never claim knowledge of private provider transformations.

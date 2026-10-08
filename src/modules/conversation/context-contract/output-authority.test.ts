@@ -49,6 +49,14 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });
+it("reminder carrier paths and original indexes are explicitly untrusted and closed",()=>{
+  for(const root of ["reminderDateChange","reminderTimeChange"]){
+    for(const suffix of ["",".index",".change",".change.field",".change.operation",".change.value",".change.evidence",".change.evidence.primaryEvidence",".change.evidence.additionalEvidenceJson"]){
+      expect(authority.classifyOutputPathV3((root+suffix) as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
+    }
+    expect(()=>authority.classifyOutputPathV3(`${root}.change.PRIVATE_USER_FIELD` as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
+  }
+});
 it("compact date selections remain untrusted while their mapping is application owned", () => {
   for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through"])for(const kind of ["C","R","W"]){
     expect(authority.classifyOutputPathV3(`${prefix}{kind=${kind}}` as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",canAuthorizeRead:false,canAuthorizeWrite:false,applicationDerivable:false});
