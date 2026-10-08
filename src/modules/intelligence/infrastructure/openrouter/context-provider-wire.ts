@@ -607,7 +607,11 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   let schema = structuredClone(providerSchemaV3);
   if (capability) {
     requireShape(typeof capability.titlePresenceRequired==="boolean" && typeof capability.titleCorrectionAllowed==="boolean");
-    if(capability.titlePresenceRequired)schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
+    if(capability.titlePresenceRequired){
+      schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
+      schema.properties!.requestTarget=schema.properties!.requestTarget.anyOf![0];
+      schema.properties!.operationCode.enum=operationWireCodes.filter((_,index)=>operationTuples[index][1]!==null);
+    }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
     requireShape(capability.version === "generation-field-capability-2" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));

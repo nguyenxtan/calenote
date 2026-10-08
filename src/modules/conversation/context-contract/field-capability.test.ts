@@ -30,6 +30,34 @@ function input(text: string): ContextInput {
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
+it("bounded title obligation requires a targeted operation and non-null target without selecting either",()=>{
+ const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+ const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{operationCode:{enum:string[]};requestTarget:{type?:string}}};
+ const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {operationCode:string;requestTarget:unknown};const target=wire.requestTarget,check=validator(context);
+ for(const code of ["0","1","2","9","10","11"]){wire.operationCode=code;wire.requestTarget=target;expect(check.safeParse(wire).success,code).toBe(true);wire.requestTarget=null;expect(check.safeParse(wire).success,`${code}/null`).toBe(false);}
+ for(const code of ["3","4","5","6","7","8"]){wire.operationCode=code;wire.requestTarget=target;expect(check.safeParse(wire).success,code).toBe(false);}
+ expect(schema.properties.operationCode.enum).toEqual(["0","1","2","9","10","11"]);
+ expect(schema.properties.requestTarget.type).toBe("object");
+});
+it.each(["xem lịch đi thi","giúp tôi","Nhắc uống thuốc."])("non-obligated request retains full operation/target domains: %s",text=>{
+ const context=input(text),schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{operationCode:{enum:string[]};requestTarget:{anyOf:unknown[]}}};
+ expect(catalogue(context).titlePresenceRequired).toBe(false);
+ expect(schema.properties.operationCode.enum).toEqual(Array.from({length:12},(_,index)=>String(index)));
+ expect(schema.properties.requestTarget.anyOf).toHaveLength(2);
+});
+it("targeted generation availability still cannot grant unavailable CURRENT authority",async()=>{
+ let schemaAccepted=false;
+ const h=await harness([context=>{
+  expect(context.activeRequest).toBeNull();expect(catalogue(context).titlePresenceRequired).toBe(true);
+  const raw=proposal({title:"đi thi"},"CURRENT")(context);
+  schemaAccepted=validator(context).safeParse(encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(raw))).success;
+  return raw;
+ }]);
+ await h.turn(0,"Ngày 11/10 đi thi.");
+ expect(schemaAccepted).toBe(true);expect(await h.read(1)).toBeNull();
+});
 it("actual three-turn request primary pointer domain excludes ASSISTANT and uses one shared enum",()=>{
   const context=input("Nhắc 9h.");context.turns=[{role:"USER",text:"Nhắc gọi mẹ."},{role:"ASSISTANT",text:"Lúc nào?"},{role:"USER",text:"9h."}];context.currentTurn=2;
   const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {$defs:Record<string,{type:string;enum?:string[]}>};
@@ -60,7 +88,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-2",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("87a7739105ec234dcd5c99ab709ea8ad9009755b682ce09d19485a410de34454");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("05163835031519c4e6f60fd8d91211b7b89605405d040d4bea3dd1017a9ddc53");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
