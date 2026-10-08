@@ -42,3 +42,15 @@ export function supportsLeadOffset(value: number, evidence: readonly SourceEvide
   }
   return supported;
 }
+
+/** Generation-only sufficient exclusion for a complete retained-count answer.
+ * Unknown tails/other clauses decline exclusion; never extracts an operand or
+ * decides CURRENT versus NEW. Existing field/value ownership stays unchanged. */
+export function isBareRetainedSeriesOffsetAnswer(value: number, evidence: readonly SourceEvidence[], turns: readonly Pick<TranscriptEntry, "id" | "role" | "semanticView">[], seriesCount?: number): boolean {
+  if (seriesCount !== value || evidence.length !== 1) return false;
+  const source = evidence[0], turn = turns.find(t => t.id === source.sourceTurnId);
+  if (!turn || turn.role !== "USER" || source.quote !== turn.semanticView || source.viewSpan.start !== 0 || source.viewSpan.end !== [...turn.semanticView].length) return false;
+  const text = turn.semanticView.toLocaleLowerCase("vi");
+  if (!/^\s*(?:nhắc(?:\s+(?:tôi|mình|tui))?\s+)?(?:trước\s+(?:(?:ngày thi|hôm thi|sự kiện|đó)\s+)?(?:\d+|một|hai|ba)\s+ngày|(?:\d+|một|hai|ba)\s+ngày\s+trước(?:\s+(?:ngày thi|hôm thi|sự kiện|đó))?)\s*[.!]?\s*$/u.test(text)) return false;
+  return supportsLeadOffset(value, evidence, turns) && !supportsLeadOffset(value, evidence, turns, seriesCount);
+}

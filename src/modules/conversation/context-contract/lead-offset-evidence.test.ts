@@ -5,7 +5,7 @@ import { SemanticPatchProposalV3Schema } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
 import { harness, proposal } from "./service-test-support";
 import { date, time } from "./resolution-test-support";
-import { supportsLeadOffset } from "./lead-offset-evidence";
+import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-offset-evidence";
 import { supportsEventRelation } from "./event-relation-evidence";
 import { turn } from "./context-test-fixtures";
 
@@ -15,6 +15,22 @@ function check(text: string, value = 2, quote = text, turn?: number) {
   const evidence = [{ kind: "USER_QUOTE", turn: turn ?? built.input.currentTurn, quote, occurrence: 1 }];
   return validateEvidenceV3(SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "leadOffsetDays", operation: "SET", value, evidence }], query: null, uncertainties: [] }), built);
 }
+it.each([
+ ["Nhắc trước 2 ngày.",true], ["nhắc trước hai ngày",true], ["Trước 2 ngày.",true], ["Nhắc 2 ngày trước ngày thi.",true],
+ ["Bắt đầu nhắc trước 2 ngày.",false], ["Nhắc một lần trước ngày thi 2 ngày.",false], ["Nhắc trước 3 ngày.",false],
+ ["Ngày 20/12 đi làm việc mới, nhắc trước 2 ngày.",false], ["Nhắc trước 2 ngày lúc 8h.",false], ["Nhắc trước 2 ngày giúp tôi.",false],
+ ["Nhắc trước 2 ngày; gọi mẹ.",false], ["Nhắc trước 2 ngày [CONTROL]",false], ["\"Nhắc trước 2 ngày.\"",false],
+ ["Nếu nhắc trước 2 ngày.",false], ["Đừng nhắc trước 2 ngày.",false], ["Nhắc trước 2 ngày?",false], ["Nhắc trước 2 ngày liên tiếp.",false],
+] as const)("generation exclusion covers only complete bare equal-count answer: %s",(text,excluded)=>{
+ const source=turn(text),n=[...text].length;
+ const evidence=[{kind:"USER_QUOTE" as const,sourceTurnId:source.id,sourceMapTurnId:source.id,quote:text,occurrence:1,sourceSpan:{start:0,end:n},viewSpan:{start:0,end:n},normalizationVersion:"nfc-codepoint-v1" as const}];
+ const before=JSON.stringify({source,evidence});
+ expect(isBareRetainedSeriesOffsetAnswer(2,evidence,[source],2)).toBe(excluded);
+ expect(isBareRetainedSeriesOffsetAnswer(2,evidence,[source])).toBe(false);
+ expect(isBareRetainedSeriesOffsetAnswer(2,evidence,[{...source,role:"ASSISTANT"}],2)).toBe(false);
+ expect(isBareRetainedSeriesOffsetAnswer(2,[{...evidence[0],viewSpan:{start:1,end:n}}],[source],2)).toBe(false);
+ expect(JSON.stringify({source,evidence})).toBe(before);
+});
 it.each([["nhắc trước sự kiện 5 ngày", true], ["nhắc 5 ngày liên tiếp trước sự kiện", false]] as const)("prompt distance/series contrast preserves exact evidence admission: %s", (text, offsetSupported) => {
   const source = turn(text), n = [...text].length;
   const evidence = [{ kind: "USER_QUOTE" as const, sourceTurnId: source.id, sourceMapTurnId: source.id, quote: text, occurrence: 1, sourceSpan: { start: 0, end: n }, viewSpan: { start: 0, end: n }, normalizationVersion: "nfc-codepoint-v1" as const }];

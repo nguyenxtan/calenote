@@ -1,7 +1,7 @@
 import type { ContextInput } from "./contracts";
 import type { SourceEvidence } from "./state";
 import { supportsCadenceOperand } from "./cadence-count-evidence";
-import { supportsLeadOffset } from "./lead-offset-evidence";
+import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-offset-evidence";
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
@@ -12,7 +12,7 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-2";
+  version: "generation-field-capability-3";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
@@ -84,7 +84,8 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
         // grounded lead instruction may propose NEW even while CURRENT holds
         // a series. Bare CURRENT answers retain the series-count restriction;
         // the validator still checks the model's chosen target and value.
-        const newLead = supportsEventRelation("BEFORE_EVENT", [source], [turn], false) && supportsLeadOffset(value, [source], [turn])
+        const bareSeriesAnswer = !allowed.has("leadOffsetDays") && isBareRetainedSeriesOffsetAnswer(value, [contextual], [fullTurn], seriesCount);
+        const newLead = !bareSeriesAnswer && supportsEventRelation("BEFORE_EVENT", [source], [turn], false) && supportsLeadOffset(value, [source], [turn])
           && supportsEventRelation("BEFORE_EVENT", [contextual], [fullTurn], false) && supportsLeadOffset(value, [contextual], [fullTurn]);
         const currentLead = leadScope && supportsLeadOffset(value, [source], [turn], seriesCount) && supportsLeadOffset(value, [contextual], [fullTurn], seriesCount);
         if (currentLead || newLead) allowed.add("leadOffsetDays");
@@ -92,7 +93,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-2", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-3", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

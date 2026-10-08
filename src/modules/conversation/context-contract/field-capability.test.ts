@@ -115,7 +115,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-2",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-3",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
   expect(fields(context)).not.toContain("title");
 });
@@ -149,7 +149,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-2", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-3", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -201,6 +201,8 @@ it("retained operands preserve corrections and CLEAR without lending a series of
   expect(catalogue(context)?.allowedNumericFields).toEqual(["frequency", "occurrenceCount"]);
   context.turns[0].text = "Trước 2 ngày.";
   expect(catalogue(context)?.allowedNumericFields).toEqual(["frequency", "occurrenceCount"]);
+  context.turns[0].text = "Nhắc trước 2 ngày.";
+  expect(catalogue(context)?.allowedNumericFields).toEqual(["frequency", "occurrenceCount"]);
   context.turns[0].text = "Bắt đầu nhắc trước 2 ngày.";
   expect(catalogue(context)?.allowedNumericFields).toEqual(["frequency", "occurrenceCount", "leadOffsetDays"]);
   context.turns[0].text = "Ngày 20/12 đi làm việc mới, nhắc trước 2 ngày.";
@@ -210,6 +212,36 @@ it("retained operands preserve corrections and CLEAR without lending a series of
   expect(catalogue(context)?.allowedNumericFields).toEqual(["frequency", "occurrenceCount"]);
   slots.frequency.value = null; slots.occurrenceCount.value = null;
   expect(catalogue(context)?.allowedNumericFields).toEqual([]);
+});
+it.each([
+ ["Nhắc trước 2 ngày.",false], ["Nhắc trước hai ngày.",false], ["Nhắc 2 ngày trước ngày thi.",false],
+ ["Bắt đầu nhắc trước 2 ngày.",true], ["Nhắc một lần trước ngày thi 2 ngày.",true],
+ ["Nhắc trước 3 ngày.",true], ["Ngày 20/12 đi làm việc mới, nhắc trước 2 ngày.",true],
+ ["Nhắc trước 2 ngày lúc 8h.",true], ["Nhắc trước 2 ngày giúp tôi.",true],
+ ["Nhắc trước 2 ngày; gọi mẹ.",true],
+] as const)("retained series request capability and actual schema bound whole answer only: %s",(text,available)=>{
+ const context=input(text),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};
+ const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"leadOffsetDays",operation:"SET",value:text.includes("3 ngày")?3:2,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const check=validator(context),wire=encodeGoogleLiteEuContextV3(canonical);
+ expect(check.safeParse(wire).success).toBe(available);
+ expect(catalogue(context).allowedNumericFields.includes("leadOffsetDays")).toBe(available);
+ slots.leadOffsetDays={state:"PROPOSED",value:2,fact:null};expect(validator(context).safeParse(wire).success).toBe(true);
+ context.activeRequest=null;expect(validator(context).safeParse(wire).success).toBe(true);
+});
+it.each(["PROPOSED","RESOLVED","CONFLICT"] as const)("actual R02 role indexes and %s state preserve bound series/fact ownership",state=>{
+ const context=input("Nhắc trước 2 ngày."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.turns=[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi."},{role:"ASSISTANT",text:"Bạn muốn nhắc lúc mấy giờ?"},{role:"USER",text:"Nhắc trước 2 ngày."}];context.currentTurn=2;
+ const common={scope:"REMINDER" as const,provenance:{kind:"EXPLICIT_USER" as const},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]};
+ context.facts=[{...common,alias:"f1",field:"frequency",value:"DAILY"},{...common,alias:"f2",field:"occurrenceCount",value:2}];
+ slots.frequency={state,value:"DAILY",fact:"f1"};slots.occurrenceCount={state,value:2,fact:"f2"};context.activeRequest={lifecycle:"CLARIFYING",slots};
+ const evidence=[{kind:"USER_QUOTE" as const,turn:2,quote:context.turns[2].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"leadOffsetDays",operation:"SET",value:2,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical);expect(validator(context).safeParse(wire).success).toBe(state==="CONFLICT");
+ context.facts.push({...common,alias:"f3",field:"leadOffsetDays",value:2});slots.leadOffsetDays={state:"RESOLVED",value:2,fact:"f3"};
+ expect(validator(context).safeParse(wire).success).toBe(true);
+ const reused=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({...canonical,changes:[{field:"leadOffsetDays",operation:"SET",value:2,evidence:[{kind:"CONTEXT_FACT",ref:"f3"}]}]}));
+ expect(validator(context).safeParse(reused).success).toBe(true);
 });
 it("only the actual pending count question allows a bare answer", () => {
   const context = input("2");
