@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
+import { FieldChangeV3Schema } from "./contracts";
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
@@ -17,6 +18,7 @@ export interface CanonicalValidationIssue {
   constraintId?: CanonicalConstraintId; participatingFields?: string[]; expectedCategory?: string; actualCategory?: string;
   ownershipState?: OwnershipControlState;
   embeddedJsonType?: "object" | "array" | "null" | "string" | "number" | "boolean" | "INVALID_JSON" | "OVERSIZED";
+  titleOwnership?: {ordinaryCount:number;carrierOperation:ReturnType<typeof projectControlEnum>;ordinaryOperations:Array<{index:number}&ReturnType<typeof projectControlEnum>>;truncated:boolean};
 }
 /** Only the decoder's trusted finite domains may call this projector. Never
  * infer control authority from an arbitrary string's shape. */
@@ -90,7 +92,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     result.issues[0].classification = structural === undefined ? "missing" : "value";
   }
   result.issues[0].code = "WIRE_SHAPE_INVALID";
-  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON"].includes(expected)) result.issues[0].expected = expected;
+  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
   if (extraKeyCount !== undefined) { result.issues[0].classification = "extra"; result.issues[0].extraKeyCount = extraKeyCount; }
   if (result.issues[0].actualType === "array" && cardinality && [cardinality.actualCount, cardinality.minItems, cardinality.maxItems].every(value => value === undefined || Number.isSafeInteger(value) && value >= 0)) {
@@ -100,6 +102,27 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     if (cardinality.maxItems !== undefined) result.issues[0].maxItems = cardinality.maxItems;
   }
   if (expected === "CONTROL_ENUM" && control) Object.assign(result.issues[0], control);
+  if(expected==="UNIQUE_TITLE_OWNER" && path.length===1 && path[0]==="titleChange" && raw && typeof raw==="object" && !Array.isArray(raw)){
+    const object=raw as Record<string,unknown>,carrier=object.titleChange as {change?:{operation?:unknown}}|undefined;
+    if(carrier && typeof carrier==="object" && Array.isArray(object.changes)){
+      const domain=[...new Set(FieldChangeV3Schema.options.flatMap(branch=>{
+        const operation=branch.shape.operation;
+        return "options" in operation ? operation.options : [operation.value];
+      }))];
+      const operationMetadata=(value:unknown)=>{
+        const projected=projectControlEnum(domain,value);
+        if(!domain.some(member=>member===value))delete projected.actualSafeToken;
+        return projected;
+      };
+      const operations:Array<{index:number}&ReturnType<typeof projectControlEnum>>=[];
+      let ordinaryCount=0;
+      for(const [index,change] of object.changes.entries())if(change && typeof change==="object" && !Array.isArray(change) && change.field==="title"){
+        ordinaryCount++;
+        if(operations.length<8)operations.push({index,...operationMetadata(change.operation)});
+      }
+      result.issues[0].titleOwnership={ordinaryCount,carrierOperation:operationMetadata(carrier.change?.operation),ordinaryOperations:operations,truncated:ordinaryCount>operations.length};
+    }
+  }
   // This carrier must be an object, never JSON-in-a-string. Inspect only the
   // rejected top-level requestTarget for bounded type telemetry; do not use
   // the parsed value for decoding, repair, semantic authority or acceptance.

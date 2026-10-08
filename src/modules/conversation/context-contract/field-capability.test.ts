@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { ContextInputSchema, SLOT_NAMES, type ContextInput } from "./contracts";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { serializeContextRequest } from "./wire";
@@ -20,6 +21,13 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
   const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {required:string[];properties:{titleChange:{type?:string}}};
   expect(schema.required).toContain("titleChange");
   expect(schema.properties.titleChange.type).toBe("object");
+  expect(fields(context)).not.toContain("title");
+});
+it("R02 request schema matches actual live binding and has no ordinary title ownership",()=>{
+  const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+  const request=serializeContextRequest(context);
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-1",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true});
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("2dd222e95ac2c3a2a54786a4b53016906b25b72419100cc0260b311d2f448006");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

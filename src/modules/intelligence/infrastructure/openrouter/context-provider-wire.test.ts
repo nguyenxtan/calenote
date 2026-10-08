@@ -59,6 +59,38 @@ it("indexed title carrier preserves literal evidence and original change order",
   const absent:Partial<typeof wire>={...wire};delete absent.titleChange;
   expect(parseGoogleLiteEuContextSectionsV3(absent,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
+it("duplicate title ownership reproduces the sanitized live root-object failure without repair",()=>{
+  const ref={kind:"USER_QUOTE",turn:0,quote:"đi thi",occurrence:1};
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[ref]},changes:[{field:"title",operation:"SET",value:"đi thi",evidence:[ref]}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{change:unknown};changes:unknown[]};
+  wire.changes.push(wire.titleChange.change);
+  const before=JSON.stringify(wire),diagnostics:unknown[]=[];
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{path:["titleChange"],code:"WIRE_SHAPE_INVALID",actualType:"object",classification:"value",unknownPathSegments:0}]}]);
+  expect(JSON.stringify(wire)).toBe(before);
+});
+it.each(["SET","REPLACE","CLEAR",undefined,"PRIVATE_OPERATION_SENTINEL"])("duplicate-title diagnostics preserve safe independent operation metadata: %s",operation=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_EVIDENCE_SENTINEL",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"PRIVATE_VALUE_SENTINEL",evidence}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{change:Record<string,unknown>};changes:unknown[]};
+  wire.changes.push({...wire.titleChange.change,operation});
+  const before=JSON.stringify(wire),diagnostics:unknown[]=[];
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{expected:"UNIQUE_TITLE_OWNER",titleOwnership:{ordinaryCount:1,carrierOperation:{actualSafeToken:"SET"},ordinaryOperations:[{index:0,actualType:operation===undefined?"undefined":"string",...(operation&&["SET","REPLACE","CLEAR"].includes(operation)?{actualSafeToken:operation}:{})}],truncated:false}}]}]);
+  if(operation==="PRIVATE_OPERATION_SENTINEL")expect(diagnostics).toMatchObject([{issues:[{titleOwnership:{ordinaryOperations:[{actualDigest:createHash("sha256").update(operation).digest("hex"),actualLength:operation.length}]}}]}]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");
+  expect(JSON.stringify(wire)).toBe(before);
+});
+it("duplicate title metadata is bounded independently of hostile ordinary change cardinality",()=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_EVIDENCE_SENTINEL",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"PRIVATE_VALUE_SENTINEL",evidence}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{change:unknown};changes:unknown[]};
+  wire.changes=Array.from({length:20},()=>wire.titleChange.change);
+  const diagnostics:unknown[]=[];
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{titleOwnership:{ordinaryCount:20,ordinaryOperations:Array.from({length:8},(_,index)=>({index,actualSafeToken:"SET"})),truncated:true}}]}]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");
+});
 it.each(["REPLACE","CLEAR"] as const)("non-obligated title %s remains exactly reversible",operation=>{
   const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:"sửa tiêu đề",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation,value:operation==="CLEAR"?null:"khác",evidence}]});
