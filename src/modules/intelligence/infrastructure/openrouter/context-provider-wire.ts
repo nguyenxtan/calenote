@@ -713,7 +713,9 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     }
     return parseInterpretationSectionsV3(decoded, observeInvalid);
   } catch (error) {
-    observeWireInvalid?.(error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3"));
+    const diagnostic=error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3");
+    if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
+    observeWireInvalid?.(diagnostic);
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }

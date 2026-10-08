@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {expect,it} from "vitest";
-import {materializeProviderEvidence,evidenceSourceCatalogue} from "./evidence-pointer";
+import {materializeProviderEvidence,evidenceSourceCatalogue,EvidencePointerFailure,projectEvidencePointerStructure} from "./evidence-pointer";
 import {ContextInputSchema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
 import {buildContextInputV2} from "../../../conversation/context-contract/context";
 import {chat,message,observation,snapshot} from "../../../conversation/context-contract/context-test-fixtures";
@@ -9,6 +9,49 @@ import {validateEvidenceV3} from "../../../conversation/context-contract/evidenc
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
+it("pointer diagnostic projection reads only descriptor scalars and counts secret keys",()=>{
+  const pointer={kind:"PRIVATE_UNKNOWN_KIND",turn:2,segment:1,PRIVATE_KEY:"PRIVATE_VALUE",get quote(){throw Error("PRIVATE_ACCESSOR");}};
+  const diagnostic=projectEvidencePointerStructure("POINTER_SHAPE",pointer,input);
+  expect(diagnostic).toMatchObject({reason:"POINTER_SHAPE",pointerKind:"UNKNOWN",pointerKindType:"string",requestedTurn:2,requestedSegment:1,sourceRole:"USER",unknownKeyCount:2});
+  expect(diagnostic.pointerKindDigest).toHaveLength(64);
+  expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_");
+  expect(projectEvidencePointerStructure("POINTER_SHAPE",{get kind(){throw Error("PRIVATE_ACCESSOR");},get turn(){throw Error("PRIVATE_ACCESSOR");}},input)).toMatchObject({pointerKind:"UNKNOWN",pointerKindType:"undefined",sourceRole:"MISSING"});
+});
+it("pointer diagnostics bound observed unknown-key count without names or values",()=>{
+  const pointer={kind:"USER_TURN",turn:2,...Object.fromEntries(Array.from({length:70},(_,index)=>[`PRIVATE_KEY_${index}`,"PRIVATE_VALUE"]))};
+  let failure:EvidencePointerFailure|undefined;
+  try{materializeProviderEvidence({changes:[{evidence:carrier(pointer)}]},input,true);}catch(error){failure=error as EvidencePointerFailure;}
+  expect(failure?.diagnostic).toMatchObject({reason:"POINTER_SHAPE",unknownKeyCount:64,unknownKeyCountTruncated:true});
+  expect(JSON.stringify(failure)).not.toContain("PRIVATE_");
+});
+it.each([
+  ["INPUT_MISSING",{kind:"USER_TURN",turn:0},undefined,false],
+  ["SOURCE_TEXT_INVALID",{kind:"USER_TURN",turn:0},"a\u0301",true],
+  ["SEGMENT_INVALID",{kind:"USER_SEGMENT",turn:0,segment:-1},"a[CONTROL]b",true],
+  ["SEGMENT_MISSING",{kind:"USER_SEGMENT",turn:0,segment:2},"a[CONTROL]b",true],
+  ["SEGMENT_EMPTY",{kind:"USER_SEGMENT",turn:0,segment:1},"a[CONTROL]",true],
+  ["SEGMENT_OCCURRENCE_MISSING",{kind:"USER_SEGMENT",turn:0,segment:1},"[CONTROL]]]",true],
+  ["EXPANDED_REF_INVALID",{kind:"USER_TURN",turn:0},"",true]
+] as const)("remaining pointer throw branch %s has exact finite diagnostics",(reason,pointer,text,hasInput)=>{
+  const context=structuredClone(input);if(text!==undefined)context.turns[0].text=text;
+  let failure:EvidencePointerFailure|undefined;
+  try{materializeProviderEvidence({changes:[{evidence:carrier(pointer)}]},hasInput?context:undefined,true);}catch(error){expect(error).toBeInstanceOf(EvidencePointerFailure);failure=error as EvidencePointerFailure;}
+  expect(failure?.diagnostic.reason).toBe(reason);
+});
+it.each([
+  [{kind:"USER_QUOTE",turn:2,quote:"PRIVATE_QUOTE",occurrence:1},"STRICT_USER_QUOTE"],
+  [{kind:"USER_TURN",turn:2,PRIVATE_SECRET_KEY:"PRIVATE_VALUE"},"POINTER_SHAPE"],
+  [{kind:"USER_TURN",turn:-1},"TURN_INVALID"],
+  [{kind:"USER_TURN",turn:3},"SOURCE_MISSING"],
+  [{kind:"USER_TURN",turn:1},"SOURCE_ROLE"],
+  [{kind:"USER_SEGMENT",turn:2,segment:0},"SEGMENT_SOURCE_UNAVAILABLE"],
+] as const)("pointer failure carries finite throw-boundary reason %# without raw values",(pointer,reason)=>{
+  let failure:EvidencePointerFailure|undefined;
+  try{materializeProviderEvidence({changes:[{evidence:carrier(pointer)}]},input,true);}catch(error){expect(error).toBeInstanceOf(EvidencePointerFailure);failure=error as EvidencePointerFailure;}
+  expect(failure).toBeDefined();
+  expect(failure).toHaveProperty("diagnostic.reason",reason);
+  expect(JSON.stringify(failure)).not.toContain("PRIVATE_");
+});
 it("materializes only the exact unchanged selected USER source",()=>{
  const raw={requestTarget:{evidence:carrier({kind:"USER_TURN",turn:2})},changes:[{value:"USER_TURN",evidence:carrier({kind:"USER_TURN",turn:0})}],query:null,uncertainties:[],replyProposal:{text:"untouched"}};
  const expanded=materializeProviderEvidence(raw,input) as typeof raw;

@@ -10,6 +10,13 @@ for(const key of ["titleChange","reminderDateChange","reminderTimeChange"])rootK
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
+export interface EvidencePointerDiagnostic {
+  reason:"STRICT_USER_QUOTE"|"POINTER_SHAPE"|"INPUT_MISSING"|"TURN_INVALID"|"SOURCE_MISSING"|"SOURCE_ROLE"|"SOURCE_TEXT_INVALID"|"SEGMENT_INVALID"|"SEGMENT_SOURCE_UNAVAILABLE"|"SEGMENT_MISSING"|"SEGMENT_EMPTY"|"SEGMENT_OCCURRENCE_MISSING"|"EXPANDED_REF_INVALID";
+  pointerKind:"USER_QUOTE"|"USER_TURN"|"USER_SEGMENT"|"CONTEXT_FACT"|"UNKNOWN";
+  pointerKindType:string;pointerKindDigest?:string;pointerKindLength?:number;
+  requestedTurn?:number;requestedSegment?:number;
+  sourceRole:"USER"|"ASSISTANT"|"MISSING"|"UNKNOWN";unknownKeyCount:number;unknownKeyCountTruncated:boolean;
+}
 export interface CanonicalValidationIssue {
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
@@ -22,6 +29,7 @@ export interface CanonicalValidationIssue {
   /** Counts describe only the first 64 observed entries, not unseen payload. */
   duplicateFieldCounts?: Array<{field:string;count:number;indexes:number[]}>;
   duplicateFieldCountsTruncated?: boolean;
+  evidencePointer?:EvidencePointerDiagnostic;
   /** carrierCount counts observed non-null object roots, not validated changes. */
   carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
 }

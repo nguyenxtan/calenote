@@ -49,6 +49,16 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it("pointer throw metadata survives indexed restoration without inferring shifted raw operands",()=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_QUOTE_SENTINEL",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"notes",operation:"SET",value:"PRIVATE_VALUE_SENTINEL",evidence},{field:"reminderTime",operation:"REPLACE",value:{hour:9,minute:0,qualifier:"H24"},evidence}]});
+  const raw=encodeGoogleLiteEuContextV3(canonical) as {requestTarget:{evidence:{primaryEvidence:string}};changes:Array<{evidence:{primaryEvidence:string}}>};
+  raw.requestTarget.evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:0});raw.changes[0].evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:0});
+  const diagnostics:unknown[]=[],before=JSON.stringify(raw);
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value),input).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{path:["changes",1,"evidence","primaryEvidence"],expected:"EVIDENCE_SOURCE_POINTER",evidencePointer:{reason:"STRICT_USER_QUOTE",pointerKind:"USER_QUOTE",requestedTurn:0,sourceRole:"USER"}}]}]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");expect(JSON.stringify(raw)).toBe(before);
+});
 it.each([
   [{kind:"USER_TURN",turn:0},"BOUNDED_JSON_OBJECT"],
   ["{PRIVATE_EVIDENCE_SENTINEL", "JSON_OBJECT"],
