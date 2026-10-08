@@ -102,6 +102,9 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
   // rejected top-level requestTarget for bounded type telemetry; do not use
   // the parsed value for decoding, repair, semantic authority or acceptance.
   if (path.length === 1 && path[0] === "requestTarget" && expected === "object" && typeof structural === "string") {
+    // Only exact members of the application-owned target control family are
+    // safe to retain here. Never use arbitrary token shape to classify text.
+    if (["CURRENT", "NEW", "UNRESOLVED"].includes(structural)) result.issues[0].actualSafeToken = structural;
     if (structural.length > 32768 || new TextEncoder().encode(structural).byteLength > 32768) result.issues[0].embeddedJsonType = "OVERSIZED";
     else {
       try { result.issues[0].embeddedJsonType = jsonType(JSON.parse(structural)) as NonNullable<CanonicalValidationIssue["embeddedJsonType"]>; }

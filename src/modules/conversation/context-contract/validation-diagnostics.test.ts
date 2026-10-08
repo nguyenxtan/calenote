@@ -70,3 +70,19 @@ it("does not inspect business strings or change actual type of requestTarget", (
   expect(diagnostic.issues[0]).not.toHaveProperty("embeddedJsonType");
   expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
 });
+
+it.each(["CURRENT", "NEW", "UNRESOLVED"])("retains only exact approved misplaced requestTarget control literal %s", token => {
+  const diagnostic = projectWireValidation({ requestTarget: token }, ["requestTarget"], "object", undefined, "calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({ expected: "object", actualType: "string", actualSafeToken: token, embeddedJsonType: "INVALID_JSON" });
+});
+
+it.each([sentinel, "current", "CURRENT ", "NEW_PRIVATE", JSON.stringify("CURRENT"), "X".repeat(40000)])("never retains unknown misplaced target contents (%#)", token => {
+  const diagnostic = projectWireValidation({ requestTarget: token }, ["requestTarget"], "object", undefined, "calenote-context-3");
+  expect(diagnostic.issues[0]).not.toHaveProperty("actualSafeToken");
+  expect(JSON.stringify(diagnostic)).not.toContain(token);
+});
+
+it("never grants target-token telemetry to a business value", () => {
+  const diagnostic = projectWireValidation({ changes: [{ value: "CURRENT" }] }, ["changes", 0, "value"], "object");
+  expect(diagnostic.issues[0]).not.toHaveProperty("actualSafeToken");
+});

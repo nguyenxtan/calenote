@@ -60,6 +60,14 @@ it.each([
   expect(diagnostics).toMatchObject([{ issues: [{ path: ["requestTarget"], expected: "object", actualType: "string", embeddedJsonType }] }]);
   expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_TARGET");
 });
+it.each(["CURRENT", "NEW", "UNRESOLVED"])("misplaced finite target %s is diagnosed but never accepted", target => {
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", conversationDirective: null, requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] } };
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as Record<string, unknown>;
+  wire.requestTarget = target;
+  const diagnostics: unknown[] = [];
+  expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3, undefined, value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" });
+  expect(diagnostics).toMatchObject([{ issues: [{ expected: "object", actualType: "string", actualSafeToken: target }] }]);
+});
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
