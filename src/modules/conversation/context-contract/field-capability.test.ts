@@ -115,7 +115,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-4",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-5",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
   expect(fields(context)).not.toContain("title");
 });
@@ -149,7 +149,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-4", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-5", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -194,6 +194,23 @@ it("clock answer restriction requires bound reminder question and preserves othe
  for(const state of ["PROPOSED","RESOLVED","CONFLICT"] as const){slots.eventTime={state,value:fact.value,fact:"f1"};expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);}
  slots.eventTime={state:"MISSING",value:null,fact:null};context.facts=[];context.turns.unshift({role:"USER",text:"Thi lúc 9h."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"});context.currentTurn=2;
  expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
+});
+it.each(["frequency","occurrenceCount","eventRelation"] as const)("bound bare clock declines non-clock %s mutations but preserves exact SET facts and both clocks",field=>{
+ const context=input("8h."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.turns=[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"},{role:"USER",text:"Nhắc trước 2 ngày."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"},{role:"USER",text:"8h."}];context.currentTurn=4;
+ slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventRelation={state:"PROPOSED",value:"BEFORE_EVENT",fact:null};slots.eventTime={state:"PROPOSED",value:{hour:9,minute:0,qualifier:"H24"},fact:null};
+ context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={text:"Mấy giờ nhắc?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
+ const value=field==="frequency"?"DAILY":field==="occurrenceCount"?2:"BEFORE_EVENT",evidence=[{kind:"USER_QUOTE" as const,turn:4,quote:"8h.",occurrence:1}];
+ context.facts=[{alias:"f1",scope:"REMINDER",field,value,provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]}] as ContextInput["facts"];
+ const wire=(field:string,operation:string,value:unknown,refs:unknown[]=evidence)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field,operation,value,evidence:refs}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}));
+ const check=validator(context);
+ for(const operation of ["REPLACE","CLEAR"]){expect(check.safeParse(wire(field,operation,operation==="CLEAR"?null:value)).success).toBe(false);for(const clock of ["eventTime","reminderTime"])expect(check.safeParse(wire(clock,operation,operation==="CLEAR"?null:{hour:8,minute:0,qualifier:"H24"})).success).toBe(true);}
+ expect(check.safeParse(wire(field,"SET",value,[{kind:"CONTEXT_FACT",ref:"f1"}])).success).toBe(true);
+ for(const operation of ["REPLACE","CLEAR"])expect(check.safeParse(wire("reminderDate",operation,operation==="CLEAR"?null:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null})).success).toBe(false);
+ slots.eventTime={state:"MISSING",value:null,fact:null};
+ for(const operation of ["REPLACE","CLEAR"]){expect(validator(context).safeParse(wire("eventTime",operation,operation==="CLEAR"?null:{hour:8,minute:0,qualifier:"H24"})).success).toBe(false);expect(validator(context).safeParse(wire("reminderTime",operation,operation==="CLEAR"?null:{hour:8,minute:0,qualifier:"H24"})).success).toBe(true);}
+ slots.eventTime={state:"PROPOSED",value:{hour:9,minute:0,qualifier:"H24"},fact:null};
+ for(const text of ["Đổi số lần sang 3 lần.","Ngày 20/12 đi làm việc mới lúc 9h.","8h giúp tôi.","8h và 9h."]){context.turns[4].text=text;const refs=[{...evidence[0],quote:text}];for(const operation of ["REPLACE","CLEAR"])expect(validator(context).safeParse(wire(field,operation,operation==="CLEAR"?null:value,refs)).success).toBe(true);}
 });
 it.each(["noon2", "user_midnight_key", "nửa đêm2", "midnight_", "_noon", "noon\u0338"])("embedded clock token does not open branches: %s", text => {
   expect(catalogue(input(text)).allowedClockFields).toEqual([]);

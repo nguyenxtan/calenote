@@ -12,7 +12,7 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-4";
+  version: "generation-field-capability-5";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
@@ -26,6 +26,13 @@ function isBareNumericClockAnswer(text: string, reference: string): boolean {
   const time = extractTemporalEvidence({ text, referenceNow: Date.parse(reference) }).time;
   return time.state === "RESOLVED" && time.source === "EXACT_TIME";
 }
+/** Sufficient generation context only; no value, target or evidence output. */
+export function isBoundReminderClockAnswer(input: ContextInput): boolean {
+  const current = input.turns[input.currentTurn];
+  return !!input.activeRequest && input.pendingQuestion?.scope === "REMINDER"
+    && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
+    && isBareNumericClockAnswer(current.text, input.reference.instant);
+}
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
  * CURRENT retained slots and NEW proposals still require downstream ownership.
@@ -34,9 +41,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   const allowed = new Set<NumericProposalField>();
   const clocks = new Set<ClockProposalField>();
   const current = input.turns[input.currentTurn];
-  const reminderClockAnswer = !!input.activeRequest && input.pendingQuestion?.scope === "REMINDER"
-    && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
-    && isBareNumericClockAnswer(current.text, input.reference.instant);
+  const reminderClockAnswer = isBoundReminderClockAnswer(input);
   for (const field of CLOCK_PROPOSAL_FIELDS) {
     const slot = input.activeRequest?.slots[field];
     if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) clocks.add(field);
@@ -106,7 +111,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-4", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-5", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

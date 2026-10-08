@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidencePointerDomain} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -614,7 +614,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
-    requireShape(capability.version === "generation-field-capability-4" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.version === "generation-field-capability-5" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
     const changes = deref(schema.properties!.changes.items!, schema);
@@ -632,6 +632,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   }
   if(primaryEvidenceInput!==undefined){
     const domain=primaryEvidencePointerDomain(primaryEvidenceInput);
+    const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);
     const bind=(node:Schema):Schema=>{
       const result=mapSchemas(node,bind);
       if(result.properties&&Object.hasOwn(result.properties,"primaryEvidence"))result.properties.primaryEvidence={$ref:"#/$defs/__sources"};
@@ -654,9 +655,16 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       const operation=properties.operation,operations=operation.enum??[operation.const];
       requireShape(operations.length>0&&operations.every(value=>["SET","REPLACE","CLEAR"].includes(String(value))));
       const mutating=operations.filter(value=>value!=="SET");if(!mutating.length)return result;
+      const fields=properties.field.enum??[properties.field.const];
+      requireShape(fields.length>0&&fields.every(value=>typeof value==="string"));
+      const mutationFields=clockOnlyMutations?fields.filter(value=>CLOCK_PROPOSAL_FIELDS.some(field=>field===value)):fields;
       const branches:Schema[]=[];
       if(operations.includes("SET")){const kept=structuredClone(result);kept.properties!.operation={type:"string",enum:["SET"]};branches.push(kept);}
-      if(currentDomain.length){const changed=structuredClone(result);changed.properties!.operation={type:"string",enum:mutating};changed.properties!.evidence={$ref:"#/$defs/__ec"};branches.push(changed);}
+      if(currentDomain.length&&mutationFields.length){
+        const changed=structuredClone(result);changed.properties!.operation={type:"string",enum:mutating};
+        if(clockOnlyMutations&&properties.field.enum)changed.properties!.field={...properties.field,enum:mutationFields};
+        changed.properties!.evidence={$ref:"#/$defs/__ec"};branches.push(changed);
+      }
       if(!branches.length)return omitted;
       if(branches.length===1)return branches[0];
       const split:Schema={anyOf:branches};splits.add(split);return split;
