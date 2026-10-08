@@ -44,6 +44,8 @@ Focused command: pnpm exec vitest run src/modules/conversation/context-contract/
 
 Acceptance: grounded title generated with exact USER pointer and required presence; wrong/missing authority rejected; original R01-R16 expectations preserved; full green, independent C0/I0, immutable local commit, then actual Fresh Pilot evidence. Commit is not a stop condition.
 
+Wire31 position clarification follow-up: RED serialized prompt contract lacks explicit emitted-total arithmetic; add bounded zero-based N rule for all non-null carriers simultaneously and current proposal only, with structural examples. Keep strict index decoder and schema/wire identity unchanged; update exact prompt pins, focused transport/runner/prompt regressions and network-denied token fit/typecheck/diff, then freeze for controller review/full/commit/live. Invalid live index4 for total4 is proven; provider motive is not.
+
 R05 reminder singleton follow-up (controller design review before runtime edits):
 
 - [ ] Quick-review the bounded two-field spec amendment.

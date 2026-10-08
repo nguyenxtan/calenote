@@ -241,3 +241,10 @@ it("reminder singleton instructions preserve model-authored global positions wit
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
+it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange and reminderTimeChange carriers");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("not prior turns, retained state fields, source positions or one-based ordinals");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("three ordinary changes plus one non-null carrier means N=4; an appended carrier has index3, never index4");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("only one current reminderTime change has index0");
+});
