@@ -6,6 +6,18 @@ import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
 
+it("dispatches the civil source fidelity checkpoint last before output", () => {
+  const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Ngày 17/12 họp, nhắc ba ngày liên tiếp trước đó." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
+  const request = serializeContextRequest(input), policy = request.messages[0].content;
+  const checkpoint = "Final civil source fidelity checkpoint: compare each proposed CIVIL_DATE day/month with the actual USER source selected by that field's evidence pointer, or preserve its exact eligible CONTEXT_FACT value.";
+  expect(request.messages[0].role).toBe("system");
+  expect(policy).toContain(checkpoint);
+  expect(policy.indexOf(checkpoint)).toBeGreaterThan(policy.indexOf("Final continuation ownership check:"));
+  expect(policy.indexOf(checkpoint)).toBeLessThan(policy.indexOf("Return a complete object within 1536 output tokens."));
+  expect(policy).not.toContain(input.turns[0].text);
+  expect(JSON.parse(request.messages[1].content).turns).toEqual(input.turns);
+});
+
 it("wire instructions require encoded canonical dates rather than padded date objects", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("On the provider wire, each active date operand is a JSON string encoding exactly one canonical DateOperand object.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain('For example, the wire value for a two-day relative operand is "{\\"kind\\":\\"RELATIVE_DAY\\",\\"offsetDays\\":2}".');

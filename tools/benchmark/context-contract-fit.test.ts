@@ -25,7 +25,7 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)),baseMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3().schema),titleMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("55f6a68aa29f0330e6144979bc8daece13d0ae2dd56ac78bf6cf50c218b19a36");
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("dffedfac41070644754749e0b891f50feaeeb57824c05a21dfacc809ed7f6ae8");
   expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({utf8Bytes:10384,rootKeys:8,recursiveObjectArrayNodes:289,maximumDepth:10,unionBranches:43,requiredEntries:121,enumArrays:23,enumValues:101,largestEnum:16,nullableNodes:36,references:21,definitions:11,constantDiscriminators:17});
   expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema)).toEqual({utf8Bytes:8495,rootKeys:8,recursiveObjectArrayNodes:240,maximumDepth:9,unionBranches:38,requiredEntries:100,enumArrays:18,enumValues:79,largestEnum:16,nullableNodes:35,references:15,definitions:8,constantDiscriminators:14});
 });
