@@ -5,9 +5,24 @@ import { CONTROL_PLACEHOLDER } from "./projection";
 import { serializeContextRequest } from "./wire";
 import { z } from "zod";
 import { ConversationInterpretationV3Schema } from "./contracts";
-import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
+// Independent schema-membership fixtures use source-pointer representation,
+// retaining the authored turn index and every field value. No source is filled.
+function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical>[0]):unknown {
+  const wire=encodeCanonical(canonical);
+  const map=(value:unknown):unknown=>{
+    if(!value||typeof value!=="object")return value;
+    if(Array.isArray(value))return value.map(map);
+    return Object.fromEntries(Object.entries(value).map(([key,child])=>{
+      if(key==="primaryEvidence"&&typeof child==="string"){
+        const ref=JSON.parse(child);if(ref.kind==="USER_QUOTE")return [key,JSON.stringify({kind:"USER_TURN",turn:ref.turn})];
+      }
+      return [key,map(child)];
+    }));
+  };return map(wire);
+}
 
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
@@ -15,6 +30,24 @@ function input(text: string): ContextInput {
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
+it("actual three-turn request primary pointer domain excludes ASSISTANT and uses one shared enum",()=>{
+  const context=input("Nhắc 9h.");context.turns=[{role:"USER",text:"Nhắc gọi mẹ."},{role:"ASSISTANT",text:"Lúc nào?"},{role:"USER",text:"9h."}];context.currentTurn=2;
+  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {$defs:Record<string,{type:string;enum?:string[]}>};
+  expect(schema.$defs.__sources).toEqual({type:"string",enum:[JSON.stringify({kind:"USER_TURN",turn:0}),JSON.stringify({kind:"USER_TURN",turn:2})]});
+  const references:string[]=[];let sourceEnums=0,evidenceReferences=0;
+  const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.$ref==="#/$defs/__sources")references.push(node.$ref);if(node.$ref==="#/$defs/__e")evidenceReferences++;if(Array.isArray(node.enum)&&node.enum.some(v=>typeof v==="string"&&v.includes('"USER_TURN"')))sourceEnums++;Object.values(node).forEach(walk);};walk(schema);
+  expect(references).toHaveLength(1);expect(sourceEnums).toBe(1);expect(evidenceReferences).toBeGreaterThan(3);
+  expect(schema.$defs.__e).toMatchObject({type:"object",properties:{primaryEvidence:{$ref:"#/$defs/__sources"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false});
+  const evidence=[{kind:"USER_QUOTE" as const,turn:2,quote:"9h.",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}>};
+  const check=validator(context);expect(check.safeParse(wire).success).toBe(true);
+  wire.changes[0].evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:1});
+  expect(check.safeParse(wire).success).toBe(false);
+  wire.changes[0].evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:2});
+  wire.changes[0].evidence.additionalEvidenceJson=JSON.stringify([{kind:"USER_TURN",turn:1}]);
+  expect(check.safeParse(wire).success).toBe(true); // Scalar extras still require unchanged downstream checks.
+});
 it("requires a generated title carrier for an asserted exam reminder",()=>{
   const context=input("Ngày 11/10 đi thi, nhắc tôi trước 2 ngày.");
   expect(catalogue(context).titlePresenceRequired).toBe(true);
@@ -27,7 +60,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-2",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("eb22c57736e6d7c2fabb1475af83a67b4d4b7a9c5c31a811df39c14b5a9ab911");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("87a7739105ec234dcd5c99ab709ea8ad9009755b682ce09d19485a410de34454");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -180,7 +213,7 @@ it.each(["PROPOSED", "RESOLVED", "CONFLICT"] as const)("occupied CURRENT title %
     const proposal=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation,value:operation==="CLEAR"?null:"gọi mẹ",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
     expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(proposal)).success).toBe(true);
   }
-  slots.title.value=null;slots.title.fact=null;
+  slots.title={state:"MISSING",value:null,fact:null};
   expect(catalogue(context).titleCorrectionAllowed).toBe(false);
   expect(fields(context)).not.toContain("title");
 });
@@ -226,7 +259,7 @@ it("independent consumer requires exactly one model title carrier, never a retai
   expect(check.safeParse(absent).success).toBe(false);
   expect(check.safeParse({...wire,changes:[canonical.changes[0]]}).success).toBe(false);
   const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
-  slots.title={state:"RESOLVED",value:"đi thi",fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};
+  slots.title={state:"RESOLVED",value:"đi thi",fact:"f1"};context.activeRequest={lifecycle:"CLARIFYING",slots};
   expect(catalogue(context).titlePresenceRequired).toBe(true);
 });
 it("non-obligated requests expose one title SET representation while preserving title REPLACE/CLEAR",()=>{

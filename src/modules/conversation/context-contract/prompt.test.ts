@@ -26,8 +26,8 @@ it("wire instructions require encoded canonical dates rather than padded date ob
 it("serialized query policy delivers current continuation evidence ownership", () => {
   const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"xem lịch"},{role:"ASSISTANT",text:"Bạn muốn xem khoảng nào?"},{role:"USER",text:"tuần sau"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const request = serializeContextRequest(input);
-  expect(request.messages[0].content).toContain("A query continuation must include current USER evidence for its newly supplied period, not only the earlier generic LIST request.");
-  expect(request.messages[0].content).toContain('For currentTurn=2 and current text "tuần sau", query primaryEvidence selects USER_TURN 2; the old generic USER_TURN 0 alone cannot authorize the new period.');
+  expect(request.messages[0].content).toContain("A query continuation needs current USER evidence for its new period:");
+  expect(request.messages[0].content).toContain('with currentTurn=2 and "tuần sau", primaryEvidence uses USER_TURN 2, not generic LIST turn0 alone.');
   expect(JSON.parse(request.messages[1].content)).toEqual({ ...input, numericOwnership: numericOwnershipCatalogue(input), fieldCapability: deriveGenerationFieldCapability(input) });
 });
 
@@ -43,8 +43,8 @@ it("source text is application-owned rather than model-authored quotation", () =
 it("serialized continuation policy does not redundantly replace retained count", () => {
  const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc việc này"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const request=serializeContextRequest(input);
- expect(request.messages[0].content).toContain("Omit unchanged retained fields from changes; do not redundantly REPLACE the retained count when answering the relation question.");
- expect(request.messages[0].content).toContain("Select the actual USER source that entails the proposed field value; output its source pointer, not rewritten evidence text.");
+ expect(request.messages[0].content).toContain("Omit unchanged fields rather than redundantly REPLACE them; explicit current-user corrections need their own grounded changes and actual USER source pointers.");
+ expect(request.messages[0].content).toContain("Normalized semantic values may differ from literal wording, but source contents are application-owned and immutable.");
  expect(JSON.parse(request.messages[1].content)).toEqual({ ...input, numericOwnership: numericOwnershipCatalogue(input), fieldCapability: deriveGenerationFieldCapability(input) });
 });
 
@@ -60,8 +60,8 @@ it("query continuation preserves matching list ownership rather than calendar co
 });
 
 it("first reminder targets NEW only when no retained request exists", () => {
- expect(CONTEXT_CONTRACT_PROMPT).toContain("When activeRequest is null and the USER states a first reminder task, use NEW; CURRENT cannot address a nonexistent retained request.");
- expect(CONTEXT_CONTRACT_PROMPT).toContain("For a grounded answer or correction to an existing activeRequest, use CURRENT; do not start a new request merely because the answer is short.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("First grounded task without activeRequest uses NEW;");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("grounded activeRequest answers/corrections use CURRENT even when short.");
 });
 
 it("operation wire uses one semantic selector and never duplicates ownership tags", () => {
@@ -77,8 +77,8 @@ it("serialized provider policy keeps target labels in operationCode, never a bar
 });
 
 it("single lead reminder policy does not manufacture a daily series", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4 because the USER explicitly says một lần; omit occurrenceCount and never emit DAILY/count=1.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Without the explicit một lần instruction, omit frequency too.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4 because một lần is explicit; omit occurrenceCount, never DAILY/count=1.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Without explicit một lần, omit frequency too: a distance is not cadence or ONCE evidence.");
 });
 
 it("a preceding distance cannot supply an unstated consecutive cadence", () => {
@@ -89,9 +89,9 @@ it("a preceding distance cannot supply an unstated consecutive cadence", () => {
 });
 
 it("final ownership check separates fresh distance requests from retained series answers", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final numeric ownership decision: first check the actual activeRequest, not an example or a previous request.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('For NEW with no retained DAILY/count, a task plus nhắc tôi trước N ngày means changes for eventRelation="BEFORE_EVENT" and leadOffsetDays=N; omit frequency and occurrenceCount only when cadence is unstated, preserving independently explicit single or repeated cadence.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not apply the CURRENT series rule to NEW: absence of repeated/consecutive notification meaning cannot be replaced with DAILY/countN.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final numeric ownership decision: inspect actual activeRequest and selected target, never examples or a previous request.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('NEW without retained DAILY/count: before N days supplies BEFORE_EVENT/leadOffsetDays N, not DAILY/count N. Omit unstated cadence/count; preserve independently explicit single/repeated cadence.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not borrow CURRENT series meaning for NEW or output cadence merely because its enum exists.");
 });
 
 it("exam task normalization example separates typed title from event operands", () => {
@@ -205,7 +205,7 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(request.messages[0].content).not.toContain(input.turns[0].text);
   expect(request.messages[1].role).toBe("user");
   expect(JSON.parse(request.messages[1].content)).toEqual({ ...input, numericOwnership: numericOwnershipCatalogue(input), fieldCapability: deriveGenerationFieldCapability(input) });
-  expect(request.response_format).toEqual({ type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(input)).schema } });
+  expect(request.response_format).toEqual({ type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(input),input).schema } });
   expect(request.max_tokens).toBe(1536);
   expect(request.stream).toBe(false);
   expect(JSON.stringify(input)).toBe(before);
@@ -247,4 +247,8 @@ it("carrier indexes count only this emitted proposal and every non-null carrier 
   expect(CONTEXT_CONTRACT_PROMPT).toContain("not prior turns, retained state fields, source positions or one-based ordinals");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("three ordinary changes plus one non-null carrier means N=4; an appended carrier has index3, never index4");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("only one current reminderTime change has index0");
+});
+it("primary evidence selects request-bound strings without granting source scope authority",()=>{
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence must select an exact JSON string from the request schema's shared source enum");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");
 });

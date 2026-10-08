@@ -1,4 +1,4 @@
-import {EvidenceRefSchema,type ContextInput} from "../../../conversation/context-contract/contracts";
+import {ContextInputSchema,EvidenceRefSchema,type ContextInput} from "../../../conversation/context-contract/contracts";
 import {CONTROL_PLACEHOLDER} from "../../../conversation/context-contract/projection";
 import {projectControlEnum,type EvidencePointerDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 type Path=Array<string|number>;
@@ -27,6 +27,17 @@ export function projectEvidencePointerStructure(reason:EvidencePointerDiagnostic
 function segments(text:string){let start=0;return text.split(CONTROL_PLACEHOLDER).map((part,segment)=>{const result={segment,text:part,start};start+=part.length+CONTROL_PLACEHOLDER.length;return result;});}
 /** Outbound source catalogue contains no new facts or authorizing state. */
 export function evidenceSourceCatalogue(input:ContextInput){return input.turns.flatMap((turn,index)=>turn.role!=="USER"||!turn.text.includes(CONTROL_PLACEHOLDER)?[]:segments(turn.text).filter(s=>s.text.trim().length>0).map(s=>({kind:"USER_SEGMENT" as const,turn:index,segment:s.segment,text:s.text})));}
+/** Generation availability only. Model still selects a pointer; existing scope,
+ * source role, value fidelity and entailment validators remain authoritative. */
+export function primaryEvidencePointerDomain(input:ContextInput):string[] {
+ if(!ContextInputSchema.safeParse(input).success)throw Error("EVIDENCE_SOURCE_CONTEXT_INVALID");
+ const whole=input.turns.flatMap((turn,index)=>turn.role==="USER"&&!turn.text.includes(CONTROL_PLACEHOLDER)&&turn.text.trim().length?[{kind:"USER_TURN" as const,turn:index}]:[]);
+ const segmented=evidenceSourceCatalogue(input).map(({kind,turn,segment})=>({kind,turn,segment}));
+ const facts=input.facts.map(fact=>({kind:"CONTEXT_FACT" as const,ref:fact.alias}));
+ const domain=[...new Set([...whole,...segmented,...facts].map(pointer=>JSON.stringify(pointer)))];
+ if(!domain.length)throw Error("EVIDENCE_SOURCE_DOMAIN_EMPTY");
+ return domain;
+}
 /** Only explicit source pointers are expanded. No value search or repair. */
 export function materializeProviderEvidence(raw:unknown,input?:ContextInput,strictPointers=false):unknown {
  const ref=(value:unknown,path:Path):unknown=>{

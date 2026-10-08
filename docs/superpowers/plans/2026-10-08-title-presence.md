@@ -44,6 +44,19 @@ Focused command: pnpm exec vitest run src/modules/conversation/context-contract/
 
 Acceptance: grounded title generated with exact USER pointer and required presence; wrong/missing authority rejected; original R01-R16 expectations preserved; full green, independent C0/I0, immutable local commit, then actual Fresh Pilot evidence. Commit is not a stop condition.
 
+Request-bound primary source enum follow-up (design only until controller technical review):
+
+Exact-fit refinement: TDD actual request contains one shared strict two-slot evidence object, all identical reachable copies reference it; preserve primary source enum and extras string, both-required/noextra language. Initial conservative actual-request maximum13521 is FAIL, not admission; deduplicate request-only evidence object before considering redundant prompt compacting. Keep12000 unchanged and base codec untouched.
+
+- [ ] Review proposed wire32 source-availability amendment; no runtime edits before review.
+- [ ] RED actual serialized R02 request primary strings permit ASSISTANT turn1; require exact USER index0/2 strings across every known primaryEvidence slot, including carriers. Prove shared pointer-string representation and literal canonical parity.
+- [ ] RED controlled USER_SEGMENT/nonblank catalogue and existing CONTEXT_FACT alias availability; preserve unchanged downstream current target/correction/NEW/query/fact-scope validation and extra-pointer rejection. No array-of-all-combinations enum.
+- [ ] Implement pure source availability helper and optional validated request-input specialization; production serializer always supplies exact ContextInput, no unconstrained fallback/default or auto-selected pointer. Empty domain fails closed before dispatch.
+- [ ] Advance wire32 request contract/prompt and exact pins; emit one shared short-named $defs enum with refs, never branch repetition or a duplicate input catalogue. Measure ordinary/maximal source domains, complexity and exact actual-request network-denied token fit across the frozen matrix, including near-cap R02/2. Preserve12000 cap; no valid-source truncation or private provider admission claim.
+- [ ] Focused pointer/capability/transport/gateway/runner/fit plus typecheck/diff, freeze; controller scoped review/full/commit/live.
+
+Proposed files/interfaces: evidence-pointer.ts/.test.ts (pure availability helper reuses existing catalogue, materialization unchanged); context-provider-wire.ts/.test.ts (optional primaryEvidenceInput specialization only); context-contract/wire.ts and field-capability.test.ts (actual request binding, no GenerationFieldCapability shape change); prompt.ts/.test.ts, protocol.ts; benchmark runner/fit pins and necessary transport tests. Existing output-authority classification already marks model-authored primary strings untrusted; no authority expansion. Canonical/evidence guards, frozen fixture/oracle source, model/provider/budget remain unchanged. Large controlled-source enums are an explicit complexity/admission risk to measure, not a reason to invent fallback sources.
+
 Wire31 position clarification follow-up: RED serialized prompt contract lacks explicit emitted-total arithmetic; add bounded zero-based N rule for all non-null carriers simultaneously and current proposal only, with structural examples. Keep strict index decoder and schema/wire identity unchanged; update exact prompt pins, focused transport/runner/prompt regressions and network-denied token fit/typecheck/diff, then freeze for controller review/full/commit/live. Invalid live index4 for total4 is proven; provider motive is not.
 
 R05 reminder singleton follow-up (controller design review before runtime edits):

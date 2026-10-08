@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import {materializeProviderEvidence,EvidencePointerFailure} from "./evidence-pointer";
+import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidencePointerDomain} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
@@ -603,8 +603,8 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
  }
  return result;
 }
-export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability): ProviderWireSchemaV3 {
-  const schema = structuredClone(providerSchemaV3);
+export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): ProviderWireSchemaV3 {
+  let schema = structuredClone(providerSchemaV3);
   if (capability) {
     requireShape(typeof capability.titlePresenceRequired==="boolean" && typeof capability.titleCorrectionAllowed==="boolean");
     if(capability.titlePresenceRequired)schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
@@ -625,6 +625,18 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       return [branch];
     });
     requireShape(changes.anyOf.length);
+  }
+  if(primaryEvidenceInput!==undefined){
+    const domain=primaryEvidencePointerDomain(primaryEvidenceInput);
+    const bind=(node:Schema):Schema=>{
+      const result=mapSchemas(node,bind);
+      if(result.properties&&Object.hasOwn(result.properties,"primaryEvidence"))result.properties.primaryEvidence={$ref:"#/$defs/__sources"};
+      return result;
+    };
+    schema=bind(schema);schema.$defs!.__sources={type:"string",enum:domain};
+    const evidence:Schema={type:"object",properties:{primaryEvidence:{$ref:"#/$defs/__sources"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false};
+    const pool=(node:Schema):Schema=>{const result=mapSchemas(node,pool);return equal(result,evidence)?{$ref:"#/$defs/__e"}:result;};
+    schema=pool(schema);schema.$defs!.__e=evidence;
   }
   // Provider dialect supports string enums, not const. Apply only after every
   // builder/specialization; internal decoder predicates remain unchanged.

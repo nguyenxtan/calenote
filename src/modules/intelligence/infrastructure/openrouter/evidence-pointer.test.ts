@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {expect,it} from "vitest";
-import {materializeProviderEvidence,evidenceSourceCatalogue,EvidencePointerFailure,projectEvidencePointerStructure} from "./evidence-pointer";
+import {materializeProviderEvidence,evidenceSourceCatalogue,EvidencePointerFailure,projectEvidencePointerStructure,primaryEvidencePointerDomain} from "./evidence-pointer";
 import {ContextInputSchema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
 import {buildContextInputV2} from "../../../conversation/context-contract/context";
 import {chat,message,observation,snapshot} from "../../../conversation/context-contract/context-test-fixtures";
@@ -9,6 +9,28 @@ import {validateEvidenceV3} from "../../../conversation/context-contract/evidenc
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
+it("source availability excludes assistant/controlled whole-turn pointers and preserves existing aliases",()=>{
+  const context=structuredClone(input);context.turns[0].text="a[CONTROL]b[CONTROL]";
+  context.facts=[{alias:"f1",scope:"REMINDER",field:"title",value:"private retained",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]},{alias:"f2",scope:"QUERY",field:"queryRange",value:{kind:"LIST",period:null,statusScope:"DEFAULT",evidence:[{kind:"USER_QUOTE",turn:2,quote:"8h sáng",occurrence:1}]},provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]}];
+  const before=JSON.stringify(context),domain=primaryEvidencePointerDomain(context);
+  expect(domain.map(text=>JSON.parse(text))).toEqual([{kind:"USER_TURN",turn:2},{kind:"USER_SEGMENT",turn:0,segment:0},{kind:"USER_SEGMENT",turn:0,segment:1},{kind:"CONTEXT_FACT",ref:"f1"},{kind:"CONTEXT_FACT",ref:"f2"}]);
+  expect(JSON.stringify(domain)).not.toContain("private");expect(JSON.stringify(context)).toBe(before);
+});
+it("invalid/empty source context fails closed without default pointer",()=>{
+  const invalid=structuredClone(input);invalid.currentTurn=1;
+  expect(()=>primaryEvidencePointerDomain(invalid)).toThrow("EVIDENCE_SOURCE_CONTEXT_INVALID");
+  const empty=structuredClone(input);empty.turns=[{role:"USER",text:"[CONTROL]"}];empty.currentTurn=0;
+  expect(()=>primaryEvidencePointerDomain(empty)).toThrow("EVIDENCE_SOURCE_DOMAIN_EMPTY");
+});
+it("source domains preserve every eligible controlled segment and fact without silent caps",()=>{
+  const context=structuredClone(input);
+  context.turns=Array.from({length:12},(_,index)=>({role:index%2?"USER" as const:"ASSISTANT" as const,text:Array.from({length:10},()=>"x").join("[CONTROL]")}));context.currentTurn=11;
+  context.facts=Array.from({length:26},(_,index)=>({alias:`f${index+1}`,scope:"REMINDER" as const,field:"title" as const,value:"private",provenance:{kind:"EXPLICIT_USER" as const},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]}));
+  const domain=primaryEvidencePointerDomain(context).map(text=>JSON.parse(text));
+  expect(domain).toHaveLength(86);
+  expect(domain).toContainEqual({kind:"USER_SEGMENT",turn:11,segment:9});expect(domain).toContainEqual({kind:"CONTEXT_FACT",ref:"f26"});
+  expect(domain.some(value=>value.kind==="USER_TURN")).toBe(false);
+});
 it("pointer diagnostic projection reads only descriptor scalars and counts secret keys",()=>{
   const pointer={kind:"PRIVATE_UNKNOWN_KIND",turn:2,segment:1,PRIVATE_KEY:"PRIVATE_VALUE",get quote(){throw Error("PRIVATE_ACCESSOR");}};
   const diagnostic=projectEvidencePointerStructure("POINTER_SHAPE",pointer,input);

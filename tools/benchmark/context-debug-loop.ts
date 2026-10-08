@@ -106,7 +106,17 @@ export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(mode==="R02_TURN0"||mode==="CANONICAL_WIRE"||mode==="V14")return s as T;
  const change=s.properties?.changes?.items,definition=change?.$ref?s.$defs?.[change.$ref.split("/").at(-1)!]:undefined;
  const groups:Record<string,string[]>={CHANGE_TEXT_ONLY:["title","location","notes"],CHANGE_DATE_ONLY:["eventDate","reminderDate","endDate"],CHANGE_TIME_ONLY:["eventTime","reminderTime"],CHANGE_SCALAR_ONLY:["calendar","frequency","occurrenceCount","leadOffsetDays","eventRelation"]};
- const unslot=(n:Node)=>{const e=n.properties?.evidence;if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");n.properties!.evidence={type:"array",items:e.properties.primaryEvidence}};
+ const unslot=(n:Node)=>{
+  let e=n.properties?.evidence;
+  if(e?.$ref){
+   if(e.$ref!=="#/$defs/__e"||Object.keys(e).length!==1)throw Error("DEBUG_PROBE_SHAPE");
+   e=s.$defs?.__e;
+   const primary=e?.properties?.primaryEvidence,extra=e?.properties?.additionalEvidenceJson,sources=s.$defs?.__sources;
+   if(e?.type!=="object"||Object.keys(e).length!==4||e.additionalProperties!==false||!Array.isArray(e.required)||e.required.length!==2||!e.required.includes("primaryEvidence")||!e.required.includes("additionalEvidenceJson")||Object.keys(e.properties??{}).length!==2||extra?.type!=="string"||Object.keys(extra).length!==1||primary?.$ref!=="#/$defs/__sources"||Object.keys(primary).length!==1||sources?.type!=="string"||!Array.isArray(sources.enum)||sources.enum.length===0||sources.enum.some(value=>typeof value!=="string"))throw Error("DEBUG_PROBE_SHAPE");
+  }
+  if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");
+  n.properties!.evidence={type:"array",items:e.properties.primaryEvidence};
+ };
  if(mode!=="NO_CHANGE_EVIDENCE") {const target=s.properties?.requestTarget?.anyOf?.[0];if(!target)throw Error("DEBUG_PROBE_SHAPE");unslot(target)}
  if(!definition?.anyOf?.length)throw Error("DEBUG_PROBE_SHAPE");
  definition.anyOf=definition.anyOf.flatMap(n=>{

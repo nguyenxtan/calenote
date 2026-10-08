@@ -25,7 +25,7 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)),baseMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3().schema),titleMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-2",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false}).schema) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("862edb1f8cae8f3f8435f5296d68be6439a8e86430289d1fe69040f07682f7ed");
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("9ad60bb5d31d30c1d412289e51bbc5a23cbf2d7be2a9d02a405316aaf08e2224");
   expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({utf8Bytes:12573,rootKeys:10,recursiveObjectArrayNodes:373,maximumDepth:12,unionBranches:51,requiredEntries:151,enumArrays:45,enumValues:121,largestEnum:16,nullableNodes:40,references:23,definitions:11,constantDiscriminators:3});
   expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-2",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false}).schema)).toEqual({utf8Bytes:9651,rootKeys:10,recursiveObjectArrayNodes:287,maximumDepth:12,unionBranches:42,requiredEntries:116,enumArrays:33,enumValues:93,largestEnum:16,nullableNodes:38,references:16,definitions:8,constantDiscriminators:3});
 });
@@ -72,8 +72,8 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
       const wireOutput = JSON.stringify(encodeFixtureV3(proposal));
       const request = serializeSelectedRequest(value);
       const name = `${script.id}_dispatch_${count}`;
-      artifacts.push({ case: name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(request), outputJson: wireOutput });
-      artifacts.push({ case: `${name}_canonical_output`, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(request), outputJson: canonical });
+      artifacts.push({ case: name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: wireOutput });
+      artifacts.push({ case: `${name}_canonical_output`, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: canonical });
       outputs.push(canonical);
       return proposal;
     });
@@ -101,7 +101,7 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
   const observed = await runContextFixtureCampaign(planned, { sourceSha: "68fac9b2b5e95ee57c53f0ac1f491210e153ed01", referenceNow: Date.parse("2026-09-28T03:00:00Z") }, (value, id, index) => {
     const proposal = frozenContextProposal(value, id, index), parsed = SelectedInterpretationSchema.safeParse(proposal);
     if (parsed.success) {
-      const wire = serializeSelectedRequest(value), common = { prompt: CONTEXT_CONTRACT_PROMPT, inputJson: JSON.stringify(value), schemaJson: JSON.stringify(targetSchema), wireJson: JSON.stringify(wire) };
+      const wire = serializeSelectedRequest(value), common = { prompt: CONTEXT_CONTRACT_PROMPT, inputJson: wire.messages[1].content, schemaJson: JSON.stringify(wire.response_format.json_schema.schema), wireJson: JSON.stringify(wire) };
       candidates.set(`${id}:${index}`, [{ ...common, case: `FULL_${id}_${index}_wire`, outputJson: JSON.stringify(encodeFixtureV3(parsed.data)) }, { ...common, case: `FULL_${id}_${index}_canonical`, outputJson: JSON.stringify(parsed.data) }]);
     }
     return proposal;
@@ -122,6 +122,11 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
     expect(utf8(JSON.stringify(encodeFixtureV3(worst)))).toBeGreaterThan(32768);
   } finally { oversized.dispose(); }
   const evidenceResult = measureLocalTokenArtifacts(artifacts);
+  const actualRows=evidenceResult.rows.filter(r=>!r.case.startsWith("schema_maximal")&&r.case!=="wire9_immutable_schema_same_input");
+  const actualSchemaMetrics=artifacts.filter(a=>!a.case.startsWith("schema_maximal")&&a.case!=="wire9_immutable_schema_same_input").map(a=>schemaMetrics(JSON.parse(a.schemaJson)));
+  console.log(JSON.stringify({actualSchemaMaximumMetrics:Object.fromEntries(Object.keys(actualSchemaMetrics[0]).map(key=>[key,Math.max(...actualSchemaMetrics.map(metrics=>metrics[key as keyof typeof metrics]))])),providerStateAdmission:"UNVERIFIED"}));
+  console.log(JSON.stringify({actualRequestRows:actualRows.length,maxApplicationTextTokens:Math.max(...actualRows.map(r=>r.applicationTextTokens)),maxConservativeTextPlusSchemaTokens:Math.max(...actualRows.map(r=>r.applicationTextTokens+r.rawSchemaDiagnosticTokens)),largestRequests:[...actualRows].sort((a,b)=>(b.applicationTextTokens+b.rawSchemaDiagnosticTokens)-(a.applicationTextTokens+a.rawSchemaDiagnosticTokens)).slice(0,4).map(r=>({case:r.case,text:r.applicationTextTokens,schema:r.rawSchemaDiagnosticTokens})),routeFramingTokens:"UNKNOWN",sdkFullStructuredUnavailableRows:actualRows.filter(r=>r.sdkFullStructuredTokens===null).length}));
+  for(const row of actualRows)expect(row.applicationTextTokens+row.rawSchemaDiagnosticTokens,row.case).toBeLessThanOrEqual(12000);
   expect(evidenceResult.provenance.networkGuardActive).toBe(true);
   expect(evidenceResult.provenance.networkAttemptsAfterSelfCheck).toEqual([]);
   for (const row of evidenceResult.rows.filter(r => !r.case.startsWith("schema_maximal"))) {

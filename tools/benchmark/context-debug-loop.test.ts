@@ -12,9 +12,39 @@ import {candidateValidationProof} from "./context-contract-candidate-validation"
 import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {parseGoogleLiteEuContextSectionsV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
+import {ContextInputSchema} from "../../src/modules/conversation/context-contract/contracts";
+import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
+function requestBoundSchema(){
+ const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Mai 8h nhắc gọi mẹ"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+ return serializeContextRequest(input).response_format.json_schema.schema;
+}
+it("diagnostic evidence ablation follows the exact request-only shared evidence definition",()=>{
+ const schema=requestBoundSchema(),before=JSON.stringify(schema);
+ const probe=debugProbeSchema(schema,"QUERY_ONLY") as unknown as {properties:{requestTarget:{anyOf:Array<{properties:{evidence:unknown}}>};query:unknown};$defs:Record<string,unknown>};
+ expect(probe.properties.requestTarget.anyOf[0].properties.evidence).toEqual({type:"array",items:{$ref:"#/$defs/__sources"}});
+ expect(probe.properties.query).toEqual((schema as unknown as typeof probe).properties.query);
+ expect(probe.$defs.__e).toEqual((schema as unknown as typeof probe).$defs.__e);
+ expect(probe.$defs.__sources).toEqual((schema as unknown as typeof probe).$defs.__sources);
+ expect(JSON.stringify(schema)).toBe(before);
+ const unresolved=structuredClone(schema) as unknown as typeof probe;delete unresolved.$defs.__sources;
+ expect(()=>debugProbeSchema(unresolved,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
+});
+it.each([
+ [{ $ref:"https://private.invalid/evidence" },"UNCHANGED"],
+ [{ $ref:"#/$defs/other" },"UNCHANGED"],
+ [{ $ref:"#/$defs/__e",type:"object" },"UNCHANGED"],
+ [{ $ref:"#/$defs/__e" },undefined],
+ [{ $ref:"#/$defs/__e" },{type:"object",properties:{primaryEvidence:{type:"string"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence"],additionalProperties:false}],
+ [{ $ref:"#/$defs/__e" },{type:"object",properties:{primaryEvidence:{type:"string"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:true}],
+])("diagnostic evidence refs reject unresolved, external or nonexact shapes %#",(evidence,definition)=>{
+ const schema=requestBoundSchema() as unknown as {properties:{requestTarget:{anyOf:Array<{properties:{evidence:unknown}}>}};$defs:Record<string,unknown>};
+ schema.properties.requestTarget.anyOf[0].properties.evidence=evidence;
+ if(definition===undefined)delete schema.$defs.__e;else if(definition!=="UNCHANGED")schema.$defs.__e=definition;
+ expect(()=>debugProbeSchema(schema,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
+});
 it("string-selector diagnostic changes only wire enum representation without runtime repair",()=>{
  const original=googleLiteEuContextWireSchemaV3().schema;
  original.properties!.operationCode={type:"integer",enum:Array.from({length:12},(_,i)=>i)};

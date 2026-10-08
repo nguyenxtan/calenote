@@ -48,7 +48,7 @@ export function verifyContextRequestSchema(request: Parameters<SemanticTransport
   if (digest(JSON.stringify(fieldCapability)) !== digest(JSON.stringify(expected))) throw new Error("FIELD_CAPABILITY_CHANGED");
   const requestWireSchemaDigest = digest(JSON.stringify(request.response_format.json_schema.schema));
   if (request.response_format.type !== "json_schema" || request.response_format.json_schema.name !== "calenote_context_3" || request.response_format.json_schema.strict !== true
-    || requestWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchemaV3(expected).schema))) throw new Error("PROVIDER_REQUEST_SCHEMA_CHANGED");
+    || requestWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchemaV3(expected,context).schema))) throw new Error("PROVIDER_REQUEST_SCHEMA_CHANGED");
   return { requestWireSchemaDigest, fieldCapabilityDigest: digest(JSON.stringify(expected)), requestContextDigest: digest(JSON.stringify(context)) };
 }
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
@@ -209,7 +209,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "862edb1f8cae8f3f8435f5296d68be6439a8e86430289d1fe69040f07682f7ed"
+    if (digest(request.messages[0].content) !== "9ad60bb5d31d30c1d412289e51bbc5a23cbf2d7be2a9d02a405316aaf08e2224"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "de60cabe9eed5aeefa8350e7402a44796c660a1addee937626a9f54dcf87a2ed") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request);
