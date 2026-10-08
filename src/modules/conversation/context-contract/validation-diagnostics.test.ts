@@ -78,6 +78,28 @@ it("retains malformed evidence in a late field union branch", () => {
   expect((diagnostics as { issues: Array<{ path: Array<string | number> }> }).issues.some(issue => issue.path.join(".") === "changes.0.evidence.0.occurrence")).toBe(true);
 });
 import { projectWireValidation } from "./validation-diagnostics";
+it.each([
+  [3,{index:3,change:{}},null,"COLLISION",["titleChange"]],
+  [4,null,null,"OUT_OF_RANGE",[]],
+  [-1,null,null,"NEGATIVE",[]],
+  [0.5,null,null,"NON_INTEGER",[]],
+  [null,null,null,"NON_INTEGER",[]],
+] as const)("carrier position diagnostics classify structural index case %# without private values",(index,titleChange,reminderDateChange,reason,collisions)=>{
+  const raw={changes:[{value:sentinel,evidence:sentinel}],titleChange,reminderDateChange,reminderTimeChange:{index,change:{value:sentinel,evidence:sentinel}}};
+  const diagnostic=projectWireValidation(raw,["reminderTimeChange","index"],"CHANGE_POSITION",undefined,"calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({carrierPosition:{reason,ordinaryCount:1,carrierCount:titleChange?2:1,combinedCount:titleChange?3:2,minIndex:0,maxIndex:titleChange?2:1,collisionRoots:collisions,...(typeof index==="number"&&Number.isSafeInteger(index)?{actualIndex:index}:{})}});
+  expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+});
+it("position diagnostics ignore unknown roots and never inspect private change payloads",()=>{
+  const payload={get value(){throw Error("PRIVATE_GETTER");},get evidence(){throw Error("PRIVATE_GETTER");}};
+  const raw={changes:[payload],titleChange:null,reminderDateChange:null,reminderTimeChange:{index:7,change:payload},[sentinel]:{index:7,change:payload}};
+  const diagnostic=projectWireValidation(raw,["reminderTimeChange","index"],"CHANGE_POSITION",undefined,"calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({carrierPosition:{actualIndex:7,ordinaryCount:1,carrierCount:1,combinedCount:2,collisionRoots:[]}});
+  expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+  expect(projectWireValidation(raw,[sentinel,"index"],"CHANGE_POSITION",undefined,"calenote-context-3").issues[0].carrierPosition).toBeUndefined();
+  const fractional=projectWireValidation({...raw,reminderTimeChange:{index:0.25,change:payload}},["reminderTimeChange","index"],"CHANGE_POSITION",undefined,"calenote-context-3");
+  expect(fractional.issues[0].carrierPosition).not.toHaveProperty("actualIndex");
+});
 it.each(["reminderDateChange","reminderTimeChange"])("new singleton path %s is finite and unknown child names remain redacted",root=>{
   const raw={[root]:{index:null,change:{[sentinel]:sentinel}}};
   expect(projectWireValidation(raw,[root,"index"],"CHANGE_POSITION",undefined,"calenote-context-3")).toMatchObject({issues:[{path:[root,"index"],expected:"CHANGE_POSITION",actualType:"null",unknownPathSegments:0}],topLevelKeys:[root],unknownTopLevelKeyCount:0});

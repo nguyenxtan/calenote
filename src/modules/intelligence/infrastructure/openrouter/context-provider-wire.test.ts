@@ -106,6 +106,16 @@ it("reminder clock carrier is null-only when no clock capability exists",()=>{
   expect(schema.properties.reminderTimeChange).toEqual({type:"null"});
   expect(schema.properties.reminderDateChange).toHaveProperty("anyOf");
 });
+it.each([[0,"COLLISION"],[2,"OUT_OF_RANGE"]] as const)("actual decoder preserves refusal and projects carrier %s/%s structure",(index,reason)=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_EVIDENCE",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"reminderDate",operation:"CLEAR",value:null,evidence},{field:"reminderTime",operation:"CLEAR",value:null,evidence}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+  wire.reminderTimeChange={...(wire.reminderTimeChange as object),index};
+  const before=JSON.stringify(wire),diagnostics:unknown[]=[];
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{path:["reminderTimeChange","index"],expected:"CHANGE_POSITION",carrierPosition:{reason,actualIndex:index,ordinaryCount:0,carrierCount:2,combinedCount:2,minIndex:0,maxIndex:1,collisionRoots:reason==="COLLISION"?["reminderDateChange"]:[]}}]}]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");expect(JSON.stringify(wire)).toBe(before);
+});
 it.each(["reminderDate","reminderTime"])("malformed %s carrier diagnostics expose known paths, not private authored values",field=>{
   const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field,operation:"CLEAR",value:null,evidence}]});

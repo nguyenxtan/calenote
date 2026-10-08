@@ -22,6 +22,22 @@ export interface CanonicalValidationIssue {
   /** Counts describe only the first 64 observed entries, not unseen payload. */
   duplicateFieldCounts?: Array<{field:string;count:number;indexes:number[]}>;
   duplicateFieldCountsTruncated?: boolean;
+  /** carrierCount counts observed non-null object roots, not validated changes. */
+  carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
+}
+/** Inspect only three fixed transport roots and index scalars; never changes'
+ * values/evidence, unknown fields, or authored change operands. */
+function carrierPositionStructure(raw:unknown,path:PropertyKey[]):CanonicalValidationIssue["carrierPosition"]|undefined {
+  const roots=["titleChange","reminderDateChange","reminderTimeChange"] as const;
+  if(path.length!==2||path[1]!=="index"||!roots.some(root=>root===path[0])||!raw||typeof raw!=="object"||Array.isArray(raw))return;
+  const read=(object:object,key:PropertyKey):unknown=>Object.getOwnPropertyDescriptor(object,key)?.value;
+  const changes=read(raw,"changes");if(!Array.isArray(changes))return;
+  const records=roots.map(root=>{const carrier=read(raw,root);return {root,present:!!carrier&&typeof carrier==="object"&&!Array.isArray(carrier),index:carrier&&typeof carrier==="object"&&!Array.isArray(carrier)?read(carrier,"index"):undefined};});
+  const selected=records.find(record=>record.root===path[0])!;
+  const index=selected.index,carrierCount=records.filter(record=>record.present).length,ordinaryCount=changes.length,combinedCount=ordinaryCount+carrierCount;
+  const collisionRoots=typeof index==="number"&&Number.isInteger(index)?records.slice(0,records.indexOf(selected)).filter(record=>record.present&&record.index===index).map(record=>record.root):[];
+  const reason=typeof index!=="number"||!Number.isInteger(index)?"NON_INTEGER":index<0?"NEGATIVE":collisionRoots.length?"COLLISION":index>=combinedCount?"OUT_OF_RANGE":"UNCLASSIFIED";
+  return {reason,...(typeof index==="number"&&Number.isSafeInteger(index)?{actualIndex:index}:{}),ordinaryCount,carrierCount,combinedCount,minIndex:0,maxIndex:combinedCount-1,collisionRoots};
 }
 function duplicateChangeStructure(raw:unknown):Pick<CanonicalValidationIssue,"duplicateFieldCounts"|"duplicateFieldCountsTruncated"> {
   if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
@@ -125,6 +141,10 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     if (cardinality.maxItems !== undefined) result.issues[0].maxItems = cardinality.maxItems;
   }
   if (expected === "CONTROL_ENUM" && control) Object.assign(result.issues[0], control);
+  if(expected==="CHANGE_POSITION"){
+    const position=carrierPositionStructure(raw,path);
+    if(position)result.issues[0].carrierPosition=position;
+  }
   if(expected==="UNIQUE_TITLE_OWNER" && path.length===1 && path[0]==="titleChange" && raw && typeof raw==="object" && !Array.isArray(raw)){
     const object=raw as Record<string,unknown>,carrier=object.titleChange as {change?:{operation?:unknown}}|undefined;
     if(carrier && typeof carrier==="object" && Array.isArray(object.changes)){
