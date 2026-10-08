@@ -78,6 +78,13 @@ it("retains malformed evidence in a late field union branch", () => {
   expect((diagnostics as { issues: Array<{ path: Array<string | number> }> }).issues.some(issue => issue.path.join(".") === "changes.0.evidence.0.occurrence")).toBe(true);
 });
 import { projectWireValidation } from "./validation-diagnostics";
+it.each(["BOUNDED_JSON_OBJECT","JSON_OBJECT","EVIDENCE_SOURCE_POINTER"])("preserves finite primary evidence failure %s without value leakage",expected=>{
+  const raw={changes:[{evidence:{primaryEvidence:{value:sentinel}}}]};
+  const diagnostic=projectWireValidation(raw,["changes",0,"evidence","primaryEvidence"],expected,undefined,"calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({expected,path:["changes",0,"evidence","primaryEvidence"],actualType:"object"});
+  expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+  expect(projectWireValidation(raw,["changes",0,"evidence","primaryEvidence"],sentinel,undefined,"calenote-context-3").issues[0].expected).toBeUndefined();
+});
 it.each([
   [3,{index:3,change:{}},null,"COLLISION",["titleChange"]],
   [4,null,null,"OUT_OF_RANGE",[]],

@@ -131,7 +131,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     result.issues[0].classification = structural === undefined ? "missing" : "value";
   }
   result.issues[0].code = "WIRE_SHAPE_INVALID";
-  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED", "UNIQUE_FIELD_OWNER", "FIELD_CARRIER_REQUIRED", "FIELD_CHANGE", "CHANGE_POSITION"].includes(expected)) result.issues[0].expected = expected;
+  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED", "UNIQUE_FIELD_OWNER", "FIELD_CARRIER_REQUIRED", "FIELD_CHANGE", "CHANGE_POSITION", "BOUNDED_JSON_OBJECT", "JSON_OBJECT", "EVIDENCE_SOURCE_POINTER"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
   if (extraKeyCount !== undefined) { result.issues[0].classification = "extra"; result.issues[0].extraKeyCount = extraKeyCount; }
   if (result.issues[0].actualType === "array" && cardinality && [cardinality.actualCount, cardinality.minItems, cardinality.maxItems].every(value => value === undefined || Number.isSafeInteger(value) && value >= 0)) {
