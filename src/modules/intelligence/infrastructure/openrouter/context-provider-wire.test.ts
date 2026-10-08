@@ -68,6 +68,13 @@ it.each(["CURRENT", "NEW", "UNRESOLVED"])("misplaced finite target %s is diagnos
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3, undefined, value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" });
   expect(diagnostics).toMatchObject([{ issues: [{ expected: "object", actualType: "string", actualSafeToken: target }] }]);
 });
+it("a properly encoded CURRENT evidence carrier round-trips without a target string", () => {
+  const canonical = ConversationInterpretationV3Schema.parse({ ...minimal, intent: "CREATE_REMINDER", conversationDirective: null, requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] } });
+  const wire = encodeGoogleLiteEuContextV3(canonical) as Record<string, unknown>;
+  expect(wire.requestTarget).toEqual({ evidence: { primaryEvidence: '{"kind":"USER_QUOTE","turn":0,"quote":"synthetic","occurrence":1}', additionalEvidenceJson: "[]" } });
+  expect(wire.operationCode).toBe("0");
+  expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3)).toMatchObject({ status: "PARSED", value: { semantic: { requestTarget: canonical.requestTarget } } });
+});
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };

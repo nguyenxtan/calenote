@@ -106,3 +106,7 @@ Mandatory reference integrity is checked even for a discarded optional range whe
 After written-spec approval, prepare the canonical implementation-plan amendment with exact interfaces, RED tests, verification commands, file ownership and meaningful independent review boundaries. After plan approval, implement offline, run full checks and independent architecture review C0/I0, then commit one local corrected candidate. No paid Pilot or release in that implementation task. Historical diagnostics and ledger remain append-only and unchanged.
 
 Expected corrected-candidate handoff: OWNER_REVIEW_OF_UNTRUSTED_WIRE_AUTHORITY_CORRECTED_CANDIDATE_BEFORE_FRESH_FORMAL_PILOT. Current documentation handoff: OWNER_REVIEW_OF_UNTRUSTED_WIRE_AUTHORITY_DESIGN.
+
+### 2026-10-08 provider target representation clarification
+
+Later bounded debug authorization permits this narrow prompt correction. Sanitized live diagnostics established a bare `CURRENT` string in `requestTarget`; the outgoing schema and strict decoder require an evidence-object carrier. OperationCode already carries CURRENT/NEW/UNRESOLVED meaning. Prompt guidance must explicitly distinguish that meaning from the wire representation and illustrate only the generic carrier using the actual application current-turn index, never fixture facts. This clarification changes no target authority, evidence requirements, schema, decoder, canonical validator or oracle. Malformed target strings still reject atomically; the backend never fabricates missing evidence or repairs them.

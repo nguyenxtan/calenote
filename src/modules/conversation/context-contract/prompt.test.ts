@@ -58,6 +58,12 @@ it("operation wire uses one semantic selector and never duplicates ownership tag
  expect(CONTEXT_CONTRACT_PROMPT).toContain("0=CREATE_REMINDER/CURRENT, 1=CREATE_REMINDER/NEW, 2=CREATE_REMINDER/UNRESOLVED, 3=LIST_REMINDERS/LIST, 4=CALENDAR_QUERY/CALENDAR_DATE, 5=CAPABILITY_QUERY/CAPABILITY, 6=HELP, 7=UNSUPPORTED, 8=AMBIGUOUS/null, 9=AMBIGUOUS/CURRENT, 10=AMBIGUOUS/NEW, 11=AMBIGUOUS/UNRESOLVED.");
 });
 
+it("serialized provider policy keeps target labels in operationCode, never a bare carrier", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("CURRENT, NEW and UNRESOLVED are operationCode meanings, not requestTarget string values.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("requestTarget MUST be a JSON object containing evidence, never a bare string or a JSON-encoded object string.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('"operationCode":"0","requestTarget":{"evidence":{"primaryEvidence":"{\\"kind\\":\\"USER_TURN\\",\\"turn\\":<input.currentTurn>}","additionalEvidenceJson":"[]"}}');
+});
+
 it("single lead reminder policy does not manufacture a daily series", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4 because the USER explicitly says một lần; omit occurrenceCount and never emit DAILY/count=1.');
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Without the explicit một lần instruction, omit frequency too.");

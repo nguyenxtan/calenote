@@ -708,3 +708,13 @@ Runtime/harness `59732fc425c02e248454062f1a7f1a9e84ecd534`: trusted preflight/cr
 See spec/plan `docs/superpowers/{specs,plans}/2026-10-07-count-offset-ownership.md`. Trusted CURRENT DAILY/count N requires independent start/single-reminder wording before admitting equal offset N; bare relation answer cannot borrow count authority. Exact facts/carry-forward, different explicit offset conflict and NEW isolation remain. No partial proposal rewrite or frozen oracle changes. Initial review marker-borrowing Important fixed with six RED→GREEN regressions; final independent C0/I0/M0. Focused130 PASS/2 skips; full175 files/8429 PASS/2 skips, docs/typecheck/lint/build/types/dry-run PASS, diff PASS. No provider/credential access before local acceptance. Fresh Pilot is next under existing $5 conservative authority and immutable history.
 
 Four requests settled KNOWN, authoritative total0.0036566 USD. Confirmed retained144518 microunits, UNKNOWN2109440 unchanged, conservative remaining2746042/5000000; hashchain PASS. Failed turn LIST reads0/reminder mutations0. No retry/Full/push/merge/deploy. Historical runs preserved. NEXT_GATE=OWNER_DECISION_ON_COUNT_OFFSET_SEMANTIC_OWNERSHIP_SCOPE. Request-target local guard PASS; Fresh Pilot FAIL; R04 live validation NOT_REACHED.
+
+### 2026-10-08 narrow target-carrier prompt correction
+
+- [x] Trace sanitized bare CURRENT failure to strict target-carrier object rejection; preserve historical executions.
+- [x] RED prompt-representation regression, then explicit operationCode meaning versus evidence-object carrier guidance with a generic currentTurn placeholder; preserve every existing semantic-ownership guard.
+- [x] Focused prompt/wire/operation regressions prove correctly encoded CURRENT remains valid and bare finite target labels remain rejected; typecheck and diff check.
+- [ ] Parent full local checks and independent C0/I0 review on the exact final delta, then selective local commit.
+- [ ] Fresh identity/accounting admission and Formal Pilot within the existing cumulative conservative $5 debug authority. No retry, fallback, Full or production action; no reset/release of historical accounting.
+
+Files: `prompt.ts`, `prompt.test.ts`, `context-provider-wire.test.ts`, and this canonical spec/plan note. Actual prompt digest is derived by the application; protocol semantics/version and ProviderWire remain unchanged.
