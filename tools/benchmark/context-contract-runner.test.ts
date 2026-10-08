@@ -14,6 +14,41 @@ import { ConversationInterpretationSchema } from "../../src/modules/conversation
 import { admitCanonicalCampaign, type ContextManifest } from "./context-contract";
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
+
+it.each(["schema", "capability", "input", "strict"])("trusted request proof rejects unbound %s before transport", mode => {
+  const input = { schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Nhắc trước 2 ngày." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE"], unsupported: [], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } } as ContextInput;
+  const request = { ...serializeContextRequest(input), model: "google/gemini-2.5-flash-lite", provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } } };
+  if (mode === "schema") request.response_format.json_schema.schema = {} as never;
+  else if (mode === "strict") request.response_format.json_schema.strict = false as never;
+  else {
+    const value = JSON.parse(request.messages[1].content);
+    if (mode === "capability") value.fieldCapability.allowedNumericFields.push("occurrenceCount");
+    else value.turns[0].text = "Nhắc 2 ngày liên tiếp.";
+    request.messages[1].content = JSON.stringify(value);
+  }
+  const verify = (runner as unknown as { verifyContextRequestSchema: (request: unknown) => unknown }).verifyContextRequestSchema;
+  expect(() => verify(request)).toThrow(mode === "schema" || mode === "strict" ? "PROVIDER_REQUEST_SCHEMA_CHANGED" : "FIELD_CAPABILITY_CHANGED");
+});
+
+it("runner captures the exact outbound request schema and capability proof separately from immutable family identity", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-capability-proof-"));
+  const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
+  let requestSchemaDigest: string | undefined, capabilityDigest: string | undefined;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "field-proof", profile: "PILOT",
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async request => {
+        const input = JSON.parse(request.messages[1].content);
+        requestSchemaDigest = hash(request.response_format.json_schema.schema); capabilityDigest = hash(input.fieldCapability);
+        return { status: 503, body: "{}" };
+      } });
+    expect(result.providerHttpRequests).toBe(1);
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0",
+      requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
+    expect(requestSchemaDigest).not.toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 it.each(["query","requestTarget"])("R01 turn-one %s conflicting legacy tag rejects at wire boundary and terminal runner", async mode=>{
   const directory=mkdtempSync(join(tmpdir(),"context-root-constraint-"));let calls=0;

@@ -434,9 +434,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
       max_price: { prompt: 0.1, completion: 0.4 },
     } };
     if (observable && typeof transport === "function") {
-      const providerRequest: SemanticJsonRequest = { ...request, response_format: { ...request.response_format,
-        json_schema: { ...request.response_format.json_schema,
-          schema: googleLiteEuContextWireSchema().schema } } };
+      const providerRequest = request;
       let dispatched = false;
       return { status: "READY", model: route.model, provider: route.provider, routeAdmission: "OBSERVABLE_CANARY", maximumCostMicrounits: CONTEXT_FINANCIAL_RESERVATION_MICROUNITS,
         async dispatch() {

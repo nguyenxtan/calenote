@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { numericOwnershipCatalogue } from "../../src/modules/conversation/context-contract/wire";
+import { deriveGenerationFieldCapability } from "../../src/modules/conversation/context-contract/field-capability";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
@@ -29,7 +30,25 @@ const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   semanticState?:ReturnType<typeof captureValidationSemanticState>;
   queryDiagnostics?:ReturnType<typeof captureQueryDiagnostics>;
-  canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string; }
+  canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string;
+  requestWireSchemaDigest?: string; fieldCapabilityDigest?: string; requestContextDigest?: string; }
+export interface RequestSchemaProof { requestWireSchemaDigest: string; fieldCapabilityDigest: string; requestContextDigest: string; }
+/** Compare actual outbound bytes to independently rederived request capability.
+ * A supplied digest/catalogue never authorizes a schema or a proposed value.
+ */
+export function verifyContextRequestSchema(request: Parameters<SemanticTransport>[0]): RequestSchemaProof {
+  const canonicalInput = JSON.parse(request.messages[1].content);
+  const { numericOwnership, fieldCapability } = canonicalInput;
+  delete canonicalInput.numericOwnership; delete canonicalInput.fieldCapability; delete canonicalInput.evidenceSources;
+  const context = ContextInputSchema.parse(canonicalInput);
+  if (digest(JSON.stringify(numericOwnership)) !== digest(JSON.stringify(numericOwnershipCatalogue(context)))) throw new Error("NUMERIC_OWNERSHIP_CATALOGUE_CHANGED");
+  const expected = deriveGenerationFieldCapability(context);
+  if (digest(JSON.stringify(fieldCapability)) !== digest(JSON.stringify(expected))) throw new Error("FIELD_CAPABILITY_CHANGED");
+  const requestWireSchemaDigest = digest(JSON.stringify(request.response_format.json_schema.schema));
+  if (request.response_format.type !== "json_schema" || request.response_format.json_schema.name !== "calenote_context_3" || request.response_format.json_schema.strict !== true
+    || requestWireSchemaDigest !== digest(JSON.stringify(googleLiteEuContextWireSchemaV3(expected).schema))) throw new Error("PROVIDER_REQUEST_SCHEMA_CHANGED");
+  return { requestWireSchemaDigest, fieldCapabilityDigest: digest(JSON.stringify(expected)), requestContextDigest: digest(JSON.stringify(context)) };
+}
 interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status: string; fullSchemaValid: boolean; pendingField: string | null;
   oracleState?:ReturnType<typeof captureContextOracleState>;
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
@@ -183,17 +202,15 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const providerWire = googleLiteEuContextWireSchemaV3();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
   const schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
+  let requestSchemaProof: Partial<RequestSchemaProof> = {};
   const actual = createContextContractGateway(config, async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== "21df6a39ff0ec2ff8eaf3b5d8cdfb7e58f40be15fca8b6da01a995b124afd6ff"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0"
-      || digest(JSON.stringify(request.response_format.json_schema.schema)) !== providerWireSchemaDigest) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
-    const canonicalInput = JSON.parse(request.messages[1].content), numericOwnership = canonicalInput.numericOwnership;
-    delete canonicalInput.numericOwnership; delete canonicalInput.evidenceSources;
-    if (digest(JSON.stringify(numericOwnership)) !== digest(JSON.stringify(numericOwnershipCatalogue(ContextInputSchema.parse(canonicalInput))))) throw new Error("NUMERIC_OWNERSHIP_CATALOGUE_CHANGED");
+    if (providerWireSchemaDigest !== "c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+    requestSchemaProof = verifyContextRequestSchema(request);
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
@@ -219,7 +236,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
-      outboundDigest = null; httpStatus = null; queryDiagnostics=undefined;
+      outboundDigest = null; httpStatus = null; queryDiagnostics=undefined; requestSchemaProof={};
       let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
       try { parsed = await prepared.dispatch(); }
       catch (error) {
@@ -237,7 +254,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
-      responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
+      responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...requestSchemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
         ...(result.status==="SUCCESS"&&!isUnreconciledListInterpretation(result.interpretation)?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
         ...(queryDiagnostics?{queryDiagnostics}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });

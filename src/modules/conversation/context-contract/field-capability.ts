@@ -1,0 +1,69 @@
+import type { ContextInput } from "./contracts";
+import type { SourceEvidence } from "./state";
+import { supportsCadenceOperand } from "./cadence-count-evidence";
+import { supportsLeadOffset } from "./lead-offset-evidence";
+import { supportsEventRelation } from "./event-relation-evidence";
+import { CONTROL_PLACEHOLDER } from "./projection";
+
+export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
+export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
+export interface GenerationFieldCapability {
+  version: "generation-field-capability-1";
+  allowedNumericFields: readonly NumericProposalField[];
+}
+/** A generation upper bound only. Probing the existing support predicates
+ * never supplies a proposed operand, evidence, or permission to mutate state.
+ * CURRENT retained slots and NEW proposals still require downstream ownership.
+ */
+export function deriveGenerationFieldCapability(input: ContextInput): GenerationFieldCapability {
+  const allowed = new Set<NumericProposalField>();
+  for (const field of NUMERIC_PROPOSAL_FIELDS) {
+    const slot = input.activeRequest?.slots[field];
+    if (slot && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(slot.state) && slot.value !== null) allowed.add(field);
+  }
+  const frequency = input.activeRequest?.slots.frequency, count = input.activeRequest?.slots.occurrenceCount;
+  const seriesCount = frequency && count && ["PROPOSED", "RESOLVED"].includes(frequency.state)
+    && ["PROPOSED", "RESOLVED"].includes(count.state) && frequency.value === "DAILY" && typeof count.value === "number" ? count.value : undefined;
+  const current = input.turns[input.currentTurn];
+  if (current?.role === "USER") {
+    const segments = current.text.split(CONTROL_PLACEHOLDER);
+    const fullTurn = { id: "current-user", role: "USER" as const, semanticView: current.text };
+    let nextStart = 0;
+    for (const [index, text] of segments.entries()) {
+      const length = [...text].length, start = nextStart;
+      nextStart += length + [...CONTROL_PLACEHOLDER].length;
+      if (!text.trim()) continue;
+      const turn = { id: `current-segment-${index}`, role: "USER" as const, semanticView: text };
+      const source: SourceEvidence = { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: text, occurrence: 1,
+        sourceSpan: { start: 0, end: length }, viewSpan: { start: 0, end: length }, normalizationVersion: "nfc-codepoint-v1" };
+      // Predicate probes only, never canonical SourceEvidence output. Pair
+      // exact segment support with its complete immutable USER context so a
+      // control boundary cannot hide a surrounding negation or hypothetical.
+      const contextual: SourceEvidence = { ...source, sourceTurnId: fullTurn.id, sourceMapTurnId: fullTurn.id,
+        sourceSpan: { start, end: start + length }, viewSpan: { start, end: start + length } };
+      const pendingCount = input.activeRequest && input.pendingQuestion?.scope === "REMINDER" && input.pendingQuestion.field === "occurrenceCount" && segments.length === 1 ? turn.id : undefined;
+      // Lexical candidates are private predicate probes, never returned values.
+      const words: Readonly<Record<string, number>> = { một: 1, hai: 2, ba: 3 };
+      const numbers = [...text.toLocaleLowerCase("vi").matchAll(/\d+|một|hai|ba/gu)].map(m => words[m[0]] ?? Number(m[0]));
+      for (const value of ["ONCE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"]) {
+        if (supportsCadenceOperand("frequency", value, [source], [turn]) && supportsCadenceOperand("frequency", value, [contextual], [fullTurn])) allowed.add("frequency");
+      }
+      for (const value of numbers) {
+        if (supportsCadenceOperand("occurrenceCount", value, [source], [turn], pendingCount, input.activeRequest ? turn.id : undefined)
+          && supportsCadenceOperand("occurrenceCount", value, [contextual], [fullTurn], pendingCount ? fullTurn.id : undefined, input.activeRequest ? fullTurn.id : undefined)) allowed.add("occurrenceCount");
+        // The lead verifier accepts a bare scoped answer. A segment separated
+        // by a control cannot borrow a reminder verb from another segment.
+        const leadScope = segments.length === 1 || !!input.activeRequest;
+        // This root schema spans both targets. An explicit independently
+        // grounded lead instruction may propose NEW even while CURRENT holds
+        // a series. Bare CURRENT answers retain the series-count restriction;
+        // the validator still checks the model's chosen target and value.
+        const newLead = supportsEventRelation("BEFORE_EVENT", [source], [turn], false) && supportsLeadOffset(value, [source], [turn])
+          && supportsEventRelation("BEFORE_EVENT", [contextual], [fullTurn], false) && supportsLeadOffset(value, [contextual], [fullTurn]);
+        const currentLead = leadScope && supportsLeadOffset(value, [source], [turn], seriesCount) && supportsLeadOffset(value, [contextual], [fullTurn], seriesCount);
+        if (currentLead || newLead) allowed.add("leadOffsetDays");
+      }
+    }
+  }
+  return { version: "generation-field-capability-1", allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)) };
+}

@@ -6,11 +6,9 @@ import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInp
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
 import * as gateways from "./semantic-gateway";
 import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
-import { googleLiteEuContextWireSchemaV3 } from "./context-provider-wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
-import { CONTEXT_CONTRACT_PROMPT } from "../../../conversation/context-contract/prompt";
-import { numericOwnershipCatalogue } from "../../../conversation/context-contract/wire";
+import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
@@ -71,12 +69,23 @@ const contextOutput = { schemaVersion: "calenote-context-3", intent: "CREATE_REM
   conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
 const materializedChanges=contextOutput.changes.map(change=>({...change,evidence:[{kind:"USER_QUOTE",turn:0,quote:contextInput.turns[0].text,occurrence:1}]}));
 const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
-  messages: [{ role: "system", content: CONTEXT_CONTRACT_PROMPT }, { role: "user", content: JSON.stringify({ ...value, numericOwnership: numericOwnershipCatalogue(value) }) }],
-  response_format: { type: "json_schema", json_schema: { name: "calenote_context_3", strict: true, schema: googleLiteEuContextWireSchemaV3().schema } },
-  stream: false, max_tokens: 1536, temperature: 0,
+  ...serializeContextRequest(value),
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
 const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
   choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload,contextInput)) }, finish_reason: finish }] }) });
+it("actual transport preserves prepared request capability despite caller mutation and duplicate dispatch", async () => {
+  const context = structuredClone(contextInput);
+  context.turns[0].text = "Nhắc trước 2 ngày.";
+  const expected = serializeContextRequest(context), requests: SemanticJsonRequest[] = [];
+  const attempt = gateways.createContextContractGateway(contextConfig, async request => { requests.push(request); return { status: 503, body: "{}" }; },
+    { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", context);
+  if (attempt.status !== "READY") throw Error("not ready");
+  context.turns[0].text = "Nhắc 2 ngày liên tiếp.";
+  await attempt.dispatch(); await attempt.dispatch();
+  expect(requests).toHaveLength(1);
+  expect(requests[0].messages).toEqual(expected.messages);
+  expect(requests[0].response_format).toEqual(expected.response_format);
+});
 const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
   admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
 
@@ -262,8 +271,7 @@ describe("observable successor route", () => {
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true },
       usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
       providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
-    expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex"))
-      .toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+    expect(requests[0].response_format).toEqual(serializeContextRequest(contextInput).response_format);
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_3", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
@@ -326,8 +334,7 @@ describe("observable successor route", () => {
     expect(seen?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
     const emitted = JSON.parse(String(seen?.init.body));
-    expect(createHash("sha256").update(JSON.stringify(emitted.response_format.json_schema.schema)).digest("hex"))
-      .toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+    expect(emitted.response_format).toEqual(serializeContextRequest(contextInput).response_format);
     expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_3", strict: true, schema: expect.any(Object) } } });
     expect(seen?.init.body).not.toContain("synthetic-test-secret");

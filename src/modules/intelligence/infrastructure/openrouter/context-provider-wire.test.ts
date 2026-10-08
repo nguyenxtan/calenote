@@ -6,6 +6,7 @@ import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/prot
 import { createContextContractGateway, createContextHttpTransport, type SemanticJsonRequest } from "./semantic-gateway";
 import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 import * as wireModule from "./context-provider-wire";
+import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 
 it("outgoing V3 dates do not multiply query discriminator enum states", () => {
   const schema=googleLiteEuContextWireSchema().schema;
@@ -220,7 +221,7 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);
-  expect(createHash("sha256").update(JSON.stringify(requests[0].response_format.json_schema.schema)).digest("hex")).toBe("c2ea900a4882c3620cdaa8e1fff1ee242f85194f23b093701e81d2314cd469a0");
+  expect(requests[0].response_format).toEqual(serializeContextRequest(input).response_format);
   expect(requests[0].provider).toEqual({ only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } });
   expect(requests[0].stream).toBe(false);
 });

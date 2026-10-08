@@ -7,6 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure} from "./evidence-pointer";
+import { NUMERIC_PROPOSAL_FIELDS, type GenerationFieldCapability, type NumericProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -496,8 +497,25 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
  }
  return result;
 }
-export function googleLiteEuContextWireSchemaV3(): ProviderWireSchemaV3 {
-  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: structuredClone(providerSchemaV3) as typeof InterpretationJsonSchemaV3 };
+export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability): ProviderWireSchemaV3 {
+  const schema = structuredClone(providerSchemaV3);
+  if (capability) {
+    const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
+    requireShape(capability.version === "generation-field-capability-1" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    const changes = deref(schema.properties!.changes.items!, schema);
+    requireShape(changes.anyOf?.length);
+    changes.anyOf = changes.anyOf.flatMap(raw => {
+      const branch = deref(raw, schema), field = deref(branch.properties!.field, schema);
+      const values = Object.hasOwn(field, "const") ? [field.const] : field.enum;
+      requireShape(values?.length);
+      const permitted = values.filter(value => !numeric(value) || capability.allowedNumericFields.includes(value));
+      if (!permitted.length) return [];
+      branch.properties!.field = Object.hasOwn(field, "const") ? { ...field, const: permitted[0] } : { ...field, enum: permitted };
+      return [branch];
+    });
+    requireShape(changes.anyOf.length);
+  }
+  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: schema as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);
