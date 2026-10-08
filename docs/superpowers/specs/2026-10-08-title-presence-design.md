@@ -18,6 +18,8 @@ Add an application-versioned nullable required root title-change carrier. A requ
 
 The base carrier remains nullable for unrelated turns. Existing non-obligated title correction/removal behavior remains possible. Request capability, schema digest, prompt digest, token measurement and actual outbound request must describe the same representation. Protocol identity advances; canonical schema authority and semantics do not change. No model output can select protocol version or expand permissions.
 
+Wire title-presence-28 uses the carrier as the sole title SET representation on every generated request; ordinary changes retain only non-obligated title REPLACE/CLEAR. Specialization prunes unreachable definitions. Decoder refuses carrier bypass and duplicate ownership without rewriting any authored change. This generation simplification is a mitigation hypothesis for the observed nonconforming duplicate output, not proof of the provider's internal cause or of live acceptance.
+
 ## Verification and live boundary
 
 TDD must prove exact missing-title failure, forced request schema presence, unchanged literal/evidence/order round-trips, duplicate/null/wrong-source rejection, CURRENT versus NEW, continuation/query/control/negative exclusions, existing R01-R16 guards and complexity metrics. Frozen local full suite and independent C0/I0 precede local commit and any provider calls. Continue Fresh Pilot within the original conservative USD5 debug authorization, same model/provider/retry0/fallbacknone. Preserve history and UNKNOWN; stop on actual budget/security/model/provider/production gates. No Full, push, merge, remote migration or deploy.

@@ -69,6 +69,15 @@ it("duplicate title ownership reproduces the sanitized live root-object failure 
   expect(diagnostics).toMatchObject([{issues:[{path:["titleChange"],code:"WIRE_SHAPE_INVALID",actualType:"object",classification:"value",unknownPathSegments:0}]}]);
   expect(JSON.stringify(wire)).toBe(before);
 });
+it("title SET cannot bypass its carrier on a non-obligated turn",()=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"literal",occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"literal",evidence}]});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{change:unknown}|null;changes:unknown[]};
+  const authored=wire.titleChange!.change;wire.titleChange=null;wire.changes=[authored];
+  const before=JSON.stringify(wire);
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  expect(JSON.stringify(wire)).toBe(before);
+});
 it.each(["SET","REPLACE","CLEAR",undefined,"PRIVATE_OPERATION_SENTINEL"])("duplicate-title diagnostics preserve safe independent operation metadata: %s",operation=>{
   const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_EVIDENCE_SENTINEL",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"PRIVATE_VALUE_SENTINEL",evidence}]});
@@ -353,8 +362,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-27");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("51ace0ea17c53b5342c477a87f68f90188c0943d3d1bd46dda31219d6f6b60f1");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-28");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("931dea2a079f1e31793fa09fbf8f7fb2410bd435d8677270024cbabeb213ce6a");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

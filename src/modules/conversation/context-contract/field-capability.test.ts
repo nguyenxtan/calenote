@@ -23,11 +23,11 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
   expect(schema.properties.titleChange.type).toBe("object");
   expect(fields(context)).not.toContain("title");
 });
-it("R02 request schema matches actual live binding and has no ordinary title ownership",()=>{
+it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-1",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("2dd222e95ac2c3a2a54786a4b53016906b25b72419100cc0260b311d2f448006");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("98256f82df3037aef548d5f9c4b5f8cf30ee4270720dcb282614ff244a904324");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -185,6 +185,31 @@ it("independent consumer requires exactly one model title carrier, never a retai
   const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
   slots.title={state:"RESOLVED",value:"đi thi",fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};
   expect(catalogue(context).titlePresenceRequired).toBe(true);
+});
+it("non-obligated requests expose one title SET representation while preserving title REPLACE/CLEAR",()=>{
+  const context=input("Nhắc việc mới."),check=validator(context),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"việc mới",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{change:unknown};changes:unknown[]};
+  expect(check.safeParse(wire).success).toBe(true);
+  expect(check.safeParse({...wire,titleChange:null,changes:[wire.titleChange.change]}).success).toBe(false);
+  for(const operation of ["REPLACE","CLEAR"] as const)expect(check.safeParse(encodeGoogleLiteEuContextV3({...canonical,changes:ConversationInterpretationV3Schema.parse({...canonical,changes:[{field:"title",operation,value:operation==="CLEAR"?null:"khác",evidence}]}).changes})).success).toBe(true);
+});
+it("specialized R02 schema exposes only reachable definitions",()=>{
+  const schema=serializeContextRequest(input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.")).response_format.json_schema.schema as unknown as {$defs:Record<string,unknown>};
+  const reached=new Set<string>();
+  const visit=(value:unknown)=>{
+    if(!value||typeof value!=="object")return;
+    const node=value as Record<string,unknown>;
+    if(typeof node.$ref==="string"){
+      const key=node.$ref.split("/").at(-1)!;
+      if(!reached.has(key)){reached.add(key);visit(schema.$defs[key]);}
+    }
+    for(const [key,child]of Object.entries(node))if(key!=="$defs"){
+      if(Array.isArray(child))child.forEach(visit);else visit(child);
+    }
+  };
+  visit(schema);
+  expect(Object.keys(schema.$defs).filter(key=>!reached.has(key))).toEqual([]);
 });
 it.each(["SET", "REPLACE", "CLEAR"] as const)("independent schema consumer rejects forbidden field carriers including %s", operation => {
   const context = input("Nhắc trước 2 ngày."), check = validator(context);

@@ -25,9 +25,9 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)),baseMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3().schema),titleMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("c29cb0942578aefb1419e5b150ff2efdfbb7b848ffd6c4e6c01ae3e769565729");
-  expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({utf8Bytes:9943,rootKeys:8,recursiveObjectArrayNodes:278,maximumDepth:10,unionBranches:42,requiredEntries:115,enumArrays:23,enumValues:102,largestEnum:16,nullableNodes:36,references:20,definitions:11,constantDiscriminators:15});
-  expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema)).toEqual({utf8Bytes:8886,rootKeys:8,recursiveObjectArrayNodes:250,maximumDepth:9,unionBranches:38,requiredEntries:103,enumArrays:20,enumValues:89,largestEnum:16,nullableNodes:35,references:18,definitions:11,constantDiscriminators:14});
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("24d8d98d0e07427115919e28bc27b037e7f81d76623df254b442ad69d8f01961");
+  expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({utf8Bytes:10384,rootKeys:8,recursiveObjectArrayNodes:289,maximumDepth:10,unionBranches:43,requiredEntries:121,enumArrays:23,enumValues:101,largestEnum:16,nullableNodes:36,references:21,definitions:11,constantDiscriminators:17});
+  expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-1",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true}).schema)).toEqual({utf8Bytes:8495,rootKeys:8,recursiveObjectArrayNodes:240,maximumDepth:9,unionBranches:38,requiredEntries:100,enumArrays:18,enumValues:79,largestEnum:16,nullableNodes:35,references:15,definitions:8,constantDiscriminators:14});
 });
 
 function schemaMetrics(schema: unknown) {

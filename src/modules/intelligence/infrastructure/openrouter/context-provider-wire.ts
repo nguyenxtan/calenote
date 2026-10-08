@@ -481,6 +481,23 @@ function indexedTitleSchema(root:Schema):Schema {
   const change=structuredClone(title);
   change.properties!.field={type:"string",const:"title"};
   change.properties!.operation={type:"string",const:"SET"};
+  deref(result.properties!.changes.items!,result).anyOf=branches.flatMap(raw=>{
+    const branch=deref(raw,result),field=branch.properties!.field,operation=branch.properties!.operation;
+    const fields=field.enum??[field.const],operations=operation.enum??[operation.const];
+    if(!fields.includes("title")||!operations.includes("SET"))return [raw];
+    const output:Schema[]=[],otherFields=fields.filter(value=>value!=="title"),titleOperations=operations.filter(value=>value!=="SET");
+    if(otherFields.length){
+      const ordinary=structuredClone(branch);
+      ordinary.properties!.field={type:"string",enum:otherFields};output.push(ordinary);
+    }
+    if(titleOperations.length){
+      const correction=structuredClone(branch);
+      correction.properties!.field={type:"string",const:"title"};
+      correction.properties!.operation=titleOperations.length===1?{type:"string",const:titleOperations[0]}:{type:"string",enum:titleOperations};
+      output.push(correction);
+    }
+    return output;
+  });
   const carrier:Schema={type:"object",properties:{index:{type:"integer"},change},required:["index","change"],additionalProperties:false};
   result.properties!.titleChange={anyOf:[carrier,{type:"null"}]};
   result.required!.push("titleChange");
@@ -503,7 +520,11 @@ function titleCarrier(raw:Record<string,unknown>,mode:"encode"|"decode",required
     if(!Object.hasOwn(raw,"titleChange"))throw new WireShapeFailure(["titleChange"],"REQUIRED_PROPERTY");
     const carrier=raw.titleChange;
     delete result.titleChange;
-    if(carrier===null){if(required)throw new WireShapeFailure(["titleChange"],"object");return result;}
+    if(carrier===null){
+      if(required)throw new WireShapeFailure(["titleChange"],"object");
+      if(titles.some(({change})=>change.operation==="SET"))throw new WireShapeFailure(["titleChange"],"TITLE_SET_CARRIER_REQUIRED");
+      return result;
+    }
     if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure(["titleChange"],"object");
     requireWireKeys(carrier as Record<string,unknown>,["index","change"],["index","change"],["titleChange"]);
     const {index,change}=carrier as {index:unknown;change:unknown};
@@ -567,7 +588,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     });
     requireShape(changes.anyOf.length);
   }
-  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: schema as typeof InterpretationJsonSchemaV3 };
+  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: prune(schema) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);

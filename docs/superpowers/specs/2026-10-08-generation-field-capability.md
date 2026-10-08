@@ -12,7 +12,7 @@ All nonnumeric fields retain their existing authority/evidence requirements; thi
 
 ## Clarified field upper-bound scope
 
-The numeric/clock upper-bound contract remains unchanged. The separately reviewed [bounded title-presence amendment](2026-10-08-title-presence-design.md) adds titlePresenceRequired as a lower-bound generation obligation and wire title-presence-27's required nullable indexed titleChange SET carrier. This presence predicate neither extracts a title value nor grants evidence or mutation authority. Unknown discourse, continuation, query and title correction/removal forms remain outside this bounded obligation.
+The numeric/clock upper-bound contract remains unchanged. The separately reviewed [bounded title-presence amendment](2026-10-08-title-presence-design.md) adds titlePresenceRequired as a lower-bound generation obligation and wire title-presence-28's required nullable indexed titleChange SET carrier. This presence predicate neither extracts a title value nor grants evidence or mutation authority. Unknown discourse, continuation, query and title correction/removal forms remain outside this bounded obligation.
 
 The root changes schema covers both CURRENT and NEW. Existing event-relation and lead-offset predicates may conservatively open a lead field for an independently grounded instruction while CURRENT retains a series. The downstream validator still checks the model-selected target and value; the allowlist cannot alone eliminate every contextual model error. A bare CURRENT series answer retains the existing count/distance restriction, and count-only language never supplies a lead capability.
 
