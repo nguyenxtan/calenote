@@ -46,3 +46,27 @@ it("retains the trusted date-encoding failure family without operand content", (
   expect(diagnostic.issues[0]).toMatchObject({ path: ["changes", 0, "value"], expected: "DATE_OPERAND_JSON", actualType: "string" });
   expect(JSON.stringify(diagnostic)).not.toContain("SYNTHETIC_PRIVATE_DATE");
 });
+
+it.each([
+  [JSON.stringify({ evidence: { ref: sentinel } }), "object"],
+  [JSON.stringify([sentinel]), "array"],
+  ["null", "null"],
+  ["2", "number"],
+  ["true", "boolean"],
+  [JSON.stringify(sentinel), "string"],
+  [sentinel, "INVALID_JSON"],
+  [" ".repeat(32769), "OVERSIZED"],
+  [JSON.stringify("ộ".repeat(11000)), "OVERSIZED"],
+  [" ".repeat(32764) + "null", "null"],
+] as const)("reports only bounded embedded type for rejected requestTarget string (%#)", (value, embeddedJsonType) => {
+  const diagnostic = projectWireValidation({ requestTarget: value }, ["requestTarget"], "object", undefined, "calenote-context-3");
+  expect(diagnostic.issues[0]).toMatchObject({ actualType: "string", embeddedJsonType });
+  expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+  expect(JSON.stringify(diagnostic).length).toBeLessThan(1000);
+});
+
+it("does not inspect business strings or change actual type of requestTarget", () => {
+  const diagnostic = projectWireValidation({ changes: [{ value: JSON.stringify({ location: sentinel }) }] }, ["changes", 0, "value"], "object");
+  expect(diagnostic.issues[0]).not.toHaveProperty("embeddedJsonType");
+  expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+});

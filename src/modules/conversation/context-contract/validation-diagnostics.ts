@@ -14,6 +14,7 @@ export interface CanonicalValidationIssue {
   acceptedDomainId?: string; acceptedValueCount?: number; actualSafeToken?: string; actualDigest?: string; actualLength?: number;
   constraintId?: CanonicalConstraintId; participatingFields?: string[]; expectedCategory?: string; actualCategory?: string;
   ownershipState?: OwnershipControlState;
+  embeddedJsonType?: "object" | "array" | "null" | "string" | "number" | "boolean" | "INVALID_JSON" | "OVERSIZED";
 }
 /** Only the decoder's trusted finite domains may call this projector. Never
  * infer control authority from an arbitrary string's shape. */
@@ -97,5 +98,15 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     if (cardinality.maxItems !== undefined) result.issues[0].maxItems = cardinality.maxItems;
   }
   if (expected === "CONTROL_ENUM" && control) Object.assign(result.issues[0], control);
+  // This carrier must be an object, never JSON-in-a-string. Inspect only the
+  // rejected top-level requestTarget for bounded type telemetry; do not use
+  // the parsed value for decoding, repair, semantic authority or acceptance.
+  if (path.length === 1 && path[0] === "requestTarget" && expected === "object" && typeof structural === "string") {
+    if (structural.length > 32768 || new TextEncoder().encode(structural).byteLength > 32768) result.issues[0].embeddedJsonType = "OVERSIZED";
+    else {
+      try { result.issues[0].embeddedJsonType = jsonType(JSON.parse(structural)) as NonNullable<CanonicalValidationIssue["embeddedJsonType"]>; }
+      catch { result.issues[0].embeddedJsonType = "INVALID_JSON"; }
+    }
+  }
   return result;
 }

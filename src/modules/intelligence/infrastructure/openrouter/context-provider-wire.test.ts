@@ -47,6 +47,19 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it.each([
+  [JSON.stringify({ evidence: { ref: "PRIVATE_TARGET" } }), "object"],
+  ["PRIVATE_TARGET", "INVALID_JSON"],
+  ["null", "null"],
+] as const)("rejects string requestTarget without materializing it while retaining safe type (%#)", (target, embeddedJsonType) => {
+  const canonical = { ...minimal, intent: "CREATE_REMINDER", conversationDirective: null, requestTarget: { kind: "CURRENT", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] } };
+  const wire = encodeGoogleLiteEuContextV3(canonical as never) as Record<string, unknown>;
+  const diagnostics: unknown[] = [];
+  wire.requestTarget = target;
+  expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3, undefined, value => diagnostics.push(value))).toEqual({ status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" });
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["requestTarget"], expected: "object", actualType: "string", embeddedJsonType }] }]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_TARGET");
+});
 const successorWire = wireModule;
 const selectedV3 = CONTEXT_PROTOCOL_V3;
 const v3Help = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
