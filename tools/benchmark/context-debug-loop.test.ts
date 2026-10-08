@@ -31,6 +31,10 @@ it("diagnostic evidence ablation follows the exact request-only shared evidence 
  expect(JSON.stringify(schema)).toBe(before);
  const unresolved=structuredClone(schema) as unknown as typeof probe;delete unresolved.$defs.__sources;
  expect(()=>debugProbeSchema(unresolved,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
+ const missingCurrent=structuredClone(schema) as unknown as typeof probe;delete missingCurrent.$defs.__current;
+ expect(()=>debugProbeSchema(missingCurrent,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
+ expect(probe.$defs.__ec).toEqual((schema as unknown as typeof probe).$defs.__ec);
+ expect(probe.$defs.__current).toEqual((schema as unknown as typeof probe).$defs.__current);
 });
 it.each([
  [{ $ref:"https://private.invalid/evidence" },"UNCHANGED"],
@@ -44,6 +48,15 @@ it.each([
  schema.properties.requestTarget.anyOf[0].properties.evidence=evidence;
  if(definition===undefined)delete schema.$defs.__e;else if(definition!=="UNCHANGED")schema.$defs.__e=definition;
  expect(()=>debugProbeSchema(schema,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
+});
+it.each(["crossed-source","extra-key","missing-required","open-object","empty-current"])("mutating evidence shared refs reject nonexact %s",fault=>{
+ const schema=requestBoundSchema() as unknown as {$defs:Record<string,{properties:Record<string,unknown>;required:string[];additionalProperties:boolean;enum:string[]}>};
+ if(fault==="crossed-source")schema.$defs.__ec.properties.primaryEvidence={$ref:"#/$defs/__sources"};
+ if(fault==="extra-key")schema.$defs.__ec.properties.secret={type:"string"};
+ if(fault==="missing-required")schema.$defs.__ec.required=["primaryEvidence"];
+ if(fault==="open-object")schema.$defs.__ec.additionalProperties=true;
+ if(fault==="empty-current")schema.$defs.__current.enum=[];
+ expect(()=>debugProbeSchema(schema as never,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
 });
 it("string-selector diagnostic changes only wire enum representation without runtime repair",()=>{
  const original=googleLiteEuContextWireSchemaV3().schema;

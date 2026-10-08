@@ -109,10 +109,11 @@ export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  const unslot=(n:Node)=>{
   let e=n.properties?.evidence;
   if(e?.$ref){
-   if(e.$ref!=="#/$defs/__e"||Object.keys(e).length!==1)throw Error("DEBUG_PROBE_SHAPE");
-   e=s.$defs?.__e;
-   const primary=e?.properties?.primaryEvidence,extra=e?.properties?.additionalEvidenceJson,sources=s.$defs?.__sources;
-   if(e?.type!=="object"||Object.keys(e).length!==4||e.additionalProperties!==false||!Array.isArray(e.required)||e.required.length!==2||!e.required.includes("primaryEvidence")||!e.required.includes("additionalEvidenceJson")||Object.keys(e.properties??{}).length!==2||extra?.type!=="string"||Object.keys(extra).length!==1||primary?.$ref!=="#/$defs/__sources"||Object.keys(primary).length!==1||sources?.type!=="string"||!Array.isArray(sources.enum)||sources.enum.length===0||sources.enum.some(value=>typeof value!=="string"))throw Error("DEBUG_PROBE_SHAPE");
+   const name=e.$ref==="#/$defs/__e"?"__e":e.$ref==="#/$defs/__ec"?"__ec":null;
+   if(!name||Object.keys(e).length!==1)throw Error("DEBUG_PROBE_SHAPE");
+   const sourceName=name==="__e"?"__sources":"__current";e=s.$defs?.[name];
+   const primary=e?.properties?.primaryEvidence,extra=e?.properties?.additionalEvidenceJson,sources=s.$defs?.[sourceName];
+   if(e?.type!=="object"||Object.keys(e).length!==4||e.additionalProperties!==false||!Array.isArray(e.required)||e.required.length!==2||!e.required.includes("primaryEvidence")||!e.required.includes("additionalEvidenceJson")||Object.keys(e.properties??{}).length!==2||extra?.type!=="string"||Object.keys(extra).length!==1||primary?.$ref!==`#/$defs/${sourceName}`||Object.keys(primary).length!==1||sources?.type!=="string"||!Array.isArray(sources.enum)||sources.enum.length===0||sources.enum.some(value=>typeof value!=="string"))throw Error("DEBUG_PROBE_SHAPE");
   }
   if(!e?.properties?.primaryEvidence)throw Error("DEBUG_PROBE_SHAPE");
   n.properties!.evidence={type:"array",items:e.properties.primaryEvidence};

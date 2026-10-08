@@ -641,6 +641,31 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     const evidence:Schema={type:"object",properties:{primaryEvidence:{$ref:"#/$defs/__sources"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false};
     const pool=(node:Schema):Schema=>{const result=mapSchemas(node,pool);return equal(result,evidence)?{$ref:"#/$defs/__e"}:result;};
     schema=pool(schema);schema.$defs!.__e=evidence;
+    // A stricter sufficient generation subset: mutating primary evidence is
+    // current USER only; the unchanged backend still accepts ANY current ref.
+    const currentDomain=domain.filter(text=>{const pointer=JSON.parse(text) as {kind:string;turn?:number};return ["USER_TURN","USER_SEGMENT"].includes(pointer.kind)&&pointer.turn===primaryEvidenceInput.currentTurn;});
+    const omitted:Schema={},splits=new WeakSet<Schema>();
+    const specialize=(node:Schema):Schema=>{
+      const result=mapSchemas(node,specialize);
+      if(result.anyOf)result.anyOf=result.anyOf.flatMap(branch=>branch===omitted?[]:splits.has(branch)?branch.anyOf!:[branch]);
+      requireShape(!Object.values(result.properties??{}).includes(omitted));
+      const properties=result.properties;
+      if(!properties?.field||!properties.operation||!properties.evidence)return result;
+      const operation=properties.operation,operations=operation.enum??[operation.const];
+      requireShape(operations.length>0&&operations.every(value=>["SET","REPLACE","CLEAR"].includes(String(value))));
+      const mutating=operations.filter(value=>value!=="SET");if(!mutating.length)return result;
+      const branches:Schema[]=[];
+      if(operations.includes("SET")){const kept=structuredClone(result);kept.properties!.operation={type:"string",enum:["SET"]};branches.push(kept);}
+      if(currentDomain.length){const changed=structuredClone(result);changed.properties!.operation={type:"string",enum:mutating};changed.properties!.evidence={$ref:"#/$defs/__ec"};branches.push(changed);}
+      if(!branches.length)return omitted;
+      if(branches.length===1)return branches[0];
+      const split:Schema={anyOf:branches};splits.add(split);return split;
+    };
+    schema=specialize(schema);
+    if(currentDomain.length){
+      schema.$defs!.__current={type:"string",enum:currentDomain};
+      schema.$defs!.__ec={...structuredClone(evidence),properties:{...evidence.properties,primaryEvidence:{$ref:"#/$defs/__current"}}};
+    }
   }
   // Provider dialect supports string enums, not const. Apply only after every
   // builder/specialization; internal decoder predicates remain unchanged.
