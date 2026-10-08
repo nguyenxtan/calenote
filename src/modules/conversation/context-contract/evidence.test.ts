@@ -12,6 +12,66 @@ import { mergePatchV3 } from "./merge";
 import { DownstreamDiagnosticSchema, type DownstreamDiagnostic } from "./downstream";
 
 describe("successor scoped semantic evidence", () => {
+  it.each([10, 11])("explicit event civil day fidelity: proposed day %s", day => {
+    const msg = message("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.");
+    const built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }];
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [
+      { field: "title", operation: "SET", value: "đi thi", evidence },
+      { field: "eventDate", operation: "SET", value: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day, month: 10, year: null, leapMonth: null }, evidence },
+    ], query: null, uncertainties: [] });
+    const before = JSON.stringify(proposal);
+    const result = validateEvidenceV3(proposal, built);
+    expect(result.status).toBe(day === 11 ? "VALID" : "REFUSED");
+    if (day === 10) expect(result).toEqual({ status: "REFUSED", reason: "CIVIL_DATE_SOURCE_MISMATCH" });
+    expect(JSON.stringify(proposal)).toBe(before);
+  });
+  it.each([
+    { text: "Nhắc gọi mẹ ngày 11/10.", field: "reminderDate", day: 11, month: 9, calendar: "GREGORIAN", status: "REFUSED" },
+    { text: "Nhắc gọi mẹ đến ngày 11/10.", field: "endDate", day: 10, month: 10, calendar: "GREGORIAN", status: "REFUSED" },
+    { text: "Nhắc gọi mẹ ngày 11/10 và 12/10.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+    { text: "Nhắc gọi mẹ ngày mai.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+    { text: "Nhắc gọi mẹ ngày 11/10 âm lịch.", field: "reminderDate", day: 10, month: 10, calendar: "LUNAR_VN", status: "VALID" },
+    { text: "Nhắc gọi mẹ ngày 11/10 âm lịch.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+    { text: "Nhắc gọi mẹ ngày 11/10 âm.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+    { text: "Nhắc gọi mẹ ngày 11/10 am lich.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+    { text: "Nhắc gọi mẹ vào ngày đã bàn.", field: "reminderDate", day: 10, month: 10, calendar: "GREGORIAN", status: "VALID" },
+  ])("civil fidelity bounded scope: $field $text $calendar", ({ text, field, day, month, calendar, status }) => {
+    const msg = message(text), built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const evidence = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }];
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field, operation: "SET", value: { kind: "CIVIL_DATE", calendar, day, month, year: null, leapMonth: null }, evidence }], query: null, uncertainties: [] });
+    const result = validateEvidenceV3(proposal, built);
+    expect(result.status).toBe(status);
+    if (status === "REFUSED") expect(result).toEqual({ status, reason: "CIVIL_DATE_SOURCE_MISMATCH" });
+    if (result.status === "VALID") expect(result.patch.resolvedChanges).toEqual(proposal.changes);
+  });
+  it("civil fidelity never reparses an exact accepted fact", () => {
+    const old = withNotes("ngày 11/10");
+    const value = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 10, month: 10, year: null, leapMonth: null } as const;
+    old.slots.eventDate = { ...old.slots.notes, value, fact: "f9" };
+    old.slots.notes = snapshot().slots.notes;
+    old.facts = [{ ...old.facts[0], scope: "REMINDER", field: "eventDate", evidenceSlot: "eventDate", value }];
+    const state = ContextSnapshotV2Schema.parse({ ...old, schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+    const msg = message("giữ ngày như cũ"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(old, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const current = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }];
+    const evidence = [{ kind: "CONTEXT_FACT", ref: built.input.facts.find(f => f.field === "eventDate")!.alias }];
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: current }, changes: [{ field: "eventDate", operation: "SET", value, evidence }], query: null, uncertainties: [] });
+    const result = validateEvidenceV3(proposal, built);
+    expect(result.status).toBe("VALID");
+    if (result.status === "VALID") expect(result.patch.resolvedChanges[0].value).toEqual(value);
+  });
+  it("an ASSISTANT date never acquires civil field authority", () => {
+    const old = snapshot(); old.transcript = [{ ...turn("ngày 11/10"), role: "ASSISTANT", kind: "NOTICE", deliveryState: "SENT" }];
+    const state = ContextSnapshotV2Schema.parse({ ...old, schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
+    const msg = message("nhắc gọi mẹ"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(old, msg) });
+    if (built.status !== "READY") throw new Error(built.reason);
+    const current = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }];
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: current }, changes: [{ field: "eventDate", operation: "SET", value: { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 11, month: 10, year: null, leapMonth: null }, evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "ngày 11/10", occurrence: 1 }] }], query: null, uncertainties: [] });
+    expect(validateEvidenceV3(proposal, built)).toEqual({ status: "REFUSED", reason: "EVIDENCE_NOT_USER" });
+  });
   it("requestTarget refusal reports the actual sanitized structural path", () => {
     const msg = message("nhắc mới"), built = buildContextInputV2({ message: msg, context: chat, snapshot: null, observation: observation(null, msg) });
     if (built.status !== "READY") throw new Error(built.reason);

@@ -2,7 +2,7 @@
 import { expect, it } from "vitest";
 import { D1ContextRuntimeStore } from "./runtime-store";
 import { date, time } from "./resolution-test-support";
-import { setup, harness, proposal, complete, type Proposal } from "./service-test-support";
+import { setup, harness, proposal, complete, completeText, type Proposal } from "./service-test-support";
 import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
 import { createContextContractService } from "./service";
 import { chat, message } from "./context-test-fixtures";
@@ -31,7 +31,7 @@ it("provider diagnostics never enter actual service errors, telemetry, replies o
 });
 it("all_successor_natural_turns_use_one_gateway and reply_captured_after_fenced_transition", async () => {
   const h = await harness([proposal(complete)]);
-  const result = await h.turn(0);
+  const result = await h.turn(0, completeText);
   expect(result, JSON.stringify({ events: h.events, replies: h.replies })).toEqual({ status: "DRAFT_CREATED" });
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
   expect(h.replies[0]).toMatchObject({ kind: "PREVIEW", source: "BACKEND" });
@@ -94,7 +94,7 @@ it.each(["SENT", "FAILED", "UNCERTAIN"] as const)("actual %s reminder clarificat
 });
 it("replacement_yes_never_saves_A_or_B through actual service", async () => {
   const h = await harness([proposal(complete), proposal({ ...complete, title: "gọi mẹ" })]);
-  await h.turn(0); await h.turn(1, "nhắc gọi mẹ ngày 8/10/2026 8h");
+  await h.turn(0, completeText); await h.turn(1, "nhắc gọi mẹ ngày 8/10/2026 8h");
   expect((await h.read(2))?.pendingDecision?.kind).toBe("REPLACE_PENDING");
   await h.turn(2, "Có.");
   const b = await h.read(3);
@@ -121,7 +121,7 @@ it("R11 query interruption retains exact draft expiry and suspends save", async 
   const query: Proposal = input => ({ schemaVersion: "calenote-context-3", intent: "LIST_REMINDERS", requestTarget: null, changes: [],
     query: { kind: "LIST", period: { kind: "MONTH", offset: 0 }, statusScope: "DEFAULT", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, uncertainties: [], conversationDirective: null, replyProposal: null });
   const h = await harness([proposal(complete), query, proposal({}, "CURRENT")]);
-  await h.turn(0); const before = await h.read(1);
+  await h.turn(0, completeText); const before = await h.read(1);
   expect(await h.turn(1, "Tháng này có lịch gì?")).toEqual({ status: "REMINDERS_LISTED" });
   const after = await h.read(2);
   expect(after?.draftExpiresAt).toBe(before?.draftExpiresAt);
@@ -159,7 +159,7 @@ it("R14 duplicate confirmation after lost send creates exactly one set of childr
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(2);
 });
 it.each(["FAILED", "UNCERTAIN"] as const)("%s preview cannot gain confirmation authority", async status => {
-  const h = await harness([proposal(complete)]); h.setDelivery({ status }); await h.turn(0);
+  const h = await harness([proposal(complete)]); h.setDelivery({ status }); await h.turn(0, completeText);
   await h.turn(1, "Có.");
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
@@ -202,12 +202,12 @@ it.each(["budget", "mark", "ceiling", "timeout", "evidence", "invalid core"])("%
       } return r;
     } }; } };
   }
-  await h.turn(0);
+  await h.turn(0, completeText);
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(["budget", "mark", "ceiling"].includes(fault) ? 0 : 1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 it("R14 uncertain confirmation read-back reports actual committed children", async () => {
-  const h = await harness([proposal(complete)]); await h.turn(0);
+  const h = await harness([proposal(complete)]); await h.turn(0, completeText);
   const confirm = h.f.store.confirm.bind(h.f.store);
   h.f.store.confirm = async (authority, proof) => { await confirm(authority, proof); return { status: "UNCERTAIN" }; };
   expect(await h.turn(1, "Có.")).toEqual({ status: "CONFIRMED" });
@@ -218,7 +218,7 @@ it("uncertain apply never sends an unverified preview or retries persistence", a
   const h = await harness([proposal(complete)]);
   const apply = h.f.store.apply.bind(h.f.store);
   h.f.store.apply = async (...args) => { await apply(...args); return { status: "UNCERTAIN" }; };
-  expect(await h.turn(0)).toEqual({ status: "SUPERSEDED" });
+  expect(await h.turn(0, completeText)).toEqual({ status: "SUPERSEDED" });
   expect(h.replies).toHaveLength(0);
   expect((await h.read(1))?.previewReceipt?.deliveryState).toBe("UNCERTAIN");
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
@@ -226,7 +226,7 @@ it("uncertain apply never sends an unverified preview or retries persistence", a
 it("queued confirmation received before preview cannot commit it", async () => {
   const h = await harness([proposal(complete)]);
   // This control was received earlier, but processed after the preview turn.
-  await h.turn(1);
+  await h.turn(1, completeText);
   expect(await h.turn(0, "Có.")).toEqual({ status: "SUPERSEDED" });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
@@ -327,7 +327,7 @@ it("first-in-flight no-draft abandon makes no fictitious cancellation receipt", 
   let release!: () => void, start!: () => void;
   const wait = new Promise<void>(r => { release = r; }), started = new Promise<void>(r => { start = r; });
   h.deps.gateway = { prepare: (tier, input) => { const p = gateway.prepare(tier, input); return p.status !== "READY" ? p : { ...p, dispatch: async () => { start(); await wait; return p.dispatch(); } }; } };
-  const pending = h.turn(0); await started;
+  const pending = h.turn(0, completeText); await started;
   await h.turn(1, "Bỏ."); const count = h.replies.length;
   expect(h.replies.at(-1)?.text).not.toContain("Đã bỏ");
   release(); expect(await pending).toEqual({ status: "SUPERSEDED" });
@@ -340,14 +340,14 @@ it("a newer accepted turn between persist and send fences old selected outbound"
   const wait = new Promise<void>(r => { release = r; }), persisted = new Promise<void>(r => { start = r; });
   h.f.store.apply = async (scope, observation, transition) => { const result = await apply(scope, observation, transition);
     if (scope.sourceInboundId === "old") { start(); await wait; } return result; };
-  const pending = h.turn(0); await persisted;
+  const pending = h.turn(0, completeText); await persisted;
   await h.turn(1, "Bỏ."); const count = h.replies.length;
   release(); await pending;
   expect(h.replies).toHaveLength(count);
   expect(h.replies.some(r => r.kind === "PREVIEW")).toBe(false);
 });
 it("two real owner/chat scopes cannot borrow each other's context or confirmation", async () => {
-  const h = await harness([proposal(complete)]); await h.turn(0);
+  const h = await harness([proposal(complete)]); await h.turn(0, completeText);
   for (const sql of [
     "INSERT INTO users VALUES('other','other@example.test','Other','Asia/Ho_Chi_Minh',1,1)",
     "INSERT INTO workspaces VALUES('other-space','other','PERSONAL',1,1)",
@@ -389,7 +389,7 @@ it.each([1, 2])("I1 numeric clarification answer %s reaches one semantic turn ra
 it.each(["2", "không", "ambiguous then 2"])("I2 decline %s at six USER turns preserves A and permits subsequent scoped abandonment", async answer => {
   const h = await harness([proposal({ title: "đi thi" }), proposal({ notes: "giấy tờ" }, "CURRENT"), proposal({ location: "Quang Trung" }, "CURRENT"),
     proposal({ eventDate: date() }, "CURRENT"), proposal({ eventRelation: "INCLUDING_EVENT" }, "CURRENT"), proposal({ ...complete, title: "gọi mẹ" })]);
-  for (let i = 0; i < 6; i++) await h.turn(i);
+  for (let i = 0; i < 6; i++) await h.turn(i, i === 5 ? "nhắc gọi mẹ ngày 8/10/2026 lúc 8h" : "nhắc đi thi ngày 11/10/2026 lúc 8h ở Quang Trung nhớ giấy tờ");
   const before = (await h.read(6))!;
   expect(before.pendingDecision?.kind).toBe("REPLACE_PENDING");
   expect(before.transcript.filter(t => t.role === "USER")).toHaveLength(6);
@@ -412,7 +412,7 @@ it.each(["2", "không", "ambiguous then 2"])("I2 decline %s at six USER turns pr
 });
 it("I3 explicit response to uncertain preview re-presents before a separate bound confirmation", async () => {
   const h = await harness([proposal(complete)]); h.setDelivery({ status: "UNCERTAIN" });
-  await h.turn(0); const before = (await h.read(1))!;
+  await h.turn(0, completeText); const before = (await h.read(1))!;
   expect(before.previewReceipt?.deliveryState).toBe("UNCERTAIN");
   h.setDelivery({ status: "SENT", messageRef: "recovery-ref" });
   expect(await h.turn(1, "Có.")).toEqual({ status: "DRAFT_CREATED" });
@@ -438,7 +438,7 @@ it("I3 explicit response to uncertain preview re-presents before a separate boun
 });
 it("I3 bound-only recovery survives uncertain-preview eviction and six USER capacity", async () => {
   const h = await harness([proposal(complete)]); h.setDelivery({ status: "UNCERTAIN" });
-  await h.turn(0); const original = (await h.read(1))!;
+  await h.turn(0, completeText); const original = (await h.read(1))!;
   h.setDelivery({ status: "SENT", messageRef: "recovery-ref" });
   for (let i = 1; i <= 6; i++) expect(await h.turn(i, "Có."), `turn ${i}: ${h.replies.at(-1)?.text}`).toEqual({ status: "DRAFT_CREATED" });
   const state = (await h.read(7))!, d = state.pendingDecision!;

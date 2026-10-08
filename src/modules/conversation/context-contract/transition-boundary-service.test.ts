@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { harness, proposal, complete, type Proposal } from "./service-test-support";
+import { harness, proposal, complete, completeText, type Proposal } from "./service-test-support";
 
 const operation: Proposal = input => {
   const evidence = [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }];
@@ -13,7 +13,7 @@ const list: Proposal = input => ({ schemaVersion: "calenote-context-3", intent: 
 
 it.each(["SENT", "UNCERTAIN"] as const)("sole retained A operation clarification issues non-saving RESUME with %s receipt", async status => {
   const h = await harness([proposal(complete), list, operation]);
-  await h.turn(0); const original = (await h.read(1))!;
+  await h.turn(0, completeText); const original = (await h.read(1))!;
   await h.turn(1, "Tháng này có lịch gì?"); const queried = (await h.read(2))!;
   h.setDelivery(status === "SENT" ? { status, messageRef: "resume-sent" } : { status });
   expect(await h.turn(2, "Xử lý yêu cầu này thế nào?")).toEqual({ status: "CLARIFICATION_REQUESTED" });
@@ -38,7 +38,7 @@ it.each(["SENT", "UNCERTAIN"] as const)("sole retained A operation clarification
 it("empty operation clarification preserves a genuinely grounded competing B", async () => {
   const competing: Proposal = input => ({ ...(operation(input) as object), intent: "CREATE_REMINDER", changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }] });
   const h = await harness([proposal(complete), competing, operation]);
-  await h.turn(0); await h.turn(1, "gọi mẹ hay yêu cầu đang giữ?"); const before = (await h.read(2))!;
+  await h.turn(0, completeText); await h.turn(1, "gọi mẹ hay yêu cầu đang giữ?"); const before = (await h.read(2))!;
   expect(before.pendingSemanticCandidate?.proposal.changes[0].value).toBe("gọi mẹ");
   await h.turn(2, "Xử lý yêu cầu này thế nào?"); const after = (await h.read(3))!;
   expect(after.pendingDecision).toBeNull(); expect(after.previewReceipt).toBeNull();
@@ -57,7 +57,7 @@ it("absent A operation ambiguity never invents a resume target", async () => {
 
 it("empty operation ambiguity suspends but never erases a competing replacement offer", async () => {
   const h = await harness([proposal(complete), proposal({ ...complete, title: "gọi mẹ" }), operation]);
-  await h.turn(0); await h.turn(1, "nhắc gọi mẹ 8/10/2026 8h"); const before = (await h.read(2))!;
+  await h.turn(0, completeText); await h.turn(1, "nhắc gọi mẹ 8/10/2026 8h"); const before = (await h.read(2))!;
   await h.turn(2, "Xử lý yêu cầu này thế nào?"); const after = (await h.read(3))!;
   expect(after.pendingDecision?.candidate).toEqual(before.pendingDecision!.candidate);
   expect(after.pendingDecision?.kind).toBe("REPLACE_PENDING");
@@ -74,7 +74,7 @@ it("field alternatives alongside operation uncertainty cannot become sole-A RESU
     const evidence = [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }];
     return { ...p, uncertainties: [...p.uncertainties, { field: "title", reason: "AMBIGUOUS", alternatives: ["đi thi", "gọi mẹ"].map(value => ({ value, evidence })) }] };
   };
-  const h = await harness([proposal(complete), factual]); await h.turn(0); await h.turn(1, "đi thi hay gọi mẹ?");
+  const h = await harness([proposal(complete), factual]); await h.turn(0, completeText); await h.turn(1, "đi thi hay gọi mẹ?");
   const s = (await h.read(2))!;
   expect(s.pendingDecision).toBeNull(); expect(s.pendingSemanticCandidate?.proposal.uncertainties).toHaveLength(2);
   expect(s.slots.title.value).toBe("đi thi"); expect(s.previewReceipt).toBeNull();
@@ -82,7 +82,7 @@ it("field alternatives alongside operation uncertainty cannot become sole-A RESU
 
 it("malformed current targeting evidence cannot issue RESUME or save", async () => {
   const invalid: Proposal = input => ({ ...(operation(input) as object), requestTarget: { kind: "UNRESOLVED", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: "nonexistent words", occurrence: 1 }] } });
-  const h = await harness([proposal(complete), invalid]); await h.turn(0);
+  const h = await harness([proposal(complete), invalid]); await h.turn(0, completeText);
   expect(await h.turn(1, "Xử lý yêu cầu này thế nào?")).toEqual({ status: "REJECTED" });
   expect((await h.read(2))?.pendingDecision).toBeNull();
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
@@ -90,7 +90,7 @@ it("malformed current targeting evidence cannot issue RESUME or save", async () 
 
 it.each(["ONCE", "YEARLY"] as const)("fresh %s NEW replacement offer has its own original TTL independent of A", async frequency => {
   const h = await harness([proposal(complete), proposal({ ...complete, title: "gọi mẹ", frequency })]);
-  await h.turn(0); const a = (await h.read(1))!;
+  await h.turn(0, completeText); const a = (await h.read(1))!;
   await h.turn(1, `nhắc gọi mẹ 8/10/2026 8h ${frequency === "YEARLY" ? "hằng năm" : "một lần"}`); const offered = (await h.read(2))!;
   expect(offered.slots).toEqual(a.slots); expect(offered.draftExpiresAt).toBe(a.draftExpiresAt);
   expect(offered.pendingDecision?.candidate).toMatchObject({ createdAt: "2026-09-28T03:00:00.001Z", expiresAt: "2026-09-28T03:10:00.001Z" });

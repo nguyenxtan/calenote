@@ -429,6 +429,25 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if (!listRangeCandidate) checkYear(requested);
     if (field === "leadOffsetDays" && requested !== null && !firstFact
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
+    // Reject-only fidelity check for a single explicit Gregorian civil source.
+    // Never supply a date/year or infer event/reminder ownership from the scan.
+    // Exact facts and unknown, ambiguous, lunar or relative forms retain their
+    // existing authority path; LIST has its own range verifier.
+    if (["eventDate", "reminderDate", "endDate"].includes(field) && !firstFact && distinct.length === 1
+      && requested && typeof requested === "object") {
+      const civil = requested as Record<string, unknown>;
+      if (civil.kind === "CIVIL_DATE" && civil.calendar === "GREGORIAN") {
+        for (const source of distinct) {
+          // The scanner does not establish calendar ownership. A bounded
+          // lunar marker, including abbreviated âm, excludes this veto.
+          if (/(?:^|[^\p{L}\p{M}\p{N}_])âm(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(source.quote)) continue;
+          const date = extractTemporalEvidence({ text: source.quote, referenceNow: Date.parse(referenceTime) }).date;
+          if (date.state !== "RESOLVED" || !["DAY_MONTH", "EXPLICIT_DATE"].includes(date.source)) continue;
+          const [, month, day] = date.localDate.split("-").map(Number);
+          if (civil.day !== day || civil.month !== month) fail("CIVIL_DATE_SOURCE_MISMATCH");
+        }
+      }
+    }
     if ((field === "frequency" || field === "occurrenceCount") && requested !== null && !firstFact
       && !supportsCadenceOperand(field, requested, distinct, built.evidenceIndex,
         target?.kind === "CURRENT" && internal.snapshot?.pendingReminderQuestion?.field === "occurrenceCount" ? built.evidenceIndex[built.input.currentTurn].id : undefined,

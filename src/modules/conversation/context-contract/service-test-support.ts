@@ -63,3 +63,6 @@ export async function harness(proposals: Proposal[], transformWire?: (wire:unkno
   return { f, deps, inputs, events, replies, service, turn, read, setIndex: (i: number) => { index = i; }, setDelivery: (receipt: ReplyReceipt) => { delivery = receipt; } };
 }
 export const complete = { title: "đi thi", reminderDate: date(8, 10, 2026), reminderTime: time() };
+// Authored independently from the proposal: complete reminder date is 8/10;
+// the generic harness default remains 11/10 for explicit event-date fixtures.
+export const completeText = "nhắc đi thi ngày 8/10/2026 lúc 8h ở Quang Trung nhớ giấy tờ";

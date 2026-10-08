@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { harness, proposal, complete } from "@/modules/conversation/context-contract/service-test-support";
+import { harness, proposal, complete, completeText } from "@/modules/conversation/context-contract/service-test-support";
 import { processBoundChatMessage } from "@/modules/reminders/command-service";
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import { chat, message } from "@/modules/conversation/context-contract/context-test-fixtures";
@@ -27,7 +27,7 @@ it.each(["reference", "no reference", "uncertain"])("actual processor preserves 
 
 it("successor_confirmation_cannot_fall_into_legacy", async () => {
   const h = await harness([proposal(complete)]);
-  await h.turn(0);
+  await h.turn(0, completeText);
   const scope = h.f.scope(1);
   h.setIndex(1);
   const commandStore = new D1ReminderCommandStore(h.f.db);
