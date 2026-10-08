@@ -1,8 +1,46 @@
 import { expect, it } from "vitest";
 import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
+import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "./contracts";
+import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+it("duplicate canonical change diagnostics identify only finite fields and authored indexes",()=>{
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:sentinel,occurrence:1}];
+  const raw={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[
+    {field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence},
+    {field:"notes",operation:"SET",value:sentinel,evidence},
+    {field:"reminderTime",operation:"REPLACE",value:{hour:9,minute:0,qualifier:"H24"},evidence},
+  ],query:null,uncertainties:[],conversationDirective:null,replyProposal:null};
+  const before=JSON.stringify(raw);let diagnostics:CanonicalValidationDiagnostics|undefined;
+  expect(parseInterpretationSectionsV3(raw,value=>{diagnostics=value;})).toMatchObject({status:"REFUSED"});
+  expect(diagnostics?.issues.find(issue=>issue.constraintId==="DUPLICATE_CHANGE_FIELD")).toMatchObject({duplicateFieldCounts:[{field:"reminderTime",count:2,indexes:[0,2]}],duplicateFieldCountsTruncated:false});
+  expect(JSON.stringify(diagnostics)).not.toContain(sentinel);
+  expect(JSON.stringify(raw)).toBe(before);
+});
+function actualDuplicateIssue(){
+  const evidence=[{kind:"USER_QUOTE",turn:0,quote:sentinel,occurrence:1}];
+  const result=ConversationInterpretationV3Schema.safeParse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:sentinel,evidence},{field:"notes",operation:"SET",value:sentinel,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+  if(result.success)throw Error("duplicate specimen unexpectedly accepted");
+  const issue=result.error.issues.find(issue=>issue.code==="custom"&&issue.params?.constraintId==="DUPLICATE_CHANGE_FIELD");
+  if(!issue)throw Error("duplicate predicate absent");return issue;
+}
+it("duplicate field telemetry ignores unknown names, private operations and value/evidence accessors",()=>{
+  const first={field:"reminderTime",operation:sentinel};
+  Object.defineProperty(first,"value",{enumerable:true,get(){throw Error("VALUE_READ");}});
+  Object.defineProperty(first,"evidence",{enumerable:true,get(){throw Error("EVIDENCE_READ");}});
+  const raw={changes:[first,{field:sentinel,value:sentinel},{field:"reminderTime",operation:sentinel},{field:sentinel,value:sentinel}], [sentinel]:sentinel};
+  const diagnostics=projectCanonicalValidation(raw,[{...actualDuplicateIssue(),message:sentinel}],"calenote-context-3");
+  expect(diagnostics.issues[0]).toMatchObject({duplicateFieldCounts:[{field:"reminderTime",count:2,indexes:[0,2]}],duplicateFieldCountsTruncated:false});
+  expect(JSON.stringify(diagnostics)).not.toContain(sentinel);
+  expect(JSON.stringify(diagnostics)).not.toContain("operation");
+});
+it("duplicate field counts are bounded observations with first eight indexes and explicit truncation",()=>{
+  const raw={changes:Array.from({length:70},()=>({field:"notes",value:sentinel,evidence:sentinel}))};
+  const diagnostics=projectCanonicalValidation(raw,[actualDuplicateIssue()],"calenote-context-3");
+  expect(diagnostics.issues[0]).toMatchObject({duplicateFieldCounts:[{field:"notes",count:64,indexes:[0,1,2,3,4,5,6,7]}],duplicateFieldCountsTruncated:true});
+  expect(JSON.stringify(diagnostics)).not.toContain(sentinel);
+});
 it.each([
   ["missing", { ...valid, replyProposal: undefined }, "replyProposal", "missing"],
   ["wrong enum", { ...valid, intent: sentinel }, "intent", "value"],

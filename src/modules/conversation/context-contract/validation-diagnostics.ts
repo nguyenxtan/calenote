@@ -19,6 +19,26 @@ export interface CanonicalValidationIssue {
   ownershipState?: OwnershipControlState;
   embeddedJsonType?: "object" | "array" | "null" | "string" | "number" | "boolean" | "INVALID_JSON" | "OVERSIZED";
   titleOwnership?: {ordinaryCount:number;carrierOperation:ReturnType<typeof projectControlEnum>;ordinaryOperations:Array<{index:number}&ReturnType<typeof projectControlEnum>>;truncated:boolean};
+  /** Counts describe only the first 64 observed entries, not unseen payload. */
+  duplicateFieldCounts?: Array<{field:string;count:number;indexes:number[]}>;
+  duplicateFieldCountsTruncated?: boolean;
+}
+function duplicateChangeStructure(raw:unknown):Pick<CanonicalValidationIssue,"duplicateFieldCounts"|"duplicateFieldCountsTruncated"> {
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const changes:unknown=Object.getOwnPropertyDescriptor(raw,"changes")?.value;
+  if(!Array.isArray(changes))return {};
+  const fields=new Map<string,{field:string;count:number;indexes:number[]}>();
+  let truncated=changes.length>64;
+  for(let index=0;index<Math.min(changes.length,64);index++){
+    const change:unknown=Object.getOwnPropertyDescriptor(changes,String(index))?.value;
+    if(!change||typeof change!=="object"||Array.isArray(change))continue;
+    const field:unknown=Object.getOwnPropertyDescriptor(change,"field")?.value;
+    if(typeof field!=="string"||!FieldChangeV3Schema.options.some(branch=>branch.shape.field.safeParse(field).success))continue;
+    let entry=fields.get(field);
+    if(!entry){if(fields.size>=13){truncated=true;continue;}entry={field,count:0,indexes:[]};fields.set(field,entry);}
+    entry.count++;if(entry.indexes.length<8)entry.indexes.push(index);else truncated=true;
+  }
+  return {duplicateFieldCounts:[...fields.values()].filter(entry=>entry.count>1),duplicateFieldCountsTruncated:truncated};
 }
 /** Only the decoder's trusted finite domains may call this projector. Never
  * infer control authority from an arbitrary string's shape. */
@@ -33,8 +53,9 @@ export interface CanonicalValidationDiagnostics {
   topLevelKeys: string[]; unknownTopLevelKeyCount: number; truncated: boolean;
 }
 const jsonType = (value: unknown) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? "object" : types.has(typeof value) ? typeof value : "non_json";
-/** Zod issues are untrusted: never copy messages, literals, inputs or unknown
- * names. Visit only bounded issue lists and bounded paths, never payload trees. */
+/** Zod issues are untrusted: never copy messages, inputs or unknown names.
+ * Visit bounded issues/paths and schema-accepted duplicate field tags only,
+ * never value, evidence or business-text trees. */
 export function projectCanonicalValidation(raw: unknown, issues: readonly z.core.$ZodIssue[], schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2"): CanonicalValidationDiagnostics {
   const result: CanonicalValidationDiagnostics = { schemaVersion, issues: [], topLevelKeys: [], unknownTopLevelKeyCount: 0, truncated: false };
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
@@ -61,6 +82,8 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
         ...(issue.code === "invalid_type" && types.has(issue.expected) ? { expected: issue.expected } : issue.code === "invalid_value" ? { expected: "CONTROL_ENUM" } : {}),
         ...(issue.code === "unrecognized_keys" ? { extraKeyCount: issue.keys.length } : {}),
         ...(issue.code === "custom" ? projectCanonicalConstraint(issue.params) : {}) });
+      const projected=result.issues.at(-1)!;
+      if(projected.constraintId==="DUPLICATE_CHANGE_FIELD"&&fullPath.length===0)Object.assign(projected,duplicateChangeStructure(raw));
       if (issue.code === "invalid_union") {
         // Prefer branches whose trusted control discriminants matched. Otherwise
         // the first text branch can consume the budget before a later date or
