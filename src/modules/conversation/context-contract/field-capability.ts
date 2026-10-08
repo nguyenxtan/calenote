@@ -12,10 +12,12 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-1";
+  version: "generation-field-capability-2";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
+  /** Availability from the application-bound occupied CURRENT slot only. */
+  titleCorrectionAllowed: boolean;
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -89,5 +91,8 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
       }
     }
   }
-  return { version: "generation-field-capability-1", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null, allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
+  const title = input.activeRequest?.slots.title;
+  return { version: "generation-field-capability-2", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+    titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
+    allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

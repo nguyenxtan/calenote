@@ -8,7 +8,7 @@ import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleL
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 
-it.each([undefined, {version:"generation-field-capability-1" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false}, {version:"generation-field-capability-1" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
+it.each([undefined, {version:"generation-field-capability-2" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false}, {version:"generation-field-capability-2" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
   const schema=googleLiteEuContextWireSchema(capability).schema;
   let constants=0;const singletonValues:string[]=[];
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;
@@ -20,7 +20,7 @@ it.each([undefined, {version:"generation-field-capability-1" as const,allowedNum
   };walk(schema);
   expect(constants).toBe(0);
   expect(singletonValues).toEqual(expect.arrayContaining(["title", "SET", "CLEAR"]));
-  if (!capability?.titlePresenceRequired) expect(singletonValues).toContain("REPLACE");
+  if (!capability) expect(singletonValues).toContain("REPLACE");
   for (const tag of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) expect(singletonValues).not.toContain(tag);
 });
 it("encoded canonical date round trip preserves strict active payload authority", () => {
@@ -364,7 +364,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-29");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-30");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("01b123b1c366deaf4bc2d706e5e3d4419c9f4caf42e2d4322e55e145a4822282");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
