@@ -16,6 +16,26 @@ import { createContextHttpTransport } from "../../src/modules/intelligence/infra
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
 
+it("persists safe transport failure tokens while stopping with unknown accounting", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-transport-diagnostics-"));
+  const sensitive = "SYNTHETIC_PRIVATE_TRANSPORT_MESSAGE";
+  let calls = 0;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "transport-failure", profile: "PILOT",
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async () => { calls++; throw new TypeError(sensitive, { cause: { code: "ENOTFOUND", message: sensitive } }); } });
+    expect(result.status).toBe("STOP");
+    expect(calls).toBe(1); expect(result.providerHttpRequests).toBe(1);
+    expect(result.responses[0]).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", httpStatus: null, rawResponseBytes: null,
+      usage: { costMicrounits: null }, provider: null,
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "TRANSPORT", errorName: "TypeError", causeCode: "ENOTFOUND" } });
+    const durable = readFileSync(join(directory, "responses.json"), "utf8");
+    expect(JSON.parse(durable)[0].transportDiagnostics).toEqual({ version: "gateway-exception-1", boundary: "TRANSPORT", errorName: "TypeError", causeCode: "ENOTFOUND" });
+    expect(durable).not.toContain(sensitive);
+    expect(readCampaignLedger(directory)).toContainEqual(expect.objectContaining({ event: "STOP", reason: "UNKNOWN_USAGE" }));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.each(["schema", "capability", "input", "strict"])("trusted request proof rejects unbound %s before transport", mode => {
   const input = { schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Nhắc trước 2 ngày." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE"], unsupported: [], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } } as ContextInput;
   const request = { ...serializeContextRequest(input), model: "google/gemini-2.5-flash-lite", provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: .1, completion: .4 } } };

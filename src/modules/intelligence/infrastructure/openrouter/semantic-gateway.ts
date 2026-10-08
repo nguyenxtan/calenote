@@ -14,6 +14,7 @@ import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import { projectProviderEnvelope } from "./envelope-diagnostics";
+import { projectTransportException, type SemanticTransportDiagnostics } from "./transport-diagnostics";
 
 async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const version = googleLiteEuContextWireSchema().version;
@@ -441,17 +442,21 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
           if (dispatched) return { status: "FAILURE", category: "UNAVAILABLE" };
           dispatched = true;
           const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
+          let boundary: SemanticTransportDiagnostics["boundary"] = "TRANSPORT";
           try {
             return await Promise.race([
-              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => ({
+              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => {
+                boundary = "DECODE";
+                return ({
                 ...await decodeObservableResponse(response, config,input.data), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
-              })),
+              }); }),
               new Promise<SemanticAttemptResult<ContextGatewayInterpretation>>(resolve => { timer = setTimeout(() => {
                 controller.abort(); resolve({ status: "FAILURE", category: "TIMEOUT", usage: { costMicrounits: null } });
               }, config.timeoutMs); }),
             ]);
-          } catch { return { status: "FAILURE", category: controller.signal.aborted ? "TIMEOUT" : "PROVIDER_FAILURE", usage: { costMicrounits: null } }; }
+          } catch (error) { return { status: "FAILURE", category: controller.signal.aborted ? "TIMEOUT" : "PROVIDER_FAILURE", usage: { costMicrounits: null },
+            transportDiagnostics: projectTransportException(error, boundary) }; }
           finally { clearTimeout(timer); }
         } };
     }

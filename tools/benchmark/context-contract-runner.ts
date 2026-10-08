@@ -10,6 +10,7 @@ import { numericOwnershipCatalogue } from "../../src/modules/conversation/contex
 import { deriveGenerationFieldCapability } from "../../src/modules/conversation/context-contract/field-capability";
 import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
+import type { SemanticTransportDiagnostics } from "../../src/modules/intelligence/infrastructure/openrouter/transport-diagnostics";
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
 import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
@@ -28,6 +29,7 @@ export const contextCampaignAdvertisedContextTokens = 1048576;
 export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
+  transportDiagnostics?: SemanticTransportDiagnostics;
   semanticState?:ReturnType<typeof captureValidationSemanticState>;
   queryDiagnostics?:ReturnType<typeof captureQueryDiagnostics>;
   canonicalSchemaDigest: string; providerWireSchemaDigest: string; providerWireSchemaVersion: string;
@@ -254,7 +256,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
-      responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...requestSchemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}) } : {}),
+      responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...requestSchemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}), ...(result.transportDiagnostics ? { transportDiagnostics: result.transportDiagnostics } : {}) } : {}),
         ...(result.status==="SUCCESS"&&!isUnreconciledListInterpretation(result.interpretation)?{semanticState:captureValidationSemanticState(result.interpretation.semantic)}:{}),
         ...(queryDiagnostics?{queryDiagnostics}:{}),
         usage: result.usage ?? null, provider: result.providerEvidence ?? null, requestDigest: outboundDigest, httpStatus, rawResponseBytes: result.rawResponseBytes ?? null });

@@ -73,6 +73,60 @@ const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: 
   provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
 const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
   choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload,contextInput)) }, finish_reason: finish }] }) });
+
+describe("bounded dispatch exception diagnostics", () => {
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  const sensitive = "SYNTHETIC_PRIVATE_MESSAGE_HEADER_URL_USER_TEXT";
+  // These exercise the real HTTP adapter and gateway. Dropping the catch
+  // projection, echoing arbitrary fields, or retrying breaks the contract.
+  it.each([
+    ["native fetch failure", new TypeError(sensitive, { cause: { code: "ECONNRESET", message: sensitive } }), { errorName: "TypeError", causeCode: "ECONNRESET" }],
+    ["direct network code", Object.assign(new Error(sensitive), { code: "ETIMEDOUT" }), { errorName: "Error", errorCode: "ETIMEDOUT" }],
+    ["early abort", Object.assign(new Error(sensitive), { name: "AbortError", code: "ABORT_ERR" }), { errorName: "AbortError", errorCode: "ABORT_ERR" }],
+    ["unknown name and code", { name: sensitive, code: sensitive, message: sensitive, stack: sensitive, headers: sensitive, url: sensitive }, { errorName: "UNKNOWN" }],
+    ["code lookalike", { name: "TypeError", code: "ECONNRESET_PRIVATE" }, { errorName: "TypeError" }],
+    ["primitive", sensitive, { errorName: "UNKNOWN" }],
+    ["null", null, { errorName: "UNKNOWN" }],
+    ["nested cause", new Error(sensitive, { cause: { code: "PRIVATE", cause: { code: "UND_ERR_CONNECT_TIMEOUT", message: sensitive } } }), { errorName: "Error", causeCode: "UND_ERR_CONNECT_TIMEOUT" }],
+    ["cause beyond bound", new Error(sensitive, { cause: { cause: { cause: { code: "ECONNREFUSED" } } } }), { errorName: "Error" }],
+  ])("projects only finite %s tokens without another dispatch", async (_label, error, tokens) => {
+    let calls = 0;
+    const transport = gateways.createContextHttpTransport("synthetic", async () => { calls++; throw error; });
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "TRANSPORT", ...tokens } });
+    expect(JSON.stringify(result)).not.toContain(sensitive);
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(400);
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(calls).toBe(1);
+  });
+
+  it.each(["getter", "proxy", "cycle"])("contains a hostile %s without invoking diagnostic getters", async mode => {
+    let reads = 0;
+    const error: Record<string, unknown> = {};
+    if (mode === "getter") for (const key of ["name", "code", "cause", "message", "stack"])
+      Object.defineProperty(error, key, { get() { reads++; throw new Error(sensitive); } });
+    else if (mode === "cycle") error.cause = error;
+    const thrown = mode === "proxy" ? new Proxy(error, { getOwnPropertyDescriptor() { throw new Error(sensitive); }, getPrototypeOf() { throw new Error(sensitive); } }) : error;
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { throw thrown; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "TRANSPORT", errorName: "UNKNOWN" } });
+    expect(reads).toBe(0);
+  });
+
+  it("distinguishes a decoder exception after the transport returned", async () => {
+    let calls = 0;
+    const response = { status: 200, get body(): string { throw new SyntaxError(sensitive); } };
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return response; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "DECODE", errorName: "SyntaxError" } });
+    await attempt.dispatch(); expect(calls).toBe(1);
+  });
+});
 it("actual transport preserves prepared request capability despite caller mutation and duplicate dispatch", async () => {
   const context = structuredClone(contextInput);
   context.turns[0].text = "Nhắc trước 2 ngày.";

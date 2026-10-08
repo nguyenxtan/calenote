@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CanonicalValidationDiagnostics } from "../conversation/context-contract/validation-diagnostics";
+import type { SemanticTransportDiagnostics } from "./infrastructure/openrouter/transport-diagnostics";
 import { LocalDateSchema, LocalTimeSchema, SEMANTIC_TIMEZONE, type ModelSemanticInterpretation } from "../semantic/contracts";
 import { SemanticContextSlotsSchema } from "../semantic/context-store";
 import { TemporalEvidenceSchema } from "../semantic/reconciliation";
@@ -88,7 +89,7 @@ export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   /** Actual HTTP chunks consumed; on an early cancelled read this is a prefix. */
   rawResponseBytes?: number;
   canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
-} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics };
+} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics; transportDiagnostics?: SemanticTransportDiagnostics };
 export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;
