@@ -10,6 +10,7 @@ import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
+import { projectProviderEnvelope } from "./envelope-diagnostics";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
 const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
@@ -21,6 +22,91 @@ const modelHelp = { intent: "HELP", title: null, titleState: "NOT_APPLICABLE", t
 const success = { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(modelHelp) }, finish_reason: "stop" }] }) };
 
 afterEach(() => vi.useRealTimers());
+
+describe("bounded choice-level provider error diagnostics", () => {
+  const privateText = "SYNTHETIC_PRIVATE_ERROR_USER_HEADER_URL";
+  it.each([
+    [{ code: 429, message: privateText }, "object", 429],
+    [{ code: 100, message: privateText }, "object", 100],
+    [{ code: 599, message: privateText }, "object", 599],
+    [{ code: 99, message: privateText }, "object", undefined],
+    [{ code: 600, message: privateText }, "object", undefined],
+    [{ code: "429", message: privateText }, "object", undefined],
+    [{ code: 429.5, message: privateText }, "object", undefined],
+    [privateText, "string", undefined],
+    [null, "null", undefined],
+    [[privateText], "array", undefined],
+  ])("projects only structural error metadata for choice and message (case %#)", async (error, errorType, errorCode) => {
+    // Removing either projection must lose these independently located errors;
+    // accepting finish_reason=error must fail the hard-rejection assertions.
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "error", error,
+      message: { content: privateText, error } }], usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    let calls = 0;
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; },
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", canonicalValidationDiagnostics: {
+      state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { errorPresent: false, firstChoice: {
+        choiceErrorPresent: true, choiceErrorType: errorType, messageErrorPresent: true, messageErrorType: errorType,
+      } } } });
+    const diagnostic = result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice;
+    expect(diagnostic?.choiceErrorCode).toBe(errorCode);
+    expect(diagnostic?.messageErrorCode).toBe(errorCode);
+    expect(JSON.stringify(result)).not.toContain(privateText);
+    await attempt.dispatch(); expect(calls).toBe(1);
+  });
+
+  it("distinguishes absent error properties from explicit null without assigning content errors to outer carriers", async () => {
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "error", message: { content: JSON.stringify({ error: { code: 429, message: privateText } }) } }], usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => ({ status: 200, body }),
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", canonicalValidationDiagnostics: {
+      providerEnvelope: { firstChoice: { choiceErrorPresent: false, choiceErrorType: "undefined", messageErrorPresent: false, messageErrorType: "undefined" } } } });
+    expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.choiceErrorCode).toBeUndefined();
+    expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.messageErrorCode).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(privateText);
+  });
+});
+
+describe("provider error content structural projection", () => {
+  const secret = "SYNTHETIC_PRIVATE_MODEL_ERROR_TEXT";
+  it.each([
+    [JSON.stringify({ error: { code: 429, message: secret }, message: secret }), { state: "JSON", jsonType: "object", errorPresent: true, errorType: "object", errorCode: 429 }],
+    [JSON.stringify({ code: 503, message: secret }), { state: "JSON", jsonType: "object", errorPresent: false, errorType: "undefined", code: 503 }],
+    [JSON.stringify({ error: { code: "429", message: secret } }), { state: "JSON", jsonType: "object", errorPresent: true, errorType: "object" }],
+    [JSON.stringify([secret]), { state: "JSON", jsonType: "array", errorPresent: false, errorType: "undefined" }],
+    [JSON.stringify(secret), { state: "JSON", jsonType: "string", errorPresent: false, errorType: "undefined" }],
+    [secret, { state: "MALFORMED" }],
+    ["x".repeat(32769), { state: "OVERSIZED" }],
+  ])("inspects only bounded finish=error content without retaining values (case %#)", (content, expected) => {
+    const result = projectProviderEnvelope({ error: null, choices: [{ finish_reason: "error", message: { content } }] });
+    expect(result).toMatchObject({ errorPresent: true, errorType: "null", firstChoice: { errorContent: expected } });
+    const diagnostic = result.firstChoice?.errorContent;
+    if (!("errorCode" in expected)) expect(diagnostic?.errorCode).toBeUndefined();
+    if (!("code" in expected)) expect(diagnostic?.code).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(result).length).toBeLessThan(1500);
+  });
+  it.each(["stop", "length", null, "SYNTHETIC_PRIVATE_FINISH"])("never parses ordinary semantic content for finish=%s", finish => {
+    const result = projectProviderEnvelope({ choices: [{ finish_reason: finish, message: { content: JSON.stringify({ error: { code: 429, message: secret } }) } }] });
+    expect(result.firstChoice?.errorContent).toEqual({ state: "NOT_INSPECTED" });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+  it("honors the exact UTF-8 byte ceiling, not only JavaScript string length", () => {
+    const json = '{"error":{"code":429}}';
+    const atBound = json + " ".repeat(32768 - Buffer.byteLength(json));
+    const atResult = projectProviderEnvelope({ choices: [{ finish_reason: "error", message: { content: atBound } }] });
+    expect(atResult.firstChoice?.errorContent).toEqual({ state: "JSON", jsonType: "object", errorPresent: true, errorType: "object", errorCode: 429 });
+    const overBound = atBound.slice(0, -1) + "é";
+    expect(overBound.length).toBe(32768);
+    expect(Buffer.byteLength(overBound)).toBe(32769);
+    const overResult = projectProviderEnvelope({ choices: [{ finish_reason: "error", message: { content: overBound } }] });
+    expect(overResult.firstChoice?.errorContent).toEqual({ state: "OVERSIZED" });
+  });
+});
 
 it.each(["error", "length", "content_filter", "tool_calls", null, 17, "SYNTHETIC_SECRET_finish"]) (
   "captures exact finite finish control without accepting or leaking content (%s)", async finish => {
