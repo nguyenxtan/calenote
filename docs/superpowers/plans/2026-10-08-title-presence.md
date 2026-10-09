@@ -2,6 +2,8 @@
 
 ### Approved wire46 TURN1 source-domain diagnostic step
 
+Integer-mode RED/GREEN exact two-definition/hash/domain restore, fake200 number1 in activequery within integer bounds then unchanged decoder type refusal/no reads/mutations; fake400 conservative settlement, drift/privacy/seed/history/duplicate/max1/zero prerequisites/no automatic axes. Two tooling/two doc files only; six-file focused/typecheck/lint/diff then freeze; no production edits or paid implementer calls.
+
 Inline-only strict RED/GREEN mode table, original/transformed SHA and sole-ref/deaddef restore identity, complete original source/current domains, fakeJSONpointer200 accepted by unchanged decoder and400 conservative settlement, zero prerequisites/max1/terminal/no Pilot credit/drift/privacy/duplicate/history/no automatic axes. Owned two debug tools/two metadata docs only; focused six files/typecheck/lint/diff then freeze for controller full/review/one probe. No production edits or implementer paid calls.
 
 Compact-only RED/GREEN extends closed source predicate by one named mode, exact original guard and compact hash; preserve source domain cardinality/order/current membership and restore only two definitions. Fake200/400 one terminal call, zero prerequisites/no Pilot credit/automatic axes, unchanged runtime alias refusal, duplicate/accounting/privacy/actual drift fences. Scoped six-file regression/typecheck/lint/diff then four-file freeze; no production changes or implementer paid calls.
