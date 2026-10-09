@@ -15,9 +15,10 @@ type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]`
 type ReminderCarrierRoot = `${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount"}Change`;
 type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"index" | "change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
 type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
-type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through"}{kind=${"C" | "R" | "W"}}`;
+type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.value`;
+type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
-  | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath | ReminderCarrierPath
+  | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath | ReminderCarrierPath | `${StructuredDateCarrierPrefix}.${"kind"|"calendar"|"day"|"month"|"year"|"leapMonth"|"offsetDays"|"weekday"|"qualifier"}`
   | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping"
   | "titleChange" | "titleChange.index" | "titleChange.change" | "titleChange.change.field" | "titleChange.change.operation" | "titleChange.change.value" | "titleChange.change.evidence" | "titleChange.change{field=title;operation=SET}";
 const semantic: OutputAuthorityRule = Object.freeze({ class: "SEMANTIC_UNTRUSTED", modelAuthorshipReason: "Proposed user meaning, operand, instruction, ambiguity or supporting source selection.", evidencePolicy: "Validate exact scoped source identity; targeting/replacement/removal require current USER_QUOTE evidence.", mergePolicy: "Only validated semantic candidates enter merge; backend derives conflicts, completeness and admission.", canAffectMerge: true, canCauseHardReject: true, canCauseClarify: true, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
@@ -64,7 +65,10 @@ for (const prefix of ["changes[].value", "query.date", "query.period.date", "que
 }
 // Compact transport selections have the same untrusted authority as canonical
 // date kinds. The fixed mapping itself remains application-owned.
-for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through"] as const)for(const kind of ["C","R","W"] as const)add([`${prefix}{kind=${kind}}`]);
+for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through","eventDateChange.change.value","reminderDateChange.change.value"] as const){
+  if(prefix==="eventDateChange.change.value"||prefix==="reminderDateChange.change.value")date(prefix);
+  for(const kind of ["C","R","W"] as const)add([`${prefix}{kind=${kind}}`]);
+}
 for (const prefix of ["query.period", "uncertainties[].alternatives[].value"]) for (const kind of ["DAY", "WEEK", "MONTH", "WEEKEND", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING", "DATE_BOUNDS"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 for (const kind of ["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP"] as const) add([`conversationDirective{kind=${kind}}`], advisory);
 const registry: Partial<Record<OutputFieldPathV3, OutputAuthorityRule>> = {};

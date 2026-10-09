@@ -18,9 +18,11 @@ it("dispatches the civil source fidelity checkpoint last before output", () => {
   expect(JSON.parse(request.messages[1].content).turns).toEqual(input.turns);
 });
 
-it("wire instructions require encoded canonical dates rather than padded date objects", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("On the provider wire, each active date operand is a JSON string encoding exactly one canonical DateOperand object.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example two-day wire value: "{\\"kind\\":\\"RELATIVE_DAY\\",\\"offsetDays\\":2}".');
+it("wire instructions require strictly typed date slots without opaque date JSON", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("kind C=CIVIL_DATE/R=RELATIVE_DAY/W=WEEKDAY");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("every inactive slot MUST be null, never discarded nonnull");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Two-day example: {kind:"R",calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:2,weekday:null,qualifier:null}.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Facts/examples/encoded uncertainty alternatives retain canonical objects/full names, never this wire codebook");
 });
 
 it("serialized query policy delivers current continuation evidence ownership", () => {
@@ -108,8 +110,8 @@ it("serialized policy specifies normalized exam task titles without changing evi
 });
 
 it("final target evidence check distinguishes targeting from historical operand sources", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: parse each requestTarget evidence JSON string.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("It must be a USER_TURN pointer with turn equal to input.currentTurn, for CURRENT and NEW alike.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: every CURRENT/NEW primary/extra parses to USER_TURN/input.currentTurn.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Historical USER/facts support eligible operands, never targeting; non-target scope unchanged.");
 });
 
 it("mutating primary source is current while SET retains the general source domain", () => {
@@ -118,13 +120,13 @@ it("mutating primary source is current while SET retains the general source doma
 });
 
 it("pending proposed slot values remain usable conversation context", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Non-conflicting PROPOSED/RESOLVED values are retained, not missing for lack of confirmation.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Scoped answers read activeRequest.slots.occurrenceCount.value and frequency.value; CONFLICT is unresolved.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("nonconflicting PROPOSED/RESOLVED retained even unconfirmed; CONFLICT unresolved.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Scoped answers read occurrenceCount.value/frequency.value.");
 });
 
 it("a scoped relation answer does not introduce a second numeric operand", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("When pendingQuestion.field is eventRelation and accepted facts already contain DAILY plus occurrenceCount=N, a short answer requesting N preceding days fills eventRelation only.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not emit leadOffsetDays SET merely because that relation answer contains a number equal to N.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Bound pendingQuestion resolves short answers: eventRelation question+accepted DAILY/countN+N preceding days fills relation only");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("never leadOffsetDays merely from matching N.");
 });
 
 it("encoded USER_TURN contains only explicit source identity", () => {
@@ -178,12 +180,12 @@ it("explicit resolved Vietnamese day-part clocks prefer the equivalent H24 repre
 });
 
 it("explicit task subject is retained independently of missing scheduling operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Missing title requires the explicit grounded USER task/event subject");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("date/location/cadence/count cannot substitute");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("nor missing reminderTime/relation justify omission");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Title needs grounded USER task/event subject");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("never date/location/cadence/count substitute");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("or omission because reminderTime/relation missing");
 });
 it("title action-phrase convention is delivered before wire serialization instructions", () => {
-  const rule="Titles are concise actions: exam/thi is đi thi, not thi; meeting is họp. Preserve supplied names/qualifiers, invent none.";
+  const rule="Concise actions: exam/thi is đi thi, not thi; meeting is họp. Keep names/qualifiers, invent none.";
   expect(CONTEXT_CONTRACT_PROMPT).toContain(rule);
   expect(CONTEXT_CONTRACT_PROMPT.indexOf(rule)).toBeLessThan(CONTEXT_CONTRACT_PROMPT.indexOf("Canonical semantic fields are"));
 });
@@ -218,8 +220,8 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(JSON.stringify(input)).toBe(before);
 });
 it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE encode complete canonical DateOperand objects as JSON strings.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow is RELATIVE_DAY/offsetDays1, never raw mai/tomorrow, ISO dates or encoded bare strings.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE use complete nine-key date objects.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow uses kind R/offsetDays1 with all other slots null, never raw mai/tomorrow, ISO dates or encoded strings.");
 });
 it("notification-owned date does not become an event date by field-order default", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A date modifying the instruction to remind belongs to reminderDate, not eventDate; an explicit event predicate owns its eventDate separately.");
@@ -240,7 +242,7 @@ it("continuation-only turns do not manufacture missing operands", () => {
 it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).not.toContain("omit frequency and occurrenceCount entirely");
   expect(CONTEXT_CONTRACT_PROMPT).not.toContain("omit frequency/count unless the USER independently supplied repeated/consecutive cadence");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single occurrence independently grounds frequency ONCE, including when a clock is still missing; do not omit that supplied cadence under the distance-only rule.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single grounds ONCE even awaiting clock, never omitted by distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, reminderDateChange and reminderTimeChange are required nullable roots");

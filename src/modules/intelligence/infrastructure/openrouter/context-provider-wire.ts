@@ -378,9 +378,17 @@ function semanticEvidenceSlots(root: Schema): Schema {
   };
   return visit(root);
 }
+const dateWireKeys=["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"] as const;
+const dateWireCodes={C:"CIVIL_DATE",R:"RELATIVE_DAY",W:"WEEKDAY"} as const;
+const dateActiveKeys={C:["kind","calendar","day","month","year","leapMonth"],R:["kind","offsetDays"],W:["kind","weekday","qualifier"]} as const;
+function structuredDateSchema():Schema {
+  const nullable=(node:Schema):Schema=>({anyOf:[node,{type:"null"}]});
+  const integer=(minimum:number,maximum:number)=>nullable({type:"integer",minimum,maximum});
+  return {type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:nullable({type:"string",enum:["GREGORIAN","LUNAR_VN"]}),day:integer(1,31),month:integer(1,12),year:integer(1,9999),leapMonth:nullable({type:"boolean"}),offsetDays:integer(-366,366),weekday:integer(1,7),qualifier:nullable({type:"string",enum:["THIS_WEEK","NEXT_WEEK","UNRESOLVED"]})},required:[...dateWireKeys],additionalProperties:false};
+}
 function encodedDateSchemas(node: Schema, root: Schema): Schema {
   const plan=taggedPlan(node,root);
-  if(plan && plan.tags.length===3 && plan.tags.every(tag=>tag.kind?.length===1 && ["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(tag.kind[0]))))return {type:"string"};
+  if(plan && plan.tags.length===3 && plan.tags.every(tag=>tag.kind?.length===1 && ["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(tag.kind[0]))))return structuredDateSchema();
   return mapSchemas(node,child=>encodedDateSchemas(child,root));
 }
 const evidenceSlottedV3 = semanticEvidenceSlots(originalV3);
@@ -392,8 +400,17 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
     if(value===null)return null;
     let candidate:unknown;
     if(mode==="decode"){
-      if(typeof value!=="string" || new TextEncoder().encode(value).byteLength>32768)throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(value,"WIRE_VALUE",typeof value!=="string"?"WRONG_WIRE_TYPE":"OVERSIZED",field));
-      try{candidate=JSON.parse(value);}catch{throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(value,"JSON_PARSE","INVALID_JSON",field));}
+      if(!value||typeof value!=="object"||Array.isArray(value))throw new WireShapeFailure(path,"DATE_OPERAND_OBJECT");
+      const item=value as Record<string,unknown>;
+      requireWireKeys(item,[...dateWireKeys],[...dateWireKeys],path);
+      const code=item.kind;
+      if(code!=="C"&&code!=="R"&&code!=="W"){
+        const control=projectControlEnum(Object.keys(dateWireCodes),code);delete control.actualSafeToken;
+        throw new WireShapeFailure([...path,"kind"],"CONTROL_ENUM",undefined,undefined,control);
+      }
+      const active:readonly string[]=dateActiveKeys[code];
+      for(const key of dateWireKeys)if(!active.includes(key)&&item[key]!==null)throw new WireShapeFailure([...path,key],"null");
+      candidate={...Object.fromEntries(active.map(key=>[key,item[key]])),kind:dateWireCodes[code]};
     }else{
       if(!value || typeof value!=="object" || Array.isArray(value))throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
       const item=value as Record<string,unknown>;
@@ -404,7 +421,7 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
     if(!parsed.success){const structure=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND",field,parsed.error.issues[0].code);
       if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)&&structure.kind==="UNKNOWN")structure.reason="UNKNOWN_KIND";
       throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON",undefined,undefined,undefined,structure);}
-    if(mode==="encode")return JSON.stringify(parsed.data);
+    if(mode==="encode")return {...Object.fromEntries(dateWireKeys.map(key=>[key,null])),...parsed.data,kind:parsed.data.kind==="CIVIL_DATE"?"C":parsed.data.kind==="RELATIVE_DAY"?"R":"W"};
     return {...Object.fromEntries(["calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"].map(key=>[key,null])),...parsed.data};
   };
   const result={...object};
@@ -710,6 +727,17 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     return result;
   };
+  // Share the one fixed object after specialization; restore its reviewed
+  // scalar bounds omitted by the historical generic provider simplifier.
+  const dateDefinitions=Object.entries(schema.$defs??{}).filter(([,node])=>node.type==="object"&&node.required?.length===dateWireKeys.length&&dateWireKeys.every(key=>node.required!.includes(key))).map(([key])=>key);
+  const shareDate=(node:Schema):Schema=>{
+    if(node.$ref&&dateDefinitions.some(key=>node.$ref===`#/$defs/${key}`))return {$ref:"#/$defs/__d"};
+    if(node.type==="object"&&node.required?.length===dateWireKeys.length&&dateWireKeys.every(key=>node.required!.includes(key)))return {$ref:"#/$defs/__d"};
+    return mapSchemas(node,shareDate);
+  };
+  schema=shareDate(schema);
+  for(const key of dateDefinitions)delete schema.$defs![key];
+  schema.$defs!.__d=structuredDateSchema();
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {

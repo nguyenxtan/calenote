@@ -1,5 +1,14 @@
 # Title Presence Implementation Plan
 
+### Approved wire45 structured-date step
+
+Technical ruling accepted; execute the bounded TDD steps below, with equivalent prompt compaction/coverage if required, then freeze for controller review/full/commit/live.
+
+1. RED actual specialized schema accepting malformed date strings, then typed candidate rejection without repair; exact SET/REPLACE/CLEAR roundtrip across all DateOperand families, calendars, nullable year/leap and all existing dateJsonOperands positions; prove alternatives/business/evidence/legacy representations unchanged.
+2. Add shared strict nine-slot/code schema and bounded deterministic conversion only after ruling; split coalesced endDate SET/REPLACE from text branch. Test missing/extra keys, invalid/full code, wrong types/ranges, every inactive nonnull, forbidden active null, Gregorian leap flag, query absent endpoints/unknown period quarantine, carrier global order and mutation-source capability preservation. No value inference or guard relaxation.
+3. Closed authority paths/finite diagnostics/privacy tests; exact protocol/schema/prompt/source pins; measure base AND actual326 complexity and input/text+schema12000/output1536 unchanged. Prototype+1281bytes/17branches is NOT admission; no live calls until independent review/full/commit. If equivalent prompt compaction needed, preserve complete normative old/new map; no cap waiver.
+4. Focused date/evidence/gateway/runner/authority/query tests, typecheck/diff, freeze/report for controller full+review. No implementation/provider/credential/commit before this technical ruling; uncertainty alternative outer JSON transport deliberately untouched.
+
 Diagnostic-only date JSON step: RED controlled malformed/oversized/nonobject/unknown-kind/missing/type/range/extra-key cases plus privacy/accessor tests; project safe finite structural details directly from the throw boundary; preserve all refusal/roundtrip assertions, then focused date/evidence/gateway/runner tests, typecheck and diff check. Freeze for controller full/review; no speculative date repair.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox syntax.

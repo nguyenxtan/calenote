@@ -28,6 +28,14 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it("actual source-bound date schema admits typed operands but never opaque JSON strings",()=>{
+ const context=input("Nhắc gọi mẹ ngày 11/10."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"reminderDate",operation:"SET",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {reminderDateChange:{change:{value:unknown}}};
+ expect(validator(context).safeParse(wire).success).toBe(true);
+ for(const value of ["{",'{"kind":"CIVIL_DATE","day":11}',{kind:"C",calendar:"GREGORIAN",day:32,month:10,year:null,leapMonth:null,offsetDays:null,weekday:null,qualifier:null}])expect(validator(context).safeParse({...wire,reminderDateChange:{...wire.reminderDateChange,change:{...wire.reminderDateChange.change,value}}}).success).toBe(false);
+ const schema=serializeContextRequest(context).response_format.json_schema.schema as {$defs:Record<string,unknown>};
+ expect(schema.$defs.__d).toMatchObject({type:"object",additionalProperties:false,required:["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"]});
+});
 it("actual source-bound schema forbids two ordinary eventRelation proposals",()=>{
  const context=input("Nhắc trước 2 ngày."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
  const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:unknown[];eventRelationChange?:{change:unknown}},ordinary=wire.eventRelationChange?.change??wire.changes[0];
@@ -187,7 +195,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-9",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("4b4e1ec46117674e77902bdc236bf42c248d0d9ea8e5639f9a825e7d3a50eb3b");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("1556c73b44a1b83a66d6b5caf913f85387a31c073113ae888b1d05f6157327de");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
