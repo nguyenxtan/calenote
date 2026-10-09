@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidencePointerDomain} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -505,7 +505,7 @@ function indexedTitleSchema(root:Schema):Schema {
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  for(const field of ["reminderDate","reminderTime","eventDate"] as const){
+  for(const field of ["reminderDate","reminderTime","eventDate","eventTime"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
       const branch=deref(raw,result),control=branch.properties!.field,fields=control.enum??[control.const];
@@ -529,7 +529,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   const result={...raw};
   if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
   const ordinaryChanges=raw.changes;
-  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false},{field:"eventDate",root:"eventDateChange",setOnly:false}] as const;
+  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false},{field:"eventDate",root:"eventDateChange",setOnly:false},{field:"eventTime",root:"eventTimeChange",setOnly:false}] as const;
   const positions=new Map<number,unknown>();
   for(const definition of definitions){
     const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);
@@ -585,7 +585,7 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
   result.operationCode=operationWireCodes[code];delete result.intent;
   for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
  }else{
-  const carriers=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange"];
+  const carriers=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange"];
   requireWireKeys(raw,providerSchemaV3.required!.filter(key=>!["conversationDirective","replyProposal",...carriers].includes(key)),Object.keys(providerSchemaV3.properties!).filter(key=>!carriers.includes(key)),[]);
   const code=raw.operationCode;
   const index=typeof code==="string"?operationWireCodes.indexOf(code):-1;
@@ -614,9 +614,10 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
-    requireShape(capability.version === "generation-field-capability-8" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.version === "generation-field-capability-9" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
+    if(!capability.allowedClockFields.includes("eventTime"))schema.properties!.eventTimeChange={type:"null"};
     const changes = deref(schema.properties!.changes.items!, schema);
     requireShape(changes.anyOf?.length);
     changes.anyOf = changes.anyOf.flatMap(raw => {
@@ -632,8 +633,10 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   }
   if(primaryEvidenceInput!==undefined){
     const domain=primaryEvidencePointerDomain(primaryEvidenceInput);
-    if(isInitialExplicitReminderClockRequired(primaryEvidenceInput)){
-      const carrier=deref(schema.properties!.reminderTimeChange.anyOf![0],schema);
+    const requiredClock=isInitialExplicitEventClockRequired(primaryEvidenceInput)?"eventTime":isInitialExplicitReminderClockRequired(primaryEvidenceInput)?"reminderTime":null;
+    if(requiredClock){
+      const root=`${requiredClock}Change`;
+      const carrier=deref(schema.properties![root].anyOf![0],schema);
       const changes=deref(carrier.properties!.change,schema);
       requireShape(changes.anyOf?.length);
       changes.anyOf=changes.anyOf.flatMap(raw=>{
@@ -642,12 +645,12 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
         branch.properties!.operation={type:"string",enum:["SET"]};return [branch];
       });
       requireShape(changes.anyOf.length);
-      schema.properties!.reminderTimeChange=carrier;
+      schema.properties![root]=carrier;
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
       const missing=structuredClone(item),other=structuredClone(item);
       missing.properties!.reason={type:"string",enum:["MISSING"]};
-      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime)};
+      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1[requiredClock])};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
       schema.properties!.uncertainties.items={anyOf:[missing,other]};
     }

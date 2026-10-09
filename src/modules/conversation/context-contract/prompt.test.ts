@@ -241,13 +241,13 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single occurrence independently grounds frequency ONCE, including when a clock is still missing; do not omit that supplied cadence under the distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, reminderDate or reminderTime.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, reminderDateChange and reminderTimeChange are required nullable roots");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, reminderDate or reminderTime.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange, reminderTimeChange and eventDateChange carriers");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange, reminderTimeChange, eventDateChange and eventTimeChange carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("not prior turns, retained state fields, source positions or one-based ordinals");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("three ordinary changes plus one non-null carrier means N=4; an appended carrier has index3, never index4");

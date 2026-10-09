@@ -1,6 +1,14 @@
 import type { FieldChangeV3, SemanticPatchProposalV3 } from "./contracts";
 import type { ValidatedFieldEvidence } from "./evidence";
 import type { TranscriptEntry } from "./state";
+import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
+
+/** Finite complete first-person assertion only; no parsed operand is returned. */
+export function isFirstPersonExamClockAssertion(text:string):boolean {
+  if(!/^\s*(?:Tôi|tôi|Em|em)\s+thi\s+ngày\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{4})?\s+lúc\s+\d{1,2}(?:h(?:\d{1,2})?|:\d{2})(?:\s+(?:sáng|trưa|chiều|tối))?\s*[.!]?\s*$/u.test(text))return false;
+  const time=extractTemporalEvidence({text,referenceNow:Date.parse("2026-01-01T00:00:00Z")}).time;
+  return time.state==="RESOLVED"&&time.source==="EXACT_TIME";
+}
 
 type CoverageInput = {
   intent: SemanticPatchProposalV3["intent"];
@@ -16,6 +24,7 @@ type CoverageInput = {
 /** Presence/coverage only for the initial literal complete exam task. Unknown
  * subjects and ambiguous discourse never create a generation obligation. */
 export function examTitleCoverage(text: string, value?: unknown): boolean | null {
+  if(isFirstPersonExamClockAssertion(text))return value==="đi thi";
   if (/["'“”‘’`?]/u.test(text) || text.includes("[CONTROL]")
     || /(?:^|[^\p{L}])(?:không|ko|chẳng|đừng|chưa|nếu|ví dụ|giả sử|hay là|lịch|xem|liệt kê|giải thích|tiếp tục|bản nháp|giữ|đổi|thay|sửa|bỏ|xóa|cụm từ|từ ngữ|tên|chữ|trích dẫn|đâu|nào|gì)(?:[^\p{L}]|$)/iu.test(text)) return null;
   const matches=[...text.matchAll(/(?:^|[^\p{L}])(đi thi)(?=$|[,;.!\n]|\s+(?:ở|tại|nhắc|nhé|nha|ngày|lúc|vào)(?:[^\p{L}]|$))/giu)];
@@ -37,6 +46,7 @@ export function examTitleCoverage(text: string, value?: unknown): boolean | null
 }
 
 export function titleCoverageComplete(input: Omit<CoverageInput,"retainedLocation"> & {retainedTitle:string|null}): boolean {
+  if(input.target?.kind==="CURRENT"&&isFirstPersonExamClockAssertion(input.currentTurn.semanticView))return true;
   if(input.intent!=="CREATE_REMINDER" || input.currentTurn.role!=="USER" || examTitleCoverage(input.currentTurn.semanticView)===null) return true;
   const text=input.currentTurn.semanticView;
   const covered=(value:unknown,bound:ValidatedFieldEvidence|undefined)=>examTitleCoverage(text,value)===true && bound?.current===true

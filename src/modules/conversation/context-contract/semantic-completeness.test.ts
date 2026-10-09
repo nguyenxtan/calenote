@@ -18,14 +18,21 @@ function coverage(text: string, value?: string | null, options: {target?: "NEW" 
     uncertainties:options.uncertainty?[UncertaintyV3Schema.parse({field:"location",reason:"AMBIGUOUS",alternatives:value===undefined?[]:[{value,evidence:[{kind:"USER_QUOTE",turn:0,quote:text,occurrence:1}]}]})]:[],alternativeEvidence:[bound],retainedLocation:options.retained??null});
 }
 
-function titleCoverage(value: string|null|undefined, options:{target?:"CURRENT"|"NEW";retained?:string;source?:string;uncertainty?:boolean;span?:{start:number;end:number};role?:"USER"|"ASSISTANT"}={}) {
-  const text="Ngày 11/10 đi thi, nhắc tôi trước 2 ngày.",current=options.role==="ASSISTANT" ? TranscriptEntrySchema.parse({...turn(text,"current"),role:"ASSISTANT",kind:"CLARIFICATION",deliveryState:"SENT"}) : turn(text,"current");
+function titleCoverage(value: string|null|undefined, options:{text?:string;target?:"CURRENT"|"NEW";retained?:string;source?:string;uncertainty?:boolean;span?:{start:number;end:number};role?:"USER"|"ASSISTANT"}={}) {
+  const text=options.text??"Ngày 11/10 đi thi, nhắc tôi trước 2 ngày.",current=options.role==="ASSISTANT" ? TranscriptEntrySchema.parse({...turn(text,"current"),role:"ASSISTANT",kind:"CLARIFICATION",deliveryState:"SENT"}) : turn(text,"current");
   const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
   const bound={field:"title",current:!options.source,sources:[{kind:"USER_QUOTE" as const,sourceTurnId:options.source??"current",sourceMapTurnId:"current",quote:text,occurrence:1,sourceSpan:{start:0,end:[...text].length},viewSpan:options.span??{start:0,end:[...text].length},normalizationVersion:"nfc-codepoint-v1" as const}],provenance:{kind:"EXPLICIT_USER" as const},referenceTime:current.receivedAt};
   return titleCoverageComplete({intent:"CREATE_REMINDER",target:{kind:options.target??"NEW",evidence:[]},currentTurn:current,
     changes:value!==undefined&&!options.uncertainty?[FieldChangeV3Schema.parse({field:"title",operation:value===null?"CLEAR":"SET",value,evidence})]:[],changeEvidence:[bound],
     uncertainties:options.uncertainty?[UncertaintyV3Schema.parse({field:"title",reason:"AMBIGUOUS",alternatives:value===undefined?[]:[{value,evidence}]})]:[],alternativeEvidence:[bound],retainedTitle:options.retained??null});
 }
+it("finite bare exam normalization covers only authored title with validated current assertion",()=>{
+ const text="Tôi thi ngày 11/10 lúc 8h.";
+ expect(titleCoverage("đi thi",{text})).toBe(true);expect(titleCoverage("thi",{text})).toBe(false);expect(titleCoverage(undefined,{text})).toBe(false);
+ expect(titleCoverage("đi thi",{text,source:"old"})).toBe(false);expect(titleCoverage("đi thi",{text,span:{start:0,end:7}})).toBe(false);
+ expect(titleCoverage(undefined,{text,target:"CURRENT"})).toBe(true);
+ expect(titleCoverage(undefined,{text,role:"ASSISTANT"})).toBe(true);
+});
 it("title completeness accepts only model subject coverage with current validated source",()=>{
   expect(titleCoverage("đi thi")).toBe(true);
   expect(titleCoverage("đi thi",{source:"old"})).toBe(false);

@@ -5,14 +5,14 @@ import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-off
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
-import { examTitleCoverage } from "./semantic-completeness";
+import { examTitleCoverage, isFirstPersonExamClockAssertion } from "./semantic-completeness";
 
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-8";
+  version: "generation-field-capability-9";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
@@ -69,6 +69,10 @@ export function isInitialExplicitReminderClockRequired(input: ContextInput): boo
   const current = input.turns[input.currentTurn];
   return !input.activeRequest && current?.role === "USER" && examTitleCoverage(current.text) !== null
     && isExplicitNotificationClockSource(current.text, input.reference.instant);
+}
+export function isInitialExplicitEventClockRequired(input:ContextInput):boolean {
+  const current=input.turns[input.currentTurn];
+  return !input.activeRequest&&current?.role==="USER"&&isFirstPersonExamClockAssertion(current.text);
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -150,7 +154,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   }
   const title = input.activeRequest?.slots.title;
   const calendar = input.activeRequest?.slots.calendar;
-  return { version: "generation-field-capability-8", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-9", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     calendarProposalAllowed: !!calendar && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(calendar.state) && calendar.value !== null
       || current?.role === "USER" && hasExplicitCalendarCue(current.text),

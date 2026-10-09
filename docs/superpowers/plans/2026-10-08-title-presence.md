@@ -4,6 +4,8 @@
 
 **Goal:** Prevent omission of explicitly grounded exam task subjects without synthesizing model values.
 
+Approved wire42 scoped execution (technical ruling accepted): first RED exact frozen R04 title/clock omission membership; contrast first-person date/clock variants with negated/quoted/control/query/correction/multi-clock/independent-notification/unknown-tail/current cases. Implement only approved shared boolean title coverage exception and initial eventTime presence representation; using the approved fifth singleton root, reuse bounded original-position restoration and exact closed authority/diagnostic registry, preserve SET/REPLACE/CLEAR and every literal value/evidence with strict duplicate/bypass/missing-root/collision rejection. Test no source extraction/fill, current validated title span, all-five global order and absence outside obligation; MISSING exclusion only for eventTime. Advance capability/wire/proof/schema/prompt identities coherently. Keep canonical/oracles/evidence and relation filtering unchanged. Focused previous29 suites plus actual326 fit/typecheck/diff, then freeze/report for controller independent review/full/commit/live; no implementer provider calls or fullsuite.
+
 **Architecture:** Share a bounded title coverage predicate between semantic completeness and request-specific generation capability. A versioned strict-object title carrier transports the model's own change and original array position into the unchanged canonical/evidence pipeline; missing, duplicate or malformed authority fails closed.
 
 **Tech Stack:** TypeScript, Zod, JSON Schema, Vitest, existing OpenRouter Google Vertex gateway and trusted benchmark tooling.

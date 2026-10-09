@@ -8,6 +8,7 @@ import { ConversationInterpretationV3Schema } from "./contracts";
 import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
+import { deriveGenerationFieldCapability } from "./field-capability";
 // Independent schema-membership fixtures use source-pointer representation,
 // retaining the authored turn index and every field value. No source is filled.
 function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical>[0]):unknown {
@@ -30,6 +31,26 @@ function input(text: string): ContextInput {
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
+it("initial first-person exam assertion requires title and event clock without inventing values",()=>{
+ for(const text of ["Tôi thi ngày 11/10 lúc 8h.","Em thi ngày 20/12 lúc 12h trưa."]){
+ const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}],make=(changes:unknown[],uncertainties:unknown[]=[])=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes,query:null,uncertainties,conversationDirective:null,replyProposal:null}));
+ const title={field:"title",operation:"SET",value:"đi thi",evidence},clock={field:"eventTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence};
+ expect(catalogue(context).titlePresenceRequired).toBe(true);
+ const check=validator(context);expect(check.safeParse(make([title,clock])).success).toBe(true);
+ expect(check.safeParse(make([title])).success).toBe(false);expect(check.safeParse(make([clock])).success).toBe(false);
+ expect(check.safeParse(make([title,clock],[{field:"eventTime",reason:"MISSING",alternatives:[]}])).success).toBe(false);
+ expect(check.safeParse(make([title,clock],[{field:"reminderTime",reason:"MISSING",alternatives:[]}])).success).toBe(true);
+ }
+});
+it.each(["Tôi thi ngày 11/10 lúc 8h?","Không tôi thi ngày 11/10 lúc 8h.","Nếu tôi thi ngày 11/10 lúc 8h.",'"Tôi thi ngày 11/10 lúc 8h."',"Tôi thi ngày 11/10 lúc [CONTROL]8h.","Tôi thi ngày 11/10 lúc 8h, nhắc lúc 7h.","Tôi thi ngày 11/10 lúc 8h và về nhà.","Đổi tôi thi ngày 11/10 lúc 8h.","Tôi thi ngày 11/10 lúc khoảng 8h.","Tôi thi ngày 11/10 lúc 25h.","Thi ngày 11/10 lúc 8h."])("bare exam lower bound declines unknown/control/query/correction: %s",text=>{
+ expect(catalogue(input(text)).titlePresenceRequired).toBe(false);
+});
+it("bare exam presence is initial only, with no inherited source or ASSISTANT authority",()=>{
+ const context=input("Tôi thi ngày 11/10 lúc 8h."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.activeRequest={lifecycle:"CLARIFYING",slots};expect(catalogue(context).titlePresenceRequired).toBe(false);
+ const current=input("Giữ như cũ.");current.turns.unshift({role:"USER",text:"Tôi thi ngày 11/10 lúc 8h."},{role:"ASSISTANT",text:"Tôi thi ngày 11/10 lúc 8h."});current.currentTurn=2;expect(catalogue(current).titlePresenceRequired).toBe(false);
+ current.turns[2]={role:"ASSISTANT",text:"Tôi thi ngày 11/10 lúc 8h."};expect(deriveGenerationFieldCapability(current).titlePresenceRequired).toBe(false);
+});
 it.each(["SET","REPLACE","CLEAR"] as const)("date-only R04 does not grant calendar %s generation",operation=>{
  const context=input("Tôi thi ngày 11/10 lúc 8h."),text=context.turns[0].text,evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
  const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"calendar",operation,value:operation==="CLEAR"?null:"GREGORIAN",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
@@ -149,8 +170,8 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-8",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("5dca0b1565f37d8bf97150ef3b2f80f9a1294726a5f672daa880e879e3f15d40");
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-9",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("ac89ad100f99a9bf8f66113287b10fa8dd5d5b5184709137b8c5ec307ddbb3e4");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -183,7 +204,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-8", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-9", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -469,7 +490,7 @@ it("historical title and unrelated facts cannot grant correction availability wi
 it("R04 supported dialect still forbids ordinary title SET when unsupported const is ignored", () => {
   const context = input("Tôi thi ngày 11/10 lúc 8h."), check = validator(context, true);
   const evidence = [{ kind: "USER_QUOTE" as const, turn: 0, quote: context.turns[0].text, occurrence: 1 }];
-  const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
+  const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [{ field: "title", operation: "SET", value: "đi thi", evidence },{field:"eventTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
   const wire = encodeGoogleLiteEuContextV3(canonical) as { titleChange: { change: unknown }; changes: unknown[] };
   expect(check.safeParse(wire).success).toBe(true);
   const duplicate = { ...wire, changes: [structuredClone(wire.titleChange.change)] };
