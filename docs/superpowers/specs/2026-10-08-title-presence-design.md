@@ -1,5 +1,7 @@
 # Bounded title-presence generation amendment
 
+Diagnostic-only date JSON amendment: capture failure at the existing strict date operand boundary, with finite stage/reason, known date field, finite kind or UNKNOWN, actual JSON type, bounded unknown-key count and trusted nested path. Never expose date values, input strings, private keys or evidence. No acceptance/schema/prompt/version changes; live actualstring alone cannot distinguish malformed JSON from a canonical operand failure.
+
 Owner execution instruction: continue until Fresh Formal Pilot passes without further routine design approvals. Existing model, privacy, budget and production boundaries remain binding.
 
 ## Goal and evidence

@@ -30,8 +30,28 @@ export interface CanonicalValidationIssue {
   duplicateFieldCounts?: Array<{field:string;count:number;indexes:number[]}>;
   duplicateFieldCountsTruncated?: boolean;
   evidencePointer?:EvidencePointerDiagnostic;
+  dateOperand?:DateOperandDiagnostic;
   /** carrierCount counts observed non-null object roots, not validated changes. */
   carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
+}
+export interface DateOperandDiagnostic {
+  stage:"WIRE_VALUE"|"JSON_PARSE"|"CANONICAL_OPERAND";
+  reason:"WRONG_WIRE_TYPE"|"OVERSIZED"|"INVALID_JSON"|"UNKNOWN_KIND"|"INVALID_OPERAND";
+  field?:"eventDate"|"reminderDate"|"endDate";
+  kind:"CIVIL_DATE"|"RELATIVE_DAY"|"WEEKDAY"|"UNKNOWN";
+  actualType:string;unknownKeyCount:number;unknownKeyCountTruncated:boolean;
+  issueCode?:string;
+}
+/** Fixed keys and own data descriptors only: no values, unknown key names,
+ * accessors or source strings are exposed or evaluated. */
+export function projectDateOperandFailure(value:unknown,stage:DateOperandDiagnostic["stage"],reason:DateOperandDiagnostic["reason"],field?:DateOperandDiagnostic["field"],issueCode?:string):DateOperandDiagnostic {
+  const object=value&&typeof value==="object"&&!Array.isArray(value)?value:undefined;
+  const tag=object?Object.getOwnPropertyDescriptor(object,"kind")?.value:undefined;
+  const kind:DateOperandDiagnostic["kind"]=tag==="CIVIL_DATE"||tag==="RELATIVE_DAY"||tag==="WEEKDAY"?tag:"UNKNOWN";
+  const allowed=kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:kind==="RELATIVE_DAY"?["kind","offsetDays"]:kind==="WEEKDAY"?["kind","weekday","qualifier"]:["kind"];
+  const count=object?Object.getOwnPropertyNames(object).filter(key=>!allowed.includes(key)).length:0;
+  return {stage,reason,...(field?{field}:{}),kind,actualType:jsonType(value),unknownKeyCount:Math.min(count,64),unknownKeyCountTruncated:count>64,
+    ...(["invalid_type","too_small","too_big","unrecognized_keys","invalid_value","invalid_union","custom"].includes(issueCode??"")?{issueCode}: {})};
 }
 /** Inspect only eight fixed transport roots and index scalars; never changes'
  * values/evidence, unknown fields, or authored change operands. */

@@ -1,10 +1,16 @@
 import { expect, it } from "vitest";
 import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "./contracts";
-import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
+import { projectCanonicalValidation, projectDateOperandFailure, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+it("date operand structural projection never evaluates accessors or copies private keys/values",()=>{
+  let reads=0;const candidate=Object.defineProperties({},{kind:{get(){reads++;throw new Error(sentinel);}},private_secret_key:{get(){reads++;throw new Error(sentinel);}}});
+  const diagnostic=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND","eventDate","private_secret_code");
+  expect(reads).toBe(0);expect(diagnostic).toMatchObject({kind:"UNKNOWN",actualType:"object",unknownKeyCount:1,unknownKeyCountTruncated:false});
+  expect(JSON.stringify(diagnostic)).not.toContain("private_secret");expect(JSON.stringify(diagnostic)).not.toContain(sentinel);expect(diagnostic).not.toHaveProperty("issueCode");
+});
 it("duplicate canonical change diagnostics identify only finite fields and authored indexes",()=>{
   const evidence=[{kind:"USER_QUOTE",turn:0,quote:sentinel,occurrence:1}];
   const raw={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[

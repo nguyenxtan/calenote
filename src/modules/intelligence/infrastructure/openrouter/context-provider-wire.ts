@@ -1,5 +1,5 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
-import { projectCanonicalValidation, projectControlEnum, projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
@@ -205,7 +205,7 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
 class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
     readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
-    readonly control?: ReturnType<typeof projectControlEnum>) { super("WIRE_SHAPE_INVALID"); }
+    readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -388,12 +388,12 @@ const slottedV3 = encodedDateSchemas(evidenceSlottedV3,evidenceSlottedV3);
 // Only known date operand positions are transformed. Business strings and
 // JSON-encoded canonical uncertainty alternatives are never traversed.
 function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "decode"): Record<string, unknown> {
-  const date = (value: unknown, path: (string | number)[]): unknown => {
+  const date = (value: unknown, path: (string | number)[], field?:DateOperandDiagnostic["field"]): unknown => {
     if(value===null)return null;
     let candidate:unknown;
     if(mode==="decode"){
-      if(typeof value!=="string" || new TextEncoder().encode(value).byteLength>32768)throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
-      try{candidate=JSON.parse(value);}catch{throw new WireShapeFailure(path,"DATE_OPERAND_JSON");}
+      if(typeof value!=="string" || new TextEncoder().encode(value).byteLength>32768)throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(value,"WIRE_VALUE",typeof value!=="string"?"WRONG_WIRE_TYPE":"OVERSIZED",field));
+      try{candidate=JSON.parse(value);}catch{throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(value,"JSON_PARSE","INVALID_JSON",field));}
     }else{
       if(!value || typeof value!=="object" || Array.isArray(value))throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
       const item=value as Record<string,unknown>;
@@ -401,7 +401,9 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
       candidate=Object.fromEntries(keys.map(key=>[key,item[key]]));
     }
     const parsed=DateOperandSchema.safeParse(candidate);
-    if(!parsed.success)throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON");
+    if(!parsed.success){const structure=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND",field,parsed.error.issues[0].code);
+      if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)&&structure.kind==="UNKNOWN")structure.reason="UNKNOWN_KIND";
+      throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON",undefined,undefined,undefined,structure);}
     if(mode==="encode")return JSON.stringify(parsed.data);
     return {...Object.fromEntries(["calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"].map(key=>[key,null])),...parsed.data};
   };
@@ -409,7 +411,7 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
   if(Array.isArray(object.changes))result.changes=object.changes.map((raw,index)=>{
     if(!raw || typeof raw!=="object" || Array.isArray(raw))return raw;
     const change=raw as Record<string,unknown>;
-    return ["eventDate","reminderDate","endDate"].includes(String(change.field)) && ["SET","REPLACE"].includes(String(change.operation))?{...change,value:date(change.value,["changes",index,"value"])}:raw;
+    return ["eventDate","reminderDate","endDate"].includes(String(change.field)) && ["SET","REPLACE"].includes(String(change.operation))?{...change,value:date(change.value,["changes",index,"value"],change.field as DateOperandDiagnostic["field"])}:raw;
   });
   if(object.query && typeof object.query==="object" && !Array.isArray(object.query)){
     const query=object.query as Record<string,unknown>;
@@ -787,6 +789,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   } catch (error) {
     const diagnostic=error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3");
     if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
+    if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
     observeWireInvalid?.(diagnostic);
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }

@@ -23,6 +23,31 @@ it.each([undefined, {version:"generation-field-capability-9" as const,allowedNum
   if (!capability) expect(singletonValues).toContain("REPLACE");
   for (const tag of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) expect(singletonValues).not.toContain(tag);
 });
+it.each([
+  ["{","JSON_PARSE","INVALID_JSON"],
+  ["x".repeat(32769),"WIRE_VALUE","OVERSIZED"],
+  ['"PRIVATE_DATE_SENTINEL"',"CANONICAL_OPERAND","INVALID_OPERAND"],
+  ['{"kind":"PRIVATE_KIND_SENTINEL","private_secret_key":1}',"CANONICAL_OPERAND","UNKNOWN_KIND"],
+  ['{"kind":"RELATIVE_DAY"}',"CANONICAL_OPERAND","INVALID_OPERAND"],
+  ['{"kind":"RELATIVE_DAY","offsetDays":"PRIVATE_DATE_SENTINEL"}',"CANONICAL_OPERAND","INVALID_OPERAND"],
+  [JSON.stringify({kind:"RELATIVE_DAY",offsetDays:2,...Object.fromEntries(Array.from({length:70},(_,i)=>[`private_secret_key_${i}`,"PRIVATE_DATE_SENTINEL"]))}),"CANONICAL_OPERAND","INVALID_OPERAND"],
+  ['{"kind":"RELATIVE_DAY","offsetDays":9999}',"CANONICAL_OPERAND","INVALID_OPERAND"],
+  ['{"kind":"RELATIVE_DAY","offsetDays":2,"private_secret_key":1}',"CANONICAL_OPERAND","INVALID_OPERAND"],
+])("date JSON diagnostics classify failures without operand content (%#)",(value,stage,reason)=>{
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
+  const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:unknown}}};raw.eventDateChange.change.value=value;
+  const diagnostics:unknown[]=[];
+  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{dateOperand:{field:"eventDate",stage,reason}}]}]);
+  const serialized=JSON.stringify(diagnostics);expect(serialized).not.toContain("PRIVATE_DATE_SENTINEL");expect(serialized).not.toContain("PRIVATE_KIND_SENTINEL");expect(serialized).not.toContain("private_secret_key");expect(serialized).not.toContain("9999");
+  if(typeof value==="string"&&value.includes("private_secret_key_69"))expect(diagnostics).toMatchObject([{issues:[{dateOperand:{unknownKeyCount:64,unknownKeyCountTruncated:true}}]}]);
+});
+it("non-string indexed date values still reject at the earlier carrier shape boundary",()=>{
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
+  const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:unknown}}};raw.eventDateChange.change.value={kind:"RELATIVE_DAY",offsetDays:2};
+  const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{expected:"FIELD_CHANGE",path:["eventDateChange","change"]}]}]);
+});
 it("encoded canonical date round trip preserves strict active payload authority", () => {
   const canonical = ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
   const encoded=encodeGoogleLiteEuContextV3(canonical) as {reminderDateChange:{change:{value:unknown}}};

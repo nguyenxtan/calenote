@@ -1,5 +1,7 @@
 # Title Presence Implementation Plan
 
+Diagnostic-only date JSON step: RED controlled malformed/oversized/nonobject/unknown-kind/missing/type/range/extra-key cases plus privacy/accessor tests; project safe finite structural details directly from the throw boundary; preserve all refusal/roundtrip assertions, then focused date/evidence/gateway/runner tests, typecheck and diff check. Freeze for controller full/review; no speculative date repair.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox syntax.
 
 **Goal:** Prevent omission of explicitly grounded exam task subjects without synthesizing model values.
