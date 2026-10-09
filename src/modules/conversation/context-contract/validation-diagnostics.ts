@@ -5,8 +5,8 @@ import { FieldChangeV3Schema } from "./contracts";
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
-for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","index","change"])keys.add(key);
-for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange"])rootKeys.add(key);
+for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","index","change"])keys.add(key);
+for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange"])rootKeys.add(key);
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
@@ -33,10 +33,10 @@ export interface CanonicalValidationIssue {
   /** carrierCount counts observed non-null object roots, not validated changes. */
   carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
 }
-/** Inspect only six fixed transport roots and index scalars; never changes'
+/** Inspect only eight fixed transport roots and index scalars; never changes'
  * values/evidence, unknown fields, or authored change operands. */
 function carrierPositionStructure(raw:unknown,path:PropertyKey[]):CanonicalValidationIssue["carrierPosition"]|undefined {
-  const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange"] as const;
+  const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange"] as const;
   if(path.length!==2||path[1]!=="index"||!roots.some(root=>root===path[0])||!raw||typeof raw!=="object"||Array.isArray(raw))return;
   const read=(object:object,key:PropertyKey):unknown=>Object.getOwnPropertyDescriptor(object,key)?.value;
   const changes=read(raw,"changes");if(!Array.isArray(changes))return;

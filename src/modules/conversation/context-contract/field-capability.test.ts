@@ -34,6 +34,16 @@ it("actual source-bound schema forbids two ordinary eventRelation proposals",()=
  const duplicate={...wire,...(wire.eventRelationChange?{eventRelationChange:null}:{}),changes:[ordinary,structuredClone(ordinary)]};
  expect(validator(context).safeParse(duplicate).success).toBe(false);
 });
+it.each(["frequency","occurrenceCount"] as const)("actual source-bound schema forbids duplicate ordinary %s",field=>{
+ const context=input("Nhắc 2 ngày liên tiếp."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field,operation:"SET",value:field==="frequency"?"DAILY":2,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,carrier=wire[field+"Change"] as {change:unknown}|undefined,ordinary=carrier?.change??(wire.changes as unknown[])[0];
+ expect(validator(context).safeParse({...wire,...(carrier?{[field+"Change"]:null}:{}),changes:[ordinary,structuredClone(ordinary)]}).success).toBe(false);
+});
+it.each(["frequency","occurrenceCount"])("numeric exclusion requires null %s carrier while included source preserves it",field=>{
+ const excluded=serializeContextRequest(input("Nhắc trước 2 ngày.")).response_format.json_schema.schema as {properties:Record<string,unknown>};
+ const included=serializeContextRequest(input("Nhắc 2 ngày liên tiếp.")).response_format.json_schema.schema as {properties:Record<string,unknown>};
+ expect(excluded.properties[field+"Change"]).toEqual({type:"null"});expect(included.properties[field+"Change"]).toHaveProperty("anyOf");
+});
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
@@ -95,11 +105,11 @@ it.each(["REPLACE","CLEAR"] as const)("mutating %s primary evidence must select 
  const context=input("Đổi nhắc hai ngày liên tiếp.");context.turns=[{role:"USER",text:"Nhắc hai ngày liên tiếp."},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"trước hôm thi"},{role:"ASSISTANT",text:"Mấy giờ?"},{role:"USER",text:context.turns[0].text}];context.currentTurn=4;
  context.facts=[{alias:"f1",scope:"REMINDER",field:"frequency",value:"DAILY",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]}];
  const evidence=[{kind:"USER_QUOTE" as const,turn:4,quote:context.turns[4].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"frequency",operation,value:operation==="CLEAR"?null:"DAILY",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
- const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{operation:string;evidence:{primaryEvidence:string;additionalEvidenceJson:string}}>},check=validator(context);
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {frequencyChange:{change:{operation:string;evidence:{primaryEvidence:string;additionalEvidenceJson:string}}}},check=validator(context),change=wire.frequencyChange.change;
  expect(check.safeParse(wire).success).toBe(true);
- for(const pointer of [{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]){wire.changes[0].evidence.primaryEvidence=JSON.stringify(pointer);expect(check.safeParse(wire).success,JSON.stringify(pointer)).toBe(false);}
- wire.changes[0].evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:4});wire.changes[0].evidence.additionalEvidenceJson=JSON.stringify([{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]);expect(check.safeParse(wire).success).toBe(true);
- if(operation==="REPLACE"){wire.changes[0].operation="SET";for(const pointer of [{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]){wire.changes[0].evidence.primaryEvidence=JSON.stringify(pointer);expect(check.safeParse(wire).success).toBe(true);}}
+ for(const pointer of [{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]){change.evidence.primaryEvidence=JSON.stringify(pointer);expect(check.safeParse(wire).success,JSON.stringify(pointer)).toBe(false);}
+ change.evidence.primaryEvidence=JSON.stringify({kind:"USER_TURN",turn:4});change.evidence.additionalEvidenceJson=JSON.stringify([{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]);expect(check.safeParse(wire).success).toBe(true);
+ if(operation==="REPLACE"){change.operation="SET";for(const pointer of [{kind:"USER_TURN",turn:0},{kind:"CONTEXT_FACT",ref:"f1"}]){change.evidence.primaryEvidence=JSON.stringify(pointer);expect(check.safeParse(wire).success).toBe(true);}}
 });
 it.each(["reminderDate","reminderTime"] as const)("indexed %s mutating evidence uses current controlled segments only",field=>{
  const context=input("Đổi nhắc ngày 11/10 lúc 9h.[CONTROL]ghi chú.");context.turns=[{role:"USER",text:"Nhắc ngày 11/10 lúc 8h."},{role:"ASSISTANT",text:"Giữ lại không?"},{role:"USER",text:context.turns[0].text}];context.currentTurn=2;
@@ -177,7 +187,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-9",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("b59d9ed08ef4b6ffc28abd76e7a4b3d9acd4f764e2169b76b21c8f679725b05e");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("4b4e1ec46117674e77902bdc236bf42c248d0d9ea8e5639f9a825e7d3a50eb3b");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -186,7 +196,10 @@ it.each(["Bạn nghĩ sao về đi thi","bao giờ đi thi","dịch đi thi"])("
 it.each(["Ngày 11/10 đi thi, nhắc tôi uống thuốc lúc 8h.","Ngày 11/10 đi thi, nhắc tôi đóng tiền trước 2 ngày.","đi thi ở đâu","đi thi rồi uống thuốc","đi thi, điều này nghĩa là gì"])("unknown continuation or competing subject cannot force exam title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
 function fields(context: ContextInput) {
   const schema = serializeContextRequest(context).response_format.json_schema.schema as unknown as { properties: { changes: { items: { $ref: string } } }; $defs: Record<string, { anyOf: Array<{ properties: { field: { enum?: string[]; const?: string } } }> }> };
-  return schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]);
+  const ordinary=schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]);
+  // Numeric singleton availability lives in its root, not the ordinary array.
+  const roots=schema.properties as unknown as Record<string,{type?:string}>;
+  return [...ordinary,...["frequency","occurrenceCount"].filter(field=>roots[field+"Change"].type!=="null")];
 }
 it.each([
   ["Nhắc trước 2 ngày.", ["leadOffsetDays"]],
