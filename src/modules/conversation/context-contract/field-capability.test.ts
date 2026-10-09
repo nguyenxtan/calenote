@@ -29,6 +29,16 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it("wire50 initial complete exam instruction has no independent notes generation",()=>{
+ const context=input("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi.");
+ expect(Reflect.get(deriveGenerationFieldCapability(context),"notesProposalAllowed")).toBe(false);
+ const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+ for(const operation of ["SET","REPLACE","CLEAR"]){const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"notes",operation,value:operation==="CLEAR"?null:"nhắc 3 ngày liên tiếp",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(canonical)).success).toBe(false);}
+});
+it.each(["Ngày 15/12 đi thi, ghi chú mang giấy tờ.","Ngày 15/12 đi thi, nhớ mang giấy tờ.","Sửa ghi chú thành mang giấy tờ.","Nhắc gọi mẹ, ghi chú mang giấy tờ."])("wire50 meaningful or unknown notes remain available (%#)",text=>{
+ const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];expect(deriveGenerationFieldCapability(context).notesProposalAllowed).toBe(true);
+ for(const operation of ["SET","REPLACE","CLEAR"]){const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation,value:operation==="CLEAR"?null:"mang giấy tờ",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(canonical)).success).toBe(true);}
+});
 it("actual source-bound date schema admits strings but strict runtime rejects invalid DateWire JSON",()=>{
  const context=input("Nhắc gọi mẹ ngày 11/10."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"reminderDate",operation:"SET",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
  const wire=encodeGoogleLiteEuContextV3(canonical) as {reminderDateChange:{change:{value:unknown}}};
@@ -197,8 +207,8 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-9",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("b0fad6bd3b48133c8937c233d53070f6bbad8c58bdb3f2102b461bb88ac4b764");
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-10",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false});
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("9a47dafcc5740a4409e924f6f69035c0c046826ccf951cc6caa5eb1e05a5ac6c");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -234,7 +244,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-9", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-10", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -267,7 +277,7 @@ it("initial explicit notification clause cannot omit its model-authored clock ca
  expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
 });
 it.each(["Nhắc 2 ngày liên tiếp lúc 8h.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h giúp tôi.","Đổi nhắc 2 ngày liên tiếp lúc 8h."])("availability alone does not require clock presence or exclude MISSING: %s",text=>{
- const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null});
+ const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[],query:null,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null});
  // A bounded title obligation can independently require its title carrier.
  if(catalogue(context).titlePresenceRequired)raw.changes.unshift({field:"title",operation:"SET",value:"đi thi",evidence});
  const check=validator(context);expect(check.safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(true);

@@ -8,7 +8,7 @@ import { observeDownstream, evidenceReason, type DownstreamObserver, type Eviden
 import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
-import { locationCoverageComplete, titleCoverageComplete } from "./semantic-completeness";
+import { locationCoverageComplete, titleCoverageComplete, notesCoverageComplete } from "./semantic-completeness";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { supportsCadenceOperand, leadDistanceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
@@ -681,6 +681,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       return (rangeIssue || deterministicRange) && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
     });
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
+    if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!titleCoverageComplete({ intent:value.intent,target:value.requestTarget,currentTurn:built.evidenceIndex[built.input.currentTurn],
       changes:keptChanges.map(p=>p.change),changeEvidence:keptChanges.map(p=>p.bound),uncertainties:resolvedUncertainties,alternativeEvidence:keptAlternativeEvidence,
       retainedTitle:internal.snapshot?.slots.title.state==="RESOLVED" && typeof internal.snapshot.slots.title.value==="string" ? internal.snapshot.slots.title.value : null,

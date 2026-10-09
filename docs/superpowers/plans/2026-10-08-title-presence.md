@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Approved wire50 notes ownership execution
+
+1. RED proven initial source-shaped scheduling-restatement notes proposal and notes alternatives: schema admits today/completeness passes today; target schema excludes and whole proposal rejects without mutation. Shared predicate source/context tests must prove single current USER/noactive/facts/pending/ambiguity and existing complete grammar only.
+2. Add boolean helper in semantic-completeness.ts (no extraction/newgrammar), application-owned notesProposalAllowed in field-capability.ts/versionadvance, required input shape/closed authority/proof identities; false only INITIAL_ISOLATED. Provider-wire generic ordinary field pruning safely removes notes ALLops/mixedCLEAR. Shared downstream completeness SEMANTIC_NOTES_UNOWNED rejects notes changes/alternatives atomically, finite safe diagnostic allowlist. Do not change canonical/evidence/oracle validators.
+3. Contrasts: task/venue/series notes-free forms; explicit and unlabelled meaningful notes/unknownsuffixes/other subjects; corrections/query/nonreminder/negation/quotedcontrols/hypothetical; earlier USER/ASSISTANT/multipleturns/facts/pending/ambiguities/occupiedCURRENT/NEW facts. Exact same predicate both consumers, actual schema membership plus actual service refusal, proposed values/pointers unchanged/no fill/drop. Privacy tests finite field/reason/no raw text/notes; legacy and all previous guards unchanged.
+4. Own semantic-completeness.ts/.test.ts; field-capability.ts/.test.ts; contracts/input capability shape and closed output-authority/diagnostic paths if required; provider-wire.ts/.test.ts; prompt/protocol and necessary existing source/request/proof/runner/fit tests/pins; these two docs. No frozen fixture/oracle edits or general parser. Update wire50/capability version/digests coherently and concise capability instruction, normative map if representation-only compaction required.
+5. Focused completeness/service/source/evidence/authority/provider/query/runner/history regressions, ENTIRE fit file plus actual326 additive12000/output1536, typecheck/scopedlint/diff; retain RED/failure logs/metrics then freeze/report. Controller independentfull/review/commit/FreshPilot; implementer no provider/credential/accounting/commit/full/children.
+
 ### Approved wire49 endDate singleton execution
 
 Capability exclusion here means existing generic operation/current-source and bound-clock constraints: no new endDate numeric/clock availability flag. Preserve current numeric-root pruning unchanged, test endDate SET retained reuse versus bound-clock REPLACE/CLEAR refusal.

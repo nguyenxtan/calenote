@@ -2,13 +2,39 @@
 import { describe, expect, it } from "vitest";
 import { buildContextInputV2 } from "./context";
 import { chat, message, observation } from "./context-test-fixtures";
-import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
+import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, SLOT_NAMES } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
-import { locationCoverageComplete, titleCoverageComplete } from "./semantic-completeness";
+import { locationCoverageComplete, titleCoverageComplete, isInitialIsolatedExamNotesFree } from "./semantic-completeness";
 import { turn } from "./context-test-fixtures";
 import { TranscriptEntrySchema } from "./state";
 import { harness, proposal as scriptedProposal, complete } from "./service-test-support";
 import { DownstreamDiagnosticSchema, type DownstreamDiagnostic } from "./downstream";
+it("wire50 notes predicate declines incomplete trusted contexts and meaningful detail",()=>{
+ const msg=message("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
+ if(built.status!=="READY")throw Error("NOT_READY");const input=built.input;
+ expect(isInitialIsolatedExamNotesFree(input)).toBe(true);
+ const occupied=structuredClone(input);occupied.activeRequest={lifecycle:"CLARIFYING",slots:Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<typeof input.activeRequest>["slots"]};expect(isInitialIsolatedExamNotesFree(occupied)).toBe(false);
+ for(const key of ["turns","currentTurn","activeRequest","facts","pendingQuestion","ambiguities"]){const missing=structuredClone(input);Reflect.deleteProperty(missing,key);expect(isInitialIsolatedExamNotesFree(missing)).toBe(false);}
+ for(const text of [msg.text+" Ghi chú mang giấy tờ.",msg.text+", nhớ mang giấy tờ.","Sửa ghi chú thành mang giấy tờ.","Xem lịch đi thi.","Không đi thi.",'"đi thi"',"[CONTROL] đi thi","Nếu đi thi.","Nhắc gọi mẹ."]){const changed=structuredClone(input);changed.turns[0].text=text;expect(isInitialIsolatedExamNotesFree(changed)).toBe(false);}
+ for(const mutate of [(v:typeof input)=>{v.turns[0].role="ASSISTANT"},(v:typeof input)=>{v.turns.push({role:"USER",text:"đi thi"});v.currentTurn=1},(v:typeof input)=>{v.pendingQuestion={text:"ghi chú?",scope:"REMINDER",field:"notes",decisionKind:null,reason:"MISSING"}},(v:typeof input)=>{v.facts.push({alias:"f1",scope:"REMINDER",field:"notes",value:"mang giấy tờ",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:input.reference.instant,dependencies:[]})},(v:typeof input)=>{v.ambiguities.push({field:"notes",reason:"AMBIGUOUS",alternatives:[]})}]){const changed=structuredClone(input);mutate(changed);expect(isInitialIsolatedExamNotesFree(changed)).toBe(false);}
+});
+it("wire50 finite notes rejection diagnostics never disclose authored notes or source text",()=>{
+ const msg=message("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});if(built.status!=="READY")throw Error("NOT_READY");
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:msg.text,occurrence:1}],value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"notes",operation:"SET",value:"PRIVATE_NOTES_SENTINEL",evidence}],query:null,uncertainties:[]});const diagnostics:DownstreamDiagnostic[]=[];
+ expect(validateEvidenceV3(value,built,d=>diagnostics.push(d))).toEqual({status:"REFUSED",reason:"SEMANTIC_NOTES_UNOWNED"});expect(diagnostics).toContainEqual({stage:"EVIDENCE",result:"REJECTED",reason:"SEMANTIC_NOTES_UNOWNED"});for(const d of diagnostics)expect(DownstreamDiagnosticSchema.safeParse(d).success).toBe(true);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_NOTES_SENTINEL");expect(JSON.stringify(diagnostics)).not.toContain(msg.text);
+});
+it("wire50 service atomically refuses notes restatement and retains meaningful notes outside boundary",async()=>{
+ for(const meaningful of [false,true]){const h=await harness([scriptedProposal({title:"đi thi",notes:meaningful?"mang giấy tờ":"nhắc 3 ngày liên tiếp"})]);await h.turn(0,"Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."+(meaningful?" Ghi chú mang giấy tờ.":""));const state=await h.read(1);
+ if(meaningful)expect(state?.slots.notes.value).toBe("mang giấy tờ");else{expect(state?.slots.notes.value??null).toBeNull();expect(state?.slots.title.value??null).toBeNull();expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.reason==="SEMANTIC_NOTES_UNOWNED")).toBe(true);}
+ expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first("n")).toBe(0);}
+});
+it("wire50 complete isolated instruction rejects misplaced notes without modifying authored proposal",()=>{
+ const msg=message("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi.");
+ const built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
+ expect(built.status).toBe("READY");if(built.status!=="READY")throw Error("NOT_READY");
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:msg.text,occurrence:1}];
+ for(const alternative of [false,true]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},...(!alternative?[{field:"notes",operation:"SET",value:"nhắc 3 ngày liên tiếp",evidence}]:[])],query:null,uncertainties:alternative?[{field:"notes",reason:"AMBIGUOUS",alternatives:[{value:"nhắc 3 ngày liên tiếp",evidence}]}]:[]});const before=JSON.stringify(value);expect(validateEvidenceV3(value,built)).toEqual({status:"REFUSED",reason:"SEMANTIC_NOTES_UNOWNED"});expect(JSON.stringify(value)).toBe(before);}
+});
 
 function coverage(text: string, value?: string | null, options: {target?: "NEW" | "CURRENT"; retained?:string; source?:string; intent?:"LIST_REMINDERS"; uncertainty?:boolean; clear?:boolean} = {}) {
   const current=turn(text,"current"), sources=[{kind:"USER_QUOTE" as const,sourceTurnId:options.source??"current",sourceMapTurnId:"current",quote:text,occurrence:1,sourceSpan:{start:0,end:[...text].length},viewSpan:{start:0,end:[...text].length},normalizationVersion:"nfc-codepoint-v1" as const}];

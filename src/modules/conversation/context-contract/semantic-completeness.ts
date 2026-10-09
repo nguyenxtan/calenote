@@ -1,4 +1,4 @@
-import type { FieldChangeV3, SemanticPatchProposalV3 } from "./contracts";
+import type { ContextInput, FieldChangeV3, SemanticPatchProposalV3 } from "./contracts";
 import type { ValidatedFieldEvidence } from "./evidence";
 import type { TranscriptEntry } from "./state";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
@@ -20,6 +20,17 @@ type CoverageInput = {
   alternativeEvidence: readonly ValidatedFieldEvidence[];
   retainedLocation: string | null;
 };
+
+/** Sufficient initial whole-clause exclusion only; unknown context never counts as empty. */
+export function isInitialIsolatedExamNotesFree(input:ContextInput):boolean {
+  return !!input && Array.isArray(input.turns) && input.turns.length===1 && input.currentTurn===0 && input.turns[0]?.role==="USER" && typeof input.turns[0].text==="string"
+    && input.activeRequest===null && Array.isArray(input.facts) && input.facts.length===0 && input.pendingQuestion===null && Array.isArray(input.ambiguities) && input.ambiguities.length===0
+    && examTitleCoverage(input.turns[0].text)!==null;
+}
+export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
+  return proposal.intent!=="CREATE_REMINDER" || !isInitialIsolatedExamNotesFree(input)
+    || !proposal.changes.some(change=>change.field==="notes") && !proposal.uncertainties.some(issue=>issue.field==="notes"&&issue.alternatives.length>0);
+}
 
 /** Presence/coverage only for the initial literal complete exam task. Unknown
  * subjects and ambiguous discourse never create a generation obligation. */

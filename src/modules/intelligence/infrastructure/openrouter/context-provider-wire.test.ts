@@ -58,7 +58,7 @@ it.each(["{", "[]", "null", '"PRIVATE_DATE_SECRET"', "true", "0", " ".repeat(327
  expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_DATE_SECRET|private_secret_key|1e999/);
 });
 
-it.each([undefined, {version:"generation-field-capability-9" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true}, {version:"generation-field-capability-9" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
+it.each([undefined, {version:"generation-field-capability-10" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true}, {version:"generation-field-capability-10" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
   const schema=googleLiteEuContextWireSchema(capability).schema;
   let constants=0;const singletonValues:string[]=[];
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;
@@ -350,7 +350,7 @@ it.each([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]])("global original posi
   }
 });
 it("reminder clock carrier is null-only when no clock capability exists",()=>{
-  const schema=googleLiteEuContextWireSchema({version:"generation-field-capability-9",allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true}).schema as unknown as {properties:{reminderTimeChange:unknown;reminderDateChange:unknown}};
+  const schema=googleLiteEuContextWireSchema({version:"generation-field-capability-10",allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true}).schema as unknown as {properties:{reminderTimeChange:unknown;reminderDateChange:unknown}};
   expect(schema.properties.reminderTimeChange).toEqual({type:"null"});
   expect(schema.properties.reminderDateChange).toHaveProperty("anyOf");
 });
@@ -693,7 +693,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-49");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-50");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("06c440ef7a2b7c626eb0d9d3838b0b7a6e325fba01f3b333c0499f3c396a0e46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
