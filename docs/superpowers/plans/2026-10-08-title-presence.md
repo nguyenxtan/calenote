@@ -1,5 +1,12 @@
 # Title Presence Implementation Plan
 
+### Wire63 equivalent item topology execution
+
+- [ ] BASEa65a8649ba38a8f7247bfc9179c7aca53298e45f; approved TOPwire63 spec/complete wire63-uncertainty-object-topology-proposal.md. RED actual specialized item still union, then prove complete encoded canonical witnesses/all16×4 reason domains and malformed/empty/extra/type/alternative cases; clock/outside cases retain exact languages.
+- [ ] Own provider-wire.ts/.test.ts/protocol.ts and necessary current measured capability/runner pins only. Reuse existing equal-shell single-finite-property coalescer ONLY specialized uncertainty item; no whole-root pass/evidence/schema-authority/prompt/semantic changes. Mismatched shell/required/extra/field domains do not fold. Preserve existing sourcebook/alternative transport/diagnostics.
+- [ ] Focused producer/authority/source/canonical/evidence/service regressions, ENTIRE fit67/all326/input12000/output1536 and measured complexity, type/lint/diff; freeze before six tools/report. No implementer paid/key/accounting/full/commit/children.
+- [ ] Controller independent C0/I0/final frozen full/local commit/trusted preflight/FreshFormal under unchanged continuousUSD5. First failure settles/terminal then scoped repair; no history rewrite/UNKNOWN release/budget reset/Full/push/merge/deploy.
+
 ### Diagnostic checkpoint62 execution
 
 - [ ] BASE30089ce5ef0e98d9e1846c5030fd2a4f8ea1f950; TOP checkpoint62 spec and complete wire62-uncertainty-shape-diagnostics-proposal.md. RED actual decoder indistinguishable absent versus obsolete field key; retain unchanged REFUSED for both and PARSED valid control.

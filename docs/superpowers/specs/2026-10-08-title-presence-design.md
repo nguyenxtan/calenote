@@ -1,5 +1,11 @@
 # Bounded title-presence generation amendment
 
+### Wire63 equivalent uncertainty-item folding
+
+Checkpoint62 live proves empty uncertainty object and correct hard rejection, not private provider compiler behavior. Controller read complete wire63-uncertainty-object-topology-proposal.md. Exact source-supported/no-required-clock request has two object branches identical except disjoint finite reason enums; approves existing equality-checked coalesceBranches on ONLY the specialized uncertainties.items. Identical shell/properties/required/additionalProperties and exactly one differing finite scalar may fold to its enum union; resulting object still requires fieldCode/reason/alternatives and rejects empty/extra/malformed entries. This is language-equivalent representation simplification, not output repair or a claim of provider root-cause certainty.
+
+Clock-required branches differ in fieldCode as well as reason and must remain distinct. Unique-but-unsupported/outside contexts and every semantic/evidence/canonical/merge/oracle/capability/source guard remain unchanged. No whole-root new pass, parser, synthesized value/default, broadened enum, prompt change or historical pin rewrite. Wire63/current bound request identities advance coherently; base/prompt/capability11 remain. Actual matrix across16codes×4reasons/malformed/clock/outside/equal-shell contrasts, ENTIRE67/all326/12000input/1536output, C0/I0/frozen full/local commit/FreshFormal required. Existing conservativeUSD5/UNKNOWN/model/provider/security and no Full/push/merge/deploy unchanged; effectiveness remains a live hypothesis until observed.
+
 ### Diagnostic checkpoint62: uncertainty required-key shape
 
 Wire61 terminal R02T0 proves absent own uncertainties[0].fieldCode, not whether an obsolete field key or empty object was authored. Controller read complete wire62-uncertainty-shape-diagnostics-proposal.md and approves diagnostic-only precision. Preserve ProviderWire61/capability11/prompt/schema/protocol/decoder ordering/acceptance semantics. No speculative representation correction. Historical failures stay immutable.

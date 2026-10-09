@@ -34,6 +34,20 @@ it.each([
   expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"UNSUPPORTED_COMBINATION",alternatives:[]}]}).success).toBe(true);
  }
 });
+it("wire63 folds only equivalent uncertainty reason shells and preserves clock domains",()=>{
+ for(const clock of [false,true]){
+  const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text:clock?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."}]});
+  const schema=serializeContextRequest(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
+  const item=schema.properties.uncertainties.items;
+  if(clock)expect(item).toHaveProperty("anyOf");else{expect(item).not.toHaveProperty("anyOf");expect(item).toMatchObject({type:"object",required:["fieldCode","reason","alternatives"],additionalProperties:false});}
+  const check=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]);
+  for(let code=0;code<16;code++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){
+   const value={fieldCode:code,reason,alternatives:[]};expect(check.safeParse(value).success).toBe(code!==8&&code!==9&&!(clock&&code===6&&reason==="MISSING"));
+   for(const malformed of [{...value,fieldCode:null},{...value,reason:"UNKNOWN"},{...value,alternatives:[null]},{...value,extra:0}])expect(check.safeParse(malformed).success).toBe(false);
+  }
+  for(const value of [{},{field:"reminderTime",reason:"MISSING",alternatives:[]},{fieldCode:6,reason:"MISSING"},null,[]])expect(check.safeParse(value).success).toBe(false);
+ }
+});
 it("wire60 title carrier preserves correction availability and required SET without ordinary bypass",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const capability={version:"generation-field-capability-11" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,eventDateYearNullRequired:false};
@@ -935,7 +949,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-61");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-63");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

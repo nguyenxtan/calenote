@@ -714,6 +714,9 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
         other.properties!.fieldCode={...other.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.frequency&&code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.occurrenceCount)};
         schema.properties!.uncertainties.items={anyOf:supportedNumeric?[missing,other]:[missing,other,unsupported]};
       }else schema.properties!.uncertainties.items={anyOf:[missing,other]};
+      // Fold only equal uncertainty shells differing in one finite control.
+      // Distinct field/reason domains (including required clocks) stay paired.
+      schema.properties!.uncertainties.items=coalesceBranches(schema.properties!.uncertainties.items!);
     }
     const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);
     const bind=(node:Schema):Schema=>{
