@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -416,11 +416,20 @@ function parseDateWireJson(value:unknown,path:(string|number)[],field?:DateOpera
   if(position!==value.length)fail("WIRE_VALUE","INVALID_OPERAND",parsed);
   return parsed as Record<string,unknown>;
 }
-function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "decode"): Record<string, unknown> {
+function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "decode", yearNullEventDate=false): Record<string, unknown> {
   const date = (value: unknown, path: (string | number)[], field?:DateOperandDiagnostic["field"]): unknown => {
     if(value===null)return null;
     let candidate:unknown;
-    if(mode==="decode"){
+    const typed=yearNullEventDate&&field==="eventDate";
+    if(mode==="decode"&&typed){
+      const fail=(subject:unknown=value):never=>{throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(subject,"WIRE_VALUE","INVALID_OPERAND",field))};
+      if(!value||typeof value!=="object"||Array.isArray(value))fail();
+      const item=value as Record<string,unknown>,keys=[...canonicalDateKeys.CIVIL_DATE];
+      requireWireKeys(item,keys,keys,path);
+      for(const key of keys)if(!Object.hasOwn(Object.getOwnPropertyDescriptor(item,key)??{},"value"))fail();
+      if(item.kind!=="CIVIL_DATE"||item.year!==null)fail();
+      candidate=item;
+    }else if(mode==="decode"){
       const item=parseDateWireJson(value,path,field);
       try{
       const code=item.kind;
@@ -445,6 +454,8 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
     if(!parsed.success){const structure=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND",field,parsed.error.issues[0].code);
       if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)&&structure.kind==="UNKNOWN")structure.reason="UNKNOWN_KIND";
       throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON",undefined,undefined,undefined,structure);}
+    if(typed&&(parsed.data.kind!=="CIVIL_DATE"||parsed.data.year!==null))throw new WireShapeFailure(path,"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND",field));
+    if(mode==="encode"&&typed)return structuredClone(parsed.data);
     if(mode==="encode"){
       const encoded=JSON.stringify(parsed.data);
       return parsed.data.kind==="RELATIVE_DAY"&&Object.is(parsed.data.offsetDays,-0)?encoded.replace('"offsetDays":0','"offsetDays":-0'):encoded;
@@ -571,7 +582,7 @@ const providerSchemaV3 = indexedReminderSchema(indexedTitleSchema(operationSchem
 
 /** Move only explicitly model-authored carrier data; indices and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
-function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false):Record<string,unknown>{
+function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false):Record<string,unknown>{
   const result={...raw};
   if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
   const ordinaryChanges=raw.changes;
@@ -598,7 +609,12 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     requireWireKeys(carrier as Record<string,unknown>,["index","change"],["index","change"],[definition.root]);
     const {index,change}=carrier as {index:unknown;change:unknown};
     if(typeof index!=="number"||!Number.isInteger(index)||index<0||positions.has(index))throw new WireShapeFailure([definition.root,"index"],"CHANGE_POSITION");
-    const shape=providerSchemaV3.properties![definition.root].anyOf![0].properties!.change;
+    let shape=providerSchemaV3.properties![definition.root].anyOf![0].properties!.change;
+    if(yearNullEventDate&&definition.field==="eventDate"){
+      const value=change&&typeof change==="object"?Object.getOwnPropertyDescriptor(change,"value")?.value:undefined;
+      if(value&&typeof value==="object"&&Object.keys(value).some(key=>!Object.hasOwn(Object.getOwnPropertyDescriptor(value,key)??{},"value")))throw new WireShapeFailure([definition.root,"change","value"],"DATE_OPERAND_JSON",undefined,undefined,undefined,projectDateOperandFailure(value,"WIRE_VALUE","INVALID_OPERAND","eventDate"));
+      shape={...shape,anyOf:shape.anyOf!.map(raw=>{const branch=structuredClone(deref(raw,providerSchemaV3)),operation=branch.properties!.operation;if((operation.enum??[operation.const]).some(value=>value==="SET"||value==="REPLACE"))branch.properties!.value={type:"object",properties:Object.fromEntries(canonicalDateKeys.CIVIL_DATE.map(key=>[key,{}])),required:[...canonicalDateKeys.CIVIL_DATE]};return branch;})};
+    }
     if(change&&typeof change==="object"&&!Array.isArray(change)){
       const item=change as Record<string,unknown>;
       if(item.field!==definition.field){
@@ -765,17 +781,23 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   schema=shareDate(schema);
   for(const key of dateDefinitions)delete schema.$defs![key];
   schema.$defs!.__d={type:"string"};
+  if(primaryEvidenceInput&&isInitialEventDateYearNullRequired(primaryEvidenceInput)){
+    schema.$defs!.__yearlessCivil={type:"object",properties:{kind:{type:"string",enum:["CIVIL_DATE"]},calendar:{type:"string",enum:["GREGORIAN","LUNAR_VN"]},day:{type:"integer",minimum:1,maximum:31},month:{type:"integer",minimum:1,maximum:12},year:{type:"null"},leapMonth:{anyOf:[{type:"boolean"},{type:"null"}]}},required:[...canonicalDateKeys.CIVIL_DATE],additionalProperties:false};
+    const carrier=deref(schema.properties!.eventDateChange.anyOf![0],schema),changes=deref(carrier.properties!.change,schema);
+    requireShape(changes.anyOf?.length);
+    for(const raw of changes.anyOf){const branch=deref(raw,schema),operation=branch.properties!.operation;if((operation.enum??[operation.const]).some(value=>value==="SET"||value==="REPLACE"))branch.properties!.value={$ref:"#/$defs/__yearlessCivil"};}
+  }
   schema.properties!.uncertainties.maxItems=4;
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
 }
-export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {
+export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3,input?:ContextInput): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);
   const generated: Record<string, unknown> = Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== "schemaVersion"));
   // The generated view omits owned constants without mutating canonical data.
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
-  return indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode"),"encode"),"encode");
+  return indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -792,9 +814,9 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const unfolded=indexedChangeCarriers(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false);
+    const unfolded=indexedChangeCarriers(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false,!!input&&isInitialEventDateYearNullRequired(input));
     const pointed=input?expandPrimaryEvidenceSourceCodes(unfolded,input):unfolded;
-    const object = dateJsonOperands(operationValues(materializeProviderEvidence(pointed,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
+    const object = dateJsonOperands(operationValues(materializeProviderEvidence(pointed,input,input!==undefined) as Record<string,unknown>,"decode"),"decode",!!input&&isInitialEventDateYearNullRequired(input));
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;

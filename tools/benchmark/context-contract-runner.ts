@@ -209,7 +209,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "ac6d69e2d29aa8048783b56fc8dc86b3e77b877874cc68446c63f8224612e2a2"
+    if (digest(request.messages[0].content) !== "0a1661219ebd83e18dc2927fe39b227cf3fbe0b36167b0173f584caac81904fb"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "389cf7e913b51d27acef043dae5e41b69b75466b6eadfec3f8f5e47cbd868c78") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request);

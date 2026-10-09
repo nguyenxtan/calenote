@@ -69,6 +69,16 @@ it.each([[2026,"Ngày 11/10 đi thi.","REJECTED"],[null,"Ngày 11/10 đi thi.","
  if(status==="REJECTED")expect(state).toBeNull();
  else expect(state?.slots.eventDate.value).toEqual(value);
 });
+it.each(["numeric-year","wrong-day","valid"] as const)("wire55 actual model-authored object retains source fidelity: %s",async mode=>{
+ const value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
+ const h=await harness([proposal({title:"đi thi",eventDate:value})],wire=>{
+  const raw=wire as {eventDateChange:{change:{value:Record<string,unknown>}}};
+  raw.eventDateChange.change.value={...raw.eventDateChange.change.value,...(mode==="numeric-year"?{year:2026}:mode==="wrong-day"?{day:10}:{})};return raw;
+ });
+ expect(await h.turn(0,"Ngày 11/10 đi thi.")).toEqual({status:mode==="valid"?"CLARIFICATION_REQUESTED":"REJECTED"});
+ const state=await h.read(1);if(mode==="valid")expect(state?.slots.eventDate.value).toEqual(value);else expect(state).toBeNull();
+ expect(await h.f.db.prepare("SELECT count(*) AS count FROM reminders").first<number>("count")).toBe(0);
+});
 it.each(["Giúp tôi", "Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."])("wire52 actual request uncertainty cardinality remains max four (%#)",text=>{
  const context=input(text),evidence=[{kind:"USER_QUOTE",turn:0,quote:text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{uncertainties:Record<string,unknown>};$defs:Record<string,unknown>};
@@ -268,9 +278,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("b562286e04647adb4b098737e6a849be7e36e3c71b243c72d684bacb37242af5");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("d8b5d0dc137cb6ec3202c76d770585a388800ea677040a1df92fd581c2fe1652");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("848beddb1202e7e0de3eeffbba7bf0e9abd9f7c5af9c61cf2376091bc4652230");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("11717a618d783c2986945576eb57c63698122fdb09f5c444ee17db9a53345718");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

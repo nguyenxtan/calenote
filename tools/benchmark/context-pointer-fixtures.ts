@@ -15,7 +15,7 @@ export function frozenContextProposal(input:ContextInput,executionId:string,turn
 export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
   const bound=input??(value&&typeof value==="object"?fixtureInputs.get(value):undefined);
   const encode=(canonical:Parameters<typeof encodeGoogleLiteEuContextV3>[0])=>{
-    const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+    const wire=encodeGoogleLiteEuContextV3(canonical,bound) as Record<string,unknown>;
     if(!bound)return wire; // Explicit historical/schema-only compatibility.
     // Provider input includes three application-owned serialized catalogues;
     // the core codebook validates the canonical dispatch input, not metadata.

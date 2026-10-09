@@ -8,6 +8,46 @@ import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleL
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
+import { z } from "zod";
+function wire55Example(operation:"SET"|"REPLACE"|"CLEAR"="SET"){
+ const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"Ngày 11/10 đi thi."}]});
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:bound.turns[0].text,occurrence:1}],value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},conversationDirective:null,changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"eventDate",operation,value:operation==="CLEAR"?null:value,evidence}]});
+ const schema=serializeContextRequest(bound).response_format.json_schema.schema;
+ const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
+ return {bound,canonical,value,check:z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]),raw:encodeFixtureV3(canonical,bound) as {eventDateChange:{change:{value:unknown}}}};
+}
+it.each(["SET","REPLACE"] as const)("wire55 scoped %s requires six authored civil keys with year null",operation=>{
+ const {bound,raw,value,check,canonical}=wire55Example(operation);raw.eventDateChange.change.value=value;
+ expect(check.safeParse(raw).success).toBe(true);
+ const diagnostics:unknown[]=[];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,d=>diagnostics.push(d),d=>diagnostics.push(d),bound).status,JSON.stringify(diagnostics)).toBe("PARSED");
+ const encoded=Reflect.apply(encodeGoogleLiteEuContextV3,undefined,[canonical,bound]) as typeof raw;
+ expect(encoded.eventDateChange.change.value).toEqual(value);
+ for(const bad of [{...value,year:2026},JSON.stringify(value),Object.fromEntries(Object.entries(value).filter(([k])=>k!=="year"))]){raw.eventDateChange.change.value=bad;expect(check.safeParse(raw).success).toBe(false);expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");}
+});
+it("wire55 CLEAR retains null while unflagged and no-input dates remain JSON only",()=>{
+ const {bound,raw,check}=wire55Example("CLEAR");expect(raw.eventDateChange.change.value).toBeNull();expect(check.safeParse(raw).success).toBe(true);expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("PARSED");
+ const ex=wire55Example();ex.raw.eventDateChange.change.value=ex.value;
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(ex.raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ const explicit=ContextInputSchema.parse({...ex.bound,turns:[{role:"USER",text:"Ngày 11/10/2026 đi thi."}]});
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(ex.raw,CONTEXT_PROTOCOL_V3,undefined,undefined,explicit).status).toBe("REFUSED");
+});
+it("wire55 typed civil rejects invalid authored slots and private/getter values without leaks",()=>{
+ const {bound,raw,value}=wire55Example();
+ const malformed=[null,[],{}, {...value,year:0},{...value,day:0},{...value,day:32},{...value,month:13},{...value,day:1.5},{...value,year:NaN},{...value,kind:"RELATIVE_DAY"},{...value,leapMonth:true},{...value,calendar:"PRIVATE_CALENDAR"},{...value,PRIVATE_KEY:"PRIVATE_VALUE"},...Object.keys(value).map(key=>Object.fromEntries(Object.entries(value).filter(([k])=>k!==key)))];
+ for(const invalid of malformed){raw.eventDateChange.change.value=invalid;const diagnostic:unknown[]=[];expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,d=>diagnostic.push(d),d=>diagnostic.push(d),bound).status).toBe("REFUSED");expect(JSON.stringify(diagnostic)).not.toMatch(/PRIVATE_KEY|PRIVATE_VALUE|PRIVATE_CALENDAR/);}
+ let accesses=0;const accessor={...value};Object.defineProperty(accessor,"year",{enumerable:true,get(){accesses++;throw Error("PRIVATE_GETTER")}});raw.eventDateChange.change.value=accessor;const diagnostic:unknown[]=[];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostic.push(d),bound).status).toBe("REFUSED");expect(accesses).toBe(0);expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_GETTER");
+ const numeric=ConversationInterpretationV3Schema.parse({...wire55Example().canonical,changes:wire55Example().canonical.changes.map(change=>change.field==="eventDate"?{...change,value:{...value,year:2026}}:change)});
+ expect(()=>encodeGoogleLiteEuContextV3(numeric,bound)).toThrow();expect((encodeGoogleLiteEuContextV3(numeric) as typeof raw).eventDateChange.change.value).toEqual(JSON.stringify({...value,year:2026}));
+});
+it.each(["valid","numeric"] as const)("wire55 actual gateway consumes typed authored date: %s",async mode=>{
+ const {bound,raw,value}=wire55Example();raw.eventDateChange.change.value=mode==="numeric"?{...value,year:2026}:value;
+ let calls=0;const transport=createContextHttpTransport("fixture",async()=>{calls++;return new Response(JSON.stringify({model:config.primary.model,provider:"Google",choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}],usage:{cost:.0001,prompt_tokens:100,completion_tokens:100}}),{headers:{"content-type":"application/json"}})});
+ const attempt=createContextContractGateway(config,transport,{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576}).prepare("PRIMARY",bound);if(attempt.status!=="READY")throw Error("Expected ready");
+ const result=await attempt.dispatch();expect(result.status).toBe(mode==="valid"?"SUCCESS":"FAILURE");expect(calls).toBe(1);expect(raw.eventDateChange.change.value).toEqual(mode==="numeric"?{...value,year:2026}:value);
+});
 it("wire53 bound schema and decoder use codes, never legacy primary JSON",()=>{
  const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"synthetic"}],currentTurn:0});
  const schema=googleLiteEuContextWireSchema(undefined,bound).schema as unknown as {$defs:Record<string,{enum?:string[]}>};
@@ -740,7 +780,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-54");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-55");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("389cf7e913b51d27acef043dae5e41b69b75466b6eadfec3f8f5e47cbd868c78");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

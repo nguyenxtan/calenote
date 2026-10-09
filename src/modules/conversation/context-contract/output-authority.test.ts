@@ -3,6 +3,9 @@ import { expect, it } from "vitest";
 import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
+it("bound typed civil discriminator and all authored date slots remain semantic untrusted",()=>{
+ for(const path of ["eventDateChange.change.value{kind=CIVIL_DATE}","eventDateChange.change.value.kind","eventDateChange.change.value.calendar","eventDateChange.change.value.day","eventDateChange.change.value.month","eventDateChange.change.value.year","eventDateChange.change.value.leapMonth"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
+});
 it("year-source capability is application owned and cannot authorize a read or write",()=>{
  expect(authority.classifyOutputPathV3("fieldCapability.eventDateYearNullRequired")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
 });
