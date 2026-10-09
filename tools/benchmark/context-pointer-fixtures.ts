@@ -1,7 +1,7 @@
 import type {ContextInput} from "../../src/modules/conversation/context-contract/contracts";
-import {ConversationInterpretationV3Schema,ModelDirectiveV3Schema,ReplyProposalSchema} from "../../src/modules/conversation/context-contract/contracts";
+import {ConversationInterpretationV3Schema,ContextInputSchema,ModelDirectiveV3Schema,ReplyProposalSchema} from "../../src/modules/conversation/context-contract/contracts";
 import {encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
-import {evidenceSourceCatalogue} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
+import {evidenceSourceCatalogue,primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {CONTROL_PLACEHOLDER} from "../../src/modules/conversation/context-contract/projection";
 import {frozenContextProposal as historicalProposal} from "./context-contract-fixtures";
 export {validateContextFixtureCoverage} from "./context-contract-fixtures";
@@ -17,6 +17,11 @@ export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
   const encode=(canonical:Parameters<typeof encodeGoogleLiteEuContextV3>[0])=>{
     const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
     if(!bound)return wire; // Explicit historical/schema-only compatibility.
+    // Provider input includes three application-owned serialized catalogues;
+    // the core codebook validates the canonical dispatch input, not metadata.
+    const canonicalInput={...bound} as Record<string,unknown>;
+    for(const key of ["evidenceSources","numericOwnership","fieldCapability"])delete canonicalInput[key];
+    const sourceCodebook=primaryEvidenceSourceCodebook(ContextInputSchema.parse(canonicalInput));
     const ref=(r:Record<string,unknown>)=>{
       if(r?.kind!=="USER_QUOTE"||typeof r.turn!=="number"||typeof r.quote!=="string"||typeof r.occurrence!=="number")return r;
       const source=bound.turns[r.turn];if(!source||source.role!=="USER"||!r.quote.length)return r;
@@ -26,7 +31,8 @@ export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
       const segment=evidenceSourceCatalogue(bound).find(s=>s.turn===r.turn&&spans[s.segment].start<=selectedStart&&spans[s.segment].end>=selectedStart+(r.quote as string).length);
       return segment?{kind:"USER_SEGMENT",turn:r.turn,segment:segment.segment}:{kind:"USER_TURN",turn:r.turn};
     };
-    const carrier=(c:Record<string,unknown>)=>{const evidence=c?.evidence as {primaryEvidence:string;additionalEvidenceJson:string}|undefined;if(evidence){evidence.primaryEvidence=JSON.stringify(ref(JSON.parse(evidence.primaryEvidence)));evidence.additionalEvidenceJson=JSON.stringify(JSON.parse(evidence.additionalEvidenceJson).map(ref));}};
+    const carrier=(c:Record<string,unknown>)=>{const evidence=c?.evidence as {primaryEvidence:string;additionalEvidenceJson:string}|undefined;if(evidence){const pointer=JSON.stringify(ref(JSON.parse(evidence.primaryEvidence)));evidence.primaryEvidence=sourceCodebook.entries.find(entry=>entry.pointerJson===pointer)?.code??pointer; // Invalid authored specimens remain invalid, never select a replacement source.
+      evidence.additionalEvidenceJson=JSON.stringify(JSON.parse(evidence.additionalEvidenceJson).map(ref));}};
     if(wire.requestTarget)carrier(wire.requestTarget as Record<string,unknown>);
     if(wire.query)carrier(wire.query as Record<string,unknown>);
     (wire.changes as Array<Record<string,unknown>>).forEach(carrier);

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import {expect,it} from "vitest";
+import * as pointerModule from "./evidence-pointer";
 import {materializeProviderEvidence,evidenceSourceCatalogue,EvidencePointerFailure,projectEvidencePointerStructure,primaryEvidencePointerDomain} from "./evidence-pointer";
 import {ContextInputSchema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
 import {buildContextInputV2} from "../../../conversation/context-contract/context";
@@ -9,6 +10,35 @@ import {validateEvidenceV3} from "../../../conversation/context-contract/evidenc
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
+it("wire53 preserves all source choices through one exact codebook and current subset",()=>{
+ const context=structuredClone(input);context.turns[0].text="a[CONTROL]b";
+ context.facts=[{alias:"f1",scope:"REMINDER",field:"title",value:"PRIVATE",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]}];
+ const book=pointerModule.primaryEvidenceSourceCodebook(context);
+ expect(book.codes).toEqual(["U2","S0.0","S0.1","Ff1"]);
+ expect(book.currentCodes).toEqual(["U2"]);
+ expect(book.decode("S0.1")).toBe('{"kind":"USER_SEGMENT","turn":0,"segment":1}');
+ expect(book.encode('{"kind":"CONTEXT_FACT","ref":"f1"}')).toBe("Ff1");
+ expect(Object.isFrozen(book)).toBe(true);expect(Object.isFrozen(book.entries)).toBe(true);
+ for(const entry of book.entries){expect(book.decode(book.encode(entry.pointerJson))).toBe(entry.pointerJson);expect(Object.isFrozen(entry)).toBe(true);}
+ expect(JSON.stringify(book.entries)).not.toContain("PRIVATE");
+});
+it("wire53 never maps inactive padding or extra/alternative code strings, and safe failure cannot leak secrets",()=>{
+ const evidence={primaryEvidence:"PRIVATE_SOURCE_SECRET",additionalEvidenceJson:"[]"};let failure:EvidencePointerFailure|undefined;
+ try{pointerModule.expandPrimaryEvidenceSourceCodes({changes:[{evidence}]},input);}catch(error){failure=error as EvidencePointerFailure;}
+ expect(failure?.diagnostic).toMatchObject({reason:"SOURCE_CODE_INVALID",pointerKind:"UNKNOWN",pointerKindType:"string"});expect(failure?.diagnostic.pointerKindDigest).toHaveLength(64);expect(JSON.stringify(failure)).not.toContain("PRIVATE_SOURCE_SECRET");
+ const raw={operationCode:"6",query:{evidence},requestTarget:null,changes:[],uncertainties:[{alternatives:['{"value":"PRIVATE_SOURCE_SECRET","evidence":["U2"]}']}],replyProposal:{text:"U2"}};
+ expect(pointerModule.expandPrimaryEvidenceSourceCodes(raw,input)).toEqual(raw);
+ const getter={get primaryEvidence(){throw Error("PRIVATE_ACCESSOR");},additionalEvidenceJson:"[]"};
+ expect(()=>pointerModule.expandPrimaryEvidenceSourceCodes({changes:[{evidence:getter}]},input)).toThrow(EvidencePointerFailure);
+});
+it("wire53 expands only active primary slots and refuses legacy JSON without fallback",()=>{
+ const raw={operationCode:"3",requestTarget:null,query:{evidence:{primaryEvidence:"U2",additionalEvidenceJson:'[{"kind":"USER_TURN","turn":0}]'}},changes:[],uncertainties:[{alternatives:['{"value":"U2"}']}],replyProposal:{text:"U2"}};
+ const out=pointerModule.expandPrimaryEvidenceSourceCodes(raw,input) as typeof raw;
+ expect(out.query.evidence.primaryEvidence).toBe('{"kind":"USER_TURN","turn":2}');
+ expect(out.query.evidence.additionalEvidenceJson).toBe(raw.query.evidence.additionalEvidenceJson);
+ expect(out.uncertainties).toEqual(raw.uncertainties);expect(out.replyProposal).toEqual(raw.replyProposal);expect(raw.query.evidence.primaryEvidence).toBe("U2");
+ for(const code of ['{"kind":"USER_TURN","turn":2}',"U1","U02"," u2","U2 ","u2","S2.0","Ff1",null,1])expect(()=>pointerModule.expandPrimaryEvidenceSourceCodes({...raw,query:{evidence:{primaryEvidence:code,additionalEvidenceJson:"[]"}}},input)).toThrow();
+});
 it("source availability excludes assistant/controlled whole-turn pointers and preserves existing aliases",()=>{
   const context=structuredClone(input);context.turns[0].text="a[CONTROL]b[CONTROL]";
   context.facts=[{alias:"f1",scope:"REMINDER",field:"title",value:"private retained",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]},{alias:"f2",scope:"QUERY",field:"queryRange",value:{kind:"LIST",period:null,statusScope:"DEFAULT",evidence:[{kind:"USER_QUOTE",turn:2,quote:"8h sáng",occurrence:1}]},provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]}];
@@ -30,6 +60,9 @@ it("source domains preserve every eligible controlled segment and fact without s
   expect(domain).toHaveLength(86);
   expect(domain).toContainEqual({kind:"USER_SEGMENT",turn:11,segment:9});expect(domain).toContainEqual({kind:"CONTEXT_FACT",ref:"f26"});
   expect(domain.some(value=>value.kind==="USER_TURN")).toBe(false);
+  const book=pointerModule.primaryEvidenceSourceCodebook(context);
+  expect(book.codes).toHaveLength(86);expect(book.currentCodes).toEqual(Array.from({length:10},(_,index)=>`S11.${index}`));
+  expect(book.decode("S11.9")).toBe('{"kind":"USER_SEGMENT","turn":11,"segment":9}');expect(book.decode("Ff26")).toBe('{"kind":"CONTEXT_FACT","ref":"f26"}');
 });
 it("pointer diagnostic projection reads only descriptor scalars and counts secret keys",()=>{
   const pointer={kind:"PRIVATE_UNKNOWN_KIND",turn:2,segment:1,PRIVATE_KEY:"PRIVATE_VALUE",get quote(){throw Error("PRIVATE_ACCESSOR");}};
@@ -177,7 +210,7 @@ it("fixture conversion preserves the second identical quote's source segment",()
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"x",occurrence:2}];
  const canonical={schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null};
  const wire=encodeFixtureV3(canonical,selected) as {requestTarget:{evidence:{primaryEvidence:string}}};
- expect(JSON.parse(wire.requestTarget.evidence.primaryEvidence)).toEqual({kind:"USER_SEGMENT",turn:0,segment:1});
- const expanded=materializeProviderEvidence(wire,selected,true) as typeof wire;
+ expect(wire.requestTarget.evidence.primaryEvidence).toBe("S0.1");
+ const expanded=materializeProviderEvidence(pointerModule.expandPrimaryEvidenceSourceCodes(wire,selected),selected,true) as typeof wire;
  expect(JSON.parse(expanded.requestTarget.evidence.primaryEvidence)).toEqual(evidence[0]);
 });

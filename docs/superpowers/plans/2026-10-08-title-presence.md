@@ -1,5 +1,14 @@
 # Title Presence Implementation Plan
 
+### Wire53 primary-source codebook execution
+
+1. Read approved wire53 amendment and wire53-primary-source-codebook-proposal.md before runtime edits. RED actual bound outgoing codes/current subset and strict bound decoding first. Own evidence-pointer.ts/.test.ts, provider-wire and parity tests; one typed immutable codebook derives existing pointer domain, exact inverse, no domain loss/duplicates or new source parser.
+2. Expand only active primary slots after indexed unfolding before unchanged materializer. Bound input rejects legacy JSON/USER_QUOTE, unavailable/case/whitespace/leading-zero/wrong-role/fact/segment/type/null codes; no fallback/default/repair. Extras/alternatives/inactive padding/business/advisory strings untouched. Test every carrier/order/operation/query/current/NEW/value-ownership refusal, privacy/observer inertness/zero reads and mutations.
+3. Advance wire53/application-owned mapping metadata; update ALL primary prompt examples without duplicated input catalogue. Adapter maps primary only after existing exact quote-to-pointer conversion; frozen source/oracle unchanged. Own prompt/protocol/output-authority/wire/gateway and necessary source/request/proof/fit tests.
+4. Preserve original historical wire52 schema635/requeste48/seed/context/authority32/ledger guards. Explicit bounded historical public structural fixture seam for pure transforms; actual current wire53 attempting old modes fails preHTTP. No historical identity relabeling/reopening/credit replacement. Cover this in debug-loop/runner/candidate tests.
+5. Run focused security/evidence/canonical/date/query/authority/gateway/runner regressions, historical authority, typecheck/scopedlint/diff and ENTIRE fit67 with explicit ALL326 construction/12000+1536 bounds. Record RED/intermediate/final commands and exact metrics; freeze/report wire53-primary-source-codebook-implementation.md. No implementer provider/key/accounting/full/commit/children.
+6. Controller independently reviews C0/I0, runs required full stable-candidate suite, fixes findings/test regressions, commits selectively/local only, derives accounting/preflight then runs Fresh Formal Pilot on unchanged verified candidate under existing conservativeUSD5 authority. Continue recoverable scoped failures until genuine formal32/84 PASS or real security/budget gate. No Full evaluation/push/merge/deploy.
+
 ### Wire52 compact-source tooling step
 
 1. Read approved compact-source amendment before RED, own two debug files/two docs. Closed R02_TURN1_GENERAL_SOURCE_COMPACT_BASELINE only exact original __sources enum literals→seven short strings; derive strict source families/components/keys/collision-free codes, no current/prompt/context/mapping change. Pin original/transformed schema/request/seed/context/localrefs.

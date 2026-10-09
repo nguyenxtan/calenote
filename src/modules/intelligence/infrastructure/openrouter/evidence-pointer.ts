@@ -38,6 +38,36 @@ export function primaryEvidencePointerDomain(input:ContextInput):string[] {
  if(!domain.length)throw Error("EVIDENCE_SOURCE_DOMAIN_EMPTY");
  return domain;
 }
+export const PRIMARY_EVIDENCE_SOURCE_CODEBOOK_VERSION="primary-evidence-source-codebook-1" as const;
+export function primaryEvidenceSourceCodebook(input:ContextInput) {
+ const entries=primaryEvidencePointerDomain(input).map(pointerJson=>{
+  const pointer=JSON.parse(pointerJson) as {kind:"USER_TURN"|"USER_SEGMENT"|"CONTEXT_FACT";turn?:number;segment?:number;ref?:string};
+  const code=pointer.kind==="USER_TURN"?`U${pointer.turn}`:pointer.kind==="USER_SEGMENT"?`S${pointer.turn}.${pointer.segment}`:`F${pointer.ref}`;
+  return Object.freeze({code,pointerJson,kind:pointer.kind,turn:pointer.turn});
+ });
+ const forward=new Map(entries.map(entry=>[entry.code,entry.pointerJson])),inverse=new Map(entries.map(entry=>[entry.pointerJson,entry.code]));
+ if(forward.size!==entries.length||inverse.size!==entries.length)throw Error("EVIDENCE_SOURCE_CODE_COLLISION");
+ return Object.freeze({entries:Object.freeze(entries),codes:Object.freeze(entries.map(entry=>entry.code)),currentCodes:Object.freeze(entries.filter(entry=>entry.kind!=="CONTEXT_FACT"&&entry.turn===input.currentTurn).map(entry=>entry.code)),
+  decode:(code:unknown)=>typeof code==="string"?forward.get(code):undefined,
+  encode:(pointerJson:string)=>{const code=inverse.get(pointerJson);if(code===undefined)throw Error("EVIDENCE_SOURCE_CODE_UNAVAILABLE");return code;}});
+}
+/** Exact request-bound lookup only. Extra/alternative JSON remains unchanged. */
+export function expandPrimaryEvidenceSourceCodes(raw:unknown,input:ContextInput):unknown {
+ const book=primaryEvidenceSourceCodebook(input);
+ const item=(value:unknown,path:Path):unknown=>{
+  if(!object(value))return value;
+  const evidence=Object.getOwnPropertyDescriptor(value,"evidence")?.value;
+  if(!object(evidence))return value;
+  const code=Object.getOwnPropertyDescriptor(evidence,"primaryEvidence")?.value;
+  const pointer=book.decode(code);
+  if(pointer===undefined)throw new EvidencePointerFailure([...path,"evidence","primaryEvidence"],projectEvidencePointerStructure("SOURCE_CODE_INVALID",{kind:code},input));
+  return {...value,evidence:{...evidence,primaryEvidence:pointer}};
+ };
+ if(!object(raw))return raw;
+ return {...raw,requestTarget:item(raw.requestTarget,["requestTarget"]),
+  query:typeof raw.operationCode==="string"&&["3","4","5"].includes(raw.operationCode)?item(raw.query,["query"]):raw.query,
+  changes:Array.isArray(raw.changes)?raw.changes.map((value,index)=>item(value,["changes",index])):raw.changes};
+}
 /** Only explicit source pointers are expanded. No value search or repair. */
 export function materializeProviderEvidence(raw:unknown,input?:ContextInput,strictPointers=false):unknown {
  const ref=(value:unknown,path:Path):unknown=>{

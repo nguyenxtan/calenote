@@ -30,12 +30,12 @@ it("serialized query policy delivers current continuation evidence ownership", (
   const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"xem lịch"},{role:"ASSISTANT",text:"Bạn muốn xem khoảng nào?"},{role:"USER",text:"tuần sau"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const request = serializeContextRequest(input);
   expect(request.messages[0].content).toContain("A query continuation needs current USER evidence for its new period:");
-  expect(request.messages[0].content).toContain('with currentTurn=2 and "tuần sau", primaryEvidence uses USER_TURN 2, not generic LIST turn0 alone.');
+  expect(request.messages[0].content).toContain('with currentTurn=2 and "tuần sau", primaryEvidence selects U2, not generic LIST turn0 alone.');
   expect(JSON.parse(request.messages[1].content)).toEqual({ ...input, numericOwnership: numericOwnershipCatalogue(input), fieldCapability: deriveGenerationFieldCapability(input) });
 });
 
 it("target continuation example binds latest USER rather than the original task", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example with currentTurn=6 and latest USER text "6h.": CURRENT target evidence selects USER_TURN 6, not the original task at turn 0; reminderTime evidence also uses turn 6.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example with currentTurn=6 and latest USER text "6h.": CURRENT target primaryEvidence selects U6, not the original task at turn 0; reminderTime evidence also uses turn 6.');
 });
 
 it("source text is application-owned rather than model-authored quotation", () => {
@@ -77,7 +77,7 @@ it("operation wire uses one semantic selector and never duplicates ownership tag
 it("serialized provider policy keeps target labels in operationCode, never a bare carrier", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("CURRENT/NEW/UNRESOLVED are operationCode meanings.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("requestTarget MUST be an evidence JSON object, never bare string/JSON-encoded object string; no kind.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('"operationCode":"0","requestTarget":{"evidence":{"primaryEvidence":"{\\"kind\\":\\"USER_TURN\\",\\"turn\\":<input.currentTurn>}","additionalEvidenceJson":"[]"}}');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('"operationCode":"0","requestTarget":{"evidence":{"primaryEvidence":"U6","additionalEvidenceJson":"[]"}}');
 });
 
 it("single lead reminder policy does not manufacture a daily series", () => {
@@ -111,12 +111,12 @@ it("serialized policy specifies normalized exam task titles without changing evi
 });
 
 it("final target evidence check distinguishes targeting from historical operand sources", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: every CURRENT/NEW primary/extra parses to USER_TURN/input.currentTurn.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final target check: every CURRENT/NEW primary code expands, and extra pointer parses, to USER_TURN/input.currentTurn (eligible listed USER_SEGMENT also allowed)");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Historical USER/facts support eligible operands, never targeting; non-target scope unchanged.");
 });
 
 it("mutating primary source is current while SET retains the general source domain", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("REPLACE/CLEAR primary evidence selects a current USER pointer from the mutating source enum; historical/fact extras never replace that primary requirement.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("REPLACE/CLEAR primary evidence selects a current USER code from the mutating source enum; historical/fact extras never replace that primary requirement.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("SET keeps the general source domain. Source availability grants no entailment, current-target authority or fact-scope permission.");
 });
 
@@ -131,8 +131,8 @@ it("a scoped relation answer does not introduce a second numeric operand", () =>
 });
 
 it("encoded USER_TURN contains only explicit source identity", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('USER evidence: only source pointer {"kind":"USER_TURN","turn":N}, with exactly these two keys.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("pointers grant no entailment/authority.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("U<turn> for USER_TURN, S<turn>.<segment> for USER_SEGMENT, F<existing-alias> for CONTEXT_FACT");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("codes grant no authority.");
 });
 
 it("request target evidence uses the supplied current-turn index, including assistant turns", () => {
@@ -265,6 +265,6 @@ it("carrier indexes count only this emitted proposal and every non-null carrier 
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Sole current reminderTime change: index0 despite earlier retained fields");
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence must select an exact JSON string from the request schema's shared source enum");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");
 });

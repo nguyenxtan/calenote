@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidencePointerDomain} from "./evidence-pointer";
+import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
@@ -679,7 +679,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     if(!changes.anyOf.length)schema.properties!.changes={type:"array",items:{type:"null"},maxItems:0};
   }
   if(primaryEvidenceInput!==undefined){
-    const domain=primaryEvidencePointerDomain(primaryEvidenceInput);
+    const sourceCodebook=primaryEvidenceSourceCodebook(primaryEvidenceInput),domain=[...sourceCodebook.codes];
     const requiredClock=isInitialExplicitEventClockRequired(primaryEvidenceInput)?"eventTime":isInitialExplicitReminderClockRequired(primaryEvidenceInput)?"reminderTime":null;
     if(requiredClock){
       const root=`${requiredClock}Change`;
@@ -713,7 +713,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     schema=pool(schema);schema.$defs!.__e=evidence;
     // A stricter sufficient generation subset: mutating primary evidence is
     // current USER only; the unchanged backend still accepts ANY current ref.
-    const currentDomain=domain.filter(text=>{const pointer=JSON.parse(text) as {kind:string;turn?:number};return ["USER_TURN","USER_SEGMENT"].includes(pointer.kind)&&pointer.turn===primaryEvidenceInput.currentTurn;});
+    const currentDomain=[...sourceCodebook.currentCodes];
     const omitted:Schema={},splits=new WeakSet<Schema>();
     const specialize=(node:Schema):Schema=>{
       const result=mapSchemas(node,specialize);
@@ -793,7 +793,8 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
     const unfolded=indexedChangeCarriers(raw as Record<string,unknown>,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false);
-    const object = dateJsonOperands(operationValues(materializeProviderEvidence(unfolded,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
+    const pointed=input?expandPrimaryEvidenceSourceCodes(unfolded,input):unfolded;
+    const object = dateJsonOperands(operationValues(materializeProviderEvidence(pointed,input,input!==undefined) as Record<string,unknown>,"decode"),"decode");
     requireWireKeys(object, coreKeys, Object.keys(originalV3.properties!), []);
     let period:ListPeriodProposal|undefined;
     let queryWire=object.query;

@@ -3,6 +3,10 @@ import { expect, it } from "vitest";
 import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
+it("primary source codes remain untrusted while exact source mapping remains application owned",()=>{
+ for(const path of ["requestTarget.evidence.primaryEvidence","query.evidence.primaryEvidence","changes[].evidence.primaryEvidence"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",canAuthorizeRead:false,canAuthorizeWrite:false});
+ expect(authority.classifyOutputPathV3("transport.codebookMapping")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
+});
 
 // Inspect active schema branches independently of the registry; adding a leaf
 // without an authority rule must fail, rather than inherit a broad prefix.

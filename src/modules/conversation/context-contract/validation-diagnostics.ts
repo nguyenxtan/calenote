@@ -11,7 +11,7 @@ for(const key of ["titleChange","reminderDateChange","reminderTimeChange","event
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
 export interface EvidencePointerDiagnostic {
-  reason:"STRICT_USER_QUOTE"|"POINTER_SHAPE"|"INPUT_MISSING"|"TURN_INVALID"|"SOURCE_MISSING"|"SOURCE_ROLE"|"SOURCE_TEXT_INVALID"|"SEGMENT_INVALID"|"SEGMENT_SOURCE_UNAVAILABLE"|"SEGMENT_MISSING"|"SEGMENT_EMPTY"|"SEGMENT_OCCURRENCE_MISSING"|"EXPANDED_REF_INVALID";
+  reason:"SOURCE_CODE_INVALID"|"STRICT_USER_QUOTE"|"POINTER_SHAPE"|"INPUT_MISSING"|"TURN_INVALID"|"SOURCE_MISSING"|"SOURCE_ROLE"|"SOURCE_TEXT_INVALID"|"SEGMENT_INVALID"|"SEGMENT_SOURCE_UNAVAILABLE"|"SEGMENT_MISSING"|"SEGMENT_EMPTY"|"SEGMENT_OCCURRENCE_MISSING"|"EXPANDED_REF_INVALID";
   pointerKind:"USER_QUOTE"|"USER_TURN"|"USER_SEGMENT"|"CONTEXT_FACT"|"UNKNOWN";
   pointerKindType:string;pointerKindDigest?:string;pointerKindLength?:number;
   requestedTurn?:number;requestedSegment?:number;

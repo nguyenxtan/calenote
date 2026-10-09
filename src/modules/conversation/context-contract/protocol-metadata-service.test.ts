@@ -117,7 +117,7 @@ it("selected build-time oversized refusal preserves pending candidate source and
   expect(await h.run(0, "nhắc đi thi 8/10/2026 8h")).toEqual({ status: "DRAFT_CREATED" });
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)];
+    const evidence = [{kind:"USER_TURN",turn:Number(target.evidence.primaryEvidence.slice(1))}, ...JSON.parse(target.evidence.additionalEvidenceJson)];
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(1, "nhắc đi thi 8/10/2026 8h");
@@ -150,7 +150,7 @@ it.each(["SCHEMA", "EVIDENCE", "PROVIDER", "BUDGET", "SIZE"] as const)("selected
   if (failure === "EVIDENCE") h.setWireMutation(wire => {
     const object = wire as { titleChange: {index:number;change:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}} };
     const change=object.titleChange.change;
-    return { ...object, titleChange:{...object.titleChange,change:{...change,evidence:{...change.evidence,primaryEvidence:JSON.stringify({...JSON.parse(change.evidence.primaryEvidence),quote:"not present in the current user turn"})}}} };
+    return { ...object, titleChange:{...object.titleChange,change:{...change,evidence:{...change.evidence,primaryEvidence:JSON.stringify({...{kind:"USER_TURN",turn:Number(change.evidence.primaryEvidence.slice(1))},quote:"not present in the current user turn"})}}} };
   });
   expect(await h.run(0, failure === "SIZE" ? "x".repeat(1801) : "nhắc đi thi")).toEqual({ status: "REJECTED" });
   expect(h.getRequests()).toBe(failure === "SIZE" || failure === "BUDGET" ? 0 : 1);
@@ -169,7 +169,7 @@ it("selected prior no-A grounded candidate survives operational refusal with ori
   const h = await selectedHarness();
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [JSON.parse(target.evidence.primaryEvidence), ...JSON.parse(target.evidence.additionalEvidenceJson)];
+    const evidence = [{kind:"USER_TURN",turn:Number(target.evidence.primaryEvidence.slice(1))}, ...JSON.parse(target.evidence.additionalEvidenceJson)];
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(0, "nhắc đi thi");

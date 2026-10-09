@@ -13,7 +13,8 @@ import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../..
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {parseGoogleLiteEuContextSectionsV3,decodeGoogleLiteEuContextTransportV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
-import {ContextInputSchema} from "../../src/modules/conversation/context-contract/contracts";
+import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
+import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
 import {resolveSingleValidationTarget} from "./context-contract-runner";
@@ -165,7 +166,7 @@ it("string-selector diagnostic changes only wire enum representation without run
  expect(probe.properties!.operationCode).toEqual({type:"string",enum:Array.from({length:12},(_,i)=>String(i))});
  expect({...probe,properties:{...probe.properties,operationCode:original.properties!.operationCode}}).toEqual(original);
  expect(JSON.stringify(original)).toBe(before);
- const raw=encodeFixtureV3(frozenContextProposal({turns:[{role:"USER",text:"Có lịch nào ko?"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R01",0)) as Record<string,unknown>;
+ const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal({turns:[{role:"USER",text:"Có lịch nào ko?"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R01",0))) as Record<string,unknown>;
  raw.operationCode=3;
  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
@@ -203,7 +204,11 @@ const r02CompactMode="R02_TURN1_GENERAL_SOURCE_COMPACT_BASELINE" as const;
 async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
- const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{schema=serializeContextRequest(input).response_format.json_schema.schema;return {fixtureFault:"SCHEMA_INVALID"};});
+ const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{schema=serializeContextRequest(input).response_format.json_schema.schema;
+  // Public historical structural specimen: restore only original source literals,
+  // then assert the immutable635 SHA. Never used by current production dispatch.
+  const book=primaryEvidenceSourceCodebook(input);for(const key of ["__sources","__current"]){const definition=schema.$defs![key];if(typeof definition==="boolean"||!definition.enum)throw Error("HISTORICAL_SCHEMA_DOMAIN");definition.enum=definition.enum.map(code=>{const pointer=book.decode(code);if(pointer===undefined)throw Error("HISTORICAL_SOURCE_CODE");return pointer;});}
+  return {fixtureFault:"SCHEMA_INVALID"};});
  try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
  expect(schema).toBeDefined();return schema!;
 }
@@ -271,140 +276,14 @@ it("R02 compact source probe preserves seven ordered choices and current members
  const restore=structuredClone(probe);restore.$defs!.__sources=structuredClone(original.$defs!.__sources);expect(JSON.stringify(restore)).toBe(before);expect(JSON.stringify(original)).toBe(before);
  expect(hash(JSON.stringify(probe))).toBe("2d1b14bd9c08fa5ad646270f216816b2f538f8a25ec9a663cf30d09ad8ea7cd1");
 });
-it.each([200,400])("R02 compact source probe HTTP%i uses actual code and unchanged decoder refuses it",async status=>{
- const s=setup();let calls=0,transportError:unknown;
- try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
- const result=await runDebugLoopExecution(a,candidate,r02CompactMode as never,async request=>{
-  calls++;try{
-   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("2d1b14bd9c08fa5ad646270f216816b2f538f8a25ec9a663cf30d09ad8ea7cd1");expect(hash(JSON.stringify(request))).toBe("16d50250b7aa1c4f1aec14db5efa68dc5c7827ced4be422b9359d51d0f9497a8");
-   const source=request.response_format.json_schema.schema.$defs!.__sources;if(typeof source==="boolean")throw Error("TEST_SOURCE_OBJECT");const code=source.enum![1];expect(code).toBe("U2");expect(source.type).toBe("string");expect(source.enum).toContain(code);
-   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",1));
-   if(!content||typeof content!=="object"||Array.isArray(content)||!("requestTarget" in content))throw Error("TEST_WIRE_OBJECT");
-   const target=content.requestTarget;if(!target||typeof target!=="object"||Array.isArray(target)||!("evidence" in target))throw Error("TEST_TARGET_OBJECT");
-   const evidence=target.evidence;if(!evidence||typeof evidence!=="object"||Array.isArray(evidence)||!("primaryEvidence" in evidence))throw Error("TEST_EVIDENCE_OBJECT");evidence.primaryEvidence=code;
-   expect(evidence.primaryEvidence).toBe("U2"); // Actual diagnostic syntax, not old JSON-pointer surrogate.
-   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-compact",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  }catch(error){transportError=error;throw error}
- },{now:()=>100});
- if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- expect(result.responses[0].status).toBe("FAILURE");
- if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["requestTarget","evidence","primaryEvidence"],expected:"JSON_OBJECT"}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
- expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
- await expect(runDebugLoopExecution(a,candidate,r02CompactMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
- }finally{s.cleanup()}
-});
-it.each([{status:200,quote:false},{status:200,quote:true},{status:400,quote:false}])("R02 general source probe HTTP$status quote=$quote preserves strict runtime boundary",async({status,quote})=>{
- const s=setup();let calls=0,transportError:unknown;
- try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
- const result=await runDebugLoopExecution(a,candidate,r02GeneralStringMode as never,async request=>{
-  calls++;try{
-   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("8e1d159043ecdb9a73d3d28a9e4d22c06d773923f95f591dcc66cda6dcd30a9e");expect(hash(JSON.stringify(request))).toBe("89aa62066b98e240e051007b0c233a03d184efe14385a34c868dbe5aecb810a1");
-   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
-   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));expect(decodeGoogleLiteEuContextTransportV3(content,CONTEXT_PROTOCOL_V3,undefined,undefined,ContextInputSchema.parse(context)).status).toBe("PARSED");
-   if(quote){
-    if(!content||typeof content!=="object"||Array.isArray(content)||!("requestTarget" in content))throw Error("TEST_WIRE_OBJECT");
-    const target=content.requestTarget;if(!target||typeof target!=="object"||Array.isArray(target)||!("evidence" in target))throw Error("TEST_TARGET_OBJECT");
-    const evidence=target.evidence;if(!evidence||typeof evidence!=="object"||Array.isArray(evidence)||!("primaryEvidence" in evidence))throw Error("TEST_EVIDENCE_OBJECT");
-    evidence.primaryEvidence=JSON.stringify({kind:"USER_QUOTE",turn:2,quote:"PRIVATE_SOURCE_SECRET",occurrence:1});
-    const source=request.response_format.json_schema.schema.$defs!.__sources;expect(source).toEqual({type:"string"});expect(typeof evidence.primaryEvidence).toBe("string");
-   }
-   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-general",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  }catch(error){transportError=error;throw error}
- },{now:()=>100});
- if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- expect(result.responses[0].status).toBe(status===200&&!quote?"SUCCESS":"FAILURE");
- if(quote){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["requestTarget","evidence","primaryEvidence"],expected:"EVIDENCE_SOURCE_POINTER",evidencePointer:{reason:"STRICT_USER_QUOTE",pointerKind:"USER_QUOTE"}}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
- expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_SOURCE_SECRET");expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0});expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
- await expect(runDebugLoopExecution(a,candidate,r02GeneralStringMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
- }finally{s.cleanup()}
-});
-it.each([200,400])("R02 coalesced probe HTTP%i keeps original fixture wire acceptance and one terminal call",async status=>{
- const s=setup();let calls=0,transportError:unknown;
- try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
- const result=await runDebugLoopExecution(a,candidate,r02CoalescedMode as never,async request=>{
-  calls++;try{
-   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("2740170b5dd2d4fe9868016766e37ea9b233254be73f7156f72dcd906cfaaafe");expect(hash(JSON.stringify(request))).toBe("8cc6e16865e5c685c5e0b65e77262bf03ab13e63da5c26d913733b2f0cdde042");
-   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
-   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
-   expect(decodeGoogleLiteEuContextTransportV3(content,CONTEXT_PROTOCOL_V3,undefined,undefined,ContextInputSchema.parse(context)).status).toBe("PARSED");
-   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-coalesced",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  }catch(error){transportError=error;throw error}
- },{now:()=>100});
- if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- expect(result.responses[0].status).toBe(status===200?"SUCCESS":"FAILURE");expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0}); // No final oracle requirement.
- expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(a,candidate,r02CoalescedMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
- }finally{s.cleanup()}
-});
-it.each([200,400])("R02 current key probe HTTP%i authors reachable CLEAR yet unchanged runtime refuses new key",async status=>{
- const s=setup();let calls=0,transportError:unknown;
- try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
- const result=await runDebugLoopExecution(a,candidate,r02CurrentKeyMode as never,async request=>{
-  calls++;try{
-   const schema=request.response_format.json_schema.schema;
-   expect(hash(JSON.stringify(schema))).toBe("6a9790bcaa4f2ef63f458fb87b8ac353c8541ca893f4c925525a192d5882a117");
-   expect(hash(JSON.stringify(request))).toBe("80eb1e580c911d7589cc070585c156f930df6c7a51144ecad34033cfd0f7fff8");
-   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
-   const original=googleLiteEuContextWireSchemaV3(input.fieldCapability,ContextInputSchema.parse(context)).schema;
-   const carrier=original.properties!.eventDateChange;if(typeof carrier==="boolean")throw Error("TEST_CARRIER_OBJECT");
-   const option=carrier.anyOf![0];if(typeof option==="boolean")throw Error("TEST_CARRIER_OPTION_OBJECT");
-   const change=option.properties!.change;if(typeof change==="boolean")throw Error("TEST_CHANGE_OBJECT");
-   const branch=change.anyOf![2];if(typeof branch==="boolean")throw Error("TEST_CHANGE_BRANCH_OBJECT");
-   expect(branch.properties!.field).toEqual({type:"string",enum:["eventDate"]});expect(branch.properties!.operation).toEqual({type:"string",enum:["CLEAR"]});expect(branch.properties!.value).toEqual({type:"null"});expect(branch.properties!.evidence).toEqual({$ref:"#/$defs/__ec"});
-   const current=schema.$defs!.__current;if(typeof current==="boolean")throw Error("TEST_CURRENT_DOMAIN_OBJECT");
-   const pointer=current.enum![0];expect(typeof pointer).toBe("string");
-   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
-   if(!content||typeof content!=="object"||Array.isArray(content)||!("changes" in content)||!("eventDateChange" in content)||!Array.isArray(content.changes))throw Error("TEST_WIRE_OBJECT");
-   expect(content.eventDateChange).toBeNull();
-   const index=content.changes.length+Object.entries(content).filter(([key,value])=>key.endsWith("Change")&&value!==null).length;
-   const evidence={currentPrimaryEvidence:pointer,additionalEvidenceJson:"[]"};
-   expect(Object.keys(evidence)).toEqual(["currentPrimaryEvidence","additionalEvidenceJson"]);
-   const shared=schema.$defs!.__ec;if(typeof shared==="boolean")throw Error("TEST_EVIDENCE_OBJECT");expect(shared.required).toEqual(Object.keys(evidence));expect(shared.additionalProperties).toBe(false);
-   content.eventDateChange={index,change:{field:"eventDate",operation:"CLEAR",value:null,evidence}};
-   const old=structuredClone(content);old.eventDateChange={index,change:{field:"eventDate",operation:"CLEAR",value:null,evidence:{primaryEvidence:pointer,additionalEvidenceJson:"[]"}}};
-   let oldWireRefusal=false;decodeGoogleLiteEuContextTransportV3(old,CONTEXT_PROTOCOL_V3,undefined,()=>{oldWireRefusal=true},ContextInputSchema.parse(context));
-   expect(oldWireRefusal).toBe(false); // No claim of final semantic/oracle acceptance.
-   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-key",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  }catch(error){transportError=error;throw error}
- },{now:()=>100});
- if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
- expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(a,candidate,r02CurrentKeyMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
- expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
- }finally{s.cleanup()}
-});
-it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode HTTP$status is one seeded terminal request with unchanged max4 decoder",async({mode,status})=>{
- const s=setup();let calls=0,transportError:unknown;
- try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
- const result=await runDebugLoopExecution(a,candidate,mode as never,async request=>{
-  calls++;try{
-   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
-   expect(hash(JSON.stringify(context))).toBe("560569f4bc260b7921602f5e5a892b87f5a384e856ea2b845e5b473df3af2c08");
-   const uncertaintySchema=request.response_format.json_schema.schema.properties!.uncertainties;
-   if(typeof uncertaintySchema==="boolean")throw Error("TEST_UNCERTAINTY_SCHEMA_OBJECT");
-   expect(uncertaintySchema.maxItems).toBe(mode===r02Turn1Modes[0]?4:undefined);
-   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
-   if(!content||typeof content!=="object"||Array.isArray(content)||!("uncertainties" in content))throw Error("TEST_WIRE_OBJECT");
-   content.uncertainties=Array.from({length:5},()=>({fieldCode:6,reason:"MISSING",alternatives:[]}));
-   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-bound",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  }catch(error){transportError=error;throw error}
- },{now:()=>100});
- if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:1,status:"FAILURE"});
- if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["uncertainties"],code:"WIRE_SHAPE_INVALID",actualCount:5,maxItems:4}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
- expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
- await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
- expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
- expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));
- expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
+// Historical positive executions remain in immutable wire52 evidence. Current
+// application must never be relabelled as that historical runner/request.
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode,r02CompactMode])("%s refuses current wire53 before HTTP and preserves accounting/history",async mode=>{
+ const s=setup();let calls=0;try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN_HTTP");},{now:()=>100});
+ expect(calls).toBe(0);expect(result).toMatchObject({providerHttpAttempts:0,terminal:true,pilotCredit:false});expect(result.responses[0].status).toBe("FAILURE");
+ expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+105472); // Existing durable reservation is conservatively retained even before HTTP.
+ await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN_HTTP");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(0);
  }finally{s.cleanup()}
 });
 it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode,r02CompactMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
@@ -511,7 +390,7 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    expect((content as {changes:unknown[]}).changes).toEqual([]);
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
    const oldKey=structuredClone(content) as {eventDateChange:typeof carrier};
-   Object.assign(oldKey.eventDateChange.change,{evidence:{primaryEvidence:pointer,additionalEvidenceJson:"[]"}});
+   Object.assign(oldKey.eventDateChange.change,{evidence:{primaryEvidence:"U2",additionalEvidenceJson:"[]"}});
    const oldKeyDiagnostics:unknown[]=[];
    const oldKeyResult=decodeGoogleLiteEuContextTransportV3(oldKey,CONTEXT_PROTOCOL_V3,d=>oldKeyDiagnostics.push(d),d=>oldKeyDiagnostics.push(d),ContextInputSchema.parse(input));
    expect(oldKeyResult.status).toBe("REFUSED");
@@ -555,11 +434,11 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  if(status===200&&mode==="SOURCE_INTEGER_BASELINE"){
-  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","evidence","primaryEvidence"],actualType:"number",expected:"BOUNDED_JSON_OBJECT"}]}}});
+  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","evidence","primaryEvidence"],actualType:"number",expected:"EVIDENCE_SOURCE_POINTER"}]}}});
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  if(status===200&&mode==="SOURCE_COMPACT_BASELINE"){
-  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","evidence","primaryEvidence"],expected:"JSON_OBJECT"}]}}});
+  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","evidence","primaryEvidence"],expected:"EVIDENCE_SOURCE_POINTER"}]}}});
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
