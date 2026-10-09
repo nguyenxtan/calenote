@@ -26,7 +26,7 @@ it("provider schema never duplicates nullable evidence slots",()=>{
 it("historical fanout bounds remain for the unchanged remainder; wire31 carrier costs are explicit, not live admission",()=>{
  const schema=googleLiteEuContextWireSchemaV3().schema;
  const remainder=structuredClone(schema) as unknown as {properties:Record<string,unknown>;required:string[]};
- for(const root of ["reminderDateChange","reminderTimeChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
+ for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
  const baseline=contextWireComplexity(remainder),metrics=contextWireComplexity(schema);
  // Preserve historical bounds; do not claim the amended schema was admitted
  // merely because its unchanged remainder satisfies a previous envelope.
@@ -34,12 +34,12 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(baseline.unions).toBeLessThanOrEqual(19);
  expect(baseline.branches).toBeLessThanOrEqual(51);
  expect(baseline.references).toBeLessThanOrEqual(42);
- expect(metrics).toMatchObject({nullableUnions:14,unions:20,branches:51,references:23});
- // Two nullable roots, each with strict non-null versus CLEAR change branches.
+ expect(metrics).toMatchObject({nullableUnions:15,unions:22,branches:55,references:24});
+ // Three nullable roots, each with strict non-null versus CLEAR change branches.
  // Merging operation/value branches would incorrectly permit SET/null.
- expect(metrics.nullableUnions-baseline.nullableUnions).toBe(2);
- expect(metrics.unions-baseline.unions).toBe(4);
- expect(metrics.branches-baseline.branches).toBe(8);
+ expect(metrics.nullableUnions-baseline.nullableUnions).toBe(3);
+ expect(metrics.unions-baseline.unions).toBe(6);
+ expect(metrics.branches-baseline.branches).toBe(12);
 });
 it("bad extras diagnostics expose structure, never serialized sensitive values",()=>{
  const raw=wire(),diagnostics:unknown[]=[];

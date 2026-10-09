@@ -36,7 +36,7 @@ it("target continuation example binds latest USER rather than the original task"
 });
 
 it("source text is application-owned rather than model-authored quotation", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Never output quote, occurrence, text, spans or paraphrased source content.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("No quote/occurrence/text/spans/paraphrases.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("source contents are application-owned and immutable.");
 });
 
@@ -77,8 +77,8 @@ it("serialized provider policy keeps target labels in operationCode, never a bar
 });
 
 it("single lead reminder policy does not manufacture a daily series", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: Nhắc một lần trước cuộc họp 4 ngày. means frequency="ONCE", eventRelation="BEFORE_EVENT", leadOffsetDays=4 because một lần is explicit; omit occurrenceCount, never DAILY/count=1.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Without explicit một lần, omit frequency too: a distance is not cadence or ONCE evidence.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Nhắc một lần trước cuộc họp 4 ngày. grounds ONCE/BEFORE_EVENT/leadOffsetDays4, omits occurrenceCount, never DAILY/count1; without một lần, omit frequency too.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Distance cannot invent DAILY or default ONCE.");
 });
 
 it("a preceding distance cannot supply an unstated consecutive cadence", () => {
@@ -117,7 +117,7 @@ it("mutating primary source is current while SET retains the general source doma
 
 it("pending proposed slot values remain usable conversation context", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Non-conflicting PROPOSED/RESOLVED values are retained, not missing for lack of confirmation.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Read count from activeRequest.slots.occurrenceCount.value and cadence from activeRequest.slots.frequency.value for scoped pending answers; CONFLICT is unresolved.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Scoped answers read activeRequest.slots.occurrenceCount.value and frequency.value; CONFLICT is unresolved.");
 });
 
 it("a scoped relation answer does not introduce a second numeric operand", () => {
@@ -141,8 +141,8 @@ it("event-clause clock and subject stay distinct from notification clock", () =>
 });
 
 it("retained finite series is completed by relation without duplicating count into offset", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("For example, accepted frequency=DAILY and occurrenceCount=3 plus a continuation requesting the three days before the event means SET eventRelation=BEFORE_EVENT only; keep occurrenceCount=3 and leadOffsetDays absent.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("The backend expands the N preceding notification dates from count+relation; no leadOffsetDays is needed to represent that N-day span.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Retained DAILY/count3 plus three preceding days SETs BEFORE_EVENT only, keeps count3 and no leadOffsetDays.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Backend expands the N dates from count+relation, not a copied offset.");
 });
 
 it("unresolved query requires a wire uncertainty independently of conversational advice", () => {
@@ -162,8 +162,8 @@ it("query continuation never borrows reminder request targeting", () => {
 });
 
 it("series continuation distinguishes preceding notification count from a single lead offset", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("For a retained DAILY consecutive series, a continuation specifying the preceding days establishes BEFORE_EVENT, retaining its occurrenceCount; do not reinterpret that same count as leadOffsetDays.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("A separate leadOffsetDays requires an independently specified single offset, not the series duration/count restated with before.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Retained DAILY preceding-day answers establish BEFORE_EVENT and KEEP count, never copy series duration/count into leadOffsetDays.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Only independently specified single/different offsets support leadOffsetDays and backend conflict computation.");
 });
 
 it("numeric clock notation preserves canonical H24 rather than inventing a meridiem qualifier", () => {
@@ -216,8 +216,8 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(JSON.stringify(input)).toBe(before);
 });
 it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Final date transport check: eventDate, reminderDate and endDate SET/REPLACE values must encode a complete canonical DateOperand object as a JSON string.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Relative tomorrow uses kind RELATIVE_DAY with offsetDays1, never the raw words mai/tomorrow, an ISO date string, or a JSON-encoded bare string.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE encode complete canonical DateOperand objects as JSON strings.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow is RELATIVE_DAY/offsetDays1, never raw mai/tomorrow, ISO dates or encoded bare strings.");
 });
 it("notification-owned date does not become an event date by field-order default", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A date modifying the instruction to remind belongs to reminderDate, not eventDate; an explicit event predicate owns its eventDate separately.");
@@ -226,13 +226,13 @@ it("notification-owned date does not become an event date by field-order default
 });
 
 it("keeps an already concise explicit task phrase without stylistic expansion", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve an already concise USER task phrase verbatim as title; do not expand it with synonymous verbs, objects or prepositions merely to sound natural.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve concise USER task wording/qualifiers verbatim; no synonymous verbs, extra objects or prepositions.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("đọc sách stays đọc sách, not đọc một cuốn sách");
 });
 
 it("continuation-only turns do not manufacture missing operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("A continuation-only or negated-abandonment turn without new task operands must emit no semantic changes or alternatives; KEEP existing slots and ask for the still-missing field.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Never manufacture an AMBIGUOUS clock object merely because reminderTime is missing.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("continuation-only/negated-abandonment without new operands emits no changes/alternatives; KEEP slots, ask the missing field.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("never manufacture AMBIGUOUS clocks for missing reminderTime.");
 });
 
 it("numeric ownership catalogue preserves explicitly single cadence", () => {
@@ -241,13 +241,13 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single occurrence independently grounds frequency ONCE, including when a clock is still missing; do not omit that supplied cadence under the distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain neither reminderDate nor reminderTime.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, reminderDateChange and reminderTimeChange are required nullable roots");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, reminderDate or reminderTime.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange and reminderTimeChange carriers");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange, reminderTimeChange and eventDateChange carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("not prior turns, retained state fields, source positions or one-based ordinals");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("three ordinary changes plus one non-null carrier means N=4; an appended carrier has index3, never index4");

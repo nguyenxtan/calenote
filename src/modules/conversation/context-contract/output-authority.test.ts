@@ -50,7 +50,7 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
   }
 });
 it("reminder carrier paths and original indexes are explicitly untrusted and closed",()=>{
-  for(const root of ["reminderDateChange","reminderTimeChange"]){
+  for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange"]){
     for(const suffix of ["",".index",".change",".change.field",".change.operation",".change.value",".change.evidence",".change.evidence.primaryEvidence",".change.evidence.additionalEvidenceJson"]){
       expect(authority.classifyOutputPathV3((root+suffix) as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
     }
