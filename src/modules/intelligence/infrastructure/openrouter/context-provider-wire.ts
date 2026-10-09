@@ -551,7 +551,7 @@ function indexedTitleSchema(root:Schema):Schema {
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount"] as const){
+  for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
       const branch=deref(raw,result),control=branch.properties!.field,fields=control.enum??[control.const];
@@ -575,7 +575,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   const result={...raw};
   if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
   const ordinaryChanges=raw.changes;
-  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false},{field:"eventDate",root:"eventDateChange",setOnly:false},{field:"eventTime",root:"eventTimeChange",setOnly:false},{field:"eventRelation",root:"eventRelationChange",setOnly:false},{field:"frequency",root:"frequencyChange",setOnly:false},{field:"occurrenceCount",root:"occurrenceCountChange",setOnly:false}] as const;
+  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false},{field:"eventDate",root:"eventDateChange",setOnly:false},{field:"eventTime",root:"eventTimeChange",setOnly:false},{field:"eventRelation",root:"eventRelationChange",setOnly:false},{field:"frequency",root:"frequencyChange",setOnly:false},{field:"occurrenceCount",root:"occurrenceCountChange",setOnly:false},{field:"endDate",root:"endDateChange",setOnly:false}] as const;
   const positions=new Map<number,unknown>();
   for(const definition of definitions){
     const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);
@@ -631,7 +631,7 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
   result.operationCode=operationWireCodes[code];delete result.intent;
   for(const key of ["requestTarget","query"]){const carrier=result[key];if(carrier){const copy={...(carrier as Record<string,unknown>)};delete copy.kind;result[key]=copy;}}
  }else{
-  const carriers=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange"];
+  const carriers=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange"];
   requireWireKeys(raw,providerSchemaV3.required!.filter(key=>!["conversationDirective","replyProposal",...carriers].includes(key)),Object.keys(providerSchemaV3.properties!).filter(key=>!carriers.includes(key)),[]);
   const code=raw.operationCode;
   const index=typeof code==="string"?operationWireCodes.indexOf(code):-1;

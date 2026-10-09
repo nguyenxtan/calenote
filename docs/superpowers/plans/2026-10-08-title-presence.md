@@ -1,5 +1,15 @@
 # Title Presence Implementation Plan
 
+### Approved wire49 endDate singleton execution
+
+Capability exclusion here means existing generic operation/current-source and bound-clock constraints: no new endDate numeric/clock availability flag. Preserve current numeric-root pruning unchanged, test endDate SET retained reuse versus bound-clock REPLACE/CLEAR refusal.
+
+1. RED actual ordinary endDate duplicate admission and sole-owner carrier roundtrip; independently authored SET/REPLACE/CLEAR with exact canonical JSON values/evidence preserved.
+2. Add nullable required endDateChange using existing bounded helper, remove all ordinary endDate branches, extend simultaneous restoration from eight to nine; never sequential splice/dedup/repair. Extend excluded-field/current-mutation/bound-clock pruning without resurrecting excluded branches or empty unions.
+3. Tests allops, original order across nine carriers+ordinary permutations, absent/null/malformed/duplicate/bypass/colliding/out-of-range indexes; exact date/evidence parity; allowed/excluded capability and historical/current/NEW source guards. Extend closed output-authority and finite diagnostic/privacy path tests. No canonical/evidence/oracle/legacy/parser/semantic capability change.
+4. Owned provider-wire.ts/.test.ts, output-authority.ts/.test.ts, validation-diagnostics.ts/.test.ts if required, prompt.ts/.test.ts, protocol.ts, necessary existing transport/evidence/capability/runner/fit pin tests and these two docs. Update nine-root prompt arithmetic and wire49 exact identities; preserve historical diagnostic strict guards/current drift refusal.
+5. Focused broad security/date/evidence/gateway/authority/query/runner regressions, actual326 additive12000/output1536, typecheck/scopedlint/diff then source/test freeze/report. Controller independent full/review/commit/FreshPilot; implementer no provider/credential/accounting/commit/full/children.
+
 ### Approved wire48 canonical date JSON execution
 
 1. RED canonical CIVIL/RELATIVE/WEEKDAY strings against current nine-slot decoder; target canonical-only acceptance with old C/R/W strict rejection. Preserve finite diagnostic stages/reasons/paths and privacy.

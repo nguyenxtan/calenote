@@ -252,13 +252,13 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single grounds ONCE even awaiting clock, never omitted by distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, eventRelation, frequency, occurrenceCount, reminderDate or reminderTime.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, reminderDateChange and reminderTimeChange are required nullable roots");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, eventRelation, frequency, occurrenceCount, endDate, reminderDate or reminderTime.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + count of all eight NON-NULL indexed carriers defined above, simultaneously");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + count of all nine NON-NULL indexed carriers defined above, simultaneously");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("never prior turns/state/source ordinals or one-based indexes");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Three ordinary changes + one carrier: N=4, appended index3, never4");
