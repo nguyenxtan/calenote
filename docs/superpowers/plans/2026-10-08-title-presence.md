@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire52 general-source diagnostic tooling step
+
+1. Read approved amendment before RED; own two debug files/two metadata docs. Closed R02_TURN1_GENERAL_SOURCE_STRING_BASELINE only original __sources enum7→type:string, no combined earlier axes; exact original/transformed schema/request/seed/context pins and local-ref guards.
+2. Tests prove outside-source byte equality/restoration, unchanged __current/evidence/topology/source availability/max4/branches; actual original pointer fake200 wirePARSED without forcedoracle. Separate invalid USER_QUOTE authored general primary string must existing STRICT_USER_QUOTE refuse/no reads/mutations/privacy; fake400 conservative UNKNOWN/duplicate/max1/0prereqs/no credit/no automatic nextmode/drift/history.
+3. Focused six tooling suites, standalone typecheck, lint/diff, freeze/report then independent C0/I0/selective localcommit/preflight/one controller probe. No implementer provider/key/accounting/commit/full/children. Appb008 immutable/latestfull9214PASS2oldskips remains applicable; broad suite not duplicated for tiny toolingdelta. Any production amendment requires its own full local/review/formal Pilot. No push/deploy.
+
 ### Approved wire52 current-evidence key tooling step
 
 1. RED closed R02_TURN1_CURRENT_KEY_BASELINE and exact key-only transform; own only context-debug-loop.ts/.test.ts plus these metadata docs. Keep app b0085bc immutable, old diagnostic guards unchanged, seed5b19cc0/context560569f4/original requeste48c60 and schema635f4734 pinned.

@@ -198,6 +198,7 @@ const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE
 const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"] as const;
 const r02CurrentKeyMode="R02_TURN1_CURRENT_KEY_BASELINE" as const;
 const r02CoalescedMode="R02_TURN1_REPLACE_COALESCED_BASELINE" as const;
+const r02GeneralStringMode="R02_TURN1_GENERAL_SOURCE_STRING_BASELINE" as const;
 async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
@@ -251,6 +252,41 @@ it("R02 coalesced probe merges only two exact REPLACE shells and preserves both 
  const restore=structuredClone(probe);restore.$defs!.__schema5=structuredClone(original.$defs!.__schema5);expect(JSON.stringify(restore)).toBe(before);expect(JSON.stringify(original)).toBe(before);
  expect(probe.$defs!.__sources).toEqual(original.$defs!.__sources);expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
  let consumers=0;const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&node.$ref==="#/$defs/__ec")consumers++;Object.values(node).forEach(walk)};walk(probe);expect(consumers).toBe(16);
+});
+it("R02 general source probe changes only the enum definition and restores original bytes",async()=>{
+ const original=await r02Turn1Schema(),before=JSON.stringify(original),probe=debugProbeSchema(original,r02GeneralStringMode as never);
+ expect(hash(JSON.stringify(probe))).toBe("8e1d159043ecdb9a73d3d28a9e4d22c06d773923f95f591dcc66cda6dcd30a9e");expect(probe.$defs!.__sources).toEqual({type:"string"});expect(original.$defs!.__sources.enum).toHaveLength(7);
+ const restore=structuredClone(probe);restore.$defs!.__sources=structuredClone(original.$defs!.__sources);expect(JSON.stringify(restore)).toBe(before);expect(JSON.stringify(original)).toBe(before);
+ expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.$defs!.__current.enum).toHaveLength(1);expect(probe.$defs!.__schema5).toEqual(original.$defs!.__schema5);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
+ const counts:Record<string,number>={};const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&typeof node.$ref==="string")counts[node.$ref]=(counts[node.$ref]??0)+1;Object.values(node).forEach(walk)};walk(probe);
+ expect(counts["#/$defs/__e"]).toBe(11);expect(counts["#/$defs/__ec"]).toBe(17);expect(counts["#/$defs/__sources"]).toBe(1);expect(counts["#/$defs/__current"]).toBe(1);
+});
+it.each([{status:200,quote:false},{status:200,quote:true},{status:400,quote:false}])("R02 general source probe HTTP$status quote=$quote preserves strict runtime boundary",async({status,quote})=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,r02GeneralStringMode as never,async request=>{
+  calls++;try{
+   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("8e1d159043ecdb9a73d3d28a9e4d22c06d773923f95f591dcc66cda6dcd30a9e");expect(hash(JSON.stringify(request))).toBe("89aa62066b98e240e051007b0c233a03d184efe14385a34c868dbe5aecb810a1");
+   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
+   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));expect(decodeGoogleLiteEuContextTransportV3(content,CONTEXT_PROTOCOL_V3,undefined,undefined,ContextInputSchema.parse(context)).status).toBe("PARSED");
+   if(quote){
+    if(!content||typeof content!=="object"||Array.isArray(content)||!("requestTarget" in content))throw Error("TEST_WIRE_OBJECT");
+    const target=content.requestTarget;if(!target||typeof target!=="object"||Array.isArray(target)||!("evidence" in target))throw Error("TEST_TARGET_OBJECT");
+    const evidence=target.evidence;if(!evidence||typeof evidence!=="object"||Array.isArray(evidence)||!("primaryEvidence" in evidence))throw Error("TEST_EVIDENCE_OBJECT");
+    evidence.primaryEvidence=JSON.stringify({kind:"USER_QUOTE",turn:2,quote:"PRIVATE_SOURCE_SECRET",occurrence:1});
+    const source=request.response_format.json_schema.schema.$defs!.__sources;expect(source).toEqual({type:"string"});expect(typeof evidence.primaryEvidence).toBe("string");
+   }
+   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-general",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  }catch(error){transportError=error;throw error}
+ },{now:()=>100});
+ if(transportError)throw transportError;
+ expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(result.responses[0].status).toBe(status===200&&!quote?"SUCCESS":"FAILURE");
+ if(quote){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["requestTarget","evidence","primaryEvidence"],expected:"EVIDENCE_SOURCE_POINTER",evidencePointer:{reason:"STRICT_USER_QUOTE",pointerKind:"USER_QUOTE"}}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
+ expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_SOURCE_SECRET");expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0});expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
+ await expect(runDebugLoopExecution(a,candidate,r02GeneralStringMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ }finally{s.cleanup()}
 });
 it.each([200,400])("R02 coalesced probe HTTP%i keeps original fixture wire acceptance and one terminal call",async status=>{
  const s=setup();let calls=0,transportError:unknown;
@@ -337,7 +373,7 @@ it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$m
  expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
  }finally{s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
  const real=serializeContextRequest;
  const spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{
   const request=real(input);
@@ -350,7 +386,7 @@ it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode].flatMap(mode=>["sc
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  }finally{spy.mockRestore();s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
  const original=await r02Turn1Schema();
  for(const fault of ["source","ref","bound"]){const drift=structuredClone(original);
   if(fault==="source")drift.$defs!.__sources.enum=["PRIVATE_SECRET"];
