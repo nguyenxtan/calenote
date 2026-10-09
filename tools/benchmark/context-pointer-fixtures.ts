@@ -37,7 +37,7 @@ export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
     if(wire.query)carrier(wire.query as Record<string,unknown>);
     (wire.changes as Array<Record<string,unknown>>).forEach(carrier);
     for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])if(wire[root])carrier((wire[root] as {change:Record<string,unknown>}).change);
-    for(const issue of wire.uncertainties as Array<{alternatives:string[]}>)issue.alternatives=issue.alternatives.map(text=>{const a=JSON.parse(text);return JSON.stringify({...a,evidence:a.evidence.map(ref)});});
+    for(const issue of wire.uncertainties as Array<{alternatives:string[]}>)issue.alternatives=issue.alternatives.map(text=>{const a=JSON.parse(text);carrier(a);return JSON.stringify(a);});
     return wire;
   };
   const valid = ConversationInterpretationV3Schema.safeParse(value);

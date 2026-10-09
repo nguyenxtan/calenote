@@ -9,6 +9,17 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it("wire59 bound alternative carrier restores canonical evidence without traversing its value",()=>{
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"title",reason:"UNSUPPORTED_COMBINATION",alternatives:[{value:"U0",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]}]});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as {uncertainties:Array<{alternatives:string[]}>};
+ raw.uncertainties[0].alternatives=[JSON.stringify({value:"U0",evidence:{primaryEvidence:"U0",additionalEvidenceJson:"[]"}})];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("PARSED");
+ expect(parseGoogleLiteEuContextSectionsV3(encodeGoogleLiteEuContextV3(canonical),CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+ const encoded=JSON.parse((encodeGoogleLiteEuContextV3(canonical) as typeof raw).uncertainties[0].alternatives[0]);
+ expect(encoded.evidence).toEqual({primaryEvidence:JSON.stringify({kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}),additionalEvidenceJson:"[]"});
+ raw.uncertainties[0].alternatives=[JSON.stringify(canonical.uncertainties[0].alternatives[0])];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+});
 function wire55Example(operation:"SET"|"REPLACE"|"CLEAR"="SET"){
  const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"Ngày 11/10 đi thi."}]});
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:bound.turns[0].text,occurrence:1}],value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
@@ -91,7 +102,7 @@ it.each([null,"PRIVATE_UNCERTAINTY_VALUE",{}])("wire52 nonarray uncertainty refu
 });
 it("wire52 restores only the outgoing root max4 and leaves uncertainty items and all other schema nodes unchanged",()=>{
  const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;
- expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a");
+ expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("d01607277e7e85a732e5acdc4919100afcd5b9f41d809f1ce87718f4c2d90ece");
 });
 it("wire52 valid zero/four uncertainty operands keep decoding while nested failures keep their exact item path",()=>{
  const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;
@@ -234,7 +245,7 @@ it.each([
  for(const field of ["eventDate","reminderDate","endDate"])for(const operation of ["SET","REPLACE","CLEAR"]){
    const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field,operation,value:operation==="CLEAR"?null:value,evidence}],uncertainties:[{field:"eventDate",reason:"AMBIGUOUS",alternatives:[{value,evidence}]}]});
    const wire=encodeGoogleLiteEuContextV3(canonical) as {uncertainties:Array<{alternatives:string[]}>};
-   expect(JSON.parse(wire.uncertainties[0].alternatives[0])).toEqual({value,evidence});
+   expect(JSON.parse(wire.uncertainties[0].alternatives[0])).toEqual({value,evidence:{primaryEvidence:JSON.stringify(evidence[0]),additionalEvidenceJson:"[]"}});
    expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
  }
  for(const query of [{kind:"CALENDAR_DATE",date:value,outputCalendar:"GREGORIAN",evidence},{kind:"LIST",period:{kind:"DAY",date:value},statusScope:"DEFAULT",evidence},{kind:"LIST",period:{kind:"DATE_BOUNDS",from:value,through:value},statusScope:"DEFAULT",evidence},{kind:"LIST",period:{kind:"DATE_BOUNDS",from:null,through:value},statusScope:"DEFAULT",evidence}]){
@@ -305,14 +316,18 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
-it("actual decoded alternative diagnostics distinguish canonical arrays from unconverted carrier objects",()=>{
+it("wire59 carrier failures stay private and canonical alternative observers still distinguish malformed objects",()=>{
  const secret="PRIVATE_ALT_VALUE_DO_NOT_RETAIN",evidence=[{kind:"USER_QUOTE",turn:0,quote:secret,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence}]}]});
  const raw=encodeGoogleLiteEuContextV3(canonical) as {uncertainties:Array<{alternatives:string[]}>};
  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
  raw.uncertainties[0].alternatives[0]=JSON.stringify({value:"DAILY",evidence:{primaryEvidence:secret,additionalEvidenceJson:secret}});
  const diagnostics:unknown[]=[];
- expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,value=>{diagnostics.push(value);}).status).toBe("REFUSED");
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>{diagnostics.push(value);}).status).toBe("REFUSED");
+ expect(JSON.stringify(diagnostics)).not.toContain(secret);
+ diagnostics.length=0;
+ const malformed={...canonical,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence:{primaryEvidence:secret,additionalEvidenceJson:secret}}]}]};
+ expect(parseInterpretationSectionsV3(malformed,value=>diagnostics.push(value)).status).toBe("REFUSED");
  expect(diagnostics[0]).toMatchObject({uncertaintyAlternatives:[{field:"frequency",fieldCode:8,reason:"AMBIGUOUS",valueType:"string",evidenceType:"object",evidenceKeys:["primaryEvidence","additionalEvidenceJson"]}]});
  expect(JSON.stringify(diagnostics)).not.toContain(secret);
  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,()=>{throw Error(secret);}).status).toBe("REFUSED");
@@ -704,13 +719,33 @@ const evidence = [quote, { kind: "CONTEXT_FACT", ref: "f1" }, quote];
 const civil = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 31, month: 12, year: 9999, leapMonth: null };
 const clock = { hour: 23, minute: 59, qualifier: "H24" };
 const values = { title: "t".repeat(1800), location: "l".repeat(300), notes: "n".repeat(2000), eventDate: civil, eventTime: clock, reminderDate: { kind: "RELATIVE_DAY", offsetDays: -366 }, reminderTime: clock, calendar: "LUNAR_VN", frequency: "DAILY", occurrenceCount: Number.MAX_SAFE_INTEGER, eventRelation: "BEFORE_EVENT", leadOffsetDays: Number.MAX_SAFE_INTEGER, endDate: { kind: "WEEKDAY", weekday: 7, qualifier: "NEXT_WEEK" } };
+it.each(Object.entries({...values,intent:"HELP",operation:"CURRENT",queryRange:{kind:"DATE_BOUNDS",from:civil,through:civil}}))("wire59 carrier preserves canonical alternative value family %s",(field,value)=>{
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,...(field==="operation"?{intent:"AMBIGUOUS",requestTarget:{kind:"UNRESOLVED",evidence:[quote]}}:{}),uncertainties:[{field,reason:"UNSUPPORTED_COMBINATION",alternatives:[{value,evidence:[quote,quote,quote]}]}]});
+ const raw=encodeFixtureV3(canonical,input);
+ const result=wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input);
+ expect(result).toMatchObject({status:"PARSED",value:{semantic:{uncertainties:canonical.uncertainties}}});
+ expect(parseGoogleLiteEuContextSectionsV3(encodeGoogleLiteEuContextV3(canonical),CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+});
+it("wire59 alternative strict carrier rejects old syntax, malformed counts and private controls atomically",()=>{
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"title",reason:"UNSUPPORTED_COMBINATION",alternatives:[{value:"synthetic",evidence:[quote]}]}]});
+ const base=encodeFixtureV3(canonical,input) as {uncertainties:Array<{alternatives:string[]}>};
+ const valid={primaryEvidence:"U0",additionalEvidenceJson:"[]"};
+ for(const invalid of [[quote],null,{},"U0",{...valid,primaryEvidence:JSON.stringify({kind:"USER_TURN",turn:0})},{...valid,primaryEvidence:"U00"},{...valid,primaryEvidence:"u0"},{...valid,primaryEvidence:" U0"},{...valid,primaryEvidence:0},{...valid,primaryEvidence:null},{...valid,primaryEvidence:"U1"},{...valid,primaryEvidence:"S0.0"},{...valid,primaryEvidence:"Ff999"},{...valid,primaryEvidence:"PRIVATE_CODE"},{...valid,additionalEvidenceJson:JSON.stringify([quote,quote,quote])},{...valid,additionalEvidenceJson:"{}"},{...valid,additionalEvidenceJson:"["},{...valid,additionalEvidenceJson:"x".repeat(32769)},{primaryEvidence:"U0"},{...valid,PRIVATE_KEY:"PRIVATE_VALUE"}]){
+  const raw=structuredClone(base);raw.uncertainties[0].alternatives=[JSON.stringify({value:"synthetic",evidence:invalid})];const diagnostics:unknown[]=[];
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,d=>diagnostics.push(d),d=>diagnostics.push(d),input).status).toBe("REFUSED");
+  expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_CODE|PRIVATE_KEY|PRIVATE_VALUE/);
+ }
+ for(const text of ["{","null","[]",JSON.stringify({value:"synthetic",evidence:valid,PRIVATE_KEY:"PRIVATE_VALUE"}),JSON.stringify({evidence:valid}),"x".repeat(32769)]){
+  const raw=structuredClone(base);raw.uncertainties[0].alternatives=[text];expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ }
+});
 // Independent, hand-specified wire layout; never calls a production encoder.
 const pads: Record<string, string[]> = { USER_QUOTE: ["ref"], CONTEXT_FACT: ["turn", "quote", "occurrence"], CIVIL_DATE: ["offsetDays", "weekday", "qualifier"], RELATIVE_DAY: ["calendar", "day", "month", "year", "leapMonth", "weekday", "qualifier"], WEEKDAY: ["calendar", "day", "month", "year", "leapMonth", "offsetDays"], DAY: ["offset", "from", "through"], WEEK: ["date", "from", "through"], MONTH: ["date", "from", "through"], WEEKEND: ["date", "from", "through"], UPCOMING: ["date", "offset", "from", "through"], DATE_BOUNDS: ["date", "offset"], LIST: ["date", "outputCalendar", "topic"], CALENDAR_DATE: ["period", "topic"], CAPABILITY: ["period", "date", "outputCalendar"], HELP: ["field", "reason", "issue"], ASK_FOR_FIELD: ["reason", "issue", "topic"], ASK_FOR_DISAMBIGUATION: ["issue", "topic"], EXPLAIN_UNSUPPORTED: ["field", "reason", "topic"], PRESENT_PREVIEW: ["field", "reason", "issue", "topic"], ANSWER_QUERY: ["field", "reason", "issue", "topic"] };
 function wireFixture(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(wireFixture);
   if (!value || typeof value !== "object") return value;
   const object = value as Record<string, unknown>, result = Object.fromEntries(Object.entries(object).map(([key, child]) => [key, key === "uncertainties" && Array.isArray(child)
-    ? child.map((item: { field: unknown; reason: unknown; alternatives: unknown[] }) => ({ fieldCode: ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "intent", "queryRange", "operation"].indexOf(String(item.field)), reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }))
+    ? child.map((item: { field: unknown; reason: unknown; alternatives: Array<{value:unknown;evidence:unknown[]}> }) => ({ fieldCode: ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "intent", "queryRange", "operation"].indexOf(String(item.field)), reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify({value:alternative.value,evidence:{primaryEvidence:JSON.stringify(alternative.evidence[0]),additionalEvidenceJson:JSON.stringify(alternative.evidence.slice(1))}})) }))
     : wireFixture(child)]));
   if (Object.hasOwn(object, "schemaVersion")) {
     delete result.schemaVersion;
@@ -811,8 +846,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-58");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("389cf7e913b51d27acef043dae5e41b69b75466b6eadfec3f8f5e47cbd868c78");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-59");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("dac8e5b9d4bfff2a1752e5612a48520a7a612d25d55b5cb69e125b9cb8dad962");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

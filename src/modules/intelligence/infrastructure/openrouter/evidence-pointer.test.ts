@@ -2,14 +2,43 @@
 import {expect,it} from "vitest";
 import * as pointerModule from "./evidence-pointer";
 import {materializeProviderEvidence,evidenceSourceCatalogue,EvidencePointerFailure,projectEvidencePointerStructure,primaryEvidencePointerDomain} from "./evidence-pointer";
-import {ContextInputSchema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
+import {ContextInputSchema,ConversationInterpretationV3Schema,SemanticPatchProposalV3Schema} from "../../../conversation/context-contract/contracts";
+import {decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
+import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import {buildContextInputV2} from "../../../conversation/context-contract/context";
-import {chat,message,observation,snapshot} from "../../../conversation/context-contract/context-test-fixtures";
+import {chat,message,observation,snapshot,withNotes} from "../../../conversation/context-contract/context-test-fixtures";
 import {ContextSnapshotV2Schema} from "../../../conversation/context-contract/state";
 import {validateEvidenceV3} from "../../../conversation/context-contract/evidence";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
+it.each(["old-quote","fact","mixed-old-quote","mixed-fact","current"])("wire59 NEW alternative retains strict source scope after code expansion: %s",source=>{
+ const oldState=withNotes(),state=ContextSnapshotV2Schema.parse({...oldState,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null}),msg=message("tạo lịch mới gọi mẹ mang giấy tờ"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(oldState,msg)});
+ if(built.status!=="READY")throw Error(built.reason);
+ const current={kind:"USER_QUOTE",turn:built.input.currentTurn,quote:msg.text,occurrence:1},old=source.endsWith("fact")?{kind:"CONTEXT_FACT",ref:built.input.facts.find(f=>f.field==="notes")!.alias}:{kind:"USER_QUOTE",turn:0,quote:"mang giấy tờ",occurrence:1};
+ const refs=source==="current"?[current]:source.startsWith("mixed")?[current,old]:[old];
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[current]},changes:[{field:"title",operation:"SET",value:"gọi mẹ",evidence:[current]}],query:null,uncertainties:[{field:"notes",reason:"AMBIGUOUS",alternatives:[{value:"mang giấy tờ",evidence:refs}]}],conversationDirective:null,replyProposal:null});
+ const decoded=decodeGoogleLiteEuContextTransportV3(encodeFixtureV3(canonical,built.input),CONTEXT_PROTOCOL_V3,undefined,undefined,built.input);expect(decoded.status).toBe("PARSED");if(decoded.status!=="PARSED")throw Error(decoded.reason);
+ if(!("semantic" in decoded.value))throw Error("Unexpected staged LIST");
+ const result=validateEvidenceV3(decoded.value.semantic,built);
+ if(source==="current"){expect(result.status).toBe("VALID");if(result.status==="VALID")expect(result.patch.alternativeEvidence[0].sources.map(s=>s.sourceTurnId)).toEqual([msg.id]);}
+ else expect(result).toEqual({status:"REFUSED",reason:"NEW_REQUEST_FACT_REUSE"});
+});
+it.each(["retained-fact","historical-operation","current-operation"])("wire59 CURRENT alternative scope stays authoritative: %s",mode=>{
+ const oldState=withNotes(),state=ContextSnapshotV2Schema.parse({...oldState,schemaVersion:"calenote-context-state-2",pendingSemanticCandidate:null}),msg=message("giữ ghi chú"),built=buildContextInputV2({message:msg,context:chat,snapshot:state,observation:observation(oldState,msg)});if(built.status!=="READY")throw Error(built.reason);
+ const current={kind:"USER_QUOTE",turn:built.input.currentTurn,quote:msg.text,occurrence:1},old={kind:"USER_QUOTE",turn:0,quote:"mang giấy tờ",occurrence:1},fact={kind:"CONTEXT_FACT",ref:built.input.facts.find(f=>f.field==="notes")!.alias};
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[current]},changes:[],query:null,uncertainties:[{field:mode==="retained-fact"?"notes":"operation",reason:"AMBIGUOUS",alternatives:[{value:mode==="retained-fact"?"mang giấy tờ":"NEW",evidence:[mode==="retained-fact"?fact:mode==="current-operation"?current:old]}]}],conversationDirective:null,replyProposal:null});
+ const decoded=decodeGoogleLiteEuContextTransportV3(encodeFixtureV3(canonical,built.input),CONTEXT_PROTOCOL_V3,undefined,undefined,built.input);expect(decoded.status).toBe("PARSED");if(decoded.status!=="PARSED")throw Error(decoded.reason);
+ if(!("semantic" in decoded.value))throw Error("Unexpected staged LIST");
+ const result=validateEvidenceV3(decoded.value.semantic,built);expect(result.status).toBe(mode==="historical-operation"?"REFUSED":"VALID");if(mode==="historical-operation")expect(result).toEqual({status:"REFUSED",reason:"CURRENT_USER_EVIDENCE_REQUIRED"});
+});
+it("wire59 designated alternative primary codes expand and materialize without changing canonical values",()=>{
+ const raw={uncertainties:[{alternatives:[JSON.stringify({value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:1,month:2,year:null,leapMonth:null},evidence:{primaryEvidence:"U2",additionalEvidenceJson:'[{"kind":"USER_TURN","turn":0}]'}})]}],replyProposal:{text:"U2"}};
+ const expanded=pointerModule.expandPrimaryEvidenceSourceCodes(raw,input);
+ const materialized=materializeProviderEvidence(expanded,input,true) as typeof raw;
+ expect(JSON.parse(materialized.uncertainties[0].alternatives[0])).toEqual({value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:1,month:2,year:null,leapMonth:null},evidence:{primaryEvidence:JSON.stringify({kind:"USER_QUOTE",turn:2,quote:"8h sáng",occurrence:1}),additionalEvidenceJson:JSON.stringify([{kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1}])}});
+ expect(materialized.replyProposal).toEqual({text:"U2"});expect(JSON.parse(raw.uncertainties[0].alternatives[0]).evidence.primaryEvidence).toBe("U2");
+});
 it("wire53 preserves all source choices through one exact codebook and current subset",()=>{
  const context=structuredClone(input);context.turns[0].text="a[CONTROL]b";
  context.facts=[{alias:"f1",scope:"REMINDER",field:"title",value:"PRIVATE",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-09-28T03:00:00Z",dependencies:[]}];
@@ -119,10 +148,10 @@ it("pointer without validated dispatch context fails closed",()=>expect(()=>mate
 it.each(["","x".repeat(2001),"e\u0301","\ud800"])("does not clip or normalize invalid source",text=>expect(()=>materializeProviderEvidence({operationCode:"3",query:{evidence:carrier({kind:"USER_TURN",turn:0})}},{...input,turns:[{role:"USER",text}]})).toThrow());
 it("preserves legacy refs and fact pointers losslessly and expands alternatives",()=>{
  const refs=[{kind:"CONTEXT_FACT",ref:"f1"},{kind:"USER_QUOTE",turn:0,quote:"gọi mẹ",occurrence:1}];
- const raw={operationCode:"3",query:{evidence:{primaryEvidence:JSON.stringify(refs[0]),additionalEvidenceJson:JSON.stringify([refs[1],{kind:"USER_TURN",turn:2}])}},uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:[{kind:"USER_TURN",turn:0}]})]}]};
+ const raw={operationCode:"3",query:{evidence:{primaryEvidence:JSON.stringify(refs[0]),additionalEvidenceJson:JSON.stringify([refs[1],{kind:"USER_TURN",turn:2}])}},uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:carrier({kind:"USER_TURN",turn:0})})]}]};
  const out=materializeProviderEvidence(raw,input) as typeof raw;
  expect(JSON.parse(out.query.evidence.primaryEvidence)).toEqual(refs[0]);expect(JSON.parse(out.query.evidence.additionalEvidenceJson)[0]).toEqual(refs[1]);
- expect(JSON.parse(out.uncertainties[0].alternatives[0]).evidence[0].quote).toBe("nhắc gọi mẹ");
+ expect(JSON.parse(JSON.parse(out.uncertainties[0].alternatives[0]).evidence.primaryEvidence).quote).toBe("nhắc gọi mẹ");
 });
 it.each(["Nhắc 2 ngày liên tiếp.","mang 2 cây bút","Đừng nhắc trước 2 ngày.","Ví dụ nhắc trước 2 ngày.","Nhắc trước 3 ngày.","Nhắc trước ngày thi; tôi đi công tác 2 ngày trước."])("pointer cannot authorize unsupported offset: %s",text=>{
  const msg=message(text),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
@@ -174,7 +203,7 @@ it("inactive query padding is never materialized into evidence authority",()=>{
 });
 it.each(["primary","extra","alternative"])("current transport rejects model-authored quotes in %s",location=>{
  const quote={kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1};
- const raw=location==="alternative"?{uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:[quote]})]}]}:{operationCode:"3",query:{evidence:location==="primary"?carrier(quote):{primaryEvidence:JSON.stringify({kind:"USER_TURN",turn:0}),additionalEvidenceJson:JSON.stringify([quote])}}};
+ const raw=location==="alternative"?{uncertainties:[{alternatives:[JSON.stringify({value:2,evidence:carrier(quote)})]}]}:{operationCode:"3",query:{evidence:location==="primary"?carrier(quote):{primaryEvidence:JSON.stringify({kind:"USER_TURN",turn:0}),additionalEvidenceJson:JSON.stringify([quote])}}};
  expect(()=>materializeProviderEvidence(raw,input,true)).toThrow("EVIDENCE_POINTER_INVALID");
 });
 it("backend catalogues exact segments without trimming and materializes only selected segment",()=>{

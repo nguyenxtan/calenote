@@ -205,9 +205,13 @@ async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
  const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{schema=serializeContextRequest(input).response_format.json_schema.schema;
-  // Public historical structural specimen: restore only original source literals,
-  // then assert the immutable635 SHA. Never used by current production dispatch.
+  // Public historical structural specimen: restore original source literals and
+  // alternative description, then assert immutable635. Never production dispatch.
   const book=primaryEvidenceSourceCodebook(input);for(const key of ["__sources","__current"]){const definition=schema.$defs![key];if(typeof definition==="boolean"||!definition.enum)throw Error("HISTORICAL_SCHEMA_DOMAIN");definition.enum=definition.enum.map(code=>{const pointer=book.decode(code);if(pointer===undefined)throw Error("HISTORICAL_SOURCE_CODE");return pointer;});}
+  const currentDescription="JSON {value,evidence}; canonical field value, evidence {primaryEvidence:available source code,additionalEvidenceJson:JSON array of 0–2 pointers}.";
+  expect(JSON.stringify(schema)).toContain(currentDescription);
+  let descriptions=0;const restore=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.description===currentDescription){node.description="JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.";descriptions++;}Object.values(node).forEach(restore);};restore(schema);
+  expect(descriptions).toBe(1);expect(hash(JSON.stringify(schema))).toBe("635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48");
   return {fixtureFault:"SCHEMA_INVALID"};});
  try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
  expect(schema).toBeDefined();return schema!;

@@ -51,7 +51,7 @@ export function primaryEvidenceSourceCodebook(input:ContextInput) {
   decode:(code:unknown)=>typeof code==="string"?forward.get(code):undefined,
   encode:(pointerJson:string)=>{const code=inverse.get(pointerJson);if(code===undefined)throw Error("EVIDENCE_SOURCE_CODE_UNAVAILABLE");return code;}});
 }
-/** Exact request-bound lookup only. Extra/alternative JSON remains unchanged. */
+/** Exact request-bound lookup only; alternative values and extras are untouched. */
 export function expandPrimaryEvidenceSourceCodes(raw:unknown,input:ContextInput):unknown {
  const book=primaryEvidenceSourceCodebook(input);
  const item=(value:unknown,path:Path):unknown=>{
@@ -66,7 +66,13 @@ export function expandPrimaryEvidenceSourceCodes(raw:unknown,input:ContextInput)
  if(!object(raw))return raw;
  return {...raw,requestTarget:item(raw.requestTarget,["requestTarget"]),
   query:typeof raw.operationCode==="string"&&["3","4","5"].includes(raw.operationCode)?item(raw.query,["query"]):raw.query,
-  changes:Array.isArray(raw.changes)?raw.changes.map((value,index)=>item(value,["changes",index])):raw.changes};
+  changes:Array.isArray(raw.changes)?raw.changes.map((value,index)=>item(value,["changes",index])):raw.changes,
+  uncertainties:Array.isArray(raw.uncertainties)?raw.uncertainties.map((issue,index)=>!object(issue)||!Array.isArray(issue.alternatives)?issue:{...issue,alternatives:issue.alternatives.map((text,position)=>{
+   if(typeof text!=="string"||new TextEncoder().encode(text).byteLength>32768)return text;
+   let parsed:unknown;try{parsed=JSON.parse(text);}catch{return text;}
+   const expanded=item(parsed,["uncertainties",index,"alternatives",position]);
+   return expanded===parsed?text:JSON.stringify(expanded);
+  })}):raw.uncertainties};
 }
 /** Only explicit source pointers are expanded. No value search or repair. */
 export function materializeProviderEvidence(raw:unknown,input?:ContextInput,strictPointers=false):unknown {
@@ -114,5 +120,5 @@ export function materializeProviderEvidence(raw:unknown,input?:ContextInput,stri
  const query=typeof raw.operationCode==="string"&&["3","4","5"].includes(raw.operationCode)?item(raw.query,["query"]):raw.query;
  return {...raw,requestTarget:item(raw.requestTarget,["requestTarget"]),query,
   changes:Array.isArray(raw.changes)?raw.changes.map((v,i)=>item(v,["changes",i])):raw.changes,
-  uncertainties:Array.isArray(raw.uncertainties)?raw.uncertainties.map((v,i)=>!object(v)||!Array.isArray(v.alternatives)?v:{...v,alternatives:v.alternatives.map((a,j)=>json(a,["uncertainties",i,"alternatives",j],parsed=>!object(parsed)||!Object.hasOwn(parsed,"evidence")?parsed:{...parsed,evidence:refs(parsed.evidence,["uncertainties",i,"alternatives",j,"evidence"])}))}):raw.uncertainties};
+  uncertainties:Array.isArray(raw.uncertainties)?raw.uncertainties.map((v,i)=>!object(v)||!Array.isArray(v.alternatives)?v:{...v,alternatives:v.alternatives.map((a,j)=>json(a,["uncertainties",i,"alternatives",j],parsed=>!object(parsed)||!Object.hasOwn(parsed,"evidence")?parsed:{...parsed,evidence:carrier(parsed.evidence,["uncertainties",i,"alternatives",j,"evidence"])}))}):raw.uncertainties};
 }

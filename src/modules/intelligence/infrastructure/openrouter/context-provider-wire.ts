@@ -161,7 +161,7 @@ function internDefinitions(root: Schema): Schema {
 }
 /** Avoid the measured nested alternative-object state explosion. Field/value
  * association and evidence constraints remain canonical application checks. */
-function simplifyUncertainties(root: Schema): Schema {
+function simplifyUncertainties(root: Schema, successor=false): Schema {
   const output = structuredClone(root), items = deref(output.properties!.uncertainties.items!, output);
   requireShape(items.anyOf?.length);
   const reason = items.anyOf[0].properties!.reason;
@@ -170,7 +170,7 @@ function simplifyUncertainties(root: Schema): Schema {
     fieldCode: { type: "integer", minimum: 0, maximum: 15,
       description: "UncertaintyFieldWireCodeV1: " + Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => `${code}=${field}`).join(","),
     }, reason: structuredClone(reason), alternatives: { type: "array", items: {
-      type: "string", description: "JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
+      type: "string", description: successor?"JSON {value,evidence}; canonical field value, evidence {primaryEvidence:available source code,additionalEvidenceJson:JSON array of 0–2 pointers}.":"JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
     } },
   }, required: ["fieldCode", "reason", "alternatives"], additionalProperties: false };
   return prune(output);
@@ -331,7 +331,15 @@ function decodeUncertainties(raw: unknown, successor = false): unknown {
     if (!(successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
     return { field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
       if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
-      try { return JSON.parse(text) as unknown; } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }
+      let decoded:unknown;try { decoded=JSON.parse(text); } catch { throw new WireShapeFailure([...path, "alternatives", alternative], "JSON_ALTERNATIVE"); }
+      if(!successor)return decoded;
+      const alternativePath=[...path,"alternatives",alternative];
+      if(!decoded||typeof decoded!=="object"||Array.isArray(decoded))throw new WireShapeFailure(alternativePath,"object");
+      const object=decoded as Record<string,unknown>;
+      requireWireKeys(object,["value","evidence"],["value","evidence"],alternativePath);
+      const branch=deref(deref(originalV3.properties!.uncertainties.items!,originalV3).anyOf![0],originalV3);
+      const evidenceNode=deref(branch.properties!.alternatives.items!,originalV3).properties!.evidence;
+      return {value:object.value,evidence:codec(evidenceNode,object.evidence,"decode",[...alternativePath,"evidence"],originalV3)};
     }) };
   });
 }
@@ -578,7 +586,7 @@ function indexedReminderSchema(root:Schema):Schema {
   }
   return result;
 }
-const providerSchemaV3 = indexedReminderSchema(indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))))))));
+const providerSchemaV3 = indexedReminderSchema(indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))),true)))));
 
 /** Move only explicitly model-authored carrier data; indices and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
@@ -807,7 +815,8 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   // The generated view omits owned constants without mutating canonical data.
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
-  output.uncertainties = parsed.uncertainties.map(item => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map(alternative => JSON.stringify(alternative)) }));
+  const encodedUncertainties=output.uncertainties as Array<{alternatives:Array<{evidence:unknown}>}>;
+  output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
   return indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {

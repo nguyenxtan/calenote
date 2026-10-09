@@ -317,9 +317,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("3fb4b6f22516f7363424a1b85814836d1e7ab328a24e17bcd373507a3daf1b22");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("1e1eb39de5f00a94b5465a7c630a81b6f6fe3784d2333dd60ed78033e024c026");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("2fd8194143bb2f53f7176146cc5ec857aad4e5455ebf90951240f224e7b51f4b");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("0c956316884f29f0e36a8d99fa4f0be1a1634a7fa1c541cc957ca97717141f6c");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

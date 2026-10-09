@@ -117,7 +117,7 @@ it("selected build-time oversized refusal preserves pending candidate source and
   expect(await h.run(0, "nhắc đi thi 8/10/2026 8h")).toEqual({ status: "DRAFT_CREATED" });
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [{kind:"USER_TURN",turn:Number(target.evidence.primaryEvidence.slice(1))}, ...JSON.parse(target.evidence.additionalEvidenceJson)];
+    const evidence = target.evidence;
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(1, "nhắc đi thi 8/10/2026 8h");
@@ -169,7 +169,7 @@ it("selected prior no-A grounded candidate survives operational refusal with ori
   const h = await selectedHarness();
   h.setWireMutation(wire => {
     const object = wire as Record<string, unknown>, target = object.requestTarget as { evidence: { primaryEvidence: string; additionalEvidenceJson: string } };
-    const evidence = [{kind:"USER_TURN",turn:Number(target.evidence.primaryEvidence.slice(1))}, ...JSON.parse(target.evidence.additionalEvidenceJson)];
+    const evidence = target.evidence;
     return { ...object, operationCode: "2", requestTarget: target, uncertainties: [{ fieldCode: 15, reason: "AMBIGUOUS", alternatives: [JSON.stringify({ value: "CURRENT", evidence }), JSON.stringify({ value: "NEW", evidence })] }] };
   });
   await h.run(0, "nhắc đi thi");

@@ -14,7 +14,7 @@ type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]`
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
 type ReminderCarrierRoot = `${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"}Change`;
 type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"index" | "change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
-type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
+type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "uncertainties[].alternatives[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.value`;
 type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
@@ -45,7 +45,7 @@ function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", 
 for (const prefix of ["requestTarget.evidence", "changes[].evidence", "query.evidence", "uncertainties[].alternatives[].evidence"]) refs(prefix);
 // Provider slots propose the same untrusted refs as canonical evidence arrays.
 // Register exact paths; new slots or fields cannot inherit authority silently.
-for (const collection of ["query", "requestTarget", "changes[]", "titleChange.change", "reminderDateChange.change", "reminderTimeChange.change", "eventDateChange.change", "eventTimeChange.change", "eventRelationChange.change", "frequencyChange.change", "occurrenceCountChange.change", "endDateChange.change", "locationChange.change"] as const) for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
+for (const collection of ["query", "requestTarget", "changes[]", "uncertainties[].alternatives[]", "titleChange.change", "reminderDateChange.change", "reminderTimeChange.change", "eventDateChange.change", "eventTimeChange.change", "eventRelationChange.change", "frequencyChange.change", "occurrenceCountChange.change", "endDateChange.change", "locationChange.change"] as const) for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
   const prefix = `${collection}.evidence.${slot}` as const;
   add([prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}` as OutputFieldPathV3),
     `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]);

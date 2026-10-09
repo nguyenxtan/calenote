@@ -67,7 +67,7 @@ it.each(["wrong-role","wrong-occurrence","wrong-fact","bad-alternative"])("expli
   if(mode==="wrong-role")query.evidence.primaryEvidence=JSON.stringify({...primary,turn:11});
   if(mode==="wrong-occurrence")query.evidence.primaryEvidence=JSON.stringify({...primary,occurrence:2});
   if(mode==="wrong-fact")query.evidence.primaryEvidence=JSON.stringify({kind:"CONTEXT_FACT",ref:"f999",turn:null,quote:null,occurrence:null});
-  if(mode==="bad-alternative")wire.uncertainties=[{fieldCode:14,reason:"AMBIGUOUS",alternatives:[JSON.stringify({value:{kind:"MONTH",offset:0},evidence:[{kind:"USER_QUOTE",turn:0,quote:"not present",occurrence:1}]})]}];
+  if(mode==="bad-alternative")wire.uncertainties=[{fieldCode:14,reason:"AMBIGUOUS",alternatives:[JSON.stringify({value:{kind:"MONTH",offset:0},evidence:{primaryEvidence:JSON.stringify({kind:"USER_QUOTE",turn:0,quote:"not present",occurrence:1}),additionalEvidenceJson:"[]"}})]}];
  });
  expect(reconciliation.reconcileListPeriodV3(value,built).status).toBe("REFUSED");
 });
