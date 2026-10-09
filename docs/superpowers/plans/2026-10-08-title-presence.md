@@ -1,5 +1,9 @@
 # Title Presence Implementation Plan
 
+### Approved wire46 TURN1 source-domain diagnostic step
+
+Strict RED/GREEN exact current R01 TURN1 request/seed, source-only clone equality and shape/context drift refusal before HTTP; fake HTTP200/400 each terminal1/no Pilot credit/zero prerequisites, duplicate execution fence and unchanged conservative accounting/history. Implement only debug-loop tooling; reuse resolveSingleValidationTarget/executeObservableSingleTargetValidation seed/manifest checks. Focused debug/seed/runner/authority/accounting, typecheck/lint/diff then freeze report for controller full/review/commit/preflight/one probe. No implementer provider/network/credentials/accounting/full/commit.
+
 ### Approved wire46 sentinel-date step
 
 Controller technical ruling accepted: RED/GREEN fixed non-null nine-slot date schema and exact finite sentinel mapping; canonical roundtrip all date families/calendar/null-year/null-leap/relative0/qualifiers, strict inactive/active sentinel rejection and unchanged DateOperandSchema. Preserve existing dateJsonOperands positions, outer null/CLEAR/query padding, all operations/global indexes/current evidence/uncertainty alternative JSON/business/legacy parity. Update only provider wire46/prompt/schema and required closed mapping identity pins, no capability/canonical/oracle/parser/value-default changes. Measure base plus all326 actual requests under unchanged12000/1536; equivalent representation wording/necessary redundancy compaction with normative map only if needed. Focused ownership/privacy/date/query/gateway/runner tests, typecheck/lint/diff then freeze for controller review/full/commit/live. Historical wire45 diagnostic guards must decline sentinel shape, never silently broaden. No implementer provider/credentials/network/full-suite/commit/subagent work.
