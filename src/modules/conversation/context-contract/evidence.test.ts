@@ -47,9 +47,9 @@ describe("successor scoped semantic evidence", () => {
     if (status === "REFUSED") expect(result).toEqual({ status, reason: "CIVIL_DATE_SOURCE_MISMATCH" });
     if (result.status === "VALID") expect(result.patch.resolvedChanges).toEqual(proposal.changes);
   });
-  it("civil fidelity never reparses an exact accepted fact", () => {
+  it.each([null,2026])("civil fidelity never reparses an exact accepted fact, including explicit retained year (%#)", (year) => {
     const old = withNotes("ngày 11/10");
-    const value = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 10, month: 10, year: null, leapMonth: null } as const;
+    const value = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 10, month: 10, year, leapMonth: null } as const;
     old.slots.eventDate = { ...old.slots.notes, value, fact: "f9" };
     old.slots.notes = snapshot().slots.notes;
     old.facts = [{ ...old.facts[0], scope: "REMINDER", field: "eventDate", evidenceSlot: "eventDate", value }];

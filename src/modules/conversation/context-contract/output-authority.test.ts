@@ -3,6 +3,9 @@ import { expect, it } from "vitest";
 import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
+it("year-source capability is application owned and cannot authorize a read or write",()=>{
+ expect(authority.classifyOutputPathV3("fieldCapability.eventDateYearNullRequired")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
+});
 it("primary source codes remain untrusted while exact source mapping remains application owned",()=>{
  for(const path of ["requestTarget.evidence.primaryEvidence","query.evidence.primaryEvidence","changes[].evidence.primaryEvidence"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",canAuthorizeRead:false,canAuthorizeWrite:false});
  expect(authority.classifyOutputPathV3("transport.codebookMapping")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
@@ -49,7 +52,7 @@ it("authority_paths_are_exhaustive_and_nonoverlapping", () => {
 it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
   for (const [path, rule] of Object.entries(authority.OUTPUT_AUTHORITY_REGISTRY_V3)) {
     if (path.startsWith("conversationDirective") || path.startsWith("replyProposal")) expect(rule.class).toBe("ADVISORY");
-    else if (path === "schemaVersion" || path === "query.statusScope" || path.startsWith("protocol.") || path.startsWith("transport.")) expect(rule.class).toBe("APPLICATION_OWNED");
+    else if (path === "schemaVersion" || path === "query.statusScope" || path === "fieldCapability.eventDateYearNullRequired" || path.startsWith("protocol.") || path.startsWith("transport.")) expect(rule.class).toBe("APPLICATION_OWNED");
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });

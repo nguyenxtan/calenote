@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire54 source-year checkpoint execution
+
+1. Read approved wire54 amendment/proposal before edits. RED actual bound request lacks source-year capability/checkpoint; add boolean only from existing complete isolated exam/context predicate and exactly one scanner DAY_MONTH source classification, never scanner-derived year/value or new parser.
+2. TDD sufficient positive/negative matrix explicityear/exactfacts/history/corrections/multidate/relative/weekday/lunar/negation/quotes/controls/hypothetical/unknown tails; flag grants no new semantic/evidence/read/write authority. Update capability type/closed registry/version/input producer coherently only if serialization requires; add short conditional instruction to existing final date checkpoint rather than another generic paragraph.
+3. Actual controlled gateway/service yearnumeric refusal YEAR_NOT_EXPLICIT/0reads/mutations; null-authoring follows existing behavior, explicit USER year/exacteligibleCURRENT facts remain valid, NEW/historical scope refusals remain. Preserve literal authored values/source metadata with no normalization/repair. Frozen fixtures/oracles/validator/DateOperand/dateJSON codec/sourcebook unchanged.
+4. Own prompt/request generation/capability and tests plus necessary exact identity/fit/closed-authority pins and these canonical docs. Wire54, coherent capability version if flagserialized. Existing historical modes remain pinned and current drift-refuse. ENTIREfit67/ALL326/12000+1536; focused year/date/evidence/authority/gateway/service/runner regressions, typecheck/lint/diff, freeze and report wire54-year-ownership-implementation.md. No implementer provider/key/accounting/full/commit/children.
+5. Controller full frozen suite/independentC0I0/selective localcommit/read-only preflight/FreshFormal under existing conservativeUSD5. Mitigation is not hard schema guarantee; only live/full oracle evidence establishes efficacy. Continue recoverable authorized work, no blind unchanged rerun/Pilotcredit/historyrewrite/push/deploy.
+
 ### Wire53 primary-source codebook execution
 
 1. Read approved wire53 amendment and wire53-primary-source-codebook-proposal.md before runtime edits. RED actual bound outgoing codes/current subset and strict bound decoding first. Own evidence-pointer.ts/.test.ts, provider-wire and parity tests; one typed immutable codebook derives existing pointer domain, exact inverse, no domain loss/duplicates or new source parser.

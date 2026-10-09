@@ -12,7 +12,9 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-10";
+  version: "generation-field-capability-11";
+  /** Sufficient source-year checkpoint only; model still authors every slot. */
+  eventDateYearNullRequired: boolean;
   /** False only for the isolated, complete notes-free source assertion. */
   notesProposalAllowed: boolean;
   allowedNumericFields: readonly NumericProposalField[];
@@ -75,6 +77,11 @@ export function isInitialExplicitReminderClockRequired(input: ContextInput): boo
 export function isInitialExplicitEventClockRequired(input:ContextInput):boolean {
   const current=input.turns[input.currentTurn];
   return !input.activeRequest&&current?.role==="USER"&&isFirstPersonExamClockAssertion(current.text);
+}
+export function isInitialEventDateYearNullRequired(input:ContextInput):boolean {
+  if(!isInitialIsolatedExamNotesFree(input))return false;
+  const date=extractTemporalEvidence({text:input.turns[0].text,referenceNow:Date.parse(input.reference.instant)}).date;
+  return date.state==="RESOLVED"&&date.source==="DAY_MONTH";
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -156,7 +163,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   }
   const title = input.activeRequest?.slots.title;
   const calendar = input.activeRequest?.slots.calendar;
-  return { version: "generation-field-capability-10", notesProposalAllowed: !isInitialIsolatedExamNotesFree(input), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
+  return { version: "generation-field-capability-11", eventDateYearNullRequired:isInitialEventDateYearNullRequired(input), notesProposalAllowed: !isInitialIsolatedExamNotesFree(input), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     calendarProposalAllowed: !!calendar && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(calendar.state) && calendar.value !== null
       || current?.role === "USER" && hasExplicitCalendarCue(current.text),

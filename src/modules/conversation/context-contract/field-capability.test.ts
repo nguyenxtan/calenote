@@ -9,7 +9,7 @@ import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWire
 import { CONTEXT_PROTOCOL_V3 } from "./protocol";
 import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
-import { deriveGenerationFieldCapability } from "./field-capability";
+import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 // Independent schema-membership fixtures use source-pointer representation,
 // retaining the authored turn index and every field value. No source is filled.
 function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical>[0]):unknown {
@@ -29,6 +29,46 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it("wire54 isolated day-month source serializes year-null ownership without resolving a year",()=>{
+ const context=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.");
+ const request=serializeContextRequest(context);
+ expect(JSON.parse(request.messages[1].content).fieldCapability.eventDateYearNullRequired).toBe(true);
+ expect(request.messages[0].content).toContain("eventDateYearNullRequired=true");
+ expect(context.turns).toEqual([{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."}]);
+ for(const instant of ["2025-12-20T03:00:00Z","2027-01-01T03:00:00Z"]){
+  const shifted={...context,reference:{...context.reference,instant}};
+  expect(Reflect.get(deriveGenerationFieldCapability(shifted),"eventDateYearNullRequired")).toBe(true);
+ }
+});
+it.each(["Ngày 11/10/2026 đi thi.","Ngày 11/10 đi thi, ngày 12/10 nữa.","Mai đi thi.","Thứ hai đi thi.","Ngày 11/10 âm đi thi.","Ngày 11/10 đi thi, ghi chú mang bút.","Nếu ngày 11/10 đi thi.",'"Ngày 11/10 đi thi."',"Không đi thi ngày 11/10.","Sửa ngày đi thi thành 11/10.","Ngày 11/10 đi thi ở đâu?"])("wire54 declines non-isolated or unknown year source (%#)",text=>{
+ expect(Reflect.get(deriveGenerationFieldCapability(input(text)),"eventDateYearNullRequired")).toBe(false);
+});
+it("wire54 prior turns or pending context cannot be treated as initial isolated year ownership",()=>{
+ const context=input("Ngày 11/10 đi thi.");
+ const history={...context,turns:[{role:"USER" as const,text:"Giúp tôi"},...context.turns],currentTurn:1};
+ expect(Reflect.get(deriveGenerationFieldCapability(history),"eventDateYearNullRequired")).toBe(false);
+ const pending={...context,pendingQuestion:{scope:"REMINDER",field:"eventDate"}} as ContextInput;
+ expect(Reflect.get(deriveGenerationFieldCapability(pending),"eventDateYearNullRequired")).toBe(false);
+});
+it("wire54 insufficient trusted context, retained facts, ambiguity or active state declines the checkpoint",()=>{
+ for(const key of ["activeRequest","facts","pendingQuestion","ambiguities"]){
+  const missing=input("Ngày 11/10 đi thi.");Reflect.deleteProperty(missing,key);
+  expect(isInitialEventDateYearNullRequired(missing)).toBe(false);
+ }
+ for(const [key,value] of [["activeRequest",{}],["facts",[{}]],["ambiguities",[{}]]] as const){
+  const occupied=input("Ngày 11/10 đi thi.");Reflect.set(occupied,key,value);
+  expect(isInitialEventDateYearNullRequired(occupied)).toBe(false);
+ }
+});
+it.each([[2026,"Ngày 11/10 đi thi.","REJECTED"],[null,"Ngày 11/10 đi thi.","CLARIFICATION_REQUESTED"],[2026,"Ngày 11/10/2026 đi thi.","CLARIFICATION_REQUESTED"]] as const)("wire54 actual service preserves year evidence refusal and authored null/explicit year (%#)",async(year,text,status)=>{
+ const value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year,leapMonth:null};
+ const h=await harness([proposal({title:"đi thi",eventDate:value})]);
+ expect(await h.turn(0,text)).toEqual({status});
+ expect(await h.f.db.prepare("SELECT count(*) AS count FROM reminders").first<number>("count")).toBe(0);
+ const state=await h.read(1);
+ if(status==="REJECTED")expect(state).toBeNull();
+ else expect(state?.slots.eventDate.value).toEqual(value);
+});
 it.each(["Giúp tôi", "Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."])("wire52 actual request uncertainty cardinality remains max four (%#)",text=>{
  const context=input(text),evidence=[{kind:"USER_QUOTE",turn:0,quote:text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{uncertainties:Record<string,unknown>};$defs:Record<string,unknown>};
@@ -227,7 +267,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-10",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("b562286e04647adb4b098737e6a849be7e36e3c71b243c72d684bacb37242af5");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
   expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("848beddb1202e7e0de3eeffbba7bf0e9abd9f7c5af9c61cf2376091bc4652230");
@@ -266,7 +306,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-10", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-11", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.

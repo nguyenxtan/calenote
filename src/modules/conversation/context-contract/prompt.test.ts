@@ -223,7 +223,8 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
 it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE=JSON strings of exact canonical DateOperand objects, never bare mai/tomorrow/ISO or C/R/W envelopes.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow=RELATIVE_DAY/offsetDays1 only.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve authored nulls, no year/leap inference. Clocks=objects; no date resolution/invention.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve authored nulls, no year/leap inference.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Clocks=objects; no date resolution/invention.");
 });
 it("date structural illustration is valid escaped canonical JSON, not source evidence",()=>{
  const line=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Structural illustration only"))!;
