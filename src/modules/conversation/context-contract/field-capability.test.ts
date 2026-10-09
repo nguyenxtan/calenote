@@ -115,7 +115,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-6",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-7",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
   expect(fields(context)).not.toContain("title");
 });
@@ -149,7 +149,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-6", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-7", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
@@ -165,13 +165,47 @@ it.each(["Đừng bỏ.", "Tiếp tục.", "Nhắc trước 2 ngày.", "Nhắc b
 it.each(["8h.", "08:00.", "nửa đêm", "noon", "midnight"])("clock source presence opens an upper bound, never a value: %s", text => {
   expect(catalogue(input(text)).allowedClockFields).toEqual(["eventTime", "reminderTime"]);
 });
+it("initial explicit notification source requires authored clock presence and forbids only its MISSING label",()=>{
+ const text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(raw) as {reminderTimeChange:unknown;uncertainties:unknown[]},check=validator(context);
+ expect(check.safeParse(wire).success).toBe(true);
+ wire.uncertainties=[{fieldCode:6,reason:"MISSING",alternatives:[]}];expect(check.safeParse(wire).success).toBe(false);
+ for(const fieldCode of [0,1,2,3,4,5,7,8,9,10,11,12,13,14,15]){wire.uncertainties=[{fieldCode,reason:"MISSING",alternatives:[]}];expect(check.safeParse(wire).success).toBe(true);}
+ for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){wire.uncertainties=[{fieldCode:6,reason,alternatives:[]}];expect(check.safeParse(wire).success).toBe(true);}
+ wire.uncertainties=[];wire.reminderTimeChange=null;expect(check.safeParse(wire).success).toBe(false);
+ for(const operation of ["REPLACE","CLEAR"]){const changed=ConversationInterpretationV3Schema.parse({...raw,changes:[raw.changes[0],{...raw.changes[1],operation,value:operation==="CLEAR"?null:raw.changes[1].value}]});expect(check.safeParse(encodeGoogleLiteEuContextV3(changed)).success).toBe(false);}
+});
+it("initial explicit notification clause cannot omit its model-authored clock carrier",()=>{
+ const text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
+});
+it.each(["Nhắc 2 ngày liên tiếp lúc 8h.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h giúp tôi.","Đổi nhắc 2 ngày liên tiếp lúc 8h."])("availability alone does not require clock presence or exclude MISSING: %s",text=>{
+ const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null});
+ // A bounded title obligation can independently require its title carrier.
+ if(catalogue(context).titlePresenceRequired)raw.changes.unshift({field:"title",operation:"SET",value:"đi thi",evidence});
+ const check=validator(context);expect(check.safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(true);
+});
+it("genuine multiple-clock uncertainty preserves canonical alternatives and optional clock carrier",()=>{
+ const text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h hoặc 9h.",context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[{field:"reminderTime",reason:"AMBIGUOUS",alternatives:[{value:{hour:8,minute:0,qualifier:"H24"},evidence},{value:{hour:9,minute:0,qualifier:"H24"},evidence}]}],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(raw);expect(validator(context).safeParse(wire).success).toBe(true);
+});
+it("retained CURRENT notification clauses preserve optional clock, correction and uncertainty domains",()=>{
+ const text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",context=input(text),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.activeRequest={lifecycle:"CLARIFYING",slots};const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const wire=(operation:string,value:unknown)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"reminderTime",operation,value,evidence}],query:null,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null}));
+ for(const operation of ["SET","REPLACE","CLEAR"])expect(validator(context).safeParse(wire(operation,operation==="CLEAR"?null:{hour:8,minute:0,qualifier:"H24"})).success).toBe(true);
+ const absent=wire("SET",{hour:8,minute:0,qualifier:"H24"}) as {reminderTimeChange:unknown};absent.reminderTimeChange=null;expect(validator(context).safeParse(absent).success).toBe(true);
+});
 it.each([
  ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",8,0],
  ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 12h trưa.",12,0],
  ["Nhắc tôi hai ngày liên tiếp lúc 08:00.",8,0],
 ] as const)("explicit finite notification clock grants reminder carrier, not eventTime: %s",(text,hour,minute)=>{
  const context=input(text),before=JSON.stringify(context),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
- const wire=(field:string,operation:string,value:unknown)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[...(catalogue(context).titlePresenceRequired?[{field:"title",operation:"SET",value:"đi thi",evidence}]:[]),{field,operation,value,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}));
+ const wire=(field:string,operation:string,value:unknown)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[...(catalogue(context).titlePresenceRequired?[{field:"title",operation:"SET",value:"đi thi",evidence}]:[]),...(field!=="reminderTime"?[{field:"reminderTime",operation:"SET",value:{hour,minute,qualifier:"H24"},evidence}]:[]),{field,operation,value,evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}));
  const check=validator(context);
  expect(check.safeParse(wire("eventTime","SET",{hour,minute,qualifier:"H24"})).success).toBe(false);
  expect(check.safeParse(wire("reminderTime","SET",{hour,minute,qualifier:"H24"})).success).toBe(true);

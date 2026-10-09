@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidencePointerDomain} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -614,7 +614,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
-    requireShape(capability.version === "generation-field-capability-6" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.version === "generation-field-capability-7" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
     const changes = deref(schema.properties!.changes.items!, schema);
@@ -632,6 +632,25 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   }
   if(primaryEvidenceInput!==undefined){
     const domain=primaryEvidencePointerDomain(primaryEvidenceInput);
+    if(isInitialExplicitReminderClockRequired(primaryEvidenceInput)){
+      const carrier=deref(schema.properties!.reminderTimeChange.anyOf![0],schema);
+      const changes=deref(carrier.properties!.change,schema);
+      requireShape(changes.anyOf?.length);
+      changes.anyOf=changes.anyOf.flatMap(raw=>{
+        const branch=deref(raw,schema),operation=branch.properties!.operation;
+        if(!(operation.enum??[operation.const]).includes("SET"))return [];
+        branch.properties!.operation={type:"string",enum:["SET"]};return [branch];
+      });
+      requireShape(changes.anyOf.length);
+      schema.properties!.reminderTimeChange=carrier;
+      const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
+      requireShape(reason.enum && reason.enum.includes("MISSING"));
+      const missing=structuredClone(item),other=structuredClone(item);
+      missing.properties!.reason={type:"string",enum:["MISSING"]};
+      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime)};
+      other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
+      schema.properties!.uncertainties.items={anyOf:[missing,other]};
+    }
     const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);
     const bind=(node:Schema):Schema=>{
       const result=mapSchemas(node,bind);

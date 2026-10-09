@@ -12,7 +12,7 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-6";
+  version: "generation-field-capability-7";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
@@ -55,6 +55,12 @@ function isExplicitNotificationClockSource(text: string, reference: string): boo
     && supportsCadenceOperand("occurrenceCount", count, [source], [clause])
     && supportsCadenceOperand("frequency", "DAILY", [contextual], [full])
     && supportsCadenceOperand("occurrenceCount", count, [contextual], [full]);
+}
+/** Sufficient initial source-grounded lower bound, not clock availability. */
+export function isInitialExplicitReminderClockRequired(input: ContextInput): boolean {
+  const current = input.turns[input.currentTurn];
+  return !input.activeRequest && current?.role === "USER" && examTitleCoverage(current.text) !== null
+    && isExplicitNotificationClockSource(current.text, input.reference.instant);
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
@@ -135,7 +141,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-6", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  return { version: "generation-field-capability-7", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }
