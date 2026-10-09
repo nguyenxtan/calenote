@@ -182,7 +182,7 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
   expect(calls).toBe(1);
  }finally{s.cleanup()}
 });
-const sourceModes=["DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
+const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
 it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode seeded R01 TURN1 HTTP$status is one terminal request without Pilot credit",async({mode,status})=>{
  const s=setup();let calls=0,transportError:unknown;
  try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
@@ -203,6 +203,11 @@ it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mod
   }
   expect(JSON.stringify(original)).toBe(before);
   const actual=request.response_format.json_schema.schema;
+  if(mode==="DATE_CURRENT_NO_SCALAR_BOUNDS"){
+   const expectedDate=structuredClone(original.$defs!.__d);
+   for(const slot of Object.values(expectedDate.properties!))if(typeof slot==="object"&&slot.type==="integer"){delete slot.minimum;delete slot.maximum;}
+   expect(actual.$defs!.__d).toEqual(expectedDate);expect(Buffer.byteLength(JSON.stringify(actual))).toBe(11460);
+  }else
   if(mode==="DATE_CURRENT_STRING_BASELINE"){
    expect(actual.$defs!.__d).toEqual({type:"string"});expect(Buffer.byteLength(JSON.stringify(actual))).toBe(10950);
   }else if(mode==="SOURCE_CURRENT_KEY_BASELINE"){
@@ -223,9 +228,14 @@ it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mod
    expect(before.split('"$ref":"#/$defs/__current"').length-1).toBe(1);
    expect(JSON.stringify(actual)).not.toContain('"$ref":"#/$defs/__current"');
   }
-  expect({...actual,$defs:{...actual.$defs,...(mode==="DATE_CURRENT_STRING_BASELINE"?{__d:original.$defs!.__d}:{}),__sources:original.$defs!.__sources,__current:original.$defs!.__current,...(mode==="SOURCE_CURRENT_INLINE_BASELINE"||mode==="SOURCE_CURRENT_KEY_BASELINE"?{__ec:original.$defs!.__ec}:{})}}).toEqual(original);
-expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_STRING_BASELINE:"1781ee604f3b9014059c649cede4d7429c8cba729342c22f4875ddc68b3f7c52",SOURCE_CURRENT_KEY_BASELINE:"f5f44a4a12451fd3e13355e7aa3f03dac31d84b949878bbcedb3a02837965779",SOURCE_INTEGER_BASELINE:"637e8368ebdc70b5672eb06ba939058b563049815092d1eafa03a3faeb4e8611",SOURCE_CURRENT_INLINE_BASELINE:"30634b9033dc0ca036320c41062e1707bda62f8e8a438db5304b033d6b87528f",SOURCE_COMPACT_BASELINE:"3ae3b2fe8ed22d1283e44996c0f56acdb3486789e5cff36bf3a9d2a366324579",SOURCE_STRING_BASELINE:"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145",SOURCE_SINGLETON_BASELINE:"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a",SOURCE_T0_SCHEMA_BASELINE:"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e"})[mode]);
+  expect({...actual,$defs:{...actual.$defs,...((mode==="DATE_CURRENT_STRING_BASELINE"||mode==="DATE_CURRENT_NO_SCALAR_BOUNDS")?{__d:original.$defs!.__d}:{}),__sources:original.$defs!.__sources,__current:original.$defs!.__current,...(mode==="SOURCE_CURRENT_INLINE_BASELINE"||mode==="SOURCE_CURRENT_KEY_BASELINE"?{__ec:original.$defs!.__ec}:{})}}).toEqual(original);
+expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f41bbdfd87bf57d8e742a559464ace84850b3cfae5cfda2854e7673ec679",DATE_CURRENT_STRING_BASELINE:"1781ee604f3b9014059c649cede4d7429c8cba729342c22f4875ddc68b3f7c52",SOURCE_CURRENT_KEY_BASELINE:"f5f44a4a12451fd3e13355e7aa3f03dac31d84b949878bbcedb3a02837965779",SOURCE_INTEGER_BASELINE:"637e8368ebdc70b5672eb06ba939058b563049815092d1eafa03a3faeb4e8611",SOURCE_CURRENT_INLINE_BASELINE:"30634b9033dc0ca036320c41062e1707bda62f8e8a438db5304b033d6b87528f",SOURCE_COMPACT_BASELINE:"3ae3b2fe8ed22d1283e44996c0f56acdb3486789e5cff36bf3a9d2a366324579",SOURCE_STRING_BASELINE:"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145",SOURCE_SINGLETON_BASELINE:"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a",SOURCE_T0_SCHEMA_BASELINE:"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e"})[mode]);
   const content=encodeFixtureV3(frozenContextProposal(input,"R01",1),input);
+  if(mode==="DATE_CURRENT_NO_SCALAR_BOUNDS"){
+   const date={kind:"C",calendar:"GREGORIAN",day:32,month:1,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE"};
+   const dateContent=content as {query:{period:unknown}};dateContent.query.period={kind:"DAY",date,offset:null,from:null,through:null};
+   expect(actual.$defs!.__d.properties!.day).toEqual({type:"integer"});expect(Number.isInteger(date.day)).toBe(true);
+  }
   if(mode==="DATE_CURRENT_STRING_BASELINE"){
    const dateContent=content as {query:{period:unknown}};dateContent.query.period={kind:"DAY",date:"INVALID_DATE_SECRET",offset:null,from:null,through:null};
    expect(actual.$defs!.__d).toEqual({type:"string"});
@@ -272,16 +282,20 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_STRING_BASELINE:"1781ee
   }catch(error){transportError=error;throw error}
  },{now:()=>100});
  if(transportError)throw transportError;
- expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R01",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(result,JSON.stringify({calls,responses:result.responses,applicationEvidence:result.applicationEvidence})).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R01",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
  expect(JSON.parse(readFileSync(join(result.directory,"terminal.json"),"utf8"))).toMatchObject({attempts:1,mode,pilotCredit:false});
  expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
- expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200&&mode!=="DATE_CURRENT_STRING_BASELINE"&&mode!=="SOURCE_COMPACT_BASELINE"&&mode!=="SOURCE_INTEGER_BASELINE"&&mode!=="SOURCE_CURRENT_KEY_BASELINE"?"SUCCESS":"FAILURE"});
+ expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200&&mode!=="DATE_CURRENT_NO_SCALAR_BOUNDS"&&mode!=="DATE_CURRENT_STRING_BASELINE"&&mode!=="SOURCE_COMPACT_BASELINE"&&mode!=="SOURCE_INTEGER_BASELINE"&&mode!=="SOURCE_CURRENT_KEY_BASELINE"?"SUCCESS":"FAILURE"});
  if(status===200&&mode==="SOURCE_CURRENT_KEY_BASELINE"){
   expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","change"],code:"WIRE_SHAPE_INVALID",expected:"FIELD_CHANGE"}]}}});
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  if(status===200&&mode==="DATE_CURRENT_STRING_BASELINE"){
   expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","period","date"],code:"WIRE_SHAPE_INVALID"}]}}});
+  expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
+ }
+ if(status===200&&mode==="DATE_CURRENT_NO_SCALAR_BOUNDS"){
+  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","period","date","day"],code:"WIRE_SHAPE_INVALID",expected:"integer"}]}}});
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  if(status===200&&mode==="SOURCE_INTEGER_BASELINE"){
@@ -305,7 +319,7 @@ it.each(sourceModes.flatMap(mode=>["schema","context"].map(fault=>({mode,fault})
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_SOURCE_SECRET");
  }finally{mock.mockRestore();s.cleanup()}
 });
-it.each(["SOURCE_CURRENT_KEY_BASELINE","DATE_CURRENT_STRING_BASELINE"] as const)("%s query-only original key remains accepted without Pilot credit",async mode=>{
+it.each(["SOURCE_CURRENT_KEY_BASELINE","DATE_CURRENT_STRING_BASELINE","DATE_CURRENT_NO_SCALAR_BOUNDS"] as const)("%s query-only original key remains accepted without Pilot credit",async mode=>{
  const s=setup();let calls=0;
  try{const result=await runDebugLoopExecution(s.load(),candidate,mode as never,async request=>{
   calls++;const body=JSON.parse(request.messages[1].content);delete body.numericOwnership;delete body.fieldCapability;delete body.evidenceSources;
