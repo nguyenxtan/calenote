@@ -197,6 +197,7 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
 const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"] as const;
 const r02CurrentKeyMode="R02_TURN1_CURRENT_KEY_BASELINE" as const;
+const r02CoalescedMode="R02_TURN1_REPLACE_COALESCED_BASELINE" as const;
 async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
@@ -228,6 +229,47 @@ it("R02 current key probe changes only the strict shared mutation key with exact
  expect(JSON.stringify(restored)).toBe(before);expect(JSON.stringify(original)).toBe(before);
  let consumers=0;const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&node.$ref==="#/$defs/__ec")consumers++;Object.values(node).forEach(walk)};walk(probe);
  expect(consumers).toBe(17);expect(probe.$defs!.__sources).toEqual(original.$defs!.__sources);expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
+});
+it("R02 coalesced probe merges only two exact REPLACE shells and preserves both fields",async()=>{
+ const original=await r02Turn1Schema(),before=JSON.stringify(original),probe=debugProbeSchema(original,r02CoalescedMode as never);
+ const old=original.$defs!.__schema5.anyOf!,merged=probe.$defs!.__schema5.anyOf!;
+ expect(old).toHaveLength(4);expect(merged).toHaveLength(3);
+ expect(old[1].properties!.field).toEqual({type:"string",enum:["notes"]});expect(old[2].properties!.field).toEqual({type:"string",enum:["title"]});
+ expect({...old[1],properties:{...old[1].properties,field:undefined}}).toEqual({...old[2],properties:{...old[2].properties,field:undefined}});
+ expect(merged[1]).toEqual({...old[1],properties:{...old[1].properties,field:{type:"string",enum:["notes","title"]}}});
+ expect(merged[0]).toEqual(old[0]);expect(merged[2]).toEqual(old[3]);
+ const shell=merged[1];expect(shell.required).toEqual(["field","operation","value","evidence"]);expect(shell.additionalProperties).toBe(false);
+ expect(shell.properties!.operation).toEqual({type:"string",enum:["REPLACE"]});expect(shell.properties!.value).toEqual({$ref:"#/$defs/__schema3"});expect(shell.properties!.evidence).toEqual({$ref:"#/$defs/__ec"});
+ // Independent finite shell membership: all common assertions are unchanged.
+ const fieldValues=(branch:typeof shell)=>{const field=branch.properties!.field;if(typeof field==="boolean")throw Error("TEST_FIELD_OBJECT");return field.enum!;};
+ const accepts=(fields:unknown[],field:string,operation:string,value:unknown,evidenceRef:string)=>fields.includes(field)&&operation==="REPLACE"&&typeof value==="string"&&evidenceRef==="#/$defs/__ec";
+ for(const field of ["notes","title","location"])for(const operation of ["REPLACE","SET","CLEAR"])for(const value of ["structural-example",null,2])for(const evidenceRef of ["#/$defs/__ec","#/$defs/__e"]){
+  const originalAccepts=old.slice(1,3).some(branch=>accepts(fieldValues(branch),field,operation,value,evidenceRef));
+  expect(accepts(fieldValues(shell),field,operation,value,evidenceRef)).toBe(originalAccepts);
+ }
+ expect(hash(JSON.stringify(probe))).toBe("2740170b5dd2d4fe9868016766e37ea9b233254be73f7156f72dcd906cfaaafe");
+ const restore=structuredClone(probe);restore.$defs!.__schema5=structuredClone(original.$defs!.__schema5);expect(JSON.stringify(restore)).toBe(before);expect(JSON.stringify(original)).toBe(before);
+ expect(probe.$defs!.__sources).toEqual(original.$defs!.__sources);expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
+ let consumers=0;const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&node.$ref==="#/$defs/__ec")consumers++;Object.values(node).forEach(walk)};walk(probe);expect(consumers).toBe(16);
+});
+it.each([200,400])("R02 coalesced probe HTTP%i keeps original fixture wire acceptance and one terminal call",async status=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,r02CoalescedMode as never,async request=>{
+  calls++;try{
+   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("2740170b5dd2d4fe9868016766e37ea9b233254be73f7156f72dcd906cfaaafe");expect(hash(JSON.stringify(request))).toBe("8cc6e16865e5c685c5e0b65e77262bf03ab13e63da5c26d913733b2f0cdde042");
+   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
+   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
+   expect(decodeGoogleLiteEuContextTransportV3(content,CONTEXT_PROTOCOL_V3,undefined,undefined,ContextInputSchema.parse(context)).status).toBe("PARSED");
+   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-coalesced",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  }catch(error){transportError=error;throw error}
+ },{now:()=>100});
+ if(transportError)throw transportError;
+ expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(result.responses[0].status).toBe(status===200?"SUCCESS":"FAILURE");expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0}); // No final oracle requirement.
+ expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(a,candidate,r02CoalescedMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
+ }finally{s.cleanup()}
 });
 it.each([200,400])("R02 current key probe HTTP%i authors reachable CLEAR yet unchanged runtime refuses new key",async status=>{
  const s=setup();let calls=0,transportError:unknown;
@@ -295,7 +337,7 @@ it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$m
  expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
  }finally{s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
  const real=serializeContextRequest;
  const spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{
   const request=real(input);
@@ -308,7 +350,7 @@ it.each([...r02Turn1Modes,r02CurrentKeyMode].flatMap(mode=>["schema","context"].
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  }finally{spy.mockRestore();s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
  const original=await r02Turn1Schema();
  for(const fault of ["source","ref","bound"]){const drift=structuredClone(original);
   if(fault==="source")drift.$defs!.__sources.enum=["PRIVATE_SECRET"];

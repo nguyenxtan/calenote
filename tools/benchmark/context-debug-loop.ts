@@ -90,9 +90,9 @@ export function inspectDebugLoopFreshRun(a:DebugLoopAuthority|undefined,candidat
  const now=(options.now??Date.now)();if(!Number.isSafeInteger(now)||now<fresh.cooldownUntil)throw Error("DEBUG_FRESH_COOLDOWN");
  const accounting=inspectDebugLoop(a);return {parentDirectory:fresh.record.parentDirectory,directory:fresh.directory,mode:fresh.record.mode,cooldownUntil:fresh.cooldownUntil,accounting};
 }
-export const DEBUG_PROBE_MODES=["R02_TURN1_CURRENT_KEY_BASELINE","R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE","DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_CURRENT_INLINE_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
+export const DEBUG_PROBE_MODES=["R02_TURN1_REPLACE_COALESCED_BASELINE","R02_TURN1_CURRENT_KEY_BASELINE","R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE","DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_CURRENT_INLINE_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
-const isR02Turn1ProbeMode=(mode:string)=>mode==="R02_TURN1_SCHEMA_CONTROL"||mode==="R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"||mode==="R02_TURN1_CURRENT_KEY_BASELINE";
+const isR02Turn1ProbeMode=(mode:string)=>mode==="R02_TURN1_SCHEMA_CONTROL"||mode==="R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"||mode==="R02_TURN1_CURRENT_KEY_BASELINE"||mode==="R02_TURN1_REPLACE_COALESCED_BASELINE";
 const isSourceProbeMode=(mode:string)=>mode==="DATE_CURRENT_NO_SCALAR_BOUNDS"||mode==="DATE_CURRENT_STRING_BASELINE"||mode==="SOURCE_CURRENT_KEY_BASELINE"||mode==="SOURCE_INTEGER_BASELINE"||mode==="SOURCE_CURRENT_INLINE_BASELINE"||mode==="SOURCE_COMPACT_BASELINE"||mode==="SOURCE_STRING_BASELINE"||mode==="SOURCE_SINGLETON_BASELINE"||mode==="SOURCE_T0_SCHEMA_BASELINE";
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
@@ -110,7 +110,14 @@ export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
    ec.properties=Object.fromEntries(Object.entries(ec.properties!).map(([key,value])=>[key==="primaryEvidence"?"currentPrimaryEvidence":key,value]));
    ec.required=(ec.required as string[]).map(key=>key==="primaryEvidence"?"currentPrimaryEvidence":key);
   }
-  const expected=mode==="R02_TURN1_CURRENT_KEY_BASELINE"?"6a9790bcaa4f2ef63f458fb87b8ac353c8541ca893f4c925525a192d5882a117":mode==="R02_TURN1_SCHEMA_CONTROL"?"635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48":"ecfc0b1b680d667f5bfa3e4fa7f841dfd6bbd157f67ab5b2e4e3d7575b53f53d";
+  if(mode==="R02_TURN1_REPLACE_COALESCED_BASELINE"){
+   const branches=s.$defs!.__schema5.anyOf;
+   if(!branches||branches.length!==4)throw Error("DEBUG_PROBE_SHAPE");
+   const left=branches[1],right=branches[2];
+   if(left.type!=="object"||right.type!=="object"||!left.properties||!right.properties||!isDeepStrictEqual(left.properties.field,{type:"string",enum:["notes"]})||!isDeepStrictEqual(right.properties.field,{type:"string",enum:["title"]})||!isDeepStrictEqual(left.properties.operation,{type:"string",enum:["REPLACE"]})||!isDeepStrictEqual(left.properties.evidence,{$ref:"#/$defs/__ec"})||!isDeepStrictEqual(left.properties.value,{$ref:"#/$defs/__schema3"})||!isDeepStrictEqual({...left,properties:{...left.properties,field:undefined}},{...right,properties:{...right.properties,field:undefined}}))throw Error("DEBUG_PROBE_SHAPE");
+   left.properties.field={type:"string",enum:["notes","title"]};branches.splice(2,1);
+  }
+  const expected=mode==="R02_TURN1_REPLACE_COALESCED_BASELINE"?"2740170b5dd2d4fe9868016766e37ea9b233254be73f7156f72dcd906cfaaafe":mode==="R02_TURN1_CURRENT_KEY_BASELINE"?"6a9790bcaa4f2ef63f458fb87b8ac353c8541ca893f4c925525a192d5882a117":mode==="R02_TURN1_SCHEMA_CONTROL"?"635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48":"ecfc0b1b680d667f5bfa3e4fa7f841dfd6bbd157f67ab5b2e4e3d7575b53f53d";
   if(hash(JSON.stringify(s))!==expected)throw Error("DEBUG_PROBE_SHAPE");
   return s as T;
  }
