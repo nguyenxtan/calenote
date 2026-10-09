@@ -7,7 +7,8 @@ import {createHash} from "node:crypto";
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest} from "./context-debug-loop";
+import {CONTEXT_CONTRACT_PROMPT} from "../../src/modules/conversation/context-contract/prompt";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -179,6 +180,34 @@ it("historical string-selector probe fails closed when runtime is already string
   await expect(runDebugLoopExecution(a,candidate,"OPERATION_STRING",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
   expect(calls).toBe(0);
  }finally{s.cleanup()}
+});
+it.each(["valid","empty","http400"])("R02 uncertainty prompt-only diagnostic stays single and strict: %s",async kind=>{
+ const s=setup();let calls=0;
+ try{
+  const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_WIRE_PROMPT",async request=>{
+   calls++;expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("ed856da2f9e58cea94ff657c4db020681b345d1dd0f62adfda59fdc802fd8436");
+   expect(request.messages[0].content).toContain("REQUIRED fieldCode/reason/alternatives, never {}");
+   if(kind==="http400")return {status:400,body:"{}"};
+   const original=structuredClone(request);original.messages[0].content=CONTEXT_CONTRACT_PROMPT;
+   const before=JSON.stringify(original),transformed=debugUncertaintyPromptRequest(original);expect(JSON.stringify(original)).toBe(before);expect(transformed).toEqual(request);
+   expect({...transformed,messages:[{...transformed.messages[0],content:CONTEXT_CONTRACT_PROMPT},...transformed.messages.slice(1)]}).toEqual(original);
+   const originalLines=CONTEXT_CONTRACT_PROMPT.split("\n"),probeLines=request.messages[0].content.split("\n");expect(probeLines.filter(line=>!line.startsWith("uncertainties:"))).toEqual(originalLines.filter(line=>!line.startsWith("uncertainties:")));
+   expect(probeLines.find(line=>line.startsWith("uncertainties:"))?.split(" Operation alternatives")[1]).toBe(originalLines.find(line=>line.startsWith("uncertainties:"))?.split(" Operation alternatives")[1]);
+   console.log(JSON.stringify({promptAxisSha:hash(request.messages[0].content),requestAxisSha:hash(JSON.stringify(request)),promptBytesBefore:Buffer.byteLength(CONTEXT_CONTRACT_PROMPT),promptBytesAfter:Buffer.byteLength(request.messages[0].content)}));
+   for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugUncertaintyPromptRequest(drift)).toThrow("DEBUG_UNCERTAINTY_PROMPT_BINDING");}
+   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;
+   if(kind==="empty")content.uncertainties=[{}];
+   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-prompt-axis",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  },{now:()=>100});
+  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(1);
+  expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");
+  if(kind==="empty")expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{uncertaintyShape:{keys:[]}}]}}});
+  await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_WIRE_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ }finally{s.cleanup();}
+});
+it.each(["prompt","context","schema","route"])("uncertainty prompt axis rejects %s drift before physical transport",async fault=>{
+ const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_WIRE_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);}finally{spy.mockRestore();s.cleanup();}
 });
 it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no Pilot credit",async()=>{
  const s=setup();let calls=0;
