@@ -1,5 +1,12 @@
 # Title Presence Implementation Plan
 
+### Approved wire52 seeded R02 TURN1 tooling execution
+
+1. Controller reads this amendment before tooling edits. Own ONLY context-debug-loop.ts/.test.ts and these two metadata docs; app b0085bc remains immutable and distinct from harness. RED closed new mode/target/seed/schema/context bindings first, preserve logs.
+2. Add separate R02_TURN1_SCHEMA_CONTROL and conditional R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE, reusing trusted resolver/single-target executor. Pin seed5b19cc0..., manifest7d9a0e1..., context560569f4..., control requeste48c60..., original schema635f4734...; remove sole root maxItems for ecfc0b1b..., prove outside-property equality/restorationorder/source7/current1. Reject drift before HTTP; do not reinterpret any historical mode.
+3. Fake200 >4 actual authored uncertainties must be refused by unchanged decoder with no partial reads/mutations; fake400 conservative UNKNOWN, max1/zero prerequisites/terminal/no Pilot credit/duplicates/privacy/accounting/history/no automatic axis. Control and ablation independently chosen, controller interprets first before authorizing second. Derive actual account totals, never hardcode current budget.
+4. Focused six existing tool/seed/runner/accounting/authority suites, standalone typecheck/scopedlint/diff; freeze four tracked files and ignored implementation report with genuine RED/GREEN/commands/pins/context-gap limitation. Controller full/review/commit/preflight/CONTROL then conditional decision; implementer no provider/network/credential/accounting/full/commit/children.
+
 ### Approved wire52 uncertainty cardinality execution
 
 1. RED actual outgoing base+specialized schema admits five valid uncertainty items while canonical/runtime rejects; 0/4 preserve behavior. Prove root failure array count5/large count safe diagnostic exactCount/max4, nonarray type-only; nested item failures retain nested paths and finite privacy. No rawlive payload available/exactlive count claim.

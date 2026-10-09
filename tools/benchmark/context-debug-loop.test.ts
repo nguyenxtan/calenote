@@ -16,6 +16,8 @@ import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contra
 import {ContextInputSchema} from "../../src/modules/conversation/context-contract/contracts";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
+import {resolveSingleValidationTarget} from "./context-contract-runner";
+import {createContextContractProbe} from "./context-contract-probe";
 import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
@@ -193,6 +195,74 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
  }finally{s.cleanup()}
 });
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
+const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"] as const;
+async function r02Turn1Schema(){
+ const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
+ let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
+ const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{schema=serializeContextRequest(input).response_format.json_schema.schema;return {fixtureFault:"SCHEMA_INVALID"};});
+ try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
+ expect(schema).toBeDefined();return schema!;
+}
+it.each(r02Turn1Modes)("%s pins seeded R02 T1 and alters at most the sole uncertainty bound",async mode=>{
+ const original=await r02Turn1Schema(),before=JSON.stringify(original);
+ expect(hash(before)).toBe("635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48");
+ const transformed=debugProbeSchema(original,mode as never);
+ expect(hash(JSON.stringify(transformed))).toBe(mode===r02Turn1Modes[0]?hash(before):"ecfc0b1b680d667f5bfa3e4fa7f841dfd6bbd157f67ab5b2e4e3d7575b53f53d");
+ expect({...transformed,properties:{...transformed.properties,uncertainties:original.properties!.uncertainties}}).toEqual(original);
+ expect(JSON.stringify(original)).toBe(before);
+ const restore=structuredClone(transformed);restore.properties!.uncertainties=structuredClone(original.properties!.uncertainties);
+ expect(JSON.stringify(restore)).toBe(before);
+ expect(original.$defs!.__sources.enum).toHaveLength(7);expect(original.$defs!.__current.enum).toHaveLength(1);
+});
+it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode HTTP$status is one seeded terminal request with unchanged max4 decoder",async({mode,status})=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,mode as never,async request=>{
+  calls++;try{
+   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
+   expect(hash(JSON.stringify(context))).toBe("560569f4bc260b7921602f5e5a892b87f5a384e856ea2b845e5b473df3af2c08");
+   const uncertaintySchema=request.response_format.json_schema.schema.properties!.uncertainties;
+   if(typeof uncertaintySchema==="boolean")throw Error("TEST_UNCERTAINTY_SCHEMA_OBJECT");
+   expect(uncertaintySchema.maxItems).toBe(mode===r02Turn1Modes[0]?4:undefined);
+   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
+   if(!content||typeof content!=="object"||Array.isArray(content)||!("uncertainties" in content))throw Error("TEST_WIRE_OBJECT");
+   content.uncertainties=Array.from({length:5},()=>({fieldCode:6,reason:"MISSING",alternatives:[]}));
+   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-bound",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  }catch(error){transportError=error;throw error}
+ },{now:()=>100});
+ if(transportError)throw transportError;
+ expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:1,status:"FAILURE"});
+ if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["uncertainties"],code:"WIRE_SHAPE_INVALID",actualCount:5,maxItems:4}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
+ expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
+ await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
+ expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));
+ expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
+ }finally{s.cleanup()}
+});
+it.each(r02Turn1Modes.flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
+ const real=serializeContextRequest;
+ const spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{
+  const request=real(input);
+  if(fault==="schema"){const uncertainty=request.response_format.json_schema.schema.properties!.uncertainties;if(typeof uncertainty==="boolean")throw Error("TEST_UNCERTAINTY_SCHEMA_OBJECT");uncertainty.maxItems=3;}
+  else{const context=JSON.parse(request.messages[1].content);context.reference.instant="2026-10-05T01:00:01Z";request.messages[1].content=JSON.stringify(context);}
+  return request;
+ });
+ const s=setup();let calls=0;
+ try{const history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),result=await runDebugLoopExecution(s.load(),candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100});
+ expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ }finally{spy.mockRestore();s.cleanup()}
+});
+it.each(r02Turn1Modes)("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
+ const original=await r02Turn1Schema();
+ for(const fault of ["source","ref","bound"]){const drift=structuredClone(original);
+  if(fault==="source")drift.$defs!.__sources.enum=["PRIVATE_SECRET"];
+  else if(fault==="ref")drift.$defs!.__ec.properties!.primaryEvidence={$ref:"https://PRIVATE_SECRET.invalid"};
+  else{const uncertainty=drift.properties!.uncertainties;if(typeof uncertainty==="boolean")throw Error("TEST_UNCERTAINTY_SCHEMA_OBJECT");uncertainty.maxItems=5;}
+  const before=JSON.stringify(drift);expect(()=>debugProbeSchema(drift,mode as never)).toThrow("DEBUG_PROBE_SHAPE");expect(JSON.stringify(drift)).toBe(before);
+ }
+});
 it.each(sourceModes)("%s rejects unmodified real wire47 candidate before HTTP",async mode=>{
  expect(hash(JSON.stringify(acceptedWire46T1Schema))).toBe("d30093b5ce25aed6f05ba17a4ae8018c196adc29acc0412328f217f917451a24");
  const s=setup();let calls=0;
