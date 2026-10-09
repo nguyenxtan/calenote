@@ -2,6 +2,8 @@
 
 ### Approved wire46 TURN1 source-domain diagnostic tooling
 
+Key-only SOURCE_CURRENT_KEY_BASELINE changes only shared __ec primaryEvidence property/required entry to currentPrimaryEvidence, same insertion order/ref/domain/consumers and all other nodes. Exact original/transformed hashes and seeded T1 fences. Actual schema-permitted CLEAR new-key response strictly rejected by unchanged decoder; general query old-key can remain accepted. No production key mapper, validator change, source widening/default/repair or automatic axes.
+
 Integer-only SOURCE_INTEGER_BASELINE on exact original T1: __sources integer0..2 and __current integer1..1, all source/current choices/order/membership retained as indices; every other node unchanged, exact hash bound. Diagnostic syntax only, numeric primary hard-rejected by unchanged string-JSON decoder. Same max1/zero prerequisites/no Pilot credit/no automatic axes; no production mapping/default/source selection.
 
 Equivalent topology-only SOURCE_CURRENT_INLINE_BASELINE: on exact original T1 schema, inline sole __current scalar reference within shared __ec and delete dead __current definition. All source/current values/cardinality/order/membership/consumers and every other node unchanged; exact transformed hash guarded. Same deterministic T1 seed/context/max1/no Pilot credit; production JSON-pointer syntax/decoder remains unchanged. No semantic narrowing/fill/repair or production admission claim.
