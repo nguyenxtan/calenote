@@ -379,13 +379,7 @@ function semanticEvidenceSlots(root: Schema): Schema {
   return visit(root);
 }
 const dateWireKeys=["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"] as const;
-const dateWireCodes={C:"CIVIL_DATE",R:"RELATIVE_DAY",W:"WEEKDAY"} as const;
-const dateActiveKeys={C:["kind","calendar","day","month","year","leapMonth"],R:["kind","offsetDays"],W:["kind","weekday","qualifier"]} as const;
-const dateInactiveSlots={calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE"} as const;
-function structuredDateSchema():Schema {
-  const integer=(minimum:number,maximum:number):Schema=>({type:"integer",minimum,maximum});
-  return {type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:{type:"string",enum:["NONE","GREGORIAN","LUNAR_VN"]},day:integer(0,31),month:integer(0,12),year:integer(0,9999),leapMonth:integer(-1,1),offsetDays:integer(-366,366),weekday:integer(0,7),qualifier:{type:"string",enum:["NONE","THIS_WEEK","NEXT_WEEK","UNRESOLVED"]}},required:[...dateWireKeys],additionalProperties:false};
-}
+const canonicalDateKeys={CIVIL_DATE:["kind","calendar","day","month","year","leapMonth"],RELATIVE_DAY:["kind","offsetDays"],WEEKDAY:["kind","weekday","qualifier"]} as const;
 function encodedDateSchemas(node: Schema, root: Schema): Schema {
   const plan=taggedPlan(node,root);
   if(plan && plan.tags.length===3 && plan.tags.every(tag=>tag.kind?.length===1 && ["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(tag.kind[0]))))return {type:"string"};
@@ -429,22 +423,14 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
     if(mode==="decode"){
       const item=parseDateWireJson(value,path,field);
       try{
-      requireWireKeys(item,[...dateWireKeys],[...dateWireKeys],path);
       const code=item.kind;
-      if(code!=="C"&&code!=="R"&&code!=="W"){
-        const control=projectControlEnum(Object.keys(dateWireCodes),code);delete control.actualSafeToken;
+      if(code!=="CIVIL_DATE"&&code!=="RELATIVE_DAY"&&code!=="WEEKDAY"){
+        const control=projectControlEnum(Object.keys(canonicalDateKeys),code);delete control.actualSafeToken;
         throw new WireShapeFailure([...path,"kind"],"CONTROL_ENUM",undefined,undefined,control);
       }
-      const active:readonly string[]=dateActiveKeys[code];
-      const shape=structuredDateSchema();
-      for(const key of dateWireKeys){
-        if(!predicate(shape.properties![key],item[key],shape))throw new WireShapeFailure([...path,key],shape.properties![key].type??"CONTROL_ENUM");
-        if(!active.includes(key)&&!Object.is(item[key],dateInactiveSlots[key as keyof typeof dateInactiveSlots]))throw new WireShapeFailure([...path,key],"CONTROL_ENUM");
-      }
-      // Representation codes are exact, not arithmetic defaults or coercions.
-      if(code==="C"&&((item.year===0&&!Object.is(item.year,0))||(item.leapMonth===0&&!Object.is(item.leapMonth,0))))throw new WireShapeFailure(path,"CONTROL_ENUM");
-      candidate={...Object.fromEntries(active.map(key=>[key,item[key]])),kind:dateWireCodes[code]};
-      if(code==="C")candidate={...candidate as Record<string,unknown>,year:item.year===0?null:item.year,leapMonth:item.leapMonth===-1?null:item.leapMonth===0?false:true};
+      const keys=[...canonicalDateKeys[code]];
+      requireWireKeys(item,keys,keys,path);
+      candidate=item;
       }catch(error){
         if(error instanceof WireShapeFailure)throw new WireShapeFailure(error.path,error.expected,error.extraKeyCount,error.cardinality,error.control,projectDateOperandFailure(item,"WIRE_VALUE","INVALID_OPERAND",field));
         throw error;
@@ -460,7 +446,7 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
       if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)&&structure.kind==="UNKNOWN")structure.reason="UNKNOWN_KIND";
       throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON",undefined,undefined,undefined,structure);}
     if(mode==="encode"){
-      const encoded=JSON.stringify({...dateInactiveSlots,...parsed.data,...(parsed.data.kind==="CIVIL_DATE"?{year:parsed.data.year===null?0:parsed.data.year,leapMonth:parsed.data.leapMonth===null?-1:parsed.data.leapMonth?1:0}:{}),kind:parsed.data.kind==="CIVIL_DATE"?"C":parsed.data.kind==="RELATIVE_DAY"?"R":"W"});
+      const encoded=JSON.stringify(parsed.data);
       return parsed.data.kind==="RELATIVE_DAY"&&Object.is(parsed.data.offsetDays,-0)?encoded.replace('"offsetDays":0','"offsetDays":-0'):encoded;
     }
     return {...Object.fromEntries(["calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"].map(key=>[key,null])),...parsed.data};

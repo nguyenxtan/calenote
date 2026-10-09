@@ -18,12 +18,12 @@ it("dispatches the civil source fidelity checkpoint last before output", () => {
   expect(JSON.parse(request.messages[1].content).turns).toEqual(input.turns);
 });
 
-it("wire instructions require strictly typed date slots without opaque date JSON", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("kind C=CIVIL_DATE/R=RELATIVE_DAY/W=WEEKDAY");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Slots non-null; inactive exact sentinel, never discard/repair");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("C year0=canonical null; leapMonth -1=null/0=false/1=true (Gregorian=-1)");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Encode the nine-key object with valid JSON quoting/escaping; never canonical kind names or bare dates.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Facts/examples/uncertainty alternatives stay canonical/full-name, never wire dates");
+it("wire instructions require exact canonical date JSON without dual codebooks", () => {
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("CIVIL_DATE keys kind/calendar/day/month/year/leapMonth");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Every family key required, no extras");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("canonical year/leapMonth null stays authored null");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Encode canonical kinds with valid JSON quoting/escaping; never C/R/W envelopes or bare dates.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Facts/examples/uncertainty alternatives stay canonical/full-name");
 });
 
 it("serialized query policy delivers current continuation evidence ownership", () => {
@@ -221,9 +221,14 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(JSON.stringify(input)).toBe(before);
 });
 it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE=JSON strings of nine-key wire objects, never bare mai/tomorrow/ISO or canonical JSON.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow=R/offsetDays1 plus inactive sentinels.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve null codebook, no year/leap inference. Clocks=objects; no date resolution/invention.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE=JSON strings of exact canonical DateOperand objects, never bare mai/tomorrow/ISO or C/R/W envelopes.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow=RELATIVE_DAY/offsetDays1 only.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve authored nulls, no year/leap inference. Clocks=objects; no date resolution/invention.");
+});
+it("date structural illustration is valid escaped canonical JSON, not source evidence",()=>{
+ const line=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Structural illustration only"))!;
+ const literal=line.slice(line.indexOf("date value ")+11,line.indexOf(". Author every value"));
+ expect(JSON.parse(JSON.parse(literal))).toEqual({kind:"CIVIL_DATE",calendar:"GREGORIAN",day:1,month:1,year:null,leapMonth:null});
 });
 it("notification-owned date does not become an event date by field-order default", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A date modifying the instruction to remind belongs to reminderDate, not eventDate; an explicit event predicate owns its eventDate separately.");

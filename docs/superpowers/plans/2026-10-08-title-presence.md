@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Approved wire48 canonical date JSON execution
+
+1. RED canonical CIVIL/RELATIVE/WEEKDAY strings against current nine-slot decoder; target canonical-only acceptance with old C/R/W strict rejection. Preserve finite diagnostic stages/reasons/paths and privacy.
+2. Change only date representation encoder/decoder: encoder preserves existing active-key application adapter; decoder requires exact canonical family keys then unchanged DateOperandSchema. Keep bounded flat parse/duplicate/nested guard, nulls/negativezero, no fallback/default/fill.
+3. Test all families/boundaries/date positions/CLEAR/inactive queries/eight-carrier order/current-source domains. Security: missing/extra/unknown/escaped duplicate keys before/after, nested/scalar/array/malformed/trailing/Unicode/whitespace, oversize/fraction/overflow/ranges/null/code/Gregorian leap and no sensitive diagnostic leaks. Preserve outer alternatives/business/evidence/legacy parity and historical guards/current real pre-HTTP drift refusal.
+4. Own context-provider-wire.ts/.test.ts, prompt.ts/.test.ts, protocol.ts, necessary existing field-capability/list-period/query-evidence/fit/runner/debug-loop pin tests and runner identity pins, plus these two docs. No canonical DateOperandSchema/evidence/oracle/field-capability runtime changes. Advance wire48 identities/capability9 unchanged; date-only normative coverage map and valid canonical escaped illustration.
+5. Broad focused date/evidence/gateway/authority/query/runner/security, actual326 additive12000/output1536 fit, typecheck/scoped lint/diff; retain RED/failure evidence. Freeze/report for controller review/full/commit/FreshPilot. No implementer provider/credential/accounting/commit/full/children.
+
 ### Approved wire46 TURN1 source-domain diagnostic step
 
 Key-mode RED/GREEN exact one-definition restore/hash/domain, reachable permitted CLEAR carrier/value/index/new-key fake200 strict refusal/no reads/mutations and separate unchanged query success; fake400/accounting/seed/context/ref drift/privacy/duplicate/max1/no Pilot credit/no automatic axes. Only two tools/two metadata docs, six-file focused/typecheck/lint/diff then freeze; no production mapper or paid implementer calls.
