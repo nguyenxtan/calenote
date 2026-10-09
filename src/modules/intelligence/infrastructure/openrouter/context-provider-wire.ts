@@ -381,10 +381,10 @@ function semanticEvidenceSlots(root: Schema): Schema {
 const dateWireKeys=["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"] as const;
 const dateWireCodes={C:"CIVIL_DATE",R:"RELATIVE_DAY",W:"WEEKDAY"} as const;
 const dateActiveKeys={C:["kind","calendar","day","month","year","leapMonth"],R:["kind","offsetDays"],W:["kind","weekday","qualifier"]} as const;
+const dateInactiveSlots={calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE"} as const;
 function structuredDateSchema():Schema {
-  const nullable=(node:Schema):Schema=>({anyOf:[node,{type:"null"}]});
-  const integer=(minimum:number,maximum:number)=>nullable({type:"integer",minimum,maximum});
-  return {type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:nullable({type:"string",enum:["GREGORIAN","LUNAR_VN"]}),day:integer(1,31),month:integer(1,12),year:integer(1,9999),leapMonth:nullable({type:"boolean"}),offsetDays:integer(-366,366),weekday:integer(1,7),qualifier:nullable({type:"string",enum:["THIS_WEEK","NEXT_WEEK","UNRESOLVED"]})},required:[...dateWireKeys],additionalProperties:false};
+  const integer=(minimum:number,maximum:number):Schema=>({type:"integer",minimum,maximum});
+  return {type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:{type:"string",enum:["NONE","GREGORIAN","LUNAR_VN"]},day:integer(0,31),month:integer(0,12),year:integer(0,9999),leapMonth:integer(-1,1),offsetDays:integer(-366,366),weekday:integer(0,7),qualifier:{type:"string",enum:["NONE","THIS_WEEK","NEXT_WEEK","UNRESOLVED"]}},required:[...dateWireKeys],additionalProperties:false};
 }
 function encodedDateSchemas(node: Schema, root: Schema): Schema {
   const plan=taggedPlan(node,root);
@@ -409,8 +409,15 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
         throw new WireShapeFailure([...path,"kind"],"CONTROL_ENUM",undefined,undefined,control);
       }
       const active:readonly string[]=dateActiveKeys[code];
-      for(const key of dateWireKeys)if(!active.includes(key)&&item[key]!==null)throw new WireShapeFailure([...path,key],"null");
+      const shape=structuredDateSchema();
+      for(const key of dateWireKeys){
+        if(!predicate(shape.properties![key],item[key],shape))throw new WireShapeFailure([...path,key],shape.properties![key].type??"CONTROL_ENUM");
+        if(!active.includes(key)&&!Object.is(item[key],dateInactiveSlots[key as keyof typeof dateInactiveSlots]))throw new WireShapeFailure([...path,key],"CONTROL_ENUM");
+      }
+      // Representation codes are exact, not arithmetic defaults or coercions.
+      if(code==="C"&&((item.year===0&&!Object.is(item.year,0))||(item.leapMonth===0&&!Object.is(item.leapMonth,0))))throw new WireShapeFailure(path,"CONTROL_ENUM");
       candidate={...Object.fromEntries(active.map(key=>[key,item[key]])),kind:dateWireCodes[code]};
+      if(code==="C")candidate={...candidate as Record<string,unknown>,year:item.year===0?null:item.year,leapMonth:item.leapMonth===-1?null:item.leapMonth===0?false:true};
     }else{
       if(!value || typeof value!=="object" || Array.isArray(value))throw new WireShapeFailure(path,"DATE_OPERAND_JSON");
       const item=value as Record<string,unknown>;
@@ -421,7 +428,7 @@ function dateJsonOperands(object: Record<string, unknown>, mode: "encode" | "dec
     if(!parsed.success){const structure=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND",field,parsed.error.issues[0].code);
       if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)&&structure.kind==="UNKNOWN")structure.reason="UNKNOWN_KIND";
       throw new WireShapeFailure([...path,...parsed.error.issues[0].path],"DATE_OPERAND_JSON",undefined,undefined,undefined,structure);}
-    if(mode==="encode")return {...Object.fromEntries(dateWireKeys.map(key=>[key,null])),...parsed.data,kind:parsed.data.kind==="CIVIL_DATE"?"C":parsed.data.kind==="RELATIVE_DAY"?"R":"W"};
+    if(mode==="encode")return {...dateInactiveSlots,...parsed.data,...(parsed.data.kind==="CIVIL_DATE"?{year:parsed.data.year===null?0:parsed.data.year,leapMonth:parsed.data.leapMonth===null?-1:parsed.data.leapMonth?1:0}:{}),kind:parsed.data.kind==="CIVIL_DATE"?"C":parsed.data.kind==="RELATIVE_DAY"?"R":"W"};
     return {...Object.fromEntries(["calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"].map(key=>[key,null])),...parsed.data};
   };
   const result={...object};

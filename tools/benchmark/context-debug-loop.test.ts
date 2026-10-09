@@ -1,5 +1,5 @@
 // @vitest-environment node
-import {it,expect} from "vitest";
+import {it,expect,vi} from "vitest";
 import {mkdtempSync,mkdirSync,realpathSync,readFileSync,writeFileSync,rmSync,existsSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -10,6 +10,7 @@ import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
 import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun} from "./context-debug-loop";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {parseGoogleLiteEuContextSectionsV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
 import {ContextInputSchema} from "../../src/modules/conversation/context-contract/contracts";
@@ -19,7 +20,21 @@ const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 const dateModes=["DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
 const dateProbeHashes={DATE_STRING_BASELINE:"ffbdc5c267f7e480879196a0d45c5f11b26ea58517a76d4016ff9bd28bd7dab9",DATE_NO_NULL_UNIONS:"f9b6c46d55acef4f22998f90e8fe8826964ebc2f5542f093d9e167ee6600ccab",DATE_NO_SCALAR_BOUNDS:"42dce35a43d7ac0989b30cd6395c48048330d5b5d10296f69e9fd35b6ea171ea"};
-it.each(dateModes)("%s isolates only the actual R01 date definition, one request and no Pilot credit",async mode=>{
+// Explicit historical wire45 specimen. The production probe guard must NOT
+// silently accept a later representation. Base candidate identity stays real.
+type HistoricalDateNode=NonNullable<ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]["$defs"]>[string];
+function historicalDateDefinition():HistoricalDateNode{
+ const nullable=(node:HistoricalDateNode):HistoricalDateNode=>({anyOf:[node,{type:"null"}]}),integer=(minimum:number,maximum:number)=>nullable({type:"integer",minimum,maximum});
+ return {type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:nullable({type:"string",enum:["GREGORIAN","LUNAR_VN"]}),day:integer(1,31),month:integer(1,12),year:integer(1,9999),leapMonth:nullable({type:"boolean"}),offsetDays:integer(-366,366),weekday:integer(1,7),qualifier:nullable({type:"string",enum:["THIS_WEEK","NEXT_WEEK","UNRESOLVED"]})},required:["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"],additionalProperties:false};
+}
+function mockHistoricalDateRequests(){
+ const real=googleLiteEuContextWireSchemaV3;
+ const mock=vi.spyOn(wireModule,"googleLiteEuContextWireSchemaV3").mockImplementation((capability,input)=>{
+  const result=real(capability,input);if(input)result.schema.$defs!.__d=historicalDateDefinition();return result;
+ });return ()=>mock.mockRestore();
+}
+it.each(dateModes)("%s isolates only historical actual R01 wire45 date definition, one request and no Pilot credit",async mode=>{
+ const restore=mockHistoricalDateRequests();
  const s=setup();let calls=0,transportError:unknown;
  try{
   const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
@@ -44,18 +59,28 @@ it.each(dateModes)("%s isolates only the actual R01 date definition, one request
   await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
   expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
   expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:1,unknownExposureMicrounits:105472});
- }finally{s.cleanup()}
+ }finally{s.cleanup();restore()}
 });
-it.each(dateModes)("%s preserves unknown accounting after exactly one failed HTTP request",async mode=>{
+it.each(dateModes)("%s preserves historical wire45 unknown accounting after exactly one failed HTTP request",async mode=>{
+ const restore=mockHistoricalDateRequests();
  const s=setup();let calls=0;
  try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");const result=await runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;return {status:400,body:"{}"}},{now:()=>100});
  expect(result).toMatchObject({providerHttpAttempts:1,terminal:true,pilotCredit:false});expect(calls).toBe(1);
  expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:2,unknownExposureMicrounits:210944});expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ }finally{s.cleanup();restore()}
+});
+it.each(dateModes)("historical %s rejects current sentinel shape before HTTP without Pilot credit",async mode=>{
+ const schema=requestBoundSchema(),before=JSON.stringify(schema);
+ expect(()=>debugProbeSchema(schema,mode)).toThrow("DEBUG_PROBE_SHAPE");expect(JSON.stringify(schema)).toBe(before);
+ const s=setup();let calls=0;
+ try{const history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");const result=await runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100});
+  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  }finally{s.cleanup()}
 });
 it.each(["missing","extra","required","open","kind","null-order","bound","external","unresolved","ref-sibling","moved-reference"])("date probes fail closed on %s shape drift",fault=>{
  type DriftNode={type?:string;$ref?:string;maximum?:number;enum?:string[];required?:string[];additionalProperties?:boolean;properties?:Record<string,DriftNode>;$defs?:Record<string,DriftNode>;anyOf?:DriftNode[]};
  const schema=requestBoundSchema() as unknown as DriftNode,d=schema.$defs!.__d,date=schema.properties!.query.anyOf![0].properties!.date.anyOf!;
+ Object.assign(d,historicalDateDefinition());
  if(fault==="missing")delete schema.$defs!.__d;
  if(fault==="extra")d.properties!.secret={type:"string"};
  if(fault==="required")d.required!.pop();
@@ -70,7 +95,7 @@ it.each(["missing","extra","required","open","kind","null-order","bound","extern
  for(const mode of dateModes)expect(()=>debugProbeSchema(schema,mode as never)).toThrow("DEBUG_PROBE_SHAPE");
 });
 it("date diagnostic string ablation never changes the structured runtime decoder",()=>{
- const schema=requestBoundSchema(),before=JSON.stringify(schema);
+ const schema=requestBoundSchema();schema.$defs!.__d=historicalDateDefinition();const before=JSON.stringify(schema);
  for(const mode of dateModes)debugProbeSchema(schema,mode);
  expect(JSON.stringify(schema)).toBe(before);
  const raw=encodeGoogleLiteEuContextV3(frozenContextProposal({turns:[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc mỗi ngày 2 ngày"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R02",0) as never) as {eventDateChange:{change:{value:unknown}}};

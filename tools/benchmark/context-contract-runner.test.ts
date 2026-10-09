@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "253ef30d226702a0e10b6d24a14a4be665d4a7840e8baaabb38b3e98b15465c0",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "e4a4926ae46bf7edb32f7051642d6c001bb078875bfce269c67f5ce8b1adf2f5",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("253ef30d226702a0e10b6d24a14a4be665d4a7840e8baaabb38b3e98b15465c0");
+    expect(requestSchemaDigest).not.toBe("e4a4926ae46bf7edb32f7051642d6c001bb078875bfce269c67f5ce8b1adf2f5");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -499,8 +499,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "253ef30d226702a0e10b6d24a14a4be665d4a7840e8baaabb38b3e98b15465c0",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-45" });
+      providerWireSchemaDigest: "e4a4926ae46bf7edb32f7051642d6c001bb078875bfce269c67f5ce8b1adf2f5",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-46" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

@@ -27,8 +27,8 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  const schema=googleLiteEuContextWireSchemaV3().schema;
  const remainder=structuredClone(schema) as unknown as {properties:Record<string,unknown>;required:string[];$defs:Record<string,unknown>};
  for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
- // Explicit new fixed-date definition has eight nullable slots (not variant
- // unions); keep its measured cost separate, never raise historical bounds.
+ // Fixed-date definition uses non-null representation sentinels, not date
+ // variant unions; keep its measured cost separate, never raise old bounds.
  delete remainder.$defs.__d;
  const baseline=contextWireComplexity(remainder),metrics=contextWireComplexity(schema);
  // Preserve historical bounds; do not claim the amended schema was admitted
@@ -37,12 +37,12 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(baseline.unions).toBeLessThanOrEqual(19);
  expect(baseline.branches).toBeLessThanOrEqual(51);
  expect(baseline.references).toBeLessThanOrEqual(42);
- expect(metrics).toMatchObject({nullableUnions:27,unions:38,branches:85,references:26});
+ expect(metrics).toMatchObject({nullableUnions:19,unions:30,branches:69,references:26});
  // Seven nullable roots preserve their original strict operation/value branches.
  // Merging operation/value branches would incorrectly permit SET/null.
- expect(metrics.nullableUnions-baseline.nullableUnions).toBe(7+8);
- expect(metrics.unions-baseline.unions).toBe(14+8);
- expect(metrics.branches-baseline.branches).toBe(28+16);
+ expect(metrics.nullableUnions-baseline.nullableUnions).toBe(7);
+ expect(metrics.unions-baseline.unions).toBe(14);
+ expect(metrics.branches-baseline.branches).toBe(28);
  // Sole endDate/text group split adds one branch within the old remainder bound.
  expect(baseline.branches).toBe(41);
 });

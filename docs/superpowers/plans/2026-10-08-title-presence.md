@@ -1,5 +1,9 @@
 # Title Presence Implementation Plan
 
+### Approved wire46 sentinel-date step
+
+Controller technical ruling accepted: RED/GREEN fixed non-null nine-slot date schema and exact finite sentinel mapping; canonical roundtrip all date families/calendar/null-year/null-leap/relative0/qualifiers, strict inactive/active sentinel rejection and unchanged DateOperandSchema. Preserve existing dateJsonOperands positions, outer null/CLEAR/query padding, all operations/global indexes/current evidence/uncertainty alternative JSON/business/legacy parity. Update only provider wire46/prompt/schema and required closed mapping identity pins, no capability/canonical/oracle/parser/value-default changes. Measure base plus all326 actual requests under unchanged12000/1536; equivalent representation wording/necessary redundancy compaction with normative map only if needed. Focused ownership/privacy/date/query/gateway/runner tests, typecheck/lint/diff then freeze for controller review/full/commit/live. Historical wire45 diagnostic guards must decline sentinel shape, never silently broaden. No implementer provider/credentials/network/full-suite/commit/subagent work.
+
 ### Approved wire45 diagnostic-only probe implementation
 
 Strict RED/GREEN in context-debug-loop.ts/.test.ts only: pin actual R01 request and three transformed schema hashes; prove only __d changes and the original remains immutable. Reject nine-key/typed-slot/bounds/required/reference drift. Fake executor tests exercise one HTTP200 or HTTP400 request, terminal/noPilotcredit/no next-axis execution, duplicate-execution refusal, UNKNOWN accounting and unchanged history. Structured runtime decoder remains unchanged and refuses ablated string dates. Run focused admission/accounting/runner/gateway regressions, typecheck and diff checks; freeze for controller full/review/commit and first paid probe. No implementer provider/credential/network/full-suite/commit work; no production wire/schema/prompt/version change.

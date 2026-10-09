@@ -62,6 +62,9 @@ it("compact date selections remain untrusted while their mapping is application 
     expect(authority.classifyOutputPathV3(`${prefix}{kind=${kind}}` as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",canAuthorizeRead:false,canAuthorizeWrite:false,applicationDerivable:false});
   }
   expect(authority.classifyOutputPathV3("transport.codebookMapping").class).toBe("APPLICATION_OWNED");
+  for(const prefix of ["eventDateChange.change.value","reminderDateChange.change.value","changes[].value","query.date","query.period.date","query.period.from","query.period.through"])for(const slot of ["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"]){
+    expect(authority.classifyOutputPathV3(`${prefix}.${slot}` as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
+  }
   expect(()=>authority.classifyOutputPathV3("query.date{kind=X}" as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
 });
 it("provider query evidence slots remain untrusted selections without execution authority", () => {
