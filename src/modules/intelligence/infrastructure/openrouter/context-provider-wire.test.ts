@@ -7,6 +7,46 @@ import { createContextContractGateway, createContextHttpTransport, type Semantic
 import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, parseGoogleLiteEuContextSectionsV3 } from "./context-provider-wire";
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
+it("date representation preserves canonical relative negative zero without changing alternative JSON",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CALENDAR_QUERY",query:{kind:"CALENDAR_DATE",date:{kind:"RELATIVE_DAY",offsetDays:-0},outputCalendar:"GREGORIAN",evidence}});
+ expect(parseGoogleLiteEuContextSectionsV3(encodeGoogleLiteEuContextV3(canonical),CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+});
+
+it("wire47 dates are exact nine-slot JSON strings and reject duplicate decoded keys",()=>{
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:0},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:unknown}}};
+ expect(typeof raw.eventDateChange.change.value).toBe("string");
+ expect(JSON.parse(raw.eventDateChange.change.value as string)).toEqual({kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE"});
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+ for(const prefix of ['"kind":"R",','"\\u006bind":"R",']){
+  const duplicate=structuredClone(raw);duplicate.eventDateChange.change.value=(raw.eventDateChange.change.value as string).replace("{","{"+prefix);
+  expect(parseGoogleLiteEuContextSectionsV3(duplicate,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ }
+ const duplicateAfter=structuredClone(raw);duplicateAfter.eventDateChange.change.value=(raw.eventDateChange.change.value as string).replace(/}$/,',"kind":"R"}');
+ expect(parseGoogleLiteEuContextSectionsV3(duplicateAfter,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ const lexical=structuredClone(raw);lexical.eventDateChange.change.value=" \n\t"+(raw.eventDateChange.change.value as string).replace('"kind"','"\\u006bind"').replace('"NONE"','"N\\u004fNE"')+"\r ";
+ expect(parseGoogleLiteEuContextSectionsV3(lexical,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
+ for(const scalar of ["1e999","0.5","null","[]","{}",'"PRIVATE_DATE_SECRET"']){
+  const bad=structuredClone(raw);bad.eventDateChange.change.value=(raw.eventDateChange.change.value as string).replace('"offsetDays":0',`"offsetDays":${scalar}`);
+  const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_DATE_SECRET");
+ }
+});
+it.each([["{","JSON_PARSE","INVALID_JSON"],[" ".repeat(32769),"WIRE_VALUE","OVERSIZED"],[42,"WIRE_VALUE","WRONG_WIRE_TYPE"],['{"kind":"R","kind":"R"}',"WIRE_VALUE","INVALID_OPERAND"],['{"kind":{"private_secret":"PRIVATE_DATE_SECRET"}}',"WIRE_VALUE","INVALID_OPERAND"]])("date failure boundary retains finite stage/reason and field (%#)",(value,stage,reason)=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"endDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:0},evidence}]});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{value:unknown}>};raw.changes[0].value=value;const diagnostics:unknown[]=[];
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+ expect(diagnostics).toMatchObject([{issues:[{dateOperand:{stage,reason,field:"endDate"}}]}]);
+ expect(JSON.stringify(diagnostics)).not.toMatch(/private_secret|PRIVATE_DATE_SECRET/);
+});
+it.each(["{", "[]", "null", '"PRIVATE_DATE_SECRET"', "true", "0", " ".repeat(32769), '{"kind":"R","offsetDays":1e999}', '{"kind":"R","kind":"W"}', '{"kind":"R","\\u006bind":"R"}', '{"kind":{"secret":"PRIVATE_DATE_SECRET"}}', '{"kind":"R","private_secret_key":[]}'])("wire47 flat date JSON failures retain no contents (%#)",value=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CALENDAR_QUERY",query:{kind:"CALENDAR_DATE",date:{kind:"RELATIVE_DAY",offsetDays:0},outputCalendar:"GREGORIAN",evidence}});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as {query:{date:unknown}};raw.query.date=value;const diagnostics:unknown[]=[];
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+ expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_DATE_SECRET|private_secret_key|1e999/);
+});
 
 it.each([undefined, {version:"generation-field-capability-9" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true}, {version:"generation-field-capability-9" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
   const schema=googleLiteEuContextWireSchema(capability).schema;
@@ -38,7 +78,7 @@ it.each([
   const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:unknown}}};raw.eventDateChange.change.value=value;
   const diagnostics:unknown[]=[];
   expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject([{issues:[{expected:"FIELD_CHANGE",path:["eventDateChange","change"]}]}]);
+  expect((diagnostics[0] as {issues:Array<{path:unknown[]}>}).issues[0].path.slice(0,3)).toEqual(["changes",0,"value"]);
   const serialized=JSON.stringify(diagnostics);expect(serialized).not.toContain("PRIVATE_DATE_SENTINEL");expect(serialized).not.toContain("PRIVATE_KIND_SENTINEL");expect(serialized).not.toContain("private_secret_key");expect(serialized).not.toContain("9999");
 });
 it("non-string indexed date values still reject at the earlier carrier shape boundary",()=>{
@@ -49,18 +89,19 @@ it("non-string indexed date values still reject at the earlier carrier shape bou
 });
 it("structured date carrier has exact typed slots and rejects inactive semantic operands",()=>{
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
-  const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:Record<string,unknown>}}};
-  expect(raw.eventDateChange.change.value).toEqual({kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:2,weekday:0,qualifier:"NONE"});
+  const raw=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:string}}};
+  const date=JSON.parse(raw.eventDateChange.change.value) as Record<string,unknown>;
+  expect(date).toEqual({kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:2,weekday:0,qualifier:"NONE"});
   expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
-  for(const value of [{...raw.eventDateChange.change.value,day:2},{...raw.eventDateChange.change.value,kind:"RELATIVE_DAY"},{...raw.eventDateChange.change.value,offsetDays:null},"{"]){
-    const mutated=structuredClone(raw);mutated.eventDateChange.change.value=value as Record<string,unknown>;
+  for(const value of [{...date,day:2},{...date,kind:"RELATIVE_DAY"},{...date,offsetDays:null},"{"]){
+    const mutated=structuredClone(raw);mutated.eventDateChange.change.value=typeof value==="string"?value:JSON.stringify(value);
     expect(parseGoogleLiteEuContextSectionsV3(mutated,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
   }
 });
 it("encoded canonical date round trip preserves strict active payload authority", () => {
   const canonical = ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]},changes:[{field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence:[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}]}]});
   const encoded=encodeGoogleLiteEuContextV3(canonical) as {reminderDateChange:{change:{value:unknown}}};
-  expect(encoded.reminderDateChange.change.value).toEqual({kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:2,weekday:0,qualifier:"NONE"});
+  expect(JSON.parse(encoded.reminderDateChange.change.value as unknown as string)).toEqual({kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:2,weekday:0,qualifier:"NONE"});
   expect(parseGoogleLiteEuContextSectionsV3(encoded,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
   for(const value of ['{"kind":"RELATIVE_DAY","offsetDays":null}','{"kind":"INVALID","offsetDays":2}','{"kind":"RELATIVE_DAY","offsetDays":2,"day":2}',"{",{kind:"RELATIVE_DAY",offsetDays:2}]) {
     const raw=structuredClone(encoded);raw.reminderDateChange.change.value=value;
@@ -95,8 +136,10 @@ it.each([
 });
 it("base and actual request share strict non-null date slots without eight nullable branches",()=>{
  for(const schema of [googleLiteEuContextWireSchema().schema,serializeContextRequest(input).response_format.json_schema.schema]){
-  const d=schema.$defs!.__d;
-  expect(d).toEqual({type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:{type:"string",enum:["NONE","GREGORIAN","LUNAR_VN"]},day:{type:"integer",minimum:0,maximum:31},month:{type:"integer",minimum:0,maximum:12},year:{type:"integer",minimum:0,maximum:9999},leapMonth:{type:"integer",minimum:-1,maximum:1},offsetDays:{type:"integer",minimum:-366,maximum:366},weekday:{type:"integer",minimum:0,maximum:7},qualifier:{type:"string",enum:["NONE","THIS_WEEK","NEXT_WEEK","UNRESOLVED"]}},required:["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"],additionalProperties:false});
+  type DateNode={$ref?:string;anyOf?:DateNode[];properties?:Record<string,DateNode>};
+  const root=schema.properties!.eventDateChange as unknown as DateNode;
+  const d=root.anyOf![0].properties!.change.anyOf![0].properties!.value;
+  expect(d.$ref?schema.$defs![d.$ref.slice(8)]:d).toEqual({type:"string"});
  }
 });
 it.each([
@@ -108,12 +151,12 @@ it.each([
 ])("finite sentinel representation is bijective without semantic defaults (%#)",(value,representation)=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventDate",operation:"SET",value,evidence}]});
  const wire=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:Record<string,unknown>}}};
- expect(wire.eventDateChange.change.value).toEqual(representation);
+ expect(JSON.parse(wire.eventDateChange.change.value as unknown as string)).toEqual(representation);
  const parsed=parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3);expect(parsed).toEqual(parseInterpretationSectionsV3(canonical));
  if(parsed.status!=="PARSED")throw Error("EXPECTED_PARSED");
  expect(encodeGoogleLiteEuContextV3({...canonical,...parsed.value.semantic})).toEqual(wire);
  const forbidden=[...Object.keys(representation).map(key=>({...representation,[key]:null})),{...representation,day:0.5},{...representation,leapMonth:2},{...representation,leapMonth:0.5},{...representation,year:10000},{...representation,year:-0},{...representation,month:13},{...representation,weekday:8},...(value.kind==="CIVIL_DATE"?[{...representation,calendar:"NONE"},{...representation,day:0},{...representation,month:0},{...representation,offsetDays:1},{...representation,leapMonth:-0},...("calendar" in value&&value.calendar==="GREGORIAN"?[{...representation,leapMonth:0},{...representation,leapMonth:1}]:[])]:value.kind==="WEEKDAY"?[{...representation,weekday:0},{...representation,qualifier:"NONE"}]:[{...representation,offsetDays:367},{...representation,offsetDays:-367}])];
- for(const operand of forbidden){const bad=structuredClone(wire);bad.eventDateChange.change.value=operand;const before=JSON.stringify(bad);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(bad)).toBe(before);}
+ for(const operand of forbidden){const bad=structuredClone(wire);bad.eventDateChange.change.value=JSON.stringify(operand).replace(/"(year|leapMonth)":0/g,(match,key)=>Object.is((operand as Record<string,unknown>)[key],-0)?`"${key}":-0`:match) as unknown as Record<string,unknown>;const before=JSON.stringify(bad);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(bad)).toBe(before);}
 });
 it("all existing active date positions reject wrong sentinel values without erasure or private diagnostics",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
@@ -121,7 +164,7 @@ it("all existing active date positions reject wrong sentinel values without eras
  for(const canonical of specimens){
   const wire=encodeGoogleLiteEuContextV3(canonical),encoded=JSON.stringify(wire);expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
   for(const replacement of ["NONE","PRIVATE_CALENDAR_SENTINEL"]){
-   const mutated=JSON.parse(encoded.replaceAll('"calendar":"GREGORIAN"',`"calendar":"${replacement}"`)),before=JSON.stringify(mutated),diagnostics:unknown[]=[];
+   const mutated=JSON.parse(encoded.replaceAll('\\"calendar\\":\\"GREGORIAN\\"',`\\\"calendar\\\":\\\"${replacement}\\\"`)),before=JSON.stringify(mutated),diagnostics:unknown[]=[];
    expect(parseGoogleLiteEuContextSectionsV3(mutated,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");expect(JSON.stringify(mutated)).toBe(before);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_CALENDAR_SENTINEL");
   }
  }
@@ -131,10 +174,10 @@ it.each([
  {kind:"RELATIVE_DAY",offsetDays:2}, {kind:"WEEKDAY",weekday:2,qualifier:"NEXT_WEEK"},
 ])("structured date inactive slots, unknown codes and private keys never become semantics (%#)",value=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventDate",operation:"SET",value,evidence}]});
- const wire=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:Record<string,unknown>}}},date=wire.eventDateChange.change.value;
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {eventDateChange:{change:{value:Record<string,unknown>}}},date=JSON.parse(wire.eventDateChange.change.value as unknown as string);
  const active=value.kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:value.kind==="RELATIVE_DAY"?["kind","offsetDays"]:["kind","weekday","qualifier"];
  const mutations=[...Object.keys(date).filter(key=>!active.includes(key)).map(key=>({...date,[key]:1})),{...date,kind:"PRIVATE_DATE_KIND_SENTINEL"},{...date,private_date_key:"PRIVATE_DATE_VALUE_SENTINEL"},Object.fromEntries(Object.entries(date).filter(([key])=>key!=="kind")),...(value.kind==="CIVIL_DATE"?[{...date,leapMonth:true}]:[])];
- for(const operand of mutations){const changed=structuredClone(wire);changed.eventDateChange.change.value=operand;const diagnostics:unknown[]=[];
+ for(const operand of mutations){const changed=structuredClone(wire);changed.eventDateChange.change.value=JSON.stringify(operand) as unknown as Record<string,unknown>;const diagnostics:unknown[]=[];
    expect(parseGoogleLiteEuContextSectionsV3(changed,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
    const text=JSON.stringify(diagnostics);for(const secret of ["PRIVATE_DATE_KIND_SENTINEL","PRIVATE_DATE_VALUE_SENTINEL","private_date_key"])expect(text).not.toContain(secret);
  }
@@ -547,7 +590,7 @@ function wireFixture(value: unknown): unknown {
   }
   if (object.kind === "LIST") delete result.statusScope;
   if (typeof object.kind === "string") for (const key of pads[object.kind] ?? []) result[key] = null;
-  if (["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(object.kind))) return {calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE",...object,...(object.kind==="CIVIL_DATE"?{year:object.year===null?0:object.year,leapMonth:object.leapMonth===null?-1:object.leapMonth===false?0:1}:{}),kind:object.kind==="CIVIL_DATE"?"C":object.kind==="RELATIVE_DAY"?"R":"W"};
+  if (["CIVIL_DATE","RELATIVE_DAY","WEEKDAY"].includes(String(object.kind))) return JSON.stringify({calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:0,weekday:0,qualifier:"NONE",...object,...(object.kind==="CIVIL_DATE"?{year:object.year===null?0:object.year,leapMonth:object.leapMonth===null?-1:object.leapMonth===false?0:1}:{}),kind:object.kind==="CIVIL_DATE"?"C":object.kind==="RELATIVE_DAY"?"R":"W"});
   return result;
 }
 async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) {
@@ -624,8 +667,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-46");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("e4a4926ae46bf7edb32f7051642d6c001bb078875bfce269c67f5ce8b1adf2f5");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-47");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("794475578ba7cef7857eaa72c8147fac9b6d33ea982ea7dd32f5adcba67df407");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

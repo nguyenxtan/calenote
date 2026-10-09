@@ -22,7 +22,7 @@ it("wire instructions require strictly typed date slots without opaque date JSON
   expect(CONTEXT_CONTRACT_PROMPT).toContain("kind C=CIVIL_DATE/R=RELATIVE_DAY/W=WEEKDAY");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Slots non-null; inactive exact sentinel, never discard/repair");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("C year0=canonical null; leapMonth -1=null/0=false/1=true (Gregorian=-1)");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('Example: {kind:"R",calendar:"NONE",day:0,month:0,year:0,leapMonth:-1,offsetDays:2,weekday:0,qualifier:"NONE"}.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('Encode the nine-key object with valid JSON quoting/escaping; never canonical kind names or bare dates.');
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Facts/examples/uncertainty alternatives stay canonical/full-name, never wire dates");
 });
 
@@ -221,7 +221,7 @@ it("wire_keeps_untrusted_turns_separate_from_policy_and_requires_complete_strict
   expect(JSON.stringify(input)).toBe(before);
 });
 it("final date transport check excludes clock/text shorthand from encoded date operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE=nine-key objects, never mai/tomorrow/ISO/encoded strings.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDate/reminderDate/endDate SET/REPLACE=JSON strings of nine-key wire objects, never bare mai/tomorrow/ISO or canonical JSON.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Tomorrow=R/offsetDays1 plus inactive sentinels.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Preserve null codebook, no year/leap inference. Clocks=objects; no date resolution/invention.");
 });
