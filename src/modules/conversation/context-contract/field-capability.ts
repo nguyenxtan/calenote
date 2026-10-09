@@ -83,6 +83,19 @@ export function isInitialEventDateYearNullRequired(input:ContextInput):boolean {
   const date=extractTemporalEvidence({text:input.turns[0].text,referenceNow:Date.parse(input.reference.instant)}).date;
   return date.state==="RESOLVED"&&date.source==="DAY_MONTH";
 }
+/** Unique source support is a sufficient lower bound, not availability or an
+ * extracted proposal. Candidate values stay private to existing probes. */
+export function isInitialUniqueCadenceCountRequired(input:ContextInput):boolean {
+  if(!isInitialIsolatedExamNotesFree(input))return false;
+  const text=input.turns[0].text,length=[...text].length;
+  const turn={id:"initial-user",role:"USER" as const,semanticView:text};
+  const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
+  const frequencies=["ONCE","DAILY","WEEKLY","MONTHLY","YEARLY"].filter(value=>supportsCadenceOperand("frequency",value,[source],[turn]));
+  const words:Readonly<Record<string,number>>={một:1,hai:2,ba:3};
+  const candidates=new Set([...text.toLocaleLowerCase("vi").matchAll(/\d+|một|hai|ba/gu)].map(match=>words[match[0]]??Number(match[0])));
+  const counts=[...candidates].filter(value=>supportsCadenceOperand("occurrenceCount",value,[source],[turn]));
+  return frequencies.length===1&&counts.length===1;
+}
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.
  * CURRENT retained slots and NEW proposals still require downstream ownership.

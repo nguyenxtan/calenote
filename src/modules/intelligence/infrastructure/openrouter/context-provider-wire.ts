@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -697,8 +697,9 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   if(primaryEvidenceInput!==undefined){
     const sourceCodebook=primaryEvidenceSourceCodebook(primaryEvidenceInput),domain=[...sourceCodebook.codes];
     const requiredClock=isInitialExplicitEventClockRequired(primaryEvidenceInput)?"eventTime":isInitialExplicitReminderClockRequired(primaryEvidenceInput)?"reminderTime":null;
-    if(requiredClock){
-      const root=`${requiredClock}Change`;
+    const requiredFields=[...(requiredClock?[requiredClock]:[]),...(isInitialUniqueCadenceCountRequired(primaryEvidenceInput)?["frequency","occurrenceCount"]:[])];
+    for(const requiredField of requiredFields){
+      const root=`${requiredField}Change`;
       const carrier=deref(schema.properties![root].anyOf![0],schema);
       const changes=deref(carrier.properties!.change,schema);
       requireShape(changes.anyOf?.length);
@@ -709,11 +710,14 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       });
       requireShape(changes.anyOf.length);
       schema.properties![root]=carrier;
+    }
+    if(requiredFields.length){
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
       const missing=structuredClone(item),other=structuredClone(item);
       missing.properties!.reason={type:"string",enum:["MISSING"]};
-      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1[requiredClock])};
+      const excluded=requiredFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]);
+      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>!excluded.includes(code))};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
       schema.properties!.uncertainties.items={anyOf:[missing,other]};
     }
