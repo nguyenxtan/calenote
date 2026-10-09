@@ -85,8 +85,8 @@ export function isInitialEventDateYearNullRequired(input:ContextInput):boolean {
 }
 /** Unique source support is a sufficient lower bound, not availability or an
  * extracted proposal. Candidate values stay private to existing probes. */
-export function isInitialUniqueCadenceCountRequired(input:ContextInput):boolean {
-  if(!isInitialIsolatedExamNotesFree(input))return false;
+function initialCadenceCountProbes(input:ContextInput) {
+  if(!isInitialIsolatedExamNotesFree(input))return null;
   const text=input.turns[0].text,length=[...text].length;
   const turn={id:"initial-user",role:"USER" as const,semanticView:text};
   const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
@@ -94,7 +94,20 @@ export function isInitialUniqueCadenceCountRequired(input:ContextInput):boolean 
   const words:Readonly<Record<string,number>>={một:1,hai:2,ba:3};
   const candidates=new Set([...text.toLocaleLowerCase("vi").matchAll(/\d+|một|hai|ba/gu)].map(match=>words[match[0]]??Number(match[0])));
   const counts=[...candidates].filter(value=>supportsCadenceOperand("occurrenceCount",value,[source],[turn]));
-  return frequencies.length===1&&counts.length===1;
+  return {frequencies,counts,candidates,source,turn};
+}
+export function isInitialUniqueCadenceCountRequired(input:ContextInput):boolean {
+  const probes=initialCadenceCountProbes(input);
+  return !!probes&&probes.frequencies.length===1&&probes.counts.length===1;
+}
+/** Numeric-domain support only, never complete schedule readiness or an
+ * authored value. All candidates remain private existing entailment probes. */
+export function isInitialSupportedCadenceCount(input:ContextInput):boolean {
+  const probes=initialCadenceCountProbes(input);
+  if(!probes||!Array.isArray(input.capabilities?.supported)||!input.capabilities.supported.includes("FINITE_DAILY")||input.capabilities.limits?.dailyCount!==30)return false;
+  return probes.frequencies.length===1&&probes.frequencies[0]==="DAILY"
+    && probes.counts.length===1&&Number.isSafeInteger(probes.counts[0])&&probes.counts[0]>=2&&probes.counts[0]<=input.capabilities.limits.dailyCount
+    && ![...probes.candidates].some(value=>supportsLeadOffset(value,[probes.source],[probes.turn]));
 }
 /** Numeric/clock generation upper bounds plus bounded title presence. Probing support predicates
  * never supplies a proposed operand, evidence, or permission to mutate state.

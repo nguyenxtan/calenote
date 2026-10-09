@@ -1,5 +1,13 @@
 # Bounded title-presence generation amendment
 
+### Wire61 support-qualified numeric uncertainty restriction
+
+Wire60 terminal R02T0 passed transport/canonical/evidence/patch/merge but proposed DAILY/count2 SET alongside numeric UNSUPPORTED_COMBINATION, producing frequency clarification instead of required reminderTime. Alternative values/source fidelity are unknown; historical runs remain unchanged. Controller read complete wire61-supported-numeric-proposal.md and approves the narrower generation consistency amendment within existing continuous scope, including conservative independently-grounded lead exclusion.
+
+Reuse existing initial isolated whole-source and private cadence/count/lead support probes. Preserve unique-presence helper semantics; expose only a new boolean support-qualified predicate: one DAILY cadence, one safe count2..trusted limits.dailyCount (30), explicit application FINITE_DAILY capability, and no independently grounded lead that could cause DAILY COUNT_OFFSET_CONFLICT. Count1/31, absent capability, genuine multiple/unsupported cadences/counts, lead conflicts, history/CURRENT/facts/pending/ambiguities/control/negation/hypothetical/unknown discourse retain numeric unsupported generation. No new grammar, extracted operand output, inferred semantic value or complete-schedule readiness claim.
+
+Only this sufficient subset additionally excludes frequency8/occurrenceCount9 UNSUPPORTED_COMBINATION. Combine with existing nonnumeric ambiguity/conflict branch; no Cartesian roots or added fields. Other uncertainty fields/reasons and all outside-subset numeric paths remain. Canonical/evidence/merge/resolution/oracles and authored values/evidence/index/order unchanged; no response deletion/repair/fallback/default. Wire61 identity and measured request pins advance coherently, capability11/prompt/base/historical identities otherwise preserved. All326/input12000/output1536 gates, C0/I0/frozen full/local commit/FreshFormal and unchanged conservativeUSD5 accounting/UNKNOWN/model/provider/security/no deployment apply.
+
 ### Approved wire60 ALL-operation title singleton generation
 
 Wire59 R02T0 passed live; terminal R02T1 diagnostics prove titleChange SET plus three ordinary title REPLACE entries. Values/evidence/motive are not retained. Controller read complete wire60-title-singleton-proposal.md and selects the bounded representation correction: titleChange becomes the sole SET/REPLACE/CLEAR carrier, using the existing ALL-operation singleton builder/restoration used by nine other fields; remove ALL ordinary title branches. Ten nullable roots and original authored indices/order/value/evidence remain, no deduplication, response repair, value selection or canonical/evidence/merge/oracle relaxation.

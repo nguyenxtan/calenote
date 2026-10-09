@@ -11,6 +11,17 @@ import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
+it("wire61 support requires finite DAILY bounds, capability and no independent lead while preserving uniqueness",()=>{
+ const supported=Reflect.get(capabilityModule,"isInitialSupportedCadenceCount") as ((input:ContextInput)=>boolean)|undefined;
+ expect(supported).toBeTypeOf("function");
+ for(const text of ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.","Ngày 11/10 đi thi, nhắc 30 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc hai ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc 2 ngày liên tiếp."]){expect(supported!(input(text))).toBe(true);}
+ for(const text of ["Ngày 11/10 đi thi, nhắc 1 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 31 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc trước 3 ngày."]){const context=input(text);expect(capabilityModule.isInitialUniqueCadenceCountRequired(context)).toBe(true);expect(supported!(context)).toBe(false);}
+ for(const text of ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc 3 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc trước 2 ngày.","Ngày 11/10 đi thi, nhắc một lần.","Ngày 11/10 đi thi, nhắc mỗi tuần.",'"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."',"Nếu ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, không nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp [CONTROL]","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, gọi mẹ."]){expect(supported!(input(text))).toBe(false);}
+ const noCapability=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");noCapability.capabilities.supported=["ONCE"];expect(capabilityModule.isInitialUniqueCadenceCountRequired(noCapability)).toBe(true);expect(supported!(noCapability)).toBe(false);
+ for(const key of ["capabilities","activeRequest","facts","pendingQuestion","ambiguities"]){const context=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");Reflect.deleteProperty(context,key);expect(supported!(context),key).toBe(false);}
+ const history=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");history.turns.unshift({role:"ASSISTANT",text:"prior"});history.currentTurn=1;expect(supported!(history)).toBe(false);
+ for(const [key,value] of [["facts",[{alias:"f1"}]],["pendingQuestion",{scope:"REMINDER",field:"occurrenceCount"}],["ambiguities",[{field:"frequency"}]],["activeRequest",{lifecycle:"CLARIFYING",slots:{}}]] as const){const context=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");Reflect.set(context,key,value);expect(supported!(context),key).toBe(false);}
+});
 it("wire56 unique supported initial cadence/count establishes presence without values",()=>{
  const helper=Reflect.get(capabilityModule,"isInitialUniqueCadenceCountRequired") as ((input:ContextInput)=>boolean)|undefined;
  expect(helper).toBeTypeOf("function");
@@ -317,9 +328,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("44a3a8d51b5c2f96c0cda9209270efb0ce4de7ab455aa7014e33a78d033654ea");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("1b9d72d89f86991e390d5578b3046a6a3e6ccb6075017ad8a8e09cd9c21a0c41");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("f893c8266a2b5b0812a69bdeb36ebda5a138da452c50dd80baa6f9f3cacfd01c");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("32d329c553d95dbfa15653b722509d92f7fea57858d07dc9e0669525581ccc6c");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

@@ -7,7 +7,7 @@ import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -707,11 +707,12 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>!excluded.includes(code))};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
       if(uniqueNumeric){
+        const supportedNumeric=isInitialSupportedCadenceCount(primaryEvidenceInput);
         const unsupported=structuredClone(item);
         unsupported.properties!.reason={type:"string",enum:["UNSUPPORTED_COMBINATION"]};
-        other.properties!.reason={type:"string",enum:["AMBIGUOUS","CONFLICT"]};
+        other.properties!.reason={type:"string",enum:supportedNumeric?["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]:["AMBIGUOUS","CONFLICT"]};
         other.properties!.fieldCode={...other.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.frequency&&code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.occurrenceCount)};
-        schema.properties!.uncertainties.items={anyOf:[missing,other,unsupported]};
+        schema.properties!.uncertainties.items={anyOf:supportedNumeric?[missing,other]:[missing,other,unsupported]};
       }else schema.properties!.uncertainties.items={anyOf:[missing,other]};
     }
     const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);

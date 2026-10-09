@@ -9,6 +9,31 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it.each([
+ [2,true,false,false],[30,true,false,false],[1,true,false,true],[31,true,false,true],[2,false,false,true],[2,true,true,true]
+] as const)("wire61 bound schema preserves genuine numeric unsupported: count%s capability%s lead%s",(count,finiteDaily,lead,allowed)=>{
+ const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:finiteDaily?["ONCE","FINITE_DAILY"]:["ONCE"]},turns:[{role:"USER",text:`Ngày 11/10 đi thi, nhắc ${count} ngày liên tiếp${lead?", nhắc trước 3 ngày":""}.`}]});
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:bound.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},conversationDirective:null,changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:count,evidence}]});
+ const schema=serializeContextRequest(bound).response_format.json_schema.schema;
+ const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
+ const check=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(check.safeParse(encodeFixtureV3(canonical,bound)).success).toBe(true);
+ for(const field of ["frequency","occurrenceCount"]){
+  const value=field==="frequency"?"DAILY":count;
+  const authored={...canonical,uncertainties:[{field,reason:"UNSUPPORTED_COMBINATION",alternatives:[{value,evidence}]}]};
+  const raw=encodeFixtureV3(authored,bound);
+  expect(check.safeParse(raw).success).toBe(allowed);
+  // The unchanged canonical/source transport still decodes these alternatives;
+  // request generation membership is not output deletion or validator repair.
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("PARSED");
+ }
+ for(const field of ["reminderTime","location","operation"]){
+  const raw=encodeFixtureV3({...canonical,uncertainties:[]},bound) as Record<string,unknown>;
+  const fieldCode=field==="reminderTime"?6:field==="location"?1:15;
+  expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"UNSUPPORTED_COMBINATION",alternatives:[]}]}).success).toBe(true);
+ }
+});
 it("wire60 title carrier preserves correction availability and required SET without ordinary bypass",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const capability={version:"generation-field-capability-11" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,eventDateYearNullRequired:false};
@@ -66,8 +91,8 @@ function wire55Example(operation:"SET"|"REPLACE"|"CLEAR"="SET"){
  const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
  return {bound,canonical,value,check:z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]),raw:encodeFixtureV3(canonical,bound) as {eventDateChange:{change:{value:unknown}}}};
 }
-it.each([false,true])("wire58 unique numeric source restricts only its reasons with requiredClock=%s",requiredClock=>{
- const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:requiredClock?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."}]});
+it.each([false,true])("wire61 supported unique numeric source restricts only its reasons with requiredClock=%s",requiredClock=>{
+ const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text:requiredClock?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."}]});
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:bound.turns[0].text,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},conversationDirective:null,changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},...(requiredClock?[{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}]:[])]});
  const schema=serializeContextRequest(bound).response_format.json_schema.schema;
@@ -75,7 +100,7 @@ it.each([false,true])("wire58 unique numeric source restricts only its reasons w
  const check=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]),raw=encodeFixtureV3(canonical,bound) as Record<string,unknown>;
  expect(check.safeParse(raw).success).toBe(true);
  for(const fieldCode of [8,9])for(const reason of ["MISSING","AMBIGUOUS","CONFLICT"]){expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(false);}
- for(const fieldCode of [8,9])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"UNSUPPORTED_COMBINATION",alternatives:[]}]}).success).toBe(true);
+ for(const fieldCode of [8,9])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"UNSUPPORTED_COMBINATION",alternatives:[]}]}).success).toBe(false);
  for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...raw,uncertainties:[{fieldCode:6,reason,alternatives:[]}]}).success).toBe(reason!=="MISSING"||!requiredClock);
  for(const fieldCode of [0,1,2,3,4,5,7,10,11,12,13,14,15])for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success).toBe(true);
 });
@@ -888,7 +913,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-60");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-61");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

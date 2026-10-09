@@ -1,5 +1,12 @@
 # Title Presence Implementation Plan
 
+### Wire61 support-qualified numeric uncertainty execution
+
+- [ ] BASE3fdda19795fc9978046ca326feed94be3efba647; approved TOP wire61 spec and complete wire61-supported-numeric-proposal.md. RED actual bound DAILY2 admits unsupported8/9; coherent complete canonical witness, supported2/30 contrasts against1/31/absent capability/weekly/multiple/lead/context guards. No unknown alternative reconstruction.
+- [ ] Own field-capability.ts/.test.ts private shared probes/new boolean only; preserve unique-presence helper semantics. Own provider-wire.ts/.test.ts request-local reason-domain filtering, protocol/current measured fit/runner dependencies only. No semantic operand extraction/parser/canonical/evidence/merge/resolver/oracle/fallback change. Supported finite DAILY and independently-grounded lead exclusion explicit; unrelated/outside unsupported paths preserved.
+- [ ] GREEN actual producer/source/canonical/evidence/merge/resolution/service and unsupported contrasts; ENTIRE fit67/all326/12000input/1536output unchanged, measured complexity/base/prompt preservation; typecheck/scopedlint/diff. Freeze before six debug/seed/runner/candidate/live/single-replay suites; report terminal outcomes/privacy. Implementer no paid/key/accounting/full/commit/children.
+- [ ] Controller complete delta independent C0/I0 review/fix/revalidate then unchanged-candidate sandbox full test/docs/type/lint/build, selective local commit/fresh trusted preflight. FreshFormal existing continuousUSD5 authority; terminal firstfailure settle then scoped offline repair. No Full/push/merge/deploy/history rewrite/holds release.
+
 ### Wire60 ALL-operation title carrier execution
 
 Goal: eliminate title's two-location generation gap while preserving correction authority. Approved TOP wire60 spec in docs/superpowers/specs/2026-10-08-title-presence-design.md; BASE9331c30276438a1eafd535341a4809b1372d91f7. Existing TypeScript singleton builder/position codec/JSON Schema/capability/source specialization; no new parser/subsystem.
