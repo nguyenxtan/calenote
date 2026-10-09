@@ -107,7 +107,7 @@ it("position diagnostics ignore unknown roots and never inspect private change p
   const fractional=projectWireValidation({...raw,reminderTimeChange:{index:0.25,change:payload}},["reminderTimeChange","index"],"CHANGE_POSITION",undefined,"calenote-context-3");
   expect(fractional.issues[0].carrierPosition).not.toHaveProperty("actualIndex");
 });
-it.each(["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange"])("new singleton path %s is finite and unknown child names remain redacted",root=>{
+it.each(["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange"])("new singleton path %s is finite and unknown child names remain redacted",root=>{
   const raw={[root]:{index:null,change:{[sentinel]:sentinel}}};
   expect(projectWireValidation(raw,[root,"index"],"CHANGE_POSITION",undefined,"calenote-context-3")).toMatchObject({issues:[{path:[root,"index"],expected:"CHANGE_POSITION",actualType:"null",unknownPathSegments:0}],topLevelKeys:[root],unknownTopLevelKeyCount:0});
   const unknown=projectWireValidation(raw,[root,"change",sentinel],"FIELD_CHANGE",undefined,"calenote-context-3");

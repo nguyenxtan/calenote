@@ -101,7 +101,7 @@ it("exam task normalization example separates typed title from event operands", 
 it("serialized policy specifies normalized exam task titles without changing evidence", () => {
   const input = ContextInputV2Schema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Tôi thi ngày 11/10 lúc 8h."}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
   const request = serializeContextRequest(input);
-  expect(request.messages[0].content).toContain("An exam predicate thi normalizes to the task title đi thi, not the bare predicate thi.");
+  expect(request.messages[0].content).toContain("normalize exam/thi to đi thi (not thi), meeting to họp");
   expect(JSON.parse(request.messages[1].content)).toEqual({ ...input, numericOwnership: numericOwnershipCatalogue(input), fieldCapability: deriveGenerationFieldCapability(input) });
 });
 
@@ -137,7 +137,7 @@ it("request target evidence uses the supplied current-turn index, including assi
 
 it("event-clause clock and subject stay distinct from notification clock", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("A clock attached to the event predicate belongs to eventTime, not reminderTime; only a notification instruction or an answer to the reminderTime question supplies reminderTime.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("A first-person event predicate supplies the task subject even without a separate noun title.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("First-person event predicates supply the subject without a noun title");
 });
 
 it("retained finite series is completed by relation without duplicating count into offset", () => {
@@ -176,12 +176,12 @@ it("explicit resolved Vietnamese day-part clocks prefer the equivalent H24 repre
 });
 
 it("explicit task subject is retained independently of missing scheduling operands", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("When a USER explicitly names the task/event subject and title is missing, propose that grounded subject as title.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Date, location, cadence and count are separate fields and never substitute for title.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Do not omit an explicit subject merely because reminder time or event relation still needs clarification.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Missing title requires the explicit grounded USER task/event subject");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("date/location/cadence/count cannot substitute");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("nor missing reminderTime/relation justify omission");
 });
 it("title action-phrase convention is delivered before wire serialization instructions", () => {
-  const rule="Title values are concise task action phrases, not a bare conversational predicate: a grounded exam/thi task is đi thi, not thi; a meeting task is họp. Keep named subjects and meaningful qualifiers supplied by the USER, without inventing them.";
+  const rule="Titles are concise actions: exam/thi is đi thi, not thi; meeting is họp. Preserve supplied names/qualifiers, invent none.";
   expect(CONTEXT_CONTRACT_PROMPT).toContain(rule);
   expect(CONTEXT_CONTRACT_PROMPT.indexOf(rule)).toBeLessThan(CONTEXT_CONTRACT_PROMPT.indexOf("Canonical semantic fields are"));
 });
@@ -241,13 +241,13 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single occurrence independently grounds frequency ONCE, including when a clock is still missing; do not omit that supplied cadence under the distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, reminderDate or reminderTime.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, reminderDateChange and reminderTimeChange are required nullable roots");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, eventRelation, reminderDate or reminderTime.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange, reminderTimeChange, eventDateChange and eventTimeChange carriers");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + the number of NON-NULL titleChange, reminderDateChange, reminderTimeChange, eventDateChange, eventTimeChange and eventRelationChange carriers");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("not prior turns, retained state fields, source positions or one-based ordinals");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("three ordinary changes plus one non-null carrier means N=4; an appended carrier has index3, never index4");

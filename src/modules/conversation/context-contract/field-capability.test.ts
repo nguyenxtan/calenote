@@ -28,6 +28,12 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it("actual source-bound schema forbids two ordinary eventRelation proposals",()=>{
+ const context=input("Nhắc trước 2 ngày."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:unknown[];eventRelationChange?:{change:unknown}},ordinary=wire.eventRelationChange?.change??wire.changes[0];
+ const duplicate={...wire,...(wire.eventRelationChange?{eventRelationChange:null}:{}),changes:[ordinary,structuredClone(ordinary)]};
+ expect(validator(context).safeParse(duplicate).success).toBe(false);
+});
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
@@ -171,7 +177,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-9",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("ac89ad100f99a9bf8f66113287b10fa8dd5d5b5184709137b8c5ec307ddbb3e4");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("b59d9ed08ef4b6ffc28abd76e7a4b3d9acd4f764e2169b76b21c8f679725b05e");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
