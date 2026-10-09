@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
-import { FieldChangeV3Schema } from "./contracts";
+import { FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
@@ -95,6 +95,44 @@ export function projectControlEnum(domain: readonly unknown[], actual: unknown):
 export interface CanonicalValidationDiagnostics {
   schemaVersion: "calenote-context-2" | "calenote-context-3"; issues: CanonicalValidationIssue[];
   topLevelKeys: string[]; unknownTopLevelKeyCount: number; truncated: boolean;
+  uncertaintyAlternatives?: AlternativeStructure[];
+  uncertaintyAlternativesTruncated?: boolean;
+}
+export interface AlternativeStructure {
+  uncertaintyIndex:number;alternativeIndex:number;field:string;fieldCode?:number;reason:string;
+  fieldType:string;reasonType:string;fieldDigest?:string;reasonDigest?:string;
+  alternativeType:string;valueType:string;evidenceType:string;alternativeKeys:string[];evidenceKeys:string[];
+  /** Unknown counts cover only the first64 own names when truncated. */
+  alternativeUnknownKeyCount:number;alternativeUnknownKeyCountTruncated:boolean;evidenceUnknownKeyCount:number;evidenceUnknownKeyCountTruncated:boolean;
+}
+/** Observed decoded structure only, never union-branch literals or values.
+ * Fixed 4x2 entries and own data descriptors keep accessor inputs inert. */
+function alternativeStructure(raw:unknown):Pick<CanonicalValidationDiagnostics,"uncertaintyAlternatives"|"uncertaintyAlternativesTruncated"> {
+  const read=(object:unknown,key:PropertyKey):unknown=>{try{return object&&typeof object==="object"?Object.getOwnPropertyDescriptor(object,key)?.value:undefined;}catch{return undefined;}};
+  const membership=(object:unknown,allowed:readonly string[])=>{
+    try{
+      const names=object&&typeof object==="object"&&!Array.isArray(object)?Object.getOwnPropertyNames(object):[];
+      const count=names.slice(0,64).filter(name=>!allowed.includes(name)).length;
+      return {keys:allowed.filter(key=>object&&typeof object==="object"&&Object.getOwnPropertyDescriptor(object,key)!==undefined),count,truncated:names.length>64};
+    }catch{return {keys:[],count:0,truncated:true};}
+  };
+  const uncertainties=read(raw,"uncertainties");if(!Array.isArray(uncertainties))return {};
+  const fields=["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate","intent","queryRange","operation"];
+  const records:AlternativeStructure[]=[];let truncated=uncertainties.length>4;
+  for(let i=0;i<Math.min(4,uncertainties.length);i++){
+    const uncertainty=read(uncertainties,String(i)),field=read(uncertainty,"field"),reason=read(uncertainty,"reason"),alternatives=read(uncertainty,"alternatives");
+    if(!Array.isArray(alternatives))continue;
+    truncated ||= alternatives.length>2;
+    const knownField=typeof field==="string"&&UncertaintyV3Schema.options.some(branch=>branch.shape.field.safeParse(field).success);
+    const knownReason=typeof reason==="string"&&["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"].includes(reason);
+    for(let j=0;j<Math.min(2,alternatives.length);j++){
+      const alternative=read(alternatives,String(j)),evidence=read(alternative,"evidence"),a=membership(alternative,["value","evidence"]),e=membership(evidence,["primaryEvidence","additionalEvidenceJson"]);
+      records.push({uncertaintyIndex:i,alternativeIndex:j,field:knownField?field:"UNKNOWN",...(knownField?{fieldCode:fields.indexOf(field)}:{}),reason:knownReason?reason:"UNKNOWN",fieldType:jsonType(field),reasonType:jsonType(reason),
+        ...(!knownField&&typeof field==="string"&&field.length<=32768?{fieldDigest:createHash("sha256").update(field).digest("hex")}:{}),...(!knownReason&&typeof reason==="string"&&reason.length<=32768?{reasonDigest:createHash("sha256").update(reason).digest("hex")}:{}),
+        alternativeType:jsonType(alternative),valueType:jsonType(read(alternative,"value")),evidenceType:jsonType(evidence),alternativeKeys:a.keys,evidenceKeys:e.keys,alternativeUnknownKeyCount:a.count,alternativeUnknownKeyCountTruncated:a.truncated,evidenceUnknownKeyCount:e.count,evidenceUnknownKeyCountTruncated:e.truncated});
+    }
+  }
+  return records.length||truncated?{uncertaintyAlternatives:records,uncertaintyAlternativesTruncated:truncated}:{};
 }
 const jsonType = (value: unknown) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? "object" : types.has(typeof value) ? typeof value : "non_json";
 /** Zod issues are untrusted: never copy messages, inputs or unknown names.
@@ -102,6 +140,7 @@ const jsonType = (value: unknown) => value === null ? "null" : Array.isArray(val
  * never value, evidence or business-text trees. */
 export function projectCanonicalValidation(raw: unknown, issues: readonly z.core.$ZodIssue[], schemaVersion: CanonicalValidationDiagnostics["schemaVersion"] = "calenote-context-2"): CanonicalValidationDiagnostics {
   const result: CanonicalValidationDiagnostics = { schemaVersion, issues: [], topLevelKeys: [], unknownTopLevelKeyCount: 0, truncated: false };
+  if(schemaVersion==="calenote-context-3")Object.assign(result,alternativeStructure(raw));
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     for (const key of Object.keys(raw)) {
       if (rootKeys.has(key)) result.topLevelKeys.push(key);
@@ -115,7 +154,7 @@ export function projectCanonicalValidation(raw: unknown, issues: readonly z.core
       const fullPath = [...prefix, ...issue.path];
       const segments = fullPath.slice(0, 8); let value = raw, unknownPathSegments = 0;
       const path = segments.map(segment => {
-        if (value && typeof value === "object" && Object.hasOwn(value, segment)) value = (value as Record<PropertyKey, unknown>)[segment]; else value = undefined;
+        try{value=value&&typeof value==="object"?Object.getOwnPropertyDescriptor(value,segment)?.value:undefined;}catch{value=undefined;}
         if (typeof segment === "number" && Number.isSafeInteger(segment) && segment >= 0) return segment;
         if (typeof segment === "string" && keys.has(segment)) return segment;
         unknownPathSegments++; return "REDACTED";

@@ -286,6 +286,18 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it("actual decoded alternative diagnostics distinguish canonical arrays from unconverted carrier objects",()=>{
+ const secret="PRIVATE_ALT_VALUE_DO_NOT_RETAIN",evidence=[{kind:"USER_QUOTE",turn:0,quote:secret,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence}]}]});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as {uncertainties:Array<{alternatives:string[]}>};
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
+ raw.uncertainties[0].alternatives[0]=JSON.stringify({value:"DAILY",evidence:{primaryEvidence:secret,additionalEvidenceJson:secret}});
+ const diagnostics:unknown[]=[];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,value=>{diagnostics.push(value);}).status).toBe("REFUSED");
+ expect(diagnostics[0]).toMatchObject({uncertaintyAlternatives:[{field:"frequency",fieldCode:8,reason:"AMBIGUOUS",valueType:"string",evidenceType:"object",evidenceKeys:["primaryEvidence","additionalEvidenceJson"]}]});
+ expect(JSON.stringify(diagnostics)).not.toContain(secret);
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,()=>{throw Error(secret);}).status).toBe("REFUSED");
+});
 it("pointer throw metadata survives indexed restoration without inferring shifted raw operands",()=>{
   const evidence=[{kind:"USER_QUOTE",turn:0,quote:"PRIVATE_QUOTE_SENTINEL",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"notes",operation:"SET",value:"PRIVATE_VALUE_SENTINEL",evidence},{field:"reminderTime",operation:"REPLACE",value:{hour:9,minute:0,qualifier:"H24"},evidence}]});

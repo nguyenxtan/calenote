@@ -2,9 +2,43 @@ import { expect, it } from "vitest";
 import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "./contracts";
 import { projectCanonicalValidation, projectDateOperandFailure, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
+import { UNCERTAINTY_FIELD_WIRE_CODE_V1 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+it("decoded canonical alternative failure observes real finite controls, not union branch literals",()=>{
+ const raw={schemaVersion:"calenote-context-3",intent:"HELP",requestTarget:null,changes:[],query:null,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence:{primaryEvidence:sentinel,additionalEvidenceJson:sentinel,private_secret_key:sentinel}}]}],conversationDirective:null,replyProposal:null};
+ let diagnostics:CanonicalValidationDiagnostics|undefined;
+ expect(parseInterpretationSectionsV3(raw,value=>{diagnostics=value;})).toMatchObject({status:"REFUSED"});
+ expect(Reflect.get(diagnostics!,"uncertaintyAlternatives")).toEqual([{uncertaintyIndex:0,alternativeIndex:0,field:"frequency",fieldCode:8,reason:"AMBIGUOUS",fieldType:"string",reasonType:"string",alternativeType:"object",valueType:"string",evidenceType:"object",alternativeKeys:["value","evidence"],alternativeUnknownKeyCount:0,alternativeUnknownKeyCountTruncated:false,evidenceKeys:["primaryEvidence","additionalEvidenceJson"],evidenceUnknownKeyCount:1,evidenceUnknownKeyCountTruncated:false}]);
+ expect(JSON.stringify(diagnostics)).not.toContain(sentinel);expect(JSON.stringify(diagnostics)).not.toContain("private_secret");
+});
+it("alternative structure bounds records/unknown keys and never reads accessors or private controls",()=>{
+ let reads=0;const getter={get(){reads++;throw Error(sentinel);}};
+ const evidence=Object.fromEntries(Array.from({length:70},(_,i)=>[`secret_key_${i}`,sentinel]));Object.defineProperty(evidence,"primaryEvidence",getter);
+ const alternative=Object.defineProperties({evidence},{value:getter});
+ const unknown={field:sentinel,reason:sentinel,alternatives:[alternative,null,"private_alternative"]};
+ const raw={uncertainties:Array.from({length:5},()=>unknown)};
+ const diagnostic=projectCanonicalValidation(raw,[{code:"custom",path:["uncertainties",0,"alternatives",0,"value"],message:sentinel}],"calenote-context-3");
+ expect(reads).toBe(0);expect(diagnostic.uncertaintyAlternatives).toHaveLength(8);expect(diagnostic.uncertaintyAlternativesTruncated).toBe(true);
+ expect(diagnostic.uncertaintyAlternatives?.[0]).toMatchObject({field:"UNKNOWN",reason:"UNKNOWN",fieldType:"string",reasonType:"string",valueType:"undefined",evidenceType:"object",evidenceKeys:["primaryEvidence"],evidenceUnknownKeyCount:64,evidenceUnknownKeyCountTruncated:true});
+ expect(diagnostic.uncertaintyAlternatives?.[1]).toMatchObject({alternativeType:"null",valueType:"undefined",evidenceType:"undefined"});
+ expect(JSON.stringify(diagnostic)).not.toContain(sentinel);expect(JSON.stringify(diagnostic)).not.toContain("secret_key");expect(JSON.stringify(diagnostic)).not.toContain("private_alternative");
+ const accessor=Object.defineProperty({},"uncertainties",getter);expect(projectCanonicalValidation(accessor,[],"calenote-context-3")).not.toHaveProperty("uncertaintyAlternatives");expect(reads).toBe(0);
+});
+it("alternative field/code projection is exhaustively pinned to the unchanged V1 codebook",()=>{
+ for(const [field,fieldCode] of Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1)){
+  const projected=projectCanonicalValidation({uncertainties:[{field,reason:"CONFLICT",alternatives:[{value:null,evidence:[]}]}]},[],"calenote-context-3");
+  expect(projected.uncertaintyAlternatives?.[0]).toMatchObject({field,fieldCode,reason:"CONFLICT",evidenceType:"array",evidenceKeys:[]});
+ }
+});
+it("oversized or descriptor-hostile alternative diagnostics retain only bounded structure",()=>{
+ const huge=sentinel.repeat(4000),hostile=new Proxy({},{ownKeys(){throw Error(sentinel);},getOwnPropertyDescriptor(){throw Error(sentinel);}});
+ const raw={uncertainties:[{field:huge,reason:huge,alternatives:[{value:huge,evidence:hostile}]}]};
+ const diagnostic=projectCanonicalValidation(raw,[{code:"custom",path:["uncertainties",0,"alternatives",0,"evidence","primaryEvidence"],message:sentinel}],"calenote-context-3");
+ expect(diagnostic.uncertaintyAlternatives?.[0]).toMatchObject({field:"UNKNOWN",reason:"UNKNOWN",valueType:"string",evidenceType:"object",evidenceUnknownKeyCount:0,evidenceUnknownKeyCountTruncated:true});
+ expect(diagnostic.uncertaintyAlternatives?.[0]).not.toHaveProperty("fieldDigest");expect(diagnostic.uncertaintyAlternatives?.[0]).not.toHaveProperty("reasonDigest");expect(JSON.stringify(diagnostic)).not.toContain(sentinel);
+});
 it("date operand structural projection never evaluates accessors or copies private keys/values",()=>{
   let reads=0;const candidate=Object.defineProperties({},{kind:{get(){reads++;throw new Error(sentinel);}},private_secret_key:{get(){reads++;throw new Error(sentinel);}}});
   const diagnostic=projectDateOperandFailure(candidate,"CANONICAL_OPERAND","INVALID_OPERAND","eventDate","private_secret_code");
