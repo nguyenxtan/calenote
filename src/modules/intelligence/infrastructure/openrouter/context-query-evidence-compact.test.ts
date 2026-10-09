@@ -37,14 +37,15 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(baseline.unions).toBeLessThanOrEqual(19);
  expect(baseline.branches).toBeLessThanOrEqual(51);
  expect(baseline.references).toBeLessThanOrEqual(42);
- expect(metrics).toMatchObject({nullableUnions:21,unions:34,branches:76,references:27});
+ expect(metrics).toMatchObject({nullableUnions:21,unions:35,branches:77,references:26});
  // Nine added nullable roots preserve their strict operation/value branches.
  // Merging operation/value branches would incorrectly permit SET/null.
  expect(metrics.nullableUnions-baseline.nullableUnions).toBe(9);
  expect(metrics.unions-baseline.unions).toBe(18);
  expect(metrics.branches-baseline.branches).toBe(36);
- // Sole endDate/text group split adds one branch within the old remainder bound.
- expect(baseline.branches).toBe(40);
+ // EndDate/text split plus ALL-op title singleton add branches inside the
+ // unchanged historical remainder bound; neither proves provider admission.
+ expect(baseline.branches).toBe(41);
 });
 it("bad extras diagnostics expose structure, never serialized sensitive values",()=>{
  const raw=wire(),diagnostics:unknown[]=[];

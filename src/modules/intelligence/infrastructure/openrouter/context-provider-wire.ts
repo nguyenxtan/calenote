@@ -535,42 +535,9 @@ function operationSchema(root:Schema):Schema{
  result.properties!.query={anyOf:[{type:"object",properties,required:[...branches[0].required!],additionalProperties:false},{type:"null"}]};
  return prune(result);
 }
-function indexedTitleSchema(root:Schema):Schema {
-  const result=structuredClone(root);
-  const branches=deref(result.properties!.changes.items!,result).anyOf!;
-  const title=branches.map(branch=>deref(branch,result)).find(branch=>{
-    const field=branch.properties!.field,operation=branch.properties!.operation;
-    return (field.enum??[field.const]).includes("title") && (operation.enum??[operation.const]).includes("SET");
-  });
-  requireShape(title);
-  const change=structuredClone(title);
-  change.properties!.field={type:"string",const:"title"};
-  change.properties!.operation={type:"string",const:"SET"};
-  deref(result.properties!.changes.items!,result).anyOf=branches.flatMap(raw=>{
-    const branch=deref(raw,result),field=branch.properties!.field,operation=branch.properties!.operation;
-    const fields=field.enum??[field.const],operations=operation.enum??[operation.const];
-    if(!fields.includes("title")||!operations.includes("SET"))return [raw];
-    const output:Schema[]=[],otherFields=fields.filter(value=>value!=="title"),titleOperations=operations.filter(value=>value!=="SET");
-    if(otherFields.length){
-      const ordinary=structuredClone(branch);
-      ordinary.properties!.field={type:"string",enum:otherFields};output.push(ordinary);
-    }
-    if(titleOperations.length){
-      const correction=structuredClone(branch);
-      correction.properties!.field={type:"string",const:"title"};
-      correction.properties!.operation=titleOperations.length===1?{type:"string",const:titleOperations[0]}:{type:"string",enum:titleOperations};
-      output.push(correction);
-    }
-    return output;
-  });
-  const carrier:Schema={type:"object",properties:{index:{type:"integer"},change},required:["index","change"],additionalProperties:false};
-  result.properties!.titleChange={anyOf:[carrier,{type:"null"}]};
-  result.required!.push("titleChange");
-  return result;
-}
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
+  for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
       const branch=deref(raw,result),control=branch.properties!.field,fields=control.enum??[control.const];
@@ -586,7 +553,7 @@ function indexedReminderSchema(root:Schema):Schema {
   }
   return result;
 }
-const providerSchemaV3 = indexedReminderSchema(indexedTitleSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))),true)))));
+const providerSchemaV3 = indexedReminderSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))),true))));
 
 /** Move only explicitly model-authored carrier data; indices and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
@@ -594,7 +561,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   const result={...raw};
   if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
   const ordinaryChanges=raw.changes;
-  const definitions=[{field:"title",root:"titleChange",setOnly:true},{field:"reminderDate",root:"reminderDateChange",setOnly:false},{field:"reminderTime",root:"reminderTimeChange",setOnly:false},{field:"eventDate",root:"eventDateChange",setOnly:false},{field:"eventTime",root:"eventTimeChange",setOnly:false},{field:"eventRelation",root:"eventRelationChange",setOnly:false},{field:"frequency",root:"frequencyChange",setOnly:false},{field:"occurrenceCount",root:"occurrenceCountChange",setOnly:false},{field:"endDate",root:"endDateChange",setOnly:false},{field:"location",root:"locationChange",setOnly:false}] as const;
+  const definitions=[{field:"title",root:"titleChange"},{field:"reminderDate",root:"reminderDateChange"},{field:"reminderTime",root:"reminderTimeChange"},{field:"eventDate",root:"eventDateChange"},{field:"eventTime",root:"eventTimeChange"},{field:"eventRelation",root:"eventRelationChange"},{field:"frequency",root:"frequencyChange"},{field:"occurrenceCount",root:"occurrenceCountChange"},{field:"endDate",root:"endDateChange"},{field:"location",root:"locationChange"}] as const;
   const positions=new Map<number,unknown>();
   for(const definition of definitions){
     const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);
@@ -602,7 +569,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     if(mode==="encode"){
       if(authored.length>1)throw new WireShapeFailure([definition.root],duplicate);
       const item=authored[0];
-      result[definition.root]=item&&(!definition.setOnly||item.change.operation==="SET")?{index:item.index,change:item.change}:null;
+      result[definition.root]=item?{index:item.index,change:item.change}:null;
       if(result[definition.root])positions.set(item.index,item.change);
       continue;
     }
@@ -610,7 +577,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     const carrier=raw[definition.root];delete result[definition.root];
     if(carrier===null){
       if(definition.field==="title"&&required)throw new WireShapeFailure([definition.root],"object");
-      if(authored.some(({change})=>!definition.setOnly||change.operation==="SET"))throw new WireShapeFailure([definition.root],definition.setOnly?"TITLE_SET_CARRIER_REQUIRED":"FIELD_CARRIER_REQUIRED");
+      if(authored.length)throw new WireShapeFailure([definition.root],"FIELD_CARRIER_REQUIRED");
       continue;
     }
     if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([definition.root],"object");
@@ -629,12 +596,15 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
         const diagnostic=projectControlEnum([definition.field],item.field);
         // Carrier field controls are schema-owned finite literals, not arbitrary
         // token-shaped user values. Unknown field strings retain digest only.
-        if(!definition.setOnly)delete diagnostic.actualSafeToken;
+        delete diagnostic.actualSafeToken;
         throw new WireShapeFailure([definition.root,"change","field"],"CONTROL_ENUM",undefined,undefined,diagnostic);
       }
-      if(definition.setOnly&&item.operation!=="SET")throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(["SET"],item.operation));
+      if(definition.field==="title"){
+        const allowed=required?["SET"]:["SET","REPLACE","CLEAR"];
+        if(typeof item.operation!=="string"||!allowed.includes(item.operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,item.operation));
+      }
     }
-    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],definition.setOnly?"TITLE_SET_CHANGE":"FIELD_CHANGE");
+    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE");
     if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
     positions.set(index,change);
   }
@@ -677,6 +647,14 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   let schema = structuredClone(providerSchemaV3);
   if (capability) {
     requireShape(typeof capability.notesProposalAllowed==="boolean" && typeof capability.titlePresenceRequired==="boolean" && typeof capability.titleCorrectionAllowed==="boolean" && typeof capability.calendarProposalAllowed==="boolean");
+    if(capability.titlePresenceRequired||!capability.titleCorrectionAllowed){
+      const title=schema.properties!.titleChange.anyOf![0].properties!.change;
+      title.anyOf=title.anyOf!.flatMap(raw=>{
+        const branch=structuredClone(deref(raw,schema)),operation=branch.properties!.operation;
+        if(!(operation.enum??[operation.const]).includes("SET"))return [];
+        branch.properties!.operation={type:"string",enum:["SET"]};return [branch];
+      });
+    }
     if(capability.titlePresenceRequired){
       schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
       schema.properties!.requestTarget=schema.properties!.requestTarget.anyOf![0];

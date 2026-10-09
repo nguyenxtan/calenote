@@ -211,7 +211,25 @@ async function r02Turn1Schema(){
   const currentDescription="JSON {value,evidence}; canonical field value, evidence {primaryEvidence:available source code,additionalEvidenceJson:JSON array of 0–2 pointers}.";
   expect(JSON.stringify(schema)).toContain(currentDescription);
   let descriptions=0;const restore=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.description===currentDescription){node.description="JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.";descriptions++;}Object.values(node).forEach(restore);};restore(schema);
-  expect(descriptions).toBe(1);expect(hash(JSON.stringify(schema))).toBe("635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48");
+  expect(descriptions).toBe(1);
+  // Invert only wire60's title singleton layout in this PUBLIC specimen.
+  // BASE9331c302 independently establishes ordinal notes SET, notes REPLACE,
+  // title REPLACE, then CLEAR title/notes; production keeps ALL-op carrier.
+  const object=(node:NonNullable<ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]["$defs"]>[string]|boolean)=>{if(typeof node==="boolean")throw Error("HISTORICAL_TITLE_SHAPE");return node;};
+  const titleCarrier=object(object(schema.properties!.titleChange).anyOf![0]);
+  const title=object(titleCarrier.properties!.change);
+  expect(title.anyOf).toHaveLength(3);
+  const [set,replace,clear]=title.anyOf!.map(object);
+  expect(object(set.properties!.operation).enum).toEqual(["SET"]);
+  expect(object(replace.properties!.operation).enum).toEqual(["REPLACE"]);
+  expect(object(clear.properties!.operation).enum).toEqual(["CLEAR"]);
+  const ordinary=object(schema.$defs!.__schema5).anyOf!;
+  expect(ordinary.map(branch=>object(object(branch).properties!.field).enum)).toEqual([["notes"],["notes"],["notes"]]);
+  expect(ordinary.map(branch=>object(object(branch).properties!.operation).enum)).toEqual([["SET"],["REPLACE"],["CLEAR"]]);
+  titleCarrier.properties!.change=structuredClone(set);
+  object(object(ordinary[2]).properties!.field).enum=["title","notes"];
+  ordinary.splice(2,0,structuredClone(replace));
+  expect(hash(JSON.stringify(schema))).toBe("635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48");
   return {fixtureFault:"SCHEMA_INVALID"};});
  try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
  expect(schema).toBeDefined();return schema!;

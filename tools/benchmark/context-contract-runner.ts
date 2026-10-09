@@ -209,9 +209,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "79c398c8872684a7792144c190308685092c70f56f06dcf52ca8a3e87d7c3e3a"
+    if (digest(request.messages[0].content) !== "0050e79ee692aec74554e8b949ad90f764f988a3c56da89904c80c6eb4fbb8d3"
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "dac8e5b9d4bfff2a1752e5612a48520a7a612d25d55b5cb69e125b9cb8dad962") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== "6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request);
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();

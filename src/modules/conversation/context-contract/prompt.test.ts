@@ -257,7 +257,7 @@ it("reminder singleton instructions preserve model-authored global positions wit
   expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, locationChange, reminderDateChange and reminderTimeChange are required nullable roots");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain none of these fields.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE carrier removal");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence unchanged (CLEAR value=null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("N=changes.length + all ten NON-NULL carriers above, simultaneously");

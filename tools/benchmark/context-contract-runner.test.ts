@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "dac8e5b9d4bfff2a1752e5612a48520a7a612d25d55b5cb69e125b9cb8dad962",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("dac8e5b9d4bfff2a1752e5612a48520a7a612d25d55b5cb69e125b9cb8dad962");
+    expect(requestSchemaDigest).not.toBe("6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -327,10 +327,10 @@ it.each([
     changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
   if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
   if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
-  if(field==="location"){(raw as unknown as Record<string,unknown>).locationChange={index:0,change:raw.changes[0]};raw.changes=[];}
+  if(field==="location"||field==="title"){(raw as unknown as Record<string,unknown>)[field+"Change"]={index:0,change:raw.changes[0]};raw.changes=[];}
   let diagnostics: unknown;
   expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:{ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
+  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:field==="title"?{path:["titleChange","change",expectedPath],expected:"CONTROL_ENUM"}:{ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
 });
 
 it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "core", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
@@ -500,8 +500,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "dac8e5b9d4bfff2a1752e5612a48520a7a612d25d55b5cb69e125b9cb8dad962",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-59" });
+      providerWireSchemaDigest: "6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-60" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

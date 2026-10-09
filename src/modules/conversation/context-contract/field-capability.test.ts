@@ -317,9 +317,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("1e1eb39de5f00a94b5465a7c630a81b6f6fe3784d2333dd60ed78033e024c026");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("44a3a8d51b5c2f96c0cda9209270efb0ce4de7ab455aa7014e33a78d033654ea");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("0c956316884f29f0e36a8d99fa4f0be1a1634a7fa1c541cc957ca97717141f6c");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("f893c8266a2b5b0812a69bdeb36ebda5a138da452c50dd80baa6f9f3cacfd01c");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -478,12 +478,13 @@ it("clock answer restriction requires bound reminder question and preserves othe
  slots.eventTime={state:"MISSING",value:null,fact:null};context.facts=[];context.turns.unshift({role:"USER",text:"Thi lúc 9h."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"});context.currentTurn=2;
  expect(catalogue(context).allowedClockFields).toEqual(["eventTime","reminderTime"]);
 });
-it.each(["frequency","occurrenceCount","eventRelation","endDate"] as const)("bound bare clock declines non-clock %s mutations but preserves exact SET facts and both clocks",field=>{
+it.each(["title","frequency","occurrenceCount","eventRelation","endDate"] as const)("bound bare clock declines non-clock %s mutations but preserves exact SET facts and both clocks",field=>{
  const context=input("8h."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
  context.turns=[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"},{role:"USER",text:"Nhắc trước 2 ngày."},{role:"ASSISTANT",text:"Mấy giờ nhắc?"},{role:"USER",text:"8h."}];context.currentTurn=4;
  slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventRelation={state:"PROPOSED",value:"BEFORE_EVENT",fact:null};slots.eventTime={state:"PROPOSED",value:{hour:9,minute:0,qualifier:"H24"},fact:null};
  context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={text:"Mấy giờ nhắc?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
- const value=field==="frequency"?"DAILY":field==="occurrenceCount"?2:field==="endDate"?{kind:"RELATIVE_DAY",offsetDays:2}:"BEFORE_EVENT",evidence=[{kind:"USER_QUOTE" as const,turn:4,quote:"8h.",occurrence:1}];
+ const value=field==="title"?"đi thi":field==="frequency"?"DAILY":field==="occurrenceCount"?2:field==="endDate"?{kind:"RELATIVE_DAY",offsetDays:2}:"BEFORE_EVENT",evidence=[{kind:"USER_QUOTE" as const,turn:4,quote:"8h.",occurrence:1}];
+ slots.title={state:"PROPOSED",value:"đi thi",fact:null};
  context.facts=[{alias:"f1",scope:"REMINDER",field,value,provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]}] as ContextInput["facts"];
  const wire=(field:string,operation:string,value:unknown,refs:unknown[]=evidence)=>encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field,operation,value,evidence:refs}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}));
  const check=validator(context);
