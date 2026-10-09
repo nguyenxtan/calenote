@@ -606,7 +606,7 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
 export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): ProviderWireSchemaV3 {
   let schema = structuredClone(providerSchemaV3);
   if (capability) {
-    requireShape(typeof capability.titlePresenceRequired==="boolean" && typeof capability.titleCorrectionAllowed==="boolean");
+    requireShape(typeof capability.titlePresenceRequired==="boolean" && typeof capability.titleCorrectionAllowed==="boolean" && typeof capability.calendarProposalAllowed==="boolean");
     if(capability.titlePresenceRequired){
       schema.properties!.titleChange=schema.properties!.titleChange.anyOf![0];
       schema.properties!.requestTarget=schema.properties!.requestTarget.anyOf![0];
@@ -614,7 +614,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
-    requireShape(capability.version === "generation-field-capability-7" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.version === "generation-field-capability-8" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
     const changes = deref(schema.properties!.changes.items!, schema);
@@ -623,7 +623,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       const branch = deref(raw, schema), field = deref(branch.properties!.field, schema);
       const values = Object.hasOwn(field, "const") ? [field.const] : field.enum;
       requireShape(values?.length);
-      const permitted = values.filter(value => !((capability.titlePresenceRequired || !capability.titleCorrectionAllowed) && value==="title") && (!numeric(value) || capability.allowedNumericFields.includes(value)) && (!clock(value) || capability.allowedClockFields.includes(value)));
+      const permitted = values.filter(value => !((capability.titlePresenceRequired || !capability.titleCorrectionAllowed) && value==="title") && (value!=="calendar" || capability.calendarProposalAllowed) && (!numeric(value) || capability.allowedNumericFields.includes(value)) && (!clock(value) || capability.allowedClockFields.includes(value)));
       if (!permitted.length) return [];
       branch.properties!.field = Object.hasOwn(field, "const") ? { ...field, const: permitted[0] } : { ...field, enum: permitted };
       return [branch];

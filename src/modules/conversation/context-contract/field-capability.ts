@@ -12,12 +12,20 @@ export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-7";
+  version: "generation-field-capability-8";
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
   titlePresenceRequired: boolean;
   /** Availability from the application-bound occupied CURRENT slot only. */
   titleCorrectionAllowed: boolean;
+  /** Calendar slot availability, independent of date/query calendar operands. */
+  calendarProposalAllowed: boolean;
+}
+/** Finite existing calendar cues only; no default, conversion or value output.
+ * Whole USER guards prevent a control split from hiding unsafe context. */
+function hasExplicitCalendarCue(text: string): boolean {
+  if (/["'“”‘’`]/u.test(text) || /(?:^|[^\p{L}\p{M}\p{N}_])(?:không|khong|ko|đừng|dung|chẳng|chang|chưa|chua|nếu|neu|ví dụ|vi du|giả sử|gia su|tên|ten|chữ|chu|trích dẫn|trich dan|cụm từ|cum tu|từ ngữ|tu ngu)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text)) return false;
+  return text.split(CONTROL_PLACEHOLDER).some(segment => /(?:^|[^\p{L}\p{M}\p{N}_])(?:âm lịch|lịch âm|ngày âm|dương lịch|lịch dương|am lich|lich am|ngay am|duong lich|lich duong)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(segment));
 }
 /** Whole numeric clock answer only; the scanner validates existing clock
  * grammar, but its parsed value is never returned or used as a proposal. */
@@ -141,7 +149,10 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
     }
   }
   const title = input.activeRequest?.slots.title;
-  return { version: "generation-field-capability-7", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
+  const calendar = input.activeRequest?.slots.calendar;
+  return { version: "generation-field-capability-8", titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null,
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
+    calendarProposalAllowed: !!calendar && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(calendar.state) && calendar.value !== null
+      || current?.role === "USER" && hasExplicitCalendarCue(current.text),
     allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => allowed.has(field)), allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => clocks.has(field)) };
 }

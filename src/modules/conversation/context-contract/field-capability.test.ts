@@ -30,6 +30,40 @@ function input(text: string): ContextInput {
 function catalogue(context: ContextInput) {
   return JSON.parse(serializeContextRequest(context).messages[1].content).fieldCapability;
 }
+it.each(["SET","REPLACE","CLEAR"] as const)("date-only R04 does not grant calendar %s generation",operation=>{
+ const context=input("Tôi thi ngày 11/10 lúc 8h."),text=context.turns[0].text,evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"calendar",operation,value:operation==="CLEAR"?null:"GREGORIAN",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(false);
+ expect(fields(context)).not.toContain("calendar");expect(catalogue(context).calendarProposalAllowed).toBe(false);
+});
+it.each(["âm lịch","lịch âm","ngày âm","dương lịch","lịch dương","am lich","lich am","ngay am","duong lich","lich duong","Đổi sang dương lịch.","Dùng âm lịch."])("explicit finite calendar cue keeps ordinary operations: %s",text=>{
+ const context=input(text),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:text,occurrence:1}];
+ context.pendingQuestion={text:"Dùng lịch nào?",scope:"REMINDER",field:"calendar",decisionKind:null,reason:"MISSING"};
+ expect(catalogue(context).calendarProposalAllowed).toBe(true);expect(fields(context)).toContain("calendar");
+ for(const operation of ["SET","REPLACE","CLEAR"]){const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"calendar",operation,value:operation==="CLEAR"?null:"LUNAR_VN",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(true);}
+});
+it.each(["Ngày 11/10.","GREGORIAN","LUNAR_VN","Không dùng âm lịch.","Nếu dùng dương lịch.","Giả sử dùng lịch âm.",'"âm lịch"',"Tên là âm lịch.","âm[CONTROL]lịch","Không [CONTROL] dùng dương lịch.","xam lich","duong lich_key"])("calendar cue cannot be default, quoted, hypothetical or control-borrowed: %s",text=>{
+ expect(catalogue(input(text)).calendarProposalAllowed).toBe(false);expect(fields(input(text))).not.toContain("calendar");
+});
+it("calendar availability is CURRENT-slot bound, not unbound facts, history or ASSISTANT text",()=>{
+ const context=input("Giữ như cũ."),slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ context.turns.unshift({role:"USER",text:"Dùng âm lịch."},{role:"ASSISTANT",text:"Dương lịch?"});context.currentTurn=2;
+ const fact={alias:"f1",scope:"REMINDER" as const,field:"calendar" as const,value:"LUNAR_VN" as const,provenance:{kind:"EXPLICIT_USER" as const},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]};context.facts=[fact];
+ expect(catalogue(context).calendarProposalAllowed).toBe(false);
+ context.activeRequest={lifecycle:"CLARIFYING",slots};expect(catalogue(context).calendarProposalAllowed).toBe(false);
+ for(const state of ["PROPOSED","RESOLVED","CONFLICT"] as const){slots.calendar={state,value:fact.value,fact:"f1"};expect(catalogue(context).calendarProposalAllowed).toBe(true);expect(fields(context)).toContain("calendar");}
+ const current=[{kind:"USER_QUOTE" as const,turn:2,quote:"Giữ như cũ.",occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:current},changes:[{field:"calendar",operation:"SET",value:"LUNAR_VN",evidence:[{kind:"CONTEXT_FACT",ref:"f1"}]}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(true);
+ slots.calendar={state:"MISSING",value:null,fact:null};context.facts=[];
+ context.facts=[{alias:"f2",scope:"QUERY",field:"queryRange",value:{kind:"CALENDAR_DATE",date:{kind:"RELATIVE_DAY",offsetDays:0},outputCalendar:"LUNAR_VN",evidence:current},provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:fact.sourceReferenceTime,dependencies:[]}];
+ expect(catalogue(context).calendarProposalAllowed).toBe(false);
+ context.turns[2].text="[CONTROL] Dương lịch.";expect(catalogue(context).calendarProposalAllowed).toBe(true);
+});
+it("closed calendar slot does not prune civil date/calendar-query output or uncertainty representation",()=>{
+ const context=input("Ngày 11/10/2026 là ngày gì?"),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+ const raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CALENDAR_QUERY",requestTarget:null,changes:[],query:{kind:"CALENDAR_DATE",date:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:2026,leapMonth:null},outputCalendar:"LUNAR_VN",evidence},uncertainties:[{field:"calendar",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null});
+ expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(raw)).success).toBe(true);
+});
 it.each(["REPLACE","CLEAR"] as const)("mutating %s primary evidence must select current USER rather than history or fact",operation=>{
  const context=input("Đổi nhắc hai ngày liên tiếp.");context.turns=[{role:"USER",text:"Nhắc hai ngày liên tiếp."},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"trước hôm thi"},{role:"ASSISTANT",text:"Mấy giờ?"},{role:"USER",text:context.turns[0].text}];context.currentTurn=4;
  context.facts=[{alias:"f1",scope:"REMINDER",field:"frequency",value:"DAILY",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]}];
@@ -115,8 +149,8 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-7",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("da41c9de25ec1f79c6e08f1601dfd1ac276124589a7a040ce4153e7e3fbececd");
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-8",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false});
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("cd882b68194c89f8e1c5ec807e77d237e9c2734a341ed4985841dd5e554868e6");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -149,7 +183,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-7", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-8", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
