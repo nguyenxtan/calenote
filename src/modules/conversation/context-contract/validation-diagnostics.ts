@@ -31,8 +31,42 @@ export interface CanonicalValidationIssue {
   duplicateFieldCountsTruncated?: boolean;
   evidencePointer?:EvidencePointerDiagnostic;
   dateOperand?:DateOperandDiagnostic;
+  uncertaintyShape?:UncertaintyWireShape;
   /** carrierCount counts observed non-null object roots, not validated changes. */
   carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
+}
+export interface UncertaintyWireShape {
+  index:number;itemType:string;keys:string[];unavailable:boolean;
+  requiredKeys:Record<"fieldCode"|"reason"|"alternatives","MISSING"|"DATA"|"ACCESSOR">;
+  fieldCodeType:string;fieldType:string;reasonType:string;alternativesType:string;
+  fieldCode?:number;field?:string;reason?:string;fieldDigest?:string;reasonDigest?:string;fieldCodeDigest?:string;
+  alternativeCount?:number;unknownKeyCount:number;unknownKeyCountTruncated:boolean;
+}
+/** Trusted immutable codebook supplied by the decoder; inspect only own
+ * descriptors and finite controls, never alternatives' contents or getters. */
+export function projectUncertaintyWireShape(raw:unknown,path:PropertyKey[],domain:ReadonlyMap<number,string>):UncertaintyWireShape|undefined {
+  const index=path[1];if(path[0]!=="uncertainties"||typeof index!=="number"||!Number.isSafeInteger(index)||index<0||index>3)return;
+  const result:UncertaintyWireShape={index,itemType:"undefined",keys:[],unavailable:false,requiredKeys:{fieldCode:"MISSING",reason:"MISSING",alternatives:"MISSING"},fieldCodeType:"undefined",fieldType:"undefined",reasonType:"undefined",alternativesType:"undefined",unknownKeyCount:0,unknownKeyCountTruncated:false};
+  try{
+    const read=(object:unknown,key:PropertyKey)=>object&&typeof object==="object"?Object.getOwnPropertyDescriptor(object,key):undefined;
+    const array=read(raw,"uncertainties")?.value,item=read(array,String(index))?.value;
+    result.itemType=jsonType(item);if(!item||typeof item!=="object"||Array.isArray(item))return result;
+    const allowed=["fieldCode","reason","alternatives","field"];
+    const names=Object.getOwnPropertyNames(item);
+    result.unknownKeyCount=names.slice(0,64).filter(key=>!allowed.includes(key)).length;result.unknownKeyCountTruncated=names.length>64;
+    const descriptors=Object.fromEntries(allowed.map(key=>[key,read(item,key)]));
+    result.keys=allowed.filter(key=>descriptors[key]!==undefined);
+    for(const key of ["fieldCode","reason","alternatives"] as const){const descriptor=descriptors[key];result.requiredKeys[key]=!descriptor?"MISSING":Object.hasOwn(descriptor,"value")?"DATA":"ACCESSOR";}
+    const code=descriptors.fieldCode?.value,field=descriptors.field?.value,reason=descriptors.reason?.value,alternatives=descriptors.alternatives?.value;
+    result.fieldCodeType=jsonType(code);result.fieldType=jsonType(field);result.reasonType=jsonType(reason);result.alternativesType=jsonType(alternatives);
+    const knownField=(value:unknown)=>typeof value==="string"&&UncertaintyV3Schema.options.some(branch=>branch.shape.field.safeParse(value).success);
+    if(typeof code==="number"&&Number.isSafeInteger(code)&&domain.has(code)&&knownField(domain.get(code)))result.fieldCode=code;
+    if(knownField(field))result.field=field;
+    if(typeof reason==="string"&&["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"].includes(reason))result.reason=reason;
+    for(const [value,key,known] of [[code,"fieldCodeDigest",result.fieldCode!==undefined],[field,"fieldDigest",result.field!==undefined],[reason,"reasonDigest",result.reason!==undefined]] as const){if(!known&&typeof value==="string"&&value.length<=32768)result[key]=createHash("sha256").update(value).digest("hex");}
+    if(Array.isArray(alternatives)){const length=read(alternatives,"length")?.value;if(typeof length==="number"&&Number.isSafeInteger(length)&&length>=0)result.alternativeCount=length;}
+  }catch{result.unavailable=true;result.unknownKeyCountTruncated=true;}
+  return result;
 }
 export interface DateOperandDiagnostic {
   stage:"WIRE_VALUE"|"JSON_PARSE"|"CANONICAL_OPERAND";

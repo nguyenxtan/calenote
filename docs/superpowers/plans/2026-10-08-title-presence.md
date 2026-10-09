@@ -1,5 +1,12 @@
 # Title Presence Implementation Plan
 
+### Diagnostic checkpoint62 execution
+
+- [ ] BASE30089ce5ef0e98d9e1846c5030fd2a4f8ea1f950; TOP checkpoint62 spec and complete wire62-uncertainty-shape-diagnostics-proposal.md. RED actual decoder indistinguishable absent versus obsolete field key; retain unchanged REFUSED for both and PARSED valid control.
+- [ ] Own validation-diagnostics.ts/.test.ts and minimal provider-wire boundary tests/inert catch attachment only. Descriptor-only capped approved metadata/codebook parity, no getters/value/alternative/source traversal or secrets; malformed/proxy/observer/oversized/privacy contrasts. Do not change wire61/prompt/schema/validator/order/model authority.
+- [ ] Focused diagnostics/provider/gateway/canonical/evidence/runner, type/lint/diff; prove exact unchanged outbound prompt/base/bound request, freeze and six tools. No redundant fit if all outbound bytes identical. Implementer no provider/key/accounting/full/commit/children.
+- [ ] Controller independent C0/I0 review, final frozen full test/docs/type/lint/build, selective local commit/trusted preflight/FreshFormal. First failure settle/terminal then evidence-backed scoped repair; no history rewrite/UNKNOWN release/budget reset/Full/push/merge/deploy.
+
 ### Wire61 support-qualified numeric uncertainty execution
 
 - [ ] BASE3fdda19795fc9978046ca326feed94be3efba647; approved TOP wire61 spec and complete wire61-supported-numeric-proposal.md. RED actual bound DAILY2 admits unsupported8/9; coherent complete canonical witness, supported2/30 contrasts against1/31/absent capability/weekly/multiple/lead/context guards. No unknown alternative reconstruction.

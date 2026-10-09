@@ -380,6 +380,22 @@ const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTok
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 const input = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "synthetic" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 const minimal = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
+it("checkpoint62 distinguishes missing and obsolete uncertainty keys without changing refusal",()=>{
+ const encoded=z.record(z.string(),z.unknown()).parse(encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)));
+ for(const [item,keys] of [[{},[]],[{field:"reminderTime",reason:"MISSING",alternatives:[]},["reason","alternatives","field"]]] as const){
+  const raw={...encoded,uncertainties:[item]};let diagnostic:unknown;
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>{diagnostic=value;}).status).toBe("REFUSED");
+  expect(diagnostic).toMatchObject({issues:[{path:["uncertainties",0,"fieldCode"],expected:"REQUIRED_PROPERTY",uncertaintyShape:{index:0,itemType:"object",keys,requiredKeys:{fieldCode:"MISSING"}}}]});
+ }
+ const valid={...encoded,uncertainties:[{fieldCode:6,reason:"MISSING",alternatives:[]}]};
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(valid,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
+ expect(()=>wireModule.decodeGoogleLiteEuContextTransportV3({...valid,uncertainties:[{}]},CONTEXT_PROTOCOL_V3,undefined,()=>{throw Error("PRIVATE_OBSERVER");})).not.toThrow();
+});
+it("checkpoint62 actual invalid controls and extras remain strict private refusals",()=>{
+ const encoded=z.record(z.string(),z.unknown()).parse(encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)));
+ for(const code of [null,"PRIVATE_CODE",0.5,16]){let diagnostic:unknown;expect(wireModule.decodeGoogleLiteEuContextTransportV3({...encoded,uncertainties:[{fieldCode:code,reason:"MISSING",alternatives:[]}]},CONTEXT_PROTOCOL_V3,undefined,value=>{diagnostic=value;}).status).toBe("REFUSED");expect(diagnostic).toMatchObject({issues:[{expected:"CONTROL_ENUM",uncertaintyShape:{index:0}}]});expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_CODE");}
+ let diagnostic:unknown;expect(wireModule.decodeGoogleLiteEuContextTransportV3({...encoded,uncertainties:[{fieldCode:6,reason:"MISSING",alternatives:[],PRIVATE_KEY:"PRIVATE_VALUE"}]},CONTEXT_PROTOCOL_V3,undefined,value=>{diagnostic=value;}).status).toBe("REFUSED");expect(diagnostic).toMatchObject({issues:[{classification:"extra",uncertaintyShape:{fieldCode:6,reason:"MISSING",unknownKeyCount:1}}]});expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_KEY");expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_VALUE");
+});
 it("wire59 carrier failures stay private and canonical alternative observers still distinguish malformed objects",()=>{
  const secret="PRIVATE_ALT_VALUE_DO_NOT_RETAIN",evidence=[{kind:"USER_QUOTE",turn:0,quote:secret,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence}]}]});
@@ -709,7 +725,8 @@ it("diagnoses invalid compact control code without retaining arbitrary values", 
   wire.uncertainties = [{ fieldCode: "BAD_CODE", reason: "private reason", alternatives: [] }];
   const diagnostics: unknown[] = [];
   expect(parseGoogleLiteEuContextSectionsV3(wire, selectedV3, undefined, value => diagnostics.push(value)).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject([{ issues: [{ path: ["uncertainties", 0, "fieldCode"], constraint: "CONTROL_ENUM", actualSafeToken: "BAD_CODE", acceptedValueCount: 16 }] }]);
+  expect(diagnostics).toMatchObject([{ issues: [{ path: ["uncertainties", 0, "fieldCode"], constraint: "CONTROL_ENUM", actualType:"string", acceptedValueCount: 16 }] }]);
+  expect(JSON.stringify(diagnostics)).not.toContain("BAD_CODE");
   expect(JSON.stringify(diagnostics)).not.toContain("private reason");
 });
 it.each(["primaryEvidence", "additionalEvidenceJson"] as const)("retains decoded control type and structural path inside %s", slot => {
@@ -860,6 +877,11 @@ async function dispatch(payload: unknown, requests: SemanticJsonRequest[] = []) 
   expect(requests).toHaveLength(1);
   return result;
 }
+it("checkpoint62 actual HTTP gateway retains uncertainty shape on unchanged atomic refusal",async()=>{
+ const raw=z.record(z.string(),z.unknown()).parse(encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)));
+ const result=await dispatch({...raw,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[]}]});
+ expect(result).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["uncertainties",0,"fieldCode"],uncertaintyShape:{field:"reminderTime",requiredKeys:{fieldCode:"MISSING"}}}]}}});
+});
 it("emits the reviewed scalar-normalized schema through the actual HTTP boundary", async () => {
   const requests: SemanticJsonRequest[] = [];
   await dispatch(wireFixture(minimal), requests);

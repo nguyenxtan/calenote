@@ -1,11 +1,40 @@
 import { expect, it } from "vitest";
 import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "./contracts";
-import { projectCanonicalValidation, projectDateOperandFailure, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
+import { projectCanonicalValidation, projectDateOperandFailure, projectUncertaintyWireShape, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
 import { UNCERTAINTY_FIELD_WIRE_CODE_V1 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+const uncertaintyDomain=new Map(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field,code])=>[code,field]));
+it("checkpoint62 projects only actual finite uncertainty controls and all immutable codebook members",()=>{
+ for(const [field,fieldCode] of Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){
+  expect(projectUncertaintyWireShape({uncertainties:[{fieldCode,field,reason,alternatives:[]}]},["uncertainties",0,"fieldCode"],uncertaintyDomain)).toMatchObject({index:0,keys:["fieldCode","reason","alternatives","field"],fieldCode,field,reason,alternativeCount:0,requiredKeys:{fieldCode:"DATA",reason:"DATA",alternatives:"DATA"},unknownKeyCount:0,unavailable:false});
+ }
+ for(const item of [null,[],"private",2])expect(projectUncertaintyWireShape({uncertainties:[item]},["uncertainties",0],uncertaintyDomain)).toMatchObject({keys:[],requiredKeys:{fieldCode:"MISSING"},unknownKeyCount:0});
+ for(const index of [-1,4,0.5,"0"])expect(projectUncertaintyWireShape({uncertainties:[{}]},["uncertainties",index],uncertaintyDomain)).toBeUndefined();
+});
+it("checkpoint62 unknown controls keys and alternatives remain private and capped",()=>{
+ const item={fieldCode:sentinel,field:sentinel,reason:sentinel,alternatives:[{get value(){throw Error(sentinel);}}],...Object.fromEntries(Array.from({length:70},(_,i)=>[`private_name_${i}`,sentinel]))};
+ const summary=projectUncertaintyWireShape({uncertainties:[item]},["uncertainties",0],uncertaintyDomain)!;
+ expect(summary).toMatchObject({fieldCodeType:"string",fieldType:"string",reasonType:"string",alternativesType:"array",alternativeCount:1,unknownKeyCount:60,unknownKeyCountTruncated:true});
+ expect(summary).not.toHaveProperty("fieldCode");expect(summary).not.toHaveProperty("field");expect(summary).not.toHaveProperty("reason");
+ for(const key of ["fieldCodeDigest","fieldDigest","reasonDigest"])expect(Reflect.get(summary,key)).toMatch(/^[a-f0-9]{64}$/);
+ expect(JSON.stringify(summary)).not.toContain(sentinel);expect(JSON.stringify(summary)).not.toContain("private_name");
+ const huge=sentinel.repeat(4000),oversized=projectUncertaintyWireShape({uncertainties:[{fieldCode:huge,field:huge,reason:huge}]},["uncertainties",0],uncertaintyDomain);
+ expect(oversized).not.toHaveProperty("fieldCodeDigest");expect(oversized).not.toHaveProperty("fieldDigest");expect(oversized).not.toHaveProperty("reasonDigest");
+});
+it("checkpoint62 accessors and hostile descriptors cannot become controls or execute",()=>{
+ let reads=0;const getter={get(){reads++;throw Error(sentinel);}};
+ const item=Object.defineProperties({}, {fieldCode:getter,field:getter,reason:getter,alternatives:getter});
+ expect(projectUncertaintyWireShape({uncertainties:[item]},["uncertainties",0],uncertaintyDomain)).toMatchObject({keys:["fieldCode","reason","alternatives","field"],requiredKeys:{fieldCode:"ACCESSOR",reason:"ACCESSOR",alternatives:"ACCESSOR"},fieldCodeType:"undefined"});
+ expect(reads).toBe(0);
+ const hostile=new Proxy({},{ownKeys(){throw Error(sentinel);},getOwnPropertyDescriptor(){throw Error(sentinel);}});
+ expect(projectUncertaintyWireShape({uncertainties:[hostile]},["uncertainties",0],uncertaintyDomain)).toMatchObject({unavailable:true,unknownKeyCountTruncated:true});
+ const root=Object.defineProperty({},"uncertainties",getter);projectUncertaintyWireShape(root,["uncertainties",0],uncertaintyDomain);expect(reads).toBe(0);
+ const array=new Proxy([],{get(){reads++;throw Error(sentinel);}});
+ expect(projectUncertaintyWireShape({uncertainties:[{alternatives:array}]},["uncertainties",0],uncertaintyDomain)).toMatchObject({alternativeCount:0});expect(reads).toBe(0);
+});
 it("decoded canonical alternative failure observes real finite controls, not union branch literals",()=>{
  const raw={schemaVersion:"calenote-context-3",intent:"HELP",requestTarget:null,changes:[],query:null,uncertainties:[{field:"frequency",reason:"AMBIGUOUS",alternatives:[{value:"DAILY",evidence:{primaryEvidence:sentinel,additionalEvidenceJson:sentinel,private_secret_key:sentinel}}]}],conversationDirective:null,replyProposal:null};
  let diagnostics:CanonicalValidationDiagnostics|undefined;

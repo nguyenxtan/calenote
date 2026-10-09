@@ -1,5 +1,5 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
-import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
@@ -868,7 +868,8 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     const diagnostic=error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3");
     if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
     if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
-    observeWireInvalid?.(diagnostic);
+    if(error instanceof WireShapeFailure){const shape=projectUncertaintyWireShape(raw,error.path,uncertaintyFieldByCode);if(shape){diagnostic.issues[0].uncertaintyShape=shape;if(error.path[2]==="fieldCode"&&shape.fieldCode===undefined)delete diagnostic.issues[0].actualSafeToken;}}
+    try{observeWireInvalid?.(diagnostic);}catch{ /* Diagnostic observers cannot alter failclosed refusal. */ }
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }

@@ -1,5 +1,11 @@
 # Bounded title-presence generation amendment
 
+### Diagnostic checkpoint62: uncertainty required-key shape
+
+Wire61 terminal R02T0 proves absent own uncertainties[0].fieldCode, not whether an obsolete field key or empty object was authored. Controller read complete wire62-uncertainty-shape-diagnostics-proposal.md and approves diagnostic-only precision. Preserve ProviderWire61/capability11/prompt/schema/protocol/decoder ordering/acceptance semantics. No speculative representation correction. Historical failures stay immutable.
+
+Existing wire-validation projector may retain bounded descriptor-only uncertaintyShape for index0..3: approved key membership fieldCode/reason/alternatives/field, required-key MISSING/DATA/ACCESSOR states, JSON types, exact existing finite control code/canonical field/reason tokens only, bounded unknown-control digest not literal, unknown-key observed count over first64 names/truncation, alternative array count only. Never invoke getters, traverse alternative values/JSON/evidence, retain arbitrary key names or sensitive source/business text. Hostile proxy/descriptor failure yields finite unavailable/truncated metadata; observer failure cannot change refusal. Actual missing/obsolete/invalid/extra/accessor/oversized/privacy tests prove differentiation without accepting, repairing, mapping or normalizing malformed output. Current schema/prompt/request digest parity must remain exact; independent C0/I0 and final frozen full before local commit/FreshFormal within unchangedUSD5 scope. No model/provider/accounting/production change.
+
 ### Wire61 support-qualified numeric uncertainty restriction
 
 Wire60 terminal R02T0 passed transport/canonical/evidence/patch/merge but proposed DAILY/count2 SET alongside numeric UNSUPPORTED_COMBINATION, producing frequency clarification instead of required reminderTime. Alternative values/source fidelity are unknown; historical runs remain unchanged. Controller read complete wire61-supported-numeric-proposal.md and approves the narrower generation consistency amendment within existing continuous scope, including conservative independently-grounded lead exclusion.
