@@ -1,5 +1,15 @@
 # Title Presence Implementation Plan
 
+### Approved wire51 location singleton execution
+
+Empty ordinary availability: RED actual isolated schema construction fails after final ordinary location removed. Emit exact required changes array null-items/maxItems0 only for empty branch set; model authors []; test [] membership, reject nonempty null and ordinary object/bypass, unchanged canonical guards. No generic empty-union acceptance or field resurrection. Provider admission unverified.
+
+1. RED ordinary location duplicate admission and target sole-owner actual schema; SET/REPLACE/CLEAR authored literal/evidence roundtrip, without asserting unknown live values/motive.
+2. Add only locationChange to existing helper/root registry; remove location from ordinary mixed text/CLEAR generation branches; simultaneously restore ten carriers. Preserve current mutation source domains, bound-clock non-clock exclusions and all prior capabilities/notes completeness; no location semantic flag or parser.
+3. Test all operations/global ten-carrier permutations/ordinary order; null carrier versus invalid null index; missing/malformed/bypass/duplicate/collision/out-of-range; current/historical/FACT/NEW evidence guards and excluded mutations; exact literal location/evidence fidelity and closed authority/finite diagnostic privacy. No canonical/evidence/oracle/frozen fixture changes.
+4. Own provider-wire.ts/.test.ts, output-authority.ts/.test.ts, validation-diagnostics.ts/.test.ts if new finite paths needed, prompt/protocol and necessary existing capability/evidence/query/runner/fit identity tests, plus these docs. Advance wire51, capability10 unchanged. Exact ten-root arithmetic and shared representation constraints retained. If fit grows beyond12000, only equivalent sharing/redundant prompt compaction with normative map; retain failed fit evidence.
+5. ENTIRE fit plus all326 actual requests under12000/1536, broad focused transport/source/evidence/authority/query/runner/security/notes regressions, typecheck/scopedlint/diff; freeze/report wire51-location-singleton-implementation.md. Controller full/review/commit/live; implementer no provider/credentials/accounting/full/commit/children. Do not implement before controller reads proposal.
+
 ### Approved wire50 notes ownership execution
 
 1. RED proven initial source-shaped scheduling-restatement notes proposal and notes alternatives: schema admits today/completeness passes today; target schema excludes and whole proposal rejects without mutation. Shared predicate source/context tests must prove single current USER/noactive/facts/pending/ambiguity and existing complete grammar only.

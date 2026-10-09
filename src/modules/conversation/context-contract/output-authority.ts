@@ -12,8 +12,8 @@ type BranchPath<T, P extends string> = T extends { kind: infer K extends string 
   : T extends { field: infer F extends string } ? `${P}{field=${F}}` : never;
 type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]` | Paths<E, `${P}[]`>
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
-type ReminderCarrierRoot = `${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate"}Change`;
-type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"index" | "change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
+type ReminderCarrierRoot = `${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"}Change`;
+type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"index" | "change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
 type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.value`;
 type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
@@ -31,7 +31,7 @@ const padding: OutputAuthorityRule = Object.freeze({ ...owned, modelAuthorshipRe
 const entries: Array<[OutputFieldPathV3, OutputAuthorityRule]> = [];
 function add(paths: readonly OutputFieldPathV3[], rule: OutputAuthorityRule = semantic) { for (const path of paths) entries.push([path, rule]); }
 add(["titleChange","titleChange.index","titleChange.change","titleChange.change.field","titleChange.change.operation","titleChange.change.value","titleChange.change.evidence","titleChange.change{field=title;operation=SET}"]);
-for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate"] as const){
+for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
   const root=`${field}Change` as const;
   add([root,`${root}.index`,`${root}.change`,`${root}.change.field`,`${root}.change.operation`,`${root}.change.value`,`${root}.change.evidence`]);
   for(const operation of ["SET","REPLACE","CLEAR"] as const)add([`${root}.change{field=${field};operation=${operation}}`]);
@@ -45,7 +45,7 @@ function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", 
 for (const prefix of ["requestTarget.evidence", "changes[].evidence", "query.evidence", "uncertainties[].alternatives[].evidence"]) refs(prefix);
 // Provider slots propose the same untrusted refs as canonical evidence arrays.
 // Register exact paths; new slots or fields cannot inherit authority silently.
-for (const collection of ["query", "requestTarget", "changes[]", "titleChange.change", "reminderDateChange.change", "reminderTimeChange.change", "eventDateChange.change", "eventTimeChange.change", "eventRelationChange.change", "frequencyChange.change", "occurrenceCountChange.change", "endDateChange.change"] as const) for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
+for (const collection of ["query", "requestTarget", "changes[]", "titleChange.change", "reminderDateChange.change", "reminderTimeChange.change", "eventDateChange.change", "eventTimeChange.change", "eventRelationChange.change", "frequencyChange.change", "occurrenceCountChange.change", "endDateChange.change", "locationChange.change"] as const) for (const slot of ["primaryEvidence", "additionalEvidenceJson"] as const) {
   const prefix = `${collection}.evidence.${slot}` as const;
   add([prefix, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}.${key}` as OutputFieldPathV3),
     `${prefix}{kind=USER_QUOTE}`, `${prefix}{kind=CONTEXT_FACT}`]);

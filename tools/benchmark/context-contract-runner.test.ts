@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "06c440ef7a2b7c626eb0d9d3838b0b7a6e325fba01f3b333c0499f3c396a0e46",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("06c440ef7a2b7c626eb0d9d3838b0b7a6e325fba01f3b333c0499f3c396a0e46");
+    expect(requestSchemaDigest).not.toBe("9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -327,9 +327,10 @@ it.each([
     changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
   if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
   if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
+  if(field==="location"){(raw as unknown as Record<string,unknown>).locationChange={index:0,change:raw.changes[0]};raw.changes=[];}
   let diagnostics: unknown;
   expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining({ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
+  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:{ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
 });
 
 it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "primitive", "unexpected-key", "nested-evidence", "guidance", "core", "oversized"])("canonical %s diagnostics survive gateway and strict runner without payload leaks", async mode => {
@@ -499,8 +500,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "06c440ef7a2b7c626eb0d9d3838b0b7a6e325fba01f3b333c0499f3c396a0e46",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-50" });
+      providerWireSchemaDigest: "9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-51" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

@@ -26,7 +26,7 @@ it("provider schema never duplicates nullable evidence slots",()=>{
 it("historical fanout bounds remain for the unchanged remainder; wire31 carrier costs are explicit, not live admission",()=>{
  const schema=googleLiteEuContextWireSchemaV3().schema;
  const remainder=structuredClone(schema) as unknown as {properties:Record<string,unknown>;required:string[];$defs:Record<string,unknown>};
- for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
+ for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
  // Fixed-date definition uses non-null representation sentinels, not date
  // variant unions; keep its measured cost separate, never raise old bounds.
  delete remainder.$defs.__d;
@@ -37,12 +37,12 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(baseline.unions).toBeLessThanOrEqual(19);
  expect(baseline.branches).toBeLessThanOrEqual(51);
  expect(baseline.references).toBeLessThanOrEqual(42);
- expect(metrics).toMatchObject({nullableUnions:20,unions:32,branches:72,references:26});
- // Eight added nullable roots preserve their strict operation/value branches.
+ expect(metrics).toMatchObject({nullableUnions:21,unions:34,branches:76,references:27});
+ // Nine added nullable roots preserve their strict operation/value branches.
  // Merging operation/value branches would incorrectly permit SET/null.
- expect(metrics.nullableUnions-baseline.nullableUnions).toBe(8);
- expect(metrics.unions-baseline.unions).toBe(16);
- expect(metrics.branches-baseline.branches).toBe(32);
+ expect(metrics.nullableUnions-baseline.nullableUnions).toBe(9);
+ expect(metrics.unions-baseline.unions).toBe(18);
+ expect(metrics.branches-baseline.branches).toBe(36);
  // Sole endDate/text group split adds one branch within the old remainder bound.
  expect(baseline.branches).toBe(40);
 });

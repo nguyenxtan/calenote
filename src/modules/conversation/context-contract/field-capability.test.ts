@@ -29,6 +29,13 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it("wire51 empty ordinary availability requires explicit empty changes and sole location carrier",()=>{
+ const context=input("Ngày 15/12 đi thi ở Quang Trung, nhắc 3 ngày liên tiếp giúp tôi."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"location",operation:"SET",value:"Quang Trung",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{changes:unknown}};
+ expect(schema.properties.changes).toEqual({type:"array",items:{type:"null"},maxItems:0});expect(wire.changes).toEqual([]);expect(validator(context).safeParse(wire).success).toBe(true);
+ for(const changes of [[null],[{field:"location",operation:"SET",value:"Quang Trung",evidence}]])expect(validator(context).safeParse({...wire,changes}).success).toBe(false);
+});
 it("wire50 initial complete exam instruction has no independent notes generation",()=>{
  const context=input("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi.");
  expect(Reflect.get(deriveGenerationFieldCapability(context),"notesProposalAllowed")).toBe(false);
@@ -208,7 +215,7 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-10",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("9a47dafcc5740a4409e924f6f69035c0c046826ccf951cc6caa5eb1e05a5ac6c");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("371f90c54b351e33c0bcf243b9509b9afd5fef83820a0ce3753e3fea52d09538");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -217,7 +224,7 @@ it.each(["Bạn nghĩ sao về đi thi","bao giờ đi thi","dịch đi thi"])("
 it.each(["Ngày 11/10 đi thi, nhắc tôi uống thuốc lúc 8h.","Ngày 11/10 đi thi, nhắc tôi đóng tiền trước 2 ngày.","đi thi ở đâu","đi thi rồi uống thuốc","đi thi, điều này nghĩa là gì"])("unknown continuation or competing subject cannot force exam title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
 function fields(context: ContextInput) {
   const schema = serializeContextRequest(context).response_format.json_schema.schema as unknown as { properties: { changes: { items: { $ref: string } } }; $defs: Record<string, { anyOf: Array<{ properties: { field: { enum?: string[]; const?: string } } }> }> };
-  const ordinary=schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]);
+  const ordinary=schema.properties.changes.items.$ref ? schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]) : [];
   // Numeric singleton availability lives in its root, not the ordinary array.
   const roots=schema.properties as unknown as Record<string,{type?:string}>;
   return [...ordinary,...["frequency","occurrenceCount"].filter(field=>roots[field+"Change"].type!=="null")];

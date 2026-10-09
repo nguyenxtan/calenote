@@ -70,13 +70,13 @@ it("first reminder targets NEW only when no retained request exists", () => {
 
 it("operation wire uses one semantic selector and never duplicates ownership tags", () => {
  expect(CONTEXT_CONTRACT_PROMPT).toContain('finite string operationCode (use JSON strings such as "3", never numbers)');
- expect(CONTEXT_CONTRACT_PROMPT).toContain("Wire root keys are operationCode, requestTarget, changes, query, uncertainties, conversationDirective, replyProposal. Do not emit intent or kind inside requestTarget/query.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Core roots: operationCode, requestTarget, changes, query, uncertainties, conversationDirective, replyProposal. No intent or requestTarget/query kind. Ten indexed roots required; nullable unless request schema requires presence.");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("0=CREATE_REMINDER/CURRENT, 1=CREATE_REMINDER/NEW, 2=CREATE_REMINDER/UNRESOLVED, 3=LIST_REMINDERS/LIST, 4=CALENDAR_QUERY/CALENDAR_DATE, 5=CAPABILITY_QUERY/CAPABILITY, 6=HELP, 7=UNSUPPORTED, 8=AMBIGUOUS/null, 9=AMBIGUOUS/CURRENT, 10=AMBIGUOUS/NEW, 11=AMBIGUOUS/UNRESOLVED.");
 });
 
 it("serialized provider policy keeps target labels in operationCode, never a bare carrier", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("CURRENT, NEW and UNRESOLVED are operationCode meanings, not requestTarget string values.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("requestTarget MUST be a JSON object containing evidence, never a bare string or a JSON-encoded object string.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("CURRENT/NEW/UNRESOLVED are operationCode meanings.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("requestTarget MUST be an evidence JSON object, never bare string/JSON-encoded object string; no kind.");
   expect(CONTEXT_CONTRACT_PROMPT).toContain('"operationCode":"0","requestTarget":{"evidence":{"primaryEvidence":"{\\"kind\\":\\"USER_TURN\\",\\"turn\\":<input.currentTurn>}","additionalEvidenceJson":"[]"}}');
 });
 
@@ -131,13 +131,13 @@ it("a scoped relation answer does not introduce a second numeric operand", () =>
 });
 
 it("encoded USER_TURN contains only explicit source identity", () => {
-  expect(CONTEXT_CONTRACT_PROMPT).toContain('output only a source pointer {"kind":"USER_TURN","turn":N}, with exactly these two keys.');
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("a source pointer does not prove entailment or grant authority.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain('USER evidence: only source pointer {"kind":"USER_TURN","turn":N}, with exactly these two keys.');
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("pointers grant no entailment/authority.");
 });
 
 it("request target evidence uses the supplied current-turn index, including assistant turns", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Every requestTarget evidence ref must be USER_TURN with turn exactly equal to input.currentTurn.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Turn indexes count every USER and ASSISTANT entry in input.turns, not just USER messages.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Indexes count every input.turns USER/ASSISTANT entry; use supplied index, never recount/earlier field source.");
 });
 
 it("event-clause clock and subject stay distinct from notification clock", () => {
@@ -188,7 +188,7 @@ it("explicit task subject is retained independently of missing scheduling operan
 it("title action-phrase convention is delivered before wire serialization instructions", () => {
   const rule="Concise actions: exam/thi is đi thi, not thi; meeting is họp. Keep names/qualifiers, invent none.";
   expect(CONTEXT_CONTRACT_PROMPT).toContain(rule);
-  expect(CONTEXT_CONTRACT_PROMPT.indexOf(rule)).toBeLessThan(CONTEXT_CONTRACT_PROMPT.indexOf("Canonical semantic fields are"));
+  expect(CONTEXT_CONTRACT_PROMPT.indexOf(rule)).toBeLessThan(CONTEXT_CONTRACT_PROMPT.indexOf("Wire semantics:"));
 });
 
 it("selected dispatch policy permits explicit null advice without granting backend authority", () => {
@@ -252,15 +252,15 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single grounds ONCE even awaiting clock, never omitted by distance-only rule.");
 });
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain no eventDate, eventTime, eventRelation, frequency, occurrenceCount, endDate, reminderDate or reminderTime.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE removing any carriers");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, locationChange, reminderDateChange and reminderTimeChange are required nullable roots");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain none of these fields.");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("BEFORE carrier removal");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("literal authored field, operation, value and evidence unchanged (CLEAR value is null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N = changes.length + count of all nine NON-NULL indexed carriers defined above, simultaneously");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("0 <= index < N");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("never prior turns/state/source ordinals or one-based indexes");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("N=changes.length + all ten NON-NULL carriers above, simultaneously");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("0<=index<N");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("never prior turns/state/source ordinals or one-based");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Three ordinary changes + one carrier: N=4, appended index3, never4");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Sole current reminderTime change: index0 despite earlier retained fields");
 });
