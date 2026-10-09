@@ -196,6 +196,7 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
 });
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
 const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"] as const;
+const r02CurrentKeyMode="R02_TURN1_CURRENT_KEY_BASELINE" as const;
 async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
@@ -213,6 +214,59 @@ it.each(r02Turn1Modes)("%s pins seeded R02 T1 and alters at most the sole uncert
  const restore=structuredClone(transformed);restore.properties!.uncertainties=structuredClone(original.properties!.uncertainties);
  expect(JSON.stringify(restore)).toBe(before);
  expect(original.$defs!.__sources.enum).toHaveLength(7);expect(original.$defs!.__current.enum).toHaveLength(1);
+});
+it("R02 current key probe changes only the strict shared mutation key with exact restoration",async()=>{
+ const original=await r02Turn1Schema(),before=JSON.stringify(original),probe=debugProbeSchema(original,r02CurrentKeyMode as never);
+ expect(hash(JSON.stringify(probe))).toBe("6a9790bcaa4f2ef63f458fb87b8ac353c8541ca893f4c925525a192d5882a117");
+ const expected=structuredClone(original),ec=expected.$defs!.__ec;
+ ec.properties=Object.fromEntries(Object.entries(ec.properties!).map(([key,value])=>[key==="primaryEvidence"?"currentPrimaryEvidence":key,value]));
+ ec.required=ec.required!.map(key=>key==="primaryEvidence"?"currentPrimaryEvidence":key);
+ expect(probe).toEqual(expected);expect({...probe,$defs:{...probe.$defs,__ec:original.$defs!.__ec}}).toEqual(original);
+ const restored=structuredClone(probe),restoreEC=restored.$defs!.__ec;
+ restoreEC.properties=Object.fromEntries(Object.entries(restoreEC.properties!).map(([key,value])=>[key==="currentPrimaryEvidence"?"primaryEvidence":key,value]));
+ restoreEC.required=restoreEC.required!.map(key=>key==="currentPrimaryEvidence"?"primaryEvidence":key);
+ expect(JSON.stringify(restored)).toBe(before);expect(JSON.stringify(original)).toBe(before);
+ let consumers=0;const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&node.$ref==="#/$defs/__ec")consumers++;Object.values(node).forEach(walk)};walk(probe);
+ expect(consumers).toBe(17);expect(probe.$defs!.__sources).toEqual(original.$defs!.__sources);expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
+});
+it.each([200,400])("R02 current key probe HTTP%i authors reachable CLEAR yet unchanged runtime refuses new key",async status=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,r02CurrentKeyMode as never,async request=>{
+  calls++;try{
+   const schema=request.response_format.json_schema.schema;
+   expect(hash(JSON.stringify(schema))).toBe("6a9790bcaa4f2ef63f458fb87b8ac353c8541ca893f4c925525a192d5882a117");
+   expect(hash(JSON.stringify(request))).toBe("80eb1e580c911d7589cc070585c156f930df6c7a51144ecad34033cfd0f7fff8");
+   const input=JSON.parse(request.messages[1].content),context={...input};delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
+   const original=googleLiteEuContextWireSchemaV3(input.fieldCapability,ContextInputSchema.parse(context)).schema;
+   const carrier=original.properties!.eventDateChange;if(typeof carrier==="boolean")throw Error("TEST_CARRIER_OBJECT");
+   const option=carrier.anyOf![0];if(typeof option==="boolean")throw Error("TEST_CARRIER_OPTION_OBJECT");
+   const change=option.properties!.change;if(typeof change==="boolean")throw Error("TEST_CHANGE_OBJECT");
+   const branch=change.anyOf![2];if(typeof branch==="boolean")throw Error("TEST_CHANGE_BRANCH_OBJECT");
+   expect(branch.properties!.field).toEqual({type:"string",enum:["eventDate"]});expect(branch.properties!.operation).toEqual({type:"string",enum:["CLEAR"]});expect(branch.properties!.value).toEqual({type:"null"});expect(branch.properties!.evidence).toEqual({$ref:"#/$defs/__ec"});
+   const current=schema.$defs!.__current;if(typeof current==="boolean")throw Error("TEST_CURRENT_DOMAIN_OBJECT");
+   const pointer=current.enum![0];expect(typeof pointer).toBe("string");
+   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1));
+   if(!content||typeof content!=="object"||Array.isArray(content)||!("changes" in content)||!("eventDateChange" in content)||!Array.isArray(content.changes))throw Error("TEST_WIRE_OBJECT");
+   expect(content.eventDateChange).toBeNull();
+   const index=content.changes.length+Object.entries(content).filter(([key,value])=>key.endsWith("Change")&&value!==null).length;
+   const evidence={currentPrimaryEvidence:pointer,additionalEvidenceJson:"[]"};
+   expect(Object.keys(evidence)).toEqual(["currentPrimaryEvidence","additionalEvidenceJson"]);
+   const shared=schema.$defs!.__ec;if(typeof shared==="boolean")throw Error("TEST_EVIDENCE_OBJECT");expect(shared.required).toEqual(Object.keys(evidence));expect(shared.additionalProperties).toBe(false);
+   content.eventDateChange={index,change:{field:"eventDate",operation:"CLEAR",value:null,evidence}};
+   const old=structuredClone(content);old.eventDateChange={index,change:{field:"eventDate",operation:"CLEAR",value:null,evidence:{primaryEvidence:pointer,additionalEvidenceJson:"[]"}}};
+   let oldWireRefusal=false;decodeGoogleLiteEuContextTransportV3(old,CONTEXT_PROTOCOL_V3,undefined,()=>{oldWireRefusal=true},ContextInputSchema.parse(context));
+   expect(oldWireRefusal).toBe(false); // No claim of final semantic/oracle acceptance.
+   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-key",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  }catch(error){transportError=error;throw error}
+ },{now:()=>100});
+ if(transportError)throw transportError;
+ expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
+ expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(a,candidate,r02CurrentKeyMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
+ }finally{s.cleanup()}
 });
 it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode HTTP$status is one seeded terminal request with unchanged max4 decoder",async({mode,status})=>{
  const s=setup();let calls=0,transportError:unknown;
@@ -241,7 +295,7 @@ it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$m
  expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
  }finally{s.cleanup()}
 });
-it.each(r02Turn1Modes.flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
  const real=serializeContextRequest;
  const spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{
   const request=real(input);
@@ -254,7 +308,7 @@ it.each(r02Turn1Modes.flatMap(mode=>["schema","context"].map(fault=>({mode,fault
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  }finally{spy.mockRestore();s.cleanup()}
 });
-it.each(r02Turn1Modes)("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
  const original=await r02Turn1Schema();
  for(const fault of ["source","ref","bound"]){const drift=structuredClone(original);
   if(fault==="source")drift.$defs!.__sources.enum=["PRIVATE_SECRET"];

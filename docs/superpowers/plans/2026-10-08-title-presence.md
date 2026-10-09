@@ -1,5 +1,12 @@
 # Title Presence Implementation Plan
 
+### Approved wire52 current-evidence key tooling step
+
+1. RED closed R02_TURN1_CURRENT_KEY_BASELINE and exact key-only transform; own only context-debug-loop.ts/.test.ts plus these metadata docs. Keep app b0085bc immutable, old diagnostic guards unchanged, seed5b19cc0/context560569f4/original requeste48c60 and schema635f4734 pinned.
+2. Rename only __ec property/required key at original order; transformed schema6a9790bc/request80eb1e58. Prove whole outside-node equality, reverse-key byte identity, all17 consumers/source7/current1 and max4 retained; pre-HTTP drift/ref/source guards. No runtime mapping or source widening.
+3. Fake200 actual permitted eventDate CLEAR carrier/new evidence key rejects unchanged FIELD_CHANGE with zero reads/mutations; old-key boundary characterized without forced semantic success. Fake400 UNKNOWN/conservative accounting, duplicate/max1/terminal/zero prefix/no Pilot credit/no auto-axis/privacy/history tests. Focused six tooling suites, standalone typecheck, lint/diff; freeze/report.
+4. Controller full/review C0/I0/local commit/read-only preflight then exactly one key diagnostic under existing budget, interpret before any production mapping proposal. No implementer provider/key/accounting/full/commit/children; no deployment.
+
 ### Approved wire52 seeded R02 TURN1 tooling execution
 
 1. Controller reads this amendment before tooling edits. Own ONLY context-debug-loop.ts/.test.ts and these two metadata docs; app b0085bc remains immutable and distinct from harness. RED closed new mode/target/seed/schema/context bindings first, preserve logs.
