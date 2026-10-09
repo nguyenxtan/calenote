@@ -90,9 +90,9 @@ export function inspectDebugLoopFreshRun(a:DebugLoopAuthority|undefined,candidat
  const now=(options.now??Date.now)();if(!Number.isSafeInteger(now)||now<fresh.cooldownUntil)throw Error("DEBUG_FRESH_COOLDOWN");
  const accounting=inspectDebugLoop(a);return {parentDirectory:fresh.record.parentDirectory,directory:fresh.directory,mode:fresh.record.mode,cooldownUntil:fresh.cooldownUntil,accounting};
 }
-export const DEBUG_PROBE_MODES=["SOURCE_COMPACT_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
+export const DEBUG_PROBE_MODES=["SOURCE_CURRENT_INLINE_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
-const isSourceProbeMode=(mode:string)=>mode==="SOURCE_COMPACT_BASELINE"||mode==="SOURCE_STRING_BASELINE"||mode==="SOURCE_SINGLETON_BASELINE"||mode==="SOURCE_T0_SCHEMA_BASELINE";
+const isSourceProbeMode=(mode:string)=>mode==="SOURCE_CURRENT_INLINE_BASELINE"||mode==="SOURCE_COMPACT_BASELINE"||mode==="SOURCE_STRING_BASELINE"||mode==="SOURCE_SINGLETON_BASELINE"||mode==="SOURCE_T0_SCHEMA_BASELINE";
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
  * responses cannot earn Pilot credit; the candidate decoder stays unchanged. */
@@ -105,7 +105,12 @@ export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
   checkRefs(s);s.$defs!.__sources=mode==="SOURCE_STRING_BASELINE"?{type:"string"}:{type:"string",enum:['{"kind":"USER_TURN","turn":0}']};
   if(mode==="SOURCE_T0_SCHEMA_BASELINE")s.$defs!.__current={type:"string",enum:['{"kind":"USER_TURN","turn":0}']};
   if(mode==="SOURCE_COMPACT_BASELINE"){s.$defs!.__sources={type:"string",enum:["p0","p1","p2"]};s.$defs!.__current={type:"string",enum:["p1"]};}
-  const expected=mode==="SOURCE_COMPACT_BASELINE"?"3ae3b2fe8ed22d1283e44996c0f56acdb3486789e5cff36bf3a9d2a366324579":mode==="SOURCE_STRING_BASELINE"?"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145":mode==="SOURCE_SINGLETON_BASELINE"?"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a":"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e";
+  if(mode==="SOURCE_CURRENT_INLINE_BASELINE"){
+   s.$defs!.__sources=structuredClone((input as Node).$defs!.__sources);
+   if(!isDeepStrictEqual(s.$defs!.__ec.properties?.primaryEvidence,{$ref:"#/$defs/__current"}))throw Error("DEBUG_PROBE_SHAPE");
+   s.$defs!.__ec.properties!.primaryEvidence=structuredClone(s.$defs!.__current);delete s.$defs!.__current;checkRefs(s);
+  }
+  const expected=mode==="SOURCE_CURRENT_INLINE_BASELINE"?"30634b9033dc0ca036320c41062e1707bda62f8e8a438db5304b033d6b87528f":mode==="SOURCE_COMPACT_BASELINE"?"3ae3b2fe8ed22d1283e44996c0f56acdb3486789e5cff36bf3a9d2a366324579":mode==="SOURCE_STRING_BASELINE"?"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145":mode==="SOURCE_SINGLETON_BASELINE"?"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a":"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e";
   if(hash(JSON.stringify(s))!==expected)throw Error("DEBUG_PROBE_SHAPE");return s as T;
  }
  if(mode==="DATE_STRING_BASELINE"||mode==="DATE_NO_NULL_UNIONS"||mode==="DATE_NO_SCALAR_BOUNDS"){

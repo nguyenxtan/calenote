@@ -2,6 +2,8 @@
 
 ### Approved wire46 TURN1 source-domain diagnostic tooling
 
+Equivalent topology-only SOURCE_CURRENT_INLINE_BASELINE: on exact original T1 schema, inline sole __current scalar reference within shared __ec and delete dead __current definition. All source/current values/cardinality/order/membership/consumers and every other node unchanged; exact transformed hash guarded. Same deterministic T1 seed/context/max1/no Pilot credit; production JSON-pointer syntax/decoder remains unchanged. No semantic narrowing/fill/repair or production admission claim.
+
 Compact admission probe only: SOURCE_COMPACT_BASELINE preserves full ordered source3/current1 domains using p0/p1/p2 and current p1, changes only __sources/__current with exact prototype hash. Same pinned T1 seed/context/app candidate/max1/zero prerequisites/no Pilot credit. No production catalogue/codec/prompt/wire change; aliases may fail unchanged decoder as expected. Controller interprets one probe before any production decision; no automatic axes.
 
 Finite diagnostic extension only: SOURCE_SINGLETON_BASELINE replaces only __sources with original T0 singleton; SOURCE_T0_SCHEMA_BASELINE also replaces __current with T0 singleton, one additional axis relative to singleton/two definitions relative to original T1. Exact transformed hashes and unchanged rest required; same pinned T1 context/seed/original schema. Both independently terminal/max1/no Pilot credit/zero prerequisites. Never automatic sequence; controller interprets singleton before separately choosing conditional T0-schema execution. No production fix inferred.
