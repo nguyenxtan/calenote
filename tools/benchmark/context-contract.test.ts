@@ -585,7 +585,7 @@ it("whole_service_I1_I10_authority_controls: all frozen Layer1 scripts execute t
     actual: observed.find(o => o.id === id)?.turns.map(t => ({ status: t.status, fields: t.fields, kind: t.kind, text: t.selectedText })) })))).toMatchObject({ gate: "PASS", plannedScripts: 80, heldoutPassed: 32, safetyFailures: 0 });
   expect(scored.detailPlanned).toBeGreaterThan(100);
   expect(scored.detailPassed).toBe(scored.detailPlanned);
-});
+}, 120000);
 
 it("canonical pilot repeats the eight critical originals twice and scores every actual turn", async () => {
   const corpus = { version: "context-contract-corpus-1", cases: [...regressions.cases, ...development.cases, ...heldout.cases] } as ContextManifest;

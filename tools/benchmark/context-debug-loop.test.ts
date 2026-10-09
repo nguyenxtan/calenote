@@ -9,7 +9,7 @@ import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
 import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun} from "./context-debug-loop";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
-import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {parseGoogleLiteEuContextSectionsV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
 import {ContextInputSchema} from "../../src/modules/conversation/context-contract/contracts";
@@ -17,6 +17,67 @@ import {serializeContextRequest} from "../../src/modules/conversation/context-co
 import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
+const dateModes=["DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
+const dateProbeHashes={DATE_STRING_BASELINE:"ffbdc5c267f7e480879196a0d45c5f11b26ea58517a76d4016ff9bd28bd7dab9",DATE_NO_NULL_UNIONS:"f9b6c46d55acef4f22998f90e8fe8826964ebc2f5542f093d9e167ee6600ccab",DATE_NO_SCALAR_BOUNDS:"42dce35a43d7ac0989b30cd6395c48048330d5b5d10296f69e9fd35b6ea171ea"};
+it.each(dateModes)("%s isolates only the actual R01 date definition, one request and no Pilot credit",async mode=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{
+  const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
+  const result=await runDebugLoopExecution(a,candidate,mode as never,async request=>{
+   calls++;try{const body=JSON.parse(request.messages[1].content),context={...body};
+   delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;
+   const original=googleLiteEuContextWireSchemaV3(body.fieldCapability,ContextInputSchema.parse(context)).schema;
+   const before=JSON.stringify(original),probe=debugProbeSchema(original,mode as never);
+   expect(hash(before)).toBe("136bbd97978fe0bb989de2470bcba73d852cb2f0d7247b40994978d2adca81c0");
+   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe(dateProbeHashes[mode]);
+   expect(probe).toEqual(request.response_format.json_schema.schema);
+   expect({...probe,$defs:{...probe.$defs,__d:original.$defs!.__d}}).toEqual(original);
+   expect(JSON.stringify(original)).toBe(before);
+   const proposal=encodeFixtureV3(frozenContextProposal(body,"R01",0));
+   const response=JSON.stringify({model:request.model,provider:"Google",id:"gen-local-date-probe",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(proposal)}}]});
+   return {status:200,body:response,rawResponseBytes:Buffer.byteLength(response)};
+   }catch(error){transportError=error;throw error;}
+  },{now:()=>100});
+  if(transportError)throw transportError;
+  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});
+  expect(result.responses[0],JSON.stringify(result.responses[0].canonicalValidationDiagnostics)).toMatchObject({fixtureId:"R01",turnIndex:0,status:"SUCCESS"});
+  await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
+  expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+  expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:1,unknownExposureMicrounits:105472});
+ }finally{s.cleanup()}
+});
+it.each(dateModes)("%s preserves unknown accounting after exactly one failed HTTP request",async mode=>{
+ const s=setup();let calls=0;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");const result=await runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;return {status:400,body:"{}"}},{now:()=>100});
+ expect(result).toMatchObject({providerHttpAttempts:1,terminal:true,pilotCredit:false});expect(calls).toBe(1);
+ expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:2,unknownExposureMicrounits:210944});expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ }finally{s.cleanup()}
+});
+it.each(["missing","extra","required","open","kind","null-order","bound","external","unresolved","ref-sibling","moved-reference"])("date probes fail closed on %s shape drift",fault=>{
+ type DriftNode={type?:string;$ref?:string;maximum?:number;enum?:string[];required?:string[];additionalProperties?:boolean;properties?:Record<string,DriftNode>;$defs?:Record<string,DriftNode>;anyOf?:DriftNode[]};
+ const schema=requestBoundSchema() as unknown as DriftNode,d=schema.$defs!.__d,date=schema.properties!.query.anyOf![0].properties!.date.anyOf!;
+ if(fault==="missing")delete schema.$defs!.__d;
+ if(fault==="extra")d.properties!.secret={type:"string"};
+ if(fault==="required")d.required!.pop();
+ if(fault==="open")d.additionalProperties=true;
+ if(fault==="kind")d.properties!.kind.enum=["C","R"];
+ if(fault==="null-order")d.properties!.day.anyOf!.reverse();
+ if(fault==="bound")d.properties!.day.anyOf![0].maximum=32;
+ if(fault==="external")date[1].$ref="https://private.invalid/date";
+ if(fault==="unresolved")date[1].$ref="#/$defs/missing";
+ if(fault==="ref-sibling")date[1].type="object";
+ if(fault==="moved-reference"){date[1]={type:"string"};schema.properties!.replyProposal={$ref:"#/$defs/__d"};}
+ for(const mode of dateModes)expect(()=>debugProbeSchema(schema,mode as never)).toThrow("DEBUG_PROBE_SHAPE");
+});
+it("date diagnostic string ablation never changes the structured runtime decoder",()=>{
+ const schema=requestBoundSchema(),before=JSON.stringify(schema);
+ for(const mode of dateModes)debugProbeSchema(schema,mode);
+ expect(JSON.stringify(schema)).toBe(before);
+ const raw=encodeGoogleLiteEuContextV3(frozenContextProposal({turns:[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc mỗi ngày 2 ngày"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R02",0) as never) as {eventDateChange:{change:{value:unknown}}};
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).not.toBe("REFUSED");
+ raw.eventDateChange.change.value=JSON.stringify(raw.eventDateChange.change.value);
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
 function requestBoundSchema(){
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Mai 8h nhắc gọi mẹ"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  return serializeContextRequest(input).response_format.json_schema.schema;

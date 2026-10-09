@@ -1,5 +1,9 @@
 # Title Presence Implementation Plan
 
+### Approved wire45 diagnostic-only probe implementation
+
+Strict RED/GREEN in context-debug-loop.ts/.test.ts only: pin actual R01 request and three transformed schema hashes; prove only __d changes and the original remains immutable. Reject nine-key/typed-slot/bounds/required/reference drift. Fake executor tests exercise one HTTP200 or HTTP400 request, terminal/noPilotcredit/no next-axis execution, duplicate-execution refusal, UNKNOWN accounting and unchanged history. Structured runtime decoder remains unchanged and refuses ablated string dates. Run focused admission/accounting/runner/gateway regressions, typecheck and diff checks; freeze for controller full/review/commit and first paid probe. No implementer provider/credential/network/full-suite/commit work; no production wire/schema/prompt/version change.
+
 ### Approved wire45 structured-date step
 
 Technical ruling accepted; execute the bounded TDD steps below, with equivalent prompt compaction/coverage if required, then freeze for controller review/full/commit/live.

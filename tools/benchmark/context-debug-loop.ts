@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {readFileSync,lstatSync,realpathSync,existsSync,mkdirSync} from "node:fs";
 import {join,relative,isAbsolute} from "node:path";
+import {isDeepStrictEqual} from "node:util";
 import {z} from "zod";
 import {candidateValidationProof,appendCandidateValidationRecord} from "./context-contract-candidate-validation";
 import {auditCampaignAccountRoot,withAccountRootLock,readCampaignLedger} from "./context-contract-live";
@@ -89,7 +90,7 @@ export function inspectDebugLoopFreshRun(a:DebugLoopAuthority|undefined,candidat
  const now=(options.now??Date.now)();if(!Number.isSafeInteger(now)||now<fresh.cooldownUntil)throw Error("DEBUG_FRESH_COOLDOWN");
  const accounting=inspectDebugLoop(a);return {parentDirectory:fresh.record.parentDirectory,directory:fresh.directory,mode:fresh.record.mode,cooldownUntil:fresh.cooldownUntil,accounting};
 }
-export const DEBUG_PROBE_MODES=["OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const;
+export const DEBUG_PROBE_MODES=["OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
@@ -97,6 +98,33 @@ type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Nod
 export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  const s=structuredClone(input) as Node;
+ if(mode==="DATE_STRING_BASELINE"||mode==="DATE_NO_NULL_UNIONS"||mode==="DATE_NO_SCALAR_BOUNDS"){
+  const nullable=(value:Node):Node=>({anyOf:[value,{type:"null"}]}),integer=(minimum:number,maximum:number)=>nullable({type:"integer",minimum,maximum});
+  const expected:Node={type:"object",properties:{kind:{type:"string",enum:["C","R","W"]},calendar:nullable({type:"string",enum:["GREGORIAN","LUNAR_VN"]}),day:integer(1,31),month:integer(1,12),year:integer(1,9999),leapMonth:nullable({type:"boolean"}),offsetDays:integer(-366,366),weekday:integer(1,7),qualifier:nullable({type:"string",enum:["THIS_WEEK","NEXT_WEEK","UNRESOLVED"]})},required:["kind","calendar","day","month","year","leapMonth","offsetDays","weekday","qualifier"],additionalProperties:false};
+  const date=s.$defs?.__d;
+  if(!isDeepStrictEqual(date,expected))throw Error("DEBUG_PROBE_SHAPE");
+  const dateReferences:string[]=[];
+  const checkRefs=(value:unknown,path:string[]=[])=>{
+   if(!value||typeof value!=="object")return;
+   if(Array.isArray(value)){value.forEach((child,index)=>checkRefs(child,[...path,String(index)]));return;}
+   const n=value as Node;
+   if(n.$ref!==undefined){
+    if(typeof n.$ref!=="string"||!/^#\/\$defs\/[A-Za-z0-9_]+$/u.test(n.$ref)||Object.keys(n).length!==1||!s.$defs?.[n.$ref.slice(8)])throw Error("DEBUG_PROBE_SHAPE");
+    if(n.$ref==="#/$defs/__d")dateReferences.push(path.join("."));
+   }
+   Object.entries(n).forEach(([key,child])=>checkRefs(child,[...path,key]));
+  };
+  checkRefs(s);
+  const expectedReferences=["properties.query.anyOf.0.properties.date.anyOf.1",... ["reminderDateChange","eventDateChange"].flatMap(field=>[0,1].map(index=>`properties.${field}.anyOf.0.properties.change.anyOf.${index}.properties.value`)),... [2,3].map(index=>`$defs.__schema5.anyOf.${index}.properties.value`),"$defs.__schema21.anyOf.0.properties.date.anyOf.0","$defs.__schema21.anyOf.3.properties.from.anyOf.0","$defs.__schema21.anyOf.3.properties.through.anyOf.0"];
+  if(!isDeepStrictEqual(dateReferences.sort(),expectedReferences.sort()))throw Error("DEBUG_PROBE_SHAPE");
+  if(mode==="DATE_STRING_BASELINE")s.$defs!.__d={type:"string"};
+  else for(const slot of Object.values(date!.properties!)){
+   if(!slot.anyOf)continue;
+   if(mode==="DATE_NO_NULL_UNIONS")slot.anyOf=slot.anyOf.filter(branch=>branch.type!=="null");
+   else for(const branch of slot.anyOf){delete branch.minimum;delete branch.maximum;}
+  }
+  return s as T;
+ }
  if(mode==="OPERATION_STRING"){
   const selector=s.properties?.operationCode;
   if(selector?.type!=="integer"||!Array.isArray(selector.enum)||selector.enum.length!==12||selector.enum.some((value,index)=>value!==index))throw Error("DEBUG_PROBE_SHAPE");

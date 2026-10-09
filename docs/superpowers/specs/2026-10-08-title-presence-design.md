@@ -1,5 +1,9 @@
 # Bounded title-presence generation amendment
 
+### Approved wire45 diagnostic-only state isolation
+
+The first actual R01 request failed Google schema-state admission. The controller approved tooling-only DATE_STRING_BASELINE (replace only shared __d with string), and conditional DATE_NO_NULL_UNIONS / DATE_NO_SCALAR_BOUNDS, each applied independently to the original exact request. Exact nine-key/date-slot/bounds/local-reference shape guards reject drift before dispatch. Preserve every other request subtree, prompt/input, route/caps, candidate decoder and application semantics. Each mode is one terminal R01/T0 diagnostic request with no Pilot credit, retry or automatic next axis; accounting and immutable history remain authoritative. These intentionally diagnostic schema languages are not production date fixes or evidence of private compiler behavior. The controller reviews the first result before choosing a further axis.
+
 ### Approved wire45 structured date transport
 
 Controller technical ruling accepts exactly this provider representation scope, including existing nullable machinery, strict inactive-null rejection, current mutation/source guards and unchanged outer uncertainty JSON. Runtime implementation may proceed TDD; provider admission remains unverified. Necessary equivalent prompt redundancy compaction is allowed with a complete normative map and unchanged12000/1536 caps.
