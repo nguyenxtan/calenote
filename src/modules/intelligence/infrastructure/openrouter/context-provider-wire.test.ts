@@ -8,6 +8,25 @@ import { encodeGoogleLiteEuContextV3, googleLiteEuContextWireSchemaV3 as googleL
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
+it.each([5,64])("wire52 root uncertainty refusal records count %s without content",count=>{
+ const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;raw.uncertainties=Array.from({length:count},()=>({PRIVATE_UNCERTAINTY_KEY:"PRIVATE_UNCERTAINTY_VALUE"}));const diagnostics:unknown[]=[];
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+ expect(diagnostics).toMatchObject([{issues:[{path:["uncertainties"],actualType:"array",constraint:"ARRAY_CARDINALITY",actualCount:count,maxItems:4}]}]);expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_UNCERTAINTY/);
+});
+it.each([null,"PRIVATE_UNCERTAINTY_VALUE",{}])("wire52 nonarray uncertainty refusal stays type only (%#)",value=>{
+ const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;raw.uncertainties=value;const diagnostics:unknown[]=[];
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");
+ const issue=(diagnostics[0] as {issues:Record<string,unknown>[]}).issues[0];expect(issue.path).toEqual(["uncertainties"]);expect(issue).not.toHaveProperty("constraint");expect(issue).not.toHaveProperty("actualCount");expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_UNCERTAINTY_VALUE");
+});
+it("wire52 restores only the outgoing root max4 and leaves uncertainty items and all other schema nodes unchanged",()=>{
+ const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;
+ expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a");
+});
+it("wire52 valid zero/four uncertainty operands keep decoding while nested failures keep their exact item path",()=>{
+ const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;
+ for(const count of [0,4]){raw.uncertainties=Array.from({length:count},()=>({fieldCode:2,reason:"MISSING",alternatives:[]}));expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");}
+ raw.uncertainties=[{fieldCode:2,reason:"MISSING",alternatives:[],PRIVATE_UNCERTAINTY_KEY:"PRIVATE_UNCERTAINTY_VALUE"}];const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");expect(diagnostics).toMatchObject([{issues:[{path:["uncertainties",0],classification:"extra",extraKeyCount:1}]}]);expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_UNCERTAINTY/);
+});
 it("wire51 source-bound fixture traverses endDate and location carriers without changing values or order",()=>{
  const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"synthetic"}],currentTurn:0}),evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"location",operation:"SET",value:"PRIVATE_LOCATION_SENTINEL",evidence},{field:"endDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence}]});
@@ -709,8 +728,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-51");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("9526c67b325ca699ba1952e1bde7befd79577719e2045e1b85114b665b1ea62a");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-52");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("389cf7e913b51d27acef043dae5e41b69b75466b6eadfec3f8f5e47cbd868c78");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

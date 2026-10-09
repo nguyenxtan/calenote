@@ -319,7 +319,7 @@ export function legacyV2EncodeGoogleLiteEuContext(canonical: unknown): unknown {
   return encoded;
 }
 function decodeUncertainties(raw: unknown, successor = false): unknown {
-  if (!Array.isArray(raw) || raw.length > 4) throw new WireShapeFailure(["uncertainties"], "ARRAY_MAX_4");
+  if (!Array.isArray(raw) || raw.length > 4) throw new WireShapeFailure(["uncertainties"], "ARRAY_MAX_4",undefined,Array.isArray(raw)?{actualCount:raw.length,maxItems:4}:undefined);
   return raw.map((item, index) => {
     const path = ["uncertainties", index];
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
@@ -765,6 +765,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   schema=shareDate(schema);
   for(const key of dateDefinitions)delete schema.$defs![key];
   schema.$defs!.__d={type:"string"};
+  schema.properties!.uncertainties.maxItems=4;
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3): unknown {

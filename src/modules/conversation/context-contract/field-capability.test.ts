@@ -29,6 +29,19 @@ function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical
 function input(text: string): ContextInput {
   return ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-10-08T03:00:00Z", localDate: "2026-10-08", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
 }
+it.each(["Giúp tôi", "Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."])("wire52 actual request uncertainty cardinality remains max four (%#)",text=>{
+ const context=input(text),evidence=[{kind:"USER_QUOTE",turn:0,quote:text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+ const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {properties:{uncertainties:Record<string,unknown>};$defs:Record<string,unknown>};
+ const slot=validator(context);
+ const item={fieldCode:1,reason:"MISSING",alternatives:[]};
+ for(const count of [0,4])expect(slot.safeParse({...wire,uncertainties:Array.from({length:count},()=>item)}).success).toBe(true);
+ expect(slot.safeParse({...wire,uncertainties:Array.from({length:5},()=>item)}).success).toBe(false);
+ expect(schema.properties.uncertainties.maxItems).toBe(4);expect(wire.uncertainties).toEqual([]);
+});
+it("wire52 actual service atomically refuses five authored uncertainties without creating a draft",async()=>{
+ const h=await harness([proposal({title:"đi thi"})],wire=>({...wire as Record<string,unknown>,uncertainties:Array.from({length:5},()=>({fieldCode:2,reason:"MISSING",alternatives:[]}))}));
+ expect(await h.turn(0,"Ngày 15/12 đi thi.")).toEqual({status:"REJECTED"});expect(await h.read(1)).toBeNull();expect(await h.f.db.prepare("SELECT count(*) AS count FROM reminders").first<number>("count")).toBe(0);
+});
 it("wire51 empty ordinary availability requires explicit empty changes and sole location carrier",()=>{
  const context=input("Ngày 15/12 đi thi ở Quang Trung, nhắc 3 ngày liên tiếp giúp tôi."),evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"location",operation:"SET",value:"Quang Trung",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
@@ -215,7 +228,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-10",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("371f90c54b351e33c0bcf243b9509b9afd5fef83820a0ce3753e3fea52d09538");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("72e1644fd20a0373debda1f0e8e5c931908c487bfaab942eede1251bdbc8d925");
+  const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("371f90c54b351e33c0bcf243b9509b9afd5fef83820a0ce3753e3fea52d09538");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Approved wire52 uncertainty cardinality execution
+
+1. RED actual outgoing base+specialized schema admits five valid uncertainty items while canonical/runtime rejects; 0/4 preserve behavior. Prove root failure array count5/large count safe diagnostic exactCount/max4, nonarray type-only; nested item failures retain nested paths and finite privacy. No rawlive payload available/exactlive count claim.
+2. Restore only V3 root uncertainties maxItems4 after generic omit/builders/specialization, before final outgoing/prune; preserve item schema equality/current sources/fixedfieldcode/alternative JSON. Add cardinality metadata to existing decodeUncertainties ARRAY_MAX_4 throw only when array. Do not alter canonical validator, actual rejection predicate, decoder outcomes, uncertainty content or legacy wire schema.
+3. Test actual serialized requests/base/specialized domains (0/4 accepted,5 denied generation/runtime), existing clock/title MISSING pruning and query/correction/alternatives unchanged; diagnostic privacy/observer inertness/nonarray/nested unknown key/source rejection. Retain no mutations/service refusal and all transport/source/canonical/oracle guards.
+4. Own provider-wire.ts/.test.ts; protocol and necessary exact schema/request/proof/runner/fit pins; existing finite diagnostics tests if needed; two canonical docs. Prompt already maximum4, prefer no new meaning or redundant repetition; equivalent redundant-wording compaction with normative map only if strict fit exceeds12000. Capability10 unchanged; wire52 coherent identity. No general cardinality architecture/parser/uncertainty redesign.
+5. ENTIRE fit67+asserted326 actualrequests/12000+1536, focused evidence/gateway/diagnostics/authority/query/runner/notes/source regressions, typecheck/scopedlint/diff then freeze/report. Controller full/review/commit/FreshPilot; implementer no provider/key/accounting/full/commit/children. Wait for controller technical read before runtime edits.
+
 ### Approved wire51 location singleton execution
 
 Empty ordinary availability: RED actual isolated schema construction fails after final ordinary location removed. Emit exact required changes array null-items/maxItems0 only for empty branch set; model authors []; test [] membership, reject nonempty null and ordinary object/bypass, unchanged canonical guards. No generic empty-union acceptance or field resurrection. Provider admission unverified.
