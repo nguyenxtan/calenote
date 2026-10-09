@@ -32,8 +32,18 @@ it("wire56 actual numeric carriers cannot be null or contradict MISSING",()=>{
  for(const field of ["frequencyChange","occurrenceCountChange"]){expect(check.safeParse({...raw,[field]:null}).success,field).toBe(false);}
  for(const fieldCode of [8,9])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"MISSING",alternatives:[]}]}).success).toBe(false);
  expect(check.safeParse({...raw,uncertainties:[{fieldCode:6,reason:"MISSING",alternatives:[]}]}).success).toBe(true);
- for(const fieldCode of [8,9])for(const reason of ["AMBIGUOUS","CONFLICT"])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(true);
+ for(const fieldCode of [8,9])for(const reason of ["AMBIGUOUS","CONFLICT"])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(false);
  for(const field of ["frequencyChange","occurrenceCountChange"]){const carrier=raw[field] as {change:Record<string,unknown>};expect(check.safeParse({...raw,[field]:{...carrier,change:{...carrier.change,operation:"REPLACE"}}}).success).toBe(false);expect(check.safeParse({...raw,[field]:{...carrier,change:{...carrier.change,operation:"CLEAR",value:null}}}).success).toBe(false);}
+});
+it.each(["history","CURRENT","pending"] as const)("wire58 %s context preserves source numeric ambiguity generation",kind=>{
+ const context=input("Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.");
+ if(kind==="history"){context.turns.unshift({role:"USER",text:"Nhắc đi thi."});context.currentTurn=1;}
+ if(kind==="CURRENT")context.activeRequest={lifecycle:"CLARIFYING",slots:Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"]};
+ if(kind==="pending")context.pendingQuestion={text:"Mấy giờ?",scope:"REMINDER",field:"reminderTime",decisionKind:null,reason:"MISSING"};
+ const evidence=[{kind:"USER_QUOTE",turn:context.currentTurn,quote:context.turns[context.currentTurn].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},...authoredSeries(evidence)],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,check=validator(context);expect(check.safeParse(raw).success).toBe(true);
+ for(const fieldCode of [8,9])for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success).toBe(true);
 });
 // Independent schema-membership fixtures use source-pointer representation,
 // retaining the authored turn index and every field value. No source is filled.
@@ -307,9 +317,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("4b8998436cefcef5ac83dae7d2ecf87b49cd5fd4138ae106de18ca4218cbf85c");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("3fb4b6f22516f7363424a1b85814836d1e7ab328a24e17bcd373507a3daf1b22");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("9d72c3b9ba9e685f89d15fe2b7627164a2057dfd4063db8813a810ea1d0700ab");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("2fd8194143bb2f53f7176146cc5ec857aad4e5455ebf90951240f224e7b51f4b");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

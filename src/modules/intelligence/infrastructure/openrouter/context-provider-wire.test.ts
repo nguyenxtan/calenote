@@ -17,6 +17,25 @@ function wire55Example(operation:"SET"|"REPLACE"|"CLEAR"="SET"){
  const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
  return {bound,canonical,value,check:z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]),raw:encodeFixtureV3(canonical,bound) as {eventDateChange:{change:{value:unknown}}}};
 }
+it.each([false,true])("wire58 unique numeric source restricts only its reasons with requiredClock=%s",requiredClock=>{
+ const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:requiredClock?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."}]});
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:bound.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},conversationDirective:null,changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},...(requiredClock?[{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}]:[])]});
+ const schema=serializeContextRequest(bound).response_format.json_schema.schema;
+ const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
+ const check=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]),raw=encodeFixtureV3(canonical,bound) as Record<string,unknown>;
+ expect(check.safeParse(raw).success).toBe(true);
+ for(const fieldCode of [8,9])for(const reason of ["MISSING","AMBIGUOUS","CONFLICT"]){expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(false);}
+ for(const fieldCode of [8,9])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason:"UNSUPPORTED_COMBINATION",alternatives:[]}]}).success).toBe(true);
+ for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...raw,uncertainties:[{fieldCode:6,reason,alternatives:[]}]}).success).toBe(reason!=="MISSING"||!requiredClock);
+ for(const fieldCode of [0,1,2,3,4,5,7,10,11,12,13,14,15])for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...raw,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success).toBe(true);
+});
+it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc 3 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp mỗi tuần.","Nhắc 2 ngày liên tiếp.","Nếu đi thi, nhắc 2 ngày liên tiếp.","Sửa nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp [CONTROL]"])("wire58 outside unique-source subset retains numeric uncertainty item domains: %s",text=>{
+ const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text}]}),schema=serializeContextRequest(bound).response_format.json_schema.schema;
+ const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
+ const item=(schema as unknown as {properties:{uncertainties:{items:unknown}}}).properties.uncertainties.items,check=z.fromJSONSchema(inline(item) as Parameters<typeof z.fromJSONSchema>[0]);
+ for(const fieldCode of [8,9])for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({fieldCode,reason,alternatives:[]}).success).toBe(true);
+});
 it.each(["SET","REPLACE"] as const)("wire55 scoped %s requires six authored civil keys with year null",operation=>{
  const {bound,raw,value,check,canonical}=wire55Example(operation);raw.eventDateChange.change.value=value;
  expect(check.safeParse(raw).success).toBe(true);
@@ -792,7 +811,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-56");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-58");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("389cf7e913b51d27acef043dae5e41b69b75466b6eadfec3f8f5e47cbd868c78");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

@@ -697,7 +697,8 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   if(primaryEvidenceInput!==undefined){
     const sourceCodebook=primaryEvidenceSourceCodebook(primaryEvidenceInput),domain=[...sourceCodebook.codes];
     const requiredClock=isInitialExplicitEventClockRequired(primaryEvidenceInput)?"eventTime":isInitialExplicitReminderClockRequired(primaryEvidenceInput)?"reminderTime":null;
-    const requiredFields=[...(requiredClock?[requiredClock]:[]),...(isInitialUniqueCadenceCountRequired(primaryEvidenceInput)?["frequency","occurrenceCount"]:[])];
+    const uniqueNumeric=isInitialUniqueCadenceCountRequired(primaryEvidenceInput);
+    const requiredFields=[...(requiredClock?[requiredClock]:[]),...(uniqueNumeric?["frequency","occurrenceCount"]:[])];
     for(const requiredField of requiredFields){
       const root=`${requiredField}Change`;
       const carrier=deref(schema.properties![root].anyOf![0],schema);
@@ -719,7 +720,13 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       const excluded=requiredFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]);
       missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>!excluded.includes(code))};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
-      schema.properties!.uncertainties.items={anyOf:[missing,other]};
+      if(uniqueNumeric){
+        const unsupported=structuredClone(item);
+        unsupported.properties!.reason={type:"string",enum:["UNSUPPORTED_COMBINATION"]};
+        other.properties!.reason={type:"string",enum:["AMBIGUOUS","CONFLICT"]};
+        other.properties!.fieldCode={...other.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.frequency&&code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.occurrenceCount)};
+        schema.properties!.uncertainties.items={anyOf:[missing,other,unsupported]};
+      }else schema.properties!.uncertainties.items={anyOf:[missing,other]};
     }
     const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);
     const bind=(node:Schema):Schema=>{
