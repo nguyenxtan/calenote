@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire52 compact-source tooling step
+
+1. Read approved compact-source amendment before RED, own two debug files/two docs. Closed R02_TURN1_GENERAL_SOURCE_COMPACT_BASELINE only exact original __sources enum literals→seven short strings; derive strict source families/components/keys/collision-free codes, no current/prompt/context/mapping change. Pin original/transformed schema/request/seed/context/localrefs.
+2. Tests prove exact bijection7↔7/order/current membership and fullbyte restoration/alloutside nodes; actual enum-selected compact fake200 general primary must unchanged JSON_OBJECT refusal/zero reads/mutations, no old-pointer surrogate. Fake400 UNKNOWN/duplicate/max1/0prereqs/no credit/drift/privacy/history/accountingderive. Target/typecheck/lint/diff then freeze/six tooling concurrentreview.
+3. Independent C0/I0/localcommit/read-only preflight/one controller probe within existing conservativeUSD5. No broad unchangedapp full duplicate; no implementer provider/key/accounting/full/commit/children. Any production mapping requires source-backed narrow amendment/TDD/full326fit/fullchecks/review/new candidate/formalPilot. Never drop sources or relax canonical/evidence/oracle to pass. No push/deploy.
+
 ### Wire52 general-source diagnostic tooling step
 
 1. Read approved amendment before RED; own two debug files/two metadata docs. Closed R02_TURN1_GENERAL_SOURCE_STRING_BASELINE only original __sources enum7→type:string, no combined earlier axes; exact original/transformed schema/request/seed/context pins and local-ref guards.

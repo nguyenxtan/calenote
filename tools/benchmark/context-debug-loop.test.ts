@@ -199,6 +199,7 @@ const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED
 const r02CurrentKeyMode="R02_TURN1_CURRENT_KEY_BASELINE" as const;
 const r02CoalescedMode="R02_TURN1_REPLACE_COALESCED_BASELINE" as const;
 const r02GeneralStringMode="R02_TURN1_GENERAL_SOURCE_STRING_BASELINE" as const;
+const r02CompactMode="R02_TURN1_GENERAL_SOURCE_COMPACT_BASELINE" as const;
 async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
@@ -260,6 +261,39 @@ it("R02 general source probe changes only the enum definition and restores origi
  expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.$defs!.__current.enum).toHaveLength(1);expect(probe.$defs!.__schema5).toEqual(original.$defs!.__schema5);expect(probe.properties!.uncertainties).toEqual(original.properties!.uncertainties);
  const counts:Record<string,number>={};const walk=(node:unknown)=>{if(!node||typeof node!=="object")return;if("$ref" in node&&typeof node.$ref==="string")counts[node.$ref]=(counts[node.$ref]??0)+1;Object.values(node).forEach(walk)};walk(probe);
  expect(counts["#/$defs/__e"]).toBe(11);expect(counts["#/$defs/__ec"]).toBe(17);expect(counts["#/$defs/__sources"]).toBe(1);expect(counts["#/$defs/__current"]).toBe(1);
+});
+it("R02 compact source probe preserves seven ordered choices and current membership bijectively",async()=>{
+ const original=await r02Turn1Schema(),before=JSON.stringify(original),probe=debugProbeSchema(original,r02CompactMode as never);
+ const pointers=original.$defs!.__sources.enum!,codes=probe.$defs!.__sources.enum!;
+ expect(codes).toEqual(["U0","U2","Ff1","Ff2","Ff3","Ff4","Ff5"]);expect(new Set(codes).size).toBe(7);expect(pointers).toHaveLength(7);
+ const inverse=new Map(codes.map((code,index)=>[code,pointers[index]]));codes.forEach((code,index)=>expect(inverse.get(code)).toBe(pointers[index]));
+ expect(inverse.get("U2")).toBe(original.$defs!.__current.enum![0]);expect(probe.$defs!.__current).toEqual(original.$defs!.__current);expect(probe.$defs!.__e).toEqual(original.$defs!.__e);expect(probe.$defs!.__ec).toEqual(original.$defs!.__ec);
+ const restore=structuredClone(probe);restore.$defs!.__sources=structuredClone(original.$defs!.__sources);expect(JSON.stringify(restore)).toBe(before);expect(JSON.stringify(original)).toBe(before);
+ expect(hash(JSON.stringify(probe))).toBe("2d1b14bd9c08fa5ad646270f216816b2f538f8a25ec9a663cf30d09ad8ea7cd1");
+});
+it.each([200,400])("R02 compact source probe HTTP%i uses actual code and unchanged decoder refuses it",async status=>{
+ const s=setup();let calls=0,transportError:unknown;
+ try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),before=inspectDebugLoop(a);
+ const result=await runDebugLoopExecution(a,candidate,r02CompactMode as never,async request=>{
+  calls++;try{
+   expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("2d1b14bd9c08fa5ad646270f216816b2f538f8a25ec9a663cf30d09ad8ea7cd1");expect(hash(JSON.stringify(request))).toBe("16d50250b7aa1c4f1aec14db5efa68dc5c7827ced4be422b9359d51d0f9497a8");
+   const source=request.response_format.json_schema.schema.$defs!.__sources;if(typeof source==="boolean")throw Error("TEST_SOURCE_OBJECT");const code=source.enum![1];expect(code).toBe("U2");expect(source.type).toBe("string");expect(source.enum).toContain(code);
+   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",1));
+   if(!content||typeof content!=="object"||Array.isArray(content)||!("requestTarget" in content))throw Error("TEST_WIRE_OBJECT");
+   const target=content.requestTarget;if(!target||typeof target!=="object"||Array.isArray(target)||!("evidence" in target))throw Error("TEST_TARGET_OBJECT");
+   const evidence=target.evidence;if(!evidence||typeof evidence!=="object"||Array.isArray(evidence)||!("primaryEvidence" in evidence))throw Error("TEST_EVIDENCE_OBJECT");evidence.primaryEvidence=code;
+   expect(evidence.primaryEvidence).toBe("U2"); // Actual diagnostic syntax, not old JSON-pointer surrogate.
+   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-r02-compact",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  }catch(error){transportError=error;throw error}
+ },{now:()=>100});
+ if(transportError)throw transportError;
+ expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R02",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(result.responses[0].status).toBe("FAILURE");
+ if(status===200){expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["requestTarget","evidence","primaryEvidence"],expected:"JSON_OBJECT"}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
+ expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
+ await expect(runDebugLoopExecution(a,candidate,r02CompactMode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ expect(inspectDebugLoop(a).unknownExposureMicrounits).toBe(before.unknownExposureMicrounits+(status===400?105472:0));expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
+ }finally{s.cleanup()}
 });
 it.each([{status:200,quote:false},{status:200,quote:true},{status:400,quote:false}])("R02 general source probe HTTP$status quote=$quote preserves strict runtime boundary",async({status,quote})=>{
  const s=setup();let calls=0,transportError:unknown;
@@ -373,7 +407,7 @@ it.each(r02Turn1Modes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$m
  expect(JSON.stringify(result.responses)).not.toContain("Quang Trung");
  }finally{s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode,r02CompactMode].flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses seeded $fault drift before physical HTTP",async({mode,fault})=>{
  const real=serializeContextRequest;
  const spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{
   const request=real(input);
@@ -386,7 +420,7 @@ it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMod
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  }finally{spy.mockRestore();s.cleanup()}
 });
-it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
+it.each([...r02Turn1Modes,r02CurrentKeyMode,r02CoalescedMode,r02GeneralStringMode,r02CompactMode])("%s rejects schema source/ref/bound drift and does not mutate caller",async mode=>{
  const original=await r02Turn1Schema();
  for(const fault of ["source","ref","bound"]){const drift=structuredClone(original);
   if(fault==="source")drift.$defs!.__sources.enum=["PRIVATE_SECRET"];
