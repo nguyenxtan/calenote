@@ -182,7 +182,7 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
   expect(calls).toBe(1);
  }finally{s.cleanup()}
 });
-const sourceModes=["SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE"] as const;
+const sourceModes=["SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE"] as const;
 it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode seeded R01 TURN1 HTTP$status is one terminal request without Pilot credit",async({mode,status})=>{
  const s=setup();let calls=0,transportError:unknown;
  try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
@@ -203,11 +203,19 @@ it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mod
   }
   expect(JSON.stringify(original)).toBe(before);
   const actual=request.response_format.json_schema.schema;
-  expect(actual.$defs!.__sources).toEqual(mode==="SOURCE_STRING_BASELINE"?{type:"string"}:{type:"string",enum:['{"kind":"USER_TURN","turn":0}']});
-  expect(actual.$defs!.__current).toEqual(mode==="SOURCE_T0_SCHEMA_BASELINE"?{type:"string",enum:['{"kind":"USER_TURN","turn":0}']}:original.$defs!.__current);
+  expect(actual.$defs!.__sources).toEqual(mode==="SOURCE_COMPACT_BASELINE"?{type:"string",enum:["p0","p1","p2"]}:mode==="SOURCE_STRING_BASELINE"?{type:"string"}:{type:"string",enum:['{"kind":"USER_TURN","turn":0}']});
+  expect(actual.$defs!.__current).toEqual(mode==="SOURCE_COMPACT_BASELINE"?{type:"string",enum:["p1"]}:mode==="SOURCE_T0_SCHEMA_BASELINE"?{type:"string",enum:['{"kind":"USER_TURN","turn":0}']}:original.$defs!.__current);
   expect({...actual,$defs:{...actual.$defs,__sources:original.$defs!.__sources,__current:original.$defs!.__current}}).toEqual(original);
-  expect(hash(JSON.stringify(actual))).toBe(({SOURCE_STRING_BASELINE:"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145",SOURCE_SINGLETON_BASELINE:"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a",SOURCE_T0_SCHEMA_BASELINE:"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e"})[mode]);
+  expect(hash(JSON.stringify(actual))).toBe(({SOURCE_COMPACT_BASELINE:"3ae3b2fe8ed22d1283e44996c0f56acdb3486789e5cff36bf3a9d2a366324579",SOURCE_STRING_BASELINE:"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145",SOURCE_SINGLETON_BASELINE:"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a",SOURCE_T0_SCHEMA_BASELINE:"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e"})[mode]);
   const content=encodeFixtureV3(frozenContextProposal(input,"R01",1),input);
+  if(mode==="SOURCE_COMPACT_BASELINE"){
+   const aliasContent=content as {query:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}};
+   aliasContent.query.evidence.primaryEvidence="p1";
+   expect(actual.$defs!.__sources.enum).toContain(aliasContent.query.evidence.primaryEvidence);
+   expect(actual.$defs!.__current.enum).toContain(aliasContent.query.evidence.primaryEvidence);
+   expect(Object.keys(aliasContent.query.evidence).sort()).toEqual(["additionalEvidenceJson","primaryEvidence"]);
+   expect(aliasContent.query.evidence.additionalEvidenceJson).toBe("[]");
+  }
   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-source-probe",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
   }catch(error){transportError=error;throw error}
  },{now:()=>100});
@@ -215,7 +223,11 @@ it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mod
  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R01",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
  expect(JSON.parse(readFileSync(join(result.directory,"terminal.json"),"utf8"))).toMatchObject({attempts:1,mode,pilotCredit:false});
  expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
- expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200?"SUCCESS":"FAILURE"});
+ expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200&&mode!=="SOURCE_COMPACT_BASELINE"?"SUCCESS":"FAILURE"});
+ if(status===200&&mode==="SOURCE_COMPACT_BASELINE"){
+  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["query","evidence","primaryEvidence"],expected:"JSON_OBJECT"}]}}});
+  expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
+ }
  await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
  expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:status===200?1:2,unknownExposureMicrounits:status===200?105472:210944});
