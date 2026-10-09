@@ -2,6 +2,8 @@
 
 ### Approved wire46 TURN1 source-domain diagnostic step
 
+Finite extension RED/GREEN table: two new modes plus preserved string mode, fake200/400 one request each, exact source/current-only differences and hashes, strict original/context/seed/ref drift rejection before HTTP, no second-axis dispatch, duplicate terminal/accounting/privacy/history fences. Reuse narrow three-mode predicate only, no generic target API. Freeze four files after scoped debug/seed/runner/candidate/live/single-replay tests and typecheck/lint/diff for controller review/full/first probe; conditional second requires separate interpretation.
+
 Strict RED/GREEN exact current R01 TURN1 request/seed, source-only clone equality and shape/context drift refusal before HTTP; fake HTTP200/400 each terminal1/no Pilot credit/zero prerequisites, duplicate execution fence and unchanged conservative accounting/history. Implement only debug-loop tooling; reuse resolveSingleValidationTarget/executeObservableSingleTargetValidation seed/manifest checks. Focused debug/seed/runner/authority/accounting, typecheck/lint/diff then freeze report for controller full/review/commit/preflight/one probe. No implementer provider/network/credentials/accounting/full/commit.
 
 ### Approved wire46 sentinel-date step

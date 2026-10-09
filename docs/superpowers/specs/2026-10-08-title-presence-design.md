@@ -2,6 +2,8 @@
 
 ### Approved wire46 TURN1 source-domain diagnostic tooling
 
+Finite diagnostic extension only: SOURCE_SINGLETON_BASELINE replaces only __sources with original T0 singleton; SOURCE_T0_SCHEMA_BASELINE also replaces __current with T0 singleton, one additional axis relative to singleton/two definitions relative to original T1. Exact transformed hashes and unchanged rest required; same pinned T1 context/seed/original schema. Both independently terminal/max1/no Pilot credit/zero prerequisites. Never automatic sequence; controller interprets singleton before separately choosing conditional T0-schema execution. No production fix inferred.
+
 Accepted app c40dda279d43605bb6e93b930c249cecf1e24e53 remains unchanged. Tooling-only SOURCE_STRING_BASELINE targets exactly R01 TURN1 using existing trusted deterministic continuation seed, zero paid prerequisites and one terminal physical request/no Pilot credit. Guard exact immutable context/schema/seed/manifest identities and local resolved references; clone replaces only __sources with {type:string}, leaving __current/__d/rest unchanged. Historical modes, runtime decoder/evidence/canonical/oracles and conservative accounting remain unchanged. No production source relaxation or provider-state mechanism claim; controller reviews tooling before its single paid probe.
 
 ### Approved wire46 non-null date-slot representation

@@ -90,18 +90,22 @@ export function inspectDebugLoopFreshRun(a:DebugLoopAuthority|undefined,candidat
  const now=(options.now??Date.now)();if(!Number.isSafeInteger(now)||now<fresh.cooldownUntil)throw Error("DEBUG_FRESH_COOLDOWN");
  const accounting=inspectDebugLoop(a);return {parentDirectory:fresh.record.parentDirectory,directory:fresh.directory,mode:fresh.record.mode,cooldownUntil:fresh.cooldownUntil,accounting};
 }
-export const DEBUG_PROBE_MODES=["SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
+export const DEBUG_PROBE_MODES=["SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_STRING_BASELINE","OPERATION_STRING","R02_TURN0","CANONICAL_WIRE","V14","QUERY_ONLY","NO_REQUEST_TARGET","NO_CHANGE_EVIDENCE","CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY","DATE_STRING_BASELINE","DATE_NO_NULL_UNIONS","DATE_NO_SCALAR_BOUNDS"] as const;
 export type DebugProbeMode=typeof DEBUG_PROBE_MODES[number];
+const isSourceProbeMode=(mode:string)=>mode==="SOURCE_STRING_BASELINE"||mode==="SOURCE_SINGLETON_BASELINE"||mode==="SOURCE_T0_SCHEMA_BASELINE";
 type Node={type?:string;properties?:Record<string,Node>;$defs?:Record<string,Node>;anyOf?:Node[];items?:Node;$ref?:string;[key:string]:unknown};
 /** Diagnostic ablation ONLY. Never used as runtime output repair. Probe
  * responses cannot earn Pilot credit; the candidate decoder stays unchanged. */
 export function debugProbeSchema<T>(input:T,mode:DebugProbeMode):T{
  if(!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  const s=structuredClone(input) as Node;
- if(mode==="SOURCE_STRING_BASELINE"){
+ if(isSourceProbeMode(mode)){
   if(hash(JSON.stringify(s))!=="d30093b5ce25aed6f05ba17a4ae8018c196adc29acc0412328f217f917451a24"||!isDeepStrictEqual(s.$defs?.__sources,{type:"string",enum:['{"kind":"USER_TURN","turn":0}','{"kind":"USER_TURN","turn":2}','{"kind":"CONTEXT_FACT","ref":"f1"}']}))throw Error("DEBUG_PROBE_SHAPE");
   const checkRefs=(n:unknown)=>{if(!n||typeof n!=="object")return;const node=n as Node;if(node.$ref!==undefined&&(typeof node.$ref!=="string"||!/^#\/\$defs\/[A-Za-z0-9_]+$/u.test(node.$ref)||Object.keys(node).length!==1||!s.$defs?.[node.$ref.slice(8)]))throw Error("DEBUG_PROBE_SHAPE");Object.values(n).forEach(checkRefs)};
-  checkRefs(s);s.$defs!.__sources={type:"string"};return s as T;
+  checkRefs(s);s.$defs!.__sources=mode==="SOURCE_STRING_BASELINE"?{type:"string"}:{type:"string",enum:['{"kind":"USER_TURN","turn":0}']};
+  if(mode==="SOURCE_T0_SCHEMA_BASELINE")s.$defs!.__current={type:"string",enum:['{"kind":"USER_TURN","turn":0}']};
+  const expected=mode==="SOURCE_STRING_BASELINE"?"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145":mode==="SOURCE_SINGLETON_BASELINE"?"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a":"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e";
+  if(hash(JSON.stringify(s))!==expected)throw Error("DEBUG_PROBE_SHAPE");return s as T;
  }
  if(mode==="DATE_STRING_BASELINE"||mode==="DATE_NO_NULL_UNIONS"||mode==="DATE_NO_SCALAR_BOUNDS"){
   const nullable=(value:Node):Node=>({anyOf:[value,{type:"null"}]}),integer=(minimum:number,maximum:number)=>nullable({type:"integer",minimum,maximum});
@@ -188,9 +192,9 @@ export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candi
  if(fresh)appendCandidateValidationRecord(r.accountRoot,fresh.marker,{parentDirectory:fresh.record.parentDirectory,childDirectory:leaf,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256});
  mkdirSync(leaf,{recursive:true,mode:0o700});
  appendCandidateValidationRecord(r.accountRoot,join(leaf,"execution.json"),{authoritySha256:g.trust.reviewedRecordSha256,...proof,mode,manifestSha256:r.manifestSha256,accounting:before,...(fresh?{freshRun:{parentDirectory:fresh.record.parentDirectory,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256}}:{})});
- let attempts=0,next=0;const targets=mode==="FORMAL_PILOT"?manifest.targets:[{fixtureId:mode==="R02_TURN0"?"R02":"R01",turnIndex:mode==="SOURCE_STRING_BASELINE"?1:0}];
- const singleTarget=mode==="R02_TURN0"?resolveSingleValidationTarget(g.root,{fixture:"R02",turn:0}):mode==="SOURCE_STRING_BASELINE"?resolveSingleValidationTarget(g.root,{fixture:"R01",turn:1}):undefined;
- if(mode==="SOURCE_STRING_BASELINE"&&(singleTarget?.contextSeedDigest!=="9db3317cac2e32828ffa743a21ab344cf3e3d761d7c72465a792d174e484302b"||singleTarget.manifestSha256!=="7d9a0e1ea2a8d48c559989770905e21256b81ba81a0d0706b48c0148eaa2ba59"))throw Error("DEBUG_SOURCE_SEED_BINDING");
+ let attempts=0,next=0;const targets=mode==="FORMAL_PILOT"?manifest.targets:[{fixtureId:mode==="R02_TURN0"?"R02":"R01",turnIndex:isSourceProbeMode(mode)?1:0}];
+ const singleTarget=mode==="R02_TURN0"?resolveSingleValidationTarget(g.root,{fixture:"R02",turn:0}):isSourceProbeMode(mode)?resolveSingleValidationTarget(g.root,{fixture:"R01",turn:1}):undefined;
+ if(isSourceProbeMode(mode)&&(singleTarget?.contextSeedDigest!=="9db3317cac2e32828ffa743a21ab344cf3e3d761d7c72465a792d174e484302b"||singleTarget.manifestSha256!=="7d9a0e1ea2a8d48c559989770905e21256b81ba81a0d0706b48c0148eaa2ba59"))throw Error("DEBUG_SOURCE_SEED_BINDING");
  const check=()=>{const checked=grant(a);if(fresh)verifyFreshRun(checked,candidate,false);const p=candidateValidationProof(g.root,candidate);if(JSON.stringify(p)!==JSON.stringify(proof))throw Error("DEBUG_SOURCE_BINDING");loadedChecks.get(a!)?.(candidate,proof.harnessRevisionSha)};
  const hooks={manifestSha256:r.manifestSha256,maxRequests:targets.length,beforeDispatch(t:{fixtureId:string;turnIndex:number},reservationId:string){check();if(JSON.stringify(t)!==JSON.stringify(targets[next])||attempts!==next)throw Error("DEBUG_TARGET_FENCE");inspectDebugLoop(a);appendCandidateValidationRecord(r.accountRoot,join(leaf,`target-${next}.claim.json`),{target:t,reservationId});next++},settled(){},outcome(){}};
  const input={root:g.root,directory:leaf,profile:"PILOT" as const,sourceSha:candidate,provenanceDigest:proof.candidateProofSha256,runId:id,accountingPolicy:"CONFIRMED_COST_V1" as const,debugBudgetAuthoritySha256:g.trust.reviewedRecordSha256,cumulativeAuthorizedMicrounits:r.hardCapMicrounits,cumulativeRetainedMicrounits:before.confirmedMicrounits,now:options.now,
@@ -199,7 +203,7 @@ export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candi
  // For probes the runner has already durably marked DISPATCH. It contains
  // exactly one selected frozen turn; check budget without counting its pending
  // claim twice (the before-execution inspection reserved full headroom).
- if(mode==="SOURCE_STRING_BASELINE"){const context=JSON.parse(request.messages[1].content);delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;if(hash(JSON.stringify(context))!=="fc84b34e2d9c9490b37ffbf0e3f2674fd7c357a84bc0b997311e06a39d775142")throw Error("DEBUG_SOURCE_CONTEXT_BINDING");}
+ if(isSourceProbeMode(mode)){const context=JSON.parse(request.messages[1].content);delete context.evidenceSources;delete context.numericOwnership;delete context.fieldCapability;if(hash(JSON.stringify(context))!=="fc84b34e2d9c9490b37ffbf0e3f2674fd7c357a84bc0b997311e06a39d775142")throw Error("DEBUG_SOURCE_CONTEXT_BINDING");}
  const outbound=mode==="FORMAL_PILOT"?request:{...request,response_format:{...request.response_format,json_schema:{...request.response_format.json_schema,schema:debugProbeSchema(request.response_format.json_schema.schema,mode)}}};
  appendCandidateValidationRecord(r.accountRoot,join(leaf,`http-${attempts}.json`),{requestSha256:hash(JSON.stringify(outbound)),schemaSha256:hash(JSON.stringify(outbound.response_format.json_schema.schema)),mode});attempts++;return transport(outbound,requestOptions);
  }};

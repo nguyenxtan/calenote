@@ -182,10 +182,11 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
   expect(calls).toBe(1);
  }finally{s.cleanup()}
 });
-it.each([200,400])("SOURCE_STRING_BASELINE seeded R01 TURN1 HTTP%s is one terminal request without Pilot credit",async status=>{
+const sourceModes=["SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE"] as const;
+it.each(sourceModes.flatMap(mode=>[200,400].map(status=>({mode,status}))))("$mode seeded R01 TURN1 HTTP$status is one terminal request without Pilot credit",async({mode,status})=>{
  const s=setup();let calls=0,transportError:unknown;
  try{const a=s.load(),history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
- const result=await runDebugLoopExecution(a,candidate,"SOURCE_STRING_BASELINE" as never,async request=>{
+ const result=await runDebugLoopExecution(a,candidate,mode as never,async request=>{
   calls++;try{const input=JSON.parse(request.messages[1].content);delete input.numericOwnership;delete input.fieldCapability;delete input.evidenceSources;
   expect(hash(JSON.stringify(ContextInputSchema.parse(input)))).toBe("fc84b34e2d9c9490b37ffbf0e3f2674fd7c357a84bc0b997311e06a39d775142");
   const original=serializeContextRequest(ContextInputSchema.parse(input)).response_format.json_schema.schema;
@@ -198,29 +199,33 @@ it.each([200,400])("SOURCE_STRING_BASELINE seeded R01 TURN1 HTTP%s is one termin
    if(fault==="date")drift.$defs!.__d={type:"string"};
    if(fault==="external")drift.$defs!.__e={$ref:"https://private.invalid/secret"};
    if(fault==="missing")delete drift.$defs!.__sources;
-   try{debugProbeSchema(drift,"SOURCE_STRING_BASELINE");throw Error("DID_NOT_REFUSE")}catch(error){expect(String(error)).toBe("Error: DEBUG_PROBE_SHAPE");}
+   try{debugProbeSchema(drift,mode as never);throw Error("DID_NOT_REFUSE")}catch(error){expect(String(error)).toBe("Error: DEBUG_PROBE_SHAPE");}
   }
   expect(JSON.stringify(original)).toBe(before);
   const actual=request.response_format.json_schema.schema;
-  expect(actual.$defs!.__sources).toEqual({type:"string"});
-  expect({...actual,$defs:{...actual.$defs,__sources:original.$defs!.__sources}}).toEqual(original);
+  expect(actual.$defs!.__sources).toEqual(mode==="SOURCE_STRING_BASELINE"?{type:"string"}:{type:"string",enum:['{"kind":"USER_TURN","turn":0}']});
+  expect(actual.$defs!.__current).toEqual(mode==="SOURCE_T0_SCHEMA_BASELINE"?{type:"string",enum:['{"kind":"USER_TURN","turn":0}']}:original.$defs!.__current);
+  expect({...actual,$defs:{...actual.$defs,__sources:original.$defs!.__sources,__current:original.$defs!.__current}}).toEqual(original);
+  expect(hash(JSON.stringify(actual))).toBe(({SOURCE_STRING_BASELINE:"2856d278ef3bf80bc16800e980200425da346295fab155da2ec2363e9d76c145",SOURCE_SINGLETON_BASELINE:"af84ca46d1cecf819e041c8fd77051f48b229db7502cb62ba385288c56155a8a",SOURCE_T0_SCHEMA_BASELINE:"dc1bf84c3102747748df9951acd99219e85ef31127a1d344c136261b3932b05e"})[mode]);
   const content=encodeFixtureV3(frozenContextProposal(input,"R01",1),input);
   return {status,body:status===400?"{}":JSON.stringify({model:request.model,provider:"Google",id:"gen-local-source-probe",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
   }catch(error){transportError=error;throw error}
  },{now:()=>100});
  if(transportError)throw transportError;
  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R01",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
+ expect(JSON.parse(readFileSync(join(result.directory,"terminal.json"),"utf8"))).toMatchObject({attempts:1,mode,pilotCredit:false});
+ expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
  expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200?"SUCCESS":"FAILURE"});
- await expect(runDebugLoopExecution(a,candidate,"SOURCE_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
+ await expect(runDebugLoopExecution(a,candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
  expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);
  expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:status===200?1:2,unknownExposureMicrounits:status===200?105472:210944});
  }finally{s.cleanup()}
 });
-it.each(["schema","context"])("SOURCE_STRING_BASELINE refuses actual %s drift before physical HTTP",async fault=>{
+it.each(sourceModes.flatMap(mode=>["schema","context"].map(fault=>({mode,fault}))))("$mode refuses actual $fault drift before physical HTTP",async({mode,fault})=>{
  const s=setup();let calls=0;const history=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
  const realSchema=googleLiteEuContextWireSchemaV3,realRequest=serializeContextRequest;
  const mock=fault==="schema"?vi.spyOn(wireModule,"googleLiteEuContextWireSchemaV3").mockImplementation((cap,input)=>{const result=realSchema(cap,input);if(input)result.schema.$defs!.__sources={type:"string",enum:["PRIVATE_SOURCE_SECRET"]};return result}):vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const result=realRequest(input);const body=JSON.parse(result.messages[1].content);body.reference.instant="2026-10-05T01:00:01.000Z";result.messages[1].content=JSON.stringify(body);return result});
- try{const result=await runDebugLoopExecution(s.load(),candidate,"SOURCE_STRING_BASELINE",async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100});
+ try{const result=await runDebugLoopExecution(s.load(),candidate,mode as never,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100});
  expect(result).toMatchObject({providerHttpAttempts:0,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(0);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(history);expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_SOURCE_SECRET");
  }finally{mock.mockRestore();s.cleanup()}
 });
