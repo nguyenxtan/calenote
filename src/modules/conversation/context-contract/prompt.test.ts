@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { ContextInputSchema } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
@@ -276,4 +277,11 @@ it("ordinary arrays and singleton roots share one non-restarting rank space",()=
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");
+});
+it("uncertainty candidates distinguish absence from typed grounded MISSING", () => {
+ expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("uncertainties ")).join("\n")).digest("hex")).toBe("cbc3478640088ff1b5915ba560e726d6effb7df2b90dd62ecb04681994d98d15");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("[] if none; nonnull");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("even MISSING");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent carriers:null; inner null legal");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Unknown required:null,targeted uncertainty");
 });

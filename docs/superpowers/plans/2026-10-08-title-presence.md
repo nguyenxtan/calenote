@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire75 candidate representation execution
+
+BASEba57e6538258875f3460b8fddd9d85ee2f57f154; TOP wire75 spec, existing TypeScript prompt/canonical/actual-service tests and continuous USD5 scope.
+
+- [ ] TDD RED prompt instruction distinguishes no-candidate empty alternatives from null absent carriers, preserves grounded typed MISSING candidates; every other paragraph byte-identical. Own prompt.ts/.test.ts plus necessary current protocol/runner/fit prompt pins. Compact only same paragraph preserving every old normative obligation; no fixture text/expected answer changes or new transport.
+- [ ] Independent actual-boundary witnesses: empty MISSING accepted; grounded typed MISSING canonical-valid; null clock candidate still rejects/zero mutation; other reason typed candidates and nullable inner query/date operands retain behavior. Canonical/evidence/merge/oracle unchanged. Historical pure inverses retain exact immutable hashes/live guards. Focused/type/lint/diff and ENTIRE67/all326 strict12000/1536, frozen dependency six if affected. No implementer full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0, frozen controller full then selective local commit/trusted preflight/Fresh Formal within derived conservative USD5. Firstfail settle/terminal then scopedrepair, no blind unchanged rerun or stop at local PASS. No Full/push/merge/deploy/remote migration.
+
 ### Wire74 bound clock notes execution
 
 BASE06f0a2ebde0427be6b310fabeb951518972a69b7; TOP wire74 spec, existing TypeScript guards/service/schema and continuous USD5 authority.
