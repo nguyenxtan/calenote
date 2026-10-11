@@ -17,6 +17,19 @@ export function isBoundExactReminderClockMissingExcluded(input: ContextInput): b
     && input.pendingQuestion.reason === "MISSING"
     && isBoundReminderClockAnswer(input);
 }
+/** Exact current clock plus absence of competing retained/source candidates.
+ * Existing whole grammar/history proof is mandatory before domain absence. */
+export function isBoundSourceUniqueReminderClock(input: ContextInput): boolean {
+  if(!isBoundExactReminderClockMissingExcluded(input)||!isBoundRetainedSeriesNotesFree(input))return false;
+  for(const field of CLOCK_PROPOSAL_FIELDS){
+    const slot=input.activeRequest?.slots[field];
+    if(!slot||slot.state!=="MISSING"||slot.value!==null||slot.fact!==null||input.facts.some(fact=>fact.field===field))return false;
+  }
+  const referenceNow=Date.parse(input.reference.instant);
+  for(const turn of input.turns.slice(0,input.currentTurn))if(turn.role==="USER"&&extractTemporalEvidence({text:turn.text,referenceNow}).time.state!=="MISSING")return false;
+  const domain=deriveGenerationFieldCapability(input).allowedClockFields;
+  return domain.length===1&&domain[0]==="reminderTime";
+}
 
 /** Whole scheduling-only source proof precedes candidate-domain absence.
  * Projected slots expose state/value/fact, not retained evidence arrays. */

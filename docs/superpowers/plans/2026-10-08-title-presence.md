@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire80 source-unique clock execution
+
+BASE0272e200980fdb84143799682e286ee1e52970ab; TOP wire80 spec, continuous conservative USD5 scope.
+
+- [ ] Genuine RED source-matched producer schema admits source-unique reminderTime uncertainty despite exact clock, controlled service clarifies. Own narrow field-capability Boolean/tests, provider-wire finite field-domain pruning/tests, current wire identity and necessary request/historical test dependencies. Reuse existing whole source/history predicates; no serialized capability/parser/prompt/base/rank/backend semantic change.
+- [ ] GREEN exclude code6/all4reasons only under complete sufficient conjunction; full16x4 actual schema witnesses, clock forms/state/history/source/FACT/capability/ambiguity negatives, null/allops unchanged, legitimate typed candidates outside subset retained, coherent service and unchanged direct bypass behavior/zero mutations. No output rewrite/value fill/carrier forcing or weakened assertions. Preserve historical exact hashes/closed gates.
+- [ ] Focused/core/type/lint/diff, ENTIRE67/all326 strict12000/1536/topology, expected six once, C0/I0 then frozen controller full/local commit/trusted preflight/FreshFormal. No implementer full/provider/key/accounting/commit/children. Continuous scoped repair until FormalPASS or genuine gate; no unchanged blindretry, Full/push/merge/deploy/remote migration.
+
 ### Wire79 bound exact-clock execution
 
 BASE6ad518bec334cc3b4cc6caf9d1b3f07680e81fbc; TOP wire79 spec and continuous conservative USD5 scope.

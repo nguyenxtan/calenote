@@ -19,12 +19,44 @@ function noClockCandidateInput(){
 }
 it("wire79 bound exact clock excludes only its contradictory MISSING language without requiring a carrier",()=>{
  const context=noClockCandidateInput();context.turns[2].text="12h trưa.";
+ context.turns[0].text+=" Ghi chú mang giấy tờ."; // Outside source-unique wire80 subset.
  const check=validator(context),wire=encodeFixtureV3(ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[{kind:"USER_QUOTE",turn:2,quote:"12h trưa.",occurrence:1}]},changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),context);
  expect(check.safeParse(wire).success).toBe(true);
  if(!wire||typeof wire!=="object"||Array.isArray(wire))throw Error("authored wire object required");
  for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){
   expect(check.safeParse({...wire,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(!(fieldCode===6&&reason==="MISSING"));
  }
+});
+it.each(["8h.","12h trưa.","20:30"])("wire80 source-unique clock excludes only code6 across all reasons: %s",text=>{
+ const context=noClockCandidateInput();context.turns[2].text=text;
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[{kind:"USER_QUOTE",turn:2,quote:text,occurrence:1}]},changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeFixtureV3(canonical,context);if(!wire||typeof wire!=="object"||Array.isArray(wire))throw Error("wire object required");
+ const check=validator(context);expect(check.safeParse(wire).success).toBe(true);
+ for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){expect(check.safeParse({...wire,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(fieldCode!==6);}
+});
+it("wire80 competing retained and source candidates preserve typed uncertainty languages",()=>{
+ const baseline=noClockCandidateInput();baseline.turns[2].text="12h trưa.";
+ expect(capabilityModule.isBoundSourceUniqueReminderClock(baseline)).toBe(true);
+ const mutations:((context:ContextInput)=>void)[]=[
+  ...["eventTime","reminderTime"].map(field=>(context:ContextInput)=>{context.activeRequest!.slots[field as "eventTime"|"reminderTime"]={state:"PROPOSED",value:{hour:8,minute:0,qualifier:"H24"},fact:null};}),
+  context=>{context.turns[0].text+=" lúc 8h";},context=>{context.turns[0].text+=" lúc sáng";},
+  context=>{context.turns[0].text+=" Ghi chú mang giấy tờ.";},context=>{context.turns[0].text="Nhắc gọi mẹ.";},
+  context=>{context.turns[0].text+=" lúc trưa";},context=>{context.turns[0].text+=" lúc 8h hoặc 9h";},
+  context=>{context.activeRequest!.slots.frequency.state="CONFLICT";},
+  context=>{context.activeRequest!.slots.occurrenceCount.value=31;},context=>{context.activeRequest!.slots.eventDate={state:"MISSING",value:null,fact:null};},
+  context=>{context.activeRequest!.slots.notes={state:"PROPOSED",value:"meaningful",fact:null};},
+  context=>{context.capabilities.supported=[];},
+  ...["eventTime","reminderTime"].map(field=>(context:ContextInput)=>{context.facts=[{alias:"f1",scope:"REMINDER",field:field as "eventTime"|"reminderTime",value:{hour:8,minute:0,qualifier:"H24"},provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:context.reference.instant,dependencies:[]}];}),
+  context=>{context.turns.splice(2,0,{role:"USER",text:"Nhắc trước 2 ngày lúc 8h."},{role:"ASSISTANT",text:"time?"});context.currentTurn=4;},
+  context=>{context.ambiguities=[{field:"reminderTime",reason:"AMBIGUOUS",alternatives:[]}];},
+ ];
+ for(const mutate of mutations){
+  const context=structuredClone(baseline);mutate(context);expect(capabilityModule.isBoundSourceUniqueReminderClock(context)).toBe(false);
+  const evidence=[{kind:"USER_QUOTE",turn:context.currentTurn,quote:"12h trưa.",occurrence:1}];
+  const value=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[{field:"reminderTime",reason:"AMBIGUOUS",alternatives:[{value:{hour:12,minute:0,qualifier:"H24"},evidence}]}],conversationDirective:null,replyProposal:null});
+  expect(validator(context).safeParse(encodeFixtureV3(value,context)).success).toBe(true);
+ }
+ for(const field of ["eventTime","reminderTime"] as const)for(const corrupt of ["value","fact"] as const){const context=structuredClone(baseline);if(corrupt==="value")context.activeRequest!.slots[field].value={hour:8,minute:0,qualifier:"H24"};else context.activeRequest!.slots[field].fact="f1";expect(capabilityModule.isBoundSourceUniqueReminderClock(context)).toBe(false);}
 });
 it("wire79 exclusion declines every unproven binding and leaves operations available",()=>{
  const baseline=noClockCandidateInput();baseline.turns[2].text="12h trưa.";
@@ -862,6 +894,20 @@ it.each(["SET", "REPLACE", "CLEAR"] as const)("independent schema consumer rejec
   const missing = encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [], query: null,
     uncertainties: [{ field: "occurrenceCount", reason: "MISSING", alternatives: [] }], conversationDirective: { kind: "ASK_FOR_FIELD", field: "occurrenceCount" }, replyProposal: null }));
   expect(check.safeParse(missing).success).toBe(true);
+});
+it("wire80 typed ambiguous direct bypass still follows unchanged canonical/evidence/merge clarification",async()=>{
+ const h=await harness([proposal({title:"đi thi",eventDate:date(11,10,null),frequency:"DAILY",occurrenceCount:2}),proposal({eventRelation:"BEFORE_EVENT"},"CURRENT"),context=>{
+  const evidence=[{kind:"USER_QUOTE",turn:context.currentTurn,quote:context.turns[context.currentTurn].text,occurrence:1}],clock={hour:12,minute:0,qualifier:"H24"};
+  return {...proposal({reminderTime:clock},"CURRENT")(context) as Record<string,unknown>,uncertainties:[{field:"reminderTime",reason:"AMBIGUOUS",alternatives:[{value:clock,evidence}]}]};
+ }]);
+ let listReads=0;const list=h.deps.list;h.deps.list=input=>{listReads++;return list(input);};
+ await h.turn(0,"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");await h.turn(1,"Nhắc trước 2 ngày.");await h.turn(2,"12h trưa.");
+ expect(h.events.some(event=>event.event==="POST_CANONICAL_STAGE"&&event.diagnostic.stage==="MERGE"&&event.diagnostic.result==="REJECTED")).toBe(false);
+ expect((await h.read(3))?.slots.reminderTime.value).toEqual({hour:12,minute:0,qualifier:"H24"});
+ expect(h.events.some(event=>event.event==="POST_CANONICAL_STAGE"&&event.diagnostic.stage==="TRANSITION"&&event.diagnostic.result==="CLARIFY")).toBe(true);
+ expect(listReads).toBe(0);
+ expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first<number>("n")).toBe(0);
+ expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminder_series").first<number>("n")).toBe(0);
 });
 it("wire79 actual service accepts coherent clock and still rejects contradictory bypass atomically",async()=>{
  for(const contradictory of [false,true]){
