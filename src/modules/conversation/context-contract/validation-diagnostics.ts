@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
 import { FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
-import { CHANGE_ORDER_FIELDS_V3 } from "./output-authority";
+import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "./output-authority";
 // Decoder traversal: ordinary entries first, then these fixed singleton roots.
 const rankCarrierRoots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
 interface RankLocation {root:typeof rankCarrierRoots[number]|"changes";index?:number}
@@ -222,19 +222,17 @@ function rankControlStructure(raw:unknown,path:PropertyKey[]):RankControlDiagnos
     for(const root of rankCarrierRoots){const wrapper=data(raw,root);if(wrapper!==null){if(wrapper&&typeof wrapper==="object"&&!Array.isArray(wrapper))result.carrierCount++;add(wrapper,{root});}}
     const selected=entries.findIndex(entry=>ordinary?entry.location.root==="changes"&&entry.location.index===path[1]:entry.location.root===path[0]);
     if(selected<0||result.truncated)throw Error();
-    const rank=entries[selected].rank;
-    if(typeof rank==="number"&&Number.isSafeInteger(rank)&&rank>=-1000000&&rank<=1000000)result.actualRank=rank;
+    const rank=decodeAuthoredChangeRank(entries[selected].rank);
+    if(rank!==undefined)result.actualRank=rank;
     // Prior rank failures would have stopped the decoder before this path.
     const prior=entries.slice(0,selected);
     const seen=new Set<number>();let previousOrdinary=-1;
-    for(const entry of prior){if(typeof entry.rank!=="number"||!Number.isSafeInteger(entry.rank)||entry.rank<0||entry.rank>=bound||seen.has(entry.rank))throw Error();if(entry.location.root==="changes"){if(entry.rank<=previousOrdinary)throw Error();previousOrdinary=entry.rank;}seen.add(entry.rank);}
-    if(typeof rank!=="number"||!Number.isSafeInteger(rank))result.reason="NON_INTEGER";
-    else if(rank<0)result.reason="NEGATIVE";
-    else if(rank>=bound)result.reason="OUT_OF_RANGE";
+    for(const entry of prior){const ordinal=decodeAuthoredChangeRank(entry.rank);if(ordinal===undefined||seen.has(ordinal))throw Error();if(entry.location.root==="changes"){if(ordinal<=previousOrdinary)throw Error();previousOrdinary=ordinal;}seen.add(ordinal);}
+    if(rank===undefined)result.reason="NON_INTEGER";
     else {
-      result.collisionLocations=prior.filter(entry=>entry.rank===rank).map(entry=>entry.location);
+      result.collisionLocations=prior.filter(entry=>decodeAuthoredChangeRank(entry.rank)===rank).map(entry=>entry.location);
       if(result.collisionLocations.length)result.reason="COLLISION";
-      else if(ordinary&&typeof path[1]==="number"&&path[1]>0){const previous=entries[selected-1].rank as number;result.previousOrdinaryRank=previous;if(rank<=previous)result.reason="NON_INCREASING";}
+      else if(ordinary&&typeof path[1]==="number"&&path[1]>0){const previous=decodeAuthoredChangeRank(entries[selected-1].rank)!;result.previousOrdinaryRank=previous;if(rank<=previous)result.reason="NON_INCREASING";}
     }
     if(result.reason==="UNAVAILABLE")result.unavailable=true;
   }catch{result.reason="UNAVAILABLE";result.unavailable=true;result.collisionLocations=[];delete result.previousOrdinaryRank;}

@@ -267,19 +267,20 @@ it("rank transport keeps single active membership and payload ownership",()=>{
 });
 it("relative ranks preserve authored order without contiguous chosen-N indexes",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
- for(const text of ["CURRENT PROPOSAL model-authored","integer rank0..12","unique across carriers/ordinary","gaps/sole10 legal","Never field codes/N-indexes/prior turn/state/root/source addresses","Ordinary ranks strictly increase in array order","Increasing ranks before evidence; no field sort/ties/gap fills/defaults"])expect(order).toContain(text);
+ for(const text of ["CURRENT PROPOSAL authored","rank STRING \"0\"..\"12\" exact/no coercion","unique across carriers/ordinary","gaps/sole\"10\" legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
+ expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("b280d4e4d35c54dd1575003021000cd7d1acd471da19bf550efb159b01f8482c");
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });
 it("ordinary arrays and singleton roots share one non-restarting rank space",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
- for(const text of ["ONE global space","NEVER restart per array/root","ordinary[1,2]+singleton0 valid","ordinary[0,1]+singleton0 collides"])expect(order).toContain(text);
+ for(const text of ["ONE global space","NEVER restart/array/root","ordinary[\"1\",\"2\"]+singleton\"0\" valid","[\"0\",\"1\"]+singleton\"0\" collides"])expect(order).toContain(text);
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");
 });
 it("uncertainty candidates distinguish absence from typed grounded MISSING", () => {
- expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("uncertainties ")).join("\n")).digest("hex")).toBe("cbc3478640088ff1b5915ba560e726d6effb7df2b90dd62ecb04681994d98d15");
+ expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("uncertainties ")&&!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("08902a34a0d1539f5142766d20301065bcf465eb76331e443639b608d5c8e78c");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("[] if none; nonnull");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("even MISSING");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent carriers:null; inner null legal");

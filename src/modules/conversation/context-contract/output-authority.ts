@@ -61,6 +61,12 @@ add(["transport.inactivePadding"], padding);
 add(["fieldCapability.eventDateYearNullRequired","fieldCapability.reminderDateProposalAllowed"], owned);
 add(["eventDateChange.change.value{kind=CIVIL_DATE}"]);
 export const CHANGE_ORDER_FIELDS_V3 = Object.freeze(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const);
+/** Exact authored ordinal spelling; never coerce a model control. */
+export function decodeAuthoredChangeRank(value: unknown): number | undefined {
+  if (typeof value !== "string" || value.length < 1 || value.length > 2) return undefined;
+  const ordinal = CHANGE_ORDER_FIELDS_V3.findIndex((_, index) => String(index) === value);
+  return ordinal < 0 ? undefined : ordinal;
+}
 const fields = CHANGE_ORDER_FIELDS_V3;
 for (const field of fields) for (const operation of ["SET", "REPLACE", "CLEAR"] as const satisfies readonly FieldOperationV3[]) add([`changes[]{field=${field};operation=${operation}}`]);
 for (const field of [...fields, "intent", "queryRange", "operation"] as const) add([`uncertainties[]{field=${field}}`]);

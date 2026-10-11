@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire78 decimal rank execution
+
+BASE78904663ffafc434c0d94e87a60e6fe53ce6d48f; TOP wire78 spec, existing provider-state debugging/ordering transport scope and conservative USD5 authority.
+
+- [ ] Genuine RED independent decimal rank schema/codec witnesses before production. Own existing output-authority bounded rank converter/tests (or same existing transport module), context-provider-wire schema/encode/decode/tests, safe validation-diagnostics/tests, protocol/current runner/fit identities and affected fixture/historical/service parity. ONLY ordering/type-dependent prompt paragraphs may change; full old ordering/source obligations and all other paragraph bytes retained. Cap16/canonical/evidence/merge/oracle unchanged.
+- [ ] GREEN exact13 strings and independent mixed rotations/allfields/operations/CURRENT/NEW, gaps/sole10; collisions/all ordinary-carrier pairs/non-increasing order hard-refuse. Wrong type/number/NULL/sign/zero padding/whitespace/exponent/fraction/Unicode/oversize/accessor/proxy and sensitive rank diagnostics inert/no leak. Exact payload/evidence/canonical order parity and actual service zero-mutation rejection. Historical pure rank scalar/prose inverse before original hashes, closed live drift gates unchanged; no legacy numeric fallback.
+- [ ] Focused affected/security/type/lint/diff and ENTIRE67/all326 strict12000/1536, source-bound generic/request-local topology comparison, frozen six once. Implementer no full/provider/key/accounting/commit/children. Independent C0/I0 then frozen controller full/local commit/trusted preflight/Fresh Formal within freshly derived budget. No separate paid probe/private compiler claim/unchangedblindrerun; no Full/push/merge/deploy/remote migration.
+
 ### Wire77 empty candidate capability execution
 
 BASEe986bb465fd9bf7536b70bbf88f78a21acad2e9d; TOP wire77 spec, continuous conservative USD5 scope.

@@ -51,6 +51,7 @@ function restorePublicEvidenceNames(schema:ReturnType<typeof googleLiteEuContext
  const names:Record<string,string>={s:"__sources",c:"__ec",e:"__e"};if(schema.$defs){schema.$defs=Object.fromEntries(Object.entries(schema.$defs).map(([key,value])=>[names[key]??key,value]));const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;for(const [before,after]of Object.entries(names))if(node.$ref===`#/$defs/${before}`)node.$ref=`#/$defs/${after}`;Object.values(node).forEach(walk);};walk(schema);}
 }
 function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
+ expect(schema.$defs!.r).toEqual({type:"string"});schema.$defs!.r={type:"integer",minimum:0,maximum:12}; // Pure immutable historical scalar inverse, never dispatch.
  // Public historical inverse only: wire73 bound and internal source name.
  const boundedOrdinary=schema.properties!.changes;if(typeof boundedOrdinary==="boolean")throw Error("HISTORICAL_RANK_SHAPE");if(boundedOrdinary.maxItems!==0)delete boundedOrdinary.maxItems;
  restorePublicEvidenceNames(schema);
@@ -515,7 +516,7 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
    // Separate current-wire witnesses preserve the evidence-key and LIST
    // ownership stages. They are NOT labelled historical-schema conforming.
-   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:0,change:structuredClone(carrier.change)}};
+   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:"0",change:structuredClone(carrier.change)}};
    const keyDiagnostics:unknown[]=[];
    expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
    expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}]);

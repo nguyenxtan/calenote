@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { CHANGE_ORDER_FIELDS_V3 } from "../../../conversation/context-contract/output-authority";
+import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
@@ -538,7 +538,7 @@ function operationSchema(root:Schema):Schema{
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  result.$defs!.r={type:"integer",minimum:0,maximum:CHANGE_ORDER_FIELDS_V3.length-1};
+  result.$defs!.r={type:"string"};
   for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
@@ -567,8 +567,8 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   const wrapper=(value:unknown,path:PropertyKey[])=>{
     if(!value||typeof value!=="object"||Array.isArray(value))throw new WireShapeFailure(path,"object");
     requireWireKeys(value as Record<string,unknown>,["rank","change"],["rank","change"],path);
-    const rank=own(value,"rank",[...path,"rank"]),change=own(value,"change",[...path,"change"]);
-    if(typeof rank!=="number"||!Number.isSafeInteger(rank)||rank<0||rank>=CHANGE_ORDER_FIELDS_V3.length||ranks.has(rank))throw new WireShapeFailure([...path,"rank"],"CHANGE_RANK");
+    const rank=decodeAuthoredChangeRank(own(value,"rank",[...path,"rank"])),change=own(value,"change",[...path,"change"]);
+    if(rank===undefined||ranks.has(rank))throw new WireShapeFailure([...path,"rank"],"CHANGE_RANK");
     ranks.add(rank);return {rank,change};
   };
   const sourceChanges=own(raw,"changes",["changes"]);
@@ -594,7 +594,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     if(mode==="encode"){
       if(authored.length>1)throw new WireShapeFailure([definition.root],duplicate);
       const item=authored[0];
-      result[definition.root]=item?{rank:item.index,change:item.change}:null;
+      result[definition.root]=item?{rank:String(item.index),change:item.change}:null;
       continue;
     }
     if(!Object.hasOwn(raw,definition.root))throw new WireShapeFailure([definition.root],"REQUIRED_PROPERTY");
@@ -633,7 +633,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     emitted.set(definition.field,change);
     ranked.push(entry);
   }
-  if(mode==="encode")result.changes=ordinaryChanges.flatMap((change,rank)=>definitions.some(definition=>definition.field===fieldOf(change))?[]:[{rank,change}]);
+  if(mode==="encode")result.changes=ordinaryChanges.flatMap((change,rank)=>definitions.some(definition=>definition.field===fieldOf(change))?[]:[{rank:String(rank),change}]);
   else {const ordinaryFields=ordinaryChanges.map(change=>fieldOf(change));if(new Set(ordinaryFields).size!==ordinaryFields.length)throw new WireShapeFailure(["changes"],"UNIQUE_FIELD_OWNER");result.changes=ranked.sort((left,right)=>left.rank-right.rank).map(entry=>entry.change);}
   return result;
 }

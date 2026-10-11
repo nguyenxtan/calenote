@@ -40,7 +40,7 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(metrics).toMatchObject({nullableUnions:21,unions:35,branches:77,references:36});
  // Rank shares one exact bounded scalar across ten singleton wrappers and
  // ordinary entries; characterize representation cost, not admission.
- expect(schema.$defs?.r).toEqual({type:"integer",minimum:0,maximum:12});
+ expect(schema.$defs?.r).toEqual({type:"string"});
  type RankNode={type?:string;anyOf?:RankNode[];properties?:Record<string,RankNode>;items?:RankNode};
  const ranked=schema as unknown as RankNode;
  const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"];

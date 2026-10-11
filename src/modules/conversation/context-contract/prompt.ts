@@ -9,7 +9,7 @@ Title REPLACE/CLEAR require titleCorrectionAllowed=true (occupied CURRENT title)
 
 Singletons: ten schema roots required/nullable unless presence requires nonnull; exclusive SET/REPLACE/CLEAR, never ordinary. Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence. Absent=null/no rank/change; CLEAR ranked despite value=null. One operation/field; ambiguity only uncertainties; excluded reminderTime=null. Order/ownership conflicts refuse/no repair.
 
-Order: CURRENT PROPOSAL model-authored integer rank0..12: ONE global space, NEVER restart per array/root; unique across carriers/ordinary, gaps/sole10 legal. ordinary[1,2]+singleton0 valid; ordinary[0,1]+singleton0 collides. Never field codes/N-indexes/prior turn/state/root/source addresses. Ordinary ranks strictly increase in array order. Increasing ranks before evidence; no field sort/ties/gap fills/defaults.
+Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; unique across carriers/ordinary, gaps/sole"10" legal. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.
 
 Clock source check: changes/alternatives need exact selected USER clock or eligible exact retained clock. Clockless continuation answers no time question. ASSISTANT/prompt/default/current-time/date/count/offset is not clock evidence. Absent stays absent; guide missing fields, never invent preview operands.
 
