@@ -22,6 +22,7 @@ import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/m
 import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import {deriveGenerationFieldCapability} from "../../src/modules/conversation/context-contract/field-capability";
+import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {isInitialIsolatedExamNotesFree} from "../../src/modules/conversation/context-contract/semantic-completeness";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
 it.each(["R02_TURN0_INDEX_POSITION_PROMPT","R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS","R02_TURN0_UNCERTAINTY_WIRE_PROMPT"] as const)("wire64 refuses historical exact request probe %s before physical HTTP",async mode=>{
@@ -298,7 +299,13 @@ async function r02Turn1Schema(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1});
  let schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]|undefined;
  let callbackFailure:unknown;
- const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{try{schema=googleLiteEuContextWireSchemaV3({...deriveGenerationFieldCapability(input),notesProposalAllowed:!isInitialIsolatedExamNotesFree(input)},input).schema;restorePublicCatalogueWrappers(schema);
+ const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{try{
+  // Pure immutable public producer specimen only: remove wire77 specialization
+  // before reference pooling/pruning. Never used by transport or live dispatch.
+  expect(capabilityModule.isBoundMissingReminderClockWithoutCandidates(input)).toBe(true);
+  const historicalOnly=vi.spyOn(capabilityModule,"isBoundMissingReminderClockWithoutCandidates").mockReturnValue(false);
+  try{schema=googleLiteEuContextWireSchemaV3({...deriveGenerationFieldCapability(input),notesProposalAllowed:!isInitialIsolatedExamNotesFree(input)},input).schema;}finally{historicalOnly.mockRestore();}
+  restorePublicCatalogueWrappers(schema);
   // Public historical structural specimen: restore original source literals and
   // alternative description, then assert immutable635. Never production dispatch.
   const book=primaryEvidenceSourceCodebook(input);for(const key of ["__sources","__current"]){const definition=schema.$defs![key];if(typeof definition==="boolean"||!definition.enum)throw Error("HISTORICAL_SCHEMA_DOMAIN");definition.enum=definition.enum.map(code=>{const pointer=book.decode(code);if(pointer===undefined)throw Error("HISTORICAL_SOURCE_CODE");return pointer;});}

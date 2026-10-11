@@ -13,8 +13,18 @@ import * as completenessModule from "./semantic-completeness";
 import {createContextContractProbe} from "../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../tools/benchmark/context-contract-fixtures";
 import regressions from "./benchmark/regressions.json";
-import {deriveGenerationFieldCapability} from "./field-capability";
+import {deriveGenerationFieldCapability,isBoundMissingReminderClockWithoutCandidates} from "./field-capability";
 import {googleLiteEuContextWireSchemaV3} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+it.each(["empty","null"])("wire77 projected no-clock continuation remains atomic: %s",async mode=>{
+ const script=regressions.cases.find(c=>c.id==="R02")!;
+ const probe=await createContextContractProbe({sourceSha:"e986bb465fd9bf7536b70bbf88f78a21acad2e9d",referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{
+  const proposed=frozenContextProposal(input,"R02",index-1) as {uncertainties:unknown[]};
+  if(index===1)proposed.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
+  if(index===2){expect(isBoundMissingReminderClockWithoutCandidates(input)).toBe(true);proposed.uncertainties=[{field:"reminderTime",reason:"MISSING",alternatives:mode==="empty"?[]:[{value:null,evidence:[{kind:"USER_QUOTE",turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}]}]}];}
+  return proposed;
+ });
+ try{await probe.turn(script.turns[0].text,script.turns[0].receipt);const result=await probe.turn(script.turns[1].text,script.turns[1].receipt);expect(result.mutations).toBe(0);const rejected=probe.events.some(event=>event.event==="POST_CANONICAL_STAGE"&&event.diagnostic.result==="REJECTED");expect(rejected).toBe(mode==="null");if(mode==="empty")expect(result.pendingField).toBe("reminderTime");}finally{probe.dispose();}
+});
 it.each(["query-only","bound-clock"])("wire76 actual projected clock excludes notes atomically: %s",async marker=>{
  const script=regressions.cases.find(c=>c.id==="R02")!;
  for(const mode of ["correct","SET","REPLACE","CLEAR","alternative","missing"]){

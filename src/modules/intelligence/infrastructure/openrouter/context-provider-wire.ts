@@ -8,7 +8,7 @@ import {issueListTransport, type ContextGatewayInterpretation, type DecodedListC
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
 import { CHANGE_ORDER_FIELDS_V3 } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
 // Immutable V1 transport protocol, independent of canonical declaration order.
@@ -786,6 +786,27 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       // Fold only equal uncertainty shells differing in one finite control.
       // Distinct field/reason domains (including required clocks) stay paired.
       schema.properties!.uncertainties.items=coalesceBranches(schema.properties!.uncertainties.items!);
+    }
+    if(isBoundMissingReminderClockWithoutCandidates(primaryEvidenceInput)){
+      const reminderClockCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime;
+      const items=deref(schema.properties!.uncertainties.items!,schema);
+      const branches=(items.anyOf??[items]).flatMap(raw=>{
+        const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema),reasons=deref(item.properties!.reason,schema);
+        const alternatives=deref(item.properties!.alternatives,schema);
+        const fieldDomain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        requireShape(fieldDomain&&reasons.enum&&alternatives.type==="array");
+        const result:Schema[]=[];
+        const otherFields=fieldDomain.filter(code=>code!==reminderClockCode);
+        if(otherFields.length){const other=structuredClone(item);other.properties!.fieldCode={...fields,enum:otherFields};result.push(other);}
+        if(fieldDomain.includes(reminderClockCode)){
+          if(reasons.enum.includes("MISSING")){const missing=structuredClone(item);missing.properties!.fieldCode={...fields,enum:[reminderClockCode]};missing.properties!.reason={...reasons,enum:["MISSING"]};missing.properties!.alternatives={...alternatives,maxItems:0};result.push(missing);}
+          const otherReasons=reasons.enum.filter(reason=>reason!=="MISSING");
+          if(otherReasons.length){const other=structuredClone(item);other.properties!.fieldCode={...fields,enum:[reminderClockCode]};other.properties!.reason={...reasons,enum:otherReasons};result.push(other);}
+        }
+        return result;
+      });
+      requireShape(branches.length);
+      schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
     const clockOnlyMutations=isBoundReminderClockAnswer(primaryEvidenceInput);
     const bind=(node:Schema):Schema=>{

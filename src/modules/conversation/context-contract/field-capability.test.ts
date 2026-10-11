@@ -11,6 +11,73 @@ import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
+import {encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
+function noClockCandidateInput(){
+ const context=input("Nhắc trước 2 ngày.");context.turns=[{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"Nhắc trước 2 ngày."}];context.currentTurn=2;
+ const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={scope:"REMINDER",field:"reminderTime",reason:"MISSING",text:"time?",decisionKind:null};return context;
+}
+it("wire77 no-clock proof declines candidate-bearing or unproven contexts",()=>{
+ const check=capabilityModule.isBoundMissingReminderClockWithoutCandidates;
+ expect(check(noClockCandidateInput())).toBe(true);
+ const mutations:((context:ContextInput)=>void)[]=[
+  context=>{context.turns[0].text+=" lúc 8h";},
+  context=>{context.turns[0].text+=" lúc sáng";},
+  context=>{context.turns[0].text+=" lúc trưa";},
+  context=>{context.turns[0].text+=" Mang giấy tờ.";},
+  context=>{context.turns[2].text+=" lúc 8h";},
+  context=>{context.turns[2].text="12h trưa.";},
+  context=>{context.pendingQuestion=null;},
+  context=>{context.pendingQuestion!.reason="AMBIGUOUS";},
+  context=>{context.pendingQuestion={scope:"REMINDER",field:"eventTime",reason:"MISSING",text:"?",decisionKind:null};},
+  context=>{context.activeRequest!.slots.reminderTime={state:"PROPOSED",value:{hour:8,minute:0,qualifier:"H24"},fact:null};},
+  context=>{context.activeRequest!.slots.eventTime={state:"PROPOSED",value:{hour:8,minute:0,qualifier:"H24"},fact:null};},
+  context=>{context.ambiguities=[{field:"reminderTime",reason:"MISSING",alternatives:[]}];},
+  context=>{context.ambiguities=[{field:"reminderTime",reason:"MISSING",alternatives:[{value:{hour:8,minute:0,qualifier:"H24"},evidence:[{kind:"USER_QUOTE",turn:0,quote:"8h",occurrence:1}]}]}];},
+  context=>{context.activeRequest!.slots.occurrenceCount.value=31;},
+  context=>{context.activeRequest!.slots.frequency.value="WEEKLY";},
+  context=>{context.activeRequest=null;},
+ ];
+ for(const mutate of mutations){const context=noClockCandidateInput();mutate(context);expect(check(context)).toBe(false);}
+ const marker=noClockCandidateInput();marker.ambiguities=[{field:"queryRange",reason:"MISSING",alternatives:[]}];expect(check(marker)).toBe(true);
+});
+it("wire77 no-clock source subset permits only empty reminderTime MISSING candidates",()=>{
+ const context=noClockCandidateInput(),evidence=[{kind:"USER_QUOTE",turn:2,quote:context.turns[2].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as {uncertainties:unknown[]},check=validator(context),candidate=JSON.stringify({value:null,evidence:{primaryEvidence:"U2",additionalEvidenceJson:"[]"}});
+ const uncertainty=serializeContextRequest(context).response_format.json_schema.schema.properties!.uncertainties;
+ if(typeof uncertainty==="boolean")throw Error("EXPECTED_UNCERTAINTY_SCHEMA");
+ const item=uncertainty.items!;
+ if(typeof item==="boolean"||Array.isArray(item))throw Error("EXPECTED_ITEM_SCHEMA");
+ expect(item.anyOf).toHaveLength(3); // Disjoint item branches, no root Cartesian product.
+ expect(check.safeParse(wire).success).toBe(true);
+ wire.uncertainties=[{fieldCode:6,reason:"MISSING",alternatives:[]}];expect(check.safeParse(wire).success).toBe(true);
+ wire.uncertainties=[{fieldCode:6,reason:"MISSING",alternatives:[candidate]}];expect(check.safeParse(wire).success).toBe(false);
+ for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){wire.uncertainties=[{fieldCode,reason,alternatives:[candidate]}];expect(check.safeParse(wire).success,`${fieldCode}/${reason}`).toBe(!(fieldCode===6&&reason==="MISSING"));}
+ context.turns[0].text+=" lúc 8h";expect(validator(context).safeParse({...wire,uncertainties:[{fieldCode:6,reason:"MISSING",alternatives:[candidate]}]}).success).toBe(true);
+});
+it.each(["USER","SEGMENT","FACT"])("wire77 grounded typed MISSING candidate remains represented outside subset: %s",source=>{
+ const context=noClockCandidateInput(),value={hour:8,minute:0,qualifier:"H24" as const};
+ let evidence:unknown[];
+ if(source==="FACT"){
+  context.facts=[{alias:"f1",scope:"REMINDER",field:"reminderTime",value,provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:"2026-10-08T03:00:00Z",dependencies:[]}];
+  context.activeRequest!.slots.reminderTime={state:"RESOLVED",value,fact:"f1"};evidence=[{kind:"CONTEXT_FACT",ref:"f1"}];
+ }else{
+  context.turns[0].text=source==="SEGMENT"?`Nhắc lúc 8h.${CONTROL_PLACEHOLDER}Ngày 11/10 đi thi.`:"Ngày 11/10 đi thi, nhắc lúc 8h.";
+  evidence=[{kind:"USER_QUOTE",turn:0,quote:"8h",occurrence:1}];
+ }
+ expect(capabilityModule.isBoundMissingReminderClockWithoutCandidates(context)).toBe(false);
+ const current=[{kind:"USER_QUOTE",turn:2,quote:context.turns[2].text,occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:current},changes:[],query:null,uncertainties:[{field:"reminderTime",reason:"MISSING",alternatives:[{value,evidence}]}],conversationDirective:null,replyProposal:null});
+ const wire=encodeFixtureV3(canonical,context);
+ expect(validator(context).safeParse(wire).success).toBe(true);
+ const decoded=decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3,undefined,undefined,context);
+ expect(decoded.status).toBe("PARSED");
+ if(decoded.status==="PARSED"){
+  expect("semantic" in decoded.value).toBe(true);
+  if(!("semantic" in decoded.value))throw Error("EXPECTED_SEMANTIC_PATCH");
+  const materializedEvidence=source==="FACT"?evidence:[{kind:"USER_QUOTE",turn:0,quote:source==="SEGMENT"?"Nhắc lúc 8h.":context.turns[0].text,occurrence:1}];
+  expect(decoded.value.semantic.uncertainties).toEqual([{field:"reminderTime",reason:"MISSING",alternatives:[{value,evidence:materializedEvidence}]}]);
+ }
+});
 it("wire74 bound clock schema admits coherent clock only and refuses every notes operation",()=>{
  const context=input("12h trưa.");context.turns=[{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"Nhắc trước 2 ngày."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"12h trưa."}];context.currentTurn=4;
  const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={scope:"REMINDER",field:"reminderTime",reason:"MISSING",text:"time?",decisionKind:null};

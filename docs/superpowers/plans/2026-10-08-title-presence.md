@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire77 empty candidate capability execution
+
+BASEe986bb465fd9bf7536b70bbf88f78a21acad2e9d; TOP wire77 spec, continuous conservative USD5 scope.
+
+- [ ] Genuine RED source-proven R02 offset request schema admits NULL JSON candidate; GREEN only code6/MISSING array empty under sufficient helper. Own field-capability.ts/.test.ts Boolean and context-provider-wire.ts/.test.ts disjoint specialization plus necessary protocol/current runner/fit pins. No serialized capability field/version bump or generic parser. Full grammar/history proof, both clock slots MISSING/null/factnull, no clock ContextFact and derived clock domain required; existing ContextInput has no evidence-array operand, so neither invent nor widen it. No prompt/codec/canonical/evidence/merge/oracle/rank changes.
+- [ ] Preserve other field/reason candidate languages and grounded typed MISSING outside subset; independent earlier USER/SEGMENT/eligible CURRENT FACT and partial/named/active clocks, unknown/multiple histories, current compound/correction/clock/new, binding/reason/state/count/capability/malformed controls. Actual empty MISSING clarification and NULL hard rejection unchanged. Focused/type/lint/diff, ENTIRE67/all326 strict12000/1536, frozen historical six once. No implementer full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0, frozen controller full, selective local commit/trusted preflight/Fresh Formal within fresh derived budget. Compiler-state risk must be measured, not presumed. Firstfail settle/terminal then scopedrepair, no unchangedblindrerun/localPASSstop. No Full/push/merge/deploy/remote migration.
+
 ### Wire76 bound marker execution
 
 BASE957ee6eeb8cf9785566f54f11a1605121933d82b; TOP wire76 spec and existing continuous conservative USD5 scope.

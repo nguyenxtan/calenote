@@ -8,6 +8,20 @@ import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
 export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
+/** Whole scheduling-only source proof precedes candidate-domain absence.
+ * Projected slots expose state/value/fact, not retained evidence arrays. */
+export function isBoundMissingReminderClockWithoutCandidates(input: ContextInput): boolean {
+  if (!isBoundRetainedSeriesNotesFree(input) || isBoundReminderClockAnswer(input)) return false;
+  const question = input.pendingQuestion;
+  if (question?.scope !== "REMINDER" || question.field !== "reminderTime" || question.reason !== "MISSING") return false;
+  for (const field of ["eventTime", "reminderTime"] as const) {
+    const slot = input.activeRequest?.slots[field];
+    if (!slot || slot.state !== "MISSING" || slot.value !== null || slot.fact !== null) return false;
+    if (input.facts.some(fact => fact.field === field)) return false;
+  }
+  return deriveGenerationFieldCapability(input).allowedClockFields.length === 0;
+}
+
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
