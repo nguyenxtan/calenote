@@ -70,7 +70,7 @@ it("first reminder targets NEW only when no retained request exists", () => {
 
 it("operation wire uses one semantic selector and never duplicates ownership tags", () => {
  expect(CONTEXT_CONTRACT_PROMPT).toContain('finite string operationCode (use JSON strings such as "3", never numbers)');
- expect(CONTEXT_CONTRACT_PROMPT).toContain("Core roots: operationCode, requestTarget, changes, changeOrder, query, uncertainties, conversationDirective, replyProposal. No intent or requestTarget/query kind. Ten singleton roots required; nullable unless request schema requires presence.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Core roots: operationCode, requestTarget, changes, query, uncertainties, conversationDirective, replyProposal. No intent or requestTarget/query kind. Ten singleton roots required; nullable unless request schema requires presence.");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("0=CREATE_REMINDER/CURRENT, 1=CREATE_REMINDER/NEW, 2=CREATE_REMINDER/UNRESOLVED, 3=LIST_REMINDERS/LIST, 4=CALENDAR_QUERY/CALENDAR_DATE, 5=CAPABILITY_QUERY/CAPABILITY, 6=HELP, 7=UNSUPPORTED, 8=AMBIGUOUS/null, 9=AMBIGUOUS/CURRENT, 10=AMBIGUOUS/NEW, 11=AMBIGUOUS/UNRESOLVED.");
 });
 
@@ -253,27 +253,21 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
   expect(CONTEXT_CONTRACT_PROMPT).not.toContain("omit frequency/count unless the USER independently supplied repeated/consecutive cadence");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Explicit one/single grounds ONCE even awaiting clock, never omitted by distance-only rule.");
 });
-it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, locationChange, reminderDateChange and reminderTimeChange are required nullable roots");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("sole SET/REPLACE/CLEAR representation, forbidden in ordinary changes");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("ordinary subsequence=changes array order");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("CLEAR object INCLUDED even value=null");
+it("rank transport keeps single active membership and payload ownership",()=>{
+ expect(CONTEXT_CONTRACT_PROMPT).not.toContain('Example: titleChange=');
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("titlePresenceRequired=true requires nonnull SET of grounded current USER subject/current USER_TURN evidence, not subject questions.");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Nonnull carrier/ordinary={rank,change}");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent=null/no rank/change; CLEAR ranked despite value=null");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("exclusive SET/REPLACE/CLEAR, never ordinary");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("ten schema roots required/nullable unless presence requires nonnull");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("One operation/field; ambiguity only uncertainties; excluded reminderTime=null");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Order/ownership conflicts refuse/no repair");
 });
-it("integer catalogue selects field identities only in this authored global proposal",()=>{
-  const positions=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
-  expect(positions).toContain("Each ACTIVE once");
-  expect(positions).toContain("CURRENT PROPOSAL integer field codes");
-  expect(positions).toContain("ACTIVE=ordinary items+nonnull carrier OBJECTS, not required root keys");
-  expect(positions).toContain("Null carriers EXCLUDED; CLEAR object INCLUDED even value=null");
-  expect(positions).toContain("0=title,1=location,2=notes,3=eventDate,4=eventTime,5=reminderDate,6=reminderTime,7=calendar,8=frequency,9=occurrenceCount,10=eventRelation,11=leadOffsetDays,12=endDate");
-  expect(positions).toContain("Codes=fields, not positions/prior turns/state/root/source addresses");
-  expect(positions).toContain("Seven active carriers=seven distinct codes");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("changeOrder required: model-authored canonical order");
-  expect(positions).toContain("ordinary/carrier mix unsorted");
-  expect(positions).toContain('[] empty; [6] sole reminderTime despite retained fields');
-  expect(positions).toContain("no omissions/phantoms");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("ordinary subsequence=changes array order");
+it("relative ranks preserve authored order without contiguous chosen-N indexes",()=>{
+ const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
+ for(const text of ["CURRENT PROPOSAL model-authored","integer rank0..12","unique across carriers/ordinary","gaps/sole10 legal","Never field codes/N-indexes/prior turn/state/root/source addresses","Ordinary ranks strictly increase in array order","Increasing ranks before evidence; no field sort/ties/gap fills/defaults"])expect(order).toContain(text);
+ expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");

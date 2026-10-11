@@ -28,7 +28,7 @@ export function projectCatalogueDiagnostic(raw:unknown):CatalogueDiagnostic|unde
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
-for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","index","change"])keys.add(key);
+for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","index","rank","change"])keys.add(key);
 for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])rootKeys.add(key);
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
@@ -244,8 +244,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
   // Canonical projection and all acceptance predicates remain unchanged.
   let structural: unknown = raw, decodedBoundary = false;
   for (const segment of path.slice(0, 8)) {
-    structural = structural && typeof structural === "object" && Object.hasOwn(structural, segment)
-      ? path[0]==="changeOrder" ? Object.getOwnPropertyDescriptor(structural,segment)?.value : (structural as Record<PropertyKey, unknown>)[segment] : undefined;
+    try{structural=structural&&typeof structural==="object"?Object.getOwnPropertyDescriptor(structural,segment)?.value:undefined;}catch{structural=undefined;}
     if ((segment === "primaryEvidence" || segment === "additionalEvidenceJson") && typeof structural === "string"
       && new TextEncoder().encode(structural).length <= 32768) {
       try { structural = JSON.parse(structural); decodedBoundary = true; } catch { /* Invalid JSON stays a string. */ }
@@ -256,7 +255,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
     result.issues[0].classification = structural === undefined ? "missing" : "value";
   }
   result.issues[0].code = "WIRE_SHAPE_INVALID";
-  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED", "UNIQUE_FIELD_OWNER", "FIELD_CARRIER_REQUIRED", "FIELD_CHANGE", "CHANGE_POSITION", "BOUNDED_JSON_OBJECT", "JSON_OBJECT", "EVIDENCE_SOURCE_POINTER"].includes(expected)) result.issues[0].expected = expected;
+  if (["null", "string", "number", "integer", "boolean", "array", "object", "CONTROL_ENUM", "UNION", "REQUIRED_PROPERTY", "DATE_OPERAND_JSON", "UNIQUE_TITLE_OWNER", "TITLE_SET_CARRIER_REQUIRED", "UNIQUE_FIELD_OWNER", "FIELD_CARRIER_REQUIRED", "FIELD_CHANGE", "CHANGE_POSITION", "CHANGE_RANK", "BOUNDED_JSON_OBJECT", "JSON_OBJECT", "EVIDENCE_SOURCE_POINTER"].includes(expected)) result.issues[0].expected = expected;
   if (result.issues[0].actualType === "undefined") result.issues[0].classification = "missing";
   if (extraKeyCount !== undefined) { result.issues[0].classification = "extra"; result.issues[0].extraKeyCount = extraKeyCount; }
   if (result.issues[0].actualType === "array" && cardinality && [cardinality.actualCount, cardinality.minItems, cardinality.maxItems].every(value => value === undefined || Number.isSafeInteger(value) && value >= 0)) {
@@ -284,9 +283,13 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
       };
       const operations:Array<{index:number}&ReturnType<typeof projectControlEnum>>=[];
       let ordinaryCount=0;
-      for(const [index,change] of object.changes.entries())if(change && typeof change==="object" && !Array.isArray(change) && change.field==="title"){
+      for(const [index,entry] of object.changes.entries()){
+        const wrapped=entry&&typeof entry==="object"?Object.getOwnPropertyDescriptor(entry,"change"):undefined;
+        const change=wrapped&&Object.hasOwn(wrapped,"value")?wrapped.value:entry;
+        if(change && typeof change==="object" && !Array.isArray(change) && Object.getOwnPropertyDescriptor(change,"field")?.value==="title"){
         ordinaryCount++;
-        if(operations.length<8)operations.push({index,...operationMetadata(change.operation)});
+        if(operations.length<8)operations.push({index,...operationMetadata(Object.getOwnPropertyDescriptor(change,"operation")?.value)});
+        }
       }
       result.issues[0].titleOwnership={ordinaryCount,carrierOperation:operationMetadata(carrier.change?.operation),ordinaryOperations:operations,truncated:ordinaryCount>operations.length};
     }

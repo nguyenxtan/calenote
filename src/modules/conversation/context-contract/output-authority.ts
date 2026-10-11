@@ -17,10 +17,12 @@ type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"chan
 type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "uncertainties[].alternatives[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.value`;
 type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
-export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
+type BaseOutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
   | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath | ReminderCarrierPath | `${StructuredDateCarrierPrefix}.${"kind"|"calendar"|"day"|"month"|"year"|"leapMonth"|"offsetDays"|"weekday"|"qualifier"}`
   | "changeOrder" | "changeOrder[]" | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping" | "fieldCapability.eventDateYearNullRequired" | "eventDateChange.change.value{kind=CIVIL_DATE}"
   | "titleChange" | "titleChange.change" | "titleChange.change.field" | "titleChange.change.operation" | "titleChange.change.value" | "titleChange.change.evidence" | `titleChange.change{field=title;operation=${"SET"|"REPLACE"|"CLEAR"}}`;
+type WrappedOrdinaryPath<P> = P extends `changes[].${infer Tail}` ? `changes[].change.${Tail}` : P extends `changes[]{${infer Tail}` ? `changes[].change{${Tail}` : never;
+export type OutputFieldPathV3 = BaseOutputFieldPathV3 | WrappedOrdinaryPath<BaseOutputFieldPathV3> | "changes[].change" | "changes[].rank" | "titleChange.rank" | `${ReminderCarrierRoot}.rank`;
 const semantic: OutputAuthorityRule = Object.freeze({ class: "SEMANTIC_UNTRUSTED", modelAuthorshipReason: "Proposed user meaning, operand, instruction, ambiguity or supporting source selection.", evidencePolicy: "Validate exact scoped source identity; targeting/replacement/removal require current USER_QUOTE evidence.", mergePolicy: "Only validated semantic candidates enter merge; backend derives conflicts, completeness and admission.", canAffectMerge: true, canCauseHardReject: true, canCauseClarify: true, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const advisory: OutputAuthorityRule = Object.freeze({ class: "ADVISORY", modelAuthorshipReason: "Optional phrasing associated with one of four compatible backend issues.", evidencePolicy: "No mandatory semantic evidence; validate eligibility independently.", mergePolicy: "Quarantine invalid hints; never affect factual merge or manufacture clarification.", canAffectMerge: false, canCauseHardReject: false, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const owned: OutputAuthorityRule = Object.freeze({ class: "APPLICATION_OWNED", modelAuthorshipReason: "Application selects immutable protocol, fixed supported status and codebook mapping; omit from generation.", evidencePolicy: "Trusted application binding, never a model assertion.", mergePolicy: "Reject unsupported application binding; independently bound constants do not grant execution.", canAffectMerge: false, canCauseHardReject: true, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: true });
@@ -30,11 +32,11 @@ const padding: OutputAuthorityRule = Object.freeze({ ...owned, modelAuthorshipRe
 // category prefix. Schema inspection checks every branch against this registry.
 const entries: Array<[OutputFieldPathV3, OutputAuthorityRule]> = [];
 function add(paths: readonly OutputFieldPathV3[], rule: OutputAuthorityRule = semantic) { for (const path of paths) entries.push([path, rule]); }
-add(["titleChange","titleChange.change","titleChange.change.field","titleChange.change.operation","titleChange.change.value","titleChange.change.evidence","titleChange.change{field=title;operation=SET}"]);
+add(["titleChange","titleChange.rank","titleChange.change","titleChange.change.field","titleChange.change.operation","titleChange.change.value","titleChange.change.evidence","titleChange.change{field=title;operation=SET}"]);
 add(["titleChange.change{field=title;operation=REPLACE}","titleChange.change{field=title;operation=CLEAR}"]);
 for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
   const root=`${field}Change` as const;
-  add([root,`${root}.change`,`${root}.change.field`,`${root}.change.operation`,`${root}.change.value`,`${root}.change.evidence`]);
+  add([root,`${root}.rank`,`${root}.change`,`${root}.change.field`,`${root}.change.operation`,`${root}.change.value`,`${root}.change.evidence`]);
   for(const operation of ["SET","REPLACE","CLEAR"] as const)add([`${root}.change{field=${field};operation=${operation}}`]);
 }
 add(["reminderTimeChange.change.value.hour","reminderTimeChange.change.value.minute","reminderTimeChange.change.value.qualifier"]);
@@ -75,6 +77,9 @@ for(const prefix of ["changes[].value","query.date","query.period.date","query.p
 }
 for (const prefix of ["query.period", "uncertainties[].alternatives[].value"]) for (const kind of ["DAY", "WEEK", "MONTH", "WEEKEND", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING", "DATE_BOUNDS"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 for (const kind of ["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP"] as const) add([`conversationDirective{kind=${kind}}`], advisory);
+// Explicit finite wrapper projection after all existing semantic branches.
+for(const [path,rule] of [...entries])if(path.startsWith("changes[].")||path.startsWith("changes[]{"))entries.push([path.replace(/^changes\[\]/,"changes[].change") as OutputFieldPathV3,rule]);
+add(["changes[].rank","changes[].change"]);
 const registry: Partial<Record<OutputFieldPathV3, OutputAuthorityRule>> = {};
 for (const [path, rule] of entries) {
   if (Object.hasOwn(registry, path)) throw new Error(`OUTPUT_AUTHORITY_OVERLAP:${path}`);

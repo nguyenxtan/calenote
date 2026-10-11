@@ -37,7 +37,16 @@ it("historical fanout bounds remain for the unchanged remainder; wire31 carrier 
  expect(baseline.unions).toBeLessThanOrEqual(19);
  expect(baseline.branches).toBeLessThanOrEqual(51);
  expect(baseline.references).toBeLessThanOrEqual(42);
- expect(metrics).toMatchObject({nullableUnions:21,unions:35,branches:77,references:26});
+ expect(metrics).toMatchObject({nullableUnions:21,unions:35,branches:77,references:36});
+ // Rank shares one exact bounded scalar across ten singleton wrappers and
+ // ordinary entries; characterize representation cost, not admission.
+ expect(schema.$defs?.r).toEqual({type:"integer",minimum:0,maximum:12});
+ type RankNode={type?:string;anyOf?:RankNode[];properties?:Record<string,RankNode>;items?:RankNode};
+ const ranked=schema as unknown as RankNode;
+ const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"];
+ for(const root of roots)expect(ranked.properties?.[root].anyOf?.find(node=>node.type==="object")?.properties?.rank).toEqual({$ref:"#/$defs/r"});
+ expect(ranked.properties?.changes.items?.properties?.rank).toEqual({$ref:"#/$defs/r"});
+ expect(JSON.stringify(schema).match(/"\$ref":"#\/\$defs\/r"/g)).toHaveLength(11);
  // Nine added nullable roots preserve their strict operation/value branches.
  // Merging operation/value branches would incorrectly permit SET/null.
  expect(metrics.nullableUnions-baseline.nullableUnions).toBe(9);

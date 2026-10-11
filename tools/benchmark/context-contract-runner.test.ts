@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e");
+    expect(requestSchemaDigest).not.toBe("92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -324,13 +324,14 @@ it.each([
 ] as const)("wire discriminant failure uses closest schema branch for field=%s operation=%s", (field, operation, expectedPath) => {
   const raw = encodeGoogleLiteEuContextV3({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] },
     query: null, uncertainties: [], conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: null,
-    changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
-  if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
-  if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
-  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={change:raw.changes[0]};object.changeOrder=[field==="title"?0:1];raw.changes=[];}
+    changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<{rank:number;change:Record<string, unknown>}> };
+  const entry=raw.changes[0];
+  if (field === undefined) delete entry.change.field; else entry.change.field = field;
+  if (operation === undefined) delete entry.change.operation; else entry.change.operation = operation;
+  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={rank:entry.rank,change:entry.change};raw.changes=[];}
   let diagnostics: unknown;
   expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:field==="title"?{path:["titleChange","change",expectedPath],expected:"CONTROL_ENUM"}:{ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
+  expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:field==="title"?{path:["titleChange","change",expectedPath],expected:"CONTROL_ENUM"}:{ path: ["changes", 0,"change",expectedPath], expected: operation===undefined?"REQUIRED_PROPERTY":"CONTROL_ENUM" })] });
   if(expectedPath==="field")expect(JSON.stringify(diagnostics)).not.toContain('"INVALID"');
 });
 
@@ -368,7 +369,7 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
     if (mode === "missing") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["operationCode"], classification: "missing" })] } });
     if (mode === "unexpected-key") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ classification: "extra", extraKeyCount: 1 })], unknownTopLevelKeyCount: 1 } });
     if (mode === "primitive") expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: [], expected: "object", actualType: "number" })] } });
-    if (mode.startsWith("operation-")) expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["titleChange", "change", "operation"], expected: "CONTROL_ENUM", classification: mode === "operation-missing" ? "missing" : "value" })] } });
+    if (mode.startsWith("operation-")) expect(result.responses[0].canonicalValidationDiagnostics).toMatchObject({ validation: { issues: [expect.objectContaining({ path: ["titleChange", "change", "operation"], expected: mode === "operation-missing" ? "REQUIRED_PROPERTY" : "CONTROL_ENUM", classification: mode === "operation-missing" ? "missing" : "value" })] } });
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -501,8 +502,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-67" });
+      providerWireSchemaDigest: "92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-68" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

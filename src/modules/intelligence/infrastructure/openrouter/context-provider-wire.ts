@@ -538,6 +538,7 @@ function operationSchema(root:Schema):Schema{
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
+  result.$defs!.r={type:"integer",minimum:0,maximum:CHANGE_ORDER_FIELDS_V3.length-1};
   for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
@@ -549,11 +550,10 @@ function indexedReminderSchema(root:Schema):Schema {
       const ordinary=structuredClone(branch);ordinary.properties!.field={type:"string",enum:remaining};return [ordinary];
     });
     requireShape(changes.length);
-    result.properties![field+"Change"]={anyOf:[{type:"object",properties:{change:{anyOf:changes}},required:["change"],additionalProperties:false},{type:"null"}]};
+    result.properties![field+"Change"]={anyOf:[{type:"object",properties:{rank:{$ref:"#/$defs/r"},change:{anyOf:changes}},required:["rank","change"],additionalProperties:false},{type:"null"}]};
     result.required!.push(field+"Change");
   }
-  result.properties!.changeOrder={type:"array",items:{type:"integer",minimum:0,maximum:CHANGE_ORDER_FIELDS_V3.length-1},maxItems:CHANGE_ORDER_FIELDS_V3.length};
-  result.required!.push("changeOrder");
+  result.properties!.changes.items={type:"object",properties:{rank:{$ref:"#/$defs/r"},change:items},required:["rank","change"],additionalProperties:false};
   return result;
 }
 const providerSchemaV3 = indexedReminderSchema(operationSchema(outgoingSemanticKindEnums(simplifyUncertainties(prune(coalesceBranches(internDefinitions(normalizeScalars(omitAnnotations(prune(flatten(slottedV3, slottedV3))))))),true))));
@@ -561,50 +561,51 @@ const providerSchemaV3 = indexedReminderSchema(operationSchema(outgoingSemanticK
 /** Move only explicitly model-authored carrier data; order and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
 function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false):Record<string,unknown>{
-  if(mode==="decode"){
-    const descriptor=Object.getOwnPropertyDescriptor(raw,"changeOrder");
-    if(!descriptor)throw new WireShapeFailure(["changeOrder"],"REQUIRED_PROPERTY");
-    if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(["changeOrder"],"array");
-  }
-  const result={...raw};
-  if(!Array.isArray(raw.changes))throw new WireShapeFailure(["changes"],"array");
-  const ordinaryChanges=raw.changes;
   const definitions=[{field:"title",root:"titleChange"},{field:"reminderDate",root:"reminderDateChange"},{field:"reminderTime",root:"reminderTimeChange"},{field:"eventDate",root:"eventDateChange"},{field:"eventTime",root:"eventTimeChange"},{field:"eventRelation",root:"eventRelationChange"},{field:"frequency",root:"frequencyChange"},{field:"occurrenceCount",root:"occurrenceCountChange"},{field:"endDate",root:"endDateChange"},{field:"location",root:"locationChange"}] as const;
+  const own=(object:object,key:string,path:PropertyKey[])=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor)throw new WireShapeFailure(path,"REQUIRED_PROPERTY");if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(path,"object");return descriptor.value;};
+  const ranks=new Set<number>(),ranked:Array<{rank:number;change:unknown}>=[];
+  const wrapper=(value:unknown,path:PropertyKey[])=>{
+    if(!value||typeof value!=="object"||Array.isArray(value))throw new WireShapeFailure(path,"object");
+    requireWireKeys(value as Record<string,unknown>,["rank","change"],["rank","change"],path);
+    const rank=own(value,"rank",[...path,"rank"]),change=own(value,"change",[...path,"change"]);
+    if(typeof rank!=="number"||!Number.isSafeInteger(rank)||rank<0||rank>=CHANGE_ORDER_FIELDS_V3.length||ranks.has(rank))throw new WireShapeFailure([...path,"rank"],"CHANGE_RANK");
+    ranks.add(rank);return {rank,change};
+  };
+  const sourceChanges=own(raw,"changes",["changes"]);
+  if(!Array.isArray(sourceChanges))throw new WireShapeFailure(["changes"],"array");
+  const length=own(sourceChanges,"length",["changes"]);if(!Number.isSafeInteger(length)||length<0||length>13)throw new WireShapeFailure(["changes"],"array");
+  const ordinaryChanges:unknown[]=[];let prior=-1;
+  for(let index=0;index<length;index++){const item=own(sourceChanges,String(index),["changes",index]);if(mode==="encode")ordinaryChanges.push(item);else{const entry=wrapper(item,["changes",index]);if(entry.rank<=prior)throw new WireShapeFailure(["changes",index,"rank"],"CHANGE_RANK");prior=entry.rank;ordinaryChanges.push(entry.change);ranked.push(entry);}}
+  if(mode==="decode"){
+    if(Object.hasOwn(raw,"changeOrder"))throw new WireShapeFailure(["changeOrder"],"object",1);
+    for(const {root} of definitions){const carrier=own(raw,root,[root]);if(carrier!==null){if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([root],"object");own(carrier,"rank",[root,"rank"]);own(carrier,"change",[root,"change"]);}}
+  }
+  const result:Record<string,unknown>={};for(const key of Object.keys(raw))result[key]=own(raw,key,[key]);
   const emitted=new Map<string,unknown>();
-  const fieldOf=(change:unknown,path:(string|number)[]=["changeOrder"]):string=>{
+  const fieldOf=(change:unknown,path:(string|number)[]=["changes"]):string=>{
     const field=change&&typeof change==="object"&&!Array.isArray(change)?Object.getOwnPropertyDescriptor(change,"field")?.value:undefined;
     if(typeof field!=="string"||!(CHANGE_ORDER_FIELDS_V3 as readonly string[]).includes(field))throw new WireShapeFailure(path,"CONTROL_ENUM");
     return field;
   };
-  ordinaryChanges.forEach((change,index)=>{const field=fieldOf(change,["changes",index,"field"]);emitted.set(field,change);});
-  if(mode==="decode"&&!Object.hasOwn(raw,"changeOrder"))throw new WireShapeFailure(["changeOrder"],"REQUIRED_PROPERTY");
-  const catalogue=mode==="encode"?ordinaryChanges.map(change=>CHANGE_ORDER_FIELDS_V3.indexOf(fieldOf(change) as typeof CHANGE_ORDER_FIELDS_V3[number])):Object.getOwnPropertyDescriptor(raw,"changeOrder")?.value;
-  const length=Array.isArray(catalogue)?Object.getOwnPropertyDescriptor(catalogue,"length")?.value:undefined;
-  if(!Array.isArray(catalogue)||!Number.isSafeInteger(length)||length<0||length>CHANGE_ORDER_FIELDS_V3.length)throw new WireShapeFailure(["changeOrder"],"array");
-  const order:string[]=[];
-  const selected=new Set<string>();
-  for(let index=0;index<length;index++){const code=Object.getOwnPropertyDescriptor(catalogue,String(index))?.value;if(typeof code!=="number"||!Number.isSafeInteger(code)||code<0||code>=CHANGE_ORDER_FIELDS_V3.length)throw new WireShapeFailure(["changeOrder",index],"CONTROL_ENUM");const field=CHANGE_ORDER_FIELDS_V3[code];if(selected.has(field))throw new WireShapeFailure(["changeOrder",index],"CONTROL_ENUM");selected.add(field);order.push(field);}
-  if(mode==="encode")result.changeOrder=catalogue;
-  else delete result.changeOrder;
+  ordinaryChanges.forEach((change,index)=>{const path=mode==="decode"?["changes",index,"change"]:["changes",index],field=fieldOf(change,[...path,"field"]);if(mode==="decode"&&change&&typeof change==="object")for(const key of ["field","operation","value","evidence"])own(change,key,[...path,key]);emitted.set(field,change);});
   for(const definition of definitions){
-    const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);
+    const authored=ordinaryChanges.flatMap((change,index)=>fieldOf(change)===definition.field?[{change,index}]:[]);
     const duplicate=definition.field==="title"?"UNIQUE_TITLE_OWNER":"UNIQUE_FIELD_OWNER";
     if(mode==="encode"){
       if(authored.length>1)throw new WireShapeFailure([definition.root],duplicate);
       const item=authored[0];
-      result[definition.root]=item?{change:item.change}:null;
+      result[definition.root]=item?{rank:item.index,change:item.change}:null;
       continue;
     }
     if(!Object.hasOwn(raw,definition.root))throw new WireShapeFailure([definition.root],"REQUIRED_PROPERTY");
-    const carrier=raw[definition.root];delete result[definition.root];
+    const carrier=own(raw,definition.root,[definition.root]);delete result[definition.root];
     if(carrier===null){
       if(definition.field==="title"&&required)throw new WireShapeFailure([definition.root],"object");
       if(authored.length)throw new WireShapeFailure([definition.root],"FIELD_CARRIER_REQUIRED");
       continue;
     }
     if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([definition.root],"object");
-    requireWireKeys(carrier as Record<string,unknown>,["change"],["change"],[definition.root]);
-    const {change}=carrier as {change:unknown};
+    const entry=wrapper(carrier,[definition.root]),{change}=entry;
     let shape=providerSchemaV3.properties![definition.root].anyOf![0].properties!.change;
     if(yearNullEventDate&&definition.field==="eventDate"){
       const value=change&&typeof change==="object"?Object.getOwnPropertyDescriptor(change,"value")?.value:undefined;
@@ -613,8 +614,10 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     }
     if(change&&typeof change==="object"&&!Array.isArray(change)){
       const item=change as Record<string,unknown>;
-      if(item.field!==definition.field){
-        const diagnostic=projectControlEnum([definition.field],item.field);
+      const field=own(item,"field",[definition.root,"change","field"]),operation=own(item,"operation",[definition.root,"change","operation"]);
+      for(const key of ["value","evidence"])own(item,key,[definition.root,"change",key]);
+      if(field!==definition.field){
+        const diagnostic=projectControlEnum([definition.field],field);
         // Carrier field controls are schema-owned finite literals, not arbitrary
         // token-shaped user values. Unknown field strings retain digest only.
         delete diagnostic.actualSafeToken;
@@ -622,23 +625,16 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
       }
       if(definition.field==="title"){
         const allowed=required?["SET"]:["SET","REPLACE","CLEAR"];
-        if(typeof item.operation!=="string"||!allowed.includes(item.operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,item.operation));
+        if(typeof operation!=="string"||!allowed.includes(operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,operation));
       }
     }
     if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE");
     if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
     emitted.set(definition.field,change);
+    ranked.push(entry);
   }
-  if(mode==="encode")result.changes=raw.changes.filter(change=>!definitions.some(definition=>definition.field===fieldOf(change)));
-  else{
-    const counts={catalogueCount:order.length,emittedCount:emitted.size,ordinaryCount:ordinaryChanges.length};
-    if(selected.size!==emitted.size||order.some(field=>!emitted.has(field)))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,{constraint:"ORDER_SET",...counts,missingFields:CHANGE_ORDER_FIELDS_V3.filter(field=>emitted.has(field)&&!selected.has(field)),extraFields:CHANGE_ORDER_FIELDS_V3.filter(field=>selected.has(field)&&!emitted.has(field))});
-    const ordinaryFields=ordinaryChanges.map(change=>fieldOf(change));
-    if(new Set(ordinaryFields).size!==ordinaryFields.length)throw new WireShapeFailure(["changes"],"UNIQUE_FIELD_OWNER");
-    const ordinaryCatalogue=order.filter(field=>ordinaryFields.includes(field));
-    if(!equal(ordinaryCatalogue,ordinaryFields))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,{constraint:"ORDER_SUBSEQUENCE",...counts,ordinaryCatalogueCodes:ordinaryCatalogue.map(field=>(CHANGE_ORDER_FIELDS_V3 as readonly string[]).indexOf(field)),ordinaryChangeCodes:ordinaryFields.map(field=>(CHANGE_ORDER_FIELDS_V3 as readonly string[]).indexOf(field)),firstMismatchIndex:ordinaryFields.findIndex((field,index)=>field!==ordinaryCatalogue[index])});
-    result.changes=order.map(field=>emitted.get(field));
-  }
+  if(mode==="encode")result.changes=ordinaryChanges.flatMap((change,rank)=>definitions.some(definition=>definition.field===fieldOf(change))?[]:[{rank,change}]);
+  else {const ordinaryFields=ordinaryChanges.map(change=>fieldOf(change));if(new Set(ordinaryFields).size!==ordinaryFields.length)throw new WireShapeFailure(["changes"],"UNIQUE_FIELD_OWNER");result.changes=ranked.sort((left,right)=>left.rank-right.rank).map(entry=>entry.change);}
   return result;
 }
 function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Record<string,unknown>{
@@ -706,7 +702,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};
     if(!capability.allowedClockFields.includes("eventTime"))schema.properties!.eventTimeChange={type:"null"};
     for(const field of ["frequency","occurrenceCount"] as const)if(!capability.allowedNumericFields.includes(field))schema.properties![`${field}Change`]={type:"null"};
-    const changes = deref(schema.properties!.changes.items!, schema);
+    const changes = deref(deref(schema.properties!.changes.items!,schema).properties!.change, schema);
     requireShape(changes.anyOf?.length);
     changes.anyOf = changes.anyOf.flatMap(raw => {
       const branch = deref(raw, schema), field = deref(branch.properties!.field, schema);

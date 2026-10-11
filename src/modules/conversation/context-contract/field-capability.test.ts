@@ -308,12 +308,12 @@ it("actual three-turn request uses one shared general enum and one current mutat
   expect(schema.$defs.__e).toMatchObject({type:"object",properties:{primaryEvidence:{$ref:"#/$defs/__sources"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false});
   const evidence=[{kind:"USER_QUOTE" as const,turn:2,quote:"9h.",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
-  const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}>};
+  const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{change:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}}>};
   const check=validator(context);expect(check.safeParse(wire).success).toBe(true);
-  wire.changes[0].evidence.primaryEvidence="U1";
+  wire.changes[0].change.evidence.primaryEvidence="U1";
   expect(check.safeParse(wire).success).toBe(false);
-  wire.changes[0].evidence.primaryEvidence="U2";
-  wire.changes[0].evidence.additionalEvidenceJson=JSON.stringify([{kind:"USER_TURN",turn:1}]);
+  wire.changes[0].change.evidence.primaryEvidence="U2";
+  wire.changes[0].change.evidence.additionalEvidenceJson=JSON.stringify([{kind:"USER_TURN",turn:1}]);
   expect(check.safeParse(wire).success).toBe(true); // Scalar extras still require unchanged downstream checks.
 });
 it("requires a generated title carrier for an asserted exam reminder",()=>{
@@ -328,9 +328,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("f03f72e36f727e11a4cd66a4a6744fdd6b2727727d97f27ffcddd55a17911d41");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("ef361d288d4f1bad057fafeebe5849d26cacae48780d2ba17127dbb80f23aa1d");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("e82743df39266a01b14d91bc5967e4ba69eba7abb5eec1204ea656656d16a12e");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("c2d650c4672150936aca311e6b8fb2fecf13b10482b503f2da695b4309d74f04");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -338,8 +338,17 @@ it.each(["Ngày 11/10 đi thi ở Quang Trung, nhắc tôi chuẩn bị giấy t
 it.each(["Bạn nghĩ sao về đi thi","bao giờ đi thi","dịch đi thi"])("unknown or interrogative discourse remains outside bounded title assertion: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
 it.each(["Ngày 11/10 đi thi, nhắc tôi uống thuốc lúc 8h.","Ngày 11/10 đi thi, nhắc tôi đóng tiền trước 2 ngày.","đi thi ở đâu","đi thi rồi uống thuốc","đi thi, điều này nghĩa là gì"])("unknown continuation or competing subject cannot force exam title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
 function fields(context: ContextInput) {
-  const schema = serializeContextRequest(context).response_format.json_schema.schema as unknown as { properties: { changes: { items: { $ref: string } } }; $defs: Record<string, { anyOf: Array<{ properties: { field: { enum?: string[]; const?: string } } }> }> };
-  const ordinary=schema.properties.changes.items.$ref ? schema.$defs[schema.properties.changes.items.$ref.split("/").at(-1)!].anyOf.flatMap(b => b.properties.field.enum ?? [b.properties.field.const!]) : [];
+  type Node={type?:string;$ref?:string;anyOf?:Node[];properties?:Record<string,Node>;enum?:string[];const?:string};
+  const schema = serializeContextRequest(context).response_format.json_schema.schema as unknown as { properties: { changes: { items: Node;maxItems?:number } }; $defs: Record<string,Node> };
+  const resolve=(node:Node):Node=>node.$ref?resolve(schema.$defs[node.$ref.split("/").at(-1)!]):node;
+  const item=resolve(schema.properties.changes.items);
+  let ordinary:string[]=[];
+  if(item.type==="null")expect(schema.properties.changes.maxItems).toBe(0);
+  else{
+    expect(item.properties).toHaveProperty("rank");expect(item.properties).toHaveProperty("change");
+    const change=resolve(item.properties!.change);expect(change.anyOf?.length).toBeGreaterThan(0);
+    ordinary=change.anyOf!.flatMap(branch=>branch.properties!.field.enum??[branch.properties!.field.const!]);
+  }
   // Numeric singleton availability lives in its root, not the ordinary array.
   const roots=schema.properties as unknown as Record<string,{type?:string}>;
   return [...ordinary,...["frequency","occurrenceCount"].filter(field=>roots[field+"Change"].type!=="null")];

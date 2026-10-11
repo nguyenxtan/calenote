@@ -65,13 +65,13 @@ const successorEvidence = [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", oc
 it.each([1, 2, 3])("all active semantic evidence collections use primary-plus-bounded-extras for %i refs", count => {
   const refs = Array.from({ length: count }, (_, index) => ({ ...successorEvidence[0], occurrence: index + 1 }));
   const canonical = ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: refs }, changes: [{ field: "leadOffsetDays", operation: "SET", value: 2, evidence: refs }], query: null, uncertainties: [], conversationDirective: null, replyProposal: null });
-  const wire = encodeGoogleLiteEuContextV3(canonical) as { requestTarget: { evidence: Record<string, unknown> }; changes: Array<{ evidence: Record<string, unknown> }> };
+  const wire = encodeGoogleLiteEuContextV3(canonical) as { requestTarget: { evidence: Record<string, unknown> }; changes: Array<{ change: { evidence: Record<string, unknown> } }> };
   const expected = { primaryEvidence: JSON.stringify(refs[0]), additionalEvidenceJson: JSON.stringify(refs.slice(1)) };
   expect(wire.requestTarget.evidence).toEqual(expected);
-  expect(wire.changes[0].evidence).toEqual(expected);
+  expect(wire.changes[0].change.evidence).toEqual(expected);
   expect(successorValidator.safeParse(wire).success).toBe(true);
   expect(parseGoogleLiteEuContextSectionsV3(wire, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
-  for (const target of [wire.requestTarget, wire.changes[0]]) {
+  for (const target of [wire.requestTarget, wire.changes[0].change]) {
     const saved = target.evidence;
     for (const invalid of [[], Array.from({ length: 6 }, () => expected.primaryEvidence), { ...expected, primaryEvidence: null }, { ...expected, additionalEvidenceJson: JSON.stringify([expected.primaryEvidence, expected.primaryEvidence, expected.primaryEvidence]) }, { ...expected, additionalEvidenceJson: "{}" }, { ...expected, additionalEvidenceJson: "[" }, { ...expected, extra: true }]) {
       target.evidence = invalid as never;

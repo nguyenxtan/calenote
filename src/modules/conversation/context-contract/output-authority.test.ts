@@ -15,6 +15,12 @@ it("wire66 catalogue reuses first13 field identities without granting model auth
 it("alternative evidence carrier selections remain closed semantic-untrusted paths",()=>{
  for(const path of ["uncertainties[].alternatives[].evidence.primaryEvidence","uncertainties[].alternatives[].evidence.additionalEvidenceJson"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
 });
+it("wire68 all rank and wrapped payload paths remain closed untrusted ordering controls",()=>{
+ for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","changes[]"]){
+  for(const suffix of ["rank","change.field","change.operation","change.value","change.evidence.primaryEvidence"]){const path=`${root}.${suffix}` as Parameters<typeof authority.classifyOutputPathV3>[0];expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});}
+  expect(()=>authority.classifyOutputPathV3(`${root}.PRIVATE_MODEL_CONTROL` as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
+ }
+});
 it("bound typed civil discriminator and all authored date slots remain semantic untrusted",()=>{
  for(const path of ["eventDateChange.change.value{kind=CIVIL_DATE}","eventDateChange.change.value.kind","eventDateChange.change.value.calendar","eventDateChange.change.value.day","eventDateChange.change.value.month","eventDateChange.change.value.year","eventDateChange.change.value.leapMonth"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
 });
