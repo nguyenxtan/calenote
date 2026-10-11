@@ -6,6 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
+import { isBoundExactReminderClockMissingExcluded } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -767,12 +768,13 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
       requireShape(changes.anyOf.length);
       schema.properties![root]=carrier;
     }
-    if(requiredFields.length){
+    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[])];
+    if(missingExclusionFields.length){
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
       const missing=structuredClone(item),other=structuredClone(item);
       missing.properties!.reason={type:"string",enum:["MISSING"]};
-      const excluded=requiredFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]);
+      const excluded=missingExclusionFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]);
       missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>!excluded.includes(code))};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
       if(uniqueNumeric){

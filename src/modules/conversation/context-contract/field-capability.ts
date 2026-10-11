@@ -8,6 +8,16 @@ import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
 export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
+/** Source-grounded contradiction exclusion only, never carrier/value presence. */
+export function isBoundExactReminderClockMissingExcluded(input: ContextInput): boolean {
+  return Number.isFinite(Date.parse(input.reference.instant))
+    && input.activeRequest?.lifecycle === "CLARIFYING"
+    && input.pendingQuestion?.scope === "REMINDER"
+    && input.pendingQuestion.field === "reminderTime"
+    && input.pendingQuestion.reason === "MISSING"
+    && isBoundReminderClockAnswer(input);
+}
+
 /** Whole scheduling-only source proof precedes candidate-domain absence.
  * Projected slots expose state/value/fact, not retained evidence arrays. */
 export function isBoundMissingReminderClockWithoutCandidates(input: ContextInput): boolean {

@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire79 bound exact-clock execution
+
+BASE6ad518bec334cc3b4cc6caf9d1b3f07680e81fbc; TOP wire79 spec and continuous conservative USD5 scope.
+
+- [ ] Genuine RED actual source-bound R02 uncertainty schema permits same-field MISSING despite exact clock, while service rejects atomically. Own only small field-capability trusted Boolean/tests, provider-wire uncertainty domain separation/tests, protocol/current request pin and historical test dependencies. No carrier presence/SET forcing, prompt/generic schema/cap16/canonical/evidence/merge/oracle change.
+- [ ] GREEN exclude only reminderTime/MISSING in sufficient CLARIFYING/MISSING whole-clock subset. Full16x4 domain matrix, retained operation/null/source/evidence parity and actual service coherent acceptance/contradictory bypass refusal with zero reminder mutations; no bound/invalid reference/ambiguous/partial/quoted/compound/wrong role/question/lifecycle negative controls keep old schema language. Historical original hash/closed live gates immutable.
+- [ ] Focused affected/type/lint/diff, ENTIRE67/all326 strict12000/1536 and specialized topology, frozen six once; independent C0/I0, controller frozen full/local commit/trusted preflight/FreshFormal on one unchanged candidate. Implementer no full/provider/key/accounting/commit/children. No blind unchanged retry, Full/push/merge/deploy/remote migration. Continue scoped repair until FormalPASS or genuine budget/security/out-of-scope gate.
+
 ### Wire78 decimal rank execution
 
 BASE78904663ffafc434c0d94e87a60e6fe53ce6d48f; TOP wire78 spec, existing provider-state debugging/ordering transport scope and conservative USD5 authority.
