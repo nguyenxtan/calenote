@@ -269,6 +269,10 @@ it("relative ranks preserve authored order without contiguous chosen-N indexes",
  for(const text of ["CURRENT PROPOSAL model-authored","integer rank0..12","unique across carriers/ordinary","gaps/sole10 legal","Never field codes/N-indexes/prior turn/state/root/source addresses","Ordinary ranks strictly increase in array order","Increasing ranks before evidence; no field sort/ties/gap fills/defaults"])expect(order).toContain(text);
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });
+it("ordinary arrays and singleton roots share one non-restarting rank space",()=>{
+ const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
+ for(const text of ["ONE global space","NEVER restart per array/root","ordinary[1,2]+singleton0 valid","ordinary[0,1]+singleton0 collides"])expect(order).toContain(text);
+});
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");

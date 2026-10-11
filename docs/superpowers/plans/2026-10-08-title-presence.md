@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire71 global-rank guidance execution
+
+BASEaff708f701654486a8ae405b872fea33486ac0bb; existing TypeScript prompt/protocol/harness, TOP wire71 spec. Existing implementation/review seats and continuous USD5 owner scope only.
+
+- [ ] Genuine RED actual serialized Order guidance assertion plus independent generic three-entry rank mixed contrast; valid[1,2]+0 preserves authored canonical order, invalid[0,1]+0 hard-refuses COLLISION without repair. Own prompt.ts/prompt.test.ts, protocol.ts and context-provider-wire.test.ts; no runtime codec or semantic guard changes. Replace only Order paragraph with approved global-space/never-restart/structural contrast; preserve every listed obligation.
+- [ ] Update exact current prompt/protocol/runner/fit identity pins; historical public request old Order inversion test-only where required, never repin old hashes/relax source guards. Run affected prompt/wire/evidence/authority/gateway tests, dependent six if changed, type/scopedlint/diff and ENTIRE67/all326 strictfit. Publish actual exits/metrics/frozenhash, no implementer full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0 whole delta and fix findings; controller unchanged-source full local checks then selective commit, trusted fresh preflight, same-candidate Formal within derived USD5 remaining. First failure settle/terminal before next scoped repair. No blind unchanged retry, Full, push, merge, deploy, accounting/history/UNKNOWN changes.
+
 ### Rank diagnostics execution
 
 BASE862181e08e26b04528d98191a1ff92f669d2c90f. Existing continuous debug authority; TypeScript diagnostic projection only, TOP rank rejection spec above. Exact owned implementation files: validation-diagnostics.ts/.test.ts and context-provider-wire.test.ts. Interfaces: optional CanonicalValidationIssue.rankControl plus private bounded own-DATA inspector, called only by projectWireValidation for CHANGE_RANK. No decoder edits or changed acceptance/version/prompt/schema.

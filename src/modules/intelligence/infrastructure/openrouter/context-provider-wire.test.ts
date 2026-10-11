@@ -10,6 +10,12 @@ import { serializeContextRequest } from "../../../conversation/context-contract/
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
 import { projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
+it("one global rank space preserves mixed order and rejects per-container restart",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"synthetic",evidence},{field:"calendar",operation:"SET",value:"GREGORIAN",evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]}),raw=wireFixture(canonical) as Record<string,unknown>;
+ const ordinary=raw.changes as Array<{rank:number}>;ordinary[0].rank=1;ordinary[1].rank=2;(raw.eventRelationChange as {rank:number}).rank=0;
+ const parsed=parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3);expect(parsed.status).toBe("PARSED");if(parsed.status==="PARSED")expect(parsed.value.semantic.changes.map(change=>change.field)).toEqual(["eventRelation","notes","calendar"]);
+ ordinary[0].rank=0;ordinary[1].rank=1;const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");expect(diagnostics).toMatchObject([{issues:[{rankControl:{reason:"COLLISION",actualRank:0,collisionLocations:[{root:"changes",index:0}]}}]}]);
+});
 it("rank diagnostics distinguish scalar collision and ordinary ordering while preserving hard refusal",async()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"synthetic",evidence},{field:"calendar",operation:"SET",value:"GREGORIAN",evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]}),wire=wireFixture(canonical) as Record<string,unknown>;
  const cases:[unknown,string,number|undefined][]=[[.5,"NON_INTEGER",undefined],[-1,"NEGATIVE",-1],[13,"OUT_OF_RANGE",13],[Number.MAX_SAFE_INTEGER+1,"NON_INTEGER",undefined],[1000001,"OUT_OF_RANGE",undefined],[0,"COLLISION",0]];
@@ -1041,7 +1047,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-70");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-71");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
