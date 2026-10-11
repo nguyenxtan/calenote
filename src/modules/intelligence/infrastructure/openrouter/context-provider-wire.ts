@@ -678,6 +678,39 @@ function uncertaintyIntegerDomains(node:Schema,root:Schema):Schema {
  }
  return result;
 }
+/** Canonical unique-field ownership bounds only ordinary emitted entries. */
+function ordinaryFieldMaximum(root:Schema):number {
+ const array=root.properties!.changes;
+ requireShape(array.type==="array"&&array.items);
+ const wrapper=deref(array.items,root);
+ if(wrapper.type==="null"){requireShape(array.maxItems===0);return 0;}
+ requireShape(wrapper.type==="object"&&wrapper.required?.includes("change")&&wrapper.properties?.change);
+ const fields=new Set<string>();
+ const visit=(raw:Schema)=>{
+  const node=deref(raw,root);
+  requireShape(!node.allOf&&!(node.anyOf&&node.oneOf));
+  const branches=node.anyOf??node.oneOf;
+  if(branches){requireShape(branches.length);branches.forEach(visit);return;}
+  requireShape(node.type==="object"&&node.required?.includes("field")&&node.properties?.field);
+  const field=deref(node.properties.field,root),values=Object.hasOwn(field,"const")?[field.const]:field.enum;
+  requireShape(field.type==="string"&&values?.length);
+  for(const value of values){requireShape(typeof value==="string"&&CHANGE_ORDER_FIELDS_V3.some(field=>field===value)&&!Object.hasOwn(root.properties!,`${value}Change`));fields.add(value);}
+ };
+ visit(wrapper.properties.change);
+ requireShape(fields.size);return fields.size;
+}
+/** Internal definition alpha-renaming; no source-domain or codec change. */
+function compactSourceDefinition(root:Schema):Schema {
+ const names:Record<string,string>={__sources:"s",__ec:"c",__e:"e"};
+ for(const name of Object.values(names))requireShape(!Object.hasOwn(root.$defs??{},name));
+ const rename=(node:Schema):Schema=>{
+  if(node.$ref){at(root,node.$ref);for(const name of Object.keys(names))requireShape(!node.$ref.startsWith(`#/$defs/${name}/`));}
+  const result=mapSchemas(node,rename);for(const [before,after] of Object.entries(names))if(result.$ref===`#/$defs/${before}`)result.$ref=`#/$defs/${after}`;return result;
+ };
+ const result=rename(root);
+ if(result.$defs)result.$defs=Object.fromEntries(Object.entries(result.$defs).map(([key,value])=>[names[key]??key,value]));
+ return result;
+}
 export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): ProviderWireSchemaV3 {
   let schema = structuredClone(providerSchemaV3);
   if (capability) {
@@ -826,7 +859,8 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
   }
   schema.properties!.uncertainties.maxItems=4;
   schema.properties!.uncertainties.items=uncertaintyIntegerDomains(schema.properties!.uncertainties.items!,schema);
-  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
+  schema.properties!.changes.maxItems=ordinaryFieldMaximum(schema);
+  return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: compactSourceDefinition(outgoingStringEnums(prune(schema))) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3,input?:ContextInput): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);

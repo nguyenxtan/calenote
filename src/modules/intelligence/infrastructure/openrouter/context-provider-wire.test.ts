@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ContextInputSchema, ConversationInterpretationSchema, ConversationInterpretationV3Schema, parseInterpretationSections, parseInterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { createContextContractGateway, createContextHttpTransport, type SemanticJsonRequest } from "./semantic-gateway";
@@ -10,6 +10,29 @@ import { serializeContextRequest } from "../../../conversation/context-contract/
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
 import { projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
+import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
+import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
+import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
+import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
+function ordinarySchema(schema:ReturnType<typeof googleLiteEuContextWireSchema>["schema"]){const node=schema.properties!.changes;if(typeof node==="boolean")throw Error("TEST_SCHEMA_OBJECT");return node;}
+function restoreGeneralSourceDefinition(schema:ReturnType<typeof googleLiteEuContextWireSchema>["schema"]){
+ const names:Record<string,string>={s:"__sources",c:"__ec",e:"__e"};if(schema.$defs){schema.$defs=Object.fromEntries(Object.entries(schema.$defs).map(([key,value])=>[names[key]??key,value]));const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;for(const [before,after]of Object.entries(names))if(node.$ref===`#/$defs/${before}`)node.$ref=`#/$defs/${after}`;Object.values(node).forEach(walk);};walk(schema);}
+}
+it("wire73 actual R03 ordinary cardinality follows distinct fields not operation branches",async()=>{
+ const script=regressions.cases.find(c=>c.id==="R03")!,hash=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
+ const probe=await createContextContractProbe({sourceSha:"2833a66fbb84a5df84afc2fa9186c4c895b3e8ca",referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{const schema=googleLiteEuContextWireSchema(deriveGenerationFieldCapability(input),input).schema;if(index===2){const restored=structuredClone(schema);delete ordinarySchema(restored).maxItems;restoreGeneralSourceDefinition(restored);expect(hash(restored)).toBe("84dc7214f88a236f08034e4de7a9713f673c6fe44ee5661f4642fb97b446fb49");expect(ordinarySchema(schema).maxItems).toBe(1);}else expect(ordinarySchema(schema).maxItems).toBe(0);const proposal=frozenContextProposal(input,"R03",index-1) as {uncertainties:unknown[]};if(index===1)proposal.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];return proposal;});try{for(const turn of script.turns)await probe.turn(turn.text,turn.receipt);}finally{probe.dispose();}
+});
+it("wire73 ordinary field cardinality preserves all operations and excludes singleton roots",()=>{
+ const base=googleLiteEuContextWireSchema().schema;expect(ordinarySchema(base).maxItems).toBe(3);
+ for(const notes of [false,true])for(const calendar of [false,true])for(const lead of [false,true]){const capability={version:"generation-field-capability-14" as const,allowedNumericFields:lead?["leadOffsetDays" as const]:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:calendar,notesProposalAllowed:notes,reminderDateProposalAllowed:true,eventDateYearNullRequired:false};const schema=googleLiteEuContextWireSchema(capability).schema;expect(ordinarySchema(schema).maxItems).toBe(Number(notes)+Number(calendar)+Number(lead));expect(schema.properties!.locationChange).not.toEqual({type:"null"});}
+});
+it("wire73 unknown ordinary field shapes and source definition collisions fail closed",()=>{
+ const clone=structuredClone;
+ for(const fault of ["missing-change","unknown-field","s","c","e"]){const spy=vi.spyOn(globalThis,"structuredClone").mockImplementationOnce(value=>{const result=clone(value) as ReturnType<typeof googleLiteEuContextWireSchema>["schema"],items=ordinarySchema(result).items;if(Array.isArray(items)||typeof items==="boolean"||!items?.properties)throw Error("TEST_SCHEMA_SHAPE");if(fault==="missing-change")delete items.properties.change;else if(fault==="unknown-field"){const change=items.properties.change;if(typeof change==="boolean")throw Error("TEST_SCHEMA_SHAPE");const branch=change.anyOf![0];branch.properties!.field={type:"string",enum:["PRIVATE_UNKNOWN"]};}else {result.$defs![fault]={type:"integer",minimum:0,maximum:12};items.properties.rank={$ref:`#/$defs/${fault}`};}return result;});try{expect(()=>googleLiteEuContextWireSchema()).toThrow("CONTEXT_PROVIDER_WIRE_INVALID");}finally{spy.mockRestore();}}
+});
+it("wire73 one ordinary operation stays representable while repeated field ownership refuses",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];for(const operation of ["SET","REPLACE","CLEAR"] as const){const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation,value:operation==="CLEAR"?null:"synthetic",evidence}]}),wire=wireFixture(canonical) as Record<string,unknown>;expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");const changes=wire.changes as Array<{rank:number;change:unknown}>;changes.push({...structuredClone(changes[0]),rank:1});expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
+});
 it("one global rank space preserves mixed order and rejects per-container restart",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"synthetic",evidence},{field:"calendar",operation:"SET",value:"GREGORIAN",evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]}),raw=wireFixture(canonical) as Record<string,unknown>;
  const ordinary=raw.changes as Array<{rank:number}>;ordinary[0].rank=1;ordinary[1].rank=2;(raw.eventRelationChange as {rank:number}).rank=0;
@@ -253,7 +276,7 @@ it.each(["valid","numeric"] as const)("wire55 actual gateway consumes typed auth
 it("wire53 bound schema and decoder use codes, never legacy primary JSON",()=>{
  const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"synthetic"}],currentTurn:0});
  const schema=googleLiteEuContextWireSchema(undefined,bound).schema as unknown as {$defs:Record<string,{enum?:string[]}>};
- expect(schema.$defs.__sources.enum).toEqual(["U0"]);expect(schema.$defs.__current.enum).toEqual(["U0"]);
+ expect(schema.$defs.s.enum).toEqual(["U0"]);expect(schema.$defs.__current.enum).toEqual(["U0"]);
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"LIST_REMINDERS",query:{kind:"LIST",period:{kind:"UPCOMING"},statusScope:"DEFAULT",evidence}});
  const raw=encodeGoogleLiteEuContextV3(canonical) as {query:{evidence:{primaryEvidence:string}}};
@@ -273,7 +296,7 @@ it.each([null,"PRIVATE_UNCERTAINTY_VALUE",{}])("wire52 nonarray uncertainty refu
  const issue=(diagnostics[0] as {issues:Record<string,unknown>[]}).issues[0];expect(issue.path).toEqual(["uncertainties"]);expect(issue).not.toHaveProperty("constraint");expect(issue).not.toHaveProperty("actualCount");expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_UNCERTAINTY_VALUE");
 });
 it("wire52 restores only the outgoing root max4 and leaves uncertainty items and all other schema nodes unchanged",()=>{
- const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;
+ const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number};changes:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;delete schema.properties.changes.maxItems;
  expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("640d01c118a9c180f16b1a52885f723a098db1f2007939b5ccc7a58ed66e61e4");
 });
 it("wire52 valid zero/four uncertainty operands keep decoding while nested failures keep their exact item path",()=>{
@@ -1047,8 +1070,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-72");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-73");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("485549cd902ac78c65ff606cc2f75f7cb5a6416b61b4ec2eeadafe93e2e23d62");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

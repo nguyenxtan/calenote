@@ -46,7 +46,13 @@ function restorePublicWire68Request(request:{messages:Array<{content:string}>;re
  request.messages[1].content=JSON.stringify(encoded);
 }
 // Public wire65 specimen only; never sent through current application authority.
+function restorePublicEvidenceNames(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
+ const names:Record<string,string>={s:"__sources",c:"__ec",e:"__e"};if(schema.$defs){schema.$defs=Object.fromEntries(Object.entries(schema.$defs).map(([key,value])=>[names[key]??key,value]));const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;for(const [before,after]of Object.entries(names))if(node.$ref===`#/$defs/${before}`)node.$ref=`#/$defs/${after}`;Object.values(node).forEach(walk);};walk(schema);}
+}
 function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
+ // Public historical inverse only: wire73 bound and internal source name.
+ const boundedOrdinary=schema.properties!.changes;if(typeof boundedOrdinary==="boolean")throw Error("HISTORICAL_RANK_SHAPE");if(boundedOrdinary.maxItems!==0)delete boundedOrdinary.maxItems;
+ restorePublicEvidenceNames(schema);
  const object=(node:NonNullable<typeof schema.$defs>[string]|boolean)=>{if(typeof node==="boolean")throw Error("HISTORICAL_RANK_SHAPE");return node;};
  for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"]){const root=object(schema.properties![field+"Change"]);if(root.type==="null")continue;const wrapper=root.anyOf?object(root.anyOf[0]):root;expect(wrapper.required).toEqual(["rank","change"]);expect(wrapper.properties!.rank).toEqual({$ref:"#/$defs/r"});delete wrapper.properties!.rank;wrapper.required=["change"];}
  const ordinary=object(schema.properties!.changes);if(ordinary.maxItems!==0){if(Array.isArray(ordinary.items))throw Error("HISTORICAL_RANK_SHAPE");const wrapper=object(ordinary.items!);expect(wrapper.required).toEqual(["rank","change"]);expect(wrapper.properties!.rank).toEqual({$ref:"#/$defs/r"});const change=object(wrapper.properties!.change);expect(schema.$defs!.__schema3).toBeDefined();expect(schema.$defs!.__schema5).toBeUndefined();const anchor=schema.$defs!.__schema4?"__schema4":"__schema3";schema.$defs=Object.fromEntries(Object.entries(schema.$defs!).flatMap(([key,value])=>key===anchor?[[key,value],["__schema5",change]]:[[key,value]]));ordinary.items={$ref:"#/$defs/__schema5"};}
@@ -211,7 +217,7 @@ it.each([
  expect(()=>debugProbeSchema(schema,"QUERY_ONLY")).toThrow("DEBUG_PROBE_SHAPE");
 });
 it.each(["crossed-source","extra-key","missing-required","open-object","empty-current"])("mutating evidence shared refs reject nonexact %s",fault=>{
- const schema=requestBoundSchema() as unknown as {$defs:Record<string,{properties:Record<string,unknown>;required:string[];additionalProperties:boolean;enum:string[]}>};
+ const historical=requestBoundSchema();restorePublicEvidenceNames(historical);const schema=historical as unknown as {$defs:Record<string,{properties:Record<string,unknown>;required:string[];additionalProperties:boolean;enum:string[]}>};
  if(fault==="crossed-source")schema.$defs.__ec.properties.primaryEvidence={$ref:"#/$defs/__sources"};
  if(fault==="extra-key")schema.$defs.__ec.properties.secret={type:"string"};
  if(fault==="missing-required")schema.$defs.__ec.required=["primaryEvidence"];

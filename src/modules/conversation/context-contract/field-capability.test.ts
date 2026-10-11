@@ -285,7 +285,7 @@ it.each(["reminderDate","reminderTime"] as const)("indexed %s mutating evidence 
 it("no current semantic source removes mutations without dropping SET/history/query domains",()=>{
  const context=input("[CONTROL]");context.turns=[{role:"USER",text:"Nhắc hai ngày liên tiếp."},{role:"ASSISTANT",text:"Giữ lại không?"},{role:"USER",text:"[CONTROL]"}];context.currentTurn=2;
  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {$defs:Record<string,unknown>};
- expect(schema.$defs.__current).toBeUndefined();expect(schema.$defs.__ec).toBeUndefined();
+ expect(schema.$defs.__current).toBeUndefined();expect(schema.$defs.c).toBeUndefined();
  const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:context.turns[0].text,occurrence:1}],raw=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
  const wire=encodeGoogleLiteEuContextV3(raw) as {changes:Array<{operation:string;value:unknown}>},check=validator(context);expect(check.safeParse(wire).success).toBe(true);wire.changes[0].operation="REPLACE";expect(check.safeParse(wire).success).toBe(false);wire.changes[0].operation="CLEAR";wire.changes[0].value=null;expect(check.safeParse(wire).success).toBe(false);
 });
@@ -321,12 +321,12 @@ it("targeted generation availability still cannot grant unavailable CURRENT auth
 it("actual three-turn request uses one shared general enum and one current mutation enum",()=>{
   const context=input("Nhắc 9h.");context.turns=[{role:"USER",text:"Nhắc gọi mẹ."},{role:"ASSISTANT",text:"Lúc nào?"},{role:"USER",text:"9h."}];context.currentTurn=2;
   const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {$defs:Record<string,{type:string;enum?:string[]}>};
-  expect(schema.$defs.__sources).toEqual({type:"string",enum:["U0","U2"]});
+  expect(schema.$defs.s).toEqual({type:"string",enum:["U0","U2"]});
   const references:string[]=[];let sourceEnums=0,evidenceReferences=0;
-  const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.$ref==="#/$defs/__sources")references.push(node.$ref);if(node.$ref==="#/$defs/__e")evidenceReferences++;if(Array.isArray(node.enum)&&node.enum.some(v=>typeof v==="string"&&/^U\d+$/.test(v)))sourceEnums++;Object.values(node).forEach(walk);};walk(schema);
+  const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.$ref==="#/$defs/s")references.push(node.$ref);if(node.$ref==="#/$defs/e")evidenceReferences++;if(Array.isArray(node.enum)&&node.enum.some(v=>typeof v==="string"&&/^U\d+$/.test(v)))sourceEnums++;Object.values(node).forEach(walk);};walk(schema);
   expect(references).toHaveLength(1);expect(sourceEnums).toBe(2);expect(evidenceReferences).toBeGreaterThan(3);
   expect(schema.$defs.__current).toEqual({type:"string",enum:["U2"]});
-  expect(schema.$defs.__e).toMatchObject({type:"object",properties:{primaryEvidence:{$ref:"#/$defs/__sources"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false});
+  expect(schema.$defs.e).toMatchObject({type:"object",properties:{primaryEvidence:{$ref:"#/$defs/s"},additionalEvidenceJson:{type:"string"}},required:["primaryEvidence","additionalEvidenceJson"],additionalProperties:false});
   const evidence=[{kind:"USER_QUOTE" as const,turn:2,quote:"9h.",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
   const wire=encodeGoogleLiteEuContextV3(canonical) as {changes:Array<{change:{evidence:{primaryEvidence:string;additionalEvidenceJson:string}}}>};
@@ -349,9 +349,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-14",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("dc4476ab56bccad3c3a3e337567e9c46fb565c8f8f3f777680fb6f1fc62e9eb4");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("fd51011558047a93089218b3261007df6c7a0a746f63eb01a5119583b228ddd8");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("4756dd6cd1a6220b3ceffed942a514a25da9f5d13b4bf0327b489dc5c8f796a0");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("c476660989b2829dbcb9dbafb42d9eeae255efe33b6413836ab6c4510f6e7a28");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

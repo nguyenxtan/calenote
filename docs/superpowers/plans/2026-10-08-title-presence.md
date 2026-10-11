@@ -1,5 +1,15 @@
 # Title Presence Implementation Plan
 
+### Wire73 ordinary uniqueness bound execution
+
+- [ ] First strict fit12003 exceeds12000: measured R07_dispatch_4 final map __sources-to-s/__ec-to-c/__e-to-e reaches12000. TDD outgoing local definition alpha-renaming only, preserving insertion order, all exact refs/assertions/domains; collision/missing-ref refusal. Exact inverse equality and pure historical inverse restoration, no source-code/decoder/prompt change. Re-run all326 strict fit and affected/historical checks; retain failed fit evidence.
+
+BASE2833a66fbb84a5df84afc2fa9186c4c895b3e8ca; TOP wire73 spec, existing TypeScript schema builder/decoder and continuous USD5 scope.
+
+- [ ] TDD RED actual R03 projection digest baseline exposes unbounded sole-field array. GREEN generic finite reachable distinct ordinary-field maximum after specialization; no fixture operand/code path. Exact field-discriminant proof, unknown shapes refuse, empty case max0, singleton carriers excluded, multiple operations same field counted once; accepted one-per-field outputs preserved and duplicate decoder rejection unchanged. Own context-provider-wire.ts/.test.ts plus necessary protocol/current identity dependent tests only.
+- [ ] Preserve all branch source/value associations and existing guards. Focused regressions/type/lint/diff, strict ENTIRE67/all32612000/1536, historical dependent six where affected. No source/prompt/oracle/canonical/evidence changes, provider/key/accounting/commit by implementer. If fit fails, report exact excess and equivalent compression proposal; no limit waiver.
+- [ ] Independent C0/I0; frozen controller full then selective local commit, fresh trusted preflight/Formal within actual conservative USD5 remaining. No extra diagnostic tools/probe or unchanged rerun. First failure settle/terminal then scoped repair; no stop at local PASS, Full, push, merge, deploy or remote migration.
+
 ### Wire72 notes context execution
 
 BASE5140639d30684ee29b634967ff6db6340b506f2f; TOP wire72 scope-aware notes spec, existing TypeScript service projection/predicate/generation bounds and continuous USD5 scope.
