@@ -9,6 +9,21 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it("wire64 seven authored carriers preserve chosen order and reject index10 without repair",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const fields=[{field:"title",operation:"SET",value:"synthetic",evidence},{field:"location",operation:"SET",value:"synthetic",evidence},{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}];
+ for(let rotation=0;rotation<7;rotation++){const changes=[...fields.slice(rotation),...fields.slice(0,rotation)],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(wire.changes).toEqual([]);expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});for(const index of [10,-1,0.5,"0",null]){const bad=structuredClone(wire);(bad.titleChange as {index:unknown}).index=index;expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}const bad=structuredClone(wire);(bad.titleChange as {index:unknown}).index=(bad.locationChange as {index:unknown}).index;expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
+});
+it.each(["outside","numeric","clock"])("wire64 integer uncertainty domains preserve exact %s language",context=>{
+ const text=context==="outside"?"Nhắc gọi mẹ.":context==="numeric"?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.";
+ const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text}]});
+ const schema=serializeContextRequest(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
+ const item=schema.properties.uncertainties.items;const check=z.fromJSONSchema({...item,$defs:(schema as unknown as {$defs:Record<string,unknown>}).$defs} as Parameters<typeof z.fromJSONSchema>[0]);
+ const visit=(value:unknown):void=>{if(!value||typeof value!=="object")return;const n=value as Record<string,unknown>;if(n.properties&&typeof n.properties==="object"&&"fieldCode" in n.properties){const field=(n.properties as Record<string,Record<string,unknown>>).fieldCode;expect(field.enum).toBeUndefined();expect(field.type).toBe("integer");}Object.values(n).forEach(visit);};visit(item);
+ for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){const expected=context==="outside"||(![8,9].includes(fieldCode)&&!(context==="clock"&&fieldCode===6&&reason==="MISSING"));expect(check.safeParse({fieldCode,reason,alternatives:[]}).success).toBe(expected);}
+ for(const fieldCode of [-1,16,0.5,"0",null,true,{},[]])expect(check.safeParse({fieldCode,reason:"MISSING",alternatives:[]}).success).toBe(false);
+ for(const value of [{},{fieldCode:0,reason:"MISSING"},{fieldCode:0,reason:"MISSING",alternatives:[],secret:1}])expect(check.safeParse(value).success).toBe(false);
+});
 it.each([
  [2,true,false,false],[30,true,false,false],[1,true,false,true],[31,true,false,true],[2,false,false,true],[2,true,true,true]
 ] as const)("wire61 bound schema preserves genuine numeric unsupported: count%s capability%s lead%s",(count,finiteDaily,lead,allowed)=>{
@@ -949,7 +964,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-63");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-64");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

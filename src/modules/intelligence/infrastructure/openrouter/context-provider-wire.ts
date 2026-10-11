@@ -643,6 +643,20 @@ function operationValues(raw:Record<string,unknown>,mode:"encode"|"decode"):Reco
  }
  return result;
 }
+function uncertaintyIntegerDomains(node:Schema,root:Schema):Schema {
+ if(node.$ref){const target=at(root,node.$ref);Object.assign(target,uncertaintyIntegerDomains(target,root));return node;}
+ const result=mapSchemas(node,child=>uncertaintyIntegerDomains(child,root)),field=result.properties?.fieldCode&&deref(result.properties.fieldCode,root);
+ if(field?.type==="integer"&&field.enum){
+  requireShape(field.enum.length>0&&field.enum.every(value=>typeof value==="number"&&Number.isSafeInteger(value)));
+  const values=[...new Set(field.enum as number[])].sort((a,b)=>a-b),ranges:{minimum:number;maximum:number}[]=[];
+  for(const value of values){const last=ranges.at(-1);if(last&&value===last.maximum+1)last.maximum=value;else ranges.push({minimum:value,maximum:value});}
+  const replacement={...field};delete replacement.enum;
+  if(ranges.length===1){replacement.minimum=ranges[0].minimum;replacement.maximum=ranges[0].maximum;}
+  else replacement.anyOf=ranges.map(range=>({type:"integer",...range}));
+  result.properties!.fieldCode=replacement;
+ }
+ return result;
+}
 export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): ProviderWireSchemaV3 {
   let schema = structuredClone(providerSchemaV3);
   if (capability) {
@@ -789,6 +803,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     for(const raw of changes.anyOf){const branch=deref(raw,schema),operation=branch.properties!.operation;if((operation.enum??[operation.const]).some(value=>value==="SET"||value==="REPLACE"))branch.properties!.value={$ref:"#/$defs/__yearlessCivil"};}
   }
   schema.properties!.uncertainties.maxItems=4;
+  schema.properties!.uncertainties.items=uncertaintyIntegerDomains(schema.properties!.uncertainties.items!,schema);
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: outgoingStringEnums(prune(schema)) as typeof InterpretationJsonSchemaV3 };
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3,input?:ContextInput): unknown {

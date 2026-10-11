@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {it,expect,vi} from "vitest";
-import {z} from "zod";
+import {execFileSync} from "node:child_process";
 import {mkdtempSync,mkdirSync,realpathSync,readFileSync,writeFileSync,rmSync,existsSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -19,50 +19,8 @@ import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/m
 import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
-it.each(["valid","index10","http400"])("position instruction axis %s remains strict and terminal",async kind=>{
- const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async request=>{
-  calls++;const interval=structuredClone(request);interval.messages[0].content=CONTEXT_CONTRACT_PROMPT;expect(hash(JSON.stringify(interval))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");expect(hash(JSON.stringify(request))).toBe("c6205ccf2477068f0cd9715b4688805e676f729c01048f1517aa6194b988637d");
-  const original=structuredClone(interval),schema=original.response_format.json_schema.schema as Record<string,unknown>,field=((schema.properties as Record<string,{items:{properties:Record<string,Record<string,unknown>>}}>).uncertainties.items.properties.fieldCode);delete field.anyOf;field.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];const before=JSON.stringify(original);expect(debugPositionRequest(original)).toEqual(request);expect(JSON.stringify(original)).toBe(before);
-  expect(request.messages[0].content.split("\n").filter(line=>!line.startsWith("Positions:"))).toEqual(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("Positions:")));
-  for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugPositionRequest(drift)).toThrow("DEBUG_UNCERTAINTY_INTEGER_BINDING");}
-  if(kind==="http400")return {status:400,body:"{}"};
-  const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;
-  const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:"synthetic",occurrence:1}],base=ConversationInterpretationV3Schema.parse(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0));
-  const changes=[{field:"title",operation:"SET",value:"synthetic",evidence},{field:"location",operation:"SET",value:"synthetic",evidence},{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}];
-  for(let rotation=0;rotation<7;rotation++){const ordered=[...changes.slice(rotation),...changes.slice(0,rotation)],canonical=ConversationInterpretationV3Schema.parse({...base,changes:ordered}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(wire.changes).toEqual([]);expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});for(const index of [10,-1,0.5,"0",null]){const bad=structuredClone(wire);(bad.titleChange as {index:unknown}).index=index;expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}const collision=structuredClone(wire);(collision.titleChange as {index:unknown}).index=(collision.locationChange as {index:unknown}).index;expect(parseGoogleLiteEuContextSectionsV3(collision,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
-  if(kind==="index10")(content.titleChange as {index:number}).index=10;
-  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-position",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- },{now:()=>100});expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(calls).toBe(1);expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");if(kind==="index10")expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- }finally{s.cleanup();}
-});
-it.each(["prompt","context","schema","route"])("position instruction axis %s drift stops before HTTP",async fault=>{
- const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
- const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);}finally{spy.mockRestore();s.cleanup();}
-});
-it.each(["valid","empty","http400"])("integer uncertainty interval axis %s remains one terminal request",async kind=>{
- const s=setup();let calls=0;try{
-  const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async request=>{
-   calls++;const original=structuredClone(request),schema=original.response_format.json_schema.schema as Record<string,unknown>;
-   const item=(schema.properties as Record<string,{items:{properties:Record<string,unknown>}}>).uncertainties.items;
-   const field=item.properties.fieldCode as Record<string,unknown>;expect(field.anyOf).toEqual([{type:"integer",minimum:0,maximum:7},{type:"integer",minimum:10,maximum:15}]);expect(field.enum).toBeUndefined();
-   const next=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]),prior={...field};delete prior.anyOf;prior.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];item.properties.fieldCode=prior;const old=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]);
-   for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(let fieldCode=0;fieldCode<16;fieldCode++){const witness={fieldCode,reason,alternatives:[]};expect(next.safeParse(witness).success).toBe(old.safeParse(witness).success);expect(next.safeParse(witness).success).toBe(fieldCode!==8&&fieldCode!==9);}
-   for(const fieldCode of [-1,16,0.5,7.5,"0",null,true,{},[]])expect(next.safeParse({fieldCode,reason:"MISSING",alternatives:[]}).success).toBe(false);
-   for(const witness of [{},{reason:"MISSING",alternatives:[]},{fieldCode:0,reason:"MISSING",alternatives:[],secret:1}])expect(next.safeParse(witness).success).toBe(false);
-   expect(hash(JSON.stringify(original))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");expect(hash(JSON.stringify(request))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");
-   const snapshot=JSON.stringify(original),again=debugUncertaintyIntegerRequest(original);expect(JSON.stringify(original)).toBe(snapshot);expect(again).toEqual(request);
-   for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugUncertaintyIntegerRequest(drift)).toThrow("DEBUG_UNCERTAINTY_INTEGER_BINDING");}
-   if(kind==="http400")return {status:400,body:"{}"};
-   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;if(kind==="empty")content.uncertainties=[{}];
-   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-integer-axis",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  },{now:()=>100});expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(calls).toBe(1);expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");
-  if(kind==="empty"){expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{uncertaintyShape:{keys:[]}}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
-  await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- }finally{s.cleanup();}
-});
-it.each(["prompt","context","schema","route"])("integer uncertainty axis %s drift stops before HTTP",async fault=>{
- const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
- const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);}finally{spy.mockRestore();s.cleanup();}
+it.each(["R02_TURN0_INDEX_POSITION_PROMPT","R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS","R02_TURN0_UNCERTAINTY_WIRE_PROMPT"] as const)("wire64 refuses historical exact request probe %s before physical HTTP",async mode=>{
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(0);}finally{s.cleanup();}
 });
 import {resolveSingleValidationTarget} from "./context-contract-runner";
 import {createContextContractProbe} from "./context-contract-probe";
@@ -227,29 +185,14 @@ it("historical string-selector probe fails closed when runtime is already string
   expect(calls).toBe(0);
  }finally{s.cleanup()}
 });
-it.each(["valid","empty","http400"])("R02 uncertainty prompt-only diagnostic stays single and strict: %s",async kind=>{
- const s=setup();let calls=0;
- try{
-  const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_WIRE_PROMPT",async request=>{
-   calls++;expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("ed856da2f9e58cea94ff657c4db020681b345d1dd0f62adfda59fdc802fd8436");
-   expect(request.messages[0].content).toContain("REQUIRED fieldCode/reason/alternatives, never {}");
-   if(kind==="http400")return {status:400,body:"{}"};
-   const original=structuredClone(request);original.messages[0].content=CONTEXT_CONTRACT_PROMPT;
-   const before=JSON.stringify(original),transformed=debugUncertaintyPromptRequest(original);expect(JSON.stringify(original)).toBe(before);expect(transformed).toEqual(request);
-   expect({...transformed,messages:[{...transformed.messages[0],content:CONTEXT_CONTRACT_PROMPT},...transformed.messages.slice(1)]}).toEqual(original);
-   const originalLines=CONTEXT_CONTRACT_PROMPT.split("\n"),probeLines=request.messages[0].content.split("\n");expect(probeLines.filter(line=>!line.startsWith("uncertainties:"))).toEqual(originalLines.filter(line=>!line.startsWith("uncertainties:")));
-   expect(probeLines.find(line=>line.startsWith("uncertainties:"))?.split(" Operation alternatives")[1]).toBe(originalLines.find(line=>line.startsWith("uncertainties:"))?.split(" Operation alternatives")[1]);
-   console.log(JSON.stringify({promptAxisSha:hash(request.messages[0].content),requestAxisSha:hash(JSON.stringify(request)),promptBytesBefore:Buffer.byteLength(CONTEXT_CONTRACT_PROMPT),promptBytesAfter:Buffer.byteLength(request.messages[0].content)}));
-   for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugUncertaintyPromptRequest(drift)).toThrow("DEBUG_UNCERTAINTY_PROMPT_BINDING");}
-   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;
-   if(kind==="empty")content.uncertainties=[{}];
-   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-prompt-axis",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
-  },{now:()=>100});
-  expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(calls).toBe(1);
-  expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");
-  if(kind==="empty")expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{uncertaintyShape:{keys:[]}}]}}});
-  await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_WIRE_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- }finally{s.cleanup();}
+it("wire64 historical pure transformations retain the immutable original request specimen",async()=>{
+ const s=setup();try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
+  const historical=structuredClone(request),oldSource=execFileSync("git",["show","01c2849f682cdc7ab8dce8aeb40ace2a8e9b8d7b:src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"}),oldPosition=oldSource.match(/^Positions:.*$/mu)?.[0],currentPosition=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Positions:"));expect(oldPosition).toBeTruthy();expect(currentPosition).toBeTruthy();historical.messages[0].content=CONTEXT_CONTRACT_PROMPT.replace(currentPosition!,oldPosition!);expect(hash(historical.messages[0].content)).toBe("0050e79ee692aec74554e8b949ad90f764f988a3c56da89904c80c6eb4fbb8d3");
+  const field=((historical.response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:{properties:{fieldCode:Record<string,unknown>}}}}}).properties.uncertainties.items.properties.fieldCode);delete field.anyOf;field.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];
+  expect(hash(JSON.stringify(historical))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");const before=JSON.stringify(historical);
+  expect(hash(JSON.stringify(debugUncertaintyIntegerRequest(historical)))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");expect(hash(JSON.stringify(debugPositionRequest(historical)))).toBe("c6205ccf2477068f0cd9715b4688805e676f729c01048f1517aa6194b988637d");expect(hash(JSON.stringify(debugUncertaintyPromptRequest(historical)))).toBe("37f21bfe80ad05cfc49afcaea464e36db9d28fe174dfffefb0d241aac7e7b381");expect(JSON.stringify(historical)).toBe(before);
+  const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-current-specimen",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ },{now:()=>100});expect(result.responses[0].status).toBe("SUCCESS");}finally{s.cleanup();}
 });
 it.each(["prompt","context","schema","route"])("uncertainty prompt axis rejects %s drift before physical transport",async fault=>{
  const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});

@@ -260,11 +260,14 @@ it("reminder singleton instructions preserve model-authored global positions wit
   expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence unchanged (CLEAR value=null)");
 });
 it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("N=changes.length + all ten NON-NULL carriers above, simultaneously");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("0<=index<N");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("never prior turns/state/source ordinals or one-based");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Three ordinary changes + one carrier: N=4, appended index3, never4");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("Sole current reminderTime change: index0 despite earlier retained fields");
+  const positions=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Positions:"));
+  expect(positions).toContain("N=changes.length + ten NON-NULL carriers simultaneously");
+  expect(positions).toContain("distinct integers0<=index<N preserve original order");
+  expect(positions).toContain("Zero-based CURRENT PROPOSAL—not prior turns/state/field/root/source codes or one-based");
+  expect(positions).toContain("Zero ordinary+7 carriers: N=7, indexes0..6 once");
+  expect(positions).toContain("3 ordinary+1: N=4, append3 not4");
+  expect(positions).toContain("Sole reminderTime:index0 despite retained fields");
+  expect(positions).toContain("No null/phantom positions");
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
