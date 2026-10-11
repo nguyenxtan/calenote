@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Rank diagnostics execution
+
+BASE862181e08e26b04528d98191a1ff92f669d2c90f. Existing continuous debug authority; TypeScript diagnostic projection only, TOP rank rejection spec above. Exact owned implementation files: validation-diagnostics.ts/.test.ts and context-provider-wire.test.ts. Interfaces: optional CanonicalValidationIssue.rankControl plus private bounded own-DATA inspector, called only by projectWireValidation for CHANGE_RANK. No decoder edits or changed acceptance/version/prompt/schema.
+
+- [ ] Genuine RED actual decoder diagnostic matrix scalar/negative/out-of-range/collision/ordinary ordering; GREEN exact same REFUSED and safe reason/domain/count/locations. Preserve sparse/sole/mixed positive controls. Test accessor/proxy/oversized/secret/observer safety and classification precedence; no business/evidence/source values retained.
+- [ ] Focused provider-wire/validation diagnostics/gateway regressions, typecheck/scoped lint/diff; record exits/frozen fingerprint. Existing review seat C0/I0; controller required frozen local checks then selective local commit. Outgoing bytes unchanged, no repeated entire fit needed.
+- [ ] Fresh trusted preflight then new-candidate Formal within existing USD5; first fail settle/terminal and use new rank evidence before any generation fix. No unchanged blind retry, Full/push/merge/deploy, budget/history changes or new owner gate.
+
 ### Wire70 scheduling-continuation notes execution
 
 Goal: prevent grounded scheduling-only continuation text from acquiring independent notes authority. Architecture/stack: existing TypeScript finite support predicates, application-derived generation bounds, unchanged strict evidence/canonical/service path. Spec is TOP wire70 in 2026-10-08-title-presence-design.md; BASE76197bb0c7ece684af7e430c99036ace7821cfdf. Reuse existing implementation/review seats and continuous owner scope; no separate campaign/master plan.

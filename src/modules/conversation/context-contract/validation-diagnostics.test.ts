@@ -6,6 +6,22 @@ import { UNCERTAINTY_FIELD_WIRE_CODE_V1 } from "../../intelligence/infrastructur
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+const rankRoots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
+const rankRaw=()=>({changes:[],...Object.fromEntries(rankRoots.map(root=>[root,null])),eventRelationChange:{rank:13,change:{value:sentinel,evidence:sentinel}}}) as Record<string,unknown>;
+it("rank projection reads only bounded own DATA controls and never exposes private strings",()=>{
+ let reads=0;const get=()=>{reads++;throw Error(sentinel);};
+ for(const target of ["root","rank","ordinary","length"]){const raw=rankRaw();if(target==="root")Object.defineProperty(raw,"eventRelationChange",{enumerable:true,get});else if(target==="rank")Object.defineProperty(raw.eventRelationChange,"rank",{get});else if(target==="ordinary"){raw.changes=[{rank:0}];Object.defineProperty(raw.changes,"0",{get});}else raw.changes=new Proxy([],{get});const result=projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK",undefined,"calenote-context-3");expect(result.issues[0].rankControl).toMatchObject(target==="length"?{reason:"OUT_OF_RANGE"}:{reason:"UNAVAILABLE",unavailable:true});expect(JSON.stringify(result)).not.toContain(sentinel);}
+ const raw=rankRaw();Object.defineProperty(raw.eventRelationChange,"change",{get});raw.eventRelationChange=new Proxy(raw.eventRelationChange as object,{get});raw[sentinel]=sentinel;expect(projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK").issues[0].rankControl).toMatchObject({reason:"OUT_OF_RANGE",actualRank:13});
+ raw.eventRelationChange=new Proxy({rank:13},{getOwnPropertyDescriptor(){throw Error(sentinel);}});expect(projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK").issues[0].rankControl).toMatchObject({reason:"UNAVAILABLE"});expect(reads).toBe(0);
+ for(const rank of [sentinel,{value:sentinel},null,NaN,Infinity]){const raw=rankRaw();raw.eventRelationChange={rank};const result=projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK");expect(result.issues[0].rankControl).toMatchObject({reason:"NON_INTEGER"});expect(result.issues[0].rankControl?.actualRank).toBeUndefined();expect(JSON.stringify(result)).not.toContain(sentinel);}
+});
+it("rank projection caps oversized scans, finite numeric telemetry and trusted path scope",()=>{
+ const raw=rankRaw(),array=Array.from({length:100},(_,rank)=>({rank}));let reads=0;Object.defineProperty(array,"13",{get(){reads++;throw Error(sentinel);}});raw.changes=new Proxy(array,{get(){reads++;throw Error(sentinel);}});
+ const result=projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK").issues[0].rankControl;expect(result).toMatchObject({reason:"UNAVAILABLE",ordinaryCount:13,carrierCount:1,truncated:true,unavailable:true});expect(reads).toBe(0);
+ for(const [rank,reason] of [[-1000001,"NEGATIVE"],[1000001,"OUT_OF_RANGE"],[Number.MAX_SAFE_INTEGER+1,"NON_INTEGER"]] as const){const raw=rankRaw();raw.eventRelationChange={rank};const result=projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK").issues[0].rankControl;expect(result?.reason).toBe(reason);expect(result?.actualRank).toBeUndefined();}
+ for(const rank of [-1000000,1000000]){const raw=rankRaw();raw.eventRelationChange={rank};expect(projectWireValidation(raw,["eventRelationChange","rank"],"CHANGE_RANK").issues[0].rankControl?.actualRank).toBe(rank);}
+ for(const path of [[sentinel,"rank"],["changes",13,"rank"],["eventRelationChange","change","rank"]])expect(projectWireValidation(rankRaw(),path,"CHANGE_RANK").issues[0].rankControl).toBeUndefined();expect(projectWireValidation(rankRaw(),["eventRelationChange","rank"],"number").issues[0].rankControl).toBeUndefined();
+});
 it("catalogue projection accepts only bounded finite own-data transport identities",()=>{
  const valid={constraint:"ORDER_SET",catalogueCount:0,emittedCount:1,ordinaryCount:0,missingFields:["eventRelation"],extraFields:[]};
  expect(projectCatalogueDiagnostic({...valid,privateKey:sentinel})).toEqual(valid);

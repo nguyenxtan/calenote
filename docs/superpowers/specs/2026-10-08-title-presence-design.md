@@ -1,5 +1,9 @@
 # Bounded title-presence generation amendment
 
+### Rank rejection diagnostics only
+
+Wire70 Fresh Formal terminal R02T1 reports eventRelationChange.rank / CHANGE_RANK / actualType number. The scalar, collision and ordinary-order failure branches are aggregated; actual cause/value is unproven. Add bounded descriptor-only rankControl metadata at existing projectWireValidation, ONLY for trusted CHANGE_RANK paths. Derive min0/max12 from existing thirteen-field alphabet. Finite reasons NON_INTEGER/NEGATIVE/OUT_OF_RANGE/COLLISION/NON_INCREASING/UNAVAILABLE, bounded observed counts/prior fixed locations and previous ordinary rank; emit actualRank only safe integers within -1000000..1000000, otherwise omit it. Never inspect change values/evidence/private strings or invoke getters; unavailable/oversized/throwing descriptors must not fabricate a classification. Respect actual decoder traversal and failure precedence. No acceptance, codec/schema/prompt/version, semantic ownership, oracle, accounting or provider change. Existing hard refusal remains hard refusal; observer failure cannot change it. This closes evidence precision only, not the live generation defect.
+
 ### Wire70 bounded scheduling-continuation notes ownership
 
 Wire69 Formal R01 both and R02T0 PASS; R02T1 has one oracle failure: notes must remain null but a CURRENT proposal SETs a string while transport/canonical/evidence/merge pass. Raw notes, quote and private model motive are not inferred. Current notes availability/completeness only excludes the initial isolated source; a complete retained-series scheduling answer still admits notes. Extend the same existing notes flag and atomic completeness guard using a Boolean-only sufficient continuation predicate, not a general notes parser. Reuse unchanged isBareRetainedSeriesOffsetAnswer and its full-span whole-clause executable support; no extracted count/value or synthetic evidence escapes the private predicate probe.

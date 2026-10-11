@@ -3,6 +3,15 @@ import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
 import { FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
 import { CHANGE_ORDER_FIELDS_V3 } from "./output-authority";
+// Decoder traversal: ordinary entries first, then these fixed singleton roots.
+const rankCarrierRoots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
+interface RankLocation {root:typeof rankCarrierRoots[number]|"changes";index?:number}
+export interface RankControlDiagnostic {
+  reason:"NON_INTEGER"|"NEGATIVE"|"OUT_OF_RANGE"|"COLLISION"|"NON_INCREASING"|"UNAVAILABLE";
+  minRank:0;maxRank:number;actualRank?:number;previousOrdinaryRank?:number;
+  ordinaryCount:number;carrierCount:number;collisionLocations:RankLocation[];
+  unavailable:boolean;truncated:boolean;
+}
 
 export interface CatalogueDiagnostic {
   constraint:"ORDER_SET"|"ORDER_SUBSEQUENCE";
@@ -54,6 +63,7 @@ export interface CanonicalValidationIssue {
   duplicateFieldCountsTruncated?: boolean;
   evidencePointer?:EvidencePointerDiagnostic;
   catalogue?:CatalogueDiagnostic;
+  rankControl?:RankControlDiagnostic;
   dateOperand?:DateOperandDiagnostic;
   uncertaintyShape?:UncertaintyWireShape;
   /** carrierCount counts observed non-null object roots, not validated changes. */
@@ -193,6 +203,43 @@ function alternativeStructure(raw:unknown):Pick<CanonicalValidationDiagnostics,"
   return records.length||truncated?{uncertaintyAlternatives:records,uncertaintyAlternativesTruncated:truncated}:{};
 }
 const jsonType = (value: unknown) => value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? "object" : types.has(typeof value) ? typeof value : "non_json";
+/** Fixed own DATA rank controls only; never change operands, evidence or unknown names. */
+function rankControlStructure(raw:unknown,path:PropertyKey[]):RankControlDiagnostic|undefined {
+  const bound=CHANGE_ORDER_FIELDS_V3.length;
+  const ordinary=path.length===3&&path[0]==="changes"&&typeof path[1]==="number"&&Number.isSafeInteger(path[1])&&path[1]>=0&&path[1]<bound&&path[2]==="rank";
+  const carrier=path.length===2&&rankCarrierRoots.some(root=>root===path[0])&&path[1]==="rank";
+  if(!ordinary&&!carrier)return;
+  const result:RankControlDiagnostic={reason:"UNAVAILABLE",minRank:0,maxRank:bound-1,ordinaryCount:0,carrierCount:0,collisionLocations:[],unavailable:false,truncated:false};
+  try{
+    const data=(object:unknown,key:PropertyKey):unknown=>{if(!object||typeof object!=="object")throw Error();const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor||!Object.hasOwn(descriptor,"value"))throw Error();return descriptor.value;};
+    if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error();
+    const changes=data(raw,"changes");if(!Array.isArray(changes))throw Error();
+    const length=data(changes,"length");if(typeof length!=="number"||!Number.isSafeInteger(length)||length<0)throw Error();
+    result.ordinaryCount=Math.min(length,bound);result.truncated=length>bound;
+    const entries:Array<{location:RankLocation;rank:unknown}>=[];
+    const add=(wrapper:unknown,location:RankLocation)=>{if(!wrapper||typeof wrapper!=="object"||Array.isArray(wrapper))throw Error();entries.push({location,rank:data(wrapper,"rank")});};
+    for(let index=0;index<result.ordinaryCount;index++)add(data(changes,String(index)),{root:"changes",index});
+    for(const root of rankCarrierRoots){const wrapper=data(raw,root);if(wrapper!==null){if(wrapper&&typeof wrapper==="object"&&!Array.isArray(wrapper))result.carrierCount++;add(wrapper,{root});}}
+    const selected=entries.findIndex(entry=>ordinary?entry.location.root==="changes"&&entry.location.index===path[1]:entry.location.root===path[0]);
+    if(selected<0||result.truncated)throw Error();
+    const rank=entries[selected].rank;
+    if(typeof rank==="number"&&Number.isSafeInteger(rank)&&rank>=-1000000&&rank<=1000000)result.actualRank=rank;
+    // Prior rank failures would have stopped the decoder before this path.
+    const prior=entries.slice(0,selected);
+    const seen=new Set<number>();let previousOrdinary=-1;
+    for(const entry of prior){if(typeof entry.rank!=="number"||!Number.isSafeInteger(entry.rank)||entry.rank<0||entry.rank>=bound||seen.has(entry.rank))throw Error();if(entry.location.root==="changes"){if(entry.rank<=previousOrdinary)throw Error();previousOrdinary=entry.rank;}seen.add(entry.rank);}
+    if(typeof rank!=="number"||!Number.isSafeInteger(rank))result.reason="NON_INTEGER";
+    else if(rank<0)result.reason="NEGATIVE";
+    else if(rank>=bound)result.reason="OUT_OF_RANGE";
+    else {
+      result.collisionLocations=prior.filter(entry=>entry.rank===rank).map(entry=>entry.location);
+      if(result.collisionLocations.length)result.reason="COLLISION";
+      else if(ordinary&&typeof path[1]==="number"&&path[1]>0){const previous=entries[selected-1].rank as number;result.previousOrdinaryRank=previous;if(rank<=previous)result.reason="NON_INCREASING";}
+    }
+    if(result.reason==="UNAVAILABLE")result.unavailable=true;
+  }catch{result.reason="UNAVAILABLE";result.unavailable=true;result.collisionLocations=[];delete result.previousOrdinaryRank;}
+  return result;
+}
 /** Zod issues are untrusted: never copy messages, inputs or unknown names.
  * Visit bounded issues/paths and schema-accepted duplicate field tags only,
  * never value, evidence or business-text trees. */
@@ -268,6 +315,10 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
   if(expected==="CHANGE_POSITION"){
     const position=carrierPositionStructure(raw,path);
     if(position)result.issues[0].carrierPosition=position;
+  }
+  if(expected==="CHANGE_RANK"){
+    const rank=rankControlStructure(raw,path);
+    if(rank)result.issues[0].rankControl=rank;
   }
   if(expected==="UNIQUE_TITLE_OWNER" && path.length===1 && path[0]==="titleChange" && raw && typeof raw==="object" && !Array.isArray(raw)){
     const object=raw as Record<string,unknown>,carrier=object.titleChange as {change?:{operation?:unknown}}|undefined;
