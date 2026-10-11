@@ -256,18 +256,20 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
 it("reminder singleton instructions preserve model-authored global positions without duplicate ownership",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("eventDateChange, eventTimeChange, eventRelationChange, frequencyChange, occurrenceCountChange, endDateChange, locationChange, reminderDateChange and reminderTimeChange are required nullable roots");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Ordinary changes contain none of these fields.");
-  expect(CONTEXT_CONTRACT_PROMPT).toContain("its ordinary-field subsequence equals changes array order");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("ordinary subsequence=changes array order");
   expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence (CLEAR=null)");
 });
-it("carrier indexes count only this emitted proposal and every non-null carrier simultaneously",()=>{
+it("integer catalogue selects field identities only in this authored global proposal",()=>{
   const positions=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
-  expect(positions).toContain("Exactly emitted ordinary+non-null carrier fields");
-  expect(positions).toContain("CURRENT PROPOSAL field-name sequence");
-  expect(positions).toContain("not prior turns/state/root/source codes");
-  expect(positions).toContain("Seven carriers: seven distinct emitted names in model-chosen order");
-  expect(positions).toContain("mix ordinary and carriers without sorting");
-  expect(positions).toContain('sole reminderTime: ["reminderTime"] despite retained fields');
-  expect(positions).toContain("no duplicates, missing/null/phantom entries or numeric indexes");
+  expect(positions).toContain("Exactly emitted ordinary+non-null fields once");
+  expect(positions).toContain("CURRENT PROPOSAL integer field-code sequence");
+  expect(positions).toContain("0=title,1=location,2=notes,3=eventDate,4=eventTime,5=reminderDate,6=reminderTime,7=calendar,8=frequency,9=occurrenceCount,10=eventRelation,11=leadOffsetDays,12=endDate");
+  expect(positions).toContain("Codes identify fields, never N-positions or prior turns/state/root/source addresses");
+  expect(positions).toContain("Seven carriers: seven distinct codes in model-chosen order");
+  expect(positions).toContain("mix ordinary/carriers without sorting");
+  expect(positions).toContain('[] empty; [6] sole reminderTime despite retained fields');
+  expect(positions).toContain("no missing/null/phantom entries");
+  expect(CONTEXT_CONTRACT_PROMPT).toContain("ordinary subsequence=changes array order");
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");

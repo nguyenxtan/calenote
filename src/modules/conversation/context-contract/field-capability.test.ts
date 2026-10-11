@@ -328,9 +328,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("481837325f92f20061c73c86004680da75c0887b745a10eeafc384690ef7e25f");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("f03f72e36f727e11a4cd66a4a6744fdd6b2727727d97f27ffcddd55a17911d41");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("611aeb3ca0b66d0718f095f478afbf8fe9107c570848ff832061faa5c6692e87");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("e82743df39266a01b14d91bc5967e4ba69eba7abb5eec1204ea656656d16a12e");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));

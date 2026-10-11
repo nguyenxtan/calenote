@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "417f30fa59082f5f7092cd6d0bc16aa56913a3715bc91fd35502a163c4052f55",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("417f30fa59082f5f7092cd6d0bc16aa56913a3715bc91fd35502a163c4052f55");
+    expect(requestSchemaDigest).not.toBe("fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -327,7 +327,7 @@ it.each([
     changes: [{ field: "notes", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "synthetic", occurrence: 1 }] }] }) as { changes: Array<Record<string, unknown>> };
   if (field === undefined) delete raw.changes[0].field; else raw.changes[0].field = field;
   if (operation === undefined) delete raw.changes[0].operation; else raw.changes[0].operation = operation;
-  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={change:raw.changes[0]};object.changeOrder=[field];raw.changes=[];}
+  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={change:raw.changes[0]};object.changeOrder=[field==="title"?0:1];raw.changes=[];}
   let diagnostics: unknown;
   expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
   expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:field==="title"?{path:["titleChange","change",expectedPath],expected:"CONTROL_ENUM"}:{ path: ["changes", 0, expectedPath], expected: "CONTROL_ENUM" })] });
@@ -501,8 +501,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "417f30fa59082f5f7092cd6d0bc16aa56913a3715bc91fd35502a163c4052f55",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-65" });
+      providerWireSchemaDigest: "fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-66" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

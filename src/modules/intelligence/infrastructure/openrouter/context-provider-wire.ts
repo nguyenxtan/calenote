@@ -552,7 +552,7 @@ function indexedReminderSchema(root:Schema):Schema {
     result.properties![field+"Change"]={anyOf:[{type:"object",properties:{change:{anyOf:changes}},required:["change"],additionalProperties:false},{type:"null"}]};
     result.required!.push(field+"Change");
   }
-  result.properties!.changeOrder={type:"array",items:{type:"string",enum:[...CHANGE_ORDER_FIELDS_V3]},maxItems:CHANGE_ORDER_FIELDS_V3.length};
+  result.properties!.changeOrder={type:"array",items:{type:"integer",minimum:0,maximum:CHANGE_ORDER_FIELDS_V3.length-1},maxItems:CHANGE_ORDER_FIELDS_V3.length};
   result.required!.push("changeOrder");
   return result;
 }
@@ -578,13 +578,13 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   };
   ordinaryChanges.forEach((change,index)=>{const field=fieldOf(change,["changes",index,"field"]);emitted.set(field,change);});
   if(mode==="decode"&&!Object.hasOwn(raw,"changeOrder"))throw new WireShapeFailure(["changeOrder"],"REQUIRED_PROPERTY");
-  const catalogue=mode==="encode"?ordinaryChanges.map(change=>fieldOf(change)):Object.getOwnPropertyDescriptor(raw,"changeOrder")?.value;
+  const catalogue=mode==="encode"?ordinaryChanges.map(change=>CHANGE_ORDER_FIELDS_V3.indexOf(fieldOf(change) as typeof CHANGE_ORDER_FIELDS_V3[number])):Object.getOwnPropertyDescriptor(raw,"changeOrder")?.value;
   const length=Array.isArray(catalogue)?Object.getOwnPropertyDescriptor(catalogue,"length")?.value:undefined;
   if(!Array.isArray(catalogue)||!Number.isSafeInteger(length)||length<0||length>CHANGE_ORDER_FIELDS_V3.length)throw new WireShapeFailure(["changeOrder"],"array");
   const order:string[]=[];
   const selected=new Set<string>();
-  for(let index=0;index<length;index++){const field=Object.getOwnPropertyDescriptor(catalogue,String(index))?.value;if(typeof field!=="string"||!(CHANGE_ORDER_FIELDS_V3 as readonly string[]).includes(field)||selected.has(field))throw new WireShapeFailure(["changeOrder",index],"CONTROL_ENUM");selected.add(field);order.push(field);}
-  if(mode==="encode")result.changeOrder=order;
+  for(let index=0;index<length;index++){const code=Object.getOwnPropertyDescriptor(catalogue,String(index))?.value;if(typeof code!=="number"||!Number.isSafeInteger(code)||code<0||code>=CHANGE_ORDER_FIELDS_V3.length)throw new WireShapeFailure(["changeOrder",index],"CONTROL_ENUM");const field=CHANGE_ORDER_FIELDS_V3[code];if(selected.has(field))throw new WireShapeFailure(["changeOrder",index],"CONTROL_ENUM");selected.add(field);order.push(field);}
+  if(mode==="encode")result.changeOrder=catalogue;
   else delete result.changeOrder;
   for(const definition of definitions){
     const authored=raw.changes.flatMap((change,index)=>change&&typeof change==="object"&&!Array.isArray(change)&&change.field===definition.field?[{change,index}]:[]);

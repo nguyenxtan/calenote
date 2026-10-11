@@ -17,8 +17,8 @@ it("bound fixture transport preserves all ten authored catalogue positions and s
  const date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},clock={hour:8,minute:0,qualifier:"H24"},evidence=[{kind:"USER_QUOTE",turn:0,quote:input.turns[0].text,occurrence:1}];
  const values={location:"synthetic",endDate:date,occurrenceCount:2,frequency:"DAILY",eventRelation:"BEFORE_EVENT",eventTime:clock,eventDate:date,reminderTime:clock,reminderDate:date,title:"đi thi"};
  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:Object.entries(values).map(([field,value])=>({field,operation:"SET",value,evidence})),query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),before=JSON.stringify(canonical);
- const raw=encodeFixtureV3(canonical,input) as Record<string,{change:{value:unknown;evidence:{primaryEvidence:string}}}>&{changeOrder:string[]};
- expect(raw.changeOrder).toEqual(Object.keys(values));
+ const raw=encodeFixtureV3(canonical,input) as Record<string,{change:{value:unknown;evidence:{primaryEvidence:string}}}>&{changeOrder:number[]};
+ expect(raw.changeOrder).toEqual([1,12,9,8,10,4,3,6,5,0]);
  for(const field of Object.keys(values)){expect(Object.keys(raw[field+"Change"])).toEqual(["change"]);expect(raw[field+"Change"]).not.toHaveProperty("index");expect(raw[field+"Change"].change.evidence.primaryEvidence).toBe("U0");}
  expect(raw.eventDateChange.change.value).toEqual(date);expect(raw.reminderDateChange.change.value).toBe(JSON.stringify(date));expect(raw.endDateChange.change.value).toBe(JSON.stringify(date));
  expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});

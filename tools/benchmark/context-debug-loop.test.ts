@@ -32,14 +32,15 @@ const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 const integerOrderMode="R01_TURN1_INTEGER_ORDER_BASELINE" as const;
 const integerOrderCandidate="ee61a225e66056324ffd55214213692e5b9efbc7";
-async function integerOrderOriginalRequest(){
+// Public wire65 specimen only; never sent through current application authority.
+async function historicalWire65IntegerOrderRequest(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R01",turn:1});let request:Parameters<SemanticTransport>[0]|undefined;
  const probe=await createContextContractProbe({sourceSha:integerOrderCandidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{
-  const wire=serializeContextRequest(input);request={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};return {fixtureFault:"SCHEMA_INVALID"};
+  const wire=serializeContextRequest(input),order=wire.response_format.json_schema.schema.properties!.changeOrder;if(typeof order==="boolean")throw Error("ORDER_SCHEMA_OBJECT");order.items={type:"string",enum:["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]};const scope:Record<string,unknown>={};runInNewContext(execFileSync("git",["show",integerOrderCandidate+":src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"}).replace("export const ","var "),scope);wire.messages[0].content=String(scope.CONTEXT_CONTRACT_PROMPT);request={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};return {fixtureFault:"SCHEMA_INVALID"};
  });try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}if(!request)throw Error("NO_REQUEST");return request;
 }
 it("integer order clone preserves exact request outside one item and all thirteen choices",async()=>{
- const original=await integerOrderOriginalRequest(),before=JSON.stringify(original),probe=debugIntegerOrderRequest(original);
+ const original=await historicalWire65IntegerOrderRequest(),before=JSON.stringify(original),probe=debugIntegerOrderRequest(original);
  expect(hash(before)).toBe("7e79a94e1f5285c41b8fa9c64b9452c2f182d9e32a4c829d4be2504e989de376");
  const order=probe.response_format.json_schema.schema.properties!.changeOrder,originalOrder=original.response_format.json_schema.schema.properties!.changeOrder;
  if(typeof order==="boolean"||typeof originalOrder==="boolean")throw Error("ORDER_SCHEMA_OBJECT");
@@ -53,40 +54,11 @@ it("integer order clone preserves exact request outside one item and all thirtee
  for(const mutate of [(r:typeof original)=>{r.messages[0].content+="x";},(r:typeof original)=>{r.messages[1].content+=" ";},(r:typeof original)=>{r.model="other";},(r:typeof original)=>{const value=r.response_format.json_schema.schema.properties!.changeOrder;if(typeof value==="boolean")throw Error("ORDER_SCHEMA_OBJECT");value.maxItems=12;}]){const changed=structuredClone(original);mutate(changed);expect(()=>debugIntegerOrderRequest(changed)).toThrow("DEBUG_INTEGER_ORDER_BINDING");}
 });
 it("integer order candidate drift cannot reach physical transport",async()=>{const s=setup();let calls=0;try{await expect(runDebugLoopExecution(s.load(),"a".repeat(40),integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_INTEGER_ORDER_CANDIDATE");expect(calls).toBe(0);}finally{s.cleanup();}});
-it.each(["schema","prompt","context"] as const)("integer order actual %s drift refuses before physical HTTP",async axis=>{
- const s=setup();let calls=0;const real=serializeContextRequest;try{
- vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(axis==="schema"){const value=request.response_format.json_schema.schema.properties!.changeOrder;if(typeof value==="boolean")throw Error("ORDER_SCHEMA_OBJECT");value.maxItems=12;}else request.messages[axis==="prompt"?0:1].content+=" PRIVATE_SOURCE_SECRET";return request;});
- const result=await runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100});
- expect(calls).toBe(0);expect(result).toMatchObject({providerHttpAttempts:0,terminal:true,pilotCredit:false});expect(result.responses[0].status).toBe("FAILURE");expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_SOURCE_SECRET");
- }finally{vi.restoreAllMocks();s.cleanup();}
-});
-it("integer order transport crash settles UNKNOWN and cannot dispatch a second axis",async()=>{const s=setup();let calls=0;try{
- const result=await runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("PRIVATE_TRANSPORT_SECRET")},{now:()=>100});
- expect(result).toMatchObject({providerHttpAttempts:1,terminal:true,pilotCredit:false});expect(result.accounting.unknownExposureMicrounits).toBe(210944);expect(JSON.stringify(result.responses)).not.toContain("PRIVATE_TRANSPORT_SECRET");expect(calls).toBe(1);
- await expect(runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+it("wire66 current request refuses immutable wire65 integer probe before HTTP",async()=>{const s=setup();let calls=0;try{
+ const before=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),accounting=inspectDebugLoop(s.load());
+ await expect(runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100})).rejects.toThrow("VALIDATION_APPLICATION_CHANGED");
+ expect(calls).toBe(0);expect(existsSync(join(s.campaignRoot,"debug-loop-executions"))).toBe(false);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);expect(inspectDebugLoop(s.load())).toEqual(accounting);
  }finally{s.cleanup();}});
-it.each(["empty","numeric","400"] as const)("integer order diagnostic %s preserves one seeded request and unchanged decoder",async witness=>{
- const s=setup();let calls=0;try{
- const before=readFileSync(join(s.history,"campaign.jsonl"),"utf8");
- const result=await runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async request=>{
-  calls++;expect(hash(JSON.stringify(request.response_format.json_schema.schema))).toBe("12583f77cac3f75c1bc715dadfc9d691372d8b80e7dbc84cc8fbdf18c9dca4e2");
-  expect(hash(JSON.stringify(request))).toBe("982aab43daa2301e1df33db6b5779c9b5584a41fbd73ea52b4dd77b98785965e");
-  if(witness==="400")return {status:400,body:"{}"};
-  const input=JSON.parse(request.messages[1].content),content=encodeFixtureV3(frozenContextProposal(input,"R01",1),input) as Record<string,unknown>;
-  content.changeOrder=witness==="empty"?[]:[0];
-  const body=JSON.stringify({model:request.model,provider:"Google",id:"gen-integer-order",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]});return {status:200,body,rawResponseBytes:Buffer.byteLength(body)};
- },{now:()=>100});
- expect(calls,JSON.stringify(result.responses)).toBe(1);expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false,contextSeedProof:{fixture:"R01",turn:1,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}});
- expect(result.responses[0].status).toBe(witness==="empty"?"SUCCESS":"FAILURE");
- if(witness==="numeric"){
-  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["changeOrder",0],code:"WIRE_SHAPE_INVALID"}]}}});
-  expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
- }
- if(witness==="400")expect(result.accounting.unknownExposureMicrounits).toBe(210944);
- await expect(runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");
- expect(calls).toBe(1);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);
- }finally{vi.restoreAllMocks();s.cleanup();}
-});
 // Immutable structural specimen from accepted application c40, not an oracle
 // or production fallback. Historical probe characterization uses only this
 // explicit schema seam; current candidate drift tests remain unmocked.
@@ -503,7 +475,7 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
    // Separate current-wire witnesses preserve the evidence-key and LIST
    // ownership stages. They are NOT labelled historical-schema conforming.
-   const currentKey={...structuredClone(content as Record<string,unknown>),changeOrder:["eventDate"],eventDateChange:{change:structuredClone(carrier.change)}};
+   const currentKey={...structuredClone(content as Record<string,unknown>),changeOrder:[3],eventDateChange:{change:structuredClone(carrier.change)}};
    const keyDiagnostics:unknown[]=[];
    expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
    expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}]);
