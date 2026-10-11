@@ -31,6 +31,21 @@ export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchP
   return proposal.intent!=="CREATE_REMINDER" || !isInitialIsolatedExamNotesFree(input)
     || !proposal.changes.some(change=>change.field==="notes") && !proposal.uncertainties.some(issue=>issue.field==="notes"&&issue.alternatives.length>0);
 }
+/** Sufficient event-owned prefix only; no scanner operand escapes this check. */
+export function isInitialEventDateOnlySource(input:ContextInput):boolean {
+  if(!isInitialIsolatedExamNotesFree(input))return false;
+  const text=input.turns[0].text;
+  if(!/^\s*ngày\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{4})?\s+đi thi(?:\s|[,;.!]|$)/iu.test(text))return false;
+  if([...text.matchAll(/\d{1,2}[/-]\d{1,2}(?:[/-]\d{4})?/gu)].length!==1)return false;
+  const referenceNow=typeof input.reference?.instant==="string"?Date.parse(input.reference.instant):NaN;
+  if(!Number.isFinite(referenceNow))return false;
+  const date=extractTemporalEvidence({text,referenceNow}).date;
+  return date.state==="RESOLVED"&&["DAY_MONTH","EXPLICIT_DATE"].includes(date.source);
+}
+export function reminderDateCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
+  return proposal.intent!=="CREATE_REMINDER"||!isInitialEventDateOnlySource(input)
+    ||!proposal.changes.some(change=>change.field==="reminderDate")&&!proposal.uncertainties.some(issue=>issue.field==="reminderDate"&&issue.alternatives.length>0);
+}
 
 /** Presence/coverage only for the initial literal complete exam task. Unknown
  * subjects and ambiguous discourse never create a generation obligation. */

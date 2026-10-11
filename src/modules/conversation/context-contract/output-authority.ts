@@ -19,7 +19,7 @@ type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.v
 type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
 type BaseOutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
   | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath | ReminderCarrierPath | `${StructuredDateCarrierPrefix}.${"kind"|"calendar"|"day"|"month"|"year"|"leapMonth"|"offsetDays"|"weekday"|"qualifier"}`
-  | "changeOrder" | "changeOrder[]" | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping" | "fieldCapability.eventDateYearNullRequired" | "eventDateChange.change.value{kind=CIVIL_DATE}"
+  | "changeOrder" | "changeOrder[]" | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping" | "fieldCapability.eventDateYearNullRequired" | "fieldCapability.reminderDateProposalAllowed" | "eventDateChange.change.value{kind=CIVIL_DATE}"
   | "titleChange" | "titleChange.change" | "titleChange.change.field" | "titleChange.change.operation" | "titleChange.change.value" | "titleChange.change.evidence" | `titleChange.change{field=title;operation=${"SET"|"REPLACE"|"CLEAR"}}`;
 type WrappedOrdinaryPath<P> = P extends `changes[].${infer Tail}` ? `changes[].change.${Tail}` : P extends `changes[]{${infer Tail}` ? `changes[].change{${Tail}` : never;
 export type OutputFieldPathV3 = BaseOutputFieldPathV3 | WrappedOrdinaryPath<BaseOutputFieldPathV3> | "changes[].change" | "changes[].rank" | "titleChange.rank" | `${ReminderCarrierRoot}.rank`;
@@ -58,7 +58,7 @@ add(["changes[].value.hour", "changes[].value.minute", "uncertainties[].alternat
 add(["conversationDirective", "conversationDirective.kind", "conversationDirective.field", "conversationDirective.reason", "conversationDirective.issue", "conversationDirective.topic", "replyProposal", "replyProposal.text"], advisory);
 add(["schemaVersion", "query.statusScope", "protocol.canonicalVersion", "protocol.promptVersion", "protocol.inputVersion", "protocol.stateVersion", "protocol.wireVersion", "protocol.codebookVersion", "protocol.storageFenceFamily", "transport.codebookMapping"], owned);
 add(["transport.inactivePadding"], padding);
-add(["fieldCapability.eventDateYearNullRequired"], owned);
+add(["fieldCapability.eventDateYearNullRequired","fieldCapability.reminderDateProposalAllowed"], owned);
 add(["eventDateChange.change.value{kind=CIVIL_DATE}"]);
 export const CHANGE_ORDER_FIELDS_V3 = Object.freeze(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const);
 const fields = CHANGE_ORDER_FIELDS_V3;

@@ -21,6 +21,7 @@ import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contra
 import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
 import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
+import {deriveGenerationFieldCapability} from "../../src/modules/conversation/context-contract/field-capability";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
 it.each(["R02_TURN0_INDEX_POSITION_PROMPT","R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS","R02_TURN0_UNCERTAINTY_WIRE_PROMPT"] as const)("wire64 refuses historical exact request probe %s before physical HTTP",async mode=>{
  const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(0);}finally{s.cleanup();}
@@ -32,6 +33,15 @@ const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 const integerOrderMode="R01_TURN1_INTEGER_ORDER_BASELINE" as const;
 const integerOrderCandidate="ee61a225e66056324ffd55214213692e5b9efbc7";
+// Pure public historical specimen, never current dispatch/authority.
+function restorePublicWire68Request(request:{messages:Array<{content:string}>;response_format:{json_schema:{schema:unknown}}}){
+ const encoded=JSON.parse(request.messages[1].content),canonical=structuredClone(encoded);
+ for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete canonical[key];
+ const input=ContextInputSchema.parse(canonical);
+ request.response_format.json_schema.schema=googleLiteEuContextWireSchemaV3({...deriveGenerationFieldCapability(input),reminderDateProposalAllowed:true},input).schema;
+ delete encoded.fieldCapability.reminderDateProposalAllowed;encoded.fieldCapability.version="generation-field-capability-11";
+ request.messages[1].content=JSON.stringify(encoded);
+}
 // Public wire65 specimen only; never sent through current application authority.
 function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
  const object=(node:NonNullable<typeof schema.$defs>[string]|boolean)=>{if(typeof node==="boolean")throw Error("HISTORICAL_RANK_SHAPE");return node;};
@@ -43,7 +53,7 @@ function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuCon
 async function historicalWire65IntegerOrderRequest(){
  const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R01",turn:1});let request:Parameters<SemanticTransport>[0]|undefined;
  const probe=await createContextContractProbe({sourceSha:integerOrderCandidate,referenceNow:Date.parse("2026-10-05T01:00:00Z"),contextSeed:selected.contextSeed.state},input=>{
-  const wire=serializeContextRequest(input);restorePublicCatalogueWrappers(wire.response_format.json_schema.schema);const order=wire.response_format.json_schema.schema.properties!.changeOrder;if(typeof order==="boolean")throw Error("ORDER_SCHEMA_OBJECT");order.items={type:"string",enum:["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]};const scope:Record<string,unknown>={};runInNewContext(execFileSync("git",["show",integerOrderCandidate+":src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"}).replace("export const ","var "),scope);wire.messages[0].content=String(scope.CONTEXT_CONTRACT_PROMPT);request={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};return {fixtureFault:"SCHEMA_INVALID"};
+  const wire=serializeContextRequest(input);restorePublicWire68Request(wire);restorePublicCatalogueWrappers(wire.response_format.json_schema.schema);const order=wire.response_format.json_schema.schema.properties!.changeOrder;if(typeof order==="boolean")throw Error("ORDER_SCHEMA_OBJECT");order.items={type:"string",enum:["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]};const scope:Record<string,unknown>={};runInNewContext(execFileSync("git",["show",integerOrderCandidate+":src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"}).replace("export const ","var "),scope);wire.messages[0].content=String(scope.CONTEXT_CONTRACT_PROMPT);request={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};return {fixtureFault:"SCHEMA_INVALID"};
  });try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}if(!request)throw Error("NO_REQUEST");return request;
 }
 it("integer order clone preserves exact request outside one item and all thirteen choices",async()=>{
@@ -242,6 +252,7 @@ function restoreHistoricalIndexedCatalogue(schema:Parameters<typeof restorePubli
 it("wire65 historical pure transformations retain the immutable original request specimen",async()=>{let proofStage="BEFORE_CALLBACK";
  const s=setup();try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
   const historical=structuredClone(request),oldSource=execFileSync("git",["show","01c2849f682cdc7ab8dce8aeb40ace2a8e9b8d7b:src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"});const scope:{CONTEXT_CONTRACT_PROMPT?:string}={};runInNewContext(oldSource.replace("export const ","var "),scope);if(typeof scope.CONTEXT_CONTRACT_PROMPT!=="string")throw Error("HISTORICAL_PROMPT_SHAPE");historical.messages[0].content=scope.CONTEXT_CONTRACT_PROMPT;proofStage="PROMPT_HASH";expect(hash(historical.messages[0].content)).toBe("0050e79ee692aec74554e8b949ad90f764f988a3c56da89904c80c6eb4fbb8d3");
+  restorePublicWire68Request(historical);
   restoreHistoricalIndexedCatalogue(historical.response_format.json_schema.schema as Parameters<typeof restorePublicCatalogueWrappers>[0]);
   const field=((historical.response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:{properties:{fieldCode:Record<string,unknown>}}}}}).properties.uncertainties.items.properties.fieldCode);delete field.anyOf;field.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];
   proofStage="REQUEST_HASH";expect(hash(JSON.stringify(historical))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");const before=JSON.stringify(historical);proofStage="TRANSFORM_HASHES";

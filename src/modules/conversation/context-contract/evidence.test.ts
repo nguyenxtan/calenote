@@ -47,18 +47,18 @@ describe("successor scoped semantic evidence", () => {
     if (status === "REFUSED") expect(result).toEqual({ status, reason: "CIVIL_DATE_SOURCE_MISMATCH" });
     if (result.status === "VALID") expect(result.patch.resolvedChanges).toEqual(proposal.changes);
   });
-  it.each([null,2026])("civil fidelity never reparses an exact accepted fact, including explicit retained year (%#)", (year) => {
+  it.each([null,2026].flatMap(year=>["eventDate","reminderDate"].map(field=>({year,field:field as "eventDate"|"reminderDate"}))))("civil fidelity never reparses an exact accepted fact, including explicit retained year (%#)", ({year,field}) => {
     const old = withNotes("ngày 11/10");
     const value = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 10, month: 10, year, leapMonth: null } as const;
-    old.slots.eventDate = { ...old.slots.notes, value, fact: "f9" };
+    old.slots[field] = { ...old.slots.notes, value, fact: "f9" };
     old.slots.notes = snapshot().slots.notes;
-    old.facts = [{ ...old.facts[0], scope: "REMINDER", field: "eventDate", evidenceSlot: "eventDate", value }];
+    old.facts = [{ ...old.facts[0], scope: "REMINDER", field, evidenceSlot: field, value }];
     const state = ContextSnapshotV2Schema.parse({ ...old, schemaVersion: "calenote-context-state-2", pendingSemanticCandidate: null });
     const msg = message("giữ ngày như cũ"), built = buildContextInputV2({ message: msg, context: chat, snapshot: state, observation: observation(old, msg) });
     if (built.status !== "READY") throw new Error(built.reason);
     const current = [{ kind: "USER_QUOTE", turn: built.input.currentTurn, quote: msg.text, occurrence: 1 }];
-    const evidence = [{ kind: "CONTEXT_FACT", ref: built.input.facts.find(f => f.field === "eventDate")!.alias }];
-    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: current }, changes: [{ field: "eventDate", operation: "SET", value, evidence }], query: null, uncertainties: [] });
+    const evidence = [{ kind: "CONTEXT_FACT", ref: built.input.facts.find(f => f.field === field)!.alias }];
+    const proposal = SemanticPatchProposalV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "CURRENT", evidence: current }, changes: [{ field, operation: "SET", value, evidence }], query: null, uncertainties: [] });
     const result = validateEvidenceV3(proposal, built);
     expect(result.status).toBe("VALID");
     if (result.status === "VALID") expect(result.patch.resolvedChanges[0].value).toEqual(value);

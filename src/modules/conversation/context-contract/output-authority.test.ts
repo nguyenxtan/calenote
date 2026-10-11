@@ -4,6 +4,9 @@ import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
 import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+it("wire69 reminder-date availability is application-owned without execution authority",()=>{
+ expect(authority.classifyOutputPathV3("fieldCapability.reminderDateProposalAllowed")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
+});
 it("wire66 catalogue reuses first13 field identities without granting model authority",()=>{
  expect(authority.CHANGE_ORDER_FIELDS_V3).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]);
  expect(Object.isFrozen(authority.CHANGE_ORDER_FIELDS_V3)).toBe(true);
@@ -73,7 +76,7 @@ it("authority_paths_are_exhaustive_and_nonoverlapping", () => {
 it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
   for (const [path, rule] of Object.entries(authority.OUTPUT_AUTHORITY_REGISTRY_V3)) {
     if (path.startsWith("conversationDirective") || path.startsWith("replyProposal")) expect(rule.class).toBe("ADVISORY");
-    else if (path === "schemaVersion" || path === "query.statusScope" || path === "fieldCapability.eventDateYearNullRequired" || path.startsWith("protocol.") || path.startsWith("transport.")) expect(rule.class).toBe("APPLICATION_OWNED");
+    else if (path === "schemaVersion" || path === "query.statusScope" || path === "fieldCapability.eventDateYearNullRequired" || path === "fieldCapability.reminderDateProposalAllowed" || path.startsWith("protocol.") || path.startsWith("transport.")) expect(rule.class).toBe("APPLICATION_OWNED");
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });

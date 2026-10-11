@@ -4,12 +4,34 @@ import { buildContextInputV2 } from "./context";
 import { chat, message, observation } from "./context-test-fixtures";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, SLOT_NAMES } from "./contracts";
 import { validateEvidenceV3 } from "./evidence";
-import { locationCoverageComplete, titleCoverageComplete, isInitialIsolatedExamNotesFree } from "./semantic-completeness";
+import { locationCoverageComplete, titleCoverageComplete, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, reminderDateCoverageComplete } from "./semantic-completeness";
 import { turn } from "./context-test-fixtures";
 import { TranscriptEntrySchema } from "./state";
 import { harness, proposal as scriptedProposal, complete } from "./service-test-support";
 import { DownstreamDiagnosticSchema, type DownstreamDiagnostic } from "./downstream";
+it("wire69 service rejects duplicated initial event date ownership atomically",async()=>{
+ const value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
+ const h=await harness([scriptedProposal({title:"đi thi",eventDate:value,reminderDate:value,frequency:"DAILY",occurrenceCount:2})]);
+ await h.turn(0,"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.");
+ const state=await h.read(1);expect(state?.slots.title.value??null).toBeNull();expect(state?.slots.reminderDate.value??null).toBeNull();
+ expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.reason==="SEMANTIC_REMINDER_DATE_UNOWNED")).toBe(true);
+ expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first("n")).toBe(0);
+});
+it("wire69 event date ownership requires full initial context, adjacent prefix, one token and resolved classifier",()=>{
+ const initial=(text:string)=>{const msg=message("Ngày 11/10 đi thi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});if(built.status!=="READY")throw Error("NOT_READY");const input=structuredClone(built.input);input.turns[0].text=text;return input;};
+ for(const text of ["Ngày 11/10 đi thi.","Ngày 11/10/2026 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.","Ngày 11-10 đi thi, nhắc lúc 8h."]){const input=initial(text),before=JSON.stringify(input);expect(isInitialEventDateOnlySource(input)).toBe(true);expect(JSON.stringify(input)).toBe(before);for(const instant of ["2025-01-01T00:00:00Z","2027-01-01T00:00:00Z"]){const changed=structuredClone(input);changed.reference.instant=instant;expect(isInitialEventDateOnlySource(changed)).toBe(true);}}
+ for(const text of ["Ngày 11/10 đi thi ngày 11/10.","Ngày 11/10 đi thi ngày 12/10.","Đi thi ngày 11/10.","Tôi thi ngày 11/10 lúc 8h.","Mai đi thi.","Ngày 11/10 âm đi thi.","Ngày 11/10 đi thi âm lịch.","Ngày 31/13 đi thi.","Ngày 29/2/2025 đi thi.","Ngày 11/10 đi thi, nhắc tôi ngày 10/10.","Ngày 11/10 đi thi, gọi mẹ.",'"Ngày 11/10 đi thi."',"Nếu ngày 11/10 đi thi.","Không ngày 11/10 đi thi.","Ngày 11/10 đi thi?","Ngày 11/10 đi thi [CONTROL]","Sửa ngày 11/10 đi thi."]){expect(isInitialEventDateOnlySource(initial(text)),text).toBe(false);}
+ const input=initial("Ngày 11/10 đi thi.");
+ for(const key of ["activeRequest","facts","pendingQuestion","ambiguities","turns","currentTurn","reference"]){const missing=structuredClone(input);Reflect.deleteProperty(missing,key);expect(isInitialEventDateOnlySource(missing),key).toBe(false);}
+ for(const mutate of [(v:typeof input)=>{v.turns[0].role="ASSISTANT"},(v:typeof input)=>{v.turns.push({role:"USER",text:v.turns[0].text});v.currentTurn=1},(v:typeof input)=>{v.pendingQuestion={scope:"REMINDER",field:"reminderDate",reason:"MISSING",text:"date?",decisionKind:null}},(v:typeof input)=>{v.ambiguities.push({field:"reminderDate",reason:"AMBIGUOUS",alternatives:[]})},(v:typeof input)=>{v.facts.push({alias:"f1",scope:"REMINDER",field:"reminderDate",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:v.reference.instant,dependencies:[]})},(v:typeof input)=>{v.activeRequest={lifecycle:"CLARIFYING",slots:Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<typeof input.activeRequest>["slots"]}}]){const changed=structuredClone(input);mutate(changed);expect(isInitialEventDateOnlySource(changed)).toBe(false);}
+});
+it("wire69 shared ownership refuses every date mutation or typed alternative, preserving empty MISSING and outside-context values",()=>{
+ const msg=message("Ngày 11/10 đi thi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});if(built.status!=="READY")throw Error("NOT_READY");const evidence=[{kind:"USER_QUOTE",turn:0,quote:msg.text,occurrence:1}],date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
+ for(const operation of ["SET","REPLACE","CLEAR"]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"reminderDate",operation,value:operation==="CLEAR"?null:date,evidence}],query:null,uncertainties:[]});const before=JSON.stringify(value);expect(reminderDateCoverageComplete(built.input,value)).toBe(false);expect(JSON.stringify(value)).toBe(before);}
+ for(const alternative of [false,true]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"eventDate",operation:"SET",value:date,evidence}],query:null,uncertainties:[{field:"reminderDate",reason:alternative?"AMBIGUOUS":"MISSING",alternatives:alternative?[{value:date,evidence}]:[]}]});expect(reminderDateCoverageComplete(built.input,value)).toBe(!alternative);const diagnostics:DownstreamDiagnostic[]=[];const result=validateEvidenceV3(value,built,d=>diagnostics.push(d));if(alternative)expect(result).toEqual({status:"REFUSED",reason:"SEMANTIC_REMINDER_DATE_UNOWNED"});else expect(result.status).toBe("VALID");expect(JSON.stringify(diagnostics)).not.toContain(msg.text);for(const d of diagnostics)expect(DownstreamDiagnosticSchema.safeParse(d).success).toBe(true);}
+});
 it("wire50 notes predicate declines incomplete trusted contexts and meaningful detail",()=>{
+ // Wire69 uses the same trusted initial boundary, not generic note/date parsing.
  const msg=message("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});
  if(built.status!=="READY")throw Error("NOT_READY");const input=built.input;
  expect(isInitialIsolatedExamNotesFree(input)).toBe(true);
@@ -17,6 +39,14 @@ it("wire50 notes predicate declines incomplete trusted contexts and meaningful d
  for(const key of ["turns","currentTurn","activeRequest","facts","pendingQuestion","ambiguities"]){const missing=structuredClone(input);Reflect.deleteProperty(missing,key);expect(isInitialIsolatedExamNotesFree(missing)).toBe(false);}
  for(const text of [msg.text+" Ghi chú mang giấy tờ.",msg.text+", nhớ mang giấy tờ.","Sửa ghi chú thành mang giấy tờ.","Xem lịch đi thi.","Không đi thi.",'"đi thi"',"[CONTROL] đi thi","Nếu đi thi.","Nhắc gọi mẹ."]){const changed=structuredClone(input);changed.turns[0].text=text;expect(isInitialIsolatedExamNotesFree(changed)).toBe(false);}
  for(const mutate of [(v:typeof input)=>{v.turns[0].role="ASSISTANT"},(v:typeof input)=>{v.turns.push({role:"USER",text:"đi thi"});v.currentTurn=1},(v:typeof input)=>{v.pendingQuestion={text:"ghi chú?",scope:"REMINDER",field:"notes",decisionKind:null,reason:"MISSING"}},(v:typeof input)=>{v.facts.push({alias:"f1",scope:"REMINDER",field:"notes",value:"mang giấy tờ",provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:input.reference.instant,dependencies:[]})},(v:typeof input)=>{v.ambiguities.push({field:"notes",reason:"AMBIGUOUS",alternatives:[]})}]){const changed=structuredClone(input);mutate(changed);expect(isInitialIsolatedExamNotesFree(changed)).toBe(false);}
+});
+it("wire69 service preserves correct event-only facts and independently stated reminder dates",async()=>{
+ const date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
+ for(const explicit of [false,true]){const h=await harness([scriptedProposal({title:"đi thi",eventDate:date,frequency:"DAILY",occurrenceCount:2,...(explicit?{reminderDate:{...date,day:10}}:{})})]);
+ await h.turn(0,"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."+(explicit?" Nhắc ngày 10/10.":""));const state=await h.read(1);
+ expect(state?.slots.eventDate.value).toEqual(date);expect(state?.slots.reminderDate.value??null).toEqual(explicit?{...date,day:10}:null);
+ expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.reason==="SEMANTIC_REMINDER_DATE_UNOWNED")).toBe(false);
+ expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first("n")).toBe(0);}
 });
 it("wire50 finite notes rejection diagnostics never disclose authored notes or source text",()=>{
  const msg=message("Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});if(built.status!=="READY")throw Error("NOT_READY");

@@ -11,6 +11,14 @@ import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
+it("wire69 initial event-only date forbids reminder date generation without defaulting values",()=>{
+ const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+ expect(Reflect.get(deriveGenerationFieldCapability(context),"reminderDateProposalAllowed")).toBe(false);
+ expect(serializeContextRequest(context).response_format.json_schema.schema.properties?.reminderDateChange).toEqual({type:"null"});
+ const capability=deriveGenerationFieldCapability(context),before=JSON.stringify(capability);
+ expect(googleLiteEuContextWireSchemaV3({...capability,reminderDateProposalAllowed:true}).schema.properties?.reminderDateChange).not.toEqual({type:"null"});
+ const missing=structuredClone(capability);Reflect.deleteProperty(missing,"reminderDateProposalAllowed");expect(()=>googleLiteEuContextWireSchemaV3(missing)).toThrow();expect(JSON.stringify(capability)).toBe(before);
+});
 it("wire61 support requires finite DAILY bounds, capability and no independent lead while preserving uniqueness",()=>{
  const supported=Reflect.get(capabilityModule,"isInitialSupportedCadenceCount") as ((input:ContextInput)=>boolean)|undefined;
  expect(supported).toBeTypeOf("function");
@@ -327,10 +335,10 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-11",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("ef361d288d4f1bad057fafeebe5849d26cacae48780d2ba17127dbb80f23aa1d");
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-12",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("dc4476ab56bccad3c3a3e337567e9c46fb565c8f8f3f777680fb6f1fc62e9eb4");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("c2d650c4672150936aca311e6b8fb2fecf13b10482b503f2da695b4309d74f04");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("4756dd6cd1a6220b3ceffed942a514a25da9f5d13b4bf0327b489dc5c8f796a0");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -375,7 +383,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-11", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-12", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.
