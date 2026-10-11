@@ -1,5 +1,6 @@
 // @vitest-environment node
 import {it,expect,vi} from "vitest";
+import {z} from "zod";
 import {mkdtempSync,mkdirSync,realpathSync,readFileSync,writeFileSync,rmSync,existsSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -7,7 +8,7 @@ import {createHash} from "node:crypto";
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest} from "./context-debug-loop";
 import {CONTEXT_CONTRACT_PROMPT} from "../../src/modules/conversation/context-contract/prompt";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -18,6 +19,31 @@ import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/m
 import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
+it.each(["valid","empty","http400"])("integer uncertainty interval axis %s remains one terminal request",async kind=>{
+ const s=setup();let calls=0;try{
+  const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async request=>{
+   calls++;const original=structuredClone(request),schema=original.response_format.json_schema.schema as Record<string,unknown>;
+   const item=(schema.properties as Record<string,{items:{properties:Record<string,unknown>}}>).uncertainties.items;
+   const field=item.properties.fieldCode as Record<string,unknown>;expect(field.anyOf).toEqual([{type:"integer",minimum:0,maximum:7},{type:"integer",minimum:10,maximum:15}]);expect(field.enum).toBeUndefined();
+   const next=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]),prior={...field};delete prior.anyOf;prior.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];item.properties.fieldCode=prior;const old=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]);
+   for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(let fieldCode=0;fieldCode<16;fieldCode++){const witness={fieldCode,reason,alternatives:[]};expect(next.safeParse(witness).success).toBe(old.safeParse(witness).success);expect(next.safeParse(witness).success).toBe(fieldCode!==8&&fieldCode!==9);}
+   for(const fieldCode of [-1,16,0.5,7.5,"0",null,true,{},[]])expect(next.safeParse({fieldCode,reason:"MISSING",alternatives:[]}).success).toBe(false);
+   for(const witness of [{},{reason:"MISSING",alternatives:[]},{fieldCode:0,reason:"MISSING",alternatives:[],secret:1}])expect(next.safeParse(witness).success).toBe(false);
+   expect(hash(JSON.stringify(original))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");expect(hash(JSON.stringify(request))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");
+   const snapshot=JSON.stringify(original),again=debugUncertaintyIntegerRequest(original);expect(JSON.stringify(original)).toBe(snapshot);expect(again).toEqual(request);
+   for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugUncertaintyIntegerRequest(drift)).toThrow("DEBUG_UNCERTAINTY_INTEGER_BINDING");}
+   if(kind==="http400")return {status:400,body:"{}"};
+   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;if(kind==="empty")content.uncertainties=[{}];
+   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-integer-axis",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+  },{now:()=>100});expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(calls).toBe(1);expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");
+  if(kind==="empty"){expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{uncertaintyShape:{keys:[]}}]}}});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});}
+  await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ }finally{s.cleanup();}
+});
+it.each(["prompt","context","schema","route"])("integer uncertainty axis %s drift stops before HTTP",async fault=>{
+ const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);}finally{spy.mockRestore();s.cleanup();}
+});
 import {resolveSingleValidationTarget} from "./context-contract-runner";
 import {createContextContractProbe} from "./context-contract-probe";
 import {frozenContextProposal,encodeFixtureV3} from "./context-pointer-fixtures";
