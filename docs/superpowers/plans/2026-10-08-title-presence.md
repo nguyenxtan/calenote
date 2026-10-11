@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire76 bound marker execution
+
+BASE957ee6eeb8cf9785566f54f11a1605121933d82b; TOP wire76 spec and existing continuous conservative USD5 scope.
+
+- [ ] Genuine RED actual-service matched reminderTime/MISSING[] plus queryRange/MISSING[] notes availability/notes proposal acceptance. Own semantic-completeness.ts/.test.ts and affected field-capability current version/tests, protocol/provider-wire current pins and necessary runner/fit current identities. Clock branch only accepts exact bound empty reminderTime marker; offset and all history/state/count/FACT/notes/source/NEW/rank guards unchanged. No output repair or canonical/evidence/oracle change.
+- [ ] GREEN independent coherent clock output, atomic notes SET/REPLACE/CLEAR/typed candidate refusal, notes MISSING[] legal; exact/combined/repeated markers, mismatch/malformed/accessor/symbol/sparse/other-field negatives and meaningful/retained notes controls. Focused/type/lint/diff, ENTIRE67/all326 strict12000/1536 and frozen historical six once. Implementer no full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0 then frozen controller full/selective local commit/trusted preflight/Fresh Formal. First failure settle/terminal then scoped repair within derived budget; no blind unchanged rerun or stopping at local PASS. No Full/push/merge/deploy/remote migration.
+
 ### Wire75 candidate representation execution
 
 BASEba57e6538258875f3460b8fddd9d85ee2f57f154; TOP wire75 spec, existing TypeScript prompt/canonical/actual-service tests and continuous USD5 scope.

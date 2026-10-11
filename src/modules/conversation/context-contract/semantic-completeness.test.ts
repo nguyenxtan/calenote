@@ -15,13 +15,14 @@ import {frozenContextProposal} from "../../../../tools/benchmark/context-contrac
 import regressions from "./benchmark/regressions.json";
 import {deriveGenerationFieldCapability} from "./field-capability";
 import {googleLiteEuContextWireSchemaV3} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
-it("wire74 actual projected clock answer excludes notes and atomically refuses changes or alternatives",async()=>{
+it.each(["query-only","bound-clock"])("wire76 actual projected clock excludes notes atomically: %s",async marker=>{
  const script=regressions.cases.find(c=>c.id==="R02")!;
  for(const mode of ["correct","SET","REPLACE","CLEAR","alternative","missing"]){
   let lastControls:{notesFree:boolean;notesAllowed:boolean;ordinary:string}|undefined;
   const probe=await createContextContractProbe({sourceSha:"06f0a2ebde0427be6b310fabeb951518972a69b7",referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{
    const proposed=frozenContextProposal(input,"R02",index-1) as {changes:unknown[];uncertainties:unknown[]};
    if(index===1)proposed.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
+   if(index===2&&marker==="bound-clock")proposed.uncertainties=[{field:"reminderTime",reason:"MISSING",alternatives:[]}];
    if(index===3){
     const schema=googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(input),input).schema;lastControls={notesFree:completenessModule.isBoundRetainedSeriesNotesFree(input),notesAllowed:deriveGenerationFieldCapability(input).notesProposalAllowed,ordinary:JSON.stringify(schema.properties!.changes)};
     const evidence=[{kind:"USER_QUOTE",turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
@@ -33,6 +34,20 @@ it("wire74 actual projected clock answer excludes notes and atomically refuses c
  }
 });
 function clockNotesContinuation(){const input=notesContinuation("12h trưa.");input.turns.splice(2,0,{role:"USER",text:"Nhắc trước 2 ngày."},{role:"ASSISTANT",text:"Nhắc lúc nào?"});input.currentTurn=4;return input;}
+it("wire76 exact bound missing marker preserves all other ambiguity guards",()=>{
+ const base=clockNotesContinuation(),marker={field:"reminderTime",reason:"MISSING",alternatives:[]};
+ base.ambiguities=[marker] as typeof base.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(base)).toBe(true);
+ base.ambiguities=[{field:"queryRange",reason:"MISSING",alternatives:[]},marker,marker] as typeof base.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(base)).toBe(true);
+ const invalid:unknown[]=[{}, {field:"reminderTime"},{...marker,field:"eventTime"},{...marker,reason:"AMBIGUOUS"},{...marker,reason:"CONFLICT"},{...marker,reason:"UNSUPPORTED_COMBINATION"},{...marker,alternatives:[null]},{...marker,extra:true},{...marker,[Symbol("private")]:true},{...marker,alternatives:new Array(1)},{...marker,alternatives:Object.assign([],{extra:true})}];
+ let getters=0;for(const key of ["field","reason","alternatives"])invalid.push(Object.defineProperty({...marker},key,{get(){getters++;return marker[key as keyof typeof marker];}}));
+ invalid.push(new Proxy(marker,{ownKeys(){throw Error("PRIVATE_UNAVAILABLE");}}));
+ for(const issue of invalid){const input=clockNotesContinuation();input.ambiguities=[issue] as typeof input.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(input)).toBe(false);}
+ expect(getters).toBe(0);
+ const sparse=clockNotesContinuation();sparse.ambiguities=new Array(1);expect(completenessModule.isBoundRetainedSeriesNotesFree(sparse)).toBe(false);
+ const offset=notesContinuation("Nhắc trước 2 ngày.");offset.ambiguities=[marker] as typeof offset.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(offset)).toBe(false);
+ for(const field of ["eventTime","eventDate"] as const){const input=clockNotesContinuation();input.pendingQuestion!.field=field;input.ambiguities=[marker] as typeof input.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(input)).toBe(false);}
+ const scope=clockNotesContinuation();scope.pendingQuestion!.scope="QUERY";scope.ambiguities=[marker] as typeof scope.ambiguities;expect(completenessModule.isBoundRetainedSeriesNotesFree(scope)).toBe(false);
+});
 it("wire74 actual service rejects clock text as notes without merging the valid clock",async()=>{
  const date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
  const h=await harness([scriptedProposal({title:"đi thi",eventDate:date,frequency:"DAILY",occurrenceCount:2}),scriptedProposal({eventRelation:"BEFORE_EVENT"},"CURRENT"),scriptedProposal({reminderTime:{hour:12,minute:0,qualifier:"H24"},notes:"12h trưa."},"CURRENT")]);

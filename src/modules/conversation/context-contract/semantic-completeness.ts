@@ -44,12 +44,12 @@ export function isInitialIsolatedExamNotesFree(input:ContextInput):boolean {
     && examTitleCoverage(input.turns[0].text)!==null;
 }
 /** Sufficient bound scheduling answer only. Private support probes never emit operands or evidence. */
-function isEmptyMissingQueryRange(issue:unknown):boolean {
+function isEmptyMissingQueryRange(issue:unknown,allowBoundClock=false):boolean {
   try {
     if(!issue||typeof issue!=="object"||Array.isArray(issue))return false;
     const keys=Reflect.ownKeys(issue);if(keys.length!==3||keys.some(key=>typeof key!=="string"||!['field','reason','alternatives'].includes(key)))return false;
     const data=(key:string)=>{const descriptor=Object.getOwnPropertyDescriptor(issue,key);return descriptor&&"value" in descriptor?descriptor.value:undefined;};
-    const alternatives=data("alternatives");return data("field")==="queryRange"&&data("reason")==="MISSING"&&Array.isArray(alternatives)&&Object.getOwnPropertyDescriptor(alternatives,"length")?.value===0&&Reflect.ownKeys(alternatives).length===1;
+    const alternatives=data("alternatives"),field=data("field");return (field==="queryRange"||allowBoundClock&&field==="reminderTime")&&data("reason")==="MISSING"&&Array.isArray(alternatives)&&Object.getOwnPropertyDescriptor(alternatives,"length")?.value===0&&Reflect.ownKeys(alternatives).length===1;
   }catch{return false;}
 }
 export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
@@ -58,7 +58,8 @@ export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
     || !input.activeRequest || input.pendingQuestion?.scope!=="REMINDER" || typeof input.pendingQuestion.field!=="string"
     || !Array.isArray(input.capabilities?.supported) || !input.capabilities.supported.includes("FINITE_DAILY") || input.capabilities.limits?.dailyCount!==30)return false;
   const current=input.turns[input.currentTurn],slots=input.activeRequest.slots;
-  for(let index=0;index<input.ambiguities.length;index++){const descriptor=Object.getOwnPropertyDescriptor(input.ambiguities,String(index));if(!descriptor||!("value" in descriptor)||!isEmptyMissingQueryRange(descriptor.value))return false;}
+  const boundClock=typeof input.reference?.instant==="string"&&Number.isFinite(Date.parse(input.reference.instant))&&isBoundReminderClockAnswer(input);
+  for(let index=0;index<input.ambiguities.length;index++){const descriptor=Object.getOwnPropertyDescriptor(input.ambiguities,String(index));if(!descriptor||!("value" in descriptor)||!isEmptyMissingQueryRange(descriptor.value,boundClock))return false;}
   if(current?.role!=="USER" || typeof current.text!=="string" || !slots)return false;
   // Earlier USER quotes remain legal evidence for SET. Restrict only history
   // positively covered by the unchanged complete initial notes-free grammar.
@@ -74,7 +75,7 @@ export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
     return isBareRetainedSeriesOffsetAnswer(retainedCount,[{kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"}],[turn],retainedCount);
   };
   const earlierUsers=earlier.filter(turn=>turn?.role==="USER");
-  if(typeof input.reference?.instant==="string"&&Number.isFinite(Date.parse(input.reference.instant))&&isBoundReminderClockAnswer(input))return earlierUsers.slice(1).every(turn=>typeof turn.text==="string"&&offsetSource(turn.text));
+  if(boundClock)return earlierUsers.slice(1).every(turn=>typeof turn.text==="string"&&offsetSource(turn.text));
   return earlierUsers.length===1&&offsetSource(current.text);
 }
 export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
