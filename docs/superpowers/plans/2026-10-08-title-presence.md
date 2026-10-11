@@ -1,5 +1,14 @@
 # Title Presence Implementation Plan
 
+### Wire67 active catalogue execution
+
+Goal: remove required-key versus active-change ambiguity without changing accepted semantics. Existing TypeScript prompt/protocol and strict codec remain the architecture; spec is the TOP wire67 amendment in 2026-10-08-title-presence-design.md. BASE8faa4165b5746b5ae1ffc07fdac08ce18f4e12f0. Existing implementer/reviewer seats; controller owns docs, full verification, accounting, provider and commit.
+
+- [ ] RED prompt ACTIVE/null-root/CLEAR distinctions and actual notes-only [2] with null eventTime carrier; [2,4] remains ORDER_SET refusal. Nonnull CLEAR object included, omitted code refuses. Preserve existing exhaustive thirteen-code, operations, mixed order, ordinary subsequence, descriptor and zero-mutation tests.
+- [ ] Change only two prompt paragraphs using wire67-active-catalogue-proposal.md normative coverage; wire67 protocol and narrowly necessary current digest/version tests. Schema/codec/evidence/canonical/oracle behavior unchanged, historical source-proof guards/pins immutable. No defaults, repair, sorting, truncation or new parser. All unrelated prompt lines byte-identical.
+- [ ] Focused affected tests, typecheck, scoped lint/diff and exact ENTIRE67/all326 token fit <=12000/1536. Compact only these two paragraphs losslessly if needed; measure unchanged schema and actual prompt digest. Implementer reports/freeze without full/provider/credential/accounting/commit.
+- [ ] Independent whole-delta review C0/I0; resolve genuine findings with focused verification. Controller runs one unchanged frozen full test/docs/type/lint/build with local harness testTimeout20000, verifies actual exit0 and frozen hash, selective local commit/clean worktree. Trusted preflight then Fresh Formal same candidate; settle/terminal first failure and continue evidence-backed scoped work until entire Formal PASS or genuine gate. No Full/push/merge/deploy; preserve all historical accounting/UNKNOWN under USD5.
+
 ### Wire66 catalogue diagnostics execution
 
 Goal: distinguish existing hard-refusal checks without acceptance changes. Architecture/stack: existing WireShapeFailure producer and safe TypeScript canonical diagnostic projector; same schema, prompt, protocol, semantic validators and actual gateway. Spec: TOP catalogue diagnostics amendment in 2026-10-08-title-presence-design.md. BASE5f80d034ef1e6e322fbcfe4eaffb059b500e075f.

@@ -9,6 +9,17 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it("active catalogue excludes required null roots but includes nonnull CLEAR objects",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ for(const operation of ["SET","CLEAR"]){const changes=[{field:"notes",operation,value:operation==="CLEAR"?null:"synthetic",evidence}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+ expect(wire.eventTimeChange).toBeNull();expect(wire.changeOrder).toEqual([2]);expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder:[2]},CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+ for(const changeOrder of [[],[2,4]]){const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder},CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");expect(diagnostics).toMatchObject([{issues:[{catalogue:{constraint:"ORDER_SET"}}]}]);}
+ }
+ const baseline=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence}})) as Record<string,unknown>;
+ const authored={...baseline,changeOrder:[1],locationChange:{change:{field:"location",operation:"CLEAR",value:null,evidence:{primaryEvidence:JSON.stringify(evidence[0]),additionalEvidenceJson:"[]"}}}};
+ expect(parseGoogleLiteEuContextSectionsV3(authored,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:[{field:"location",operation:"CLEAR",value:null,evidence}]}}});
+ expect(parseGoogleLiteEuContextSectionsV3({...authored,changeOrder:[]},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
 it("catalogue diagnostics distinguish emitted set from ordinary subsequence without changing refusal",async()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"PRIVATE_CATALOGUE_VALUE",evidence},{field:"calendar",operation:"SET",value:"GREGORIAN",evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]});
@@ -1040,7 +1051,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-66");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-67");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
