@@ -1,5 +1,9 @@
 # Bounded title-presence generation amendment
 
+### Wire66 catalogue rejection diagnostics
+
+After reviewed wire66 Formal5f80d034, R01 both turns passed. R02 turn0 rejected changeOrder/FIELD_CHANGE; two existing checks share this diagnostic (emitted-set bijection versus ordinary subsequence), and raw output was not retained. Exact missing/extra/order identity remains unproven. Add only bounded structural metadata at the existing throw sites: ORDER_SET or ORDER_SUBSEQUENCE, counts at most13, missing/extra identities from immutable CHANGE_ORDER_FIELDS_V3, and bounded finite ordinary code sequences or firstMismatchIndex. Safely validate metadata before projecting; no business values, evidence/source pointers, raw payload, getters, unknown literal or user text. Existing FIELD_CHANGE rejection, wire66 schema/prompt/version, all canonical/evidence/semantic/oracle guards and model-authored order remain unchanged. No sorting/coercion/repair/default/partial acceptance. TDD distinguishes both branches, mixed positives and privacy/observer/malformed/oversized cases; focused tests, review C0/I0 and frozen full precede local commit. Existing single R02_TURN0 mode may capture new evidence with unchanged request/decoder and no Formal credit, within conservative USD5; do not claim historical exact contents or private model motive. Continue only evidence-backed scoped repair; no Full/push/deploy.
+
 ### Wire66 bounded integer order representation
 
 Wire65 Formal R01T0 passed, T1 failed Google schema-state compilation before output. One reviewed, terminal, exact executor-request diagnostic changed ONLY catalogue items from thirteen string literals to integer0..12 bounds: R01T1 HTTP200/canonical/evidence/full-oracle PASS, one authorized LIST read/zero reminder mutations. This supports the representation choice, not private compiler causation, nonempty integer decoding or complete Formal acceptance. Original failures and UNKNOWN accounting remain unchanged.

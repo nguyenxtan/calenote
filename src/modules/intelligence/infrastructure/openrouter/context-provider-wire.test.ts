@@ -9,6 +9,18 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it("catalogue diagnostics distinguish emitted set from ordinary subsequence without changing refusal",async()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"notes",operation:"SET",value:"PRIVATE_CATALOGUE_VALUE",evidence},{field:"calendar",operation:"SET",value:"GREGORIAN",evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+ for(const [changeOrder,summary] of [[[2,7],{constraint:"ORDER_SET",catalogueCount:2,emittedCount:3,ordinaryCount:2,missingFields:["eventRelation"],extraFields:[]}],[[2,7,10,0],{constraint:"ORDER_SET",missingFields:[],extraFields:["title"]}],[[7,10,2],{constraint:"ORDER_SUBSEQUENCE",firstMismatchIndex:0,ordinaryCatalogueCodes:[7,2],ordinaryChangeCodes:[2,7]}]] as const){
+  const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder},CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
+  expect(diagnostics).toMatchObject([{issues:[{path:["changeOrder"],expected:"FIELD_CHANGE",catalogue:summary}]}]);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_CATALOGUE_VALUE");
+ }
+ expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder:[2,10,7]},CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
+ expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder:[]},CONTEXT_PROTOCOL_V3,undefined,()=>{throw Error("private observer");}).status).toBe("REFUSED");
+ const result=await dispatch({...wire,changeOrder:[2,7]});expect(result).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{catalogue:{constraint:"ORDER_SET",missingFields:["eventRelation"]}}]}}});
+});
 it("wire66 requires a model-authored exact integer field catalogue, never positions",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]});

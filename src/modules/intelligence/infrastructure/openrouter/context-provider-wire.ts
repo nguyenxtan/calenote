@@ -1,5 +1,5 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
-import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, projectCatalogueDiagnostic, type CatalogueDiagnostic, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
@@ -206,7 +206,7 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
 class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
     readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
-    readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic) { super("WIRE_SHAPE_INVALID"); }
+    readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic,readonly catalogue?:CatalogueDiagnostic) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -631,10 +631,12 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   }
   if(mode==="encode")result.changes=raw.changes.filter(change=>!definitions.some(definition=>definition.field===fieldOf(change)));
   else{
-    if(selected.size!==emitted.size||order.some(field=>!emitted.has(field)))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE");
+    const counts={catalogueCount:order.length,emittedCount:emitted.size,ordinaryCount:ordinaryChanges.length};
+    if(selected.size!==emitted.size||order.some(field=>!emitted.has(field)))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,{constraint:"ORDER_SET",...counts,missingFields:CHANGE_ORDER_FIELDS_V3.filter(field=>emitted.has(field)&&!selected.has(field)),extraFields:CHANGE_ORDER_FIELDS_V3.filter(field=>selected.has(field)&&!emitted.has(field))});
     const ordinaryFields=ordinaryChanges.map(change=>fieldOf(change));
     if(new Set(ordinaryFields).size!==ordinaryFields.length)throw new WireShapeFailure(["changes"],"UNIQUE_FIELD_OWNER");
-    if(!equal(order.filter(field=>ordinaryFields.includes(field)),ordinaryFields))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE");
+    const ordinaryCatalogue=order.filter(field=>ordinaryFields.includes(field));
+    if(!equal(ordinaryCatalogue,ordinaryFields))throw new WireShapeFailure(["changeOrder"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,{constraint:"ORDER_SUBSEQUENCE",...counts,ordinaryCatalogueCodes:ordinaryCatalogue.map(field=>(CHANGE_ORDER_FIELDS_V3 as readonly string[]).indexOf(field)),ordinaryChangeCodes:ordinaryFields.map(field=>(CHANGE_ORDER_FIELDS_V3 as readonly string[]).indexOf(field)),firstMismatchIndex:ordinaryFields.findIndex((field,index)=>field!==ordinaryCatalogue[index])});
     result.changes=order.map(field=>emitted.get(field));
   }
   return result;
@@ -909,6 +911,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     const diagnostic=error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3");
     if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
     if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
+    if(error instanceof WireShapeFailure&&error.catalogue){const catalogue=projectCatalogueDiagnostic(error.catalogue);if(catalogue)diagnostic.issues[0].catalogue=catalogue;}
     if(error instanceof WireShapeFailure){const shape=projectUncertaintyWireShape(raw,error.path,uncertaintyFieldByCode);if(shape){diagnostic.issues[0].uncertaintyShape=shape;if(error.path[2]==="fieldCode"&&shape.fieldCode===undefined)delete diagnostic.issues[0].actualSafeToken;}}
     try{observeWireInvalid?.(diagnostic);}catch{ /* Diagnostic observers cannot alter failclosed refusal. */ }
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };

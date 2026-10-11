@@ -1,5 +1,14 @@
 # Title Presence Implementation Plan
 
+### Wire66 catalogue diagnostics execution
+
+Goal: distinguish existing hard-refusal checks without acceptance changes. Architecture/stack: existing WireShapeFailure producer and safe TypeScript canonical diagnostic projector; same schema, prompt, protocol, semantic validators and actual gateway. Spec: TOP catalogue diagnostics amendment in 2026-10-08-title-presence-design.md. BASE5f80d034ef1e6e322fbcfe4eaffb059b500e075f.
+
+- [ ] RED actual decoder ORDER_SET missing/extra versus ORDER_SUBSEQUENCE witnesses, positive authored mixed order, safe bounded counts/field alphabet/observer/accessor/private/oversized metadata. Never reconstruct or repair unretained historical output.
+- [ ] GREEN codec.ts/.test.ts, validation-diagnostics.ts/.test.ts and relevant gateway test: optional trusted structural summary at exact throw sites, strict bounded projector, unchanged FIELD_CHANGE hard rejection/no mutations. No schema/prompt/protocol/authority/fixtures/oracle edits. Reuse existing implementer/reviewer; controller owns docs/full/accounting/provider/commit.
+- [ ] Focused provider codec/diagnostics/gateway/service/runner tests, standalone typecheck/scoped lint/diff; confirm schema/prompt byte-identical, so no redundant ENTIRE fit rerun. Freeze complete delta/report, review C0/I0, controller network-denied full test/docs/type/lint/build and selective local commit.
+- [ ] Read-only actual-candidate/authority/accounting preflight then at most one existing R02_TURN0 diagnostic execution with production-shaped unchanged request and no Formal credit. Capture exact structural failure if reproduced; never blindly repeat unchanged Formal, guess missing fields, weaken oracle/validators, or repair output. Settle/terminal and continue evidence-backed scoped fix within existing conservativeUSD5. No Full/push/merge/migration/deploy.
+
 ### Wire66 bounded integer order execution
 
 Goal: promote the single-axis live-admitted catalogue representation without changing semantic sequence or authority. Architecture/stack: existing TypeScript request-local JSON Schema, fixed typed field alphabet and strict singleton-order codec; unchanged Zod canonical/evidence/application path. Spec: TOP wire66 section of docs/superpowers/specs/2026-10-08-title-presence-design.md. BASE6913ff9cd2b65c733eb1485be6f99d18f7cc58a6; prior applicationee61a225e66056324ffd55214213692e5b9efbc7. One coherent existing implementer/reviewer; controller owns docs/full/accounting/provider/commit.

@@ -1,11 +1,23 @@
 import { expect, it } from "vitest";
 import { LegacyV2parseInterpretationSections as parseInterpretationSections } from "./contracts";
 import { ConversationInterpretationV3Schema, parseInterpretationSectionsV3 } from "./contracts";
-import { projectCanonicalValidation, projectDateOperandFailure, projectUncertaintyWireShape, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
+import { projectCanonicalValidation, projectDateOperandFailure, projectUncertaintyWireShape, projectCatalogueDiagnostic, type CanonicalValidationDiagnostics } from "./validation-diagnostics";
 import { UNCERTAINTY_FIELD_WIRE_CODE_V1 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 
 const valid = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "NEW_REQUEST", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const sentinel = "SENSITIVE_ATTACK_DO_NOT_RETAIN";
+it("catalogue projection accepts only bounded finite own-data transport identities",()=>{
+ const valid={constraint:"ORDER_SET",catalogueCount:0,emittedCount:1,ordinaryCount:0,missingFields:["eventRelation"],extraFields:[]};
+ expect(projectCatalogueDiagnostic({...valid,privateKey:sentinel})).toEqual(valid);
+ for(const mutation of [{catalogueCount:14},{ordinaryCount:-1},{emittedCount:.5},{missingFields:[sentinel]},{extraFields:Array(14).fill("title")},{constraint:sentinel},{missingFields:[0]},{missingFields:null}])expect(projectCatalogueDiagnostic({...valid,...mutation})).toBeUndefined();
+ let getters=0;const accessor={...valid};Object.defineProperty(accessor,"missingFields",{get(){getters++;throw Error(sentinel);}});expect(projectCatalogueDiagnostic(accessor)).toBeUndefined();
+ const array:string[]=[];Object.defineProperty(array,"0",{get(){getters++;return sentinel;}});expect(projectCatalogueDiagnostic({...valid,missingFields:array})).toBeUndefined();
+ const proxy=new Proxy(["title"],{get(){getters++;throw Error(sentinel);}});expect(projectCatalogueDiagnostic({...valid,missingFields:proxy})).toEqual({...valid,missingFields:["title"]});expect(getters).toBe(0);
+ expect(projectCatalogueDiagnostic(new Proxy(valid,{getOwnPropertyDescriptor(){throw Error(sentinel);}}))).toBeUndefined();
+ const ordered={constraint:"ORDER_SUBSEQUENCE",catalogueCount:3,emittedCount:3,ordinaryCount:2,ordinaryCatalogueCodes:[7,2],ordinaryChangeCodes:[2,7],firstMismatchIndex:0};expect(projectCatalogueDiagnostic(ordered)).toEqual(ordered);
+ for(const mutation of [{ordinaryCatalogueCodes:[13]},{ordinaryChangeCodes:["2"]},{firstMismatchIndex:13},{ordinaryCount:Infinity}])expect(projectCatalogueDiagnostic({...ordered,...mutation})).toBeUndefined();
+ expect(JSON.stringify(projectCatalogueDiagnostic({...valid,privateKey:sentinel}))).not.toContain(sentinel);
+});
 const uncertaintyDomain=new Map(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field,code])=>[code,field]));
 it("checkpoint62 projects only actual finite uncertainty controls and all immutable codebook members",()=>{
  for(const [field,fieldCode] of Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){

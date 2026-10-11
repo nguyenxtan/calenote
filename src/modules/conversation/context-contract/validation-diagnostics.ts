@@ -2,6 +2,29 @@ import type { z } from "zod";
 import { createHash } from "node:crypto";
 import { projectCanonicalConstraint, type CanonicalConstraintId, type OwnershipControlState } from "./canonical-constraints";
 import { FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
+import { CHANGE_ORDER_FIELDS_V3 } from "./output-authority";
+
+export interface CatalogueDiagnostic {
+  constraint:"ORDER_SET"|"ORDER_SUBSEQUENCE";
+  catalogueCount:number;emittedCount:number;ordinaryCount:number;
+  missingFields?:string[];extraFields?:string[];
+  ordinaryCatalogueCodes?:number[];ordinaryChangeCodes?:number[];firstMismatchIndex?:number;
+}
+/** Only fixed own data slots and bounded finite transport controls are observable. */
+export function projectCatalogueDiagnostic(raw:unknown):CatalogueDiagnostic|undefined {
+ try {
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return;
+  const read=(object:object,key:string)=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);return descriptor&&Object.hasOwn(descriptor,"value")?descriptor.value:undefined;};
+  const count=(value:unknown):value is number=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0&&value<=13;
+  const constraint=read(raw,"constraint");if(constraint!=="ORDER_SET"&&constraint!=="ORDER_SUBSEQUENCE")return;
+  const catalogueCount=read(raw,"catalogueCount"),emittedCount=read(raw,"emittedCount"),ordinaryCount=read(raw,"ordinaryCount");if(!count(catalogueCount)||!count(emittedCount)||!count(ordinaryCount))return;
+  const list=(key:string,code:boolean):Array<string|number>|undefined=>{const value=read(raw,key);if(!Array.isArray(value))return;const length=read(value,"length");if(!count(length))return;const result:Array<string|number>=[];for(let index=0;index<length;index++){const item=read(value,String(index));if(code?typeof item!=="number"||!Number.isSafeInteger(item)||item<0||item>=13:typeof item!=="string"||!(CHANGE_ORDER_FIELDS_V3 as readonly string[]).includes(item))return;result.push(item);}return result;};
+  const result:CatalogueDiagnostic={constraint,catalogueCount,emittedCount,ordinaryCount};
+  if(constraint==="ORDER_SET"){const missingFields=list("missingFields",false),extraFields=list("extraFields",false);if(!missingFields||!extraFields)return;result.missingFields=missingFields as string[];result.extraFields=extraFields as string[];}
+  else {const ordinaryCatalogueCodes=list("ordinaryCatalogueCodes",true),ordinaryChangeCodes=list("ordinaryChangeCodes",true),firstMismatchIndex=read(raw,"firstMismatchIndex");if(!ordinaryCatalogueCodes||!ordinaryChangeCodes||!count(firstMismatchIndex)||firstMismatchIndex>=13)return;result.ordinaryCatalogueCodes=ordinaryCatalogueCodes as number[];result.ordinaryChangeCodes=ordinaryChangeCodes as number[];result.firstMismatchIndex=firstMismatchIndex;}
+  return result;
+ }catch{return;}
+}
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
@@ -30,6 +53,7 @@ export interface CanonicalValidationIssue {
   duplicateFieldCounts?: Array<{field:string;count:number;indexes:number[]}>;
   duplicateFieldCountsTruncated?: boolean;
   evidencePointer?:EvidencePointerDiagnostic;
+  catalogue?:CatalogueDiagnostic;
   dateOperand?:DateOperandDiagnostic;
   uncertaintyShape?:UncertaintyWireShape;
   /** carrierCount counts observed non-null object roots, not validated changes. */
