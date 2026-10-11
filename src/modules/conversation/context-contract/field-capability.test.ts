@@ -17,6 +17,46 @@ function noClockCandidateInput(){
  const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
  slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={scope:"REMINDER",field:"reminderTime",reason:"MISSING",text:"time?",decisionKind:null};return context;
 }
+function completeClockInput(){
+ const context=noClockCandidateInput();context.turns[2].text="12h trưa.";
+ const values={title:"đi thi",eventDate:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},frequency:"DAILY",occurrenceCount:2,eventRelation:"BEFORE_EVENT"};
+ const facts=Object.entries(values).map(([field,value],index)=>{const alias=`f${index+1}`;Object.assign(context.activeRequest!.slots[field as typeof SLOT_NAMES[number]],{state:"RESOLVED",value,fact:alias});return {alias,scope:"REMINDER",field,value,provenance:{kind:"EXPLICIT_USER"},sourceReferenceTime:context.reference.instant,dependencies:[]};});
+ return ContextInputSchema.parse({...context,facts});
+}
+it("wire81 complete factual answer has no applicable uncertainty but retains null carriers",()=>{
+ const context=completeClockInput(),evidence=[{kind:"USER_QUOTE",turn:2,quote:"12h trưa.",occurrence:1}];
+ expect(capabilityModule.isBoundSourceUniqueReminderClock(context)).toBe(true);
+ expect(capabilityModule.isBoundCompleteFiniteSeriesClockAnswer(context)).toBe(true);
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeFixtureV3(canonical,context);if(!wire||typeof wire!=="object"||Array.isArray(wire))throw Error("wire object required");const check=validator(context);expect(check.safeParse(wire).success).toBe(true);
+ for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(check.safeParse({...wire,uncertainties:[{fieldCode,reason,alternatives:[]}]}).success,`${fieldCode}/${reason}`).toBe(false);
+ const typed=ConversationInterpretationV3Schema.parse({...canonical,uncertainties:[{field:"operation",reason:"AMBIGUOUS",alternatives:[{value:"CURRENT",evidence}]}]});expect(check.safeParse(encodeFixtureV3(typed,context)).success).toBe(false);
+ for(const operation of ["SET","REPLACE","CLEAR"]){const value=ConversationInterpretationV3Schema.parse({...canonical,changes:[{field:"reminderTime",operation,value:operation==="CLEAR"?null:{hour:12,minute:0,qualifier:"H24"},evidence}]});expect(check.safeParse(encodeFixtureV3(value,context)).success,operation).toBe(true);}
+});
+it("wire81 each incomplete or unbound fact preserves prior operation uncertainty language",()=>{
+ const baseline=completeClockInput();
+ const mutations:((context:ContextInput)=>void)[]=[
+  ...["title","eventDate","frequency","occurrenceCount","eventRelation"].flatMap(field=>[
+   (context:ContextInput)=>{context.activeRequest!.slots[field as typeof SLOT_NAMES[number]].fact="f99";},
+   (context:ContextInput)=>{context.activeRequest!.slots[field as typeof SLOT_NAMES[number]].fact=field==="title"?"f2":"f1";},
+   (context:ContextInput)=>{context.activeRequest!.slots[field as typeof SLOT_NAMES[number]].state="PROPOSED";context.activeRequest!.slots[field as typeof SLOT_NAMES[number]].fact=null;},
+  ]),
+  context=>{context.facts.find(fact=>fact.field==="occurrenceCount")!.value=3;},
+  context=>{const fact=context.facts.find(fact=>fact.field==="title")!;fact.value="other title";},
+  context=>{context.facts.push({...context.facts[0],alias:"f99"});},
+  context=>{context.activeRequest!.slots.calendar.fact="f99";},
+  context=>{context.activeRequest!.slots.eventRelation.value="STARTING_ON";context.facts.find(fact=>fact.field==="eventRelation")!.value="STARTING_ON";},
+  context=>{context.activeRequest!.slots.eventDate.value={kind:"RELATIVE_DAY",offsetDays:2};context.facts.find(fact=>fact.field==="eventDate")!.value={kind:"RELATIVE_DAY",offsetDays:2};},
+  context=>{const date={kind:"CIVIL_DATE" as const,calendar:"LUNAR_VN" as const,day:11,month:10,year:null,leapMonth:null};context.activeRequest!.slots.eventDate.value=date;context.facts.find(fact=>fact.field==="eventDate")!.value=date;},
+  ...["leadOffsetDays","reminderDate","endDate"].map(field=>(context:ContextInput)=>{Object.assign(context.activeRequest!.slots[field as typeof SLOT_NAMES[number]],{state:"PROPOSED",value:field==="leadOffsetDays"?2:{kind:"RELATIVE_DAY",offsetDays:2},fact:null});}),
+  context=>{context.activeRequest!.slots.location={state:"CONFLICT",value:"other",fact:null};},
+  context=>{context.activeRequest!.slots.calendar={state:"PROPOSED",value:"LUNAR_VN",fact:null};},
+ ];
+ for(const mutate of mutations){const context=structuredClone(baseline);mutate(context);if(context.activeRequest!.slots.calendar.state==="MISSING"&&context.activeRequest!.slots.calendar.fact!==null){expect(capabilityModule.isBoundCompleteFiniteSeriesClockAnswer(context)).toBe(false);continue;}ContextInputSchema.parse(context);expect(capabilityModule.isBoundCompleteFiniteSeriesClockAnswer(context)).toBe(false);
+  const evidence=[{kind:"USER_QUOTE",turn:2,quote:"12h trưa.",occurrence:1}],value=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[],query:null,uncertainties:[{field:"operation",reason:"MISSING",alternatives:[]}],conversationDirective:null,replyProposal:null});
+  expect(validator(context).safeParse(encodeFixtureV3(value,context)).success).toBe(true);
+ }
+});
 it("wire79 bound exact clock excludes only its contradictory MISSING language without requiring a carrier",()=>{
  const context=noClockCandidateInput();context.turns[2].text="12h trưa.";
  context.turns[0].text+=" Ghi chú mang giấy tờ."; // Outside source-unique wire80 subset.
@@ -894,6 +934,20 @@ it.each(["SET", "REPLACE", "CLEAR"] as const)("independent schema consumer rejec
   const missing = encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse({ schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence }, changes: [], query: null,
     uncertainties: [{ field: "occurrenceCount", reason: "MISSING", alternatives: [] }], conversationDirective: { kind: "ASK_FOR_FIELD", field: "occurrenceCount" }, replyProposal: null }));
   expect(check.safeParse(missing).success).toBe(true);
+});
+it("wire81 actual complete projection accepts coherent answer and preserves unrelated uncertainty bypass clarification",async()=>{
+ for(const bypass of [false,true]){
+  const h=await harness([proposal({title:"đi thi",eventDate:date(11,10,null),frequency:"DAILY",occurrenceCount:2}),proposal({eventRelation:"BEFORE_EVENT"},"CURRENT"),context=>{
+   expect(capabilityModule.isBoundCompleteFiniteSeriesClockAnswer(context)).toBe(true);
+   const uncertainty=serializeContextRequest(context).response_format.json_schema.schema.properties?.uncertainties;
+   if(!uncertainty||typeof uncertainty!=="object")throw Error("uncertainty array schema required");expect(uncertainty.maxItems).toBe(0);
+   return {...proposal({reminderTime:{hour:12,minute:0,qualifier:"H24"}},"CURRENT")(context) as Record<string,unknown>,uncertainties:bypass?[{field:"operation",reason:"MISSING",alternatives:[]},{field:"endDate",reason:"MISSING",alternatives:[]}]:[]};
+  }]);
+  let reads=0;const list=h.deps.list;h.deps.list=input=>{reads++;return list(input);};
+  await h.turn(0,"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.");await h.turn(1,"Nhắc trước 2 ngày.");await h.turn(2,"12h trưa.");
+  expect(h.events.some(event=>event.event==="POST_CANONICAL_STAGE"&&event.diagnostic.stage==="MERGE"&&event.diagnostic.result==="CLARIFY")).toBe(bypass);
+  expect(reads).toBe(0);expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first<number>("n")).toBe(0);expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminder_series").first<number>("n")).toBe(0);
+ }
 });
 it("wire80 typed ambiguous direct bypass still follows unchanged canonical/evidence/merge clarification",async()=>{
  const h=await harness([proposal({title:"đi thi",eventDate:date(11,10,null),frequency:"DAILY",occurrenceCount:2}),proposal({eventRelation:"BEFORE_EVENT"},"CURRENT"),context=>{

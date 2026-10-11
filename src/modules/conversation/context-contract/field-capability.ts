@@ -30,6 +30,26 @@ export function isBoundSourceUniqueReminderClock(input: ContextInput): boolean {
   const domain=deriveGenerationFieldCapability(input).allowedClockFields;
   return domain.length===1&&domain[0]==="reminderTime";
 }
+/** Complete retained finite-relative dependencies, not a READY prediction. */
+export function isBoundCompleteFiniteSeriesClockAnswer(input: ContextInput): boolean {
+  if(!isBoundSourceUniqueReminderClock(input))return false;
+  const slots=input.activeRequest!.slots;
+  const factual=(field:keyof typeof slots)=>{
+    const slot=slots[field];if(slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
+    const facts=input.facts.filter(fact=>fact.alias===slot.fact);
+    return facts.length===1&&facts[0].scope==="REMINDER"&&facts[0].field===field
+      &&input.facts.filter(fact=>fact.scope==="REMINDER"&&fact.field===field).length===1
+      &&JSON.stringify(facts[0].value)===JSON.stringify(slot.value);
+  };
+  if(!(["title","eventDate","frequency","occurrenceCount","eventRelation"] as const).every(factual))return false;
+  const date=slots.eventDate.value;
+  if(!date||date.kind!=="CIVIL_DATE"||date.calendar!=="GREGORIAN"||slots.eventRelation.value!=="BEFORE_EVENT")return false;
+  for(const field of ["leadOffsetDays","reminderDate","endDate"] as const){const slot=slots[field];if(slot.state!=="MISSING"||slot.value!==null||slot.fact!==null||input.facts.some(fact=>fact.field===field))return false;}
+  if(Object.values(slots).some(slot=>slot.state==="CONFLICT"))return false;
+  const calendar=slots.calendar;
+  return calendar.state==="MISSING"?calendar.value===null&&calendar.fact===null&&!input.facts.some(fact=>fact.field==="calendar")
+    :calendar.value==="GREGORIAN"&&factual("calendar");
+}
 
 /** Whole scheduling-only source proof precedes candidate-domain absence.
  * Projected slots expose state/value/fact, not retained evidence arrays. */

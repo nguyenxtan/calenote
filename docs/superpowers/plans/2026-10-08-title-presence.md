@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire81 complete bound-answer applicability execution
+
+BASE95bf4989800a36d60589150ce3172f00158e7bef; TOP wire81 spec, existing continuous conservative USD5 scope.
+
+- [ ] Genuine RED matched schema/service admits unrelated uncertainty. Own field-capability Boolean/tests, provider-wire maxItems0/tests, current protocol/version pins and narrow historical test dependencies. Exact alias/state/type/calendar/source/history conjunction; no backend READY inference or new serialized capability/parser.
+- [ ] GREEN all16x4/typed uncertainties absent only sufficient complete subset; null/allops/carrier presence unchanged. Every-conjunct negative for state/FACT/alias/calendar/lunar/relative/range/lead/count/title/history/context preserves existing typed languages. Coherent service accepted; direct bypass remains unchanged clarify/reject with zero reads/mutations. No prompt/base/rank/codec/canonical/evidence/merge/oracle weakening or output repair.
+- [ ] Focused/type/lint/diff, strict ENTIRE67/all32612000/1536/topology, expected historical six once; independent C0/I0 then frozen controller full/local commit/trusted preflight/FreshFormal. No implementer full/provider/key/accounting/commit/children. Continue scoped repair, no unchanged paid rerun/Full/push/merge/deploy/remote migration.
+
 ### Wire80 source-unique clock execution
 
 BASE0272e200980fdb84143799682e286ee1e52970ab; TOP wire80 spec, continuous conservative USD5 scope.

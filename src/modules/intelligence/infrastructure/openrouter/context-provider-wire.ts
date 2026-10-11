@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock } from "../../../conversation/context-contract/field-capability";
+import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -892,7 +892,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     requireShape(changes.anyOf?.length);
     for(const raw of changes.anyOf){const branch=deref(raw,schema),operation=branch.properties!.operation;if((operation.enum??[operation.const]).some(value=>value==="SET"||value==="REPLACE"))branch.properties!.value={$ref:"#/$defs/__yearlessCivil"};}
   }
-  schema.properties!.uncertainties.maxItems=4;
+  schema.properties!.uncertainties.maxItems=primaryEvidenceInput&&isBoundCompleteFiniteSeriesClockAnswer(primaryEvidenceInput)?0:4;
   schema.properties!.uncertainties.items=uncertaintyIntegerDomains(schema.properties!.uncertainties.items!,schema);
   schema.properties!.changes.maxItems=ordinaryFieldMaximum(schema);
   return { version: CONTEXT_PROTOCOL_V3.wireVersion, schema: compactSourceDefinition(outgoingStringEnums(prune(schema))) as typeof InterpretationJsonSchemaV3 };
