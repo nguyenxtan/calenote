@@ -11,6 +11,19 @@ import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
+it("wire70 bound scheduling continuation excludes all ordinary notes operations",()=>{
+ const context=input("Nhắc trước 2 ngày.");context.turns=[{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"Nhắc trước 2 ngày."}];context.currentTurn=2;
+ const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ slots.frequency={state:"PROPOSED",value:"DAILY",fact:null};slots.occurrenceCount={state:"PROPOSED",value:2,fact:null};slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},fact:null};context.activeRequest={lifecycle:"CLARIFYING",slots};context.pendingQuestion={scope:"REMINDER",field:"reminderTime",reason:"MISSING",text:"time?",decisionKind:null};
+ const evidence=[{kind:"USER_QUOTE",turn:2,quote:context.turns[2].text,occurrence:1}];const check=validator(context);
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});expect(check.safeParse(encodeGoogleLiteEuContextV3(canonical)).success).toBe(true);
+ for(const operation of ["SET","REPLACE","CLEAR"]){const value=ConversationInterpretationV3Schema.parse({...canonical,changes:[...canonical.changes,{field:"notes",operation,value:operation==="CLEAR"?null:"private-note",evidence}]});expect(check.safeParse(encodeGoogleLiteEuContextV3(value)).success,operation).toBe(false);}
+ expect(catalogue(context).notesProposalAllowed).toBe(false);
+ context.turns[0].text+=" Ghi chú mang giấy tờ.";
+ const earlier=[{kind:"USER_QUOTE",turn:0,quote:context.turns[0].text,occurrence:1}];
+ const notes=ConversationInterpretationV3Schema.parse({...canonical,changes:[...canonical.changes,{field:"notes",operation:"SET",value:"mang giấy tờ",evidence:earlier}]});
+ expect(catalogue(context).notesProposalAllowed).toBe(true);expect(validator(context).safeParse(encodeGoogleLiteEuContextV3(notes)).success).toBe(true);
+});
 it("wire69 initial event-only date forbids reminder date generation without defaulting values",()=>{
  const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
  expect(Reflect.get(deriveGenerationFieldCapability(context),"reminderDateProposalAllowed")).toBe(false);
@@ -335,7 +348,7 @@ it("requires a generated title carrier for an asserted exam reminder",()=>{
 it("R02 simplified request schema pins single title ownership and reachable definitions",()=>{
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
-  expect(catalogue(context)).toEqual({version:"generation-field-capability-12",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
+  expect(catalogue(context)).toEqual({version:"generation-field-capability-13",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
   expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("dc4476ab56bccad3c3a3e337567e9c46fb565c8f8f3f777680fb6f1fc62e9eb4");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
   expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("4756dd6cd1a6220b3ceffed942a514a25da9f5d13b4bf0327b489dc5c8f796a0");
@@ -383,7 +396,7 @@ it.each([
   [`🗓️ ${CONTROL_PLACEHOLDER} Nhắc 2 ngày liên tiếp.`, ["frequency", "occurrenceCount"]],
 ] as const)("request field upper bound preserves numeric ownership: %s", (text, allowed) => {
   const context = input(text), before = JSON.stringify(context);
-  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-12", allowedNumericFields: allowed });
+  expect(catalogue(context)).toMatchObject({ version: "generation-field-capability-13", allowedNumericFields: allowed });
   const domain = fields(context);
   for (const field of ["frequency", "occurrenceCount", "leadOffsetDays"]) expect(domain.includes(field)).toBe((allowed as readonly string[]).includes(field));
   expect(domain).not.toContain("title"); // SET remains in the separate carrier.

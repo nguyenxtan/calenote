@@ -5,18 +5,18 @@ import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-off
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
-import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource } from "./semantic-completeness";
+import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree } from "./semantic-completeness";
 
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-12";
+  version: "generation-field-capability-13";
   reminderDateProposalAllowed: boolean;
   /** Sufficient source-year checkpoint only; model still authors every slot. */
   eventDateYearNullRequired: boolean;
-  /** False only for the isolated, complete notes-free source assertion. */
+  /** False only for sufficient initial or bound scheduling-only source contexts. */
   notesProposalAllowed: boolean;
   allowedNumericFields: readonly NumericProposalField[];
   allowedClockFields: readonly ClockProposalField[];
@@ -190,7 +190,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   }
   const title = input.activeRequest?.slots.title;
   const calendar = input.activeRequest?.slots.calendar;
-  return { version: "generation-field-capability-12", reminderDateProposalAllowed:!isInitialEventDateOnlySource(input), eventDateYearNullRequired:isInitialEventDateYearNullRequired(input), notesProposalAllowed: !isInitialIsolatedExamNotesFree(input), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
+  return { version: "generation-field-capability-13", reminderDateProposalAllowed:!isInitialEventDateOnlySource(input), eventDateYearNullRequired:isInitialEventDateYearNullRequired(input), notesProposalAllowed: !(isInitialIsolatedExamNotesFree(input)||isBoundRetainedSeriesNotesFree(input)), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     calendarProposalAllowed: !!calendar && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(calendar.state) && calendar.value !== null
       || current?.role === "USER" && hasExplicitCalendarCue(current.text),

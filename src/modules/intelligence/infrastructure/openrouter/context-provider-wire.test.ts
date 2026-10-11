@@ -131,7 +131,7 @@ it("wire63 folds only equivalent uncertainty reason shells and preserves clock d
 });
 it("wire60 title carrier preserves correction availability and required SET without ordinary bypass",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
- const capability={version:"generation-field-capability-12" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false};
+ const capability={version:"generation-field-capability-13" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false};
  for(const titlePresenceRequired of [false,true])for(const titleCorrectionAllowed of [false,true]){
   const schema=googleLiteEuContextWireSchema({...capability,titlePresenceRequired,titleCorrectionAllowed}).schema;
   const inline=(v:unknown):unknown=>{if(Array.isArray(v))return v.map(inline);if(!v||typeof v!=="object")return v;const n=v as Record<string,unknown>;if(typeof n.$ref==="string")return inline(n.$ref.slice(2).split("/").reduce((p,k)=>(p as Record<string,unknown>)[k],schema as unknown));return Object.fromEntries(Object.entries(n).filter(([k])=>k!=="$defs").map(([k,c])=>[k,inline(c)]));};
@@ -325,7 +325,7 @@ it.each(["{", "[]", "null", '"PRIVATE_DATE_SECRET"', "true", "0", " ".repeat(327
  expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE_DATE_SECRET|private_secret_key|1e999/);
 });
 
-it.each([undefined, {version:"generation-field-capability-12" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}, {version:"generation-field-capability-12" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
+it.each([undefined, {version:"generation-field-capability-13" as const,allowedNumericFields:[],allowedClockFields:["eventTime" as const,"reminderTime" as const],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}, {version:"generation-field-capability-13" as const,allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}])("outgoing string controls use supported enums without exposing encoded date tags (%#)", capability => {
   const schema=googleLiteEuContextWireSchema(capability).schema;
   let constants=0;const singletonValues:string[]=[];
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;
@@ -659,7 +659,7 @@ it.each([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]])("global original posi
   }
 });
 it("reminder clock carrier is null-only when no clock capability exists",()=>{
-  const schema=googleLiteEuContextWireSchema({version:"generation-field-capability-12",allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}).schema as unknown as {properties:{reminderTimeChange:unknown;reminderDateChange:unknown}};
+  const schema=googleLiteEuContextWireSchema({version:"generation-field-capability-13",allowedNumericFields:[],allowedClockFields:[],titlePresenceRequired:false,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}).schema as unknown as {properties:{reminderTimeChange:unknown;reminderDateChange:unknown}};
   expect(schema.properties.reminderTimeChange).toEqual({type:"null"});
   expect(schema.properties.reminderDateChange).toHaveProperty("anyOf");
 });
@@ -1033,7 +1033,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-69");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-70");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("92d022f2b8edadf6452fa9106461012467fbb585d501b9822f2385e3895e6fd8");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

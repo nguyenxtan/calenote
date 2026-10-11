@@ -2,6 +2,7 @@ import type { ContextInput, FieldChangeV3, SemanticPatchProposalV3 } from "./con
 import type { ValidatedFieldEvidence } from "./evidence";
 import type { TranscriptEntry } from "./state";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
+import { isBareRetainedSeriesOffsetAnswer } from "./lead-offset-evidence";
 
 /** Finite complete first-person assertion only; no parsed operand is returned. */
 export function isFirstPersonExamClockAssertion(text:string):boolean {
@@ -27,8 +28,27 @@ export function isInitialIsolatedExamNotesFree(input:ContextInput):boolean {
     && input.activeRequest===null && Array.isArray(input.facts) && input.facts.length===0 && input.pendingQuestion===null && Array.isArray(input.ambiguities) && input.ambiguities.length===0
     && examTitleCoverage(input.turns[0].text)!==null;
 }
+/** Sufficient bound scheduling answer only. Private support probes never emit operands or evidence. */
+export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
+  if(!input || !Array.isArray(input.turns) || !Number.isSafeInteger(input.currentTurn) || input.currentTurn<=0
+    || !Array.isArray(input.facts) || !Array.isArray(input.ambiguities) || input.ambiguities.length!==0
+    || !input.activeRequest || input.pendingQuestion?.scope!=="REMINDER" || typeof input.pendingQuestion.field!=="string"
+    || !Array.isArray(input.capabilities?.supported) || !input.capabilities.supported.includes("FINITE_DAILY") || input.capabilities.limits?.dailyCount!==30)return false;
+  const current=input.turns[input.currentTurn],slots=input.activeRequest.slots;
+  if(current?.role!=="USER" || typeof current.text!=="string" || !slots)return false;
+  // Earlier USER quotes remain legal evidence for SET. Restrict only history
+  // positively covered by the unchanged complete initial notes-free grammar.
+  const earlier=input.turns.slice(0,input.currentTurn);
+  if(earlier.filter(turn=>turn?.role==="USER").length!==1||earlier[0]?.role!=="USER"||typeof earlier[0].text!=="string"||examTitleCoverage(earlier[0].text)===null)return false;
+  const {frequency,occurrenceCount:count,eventDate,notes}=slots;
+  const occupied=(slot:typeof frequency|typeof count|typeof eventDate)=>!!slot&&["PROPOSED","RESOLVED"].includes(slot.state)&&slot.value!==null&&slot.value!==undefined;
+  if(!occupied(frequency)||frequency.value!=="DAILY"||!occupied(count)||typeof count.value!=="number"||!Number.isSafeInteger(count.value)||count.value<2||count.value>30
+    ||!occupied(eventDate)||!notes||notes.state!=="MISSING"||notes.value!==null||notes.fact!==null||input.facts.some(fact=>fact?.field==="notes"))return false;
+  const length=[...current.text].length,turn={id:"current-notes-probe",role:"USER" as const,semanticView:current.text};
+  return isBareRetainedSeriesOffsetAnswer(count.value,[{kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:current.text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"}],[turn],count.value);
+}
 export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
-  return proposal.intent!=="CREATE_REMINDER" || !isInitialIsolatedExamNotesFree(input)
+  return proposal.intent!=="CREATE_REMINDER" || !(isInitialIsolatedExamNotesFree(input)||proposal.requestTarget?.kind==="CURRENT"&&isBoundRetainedSeriesNotesFree(input))
     || !proposal.changes.some(change=>change.field==="notes") && !proposal.uncertainties.some(issue=>issue.field==="notes"&&issue.alternatives.length>0);
 }
 /** Sufficient event-owned prefix only; no scanner operand escapes this check. */
