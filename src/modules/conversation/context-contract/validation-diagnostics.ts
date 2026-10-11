@@ -5,8 +5,8 @@ import { FieldChangeV3Schema, UncertaintyV3Schema } from "./contracts";
 
 const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
-for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","index","change"])keys.add(key);
-for(const key of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])rootKeys.add(key);
+for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","index","change"])keys.add(key);
+for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])rootKeys.add(key);
 // Trusted provider-envelope paths only; values and unknown keys stay redacted.
 for (const key of ["choices", "message", "content", "finish_reason", "tool_calls", "function_call"]) keys.add(key);
 const types = new Set(["string", "number", "boolean", "null", "undefined", "array", "object", "int"]);
@@ -221,7 +221,7 @@ export function projectWireValidation(raw: unknown, path: PropertyKey[], expecte
   let structural: unknown = raw, decodedBoundary = false;
   for (const segment of path.slice(0, 8)) {
     structural = structural && typeof structural === "object" && Object.hasOwn(structural, segment)
-      ? (structural as Record<PropertyKey, unknown>)[segment] : undefined;
+      ? path[0]==="changeOrder" ? Object.getOwnPropertyDescriptor(structural,segment)?.value : (structural as Record<PropertyKey, unknown>)[segment] : undefined;
     if ((segment === "primaryEvidence" || segment === "additionalEvidenceJson") && typeof structural === "string"
       && new TextEncoder().encode(structural).length <= 32768) {
       try { structural = JSON.parse(structural); decodedBoundary = true; } catch { /* Invalid JSON stays a string. */ }

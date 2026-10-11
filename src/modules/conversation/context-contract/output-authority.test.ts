@@ -3,6 +3,13 @@ import { expect, it } from "vitest";
 import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
+it("wire65 catalogue is untrusted order with one shared closed field alphabet",()=>{
+ expect(authority.CHANGE_ORDER_FIELDS_V3).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]);
+ expect(Object.isFrozen(authority.CHANGE_ORDER_FIELDS_V3)).toBe(true);
+ for(const path of ["changeOrder","changeOrder[]"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
+ expect(authority.classifyOutputPathV3("transport.codebookMapping").class).toBe("APPLICATION_OWNED");
+ for(const root of ["titleChange","reminderTimeChange","locationChange"])expect(()=>authority.classifyOutputPathV3(`${root}.index` as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
+});
 it("alternative evidence carrier selections remain closed semantic-untrusted paths",()=>{
  for(const path of ["uncertainties[].alternatives[].evidence.primaryEvidence","uncertainties[].alternatives[].evidence.additionalEvidenceJson"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
 });
@@ -62,9 +69,9 @@ it("registry_categories_preserve_semantic_and_advisory_boundaries", () => {
     else expect(rule.class).toBe("SEMANTIC_UNTRUSTED");
   }
 });
-it("reminder carrier paths and original indexes are explicitly untrusted and closed",()=>{
+it("reminder carrier paths are explicitly untrusted and legacy indexes are closed",()=>{
   for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"]){
-    for(const suffix of ["",".index",".change",".change.field",".change.operation",".change.value",".change.evidence",".change.evidence.primaryEvidence",".change.evidence.additionalEvidenceJson"]){
+    for(const suffix of ["",".change",".change.field",".change.operation",".change.value",".change.evidence",".change.evidence.primaryEvidence",".change.evidence.additionalEvidenceJson"]){
       expect(authority.classifyOutputPathV3((root+suffix) as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
     }
     expect(()=>authority.classifyOutputPathV3(`${root}.change.PRIVATE_USER_FIELD` as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");

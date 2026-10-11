@@ -12,13 +12,14 @@ it("wire59 bound fixture authors exact alternative primary source and ordered ex
  expect(JSON.parse(raw.uncertainties[0].alternatives[0])).toEqual({value:"S0.1",evidence:{primaryEvidence:"S0.1",additionalEvidenceJson:JSON.stringify([{kind:"CONTEXT_FACT",ref:"f1"},{kind:"USER_TURN",turn:2}])}});
  expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input)).toMatchObject({status:"PARSED",value:{semantic:{uncertainties:canonical.uncertainties}}});expect(JSON.stringify(canonical)).toBe(before);
 });
-it("bound fixture transport preserves all ten authored carrier positions and source codes with only eventDate typed",()=>{
+it("bound fixture transport preserves all ten authored catalogue positions and source codes with only eventDate typed",()=>{
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Ngày 11/10 đi thi."}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},clock={hour:8,minute:0,qualifier:"H24"},evidence=[{kind:"USER_QUOTE",turn:0,quote:input.turns[0].text,occurrence:1}];
  const values={location:"synthetic",endDate:date,occurrenceCount:2,frequency:"DAILY",eventRelation:"BEFORE_EVENT",eventTime:clock,eventDate:date,reminderTime:clock,reminderDate:date,title:"đi thi"};
  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:Object.entries(values).map(([field,value])=>({field,operation:"SET",value,evidence})),query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),before=JSON.stringify(canonical);
- const raw=encodeFixtureV3(canonical,input) as Record<string,{index:number;change:{value:unknown;evidence:{primaryEvidence:string}}}>;
- for(const [index,field] of Object.keys(values).entries()){expect(raw[field+"Change"].index).toBe(index);expect(raw[field+"Change"].change.evidence.primaryEvidence).toBe("U0");}
+ const raw=encodeFixtureV3(canonical,input) as Record<string,{change:{value:unknown;evidence:{primaryEvidence:string}}}>&{changeOrder:string[]};
+ expect(raw.changeOrder).toEqual(Object.keys(values));
+ for(const field of Object.keys(values)){expect(Object.keys(raw[field+"Change"])).toEqual(["change"]);expect(raw[field+"Change"]).not.toHaveProperty("index");expect(raw[field+"Change"].change.evidence.primaryEvidence).toBe("U0");}
  expect(raw.eventDateChange.change.value).toEqual(date);expect(raw.reminderDateChange.change.value).toBe(JSON.stringify(date));expect(raw.endDateChange.change.value).toBe(JSON.stringify(date));
  expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  expect(JSON.stringify(canonical)).toBe(before);

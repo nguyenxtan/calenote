@@ -9,6 +9,60 @@ import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { z } from "zod";
+it("wire65 requires a model-authored exact field catalogue instead of numeric positions",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]});
+ const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+ expect(wire.changeOrder).toEqual(["eventRelation"]);
+ expect(Object.keys(wire.eventRelationChange as object)).toEqual(["change"]);
+ expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+ for(const changeOrder of [undefined,[],["title"],["eventRelation","eventRelation"],[10],"eventRelation",null]){
+  expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ }
+ expect(parseGoogleLiteEuContextSectionsV3({...wire,eventRelationChange:{...(wire.eventRelationChange as object),index:10}},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it("wire65 catalogue preserves all13 fields and refuses contradictory ordinary order",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const fields=["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"];
+ for(const kind of ["CURRENT","NEW"])for(const operation of ["SET","REPLACE","CLEAR"])for(let rotation=0;rotation<13;rotation++){
+  const ordered=[...fields.slice(rotation),...fields.slice(0,rotation)];
+  const values:Record<string,unknown>={title:"literal",location:"literal",notes:"literal",eventDate:{kind:"RELATIVE_DAY",offsetDays:2},eventTime:{hour:8,minute:0,qualifier:"H24"},reminderDate:{kind:"RELATIVE_DAY",offsetDays:3},reminderTime:{hour:9,minute:0,qualifier:"H24"},calendar:"GREGORIAN",frequency:"DAILY",occurrenceCount:2,eventRelation:"BEFORE_EVENT",leadOffsetDays:2,endDate:{kind:"RELATIVE_DAY",offsetDays:4}};
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind,evidence},changes:ordered.map(field=>({field,operation,value:operation==="CLEAR"?null:values[field],evidence}))});
+  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;
+  expect(wire.changeOrder).toEqual(ordered);expect(wire.changes).toHaveLength(3);
+  expect(wire).toEqual(wireFixture(canonical));
+  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+  const reversed={...wire,changes:[...(wire.changes as unknown[])].reverse()};
+  expect(parseGoogleLiteEuContextSectionsV3(reversed,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ }
+ const empty=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;
+ expect(empty.changeOrder).toEqual([]);expect(parseGoogleLiteEuContextSectionsV3(empty,CONTEXT_PROTOCOL_V3).status).toBe("PARSED");
+});
+it("wire65 catalogue schema and private malformed controls fail atomically without getter invocation",async()=>{
+ const canonical=ConversationInterpretationV3Schema.parse(minimal),wire=wireFixture(canonical) as Record<string,unknown>;
+ const schema=googleLiteEuContextWireSchema().schema;
+ const inline=(value:unknown):unknown=>{if(Array.isArray(value))return value.map(inline);if(!value||typeof value!=="object")return value;const node=value as Record<string,unknown>;if(typeof node.$ref==="string")return inline(node.$ref.slice(2).split("/").reduce((parent,key)=>(parent as Record<string,unknown>)[key],schema as unknown));return Object.fromEntries(Object.entries(node).filter(([key])=>key!=="$defs").map(([key,child])=>[key,inline(child)]));};
+ const check=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(check.safeParse(wire).success).toBe(true);
+ expect(schema.required).toContain("changeOrder");
+ expect(schema.properties!.changeOrder).toMatchObject({maxItems:13,items:{enum:["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]}});
+ for(const changeOrder of [["PRIVATE_ORDER_SENTINEL"],Array(14).fill("notes"),[null],[{}],[],["notes"]]){
+  const raw={...wire,changeOrder};const diagnostics:unknown[]=[];
+  const result=parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value));
+  expect(result.status).toBe(changeOrder.length===0?"PARSED":"REFUSED");
+  if(changeOrder.length){expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_ORDER_SENTINEL");expect(diagnostics).toMatchObject([{issues:[{path:expect.arrayContaining(["changeOrder"]),unknownPathSegments:0}],topLevelKeys:expect.arrayContaining(["changeOrder"])}]);}
+ }
+ let getters=0;const catalogue:string[]=[];Object.defineProperty(catalogue,"0",{enumerable:true,get(){getters++;return "notes";}});
+ expect(parseGoogleLiteEuContextSectionsV3({...wire,changeOrder:catalogue},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(getters).toBe(0);
+ const result=await dispatch({...wire,changeOrder:["PRIVATE_ORDER_SENTINEL"]});expect(result.status).toBe("FAILURE");
+});
+it("wire65 root catalogue accessor refuses before copying without invoking it",()=>{
+ const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;let getters=0;
+ Object.defineProperty(raw,"changeOrder",{enumerable:true,get(){getters++;return [];}});
+ const diagnostics:unknown[]=[];const result=parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value));
+ expect(getters).toBe(0);expect(result.status).toBe("REFUSED");expect(diagnostics).toMatchObject([{issues:[{path:["changeOrder"],actualType:"undefined"}]}]);
+ expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3,undefined,()=>{throw Error("PRIVATE_OBSERVER_SENTINEL");}).status).toBe("REFUSED");expect(getters).toBe(0);
+});
 it("wire64 seven authored carriers preserve chosen order and reject index10 without repair",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const fields=[{field:"title",operation:"SET",value:"synthetic",evidence},{field:"location",operation:"SET",value:"synthetic",evidence},{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}];
@@ -194,7 +248,7 @@ it.each([null,"PRIVATE_UNCERTAINTY_VALUE",{}])("wire52 nonarray uncertainty refu
 });
 it("wire52 restores only the outgoing root max4 and leaves uncertainty items and all other schema nodes unchanged",()=>{
  const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;
- expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("66972157a90d6dc258929e25b13772ac927be6c2d688ea193679f7cb782936d5");
+ expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("dc522468035736436349f5f2a93f53b3e4641cab299eb772f98ccca9f7d435af");
 });
 it("wire52 valid zero/four uncertainty operands keep decoding while nested failures keep their exact item path",()=>{
  const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;
@@ -205,7 +259,7 @@ it("wire51 source-bound fixture traverses endDate and location carriers without 
  const bound=ContextInputSchema.parse({...input,turns:[{role:"USER",text:"synthetic"}],currentTurn:0}),evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"location",operation:"SET",value:"PRIVATE_LOCATION_SENTINEL",evidence},{field:"endDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence}]});
  const before=JSON.stringify(canonical),wire=encodeFixtureV3(canonical,bound) as Record<string,{index:number;change:{value:unknown;evidence:{primaryEvidence:string}}}>;
- for(const [root,index] of [["locationChange",0],["endDateChange",1]] as const){expect(wire[root].index).toBe(index);expect(wire[root].change.evidence.primaryEvidence).toBe("U0");expect(wire[root].change.evidence.primaryEvidence).not.toContain("synthetic");}
+ for(const [root,index] of [["locationChange",0],["endDateChange",1]] as const){expect((wire as unknown as {changeOrder:string[]}).changeOrder[index]).toBe(root==="locationChange"?"location":"endDate");expect(wire[root]).not.toHaveProperty("index");expect(wire[root].change.evidence.primaryEvidence).toBe("U0");expect(wire[root].change.evidence.primaryEvidence).not.toContain("synthetic");}
  expect(wire.locationChange.change.value).toBe("PRIVATE_LOCATION_SENTINEL");expect(wire.endDateChange.change.value).toBe(JSON.stringify({kind:"RELATIVE_DAY",offsetDays:2}));expect(JSON.stringify(canonical)).toBe(before);
 });
 it.each([{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},{kind:"RELATIVE_DAY",offsetDays:0},{kind:"WEEKDAY",weekday:1,qualifier:"UNRESOLVED"}])("wire48 canonical-only date JSON roundtrip (%#)",date=>{
@@ -469,7 +523,7 @@ it.each([
 it.each(["SET","REPLACE","CLEAR"])("wire51 location singleton preserves authored %s and strictly rejects bypass",operation=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence},{field:"location",operation,value:operation==="CLEAR"?null:"PRIVATE_LOCATION_SENTINEL",evidence}]});
  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,carrier=wire.locationChange as {index:number;change:unknown};
- expect(carrier).toMatchObject({index:1,change:{field:"location",operation}});expect(wire.changes).toHaveLength(1);
+ expect(carrier).toMatchObject({change:{field:"location",operation}});expect(wire.changes).toHaveLength(1);
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const missing={...wire};delete missing.locationChange;
  for(const raw of [missing,{...wire,locationChange:null,changes:[carrier.change]},{...wire,changes:[carrier.change]},...([null,-1,0.5,2] as const).map(index=>({...wire,locationChange:{...carrier,index}}))]){const before=JSON.stringify(raw);expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(raw)).toBe(before);}
@@ -477,7 +531,7 @@ it.each(["SET","REPLACE","CLEAR"])("wire51 location singleton preserves authored
 it.each(["SET","REPLACE","CLEAR"])("endDate singleton preserves authored %s and rejects duplicate/bypass/invalid position",operation=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence},{field:"endDate",operation,value:operation==="CLEAR"?null:{kind:"RELATIVE_DAY",offsetDays:2},evidence}]});
  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,carrier=wire.endDateChange as {index:number;change:unknown};
- expect(carrier).toMatchObject({index:1,change:{field:"endDate",operation}});expect(wire.changes).toHaveLength(1);
+ expect(carrier).toMatchObject({change:{field:"endDate",operation}});expect(wire.changes).toHaveLength(1);
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const missing={...wire};delete missing.endDateChange;
  for(const raw of [missing,{...wire,endDateChange:null,changes:[carrier.change]},{...wire,changes:[carrier.change]},...([null,-1,0.5,2] as const).map(index=>({...wire,endDateChange:{...carrier,index}}))]){const before=JSON.stringify(raw);expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(raw)).toBe(before);}
@@ -493,7 +547,7 @@ it("endDate singleton malformed value fails carrier boundary and collisions reta
 it.each(["SET","REPLACE","CLEAR"])("eventDate singleton preserves authored %s and rejects duplicate/bypass/invalid position",operation=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"notes",operation:"SET",value:"literal",evidence},{field:"eventDate",operation,value:operation==="CLEAR"?null:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},evidence}]});
  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,carrier=wire.eventDateChange as {index:number;change:unknown};
- expect(carrier).toMatchObject({index:1,change:{field:"eventDate",operation}});expect(wire.changes).toHaveLength(1);
+ expect(carrier).toMatchObject({change:{field:"eventDate",operation}});expect(wire.changes).toHaveLength(1);
  expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const missing={...wire};delete missing.eventDateChange;
  for(const raw of [missing,{...wire,eventDateChange:null,changes:[carrier.change]},{...wire,changes:[carrier.change]},...([null,-1,0.5,2] as const).map(index=>({...wire,eventDateChange:{...carrier,index}}))]){const before=JSON.stringify(raw);expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(raw)).toBe(before);}
@@ -509,21 +563,21 @@ it.each([
 it.each(["frequency","occurrenceCount"])("numeric %s singleton preserves ALL operations and rejects bypass",field=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
  for(const operation of ["SET","REPLACE","CLEAR"]){const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field,operation,value:operation==="CLEAR"?null:field==="frequency"?"DAILY":3,evidence}]});
- const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,root=field+"Change",carrier=raw[root] as {change:unknown};expect(carrier).toMatchObject({index:0,change:{field,operation}});expect(raw.changes).toEqual([]);
+ const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,root=field+"Change",carrier=raw[root] as {change:unknown};expect(carrier).toMatchObject({change:{field,operation}});expect(raw.changes).toEqual([]);
  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const missing={...raw};delete missing[root];for(const bad of [missing,{...raw,[root]:null,changes:[carrier.change]},{...raw,changes:[carrier.change]},...[null,-1,0.5,1].map(index=>({...raw,[root]:{...carrier,index}}))]){const before=JSON.stringify(bad);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(bad)).toBe(before);}
  }
 });
 it.each(["SET","REPLACE","CLEAR"])("eventRelation singleton preserves authored %s and rejects bypass",operation=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"eventRelation",operation,value:operation==="CLEAR"?null:"INCLUDING_EVENT",evidence}]});
- const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(raw.eventRelationChange).toMatchObject({index:0,change:{field:"eventRelation",operation}});expect(raw.changes).toEqual([]);
+ const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(raw.eventRelationChange).toMatchObject({change:{field:"eventRelation",operation}});expect(raw.changes).toEqual([]);
  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const carrier=raw.eventRelationChange as {change:unknown},missing={...raw};delete missing.eventRelationChange;
  for(const bad of [missing,{...raw,eventRelationChange:null,changes:[carrier.change]},{...raw,changes:[carrier.change]},...[null,-1,0.5,1].map(index=>({...raw,eventRelationChange:{...carrier,index}}))]){const before=JSON.stringify(bad);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(bad)).toBe(before);}
 });
 it.each(["SET","REPLACE","CLEAR"])("eventTime singleton preserves %s and rejects ordinary bypass",operation=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventTime",operation,value:operation==="CLEAR"?null:{hour:8,minute:30,qualifier:"H24"},evidence}]});
- const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(raw.eventTimeChange).toMatchObject({index:0,change:{field:"eventTime",operation}});expect(raw.changes).toEqual([]);
+ const raw=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(raw.eventTimeChange).toMatchObject({change:{field:"eventTime",operation}});expect(raw.changes).toEqual([]);
  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const carrier=raw.eventTimeChange as {change:unknown},missing={...raw};delete missing.eventTimeChange;
  for(const bad of [missing,{...raw,eventTimeChange:null,changes:[carrier.change]},{...raw,changes:[carrier.change]},...[null,-1,0.5,1].map(index=>({...raw,eventTimeChange:{...carrier,index}}))]){const before=JSON.stringify(bad);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");expect(JSON.stringify(bad)).toBe(before);}
@@ -549,8 +603,8 @@ it.each(["NEW","CURRENT"])("three indexed carriers restore original global posit
     {field:"reminderDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence}
   ]});
   const wire=encodeGoogleLiteEuContextV3(canonical) as {reminderTimeChange:unknown;titleChange:{index:number};reminderDateChange:{index:number};changes:unknown[]};
-  expect(wire.reminderTimeChange).toMatchObject({index:0,change:{field:"reminderTime",operation:"SET"}});
-  expect(wire.titleChange.index).toBe(2);expect(wire.reminderDateChange.index).toBe(3);
+  expect(wire.reminderTimeChange).toMatchObject({change:{field:"reminderTime",operation:"SET"}});
+  expect((wire as unknown as {changeOrder:string[]}).changeOrder).toEqual(["reminderTime","notes","title","reminderDate"]);
   expect(wire.changes).toHaveLength(1);
   expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
 });
@@ -604,7 +658,7 @@ it.each([[0,"COLLISION"],[2,"OUT_OF_RANGE"]] as const)("actual decoder preserves
   wire.reminderTimeChange={...(wire.reminderTimeChange as object),index};
   const before=JSON.stringify(wire),diagnostics:unknown[]=[];
   expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value)).status).toBe("REFUSED");
-  expect(diagnostics).toMatchObject([{issues:[{path:["reminderTimeChange","index"],expected:"CHANGE_POSITION",carrierPosition:{reason,actualIndex:index,ordinaryCount:0,carrierCount:2,combinedCount:2,minIndex:0,maxIndex:1,collisionRoots:reason==="COLLISION"?["reminderDateChange"]:[]}}]}]);
+  expect(reason).toMatch(/COLLISION|OUT_OF_RANGE/);expect(diagnostics).toMatchObject([{issues:[{path:["reminderTimeChange"],classification:"extra",extraKeyCount:1}]}]);
   expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");expect(JSON.stringify(wire)).toBe(before);
 });
 it.each(["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount"])("malformed %s carrier diagnostics expose known paths, not private authored values",field=>{
@@ -621,7 +675,7 @@ it("indexed title carrier preserves literal evidence and original change order",
   const ref={kind:"USER_QUOTE",turn:0,quote:"đi thi",occurrence:1};
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:[ref]},changes:[{field:"notes",operation:"SET",value:"literal",evidence:[ref]},{field:"title",operation:"SET",value:"đi thi",evidence:[ref]}]});
   const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:{index:number;change:unknown};changes:unknown[]};
-  expect(wire.titleChange).toMatchObject({index:1,change:{field:"title",operation:"SET",value:"đi thi"}});
+  expect(wire.titleChange).toMatchObject({change:{field:"title",operation:"SET",value:"đi thi"}});
   expect(wire.changes).toHaveLength(1);
   expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
   for(const index of [-1,3,0.5]) expect(parseGoogleLiteEuContextSectionsV3({...wire,titleChange:{...wire.titleChange,index}},CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
@@ -674,7 +728,7 @@ it.each(["REPLACE","CLEAR"] as const)("non-obligated title %s remains exactly re
   const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:"sửa tiêu đề",occurrence:1}];
   const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence},changes:[{field:"title",operation,value:operation==="CLEAR"?null:"khác",evidence}]});
   const wire=encodeGoogleLiteEuContextV3(canonical) as {titleChange:unknown};
-  expect(wire.titleChange).toMatchObject({index:0,change:{field:"title",operation,value:operation==="CLEAR"?null:"khác"}});
+  expect(wire.titleChange).toMatchObject({change:{field:"title",operation,value:operation==="CLEAR"?null:"khác"}});
   expect((wire as {changes?:unknown[]}).changes).toEqual([]);
   expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
 });
@@ -868,10 +922,10 @@ function wireFixture(value: unknown): unknown {
     delete result.intent;
     for(const key of ["requestTarget","query"])if(result[key])delete (result[key] as Record<string,unknown>).kind;
     const changes=result.changes as Array<Record<string,unknown>>;
-    const removed=new Set<number>();
+    const removed=new Set<number>(); result.changeOrder=changes.map(change=>change.field);
     for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"]){
       const index=changes.findIndex(change=>change.field===field);
-      result[field+"Change"]=index<0?null:{index,change:changes[index]};
+      result[field+"Change"]=index<0?null:{change:changes[index]};
       if(index>=0)removed.add(index);
     }
     result.changes=changes.filter((_,position)=>!removed.has(position));
@@ -964,8 +1018,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-64");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("6b1718201a786b94666a374ae7d32fd18c491d5475e61ebaa124c0845fe6649f");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-65");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("417f30fa59082f5f7092cd6d0bc16aa56913a3715bc91fd35502a163c4052f55");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });

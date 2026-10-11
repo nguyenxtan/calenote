@@ -13,14 +13,14 @@ type BranchPath<T, P extends string> = T extends { kind: infer K extends string 
 type Paths<T, P extends string = ""> = T extends readonly (infer E)[] ? `${P}[]` | Paths<E, `${P}[]`>
   : T extends object ? BranchPath<T, P> | { [K in keyof T & string]: `${P}${P extends "" ? "" : "."}${K}` | Paths<T[K], `${P}${P extends "" ? "" : "."}${K}`> }[keyof T & string] : never;
 type ReminderCarrierRoot = `${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"}Change`;
-type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"index" | "change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
+type ReminderCarrierPath = ReminderCarrierRoot | `${ReminderCarrierRoot}.${"change"}` | `${ReminderCarrierRoot}.change.${"field" | "operation" | "value" | "evidence"}` | `${ReminderCarrierRoot}.change{field=${"reminderDate" | "reminderTime" | "eventDate" | "eventTime" | "eventRelation" | "frequency" | "occurrenceCount" | "endDate" | "location"};operation=${"SET" | "REPLACE" | "CLEAR"}}` | `${"reminderTime"|"eventTime"}Change.change.value.${"hour" | "minute" | "qualifier"}`;
 type SemanticEvidenceSlotPath = `${"query" | "requestTarget" | "changes[]" | "uncertainties[].alternatives[]" | "titleChange.change" | `${ReminderCarrierRoot}.change`}.evidence.${"primaryEvidence" | "additionalEvidenceJson"}`;
 type StructuredDateCarrierPrefix = `${"eventDate"|"reminderDate"}Change.change.value`;
 type CompactDateBranchPath = `${"changes[].value" | "query.date" | "query.period.date" | "query.period.from" | "query.period.through" | StructuredDateCarrierPrefix}{kind=${"C" | "R" | "W"}}`;
 export type OutputFieldPathV3 = Paths<ConversationInterpretationV3> | Paths<ContextProtocolV3, "protocol">
   | SemanticEvidenceSlotPath | Paths<EvidenceRef, SemanticEvidenceSlotPath> | CompactDateBranchPath | ReminderCarrierPath | `${StructuredDateCarrierPrefix}.${"kind"|"calendar"|"day"|"month"|"year"|"leapMonth"|"offsetDays"|"weekday"|"qualifier"}`
-  | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping" | "fieldCapability.eventDateYearNullRequired" | "eventDateChange.change.value{kind=CIVIL_DATE}"
-  | "titleChange" | "titleChange.index" | "titleChange.change" | "titleChange.change.field" | "titleChange.change.operation" | "titleChange.change.value" | "titleChange.change.evidence" | `titleChange.change{field=title;operation=${"SET"|"REPLACE"|"CLEAR"}}`;
+  | "changeOrder" | "changeOrder[]" | "operationCode" | "uncertainties[].fieldCode" | "transport.inactivePadding" | "transport.codebookMapping" | "fieldCapability.eventDateYearNullRequired" | "eventDateChange.change.value{kind=CIVIL_DATE}"
+  | "titleChange" | "titleChange.change" | "titleChange.change.field" | "titleChange.change.operation" | "titleChange.change.value" | "titleChange.change.evidence" | `titleChange.change{field=title;operation=${"SET"|"REPLACE"|"CLEAR"}}`;
 const semantic: OutputAuthorityRule = Object.freeze({ class: "SEMANTIC_UNTRUSTED", modelAuthorshipReason: "Proposed user meaning, operand, instruction, ambiguity or supporting source selection.", evidencePolicy: "Validate exact scoped source identity; targeting/replacement/removal require current USER_QUOTE evidence.", mergePolicy: "Only validated semantic candidates enter merge; backend derives conflicts, completeness and admission.", canAffectMerge: true, canCauseHardReject: true, canCauseClarify: true, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const advisory: OutputAuthorityRule = Object.freeze({ class: "ADVISORY", modelAuthorshipReason: "Optional phrasing associated with one of four compatible backend issues.", evidencePolicy: "No mandatory semantic evidence; validate eligibility independently.", mergePolicy: "Quarantine invalid hints; never affect factual merge or manufacture clarification.", canAffectMerge: false, canCauseHardReject: false, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: false });
 const owned: OutputAuthorityRule = Object.freeze({ class: "APPLICATION_OWNED", modelAuthorshipReason: "Application selects immutable protocol, fixed supported status and codebook mapping; omit from generation.", evidencePolicy: "Trusted application binding, never a model assertion.", mergePolicy: "Reject unsupported application binding; independently bound constants do not grant execution.", canAffectMerge: false, canCauseHardReject: true, canCauseClarify: false, canAuthorizeRead: false, canAuthorizeWrite: false, applicationDerivable: true });
@@ -30,16 +30,16 @@ const padding: OutputAuthorityRule = Object.freeze({ ...owned, modelAuthorshipRe
 // category prefix. Schema inspection checks every branch against this registry.
 const entries: Array<[OutputFieldPathV3, OutputAuthorityRule]> = [];
 function add(paths: readonly OutputFieldPathV3[], rule: OutputAuthorityRule = semantic) { for (const path of paths) entries.push([path, rule]); }
-add(["titleChange","titleChange.index","titleChange.change","titleChange.change.field","titleChange.change.operation","titleChange.change.value","titleChange.change.evidence","titleChange.change{field=title;operation=SET}"]);
+add(["titleChange","titleChange.change","titleChange.change.field","titleChange.change.operation","titleChange.change.value","titleChange.change.evidence","titleChange.change{field=title;operation=SET}"]);
 add(["titleChange.change{field=title;operation=REPLACE}","titleChange.change{field=title;operation=CLEAR}"]);
 for(const field of ["reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
   const root=`${field}Change` as const;
-  add([root,`${root}.index`,`${root}.change`,`${root}.change.field`,`${root}.change.operation`,`${root}.change.value`,`${root}.change.evidence`]);
+  add([root,`${root}.change`,`${root}.change.field`,`${root}.change.operation`,`${root}.change.value`,`${root}.change.evidence`]);
   for(const operation of ["SET","REPLACE","CLEAR"] as const)add([`${root}.change{field=${field};operation=${operation}}`]);
 }
 add(["reminderTimeChange.change.value.hour","reminderTimeChange.change.value.minute","reminderTimeChange.change.value.qualifier"]);
 add(["eventTimeChange.change.value.hour","eventTimeChange.change.value.minute","eventTimeChange.change.value.qualifier"]);
-add(["operationCode", "intent", "requestTarget", "requestTarget.kind", "changes", "changes[]", "changes[].field", "changes[].operation", "changes[].value", "query", "query.kind", "query.outputCalendar", "query.topic", "uncertainties", "uncertainties[]", "uncertainties[].field", "uncertainties[].fieldCode", "uncertainties[].reason", "uncertainties[].alternatives", "uncertainties[].alternatives[]", "uncertainties[].alternatives[].value"]);
+add(["changeOrder","changeOrder[]","operationCode", "intent", "requestTarget", "requestTarget.kind", "changes", "changes[]", "changes[].field", "changes[].operation", "changes[].value", "query", "query.kind", "query.outputCalendar", "query.topic", "uncertainties", "uncertainties[]", "uncertainties[].field", "uncertainties[].fieldCode", "uncertainties[].reason", "uncertainties[].alternatives", "uncertainties[].alternatives[]", "uncertainties[].alternatives[].value"]);
 const dateKeys = ["kind", "calendar", "day", "month", "year", "leapMonth", "offsetDays", "weekday", "qualifier"] as const;
 function date(prefix: string) { add(dateKeys.map(key => `${prefix}.${key}` as OutputFieldPathV3)); }
 function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}[].${key}`), ...["USER_QUOTE", "CONTEXT_FACT"].map(kind => `${prefix}[]{kind=${kind}}`)] as OutputFieldPathV3[]); }
@@ -58,7 +58,8 @@ add(["schemaVersion", "query.statusScope", "protocol.canonicalVersion", "protoco
 add(["transport.inactivePadding"], padding);
 add(["fieldCapability.eventDateYearNullRequired"], owned);
 add(["eventDateChange.change.value{kind=CIVIL_DATE}"]);
-const fields = ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const;
+export const CHANGE_ORDER_FIELDS_V3 = Object.freeze(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const);
+const fields = CHANGE_ORDER_FIELDS_V3;
 for (const field of fields) for (const operation of ["SET", "REPLACE", "CLEAR"] as const satisfies readonly FieldOperationV3[]) add([`changes[]{field=${field};operation=${operation}}`]);
 for (const field of [...fields, "intent", "queryRange", "operation"] as const) add([`uncertainties[]{field=${field}}`]);
 for (const kind of ["CURRENT", "NEW", "UNRESOLVED"] as const) add([`requestTarget{kind=${kind}}`]);

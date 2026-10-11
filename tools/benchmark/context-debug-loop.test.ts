@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {it,expect,vi} from "vitest";
 import {execFileSync} from "node:child_process";
+import {runInNewContext} from "node:vm";
 import {mkdtempSync,mkdirSync,realpathSync,readFileSync,writeFileSync,rmSync,existsSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -9,7 +10,6 @@ import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCam
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
 import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest} from "./context-debug-loop";
-import {CONTEXT_CONTRACT_PROMPT} from "../../src/modules/conversation/context-contract/prompt";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -185,14 +185,25 @@ it("historical string-selector probe fails closed when runtime is already string
   expect(calls).toBe(0);
  }finally{s.cleanup()}
 });
-it("wire64 historical pure transformations retain the immutable original request specimen",async()=>{
+function restoreHistoricalIndexedCatalogue(schema:{properties?:Record<string,unknown>;required?:string[]}){
+ for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"]){
+  type Wrapper={type?:string;properties?:Record<string,unknown>;required?:string[]};
+  const root=schema.properties![field+"Change"] as Wrapper&{anyOf?:Wrapper[]};if(typeof root==="boolean")throw Error("HISTORICAL_CARRIER_SHAPE");
+  if(root.type==="null")continue;
+  const wrapper=root.anyOf?root.anyOf[0]:root;if(typeof wrapper==="boolean"||!wrapper.properties||JSON.stringify(wrapper.required)!=='["change"]')throw Error("HISTORICAL_CARRIER_SHAPE");
+  wrapper.properties={index:{type:"integer"},...wrapper.properties};wrapper.required=["index","change"];
+ }
+ delete schema.properties!.changeOrder;schema.required=schema.required!.filter(key=>key!=="changeOrder");
+}
+it("wire65 historical pure transformations retain the immutable original request specimen",async()=>{let proofStage="BEFORE_CALLBACK";
  const s=setup();try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
-  const historical=structuredClone(request),oldSource=execFileSync("git",["show","01c2849f682cdc7ab8dce8aeb40ace2a8e9b8d7b:src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"}),oldPosition=oldSource.match(/^Positions:.*$/mu)?.[0],currentPosition=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Positions:"));expect(oldPosition).toBeTruthy();expect(currentPosition).toBeTruthy();historical.messages[0].content=CONTEXT_CONTRACT_PROMPT.replace(currentPosition!,oldPosition!);expect(hash(historical.messages[0].content)).toBe("0050e79ee692aec74554e8b949ad90f764f988a3c56da89904c80c6eb4fbb8d3");
+  const historical=structuredClone(request),oldSource=execFileSync("git",["show","01c2849f682cdc7ab8dce8aeb40ace2a8e9b8d7b:src/modules/conversation/context-contract/prompt.ts"],{encoding:"utf8"});const scope:{CONTEXT_CONTRACT_PROMPT?:string}={};runInNewContext(oldSource.replace("export const ","var "),scope);if(typeof scope.CONTEXT_CONTRACT_PROMPT!=="string")throw Error("HISTORICAL_PROMPT_SHAPE");historical.messages[0].content=scope.CONTEXT_CONTRACT_PROMPT;proofStage="PROMPT_HASH";expect(hash(historical.messages[0].content)).toBe("0050e79ee692aec74554e8b949ad90f764f988a3c56da89904c80c6eb4fbb8d3");
+  restoreHistoricalIndexedCatalogue(historical.response_format.json_schema.schema);
   const field=((historical.response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:{properties:{fieldCode:Record<string,unknown>}}}}}).properties.uncertainties.items.properties.fieldCode);delete field.anyOf;field.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];
-  expect(hash(JSON.stringify(historical))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");const before=JSON.stringify(historical);
-  expect(hash(JSON.stringify(debugUncertaintyIntegerRequest(historical)))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");expect(hash(JSON.stringify(debugPositionRequest(historical)))).toBe("c6205ccf2477068f0cd9715b4688805e676f729c01048f1517aa6194b988637d");expect(hash(JSON.stringify(debugUncertaintyPromptRequest(historical)))).toBe("37f21bfe80ad05cfc49afcaea464e36db9d28fe174dfffefb0d241aac7e7b381");expect(JSON.stringify(historical)).toBe(before);
+  proofStage="REQUEST_HASH";expect(hash(JSON.stringify(historical))).toBe("bf2ff9cb5106d5c74a155c6f2fb5749ec6389da7ef2014ccb7562772440596fc");const before=JSON.stringify(historical);proofStage="TRANSFORM_HASHES";
+  expect(hash(JSON.stringify(debugUncertaintyIntegerRequest(historical)))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");expect(hash(JSON.stringify(debugPositionRequest(historical)))).toBe("c6205ccf2477068f0cd9715b4688805e676f729c01048f1517aa6194b988637d");expect(hash(JSON.stringify(debugUncertaintyPromptRequest(historical)))).toBe("37f21bfe80ad05cfc49afcaea464e36db9d28fe174dfffefb0d241aac7e7b381");expect(JSON.stringify(historical)).toBe(before);proofStage="PROVEN";
   const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-current-specimen",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- },{now:()=>100});expect(result.responses[0].status).toBe("SUCCESS");}finally{s.cleanup();}
+ },{now:()=>100});expect(proofStage).toBe("PROVEN");expect(result.responses[0].status).toBe("SUCCESS");}finally{s.cleanup();}
 });
 it.each(["prompt","context","schema","route"])("uncertainty prompt axis rejects %s drift before physical transport",async fault=>{
  const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
@@ -247,6 +258,7 @@ async function r02Turn1Schema(){
   titleCarrier.properties!.change=structuredClone(set);
   object(object(ordinary[2]).properties!.field).enum=["title","notes"];
   ordinary.splice(2,0,structuredClone(replace));
+  restoreHistoricalIndexedCatalogue(schema);
   expect(hash(JSON.stringify(schema))).toBe("635f4734b667e0827e1975135b1eaae4bfaf43ac4e5b729b6612dba8113b3e48");
   return {fixtureFault:"SCHEMA_INVALID"};});
  try{const turn=selected.script.turns[0];await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
@@ -429,7 +441,13 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    Object.assign(content as object,{eventDateChange:carrier});
    expect((content as {changes:unknown[]}).changes).toEqual([]);
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
-   const oldKey=structuredClone(content) as {eventDateChange:typeof carrier};
+   // Separate current-wire witnesses preserve the evidence-key and LIST
+   // ownership stages. They are NOT labelled historical-schema conforming.
+   const currentKey={...structuredClone(content as Record<string,unknown>),changeOrder:["eventDate"],eventDateChange:{change:structuredClone(carrier.change)}};
+   const keyDiagnostics:unknown[]=[];
+   expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
+   expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}]);
+   const oldKey=structuredClone(currentKey);
    Object.assign(oldKey.eventDateChange.change,{evidence:{primaryEvidence:"U2",additionalEvidenceJson:"[]"}});
    const oldKeyDiagnostics:unknown[]=[];
    const oldKeyResult=decodeGoogleLiteEuContextTransportV3(oldKey,CONTEXT_PROTOCOL_V3,d=>oldKeyDiagnostics.push(d),d=>oldKeyDiagnostics.push(d),ContextInputSchema.parse(input));
@@ -460,7 +478,9 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
  expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);
  expect(result.responses[0],JSON.stringify(result.responses[0])).toMatchObject({fixtureId:"R01",turnIndex:1,status:status===200&&mode!=="DATE_CURRENT_NO_SCALAR_BOUNDS"&&mode!=="DATE_CURRENT_STRING_BASELINE"&&mode!=="SOURCE_COMPACT_BASELINE"&&mode!=="SOURCE_INTEGER_BASELINE"&&mode!=="SOURCE_CURRENT_KEY_BASELINE"?"SUCCESS":"FAILURE"});
  if(status===200&&mode==="SOURCE_CURRENT_KEY_BASELINE"){
-  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","change"],code:"WIRE_SHAPE_INVALID",expected:"FIELD_CHANGE"}]}}});
+  // Historical indexed shell stays indexed. Current runtime refuses the
+  // obsolete wrapper before evidence-key interpretation; no compatibility.
+  expect(result.responses[0]).toMatchObject({category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange"],code:"WIRE_SHAPE_INVALID",classification:"extra",extraKeyCount:1}]}}});
   expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});
  }
  if(status===200&&mode==="DATE_CURRENT_STRING_BASELINE"){
