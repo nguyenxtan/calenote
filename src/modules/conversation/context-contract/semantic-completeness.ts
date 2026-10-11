@@ -29,12 +29,21 @@ export function isInitialIsolatedExamNotesFree(input:ContextInput):boolean {
     && examTitleCoverage(input.turns[0].text)!==null;
 }
 /** Sufficient bound scheduling answer only. Private support probes never emit operands or evidence. */
+function isEmptyMissingQueryRange(issue:unknown):boolean {
+  try {
+    if(!issue||typeof issue!=="object"||Array.isArray(issue))return false;
+    const keys=Reflect.ownKeys(issue);if(keys.length!==3||keys.some(key=>typeof key!=="string"||!['field','reason','alternatives'].includes(key)))return false;
+    const data=(key:string)=>{const descriptor=Object.getOwnPropertyDescriptor(issue,key);return descriptor&&"value" in descriptor?descriptor.value:undefined;};
+    const alternatives=data("alternatives");return data("field")==="queryRange"&&data("reason")==="MISSING"&&Array.isArray(alternatives)&&Object.getOwnPropertyDescriptor(alternatives,"length")?.value===0&&Reflect.ownKeys(alternatives).length===1;
+  }catch{return false;}
+}
 export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
   if(!input || !Array.isArray(input.turns) || !Number.isSafeInteger(input.currentTurn) || input.currentTurn<=0
-    || !Array.isArray(input.facts) || !Array.isArray(input.ambiguities) || input.ambiguities.length!==0
+    || !Array.isArray(input.facts) || !Array.isArray(input.ambiguities) || input.ambiguities.length>4 // ContextInputV2Schema ambiguities.max(4).
     || !input.activeRequest || input.pendingQuestion?.scope!=="REMINDER" || typeof input.pendingQuestion.field!=="string"
     || !Array.isArray(input.capabilities?.supported) || !input.capabilities.supported.includes("FINITE_DAILY") || input.capabilities.limits?.dailyCount!==30)return false;
   const current=input.turns[input.currentTurn],slots=input.activeRequest.slots;
+  for(let index=0;index<input.ambiguities.length;index++){const descriptor=Object.getOwnPropertyDescriptor(input.ambiguities,String(index));if(!descriptor||!("value" in descriptor)||!isEmptyMissingQueryRange(descriptor.value))return false;}
   if(current?.role!=="USER" || typeof current.text!=="string" || !slots)return false;
   // Earlier USER quotes remain legal evidence for SET. Restrict only history
   // positively covered by the unchanged complete initial notes-free grammar.

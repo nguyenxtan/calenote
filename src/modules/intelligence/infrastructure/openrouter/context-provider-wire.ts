@@ -697,7 +697,7 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
     }
     const numeric = (value: unknown): value is NumericProposalField => NUMERIC_PROPOSAL_FIELDS.some(field => field === value);
     const clock = (value: unknown): value is ClockProposalField => CLOCK_PROPOSAL_FIELDS.some(field => field === value);
-    requireShape(capability.version === "generation-field-capability-13" && typeof capability.reminderDateProposalAllowed==="boolean" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
+    requireShape(capability.version === "generation-field-capability-14" && typeof capability.reminderDateProposalAllowed==="boolean" && capability.allowedNumericFields.every(field => NUMERIC_PROPOSAL_FIELDS.includes(field)));
     if(!capability.reminderDateProposalAllowed)schema.properties!.reminderDateChange={type:"null"};
     requireShape(capability.allowedClockFields.every(field => CLOCK_PROPOSAL_FIELDS.includes(field)));
     if(!capability.allowedClockFields.includes("reminderTime"))schema.properties!.reminderTimeChange={type:"null"};

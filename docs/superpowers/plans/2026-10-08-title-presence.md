@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire72 notes context execution
+
+BASE5140639d30684ee29b634967ff6db6340b506f2f; TOP wire72 scope-aware notes spec, existing TypeScript service projection/predicate/generation bounds and continuous USD5 scope.
+
+- [ ] Genuine RED controlled actual first proposal adds only observed queryRange/MISSING/[] to frozen public R02; real projected continuation notes schema/service availability currently fails expected exclusion. Own semantic-completeness.ts/.test.ts: exact empty-MISSING query marker predicate only within bound REMINDER continuation; no context rewriting. GREEN schema prunes notes and service atomically rejects notes changes/typed alternatives, relation-only passes; prior notes/history/facts unchanged.
+- [ ] Contrast repeated empty query markers with genuine ambiguity/conflict/unsupported/notes/operation/other fields, nonempty/malformed alternatives/unknown shape; preserve every original helper conjunct. Own field-capability/protocol/current dependent pins for14/72 only where necessary. Historical pure specimens may restore original capabilities in tests; original hashes and production guards immutable. Affected regression/type/scopedlint/diff, ENTIRE67/all326 strict12000/1536, dependency six if needed; publish exits/frozenhash. No implementer full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0, controller frozen full/local selective commit then actual candidate trusted preflight/Fresh Formal within existing derived USD5. First fail settle/terminal then scoped repair; do not stop at local PASS. No model/provider/accounting/UNKNOWN/history change, Full, push, merge, deploy or remote migration.
+
 ### Wire71 global-rank guidance execution
 
 BASEaff708f701654486a8ae405b872fea33486ac0bb; existing TypeScript prompt/protocol/harness, TOP wire71 spec. Existing implementation/review seats and continuous USD5 owner scope only.
