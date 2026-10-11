@@ -4,6 +4,21 @@ import type { TranscriptEntry } from "./state";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { isBareRetainedSeriesOffsetAnswer } from "./lead-offset-evidence";
 
+/** Whole numeric clock answer only; the scanner validates existing clock
+ * grammar, but its parsed value is never returned or used as a proposal. */
+export function isBareNumericClockAnswer(text: string, reference: string): boolean {
+  if (!/^\s*(?:\d{1,2}h(?:\d{1,2})?|\d{1,2}:\d{2})(?:\s+(?:sáng|trưa|chiều|tối))?\s*[.!]?\s*$/iu.test(text)) return false;
+  const time = extractTemporalEvidence({ text, referenceNow: Date.parse(reference) }).time;
+  return time.state === "RESOLVED" && time.source === "EXACT_TIME";
+}
+/** Sufficient generation context only; no value, target or evidence output. */
+export function isBoundReminderClockAnswer(input: ContextInput): boolean {
+  const current = input.turns[input.currentTurn];
+  return !!input.activeRequest && input.pendingQuestion?.scope === "REMINDER"
+    && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
+    && isBareNumericClockAnswer(current.text, input.reference.instant);
+}
+
 /** Finite complete first-person assertion only; no parsed operand is returned. */
 export function isFirstPersonExamClockAssertion(text:string):boolean {
   if(!/^\s*(?:Tôi|tôi|Em|em)\s+thi\s+ngày\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{4})?\s+lúc\s+\d{1,2}(?:h(?:\d{1,2})?|:\d{2})(?:\s+(?:sáng|trưa|chiều|tối))?\s*[.!]?\s*$/u.test(text))return false;
@@ -48,13 +63,19 @@ export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
   // Earlier USER quotes remain legal evidence for SET. Restrict only history
   // positively covered by the unchanged complete initial notes-free grammar.
   const earlier=input.turns.slice(0,input.currentTurn);
-  if(earlier.filter(turn=>turn?.role==="USER").length!==1||earlier[0]?.role!=="USER"||typeof earlier[0].text!=="string"||examTitleCoverage(earlier[0].text)===null)return false;
+  if(earlier[0]?.role!=="USER"||typeof earlier[0].text!=="string"||examTitleCoverage(earlier[0].text)===null)return false;
   const {frequency,occurrenceCount:count,eventDate,notes}=slots;
   const occupied=(slot:typeof frequency|typeof count|typeof eventDate)=>!!slot&&["PROPOSED","RESOLVED"].includes(slot.state)&&slot.value!==null&&slot.value!==undefined;
   if(!occupied(frequency)||frequency.value!=="DAILY"||!occupied(count)||typeof count.value!=="number"||!Number.isSafeInteger(count.value)||count.value<2||count.value>30
     ||!occupied(eventDate)||!notes||notes.state!=="MISSING"||notes.value!==null||notes.fact!==null||input.facts.some(fact=>fact?.field==="notes"))return false;
-  const length=[...current.text].length,turn={id:"current-notes-probe",role:"USER" as const,semanticView:current.text};
-  return isBareRetainedSeriesOffsetAnswer(count.value,[{kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:current.text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"}],[turn],count.value);
+  const retainedCount=count.value;
+  const offsetSource=(text:string)=>{
+    const length=[...text].length,turn={id:"current-notes-probe",role:"USER" as const,semanticView:text};
+    return isBareRetainedSeriesOffsetAnswer(retainedCount,[{kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"}],[turn],retainedCount);
+  };
+  const earlierUsers=earlier.filter(turn=>turn?.role==="USER");
+  if(typeof input.reference?.instant==="string"&&Number.isFinite(Date.parse(input.reference.instant))&&isBoundReminderClockAnswer(input))return earlierUsers.slice(1).every(turn=>typeof turn.text==="string"&&offsetSource(turn.text));
+  return earlierUsers.length===1&&offsetSource(current.text);
 }
 export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
   return proposal.intent!=="CREATE_REMINDER" || !(isInitialIsolatedExamNotesFree(input)||proposal.requestTarget?.kind==="CURRENT"&&isBoundRetainedSeriesNotesFree(input))

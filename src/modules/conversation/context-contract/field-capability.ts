@@ -5,14 +5,15 @@ import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-off
 import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
-import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree } from "./semantic-completeness";
+import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
+export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
 export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
 export interface GenerationFieldCapability {
-  version: "generation-field-capability-14";
+  version: "generation-field-capability-15";
   reminderDateProposalAllowed: boolean;
   /** Sufficient source-year checkpoint only; model still authors every slot. */
   eventDateYearNullRequired: boolean;
@@ -31,20 +32,6 @@ export interface GenerationFieldCapability {
 function hasExplicitCalendarCue(text: string): boolean {
   if (/["'“”‘’`]/u.test(text) || /(?:^|[^\p{L}\p{M}\p{N}_])(?:không|khong|ko|đừng|dung|chẳng|chang|chưa|chua|nếu|neu|ví dụ|vi du|giả sử|gia su|tên|ten|chữ|chu|trích dẫn|trich dan|cụm từ|cum tu|từ ngữ|tu ngu)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text)) return false;
   return text.split(CONTROL_PLACEHOLDER).some(segment => /(?:^|[^\p{L}\p{M}\p{N}_])(?:âm lịch|lịch âm|ngày âm|dương lịch|lịch dương|am lich|lich am|ngay am|duong lich|lich duong)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(segment));
-}
-/** Whole numeric clock answer only; the scanner validates existing clock
- * grammar, but its parsed value is never returned or used as a proposal. */
-function isBareNumericClockAnswer(text: string, reference: string): boolean {
-  if (!/^\s*(?:\d{1,2}h(?:\d{1,2})?|\d{1,2}:\d{2})(?:\s+(?:sáng|trưa|chiều|tối))?\s*[.!]?\s*$/iu.test(text)) return false;
-  const time = extractTemporalEvidence({ text, referenceNow: Date.parse(reference) }).time;
-  return time.state === "RESOLVED" && time.source === "EXACT_TIME";
-}
-/** Sufficient generation context only; no value, target or evidence output. */
-export function isBoundReminderClockAnswer(input: ContextInput): boolean {
-  const current = input.turns[input.currentTurn];
-  return !!input.activeRequest && input.pendingQuestion?.scope === "REMINDER"
-    && input.pendingQuestion.field === "reminderTime" && current?.role === "USER"
-    && isBareNumericClockAnswer(current.text, input.reference.instant);
 }
 /** Finite notification clause owns its single clock, not an event clock.
  * Cadence/count and full-context checks remain existing predicate probes;
@@ -190,7 +177,7 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
   }
   const title = input.activeRequest?.slots.title;
   const calendar = input.activeRequest?.slots.calendar;
-  return { version: "generation-field-capability-14", reminderDateProposalAllowed:!isInitialEventDateOnlySource(input), eventDateYearNullRequired:isInitialEventDateYearNullRequired(input), notesProposalAllowed: !(isInitialIsolatedExamNotesFree(input)||isBoundRetainedSeriesNotesFree(input)), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
+  return { version: "generation-field-capability-15", reminderDateProposalAllowed:!isInitialEventDateOnlySource(input), eventDateYearNullRequired:isInitialEventDateYearNullRequired(input), notesProposalAllowed: !(isInitialIsolatedExamNotesFree(input)||isBoundRetainedSeriesNotesFree(input)), titlePresenceRequired: current?.role==="USER" && examTitleCoverage(current.text)!==null && (!input.activeRequest || !isFirstPersonExamClockAssertion(current.text)),
     titleCorrectionAllowed: !!title && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(title.state) && title.value !== null,
     calendarProposalAllowed: !!calendar && ["PROPOSED", "RESOLVED", "CONFLICT"].includes(calendar.state) && calendar.value !== null
       || current?.role === "USER" && hasExplicitCalendarCue(current.text),

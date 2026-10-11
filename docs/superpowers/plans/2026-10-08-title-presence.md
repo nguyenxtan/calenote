@@ -1,5 +1,13 @@
 # Title Presence Implementation Plan
 
+### Wire74 bound clock notes execution
+
+BASE06f0a2ebde0427be6b310fabeb951518972a69b7; TOP wire74 spec, existing TypeScript guards/service/schema and continuous USD5 authority.
+
+- [ ] Genuine actual R02 projection RED notes schema/service acceptance; GREEN coherent reminderTime-only passes, notes changes/all operations/typed alternatives refuse atomically and MISSING[] remains legal. Own semantic-completeness.ts/.test.ts and unchanged bare/bound clock helper relocation with field-capability.ts import/reexport. Preserve initial/offset behavior; first and EVERY earlier USER scheduling-only proof, no fabricated context. Negative matrix each history/state/source/fact/count/question/capability/ambiguity/clock conjunct and existing meaningful earlier notes/fact reuse/NEW guards.
+- [ ] Necessary capability15/wire74 current pins only, original historical pure helper inverse positive old semantics and hashes/live guards intact. Focused ownership/service/source/gateway regressions/type/lint/diff; ENTIRE67/all32612000/1536 no waiver; frozen dependency six as necessary. No implementer full/provider/key/accounting/commit/children.
+- [ ] Independent C0/I0, frozen controller full/local selective commit, trusted same-candidate preflight/Fresh Formal within derived conservative USD5 remaining. No diagnostic extra probe, blind retry, Full, push, merge, deploy or remote migration; firstfail settle/terminal then scopedrepair, never stop at local PASS.
+
 ### Wire73 ordinary uniqueness bound execution
 
 - [ ] First strict fit12003 exceeds12000: measured R07_dispatch_4 final map __sources-to-s/__ec-to-c/__e-to-e reaches12000. TDD outgoing local definition alpha-renaming only, preserving insertion order, all exact refs/assertions/domains; collision/missing-ref refusal. Exact inverse equality and pure historical inverse restoration, no source-code/decoder/prompt change. Re-run all326 strict fit and affected/historical checks; retain failed fit evidence.
