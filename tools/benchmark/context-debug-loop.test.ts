@@ -8,7 +8,7 @@ import {createHash} from "node:crypto";
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest} from "./context-debug-loop";
 import {CONTEXT_CONTRACT_PROMPT} from "../../src/modules/conversation/context-contract/prompt";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -19,6 +19,26 @@ import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/m
 import {primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
+it.each(["valid","index10","http400"])("position instruction axis %s remains strict and terminal",async kind=>{
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async request=>{
+  calls++;const interval=structuredClone(request);interval.messages[0].content=CONTEXT_CONTRACT_PROMPT;expect(hash(JSON.stringify(interval))).toBe("2b9cb04b6e90dccfd9a7ca89d6e6fc0107f9e756c730209d387f26ae02f612e4");expect(hash(JSON.stringify(request))).toBe("c6205ccf2477068f0cd9715b4688805e676f729c01048f1517aa6194b988637d");
+  const original=structuredClone(interval),schema=original.response_format.json_schema.schema as Record<string,unknown>,field=((schema.properties as Record<string,{items:{properties:Record<string,Record<string,unknown>>}}>).uncertainties.items.properties.fieldCode);delete field.anyOf;field.enum=[0,1,2,3,4,5,6,7,10,11,12,13,14,15];const before=JSON.stringify(original);expect(debugPositionRequest(original)).toEqual(request);expect(JSON.stringify(original)).toBe(before);
+  expect(request.messages[0].content.split("\n").filter(line=>!line.startsWith("Positions:"))).toEqual(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("Positions:")));
+  for(const fault of ["prompt","context","schema","route"]){const drift=structuredClone(original);if(fault==="prompt")drift.messages[0].content+=" ";else if(fault==="context")drift.messages[1].content+=" ";else if(fault==="schema")Reflect.set(drift.response_format.json_schema.schema,"type","null");else drift.max_tokens=1;expect(()=>debugPositionRequest(drift)).toThrow("DEBUG_UNCERTAINTY_INTEGER_BINDING");}
+  if(kind==="http400")return {status:400,body:"{}"};
+  const content=encodeFixtureV3(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0)) as Record<string,unknown>;
+  const evidence=[{kind:"USER_QUOTE" as const,turn:0,quote:"synthetic",occurrence:1}],base=ConversationInterpretationV3Schema.parse(frozenContextProposal(JSON.parse(request.messages[1].content),"R02",0));
+  const changes=[{field:"title",operation:"SET",value:"synthetic",evidence},{field:"location",operation:"SET",value:"synthetic",evidence},{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:2},evidence},{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence},{field:"reminderTime",operation:"SET",value:{hour:8,minute:0,qualifier:"H24"},evidence}];
+  for(let rotation=0;rotation<7;rotation++){const ordered=[...changes.slice(rotation),...changes.slice(0,rotation)],canonical=ConversationInterpretationV3Schema.parse({...base,changes:ordered}),wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(wire.changes).toEqual([]);expect(parseGoogleLiteEuContextSectionsV3(wire,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});for(const index of [10,-1,0.5,"0",null]){const bad=structuredClone(wire);(bad.titleChange as {index:unknown}).index=index;expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}const collision=structuredClone(wire);(collision.titleChange as {index:unknown}).index=(collision.locationChange as {index:unknown}).index;expect(parseGoogleLiteEuContextSectionsV3(collision,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
+  if(kind==="index10")(content.titleChange as {index:number}).index=10;
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-position",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ },{now:()=>100});expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(calls).toBe(1);expect(result.responses[0].status).toBe(kind==="valid"?"SUCCESS":"FAILURE");if(kind==="index10")expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ }finally{s.cleanup();}
+});
+it.each(["prompt","context","schema","route"])("position instruction axis %s drift stops before HTTP",async fault=>{
+ const real=serializeContextRequest,spy=vi.spyOn(requestWireModule,"serializeContextRequest").mockImplementation(input=>{const request=real(input);if(fault==="prompt")request.messages[0].content+=" ";else if(fault==="context")request.messages[1].content+=" ";else if(fault==="schema")Reflect.set(request.response_format.json_schema.schema,"type","null");else Reflect.set(request.messages[0],"role","user");return request;});
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_INDEX_POSITION_PROMPT",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);}finally{spy.mockRestore();s.cleanup();}
+});
 it.each(["valid","empty","http400"])("integer uncertainty interval axis %s remains one terminal request",async kind=>{
  const s=setup();let calls=0;try{
   const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS",async request=>{
