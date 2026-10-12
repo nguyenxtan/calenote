@@ -1,5 +1,10 @@
 # Title Presence Implementation Plan
 
+### Wire89 source-known intent execution
+
+- [ ] RED absent sufficient helper and actual producer13/MISSING admission; GREEN source-only Boolean and existing missing-field exclusion, no backend/output semantic change. Whole-clause positive variants and unknown/history/pending/fact/active/ambiguity/control negatives; entire16x4 retained-domain and exact scalar-independent inverse.
+- [ ] Collect historical/current inverse/fixtures/pins/source inventory dependencies before full; focused/strict67/326/type/lint/diff allEXIT0 sequential, reviewer/refreeze then one frozen full. Commit/preflight/FreshFormal only after all gates, settlement before any subsequent repair. No provider/model/budget/oracle/sourceauthority change or push/merge/deploy.
+
 ### Wire88 numeric rank execution
 
 - [ ] RED strict scalar/codec/raw sparse roundtrip and legacy refusal, then lossless numeric producer/consumer and equivalent Order examples/current wire88 identities.

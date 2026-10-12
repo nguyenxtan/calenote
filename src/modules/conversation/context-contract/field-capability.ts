@@ -6,6 +6,17 @@ import { supportsEventRelation } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
+
+/** Sufficient whole initial reminder source only; no operands or proposal output. */
+export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean {
+  if(!isInitialIsolatedExamNotesFree(input))return false;
+  const text=input.turns[0].text,subject=/đi thi/iu.exec(text);
+  if(!subject)return false;
+  // An admitted header or lowercase scheduling clause is a reminder verb;
+  // a capitalized/hyphenated venue name such as Nhắc is not that clause.
+  return /^\s*nhắc(?:\s+(?:tôi|mình|tui))?\s+đi thi(?=$|[\s,;.!])/iu.test(text)
+    || /(?:^|[\s,;])nhắc(?:\s|$)/u.test(text.slice(subject.index+subject[0].length));
+}
 export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */

@@ -8,7 +8,7 @@ import { encodeGoogleLiteEuContextV3 as encodeOpaqueSingletonV3, parseGoogleLite
 import * as wireModule from "./context-provider-wire";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
 import { encodeFixtureV3 as encodeOpaqueFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
-import {unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture,typedSingletonSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire88RequestFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture,typedSingletonSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import { z } from "zod";
 import { projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
@@ -148,7 +148,7 @@ it("wire64 seven authored carriers preserve chosen order and reject index10 with
 it.each(["outside","numeric","clock"])("wire64 integer uncertainty domains preserve exact %s language",context=>{
  const text=context==="outside"?"Nhắc gọi mẹ.":context==="numeric"?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.";
  const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text}]});
- const schema=serializeContextRequest(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
+ const schema=wire88RequestFixture(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
  const item=schema.properties.uncertainties.items;const check=z.fromJSONSchema({...item,$defs:(schema as unknown as {$defs:Record<string,unknown>}).$defs} as Parameters<typeof z.fromJSONSchema>[0]);
  const visit=(value:unknown):void=>{if(!value||typeof value!=="object")return;const n=value as Record<string,unknown>;if(n.properties&&typeof n.properties==="object"&&"fieldCode" in n.properties){const field=(n.properties as Record<string,Record<string,unknown>>).fieldCode;expect(field.enum).toBeUndefined();expect(field.type).toBe("integer");}Object.values(n).forEach(visit);};visit(item);
  for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]){const expected=context==="outside"||(![8,9].includes(fieldCode)&&!(context==="clock"&&fieldCode===6&&reason==="MISSING"));expect(check.safeParse({fieldCode,reason,alternatives:[]}).success).toBe(expected);}
@@ -183,7 +183,7 @@ it.each([
 it("wire63 folds only equivalent uncertainty reason shells and preserves clock domains",()=>{
  for(const clock of [false,true]){
   const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text:clock?"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.":"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."}]});
-  const schema=serializeContextRequest(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
+  const schema=wire88RequestFixture(bound).response_format.json_schema.schema as unknown as {properties:{uncertainties:{items:Record<string,unknown>}}};
   const item=schema.properties.uncertainties.items;
   if(clock)expect(item).toHaveProperty("anyOf");else{expect(item).not.toHaveProperty("anyOf");expect(item).toMatchObject({type:"object",required:["fieldCode","reason","alternatives"],additionalProperties:false});}
   const check=z.fromJSONSchema(item as Parameters<typeof z.fromJSONSchema>[0]);
@@ -1267,7 +1267,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-88");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-89");
   const previous=structuredClone(schema.schema);previous.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};expect(createHash("sha256").update(JSON.stringify(previous)).digest("hex")).toBe("7cb6dc6f5d8dd626289c3c1aa63dfb9aecd940977bb3493b47e10fc8b0f93f46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

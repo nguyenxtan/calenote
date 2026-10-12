@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer } from "../../../conversation/context-contract/field-capability";
+import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -771,7 +771,7 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       requireShape(changes.anyOf.length);
       schema.properties![root]=carrier;
     }
-    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[])];
+    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[]),...(isInitialExplicitReminderIntentKnown(primaryEvidenceInput)?["intent"]:[])];
     if(missingExclusionFields.length){
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
