@@ -12,7 +12,7 @@ import type {SemanticTransport} from "../../src/modules/intelligence/infrastruct
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest,debugR03UncertaintiesRequest} from "./context-debug-loop";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -606,6 +606,36 @@ function setup(){
  const load=(patch:Record<string,unknown>={},freshRun?:Parameters<typeof createDebugLoopLoader>[0]["freshRun"])=>{const text=JSON.stringify({...record,...patch});writeFileSync(path,text);return createDebugLoopLoader({accountRoot,campaignRoot,reviewedRecordSha256:hash(text),reviewedOwnerMessageSha256:record.ownerMessageSha256,freshRun})(path,root)};
  return {root,accountRoot,campaignRoot,history,load,record,cleanup:()=>rmSync(accountRoot,{recursive:true,force:true})};
 }
+it.each(["array","string","400","crash"] as const)("R03 bounded uncertainty probe %s always terminates at seven without Formal credit",async variant=>{const s=setup();let calls=0,callbackError:unknown;try{
+ const targets=deriveBoundedPilotManifest(s.root).targets;
+ const result=await runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE",async request=>{try{
+  const target=targets[calls++],body=JSON.parse(request.messages[1].content);delete body.numericOwnership;delete body.fieldCapability;delete body.evidenceSources;
+  const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(body,target.fixtureId,target.turnIndex));
+  if(target.fixtureId==="R03"&&target.turnIndex===0)value.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
+  const content=z.record(z.string(),z.unknown()).parse(encodeFixtureV3(value,body));
+  if(calls===7){expect(target).toEqual({fixtureId:"R03",turnIndex:1});expect(request.response_format.json_schema.schema.properties!.uncertainties).toEqual({type:"string"});
+   const original=structuredClone(request);original.response_format.json_schema.schema=googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(body),body).schema;
+   const before=JSON.stringify(original),transformed=debugR03UncertaintiesRequest(original,s.root);expect(transformed).toEqual(request);expect(JSON.stringify(original)).toBe(before);
+   const restored=structuredClone(transformed);restored.response_format.json_schema.schema.properties!.uncertainties=original.response_format.json_schema.schema.properties!.uncertainties;expect(JSON.stringify(restored)).toBe(before);
+   for(const axis of ["schema","capability","prompt","source","receipt"]){const bad=structuredClone(original);
+    if(axis==="schema")bad.response_format.json_schema.schema.properties!.uncertainties={type:"null"};
+    else if(axis==="prompt")bad.messages[0].content+=" ";
+    else{const context=JSON.parse(bad.messages[1].content);if(axis==="capability")context.fieldCapability.clockOnlyMutations=!context.fieldCapability.clockOnlyMutations;if(axis==="source")context.turns[context.currentTurn].text+=" ";if(axis==="receipt")context.reference.instant="2026-10-05T01:00:01Z";bad.messages[1].content=JSON.stringify(context);}
+    expect(()=>debugR03UncertaintiesRequest(bad,s.root),axis).toThrow();
+   }
+   console.log(JSON.stringify({r03ProbeHashes:{schema:hash(JSON.stringify(request.response_format.json_schema.schema)),originalSchema:hash(JSON.stringify(original.response_format.json_schema.schema)),originalRequest:hash(before),request:hash(JSON.stringify(request))}}));
+   if(variant==="400")return {status:400,body:"{}"};if(variant==="crash")throw Error("LOCAL_TEST_CRASH");if(variant==="string")content.uncertainties="[]";}
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-prefix",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ }catch(error){callbackError=error;throw error;}},{now:()=>100});if(variant==="crash")expect(callbackError).toMatchObject({message:"LOCAL_TEST_CRASH"});else expect(callbackError).toBeUndefined();expect(calls).toBe(7);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:7,applicationLlmCalls:7});
+ expect(result.responses.slice(0,6).every(x=>x.status==="SUCCESS")).toBe(true);
+ if(variant==="string"){expect(result.responses[6]).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["uncertainties"],code:"WIRE_SHAPE_INVALID",actualType:"string"}]}}});expect(result.applicationEvidence[6]).toMatchObject({listStoreReads:0,mutations:0});}
+ if(variant==="array")expect(result.responses[6].status).toBe("SUCCESS");
+ expect(result.accounting).toMatchObject({confirmedMicrounits:variant==="400"||variant==="crash"?600:700,unknownExposureMicrounits:variant==="400"||variant==="crash"?210944:105472});
+ const ledger=readFileSync(join(result.directory,"campaign.jsonl"),"utf8").trim().split("\n").map(row=>JSON.parse(row));expect(ledger.filter(row=>row.event==="RESERVE")).toHaveLength(7);
+ expect(result.applicationEvidence).toHaveLength(7);expect(result.applicationEvidence[6]).toMatchObject({fixtureId:"R03",turnIndex:1});
+ expect(existsSync(join(result.directory,"http-7.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(7);
+ }finally{s.cleanup()}},120000);
+it("R03 prefix prerequisite failure never attempts later targets",async()=>{const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE",async()=>{calls++;return {status:400,body:"{}"}},{now:()=>100});expect(calls).toBe(1);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);}finally{s.cleanup()}});
 it("new reviewed debug authority admits conservative UNKNOWN without rewriting stopped history",()=>{const s=setup();try{const before=readFileSync(join(s.history,"campaign.jsonl"),"utf8");expect(inspectDebugLoop(s.load())).toMatchObject({unknownExposureMicrounits:105472,remainingConservativeMicrounits:4894528});expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);}finally{s.cleanup()}});
 it.each([{hardCapMicrounits:10000001},{model:"other"},{provider:"other"},{retry:1},{fallback:"other"},{accountingPolicy:"CONFIRMED_COST_V1"}])("rejects broadened debug policy %j",patch=>{const s=setup();try{expect(()=>s.load(patch)).toThrow()}finally{s.cleanup()}});
 it("new append-only reviewed ten-dollar authority retains historical UNKNOWN and old grant binding",()=>{const s=setup();try{

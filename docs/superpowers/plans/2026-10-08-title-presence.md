@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### R03 bounded-prefix isolation execution
+
+- [ ] Tooling-only RED→GREEN context-debug-loop.ts/.test closed R03_TURN1_UNCERTAINTIES_STRING_BASELINE mode; exact seven frozen manifest targets, firstsix normal oracle gates; exact target schema/cap/prompt/source/routing before HTTP. Single-factor clone/inverse byte equality; wrongpins zero targetHTTP. No fabricated trusted checkpoint or private-context claim.
+- [ ] Fake seventh400 retainsUNKNOWN, seventh200 string refused by unchanged decoder, seventh200 original array still terminal, firstfailure no later calls, hard before-reservation eighth fence/duplicate/crash/settlement/route guards. Evaluation-only optional boundedPilot.afterEvidence hook in context-contract-runner.ts may stop after target response settlement and application-evidence persistence; normal Formal omits it and retains behavior. Tests require actual target evidence retained and no eighth reservation/HTTP. Historical modes/pins unchanged; no Formal credit. Focused/type/lint/diff, independent C0/I0 and frozen controller full/local commit precede one accounted live probe via existing ten-dollar launcher.
+- [ ] Interpret observed compiler admission only, not productPASS. Continue scoped rootcause/TDD/representation repair and reviewed Formal on a new verified candidate; preserve canonical/evidence/oracle/model/provider and all history. Stop only FormalPASS or genuinebudget/security/out-of-scope gate, no push/merge/deploy.
+
 ### USD10 authority admission and R03 continuation
 
 - [ ] RED→GREEN budget-authority max10M in context-debug-loop.ts/.test; >10M hard refusal, independent reviewed new owner record admitted, immutable old5Mrecord/ledger/history/UNKNOWN/inventory retained. Same accountRoot/campaign; no new money namespace, automatic grant, fake settlement or Full scope.

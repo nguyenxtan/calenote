@@ -62,7 +62,8 @@ export interface ObservableExecution { directory: string; sourceSha: string; pro
   boundedPilot?: { manifestSha256: string; maxRequests: number;
     beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void;
     settled(target: {fixtureId:string;turnIndex:number}, reservationId:string, costMicrounits:number|null): void;
-    outcome(target: {fixtureId:string;turnIndex:number}, accepted:boolean): void; };
+    outcome(target: {fixtureId:string;turnIndex:number}, accepted:boolean): void;
+    afterEvidence?(target: {fixtureId:string;turnIndex:number}): void; };
   cumulativeAuthorizedMicrounits: number; cumulativeRetainedMicrounits: number; transport: SemanticTransport; now?: () => number; root?: string;
   /** Live entry counts at fetch; injected tests represent an actual HTTP boundary. */
   httpRequestCount?: () => number; expiresAt?: number;
@@ -293,6 +294,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
           queryRange: observed.queryRange ? { start: observed.queryRange.start, end: observed.queryRange.end } : null,
           oracle: accepted ? "PASS" : "FAIL", oracleDiagnostics:diagnoseContextTurn(turn,observed,true) });
         writeFileSync(join(input.directory, "application-evidence.json"), JSON.stringify(applicationEvidence), { mode: 0o600 });
+        if(turn.model==="HEALTHY")input.boundedPilot?.afterEvidence?.({fixtureId:script.executionId,turnIndex:index});
         if (replayOnly && index === 0) {
           offlineSeedExecutions++;
           if (!accepted || observed.fullSchemaValid !== true || observed.pendingField !== "queryRange" || applicationLlmCalls !== 0 || httpCount() !== 0) { seedFailure = { oracle: "FAIL", status: observed.status, fullSchemaValid: observed.fullSchemaValid === true, dispatches: observed.dispatches, proof }; stop("OFFLINE_SEED_ORACLE_FAILED"); throw new Error("OFFLINE_SEED_ORACLE_FAILED"); }
