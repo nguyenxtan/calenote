@@ -469,6 +469,23 @@ it("one campaign cannot authorize over the combined USD 2.50 ceiling or bypass g
       reservationId: "r1", maximumMicrounits: 1, at: 1 })).toThrow(/USE_GUARDED_CAMPAIGN_TRANSITION/u);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+it("reviewed debug BEGIN admits ten dollars on append while retaining old five-dollar history",()=>{
+ const dir=mkdtempSync(join(tmpdir(),"context-debug-ten-")),old=join(dir,"old"),next=join(dir,"next");mkdirSync(old);mkdirSync(next);
+ const begin={event:"BEGIN" as const,runId:"debug",sourceSha:"a".repeat(40),profile:"PILOT" as const,provenanceDigest:"b".repeat(64),executionKind:"R01_REPLAY" as const,debugBudgetAuthoritySha256:"c".repeat(64),accountingPolicy:"CONFIRMED_COST_V1" as const,requestExposureBoundMicrounits:105472,cumulativeAuthorizedMicrounits:5000000,cumulativeRetainedMicrounits:0,startedAt:0};
+ try{appendCampaignEvent(old,begin);const bytes=readFileSync(join(old,"campaign.jsonl"),"utf8");
+  expect(()=>appendCampaignEvent(next,{...begin,cumulativeAuthorizedMicrounits:10000001})).toThrow("INVALID_CUMULATIVE_AUTHORITY");
+  appendCampaignEvent(next,{...begin,cumulativeAuthorizedMicrounits:10000000});expect(readCampaignLedger(next)[0]).toMatchObject({cumulativeAuthorizedMicrounits:10000000,debugBudgetAuthoritySha256:"c".repeat(64)});
+  expect(readCampaignLedger(old)[0]).toMatchObject({cumulativeAuthorizedMicrounits:5000000});expect(readFileSync(join(old,"campaign.jsonl"),"utf8")).toBe(bytes);
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});
+it.each([5000000,10000000,10000001])("debug reader validates independent hash-chain cap %s without rewriting",cap=>{
+ const dir=mkdtempSync(join(tmpdir(),"context-debug-read-ten-"));try{
+  const row={event:"BEGIN",runId:"debug",sourceSha:"a".repeat(40),profile:"PILOT",provenanceDigest:"b".repeat(64),executionKind:"R01_REPLAY" as const,debugBudgetAuthoritySha256:"c".repeat(64),accountingPolicy:"CONFIRMED_COST_V1",requestExposureBoundMicrounits:105472,cumulativeAuthorizedMicrounits:cap,cumulativeRetainedMicrounits:0,startedAt:0,sequence:1,previousHash:"0".repeat(64)};
+  const bytes=JSON.stringify({...row,hash:createHash("sha256").update(JSON.stringify(row)).digest("hex")})+"\n";writeFileSync(join(dir,"campaign.jsonl"),bytes);
+  if(cap===10000001)expect(()=>readCampaignLedger(dir)).toThrow();else expect(readCampaignLedger(dir)[0]).toMatchObject({cumulativeAuthorizedMicrounits:cap});
+  expect(readFileSync(join(dir,"campaign.jsonl"),"utf8")).toBe(bytes);
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});
 it("observable live intent requires explicit source-bound authority and a fixed campaign root", () => {
   const dir = mkdtempSync(join(tmpdir(), "context-contract-authorization-"));
   try {

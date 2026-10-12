@@ -6,6 +6,8 @@ Actual wire81 R03T1 rejects upstream with Schema state limit exceeded; public ac
 
 ### Owner-authorized cumulative debug cap amendment
 
+Cross-layer admission must consistently support the reviewed USD10 maximum in both appendCampaignEvent BEGIN validation and readCampaignLedger hash-chain validation. General/non-debug authority ceilings remain unchanged; a debug BEGIN still requires a bounded digest and trusted hashed owner record at the executor, and its recorded cap/history is never rewritten. A no-inference INVALID_CUMULATIVE_AUTHORITY execution stays terminal/immutable; a new reviewed tooling candidate gets a distinct execution record, not a reopened failed run.
+
 Owner directly approves total debug budget USD10, same Google Flash Lite/Vertex EU route and all historical UNKNOWN holds, continuous R03 schema debugging through Formal Pilot only, no push/merge/deploy. Existing trusted debug authority may admit an independently reviewed append-only USD10 record bound to this exact new owner message and the SAME account/campaign. Never rewrite the USD5 record, reset accounting, reinterpret UNKNOWN as known spend, release holds or infer authority merely from the higher schema ceiling. Maximum supported authorization ceiling becomes10000000microunits; every loaded authority retains its individually hashed cap. Old loaded USD5 authority must still refuse tampering. Conservative aggregate accounting includes all previous history and unchanged request exposure policy; Full remains unauthorized.
 
 ### Wire81 complete bound-answer uncertainty applicability

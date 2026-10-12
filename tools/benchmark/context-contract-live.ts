@@ -412,7 +412,7 @@ function validateCampaign(rows: readonly Stored[]) {
     "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits", "targetManifestSha256", "maxTargetRequests", "targetFixture", "targetTurn", "contextSeedDigest", "debugBudgetAuthoritySha256"])
     || !id(begin.runId) || !["PILOT", "FULL"].includes(begin.profile) || !digest(begin.sourceSha, 40) || !digest(begin.provenanceDigest, 64)
     || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits) || begin.cumulativeAuthorizedMicrounits <= 0
-    || begin.cumulativeAuthorizedMicrounits > (begin.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 5000000) || !integer(begin.cumulativeRetainedMicrounits)
+    || begin.cumulativeAuthorizedMicrounits > (begin.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 10000000) || !integer(begin.cumulativeRetainedMicrounits)
     || (begin.debugBudgetAuthoritySha256 !== undefined && (!digest(begin.debugBudgetAuthoritySha256,64) || begin.accountingPolicy !== "CONFIRMED_COST_V1" || begin.profile !== "PILOT"))
     || begin.cumulativeRetainedMicrounits > begin.cumulativeAuthorizedMicrounits
     || (begin.observableAdmission !== undefined && typeof begin.observableAdmission !== "boolean")
@@ -528,7 +528,7 @@ function appendUnlocked(directory: string, event: CampaignEvent): Stored {
     }
     if (!/^[0-9a-f]{40}$/u.test(event.sourceSha) || !/^[0-9a-f]{64}$/u.test(event.provenanceDigest)
       || !Number.isSafeInteger(event.cumulativeAuthorizedMicrounits) || event.cumulativeAuthorizedMicrounits <= 0
-      || event.cumulativeAuthorizedMicrounits > (event.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 5000000)
+      || event.cumulativeAuthorizedMicrounits > (event.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 10000000)
       || !Number.isSafeInteger(event.cumulativeRetainedMicrounits) || event.cumulativeRetainedMicrounits < 0
       || event.cumulativeRetainedMicrounits > event.cumulativeAuthorizedMicrounits
       || !Number.isSafeInteger(event.startedAt) || event.startedAt < 0
