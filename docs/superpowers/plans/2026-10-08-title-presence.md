@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire83 mandatory inner-evidence generation clarification
+
+- [ ] RED actual serialized system instruction for both inner evidence keys/required empty-extras STRING/actual-source rule; unchanged all-other-bytes inverse. Keep raw omitted-key rejection and independently model-authored valid empty/ordered extra pointers/source restrictions via actual gateway/service.
+- [ ] GREEN one Singletons sentence only, coherent wire83/current prompt/version pins; schema/capability/canonical/evidence/oracle/decoder unchanged. Migrate only current identities and exact pure historical prompt inverses; never old live guards.
+- [ ] Focused prompt/provider/gateway/guard/historical dependencies, type/lint/diff and ENTIRE67/all32612000/1536/outputescaping; freeze independent C0/I0/localcommit. Controller may first use one trusted accounted R02T0 observation to test this exact generation hypothesis without Formal credit; then require fresh full on the same unchanged candidate before trusted USD10 FreshFormal. Continue scoped repair until genuine FormalPASS or genuine budget/security/out-of-scope gate. No implementer full/provider/key/accounting/commit/children, no push/merge/deploy.
+
 ### Wire82 inner predicate evidence closure
 
 - [ ] RED actual raw singleton string value/evidence/extra-key faults: unchanged primary FIELD_CHANGE/STRING plus bounded safe inner paths/types/counts; no private values/keys/source text, no guessed branch. Own provider-wire.ts/.test.ts, necessary existing-projector test and actual gateway test only.

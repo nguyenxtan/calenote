@@ -37,8 +37,10 @@ const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 const integerOrderMode="R01_TURN1_INTEGER_ORDER_BASELINE" as const;
 const integerOrderCandidate="ee61a225e66056324ffd55214213692e5b9efbc7";
+const removeWire83InnerEvidenceSentence=(prompt:string)=>prompt.replace(' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.',"");
 // Pure public historical specimen, never current dispatch/authority.
 function restorePublicWire68Request(request:{messages:Array<{content:string}>;response_format:{json_schema:{schema:unknown}}}){
+ request.messages[0].content=removeWire83InnerEvidenceSentence(request.messages[0].content);
  const encoded=JSON.parse(request.messages[1].content),canonical=structuredClone(encoded);
  for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete canonical[key];
  const input=ContextInputSchema.parse(canonical);
@@ -521,7 +523,13 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:"0",change:JSON.stringify(carrier.change)}};
    const keyDiagnostics:unknown[]=[];
    expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
-   expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],code:"WIRE_SHAPE_INVALID"}]}]);
+   expect(keyDiagnostics).toMatchObject([{issues:[
+    {path:["eventDateChange","change"],code:"WIRE_SHAPE_INVALID",expected:"FIELD_CHANGE",actualType:"string"},
+    {path:["eventDateChange","change","evidence","primaryEvidence"],code:"invalid_type",classification:"missing",actualType:"undefined"},
+    {path:["eventDateChange","change","evidence"],code:"unrecognized_keys",classification:"extra",extraKeyCount:1},
+   ]}]);
+   expect(JSON.stringify(keyDiagnostics)).not.toContain("currentPrimaryEvidence");
+   expect(JSON.stringify(keyDiagnostics)).not.toContain(pointer);
    const oldKey=structuredClone(currentKey);
    const restoredChange=JSON.parse(oldKey.eventDateChange.change);restoredChange.evidence={primaryEvidence:"U2",additionalEvidenceJson:"[]"};oldKey.eventDateChange.change=JSON.stringify(restoredChange);
    const oldKeyDiagnostics:unknown[]=[];
@@ -614,7 +622,7 @@ it("wire82 keeps both R03 historical transforms as exact pure public specimens, 
  const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{
   const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,"R03",index-1));if(index===1)value.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
   if(index===2){const wire=serializeContextRequest(input);wire.response_format.json_schema.schema=typedSingletonSchemaFixture(deriveGenerationFieldCapability(input),input).schema;
-   wire.messages[0].content=wire.messages[0].content.replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
+   wire.messages[0].content=removeWire83InnerEvidenceSentence(wire.messages[0].content).replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
    captured={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};}
   return value;
  });try{for(const turn of script.turns.slice(0,2))await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}

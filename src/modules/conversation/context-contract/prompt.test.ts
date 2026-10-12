@@ -6,7 +6,15 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
-const previousSingletonPrompt=(prompt:string)=>prompt.replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
+const innerEvidenceSentence83=' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.';
+it("wire83 serialized singleton guidance requires complete inner evidence without changing other policy bytes",()=>{
+ const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+ const request=serializeContextRequest(input),policy=request.messages[0].content;
+ expect(request.messages[0].role).toBe("system");expect(policy.split(innerEvidenceSentence83)).toHaveLength(2);
+ expect(policy.split("\n").find(line=>line.startsWith("Singletons:"))).toContain(innerEvidenceSentence83);
+ expect(createHash("sha256").update(policy.replace(innerEvidenceSentence83,"")).digest("hex")).toBe("132cc937cda5911f5e4a2c7f8d5dfeb90af4a1bbf303604d64724608b14760dc");
+});
+const previousSingletonPrompt=(prompt:string)=>prompt.replace(innerEvidenceSentence83,"").replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
 
 it("dispatches the civil source fidelity checkpoint last before output", () => {
   const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Ngày 17/12 họp, nhắc ba ngày liên tiếp trước đó." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
