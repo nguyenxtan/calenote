@@ -7,6 +7,7 @@ import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protoc
 import {decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {primaryEvidenceSourceCodebook} from "./evidence-pointer";
+import {wire92PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 
 it("numeric alternative example preserves number inside both JSON layers and never supplies source authority",()=>{
  const match=/^Alternative example \(syntax only\): (.+)$/m.exec(CONTEXT_CONTRACT_PROMPT);expect(match).not.toBeNull();
@@ -28,6 +29,6 @@ it("numeric alternative example preserves number inside both JSON layers and nev
  }
 });
 it("alternative-only paragraph inverse preserves immutable wire91 prompt",()=>{
- const inverse=CONTEXT_CONTRACT_PROMPT.replace(/\nAlternative serialization:[^\n]*\nAlternative example \(syntax only\):[^\n]*\nAlternative example boundary:[^\n]*\n/u,"");
+ const inverse=wire92PromptFixture(CONTEXT_CONTRACT_PROMPT).replace(/\nAlternative serialization:[^\n]*\nAlternative example \(syntax only\):[^\n]*\nAlternative example boundary:[^\n]*\n/u,"");
  expect(createHash("sha256").update(inverse).digest("hex")).toBe("60d9fa3ccb7ef9a07466a93ae66168e6fd170f8ab7f02f3c65e4394eed4ac153");
 });
