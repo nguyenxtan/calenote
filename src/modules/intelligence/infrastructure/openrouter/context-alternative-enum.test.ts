@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {wire95PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {expect,it} from "vitest";
 import {createHash} from "node:crypto";
 import {ContextInputSchema,ConversationInterpretationV3Schema,SlotValueSchemas} from "../../../conversation/context-contract/contracts";
@@ -29,6 +30,6 @@ it.each(SlotValueSchemas.eventRelation.options)("unchanged codec preserves exact
  }
 });
 it("relation-only inverse preserves immutable wire92 numeric prompt",()=>{
- const inverse=CONTEXT_CONTRACT_PROMPT.replace(/^Alternative relation enum: [^\n]*\n/mu,"");
+ const inverse=wire95PromptFixture(CONTEXT_CONTRACT_PROMPT).replace(/^Alternative relation enum: [^\n]*\n/mu,"");
  expect(createHash("sha256").update(inverse).digest("hex")).toBe("ef9857d2ea81741698714f5705b49074ac2a770a8027da649bf9dc9af35b071e");
 });

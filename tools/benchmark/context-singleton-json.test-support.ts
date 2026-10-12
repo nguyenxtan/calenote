@@ -4,8 +4,13 @@ const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateC
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 /** Public historical prompt specimen only; immutable hashes remain asserted. */
+export function wire95PromptFixture(prompt:string):string {
+ return prompt.replace(/^Rank assembly: [^\n]*\n/mu,"")
+ .replace('Serialization example boundary: this syntax fragment deliberately omits rank and is not a complete carrier. Supply an independently authored numeric rank for the real carrier; there is no default rank. This is a partial carrier, not a proposal or source.','Serialization example boundary: this is a partial carrier, not a proposal or source.')
+ .replace(/^Serialization example \(syntax only\): (.+)$/mu,(_line,json:string)=>{const value=JSON.parse(json);return "Serialization example (syntax only): "+JSON.stringify({eventRelationChange:{rank:10,change:value.eventRelationChange.change}});});
+}
 export function wire92PromptFixture(prompt:string):string {
- return prompt.replace(/^Alternative relation enum: [^\n]*\n/mu,"");
+ return wire95PromptFixture(prompt).replace(/^Alternative relation enum: [^\n]*\n/mu,"");
 }
 export function wire91PromptFixture(prompt:string):string {
  return wire92PromptFixture(prompt).replace(/\nAlternative serialization:[^\n]*\nAlternative example \(syntax only\):[^\n]*\nAlternative example boundary:[^\n]*\n/u,"");

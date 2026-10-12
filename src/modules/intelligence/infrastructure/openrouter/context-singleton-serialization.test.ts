@@ -12,7 +12,7 @@ import {wire91PromptFixture} from "../../../../../tools/benchmark/context-single
 it("producer serialization example survives both JSON layers and the unchanged source-bound decoder",()=>{
  const example=/^Serialization example \(syntax only\): (.+)$/m.exec(CONTEXT_CONTRACT_PROMPT);
  expect(example).not.toBeNull();
- const partial=JSON.parse(example![1]) as {eventRelationChange:{rank:number;change:string}};
+ const partial=JSON.parse(example![1]) as {eventRelationChange:{rank?:number;change:string}};
  const change=JSON.parse(partial.eventRelationChange.change);
  expect(change).toEqual({field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence:{primaryEvidence:"<available source code>",additionalEvidenceJson:"[]"}});
  expect(JSON.parse(change.evidence.additionalEvidenceJson)).toEqual([]);
@@ -22,8 +22,13 @@ it("producer serialization example survives both JSON layers and the unchanged s
  const wire=encodeFixtureV3(canonical,input) as Record<string,unknown>;
  wire.eventRelationChange=partial.eventRelationChange;
  expect(decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ partial.eventRelationChange.rank=10;
+ expect(decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ delete partial.eventRelationChange.rank;
  change.evidence.primaryEvidence=primaryEvidenceSourceCodebook(input).entries.find(entry=>entry.kind==="USER_TURN"&&entry.turn===input.currentTurn)!.code;
  partial.eventRelationChange.change=JSON.stringify(change);
+ expect(decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ partial.eventRelationChange.rank=10;
  expect(decodeGoogleLiteEuContextTransportV3(wire,CONTEXT_PROTOCOL_V3,undefined,undefined,input)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  const diagnostics:unknown[]=[];
  wire.eventRelationChange={...partial.eventRelationChange,change:partial.eventRelationChange.change.slice(0,-1)};
