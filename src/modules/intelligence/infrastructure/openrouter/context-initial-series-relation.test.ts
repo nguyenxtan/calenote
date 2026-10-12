@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import * as capability from "../../../conversation/context-contract/field-capability";
-import {wire93RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire93RequestFixture,wire94RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
@@ -38,7 +38,7 @@ it("noninitial, occupied, invalid reference or unsupported capabilities never gr
  for(const patch of [{currentTurn:1},{turns:[...initial.turns,{role:"ASSISTANT",text:"x"}]},{activeRequest:{}},{facts:[{alias:"f1",field:"eventRelation"}]},{pendingQuestion:{}},{ambiguities:[{}]},{reference:{...initial.reference,instant:"invalid"}},{capabilities:{...initial.capabilities,calendars:[]}},{capabilities:{...initial.capabilities,supported:[]}}])expect(excluded({...structuredClone(initial),...patch} as unknown as ContextInput)).toBe(false);
 });
 it("entire field/reason/count differential changes only the two proven missing pairs",()=>{
- const schema=googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(initial),initial).schema,old=prior(initial).response_format.json_schema.schema;
+ const schema=wire94RequestFixture(initial).response_format.json_schema.schema,old=prior(initial).response_format.json_schema.schema;
  const current=z.fromJSONSchema(inline(schema,schema.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]),previous=z.fromJSONSchema(inline(old,old.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const count of [0,1,2]){
   const raw=[{fieldCode,reason,alternatives:Array(count).fill("{}")}];

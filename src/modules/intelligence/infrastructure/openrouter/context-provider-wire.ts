@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded } from "../../../conversation/context-contract/field-capability";
+import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -773,7 +773,8 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       schema.properties![root]=carrier;
     }
     const initialWithoutRelation=isInitialFiniteSeriesWithoutRelationSource(primaryEvidenceInput);
-    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[]),...(isInitialExplicitReminderIntentKnown(primaryEvidenceInput)?["intent"]:[]),...(isBoundSeriesDistanceOffsetMissingExcluded(primaryEvidenceInput)?["leadOffsetDays"]:[]),...(isBoundSeriesDistanceRelationMissingExcluded(primaryEvidenceInput)?["eventRelation"]:[]),...(initialWithoutRelation?["eventRelation","leadOffsetDays"]:[])];
+    const offsetAbsent=isWholeSeriesOffsetAlternativeAbsent(primaryEvidenceInput);
+    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[]),...(isInitialExplicitReminderIntentKnown(primaryEvidenceInput)?["intent"]:[]),...(isBoundSeriesDistanceOffsetMissingExcluded(primaryEvidenceInput)?["leadOffsetDays"]:[]),...(isBoundSeriesDistanceRelationMissingExcluded(primaryEvidenceInput)?["eventRelation"]:[]),...(initialWithoutRelation?["eventRelation","leadOffsetDays"]:[]),...(offsetAbsent?["leadOffsetDays"]:[])];
     if(missingExclusionFields.length){
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
@@ -793,6 +794,19 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       // Fold only equal uncertainty shells differing in one finite control.
       // Distinct field/reason domains (including required clocks) stay paired.
       schema.properties!.uncertainties.items=coalesceBranches(schema.properties!.uncertainties.items!);
+    }
+    if(offsetAbsent){
+      const items=deref(schema.properties!.uncertainties.items!,schema),offsetCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays;
+      const branches=(items.anyOf??[items]).flatMap(raw=>{
+        const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema),alternatives=deref(item.properties!.alternatives,schema);
+        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        requireShape(domain?.length&&alternatives.type==="array");
+        const result:Schema[]=[],otherFields=domain.filter(code=>code!==offsetCode);
+        if(otherFields.length){const other=structuredClone(item);other.properties!.fieldCode={...fields,enum:otherFields};result.push(other);}
+        if(domain.includes(offsetCode)){const offset=structuredClone(item);offset.properties!.fieldCode={...fields,enum:[offsetCode]};offset.properties!.alternatives={...alternatives,maxItems:0};result.push(offset);}
+        return result;
+      });
+      requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
     if(isBoundMissingReminderClockWithoutCandidates(primaryEvidenceInput)){
       const reminderClockCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime;

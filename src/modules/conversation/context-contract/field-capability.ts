@@ -68,6 +68,17 @@ export function isBoundSeriesDistanceRelationMissingExcluded(input:ContextInput)
   return supportsEventRelation("BEFORE_EVENT",[source],[turn],true);
 }
 
+/** No independent offset candidate source exists in the whole initial finite
+ * source or bound factual series. A clock is unrelated to offset eligibility;
+ * reasons remain proposals and no values are emitted. */
+export function isWholeSeriesOffsetAlternativeAbsent(input:ContextInput):boolean {
+  const initial=typeof input.reference?.instant==="string"&&Number.isFinite(Date.parse(input.reference.instant))
+    &&Array.isArray(input.capabilities?.calendars)&&input.capabilities.calendars.includes("GREGORIAN")
+    &&isInitialExplicitReminderIntentKnown(input)&&isInitialEventDateOnlySource(input)
+    &&isInitialEventDateYearNullRequired(input)&&isInitialSupportedCadenceCount(input);
+  return initial||isBoundSeriesDistanceOffsetMissingExcluded(input);
+}
+
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */
 export function isBoundExactReminderClockMissingExcluded(input: ContextInput): boolean {
   return Number.isFinite(Date.parse(input.reference.instant))

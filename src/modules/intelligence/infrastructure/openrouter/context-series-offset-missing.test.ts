@@ -7,7 +7,7 @@ import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
-import {wire90RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire90RequestFixture,wire94RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 let bound:ContextInput;
 beforeAll(async()=>{
  const script=regressions.cases.find(row=>row.id==="R02")!;let captured:ContextInput|undefined;
@@ -47,7 +47,7 @@ it("independent offset in the retained whole USER source never loses its missing
  expect(excluded(input)).toBe(false);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(true);
 });
 it("entire field/reason/alternative domain changes only at the proven bound-series missing pairs",()=>{
- const current=googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(bound),bound).schema;
+ const current=wire94RequestFixture(bound).response_format.json_schema.schema;
  const prior=wire90RequestFixture(bound).response_format.json_schema.schema;
  const next=z.fromJSONSchema(inline(current,current.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  const old=z.fromJSONSchema(inline(prior,(prior.properties!.uncertainties)) as Parameters<typeof z.fromJSONSchema>[0]);

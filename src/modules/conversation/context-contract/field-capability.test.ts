@@ -12,7 +12,7 @@ import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
 import {encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
-import {wire88RequestFixture,typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire88RequestFixture,wire94RequestFixture,typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
 // Original capability language witnesses inspect the captured typed producer
 // AST, not the deliberately broader opaque upstream change-string schema.
 const decodeGoogleLiteEuContextTransportV3=(raw:unknown,selected:Parameters<typeof decodeRawSingletonTransport>[1],invalid?:Parameters<typeof decodeRawSingletonTransport>[2],wireInvalid?:Parameters<typeof decodeRawSingletonTransport>[3],context?:ContextInput)=>decodeRawSingletonTransport(wrapSingletonAuthoringFixture(raw),selected,invalid,wireInvalid,context);
@@ -526,7 +526,10 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-16",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("97c079d1ba05b2c3583dbd52f4957b5a08dd60c249187e6cc4dfaf3b9637de13");
+  const historical=wire94RequestFixture(context).response_format.json_schema.schema;
+  expect(request.response_format.json_schema.schema.properties!.titleChange).toEqual(historical.properties!.titleChange);
+  expect(request.response_format.json_schema.schema.$defs).toEqual(historical.$defs);
+  expect(createHash("sha256").update(JSON.stringify(historical)).digest("hex")).toBe("97c079d1ba05b2c3583dbd52f4957b5a08dd60c249187e6cc4dfaf3b9637de13");
   const withoutCardinality=wire88RequestFixture(context).response_format.json_schema.schema;
   expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("bf874811a31e5807c57aabb18116ce8b58abef6587751ffb55a0f7bbf0f97582");withoutCardinality.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};
   expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("3678349a47b2b9bcfdd618bc642b83f1b4e6c47e93e3e5cb5ac1b8ed17a3c60b");const restoredUncertainty=withoutCardinality.properties!.uncertainties;if(typeof restoredUncertainty==="boolean")throw Error("TEST_UNCERTAINTY_SCHEMA_OBJECT");delete restoredUncertainty.maxItems;
