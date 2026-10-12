@@ -562,6 +562,13 @@ it.each([false,true])("wire83 actual R02 inner evidence omission=%s stays atomic
  const h=await createContextContractProbe({sourceSha:"2e06c3342e0a25f41f8d8910b559668b7c27540c",referenceNow:Date.parse(script.turns[0].receipt),liveGateway:observed},()=>{throw Error("FORBIDDEN_FIXTURE_PATH")});
  try{const result=await h.turn(script.turns[0].text,script.turns[0].receipt);expect(result).toMatchObject({fullSchemaValid:!omitted,listStoreReads:0,mutations:0});expect(result.status==="REJECTED").toBe(omitted);expect(calls).toBe(1);if(omitted)expect(captured).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{expected:"FIELD_CHANGE",actualType:"string"},{path:["titleChange","change","evidence","additionalEvidenceJson"],classification:"missing",actualType:"undefined",expected:"string"}]}}});else expect(captured).toMatchObject({status:"SUCCESS"});}finally{h.dispose();}
 });
+it("wire84 actual R02 multi-singleton rank collision refuses atomically without renumbering",async()=>{
+ const script=regressions.cases.find(item=>item.id==="R02")!;let captured:unknown,calls=0;
+ const gateway=createContextContractGateway(config,async request=>{calls++;const context=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete context[key];const bound=ContextInputSchema.parse(context),raw=encodeOpaqueFixtureV3(frozenContextProposal(bound,"R02",0),bound) as Record<string,{rank:string;change:string}>;raw.eventDateChange.rank=raw.titleChange.rank;expect(raw.eventDateChange.rank).toBe("0");return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-wire84-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})};},{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const observed:typeof gateway={prepare(tier,bound){const attempt=gateway.prepare(tier,bound);return attempt.status!=="READY"?attempt:{...attempt,dispatch:async()=>{const result=await attempt.dispatch();captured=result;return result}}}};
+ const h=await createContextContractProbe({sourceSha:"92a5b87529d0d9b65142178c716eec646fd84027",referenceNow:Date.parse(script.turns[0].receipt),liveGateway:observed},()=>{throw Error("FORBIDDEN_FIXTURE_PATH")});
+ try{expect(await h.turn(script.turns[0].text,script.turns[0].receipt)).toMatchObject({status:"REJECTED",fullSchemaValid:false,listStoreReads:0,mutations:0});expect(calls).toBe(1);expect(captured).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","rank"],expected:"CHANGE_RANK",rankControl:{reason:"COLLISION",actualRank:0,collisionLocations:[{root:"titleChange"}]}}]}}});}finally{h.dispose();}
+});
 it.each([[42,"number"],[null,"null"],[[],"array"],[{PRIVATE_VALUE:"PRIVATE_SECRET"},"object"]] as const)("decoded singleton predicate diagnostics retain primary refusal and identify value type %s",(value,actualType)=>{
  const raw=wireModule.encodeGoogleLiteEuContextV3(wire82Canonical()) as Record<string,{rank:string;change:string}>;
  const change=JSON.parse(raw.titleChange.change);change.value=value;raw.titleChange.change=JSON.stringify(change);const before=JSON.stringify(raw),diagnostics:unknown[]=[];
@@ -1240,7 +1247,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-83");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-84");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("b581506fbe196fc3f2aab77f70c127ebc347f574193b26c632e52967115f7763");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

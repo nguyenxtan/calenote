@@ -7,14 +7,23 @@ import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
 const innerEvidenceSentence83=' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.';
+const oldOrder83='Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; unique across carriers/ordinary, gaps/sole"10" legal. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.';
+const restoreOrder84=(prompt:string)=>prompt.replace(/^Order:.*$/m,oldOrder83);
+it("wire84 serialized global ranks distinguish multiple singleton roots without changing other policy bytes",()=>{
+ const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+ const policy=serializeContextRequest(input).messages[0].content;
+ expect(policy).toContain('all nonnull singleton roots and ordinary entries have distinct ranks');
+ expect(policy).toContain('singleton roots A="2",B="7" valid; A="0",B="0" collide.');
+ expect(createHash("sha256").update(restoreOrder84(policy)).digest("hex")).toBe("834a745757b68fa0032667e2888bdab6ce8e07fc4af2cb08e7a98c9b8b0eec09");
+});
 it("wire83 serialized singleton guidance requires complete inner evidence without changing other policy bytes",()=>{
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const request=serializeContextRequest(input),policy=request.messages[0].content;
  expect(request.messages[0].role).toBe("system");expect(policy.split(innerEvidenceSentence83)).toHaveLength(2);
  expect(policy.split("\n").find(line=>line.startsWith("Singletons:"))).toContain(innerEvidenceSentence83);
- expect(createHash("sha256").update(policy.replace(innerEvidenceSentence83,"")).digest("hex")).toBe("132cc937cda5911f5e4a2c7f8d5dfeb90af4a1bbf303604d64724608b14760dc");
+ expect(createHash("sha256").update(restoreOrder84(policy).replace(innerEvidenceSentence83,"")).digest("hex")).toBe("132cc937cda5911f5e4a2c7f8d5dfeb90af4a1bbf303604d64724608b14760dc");
 });
-const previousSingletonPrompt=(prompt:string)=>prompt.replace(innerEvidenceSentence83,"").replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
+const previousSingletonPrompt=(prompt:string)=>restoreOrder84(prompt).replace(innerEvidenceSentence83,"").replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
 
 it("dispatches the civil source fidelity checkpoint last before output", () => {
   const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Ngày 17/12 họp, nhắc ba ngày liên tiếp trước đó." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
@@ -276,7 +285,7 @@ it("rank transport keeps single active membership and payload ownership",()=>{
 });
 it("relative ranks preserve authored order without contiguous chosen-N indexes",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
- for(const text of ["CURRENT PROPOSAL authored","rank STRING \"0\"..\"12\" exact/no coercion","unique across carriers/ordinary","gaps/sole\"10\" legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
+ for(const text of ["CURRENT PROPOSAL authored","rank STRING \"0\"..\"12\" exact/no coercion","all nonnull singleton roots and ordinary entries have distinct ranks","Gaps/sole\"10\" legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
  expect(createHash("sha256").update(previousSingletonPrompt(CONTEXT_CONTRACT_PROMPT).split("\n").filter(line=>!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("b280d4e4d35c54dd1575003021000cd7d1acd471da19bf550efb159b01f8482c");
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });

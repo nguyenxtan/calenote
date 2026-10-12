@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire84 multi-singleton global-rank guidance
+
+- [ ] RED actual serialized Order instruction and exact single-paragraph inverse; reuse independent raw multi-singleton collision refusal, sparse/gaps/sole10/all13 rotations/authored payload order and real service zero-mutation checks.
+- [ ] GREEN only approved Order paragraph, wire84/current prompt/version pins; all other prompt/schema/decoder/evidence/oracle/source/capability bytes unchanged. Exact pure historical Order inverse; no production old-guard repins or field-specific ranks.
+- [ ] Focused affected/changed-historical tests/type/lint/diff, ENTIRE67/all32612000/1536, independent C0/I0/localcommit. Controller one trusted accounted R02 observation; after coherent PASS, fresh full same candidate before Formal. Continue under existing USD10 authority; no implementer provider/key/accounting/full/commit/children, no push/merge/deploy.
+
 ### Wire83 mandatory inner-evidence generation clarification
 
 - [ ] RED actual serialized system instruction for both inner evidence keys/required empty-extras STRING/actual-source rule; unchanged all-other-bytes inverse. Keep raw omitted-key rejection and independently model-authored valid empty/ordered extra pointers/source restrictions via actual gateway/service.

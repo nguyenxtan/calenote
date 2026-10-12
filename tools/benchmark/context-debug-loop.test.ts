@@ -37,7 +37,7 @@ const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const candidate=currentFixtureCandidate();
 const integerOrderMode="R01_TURN1_INTEGER_ORDER_BASELINE" as const;
 const integerOrderCandidate="ee61a225e66056324ffd55214213692e5b9efbc7";
-const removeWire83InnerEvidenceSentence=(prompt:string)=>prompt.replace(' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.',"");
+const removeWire83InnerEvidenceSentence=(prompt:string)=>prompt.replace(/^Order:.*$/m,'Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; unique across carriers/ordinary, gaps/sole"10" legal. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.').replace(' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.',"");
 // Pure public historical specimen, never current dispatch/authority.
 function restorePublicWire68Request(request:{messages:Array<{content:string}>;response_format:{json_schema:{schema:unknown}}}){
  request.messages[0].content=removeWire83InnerEvidenceSentence(request.messages[0].content);
