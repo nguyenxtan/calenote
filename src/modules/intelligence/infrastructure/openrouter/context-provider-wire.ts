@@ -541,7 +541,7 @@ function operationSchema(root:Schema):Schema{
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  result.$defs!.r={type:"string",enum:CHANGE_ORDER_FIELDS_V3.map((_,ordinal)=>String(ordinal))};
+  result.$defs!.r={type:"integer",minimum:0,maximum:CHANGE_ORDER_FIELDS_V3.length-1};
   for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{
@@ -598,7 +598,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     if(mode==="encode"){
       if(authored.length>1)throw new WireShapeFailure([definition.root],duplicate);
       const item=authored[0];
-      result[definition.root]=item?{rank:String(item.index),change:item.change}:null;
+      result[definition.root]=item?{rank:item.index,change:item.change}:null;
       continue;
     }
     if(!Object.hasOwn(raw,definition.root))throw new WireShapeFailure([definition.root],"REQUIRED_PROPERTY");
@@ -637,7 +637,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
     emitted.set(definition.field,change);
     ranked.push(entry);
   }
-  if(mode==="encode")result.changes=ordinaryChanges.flatMap((change,rank)=>definitions.some(definition=>definition.field===fieldOf(change))?[]:[{rank:String(rank),change}]);
+  if(mode==="encode")result.changes=ordinaryChanges.flatMap((change,rank)=>definitions.some(definition=>definition.field===fieldOf(change))?[]:[{rank,change}]);
   else {const ordinaryFields=ordinaryChanges.map(change=>fieldOf(change));if(new Set(ordinaryFields).size!==ordinaryFields.length)throw new WireShapeFailure(["changes"],"UNIQUE_FIELD_OWNER");result.changes=ranked.sort((left,right)=>left.rank-right.rank).map(entry=>entry.change);}
   return result;
 }

@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire88 numeric rank execution
+
+- [ ] RED strict scalar/codec/raw sparse roundtrip and legacy refusal, then lossless numeric producer/consumer and equivalent Order examples/current wire88 identities.
+- [ ] Preserve every payload/source/operation/rank-domain/atomic guard; focused full13/collision/security/history/strict fit/type/lint/diff; independent C0/I0 and fresh local full then selective commit/preflight/FreshFormal.
+- [ ] Paid requests terminal/accounted, UNKNOWN preserved, stop first failure before repair; no blind repeat/push/merge/deploy.
+
 ### Wire87 bounded numeric-rank admission axis
 
 - [ ] RED closed current R02T0 scalar-only integer0..12 transform, inverse/all-rest-byte equality, original prompt/context/candidate/target guards and unchanged STRING decoder refusal.

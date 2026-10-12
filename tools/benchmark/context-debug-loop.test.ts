@@ -12,7 +12,7 @@ import type {SemanticTransport} from "../../src/modules/intelligence/infrastruct
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest,debugR03UncertaintiesRequest,debugR03SingletonChangeRequest,debugNumericRankRequest} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest,debugR03UncertaintiesRequest,debugR03SingletonChangeRequest} from "./context-debug-loop";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -55,7 +55,7 @@ function restorePublicEvidenceNames(schema:ReturnType<typeof googleLiteEuContext
  const names:Record<string,string>={s:"__sources",c:"__ec",e:"__e"};if(schema.$defs){schema.$defs=Object.fromEntries(Object.entries(schema.$defs).map(([key,value])=>[names[key]??key,value]));const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;for(const [before,after]of Object.entries(names))if(node.$ref===`#/$defs/${before}`)node.$ref=`#/$defs/${after}`;Object.values(node).forEach(walk);};walk(schema);}
 }
 function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
- expect(schema.$defs!.r).toEqual({type:"string",enum:Array.from({length:13},(_,ordinal)=>String(ordinal))});schema.$defs!.r={type:"integer",minimum:0,maximum:12}; // Pure immutable historical scalar inverse, never dispatch.
+ expect(schema.$defs!.r).toEqual({type:"integer",minimum:0,maximum:12});schema.$defs!.r={type:"integer",minimum:0,maximum:12}; // Pure immutable historical scalar inverse, never dispatch.
  // Public historical inverse only: wire73 bound and internal source name.
  const boundedOrdinary=schema.properties!.changes;if(typeof boundedOrdinary==="boolean")throw Error("HISTORICAL_RANK_SHAPE");if(boundedOrdinary.maxItems!==0)delete boundedOrdinary.maxItems;
  restorePublicEvidenceNames(schema);
@@ -90,7 +90,7 @@ it("integer order clone preserves exact request outside one item and all thirtee
 it("integer order candidate drift cannot reach physical transport",async()=>{const s=setup();let calls=0;try{await expect(runDebugLoopExecution(s.load(),"a".repeat(40),integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_INTEGER_ORDER_CANDIDATE");expect(calls).toBe(0);}finally{s.cleanup();}});
 it("wire66 current request refuses immutable wire65 integer probe before HTTP",async()=>{const s=setup();let calls=0;try{
  const before=readFileSync(join(s.history,"campaign.jsonl"),"utf8"),accounting=inspectDebugLoop(s.load());
- await expect(runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100})).rejects.toThrow("VALIDATION_APPLICATION_CHANGED");
+ await expect(runDebugLoopExecution(s.load(),integerOrderCandidate,integerOrderMode,async()=>{calls++;throw Error("FORBIDDEN")},{now:()=>100})).rejects.toThrow("VALIDATION_APPLICATION_FILES_CHANGED");
  expect(calls).toBe(0);expect(existsSync(join(s.campaignRoot,"debug-loop-executions"))).toBe(false);expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);expect(inspectDebugLoop(s.load())).toEqual(accounting);
  }finally{s.cleanup();}});
 // Immutable structural specimen from accepted application c40, not an oracle
@@ -295,28 +295,12 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
  }finally{s.cleanup()}
 });
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
-it("numeric rank clone preserves every other request byte and refuses current identity drift",async()=>{
- const s=setup();let proven=false;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
-  const before=JSON.stringify(request),changed=debugNumericRankRequest(request),restored=structuredClone(changed);restored.response_format.json_schema.schema.$defs!.r=request.response_format.json_schema.schema.$defs!.r;expect(JSON.stringify(restored)).toBe(before);expect(JSON.stringify(request)).toBe(before);
-  expect(()=>debugProbeSchema(request.response_format.json_schema.schema,"R02_TURN0_NUMERIC_RANK_BASELINE")).toThrow("DEBUG_UNCERTAINTY_REQUEST_ONLY");
-  expect(hash(JSON.stringify(changed.response_format.json_schema.schema))).toBe("bf874811a31e5807c57aabb18116ce8b58abef6587751ffb55a0f7bbf0f97582");
-  process.stdout.write("numericRankPins "+JSON.stringify({originalRequest:hash(before),originalSchema:hash(JSON.stringify(request.response_format.json_schema.schema)),transformedRequest:hash(JSON.stringify(changed)),transformedSchema:hash(JSON.stringify(changed.response_format.json_schema.schema))})+"\n");
-  for(const fault of ["schema","prompt","source","route"]){const bad=structuredClone(request);if(fault==="schema")bad.response_format.json_schema.schema.$defs!.r={type:"string"};else if(fault==="prompt")bad.messages[0].content+=" ";else if(fault==="source"){const context=JSON.parse(bad.messages[1].content);context.turns[0].text+=" ";bad.messages[1].content=JSON.stringify(context);}else bad.max_tokens=1535;expect(()=>debugNumericRankRequest(bad),fault).toThrow();}
-  proven=true;const input=JSON.parse(request.messages[1].content),content=encodeFixtureV3(frozenContextProposal(input,"R02",0));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-numeric-clone-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- },{now:()=>100});expect(proven).toBe(true);expect(result.responses[0].status).toBe("SUCCESS");}finally{s.cleanup();}
-});
-it.each([200,400] as const)("numeric rank R02 TURN0 diagnostic status%s is one terminal unchanged-decoder request",async status=>{
- const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async request=>{
-  calls++;expect(request.response_format.json_schema.schema.$defs?.r).toEqual({type:"integer",minimum:0,maximum:12});const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];
-  if(status===400)return {status:400,body:JSON.stringify({error:{message:"Schema state limit exceeded"}})};
-  const content=encodeFixtureV3(frozenContextProposal(input,"R02",0),ContextInputSchema.parse(input)) as Record<string,unknown>;for(const [key,value]of Object.entries(content)){if(key.endsWith("Change")&&value!==null)(value as {rank:unknown}).rank=Number((value as {rank:unknown}).rank);}for(const item of content.changes as Array<{rank:unknown}>)item.rank=Number(item.rank);
-  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-numeric-rank-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- },{now:()=>100});expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:0,status:"FAILURE"});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});if(status===200)expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["titleChange","rank"],expected:"CHANGE_RANK",actualType:"number"}]}}});else expect(result.accounting.unknownExposureMicrounits).toBeGreaterThan(0);expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
- }finally{s.cleanup();}
+it("wire88 current candidate refuses closed wire87 numeric admission before physical HTTP",async()=>{
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(0);}finally{s.cleanup();}
 });
 it.each([200,400] as const)("current R02 TURN1 diagnostic status%s uses one trusted seeded request with no Pilot credit",async status=>{
  const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN1",async request=>{
-  calls++;expect(request.max_tokens).toBe(1536);const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];expect(input.currentTurn).toBe(2);const scalar=request.response_format.json_schema.schema.$defs?.r;expect(scalar).toEqual({type:"string",enum:["0","1","2","3","4","5","6","7","8","9","10","11","12"]});
+  calls++;expect(request.max_tokens).toBe(1536);const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];expect(input.currentTurn).toBe(2);const scalar=request.response_format.json_schema.schema.$defs?.r;expect(scalar).toEqual({type:"integer",minimum:0,maximum:12});
   if(status===400)return {status:400,body:JSON.stringify({error:{message:"Schema state limit exceeded"}})};
   const content=encodeFixtureV3(frozenContextProposal(input,"R02",1),ContextInputSchema.parse(input));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-current-r02-t1",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
  },{now:()=>100});expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:1,status:status===200?"SUCCESS":"FAILURE"});expect(result.applicationEvidence).toHaveLength(1);expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0});if(status===400)expect(result.accounting.unknownExposureMicrounits).toBeGreaterThan(0);expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN1",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
@@ -547,7 +531,7 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
    // Separate current-wire witnesses preserve the evidence-key and LIST
    // ownership stages. They are NOT labelled historical-schema conforming.
-   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:"0",change:JSON.stringify(carrier.change)}};
+   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:0,change:JSON.stringify(carrier.change)}};
    const keyDiagnostics:unknown[]=[];
    expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
    expect(keyDiagnostics).toMatchObject([{issues:[

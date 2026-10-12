@@ -8,7 +8,8 @@ import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
 const innerEvidenceSentence83=' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.';
 const innerValueSentence86=' SET/REPLACE value grammar: title/location=nonblank NFC text (max1800/300 code points); frequency=STRING ONCE/DAILY/WEEKLY/MONTHLY/YEARLY/UNKNOWN; occurrenceCount=positive safe INTEGER; eventRelation=STRING BEFORE_EVENT/INCLUDING_EVENT/STARTING_ON, never an object. eventTime/reminderTime=exact {hour,minute,qualifier} object (hour0..23,minute0..59,qualifier H24/AM/PM/UNKNOWN; AM/PM hour1..12). eventDate/reminderDate/endDate follow the Final date check\'s exact DateOperand JSON-string/flagged six-key object distinction. CLEAR value=null, never a typed placeholder. No extra value keys, coercion or defaults.';
-const removeValue86=(prompt:string)=>prompt.replace(innerValueSentence86,"");
+const restoreOrder88=(prompt:string)=>prompt.replace(/^Order:.*$/m,'Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; all nonnull singleton roots and ordinary entries have distinct ranks. singleton roots A="2",B="7" valid; A="0",B="0" collide. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Gaps/sole"10" legal. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.');
+const removeValue86=(prompt:string)=>restoreOrder88(prompt).replace(innerValueSentence86,"");
 it("wire86 serialized singleton values expose all ten families without other policy changes",()=>{
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const policy=serializeContextRequest(input).messages[0].content;expect(policy.split(innerValueSentence86)).toHaveLength(2);expect(policy.split("\n").find(line=>line.startsWith("Singletons:"))).toContain(innerValueSentence86);
@@ -20,7 +21,7 @@ it("wire84 serialized global ranks distinguish multiple singleton roots without 
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const policy=serializeContextRequest(input).messages[0].content;
  expect(policy).toContain('all nonnull singleton roots and ordinary entries have distinct ranks');
- expect(policy).toContain('singleton roots A="2",B="7" valid; A="0",B="0" collide.');
+ expect(policy).toContain('singleton roots A=2,B=7 valid; A=0,B=0 collide.');
  expect(createHash("sha256").update(restoreOrder84(policy)).digest("hex")).toBe("834a745757b68fa0032667e2888bdab6ce8e07fc4af2cb08e7a98c9b8b0eec09");
 });
 it("wire83 serialized singleton guidance requires complete inner evidence without changing other policy bytes",()=>{
@@ -292,13 +293,13 @@ it("rank transport keeps single active membership and payload ownership",()=>{
 });
 it("relative ranks preserve authored order without contiguous chosen-N indexes",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
- for(const text of ["CURRENT PROPOSAL authored","rank STRING \"0\"..\"12\" exact/no coercion","all nonnull singleton roots and ordinary entries have distinct ranks","Gaps/sole\"10\" legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
+ for(const text of ["CURRENT PROPOSAL authored","rank INTEGER 0..12 exact/no coercion","all nonnull singleton roots and ordinary entries have distinct ranks","Gaps/sole10 legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
  expect(createHash("sha256").update(previousSingletonPrompt(CONTEXT_CONTRACT_PROMPT).split("\n").filter(line=>!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("b280d4e4d35c54dd1575003021000cd7d1acd471da19bf550efb159b01f8482c");
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });
 it("ordinary arrays and singleton roots share one non-restarting rank space",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
- for(const text of ["ONE global space","NEVER restart/array/root","ordinary[\"1\",\"2\"]+singleton\"0\" valid","[\"0\",\"1\"]+singleton\"0\" collides"])expect(order).toContain(text);
+ for(const text of ["ONE global space","NEVER restart/array/root","ordinary[1,2]+singleton0 valid","[0,1]+singleton0 collides"])expect(order).toContain(text);
 });
 it("primary evidence selects request-bound strings without granting source scope authority",()=>{
   expect(CONTEXT_CONTRACT_PROMPT).toContain("primaryEvidence selects exactly one code from the request schema's shared source enum");
