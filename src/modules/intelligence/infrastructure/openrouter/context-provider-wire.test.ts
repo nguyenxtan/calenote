@@ -1267,7 +1267,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-102");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-103");
   const previous=structuredClone(schema.schema);previous.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};expect(createHash("sha256").update(JSON.stringify(previous)).digest("hex")).toBe("7cb6dc6f5d8dd626289c3c1aa63dfb9aecd940977bb3493b47e10fc8b0f93f46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

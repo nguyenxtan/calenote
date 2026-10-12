@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {createHash} from "node:crypto";
-import {wire101PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire101PromptFixture,wire102PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {expect,it} from "vitest";
 import {CONTEXT_CONTRACT_PROMPT} from "../../../conversation/context-contract/prompt";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
@@ -23,6 +23,7 @@ it("date singleton emission explicitly orders operand string, change string and 
 
 it.each([
  {id:"D01",text:"Mai nhắc tui gọi mẹ lúc 8h.",root:"reminderDateChange",typed:false},
+ {id:"R02",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",root:"eventDateChange",typed:true},
  {id:"R03",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.",root:"eventDateChange",typed:true},
 ])("$id public actual-service date singleton preserves selected type and refuses the other type without mutation",async c=>{
  let captured:Parameters<typeof encodeFixtureV3>[1]|undefined,proposal:Parameters<typeof encodeFixtureV3>[0]|undefined;
@@ -40,4 +41,18 @@ it.each([
 
 it("date serialization guide inverse preserves the exact immutable wire101 prompt",()=>{
  expect(createHash("sha256").update(wire101PromptFixture(CONTEXT_CONTRACT_PROMPT)).digest("hex")).toBe("78e4c9f0598735f0af40f71804bb4c01c11f22ee3d2583420292c527a24c094d");
+});
+
+it("date serialization selects operation and field representation before any operand encoding",()=>{
+ const guide=/^Date singleton serialization: (.+)$/m.exec(CONTEXT_CONTRACT_PROMPT)?.[1];
+ expect(guide).toContain("FIRST select the inner value representation");
+ expect(guide).toContain("SET/REPLACE reminderDate and endDate always use a STRING");
+ expect(guide).toContain("SET/REPLACE eventDate uses an OBJECT only when input.fieldCapability.eventDateYearNullRequired=true; otherwise it uses a STRING");
+ expect(guide).toContain("The flag applies only to eventDate");
+ expect(guide).toContain("For the selected OBJECT branch, author the grounded six-key CIVIL_DATE/year-null object directly; do not JSON-serialize the operand");
+ expect(guide!.indexOf("FIRST select")).toBeLessThan(guide!.indexOf("For the selected STRING branch"));
+});
+
+it("branch-first guide inverse preserves the exact immutable wire102 prompt",()=>{
+ expect(createHash("sha256").update(wire102PromptFixture(CONTEXT_CONTRACT_PROMPT)).digest("hex")).toBe("d37a1d01278acbf713ae93cefe991493d1bf9e9e50f6a6cda8b99b9d3d2e444b");
 });
