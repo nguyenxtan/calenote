@@ -12,7 +12,7 @@ import type {SemanticTransport} from "../../src/modules/intelligence/infrastruct
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from "./context-contract-live";
 import {currentFixtureCandidate} from "./current-candidate.test-support";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
-import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest,debugR03UncertaintiesRequest,debugR03SingletonChangeRequest} from "./context-debug-loop";
+import {createDebugLoopLoader,inspectDebugLoop,runDebugLoopExecution,debugProbeSchema,inspectDebugLoopFreshRun,debugUncertaintyPromptRequest,debugUncertaintyIntegerRequest,debugPositionRequest,debugIntegerOrderRequest,debugR03UncertaintiesRequest,debugR03SingletonChangeRequest,debugNumericRankRequest} from "./context-debug-loop";
 import {candidateValidationProof} from "./context-contract-candidate-validation";
 import {googleLiteEuContextWireSchemaV3,encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import * as wireModule from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -295,6 +295,25 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
  }finally{s.cleanup()}
 });
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
+it("numeric rank clone preserves every other request byte and refuses current identity drift",async()=>{
+ const s=setup();let proven=false;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0",async request=>{
+  const before=JSON.stringify(request),changed=debugNumericRankRequest(request),restored=structuredClone(changed);restored.response_format.json_schema.schema.$defs!.r=request.response_format.json_schema.schema.$defs!.r;expect(JSON.stringify(restored)).toBe(before);expect(JSON.stringify(request)).toBe(before);
+  expect(()=>debugProbeSchema(request.response_format.json_schema.schema,"R02_TURN0_NUMERIC_RANK_BASELINE")).toThrow("DEBUG_UNCERTAINTY_REQUEST_ONLY");
+  expect(hash(JSON.stringify(changed.response_format.json_schema.schema))).toBe("bf874811a31e5807c57aabb18116ce8b58abef6587751ffb55a0f7bbf0f97582");
+  process.stdout.write("numericRankPins "+JSON.stringify({originalRequest:hash(before),originalSchema:hash(JSON.stringify(request.response_format.json_schema.schema)),transformedRequest:hash(JSON.stringify(changed)),transformedSchema:hash(JSON.stringify(changed.response_format.json_schema.schema))})+"\n");
+  for(const fault of ["schema","prompt","source","route"]){const bad=structuredClone(request);if(fault==="schema")bad.response_format.json_schema.schema.$defs!.r={type:"string"};else if(fault==="prompt")bad.messages[0].content+=" ";else if(fault==="source"){const context=JSON.parse(bad.messages[1].content);context.turns[0].text+=" ";bad.messages[1].content=JSON.stringify(context);}else bad.max_tokens=1535;expect(()=>debugNumericRankRequest(bad),fault).toThrow();}
+  proven=true;const input=JSON.parse(request.messages[1].content),content=encodeFixtureV3(frozenContextProposal(input,"R02",0));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-numeric-clone-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ },{now:()=>100});expect(proven).toBe(true);expect(result.responses[0].status).toBe("SUCCESS");}finally{s.cleanup();}
+});
+it.each([200,400] as const)("numeric rank R02 TURN0 diagnostic status%s is one terminal unchanged-decoder request",async status=>{
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async request=>{
+  calls++;expect(request.response_format.json_schema.schema.$defs?.r).toEqual({type:"integer",minimum:0,maximum:12});const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];
+  if(status===400)return {status:400,body:JSON.stringify({error:{message:"Schema state limit exceeded"}})};
+  const content=encodeFixtureV3(frozenContextProposal(input,"R02",0),ContextInputSchema.parse(input)) as Record<string,unknown>;for(const [key,value]of Object.entries(content)){if(key.endsWith("Change")&&value!==null)(value as {rank:unknown}).rank=Number((value as {rank:unknown}).rank);}for(const item of content.changes as Array<{rank:unknown}>)item.rank=Number(item.rank);
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-numeric-rank-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ },{now:()=>100});expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:0,status:"FAILURE"});expect(result.applicationEvidence[0]).toMatchObject({status:"REJECTED",listStoreReads:0,mutations:0});if(status===200)expect(result.responses[0]).toMatchObject({canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["titleChange","rank"],expected:"CHANGE_RANK",actualType:"number"}]}}});else expect(result.accounting.unknownExposureMicrounits).toBeGreaterThan(0);expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN0_NUMERIC_RANK_BASELINE",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ }finally{s.cleanup();}
+});
 it.each([200,400] as const)("current R02 TURN1 diagnostic status%s uses one trusted seeded request with no Pilot credit",async status=>{
  const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN1",async request=>{
   calls++;expect(request.max_tokens).toBe(1536);const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];expect(input.currentTurn).toBe(2);const scalar=request.response_format.json_schema.schema.$defs?.r;expect(scalar).toEqual({type:"string",enum:["0","1","2","3","4","5","6","7","8","9","10","11","12"]});

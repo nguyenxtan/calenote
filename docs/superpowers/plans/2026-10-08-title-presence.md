@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire87 bounded numeric-rank admission axis
+
+- [ ] RED closed current R02T0 scalar-only integer0..12 transform, inverse/all-rest-byte equality, original prompt/context/candidate/target guards and unchanged STRING decoder refusal.
+- [ ] GREEN tooling only current mode, exact schema/prompt/route bindings and max1/no prerequisites/no retry/fallback/credit; fake200/400, consumed execution/no second request, conservative UNKNOWN. Preserve every old closed mode/pin/history and runtime byte.
+- [ ] Focused affected/history/type/lint/diff, independent C0/I0/localcommit then one accounted controller admission observation under USD10. No child provider/key/accounting/full/commit/newagents, no production format migration/full/Formal credit/push/merge/deploy.
+
 ### Wire86 complete singleton value grammar
 
 - [ ] RED serialized policy exact all-ten value families and all-other-byte inverse; raw eventRelation OBJECT refusal versus valid STRING with preserved rank/evidence; compact family/CLEAR/flagged-date and actual service zero-mutation witnesses.
