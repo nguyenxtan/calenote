@@ -4,11 +4,11 @@ import {z} from "zod";
 import {type ContextInput,ContextInputSchema,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
-import {wire98RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire98RequestFixture,wire99RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
-import {googleLiteEuContextWireSchemaV3,decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
+import {decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
 let clockless:ContextInput,clocked:ContextInput,bound:ContextInput;
 beforeAll(async()=>{
@@ -22,7 +22,7 @@ function inline(root:unknown,node:unknown,seen:string[]=[]):unknown{
  if(typeof o.$ref==="string"){const ref=o.$ref;if(!ref.startsWith("#/")||seen.includes(ref))throw Error("TEST_REF");return inline(root,ref.slice(2).split("/").reduce<unknown>((v,k)=>(v as Record<string,unknown>)[k],root),[...seen,ref]);}
  return Object.fromEntries(Object.entries(o).filter(([k])=>k!=="$defs").map(([k,v])=>[k,inline(root,v,seen)]));
 }
-const schema=(input:ContextInput)=>googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema;
+const schema=(input:ContextInput)=>wire99RequestFixture(input).response_format.json_schema.schema;
 const validator=(s:ReturnType<typeof schema>)=>z.fromJSONSchema(inline(s,s.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
 it.each(["clockless","clocked","bound"])("certified %s source denies only unsupported offset reason language",kind=>{
  const input=kind==="clockless"?clockless:kind==="clocked"?clocked:bound;

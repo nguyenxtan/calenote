@@ -464,3 +464,8 @@ Wire99 independentlayoutI1: admittedwholegrammarusesflexiblewhitespacebutrelatio
 
 
 Wire99 unique-supportI1localcounterexample: first-sourcevenueBaoGồmNgàyThi plusunsupportedbefore500 causesnumeric-independentuniqueBEFOREsupportfalse dueotherenumvenuepattern; validboundcontextcanstillclassifyfalseabsence. RED1fail58PASS confirmedboundroute. Finalcertificationusesnarrowerpositive-sourceeligibility: canonicalwhitespaceANDnooriginalliteral/trước/iu occurrenceanywherefirstsource (includingvenue), becauseunchangedcompletefiniteexamgrammar's independentdistanceclauseuses that cue. Do notconvertfailureofuniquevalue supportintoabsence. Removeunnecessaryprivateevidencespan/value-supportprobe fromnewfulloffsetBoolean; oldsupported-candidate/MISSING predicates andallvalue-supportverifiersunchanged. ApplysameconservativesourceeligibilitytobothfullreasonabsenceBooleans. This is a disqualifyingeligibilitycheck, not a newoperandparser/sourceflag/normalization. Inputswithbefore-onlyrelationorvenuebeforetext maydecline evenwithoutactualindependentoffset; deliberateconservativefalsenegatives preservepriorreasonauthority.
+
+
+### Wire100 initial event-owned notification-date marker
+
+Only producer MISSING reminderDate is excluded under existing certified empty initial finite source and reminderDateProposalAllowed=false. All non-MISSING date reasons and every bound/independent/unknown context retain prior language. Backend can still require date; R03 initial clocked date clarification stays unchanged. No incoming marker deletion, operand or readiness inference, canonical/backend/PASS relaxation. Whole R02/R03 sequences, raw field/reason differentials and historical inverses precede immutable full and Fresh Formal.

@@ -46,6 +46,13 @@ export function isInitialRelationUncertaintyAbsent(input:ContextInput):boolean {
     &&typeof input.turns[0]?.text==="string"&&hasConservativeWholeSourceEligibility(input.turns[0].text);
 }
 
+/** Initial event-owned date cannot ground a producer MISSING notification
+ * date marker. Backend readiness can still require that date independently. */
+export function isInitialReminderDateMissingExcluded(input:ContextInput):boolean {
+  return isInitialRelationUncertaintyAbsent(input)
+    &&!deriveGenerationFieldCapability(input).reminderDateProposalAllowed;
+}
+
 /** Existing matched-count distance grammar grants relation only, not a new
  * independent offset requirement. Producer exclusion only; no operand output. */
 export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):boolean {
