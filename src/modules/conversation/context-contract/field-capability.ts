@@ -31,6 +31,12 @@ export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):b
     .some(value=>supportsEventRelation(value,[probes.source],[probes.turn]));
 }
 
+/** Complete empty initial source has no independently grounded relation
+ * uncertainty candidate or competing fact. Producer language only. */
+export function isInitialRelationUncertaintyAbsent(input:ContextInput):boolean {
+  return isInitialFiniteSeriesWithoutRelationSource(input);
+}
+
 /** Existing matched-count distance grammar grants relation only, not a new
  * independent offset requirement. Producer exclusion only; no operand output. */
 export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):boolean {

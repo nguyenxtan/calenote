@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
-import {wire96RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire96RequestFixture,wire97RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
@@ -29,7 +29,7 @@ it("whole actual clockless initial source proves optional relation absence witho
  expect(capability.deriveGenerationFieldCapability(initial).allowedClockFields).not.toContain("reminderTime");
 });
 it("complete differential changes only relation MISSING and no non-uncertainty bytes",()=>{
- const current=schema(initial),old=wire96RequestFixture(initial).response_format.json_schema.schema;
+ const current=wire97RequestFixture(initial).response_format.json_schema.schema,old=wire96RequestFixture(initial).response_format.json_schema.schema;
  const a=z.fromJSONSchema(inline(current,current.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]),b=z.fromJSONSchema(inline(old,old.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const n of [0,1,2]){
   const value=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(value).success,`${fieldCode}/${reason}/${n}`).toBe(fieldCode===10&&reason==="MISSING"?false:b.safeParse(value).success);
@@ -68,7 +68,7 @@ it.each([{fields:[]},{fields:["eventRelation"]},{fields:["leadOffsetDays"]},{fie
 
 it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 25h.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc chưa rõ."])("clock-axis whole field/reason/candidate differential remains bounded for %s",text=>{
  const input=structuredClone(initial);input.turns[0].text=text;
- const current=schema(input),old=wire96RequestFixture(input).response_format.json_schema.schema;
+ const current=wire97RequestFixture(input).response_format.json_schema.schema,old=wire96RequestFixture(input).response_format.json_schema.schema;
  const a=z.fromJSONSchema(inline(current,current.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]),b=z.fromJSONSchema(inline(old,old.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const n of [0,1,2]){
   const raw=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(raw).success,`${fieldCode}/${reason}/${n}`).toBe(fieldCode===10&&reason==="MISSING"&&capability.isInitialFiniteSeriesWithoutRelationSource(input)?false:b.safeParse(raw).success);
