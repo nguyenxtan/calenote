@@ -55,7 +55,7 @@ function restorePublicEvidenceNames(schema:ReturnType<typeof googleLiteEuContext
  const names:Record<string,string>={s:"__sources",c:"__ec",e:"__e"};if(schema.$defs){schema.$defs=Object.fromEntries(Object.entries(schema.$defs).map(([key,value])=>[names[key]??key,value]));const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;for(const [before,after]of Object.entries(names))if(node.$ref===`#/$defs/${before}`)node.$ref=`#/$defs/${after}`;Object.values(node).forEach(walk);};walk(schema);}
 }
 function restorePublicCatalogueWrappers(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){
- expect(schema.$defs!.r).toEqual({type:"string"});schema.$defs!.r={type:"integer",minimum:0,maximum:12}; // Pure immutable historical scalar inverse, never dispatch.
+ expect(schema.$defs!.r).toEqual({type:"string",enum:Array.from({length:13},(_,ordinal)=>String(ordinal))});schema.$defs!.r={type:"integer",minimum:0,maximum:12}; // Pure immutable historical scalar inverse, never dispatch.
  // Public historical inverse only: wire73 bound and internal source name.
  const boundedOrdinary=schema.properties!.changes;if(typeof boundedOrdinary==="boolean")throw Error("HISTORICAL_RANK_SHAPE");if(boundedOrdinary.maxItems!==0)delete boundedOrdinary.maxItems;
  restorePublicEvidenceNames(schema);
@@ -295,6 +295,14 @@ it("R02 diagnostic is exactly one frozen turn with safe semantic summary and no 
  }finally{s.cleanup()}
 });
 const sourceModes=["DATE_CURRENT_NO_SCALAR_BOUNDS","DATE_CURRENT_STRING_BASELINE","SOURCE_CURRENT_KEY_BASELINE","SOURCE_INTEGER_BASELINE","SOURCE_STRING_BASELINE","SOURCE_SINGLETON_BASELINE","SOURCE_T0_SCHEMA_BASELINE","SOURCE_COMPACT_BASELINE","SOURCE_CURRENT_INLINE_BASELINE"] as const;
+it.each([200,400] as const)("current R02 TURN1 diagnostic status%s uses one trusted seeded request with no Pilot credit",async status=>{
+ const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,"R02_TURN1",async request=>{
+  calls++;expect(request.max_tokens).toBe(1536);const input=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete input[key];expect(input.currentTurn).toBe(2);const scalar=request.response_format.json_schema.schema.$defs?.r;expect(scalar).toEqual({type:"string",enum:["0","1","2","3","4","5","6","7","8","9","10","11","12"]});
+  if(status===400)return {status:400,body:JSON.stringify({error:{message:"Schema state limit exceeded"}})};
+  const content=encodeFixtureV3(frozenContextProposal(input,"R02",1),ContextInputSchema.parse(input));return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-current-r02-t1",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
+ },{now:()=>100});expect(result).toMatchObject({providerHttpAttempts:1,applicationLlmCalls:1,terminal:true,pilotCredit:false});expect(result.responses[0]).toMatchObject({fixtureId:"R02",turnIndex:1,status:status===200?"SUCCESS":"FAILURE"});expect(result.applicationEvidence).toHaveLength(1);expect(result.applicationEvidence[0]).toMatchObject({listStoreReads:0,mutations:0});if(status===400)expect(result.accounting.unknownExposureMicrounits).toBeGreaterThan(0);expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R02_TURN1",async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);
+ }finally{s.cleanup();}
+});
 const r02Turn1Modes=["R02_TURN1_SCHEMA_CONTROL","R02_TURN1_UNCERTAINTY_UNBOUNDED_BASELINE"] as const;
 const r02CurrentKeyMode="R02_TURN1_CURRENT_KEY_BASELINE" as const;
 const r02CoalescedMode="R02_TURN1_REPLACE_COALESCED_BASELINE" as const;
@@ -622,6 +630,8 @@ it("wire82 keeps both R03 historical transforms as exact pure public specimens, 
  const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{
   const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,"R03",index-1));if(index===1)value.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
   if(index===2){const wire=serializeContextRequest(input);wire.response_format.json_schema.schema=typedSingletonSchemaFixture(deriveGenerationFieldCapability(input),input).schema;
+   // Pure immutable R03 specimen: undo only wire85's scalar enum before old hashes.
+   wire.response_format.json_schema.schema.$defs!.r={type:"string"};
    wire.messages[0].content=removeWire83InnerEvidenceSentence(wire.messages[0].content).replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
    captured={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};}
   return value;

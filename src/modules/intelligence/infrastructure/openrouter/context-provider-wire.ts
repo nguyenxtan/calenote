@@ -541,7 +541,7 @@ function operationSchema(root:Schema):Schema{
 }
 function indexedReminderSchema(root:Schema):Schema {
   const result=structuredClone(root),items=deref(result.properties!.changes.items!,result);
-  result.$defs!.r={type:"string"};
+  result.$defs!.r={type:"string",enum:CHANGE_ORDER_FIELDS_V3.map((_,ordinal)=>String(ordinal))};
   for(const field of ["title","reminderDate","reminderTime","eventDate","eventTime","eventRelation","frequency","occurrenceCount","endDate","location"] as const){
     const changes:Schema[]=[];
     items.anyOf=items.anyOf!.flatMap(raw=>{

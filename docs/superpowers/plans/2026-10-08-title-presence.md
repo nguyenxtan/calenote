@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire85 exact rank generation domain
+
+- [ ] RED actual outgoing shared rank admits only all thirteen exact strings, rejects malformed/type/security variants; prove scalar-only schema inverse and reuse global rank/source/payload/service refusal controls.
+- [ ] GREEN only rank enum derived from existing ordinal alphabet, wire85/current schema metadata; prompt/cap16/decoder/evidence/canonical/merge/oracle unchanged. Pure historical scalar inverse only; old production guards immutable. If needed closed current R02_TURN1 mode uses existing trusted seed and max1/no retry/fallback/Pilot credit.
+- [ ] Focused affected/current and changed historical tests, type/lint/diff, ENTIRE67/all32612000/1536; independent C0/I0/localcommit. Controller accounted current R02T1 hypothesis check; after coherence fresh full same candidate then FreshFormal under existing USD10 authority. No child provider/key/accounting/full/commit/newagents; no push/merge/deploy.
+
 ### Wire84 multi-singleton global-rank guidance
 
 - [ ] RED actual serialized Order instruction and exact single-paragraph inverse; reuse independent raw multi-singleton collision refusal, sparse/gaps/sole10/all13 rotations/authored payload order and real service zero-mutation checks.

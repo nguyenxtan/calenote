@@ -24,8 +24,16 @@ const parseGoogleLiteEuContextSectionsV3=(raw:unknown,...args:TailParseArgs)=>pa
 type TailParseArgs=Parameters<typeof parseOpaqueSingletonV3> extends [unknown,...infer Rest]?Rest:never;
 const decodeSingletonAuthoringFixture=(raw:unknown,...args:TailDecodeArgs)=>wireModule.decodeGoogleLiteEuContextTransportV3(wrapSingletonAuthoringFixture(raw),...args);
 type TailDecodeArgs=Parameters<typeof wireModule.decodeGoogleLiteEuContextTransportV3> extends [unknown,...infer Rest]?Rest:never;
+it("wire85 actual shared rank domain admits exactly thirteen decimal strings with scalar-only inverse",()=>{
+ const schema=wireModule.googleLiteEuContextWireSchemaV3().schema,scalar=schema.$defs!.r;
+ expect(scalar).toEqual({type:"string",enum:["0","1","2","3","4","5","6","7","8","9","10","11","12"]});
+ const validator=z.fromJSONSchema(scalar as Parameters<typeof z.fromJSONSchema>[0]);
+ for(const rank of ["0","1","2","3","4","5","6","7","8","9","10","11","12"])expect(validator.safeParse(rank).success).toBe(true);
+ for(const rank of [0,null,"01","+1","-1"," 1","1 ","1e0","1.0","13","١","PRIVATE_RANK".repeat(1000)])expect(validator.safeParse(rank).success).toBe(false);
+ const old=structuredClone(schema);old.$defs!.r={type:"string"};expect(createHash("sha256").update(JSON.stringify(old)).digest("hex")).toBe("ccdaa04f90eeef364c33c40fba24c9fbe511ceeeaf383f851ba17443fa65bd41");
+});
 it("wire78 decimal ranks preserve all thirteen ordinals without legacy coercion",()=>{
- const current=googleLiteEuContextWireSchema().schema,original=structuredClone(current);expect(current.$defs!.r).toEqual({type:"string"});original.$defs!.r={type:"integer",minimum:0,maximum:12};expect(createHash("sha256").update(JSON.stringify(original)).digest("hex")).toBe("485549cd902ac78c65ff606cc2f75f7cb5a6416b61b4ec2eeadafe93e2e23d62");
+ const current=googleLiteEuContextWireSchema().schema,original=structuredClone(current);expect(current.$defs!.r).toEqual({type:"string",enum:Array.from({length:13},(_,ordinal)=>String(ordinal))});original.$defs!.r={type:"integer",minimum:0,maximum:12};expect(createHash("sha256").update(JSON.stringify(original)).digest("hex")).toBe("485549cd902ac78c65ff606cc2f75f7cb5a6416b61b4ec2eeadafe93e2e23d62");
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}]});
  const wire=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>,carrier=wire.eventRelationChange as {rank:unknown;change:unknown};
  expect(carrier.rank).toBe("0");
@@ -71,7 +79,7 @@ it("wire68 sparse authored ranks declare membership only on actual entries",()=>
  const encoded=encodeGoogleLiteEuContextV3(canonical) as Record<string,unknown>;expect(encoded).not.toHaveProperty("changeOrder");expect(encoded.eventRelationChange).toMatchObject({rank:"0"});
  const authored={...encoded,eventRelationChange:{rank:"10",change:(encoded.eventRelationChange as {change:unknown}).change}};
  expect(parseGoogleLiteEuContextSectionsV3(authored,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
- const schema=googleLiteEuContextWireSchema().schema;expect(schema.properties).not.toHaveProperty("changeOrder");const carrier=schema.properties!.eventRelationChange;if(typeof carrier==="boolean"||typeof carrier.anyOf![0]==="boolean")throw Error("carrier schema missing");expect(carrier.anyOf![0].properties!.rank).toEqual({$ref:"#/$defs/r"});expect(schema.$defs!.r).toEqual({type:"string"});
+ const schema=googleLiteEuContextWireSchema().schema;expect(schema.properties).not.toHaveProperty("changeOrder");const carrier=schema.properties!.eventRelationChange;if(typeof carrier==="boolean"||typeof carrier.anyOf![0]==="boolean")throw Error("carrier schema missing");expect(carrier.anyOf![0].properties!.rank).toEqual({$ref:"#/$defs/r"});expect(schema.$defs!.r).toEqual({type:"string",enum:Array.from({length:13},(_,ordinal)=>String(ordinal))});
 });
 it("wire68 ranks preserve all13 fields and refuses contradictory ordinary order",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
@@ -99,7 +107,7 @@ it("wire68 exact rank schema admits sparse13-field controls while decoder reject
  const entries=(raw:Record<string,unknown>)=>[...(raw.changes as Array<{rank:string;change:unknown}>),...fields.flatMap(field=>raw[field+"Change"]?[raw[field+"Change"] as {rank:string;change:unknown}]:[])];
  for(let left=0;left<13;left++)for(let right=left+1;right<13;right++){const bad=structuredClone(wire),all=entries(bad);all[right].rank=all[left].rank;const diagnostics:unknown[]=[];expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d)).status).toBe("REFUSED");expect(diagnostics).toMatchObject([{issues:[{rankControl:{reason:"COLLISION",unavailable:false}}]}]);}
  const sparse=wireFixture(ConversationInterpretationV3Schema.parse({...canonical,changes:[canonical.changes[10]]})) as Record<string,unknown>;(sparse.eventRelationChange as {rank:string}).rank="10";expect(schema.safeParse(sparse).success).toBe(true);expect(parseGoogleLiteEuContextSectionsV3(sparse,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:[canonical.changes[10]]}}});
- for(const rank of [-1,13,.5,"01","13",null]){const bad=structuredClone(sparse);(bad.eventRelationChange as {rank:unknown}).rank=rank;expect(schema.safeParse(bad).success).toBe(typeof rank==="string");expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
+ for(const rank of [-1,13,.5,"01","13",null]){const bad=structuredClone(sparse);(bad.eventRelationChange as {rank:unknown}).rank=rank;expect(schema.safeParse(bad).success).toBe(false);expect(parseGoogleLiteEuContextSectionsV3(bad,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");}
 });
 it("wire68 root wrapper and nested controls refuse accessors without invoking get traps",()=>{
  const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence},{field:"notes",operation:"SET",value:"literal",evidence}]}),baseline=wireFixture(canonical) as Record<string,unknown>;
@@ -319,7 +327,7 @@ it.each([null,"PRIVATE_UNCERTAINTY_VALUE",{}])("wire52 nonarray uncertainty refu
 });
 it("wire52 restores only the outgoing root max4 and leaves uncertainty items and all other schema nodes unchanged",()=>{
  const schema=structuredClone(googleLiteEuContextWireSchema().schema) as unknown as {properties:{uncertainties:{maxItems?:number};changes:{maxItems?:number}}};expect(schema.properties.uncertainties.maxItems).toBe(4);delete schema.properties.uncertainties.maxItems;delete schema.properties.changes.maxItems;
- expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("85a21b30ec73df68aa1112b7b5f889ea9cf9c3dde6ad02bd39f28b7701361cb1");
+ expect(createHash("sha256").update(JSON.stringify(schema)).digest("hex")).toBe("04714899a9c5aedebadef476e2ce4554caaf6977afc1b97747444518f106e0f9");
 });
 it("wire52 valid zero/four uncertainty operands keep decoding while nested failures keep their exact item path",()=>{
  const raw=encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(minimal)) as Record<string,unknown>;
@@ -1247,8 +1255,8 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-84");
-  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("b581506fbe196fc3f2aab77f70c127ebc347f574193b26c632e52967115f7763");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-85");
+  expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("7cb6dc6f5d8dd626289c3c1aa63dfb9aecd940977bb3493b47e10fc8b0f93f46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
 });
