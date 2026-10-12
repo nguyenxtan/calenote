@@ -7,6 +7,7 @@ import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protoc
 import {decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {primaryEvidenceSourceCodebook} from "./evidence-pointer";
+import {wire91PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 
 it("producer serialization example survives both JSON layers and the unchanged source-bound decoder",()=>{
  const example=/^Serialization example \(syntax only\): (.+)$/m.exec(CONTEXT_CONTRACT_PROMPT);
@@ -30,6 +31,6 @@ it("producer serialization example survives both JSON layers and the unchanged s
  expect((diagnostics[0] as {issues:unknown[]}).issues[0]).toMatchObject({singletonJson:{stage:"JSON_PARSE",reason:"INVALID_JSON"}});
 });
 it("serialization-only paragraph inverse preserves the immutable wire88 prompt",()=>{
- const inverse=CONTEXT_CONTRACT_PROMPT.replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
+ const inverse=wire91PromptFixture(CONTEXT_CONTRACT_PROMPT).replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
  expect(createHash("sha256").update(inverse).digest("hex")).toBe("3f90c952df37db5898dafe329cd7a7c35003ea2638aa4cd9baac46a23bea4c14");
 });

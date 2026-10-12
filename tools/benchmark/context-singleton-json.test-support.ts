@@ -4,8 +4,11 @@ const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateC
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 /** Public historical prompt specimen only; immutable hashes remain asserted. */
+export function wire91PromptFixture(prompt:string):string {
+ return prompt.replace(/\nAlternative serialization:[^\n]*\nAlternative example \(syntax only\):[^\n]*\nAlternative example boundary:[^\n]*\n/u,"");
+}
 export function wire89PromptFixture(prompt:string):string {
- return prompt.replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
+ return wire91PromptFixture(prompt).replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
 }
 /** Previous source language only, never current dispatch or authority. */
 export function wire90RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {

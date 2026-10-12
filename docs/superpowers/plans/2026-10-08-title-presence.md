@@ -1,3 +1,7 @@
+## Wire92 numeric alternative serialization
+
+Wire91 fresh Formal stopped at R02T1 with a numeric leadOffsetDays/AMBIGUOUS alternative whose inner value was string; earlier three turns passed. Keep every field/reason/count and strict canonical consumer unchanged. Add producer guidance that wrapping alternative JSON never changes numeric inner values to strings, and an executable double-serialized number example with unavailable source placeholder. Example supplies syntax only, no candidate/source/semantic authority. Current prompt ef9857d2 and wire92; preserve wire91 prompt60d9 and earlier prompt3f90 through pure test-only paragraph inverses. Require source-bound unchanged-decoder numeric acceptance, string/invalid numeric refusal, unavailable placeholder refusal, RED/GREEN, all inverse/fixture/hash dependencies, strict fit, focused/type/lint/docs/build, independent same-model review, one frozen full before local commit and fresh budget-gated Formal. No semantic replay or provider calls during repair; UNKNOWN, model/provider, canonical/backend/oracle/PASS/source rules unchanged. Prior live targets remain unverified until reached.
+
 # Title Presence Implementation Plan
 
 ### Wire91 matched-distance missing-offset execution
