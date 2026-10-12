@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### USD10 authority admission and R03 continuation
+
+- [ ] RED→GREEN budget-authority max10M in context-debug-loop.ts/.test; >10M hard refusal, independent reviewed new owner record admitted, immutable old5Mrecord/ledger/history/UNKNOWN/inventory retained. Same accountRoot/campaign; no new money namespace, automatic grant, fake settlement or Full scope.
+- [ ] Existing reviewed security/accounting pipeline in a new ignored launcher bound to exact direct owner approval, new append-only owner/authority filenames and10Mcap. Preserve old launcher/record/pins. Focused/type/lint/diff and independent review before trusted preflight/credential/live.
+- [ ] Root-cause actual R03 request schema/cap through public actual-service matching; isolate provider schema factors with bounded accounted probes if needed. No blind unchanged Formal rerun, semantic/evidence/canonical/oracle weakening or private compiler claim. TDD/affected checks, frozen full/review/local commit precede repaired Formal Pilot. Continue until genuine FormalPASS or budget/security/out-of-scope gate; no Full/push/merge/deploy/remote migration.
+
 ### Wire81 complete bound-answer applicability execution
 
 BASE95bf4989800a36d60589150ce3172f00158e7bef; TOP wire81 spec, existing continuous conservative USD5 scope.

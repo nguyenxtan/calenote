@@ -13,7 +13,7 @@ import {createContextHttpTransport,type SemanticTransport} from "../../src/modul
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const digest=z.string().regex(/^[a-f0-9]{64}$/u);
 const schema=z.strictObject({version:z.literal("t11-debug-loop-authority-1"),operation:z.literal("T11_SCHEMA_DEBUG_THROUGH_FORMAL_PILOT"),
- accountRoot:z.string(),campaignRoot:z.string(),hardCapMicrounits:z.number().int().positive().max(5000000),accountingPolicy:z.literal("CONSERVATIVE_DEBUG_V1"),
+ accountRoot:z.string(),campaignRoot:z.string(),hardCapMicrounits:z.number().int().positive().max(10000000),accountingPolicy:z.literal("CONSERVATIVE_DEBUG_V1"),
  model:z.literal("google/gemini-2.5-flash-lite"),provider:z.literal("google-vertex/eu"),retry:z.literal(0),fallback:z.literal("none"),stream:z.literal(false),
  manifestSha256:digest,ownerMessagePath:z.string(),ownerMessageSha256:digest});
 export interface DebugFreshRunTrust {recordPath:string;reviewedRecordSha256:string;reviewedOwnerMessageSha256:string;reviewedEvidenceSha256:string;expectedCandidateSha:string;parentDirectory:string}
