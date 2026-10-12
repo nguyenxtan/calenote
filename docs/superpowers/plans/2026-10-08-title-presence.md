@@ -1,5 +1,10 @@
 # Title Presence Implementation Plan
 
+### Wire91 matched-distance missing-offset execution
+
+- [ ] Source/factual Boolean plus existing producer field11/MISSING exclusion only; keep all other pairs/scopes. Actual causal unchanged-service marker witness, raw producer RED/GREEN with authoritative codebook, retained independent-offset guard, fact/slot/pending/history negatives and full16x4/alternative differential.
+- [ ] Preserve pre-wire91/89 constructor snapshots and immutable historical hashes; coherent wire91 metadata while prompt/generic/cap16 stay unchanged. Gather focused/type/lint/strict67/326/docs/build/dependency gates, reviewer/refreeze/one unchanged full. Only then local commit/preflight/FreshFormal with settlement and existing USD10/UNKNOWN; no backend/PASS/source authority widening/output repair/replay/push/merge/deploy.
+
 ### Wire90 serialization-only producer execution
 
 - [ ] RED missing executable nested JSON syntax example; GREEN generated example/source-instantiated unchanged decoder, placeholder refusal and malformed-inner regression. Exact serialization paragraph inverse preserves prior prompt; current prompt pin and wire90 metadata coherent, generic schema/cap16 unchanged.

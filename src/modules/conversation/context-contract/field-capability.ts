@@ -19,6 +19,33 @@ export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean
 }
 export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
+/** Existing matched-count distance grammar grants relation only, not a new
+ * independent offset requirement. Producer exclusion only; no operand output. */
+export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):boolean {
+  if(!isBoundRetainedSeriesNotesFree(input)||isBoundReminderClockAnswer(input)
+    ||input.currentTurn!==input.turns.length-1||input.turns.length>12
+    ||typeof input.reference?.instant!=="string"||!Number.isFinite(Date.parse(input.reference.instant))
+    ||input.activeRequest?.lifecycle!=="CLARIFYING"
+    ||input.pendingQuestion?.field!=="reminderTime"||input.pendingQuestion.reason!=="MISSING"
+    ||!Array.isArray(input.capabilities.calendars)||!input.capabilities.calendars.includes("GREGORIAN"))return false;
+  const slots=input.activeRequest.slots,offset=slots.leadOffsetDays;
+  if(!offset||offset.state!=="MISSING"||offset.value!==null||offset.fact!==null
+    ||input.facts.some(fact=>fact?.field==="leadOffsetDays"))return false;
+  for(const field of ["frequency","occurrenceCount","eventDate"] as const){
+    const slot=slots[field];if(slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
+    const facts=input.facts.filter(fact=>fact?.alias===slot.fact);
+    if(facts.length!==1||facts[0].scope!=="REMINDER"||facts[0].field!==field
+      ||input.facts.filter(fact=>fact?.scope==="REMINDER"&&fact.field===field).length!==1
+      ||JSON.stringify(facts[0].value)!==JSON.stringify(slot.value))return false;
+  }
+  const date=slots.eventDate.value;
+  return !!date&&date.kind==="CIVIL_DATE"&&date.calendar==="GREGORIAN"
+    &&!deriveGenerationFieldCapability(input).allowedNumericFields.includes("leadOffsetDays")
+    // Negative-only probe of the retained first USER source. This view is
+    // never serialized or used as a request, operand, evidence or authority.
+    &&!deriveGenerationFieldCapability({...input,currentTurn:0}).allowedNumericFields.includes("leadOffsetDays");
+}
+
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */
 export function isBoundExactReminderClockMissingExcluded(input: ContextInput): boolean {
   return Number.isFinite(Date.parse(input.reference.instant))

@@ -7,10 +7,15 @@ import {serializeContextRequest} from "../../src/modules/conversation/context-co
 export function wire89PromptFixture(prompt:string):string {
  return prompt.replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
 }
+/** Previous source language only, never current dispatch or authority. */
+export function wire90RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
+ const inverse=vi.spyOn(capabilityModule,"isBoundSeriesDistanceOffsetMissingExcluded").mockReturnValue(false);
+ try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+}
 /** Pure synchronous public pre-wire89 source-condition inverse, never dispatch. */
 export function wire88RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isInitialExplicitReminderIntentKnown").mockReturnValue(false);
- try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+ try{return wire90RequestFixture(input);}finally{inverse.mockRestore();}
 }
 /** Controlled fixture authoring only; never called by production transport. */
 function data(object:object,key:PropertyKey){const descriptor=Object.getOwnPropertyDescriptor(object,key);return descriptor&&Object.hasOwn(descriptor,"value")?descriptor.value:undefined;}
@@ -44,13 +49,14 @@ function authoring<T>(wire:T,unwrap:boolean):T{
 }
 export const unwrapSingletonAuthoringFixture=<T>(wire:T):T=>authoring(wire,true);
 export const wrapSingletonAuthoringFixture=<T>(wire:T):T=>authoring(wire,false);
-/** Pure pre-wire89 typed specimen capture. Both synchronous spies always restored. */
+/** Pure pre-wire89 typed specimen capture. All synchronous spies restored. */
 export function typedSingletonSchemaFixture(...args:Parameters<typeof googleLiteEuContextWireSchemaV3>):ReturnType<typeof googleLiteEuContextWireSchemaV3>{
  const clone=globalThis.structuredClone,candidates:Array<ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]>=[];
  const inverse=vi.spyOn(capabilityModule,"isInitialExplicitReminderIntentKnown").mockReturnValue(false);
+ const seriesInverse=vi.spyOn(capabilityModule,"isBoundSeriesDistanceOffsetMissingExcluded").mockReturnValue(false);
  const spy=vi.spyOn(globalThis,"structuredClone").mockImplementation(value=>{const result=clone(value);const node=value as {properties?:{changes?:{maxItems?:unknown}}};if(typeof node?.properties?.changes?.maxItems==="number"&&node.properties.changes.maxItems<=3){if(candidates.length>=16)throw Error("PUBLIC_TYPED_SPECIMEN_BOUND");candidates.push(clone(value) as typeof candidates[number]);}return result;});
  try{const result=googleLiteEuContextWireSchemaV3(...args),matching=new Map<string,typeof result.schema>();
   for(const candidate of candidates){const restored=clone(result.schema);for(const root of roots)restored.properties![root]=candidate.properties![root];if(JSON.stringify(restored)===JSON.stringify(candidate))matching.set(JSON.stringify(candidate),candidate);}
   if(matching.size!==1)throw Error("PUBLIC_TYPED_SPECIMEN_CAPTURE");return {...result,schema:[...matching.values()][0]};
- }finally{spy.mockRestore();inverse.mockRestore();}
+ }finally{spy.mockRestore();seriesInverse.mockRestore();inverse.mockRestore();}
 }
