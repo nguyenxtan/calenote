@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
-import {wire97RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire97RequestFixture,wire98RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
@@ -26,7 +26,7 @@ const schema=(input:ContextInput)=>googleLiteEuContextWireSchemaV3(capability.de
 const validator=(s:ReturnType<typeof schema>)=>z.fromJSONSchema(inline(s,s.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
 it.each(["clockless","clocked","unresolved-clock"])("whole %s source excludes only unsupported relation uncertainty language",kind=>{
  const input=structuredClone(kind==="clockless"?clockless:clocked);if(kind==="unresolved-clock")input.turns[0].text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc chưa rõ.";
- const current=schema(input),old=wire97RequestFixture(input).response_format.json_schema.schema,a=validator(current),b=validator(old),absent=capability.isInitialRelationUncertaintyAbsent(input);
+ const current=wire98RequestFixture(input).response_format.json_schema.schema,old=wire97RequestFixture(input).response_format.json_schema.schema,a=validator(current),b=validator(old),absent=capability.isInitialRelationUncertaintyAbsent(input);
  if(kind!=="unresolved-clock")expect(absent).toBe(true);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const n of [0,1,2]){
   const raw=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(raw).success,`${fieldCode}/${reason}/${n}`).toBe(fieldCode===10&&absent?false:b.safeParse(raw).success);
@@ -40,7 +40,7 @@ it.each(["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])("currently admitted 
 it("independent relation/offset, unknown discourse, retained context and facts keep every prior byte",()=>{
  const controls=[structuredClone(bound)];
  for(const text of ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp trước sự kiện.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc trước 5 ngày.","Nếu ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 31 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc hai ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp trước hoặc sau sự kiện."]){const input=structuredClone(clockless);input.turns[0].text=text;controls.push(input);}
- for(const input of controls){expect(capability.isInitialRelationUncertaintyAbsent(input)).toBe(false);expect(schema(input)).toEqual(wire97RequestFixture(input).response_format.json_schema.schema);}
+ for(const input of controls){expect(capability.isInitialRelationUncertaintyAbsent(input)).toBe(false);expect(wire98RequestFixture(input).response_format.json_schema.schema).toEqual(wire97RequestFixture(input).response_format.json_schema.schema);}
  for(const patch of [{activeRequest:{}},{facts:[{alias:"f1",field:"eventRelation"}]},{pendingQuestion:{}},{ambiguities:[{}]},{currentTurn:1},{reference:{...clockless.reference,instant:"invalid"}},{capabilities:{...clockless.capabilities,calendars:[]}}])expect(capability.isInitialRelationUncertaintyAbsent({...structuredClone(clockless),...patch} as unknown as ContextInput)).toBe(false);
 });
 it.each(["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"] as const)("direct consumer still parses supplied relation %s and numeric marker with authored singleton",reason=>{

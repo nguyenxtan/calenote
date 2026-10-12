@@ -31,10 +31,19 @@ export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):b
     .some(value=>supportsEventRelation(value,[probes.source],[probes.turn]));
 }
 
+/** The finite whole task grammar uses "trước" for independent distance.
+ * Any occurrence, including a venue, conservatively declines silence. The
+ * relation verifier is value support, not cue absence; flexible layout also
+ * declines. Original source/evidence text is never normalized or rewritten. */
+function hasConservativeWholeSourceEligibility(text:string):boolean {
+  return !/[^\S ]| {2}/u.test(text)&&!/trước/iu.test(text);
+}
+
 /** Complete empty initial source has no independently grounded relation
  * uncertainty candidate or competing fact. Producer language only. */
 export function isInitialRelationUncertaintyAbsent(input:ContextInput):boolean {
-  return isInitialFiniteSeriesWithoutRelationSource(input);
+  return isInitialFiniteSeriesWithoutRelationSource(input)
+    &&typeof input.turns[0]?.text==="string"&&hasConservativeWholeSourceEligibility(input.turns[0].text);
 }
 
 /** Existing matched-count distance grammar grants relation only, not a new
@@ -83,6 +92,14 @@ export function isWholeSeriesOffsetAlternativeAbsent(input:ContextInput):boolean
     &&isInitialExplicitReminderIntentKnown(input)&&isInitialEventDateOnlySource(input)
     &&isInitialEventDateYearNullRequired(input)&&isInitialSupportedCadenceCount(input);
   return initial||isBoundSeriesDistanceOffsetMissingExcluded(input);
+}
+
+/** Full uncertainty absence is stronger than supported candidate absence.
+ * Private negative source classification only; no operand/value is returned. */
+export function isWholeSeriesOffsetUncertaintyAbsent(input:ContextInput):boolean {
+  if(!isWholeSeriesOffsetAlternativeAbsent(input))return false;
+  const first=input.turns[0];
+  return first?.role==="USER"&&typeof first.text==="string"&&hasConservativeWholeSourceEligibility(first.text);
 }
 
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */
