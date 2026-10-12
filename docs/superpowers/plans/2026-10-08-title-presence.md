@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire86 complete singleton value grammar
+
+- [ ] RED serialized policy exact all-ten value families and all-other-byte inverse; raw eventRelation OBJECT refusal versus valid STRING with preserved rank/evidence; compact family/CLEAR/flagged-date and actual service zero-mutation witnesses.
+- [ ] GREEN one approved Singletons sentence, wire86/current prompt/version pins; schema/cap16/decoder/canonical/evidence/ownership/merge/oracle unchanged. Exact historical sentence inverse, no guard repins or response repair.
+- [ ] Focused affected/changed-history once after migrations, type/lint/diff, ENTIRE67/all32612000/1536; independent C0/I0/localcommit. One controller current R02T1 hypothesis check, then after coherence fresh full same candidate and Formal under existing USD10 authority. No child provider/key/accounting/full/commit/newagents, no push/merge/deploy.
+
 ### Wire85 exact rank generation domain
 
 - [ ] RED actual outgoing shared rank admits only all thirteen exact strings, rejects malformed/type/security variants; prove scalar-only schema inverse and reuse global rank/source/payload/service refusal controls.

@@ -13,6 +13,7 @@ import { z } from "zod";
 import { projectWireValidation } from "../../../conversation/context-contract/validation-diagnostics";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
+import {resolveSingleValidationTarget} from "../../../../../tools/benchmark/context-contract-runner";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 // Pre-wire82 structural cases use an explicit authoring view. Actual wire82
@@ -577,6 +578,13 @@ it("wire84 actual R02 multi-singleton rank collision refuses atomically without 
  const h=await createContextContractProbe({sourceSha:"92a5b87529d0d9b65142178c716eec646fd84027",referenceNow:Date.parse(script.turns[0].receipt),liveGateway:observed},()=>{throw Error("FORBIDDEN_FIXTURE_PATH")});
  try{expect(await h.turn(script.turns[0].text,script.turns[0].receipt)).toMatchObject({status:"REJECTED",fullSchemaValid:false,listStoreReads:0,mutations:0});expect(calls).toBe(1);expect(captured).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventDateChange","rank"],expected:"CHANGE_RANK",rankControl:{reason:"COLLISION",actualRank:0,collisionLocations:[{root:"titleChange"}]}}]}}});}finally{h.dispose();}
 });
+it.each([false,true])("wire86 actual R02 relation object=%s preserves strict value ownership and atomic service",async wrongObject=>{
+ const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1}),script=regressions.cases.find(item=>item.id==="R02")!;let captured:unknown,calls=0;
+ const gateway=createContextContractGateway(config,async request=>{calls++;const context=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete context[key];const bound=ContextInputSchema.parse(context),raw=encodeOpaqueFixtureV3(frozenContextProposal(bound,"R02",1),bound) as Record<string,{rank:string;change:string}>,change=JSON.parse(raw.eventRelationChange.change);expect(change.value).toBe("BEFORE_EVENT");if(wrongObject)change.value={kind:"BEFORE_EVENT"};raw.eventRelationChange.change=JSON.stringify(change);return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-wire86-local",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})};},{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const observed:typeof gateway={prepare(tier,bound){const attempt=gateway.prepare(tier,bound);return attempt.status!=="READY"?attempt:{...attempt,dispatch:async()=>{const result=await attempt.dispatch();captured=result;return result}}}};
+ const h=await createContextContractProbe({sourceSha:"aa0cc97240e6ea6d5982ed2001cf8fe79cafb0ed",referenceNow:Date.parse(script.turns[1].receipt),contextSeed:selected.contextSeed.state,liveGateway:observed},()=>{throw Error("FORBIDDEN_FIXTURE_PATH")});
+ try{const result=await h.turn(script.turns[1].text,script.turns[1].receipt);expect(result).toMatchObject({fullSchemaValid:!wrongObject,listStoreReads:0,mutations:0});expect(result.status==="REJECTED").toBe(wrongObject);expect(calls).toBe(1);if(wrongObject)expect(captured).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["eventRelationChange","change"],expected:"FIELD_CHANGE"},{path:["eventRelationChange","change","value"],actualType:"object",expected:"CONTROL_ENUM"}]}}});else expect(captured).toMatchObject({status:"SUCCESS"});}finally{h.dispose();}
+});
 it.each([[42,"number"],[null,"null"],[[],"array"],[{PRIVATE_VALUE:"PRIVATE_SECRET"},"object"]] as const)("decoded singleton predicate diagnostics retain primary refusal and identify value type %s",(value,actualType)=>{
  const raw=wireModule.encodeGoogleLiteEuContextV3(wire82Canonical()) as Record<string,{rank:string;change:string}>;
  const change=JSON.parse(raw.titleChange.change);change.value=value;raw.titleChange.change=JSON.stringify(change);const before=JSON.stringify(raw),diagnostics:unknown[]=[];
@@ -1091,6 +1099,10 @@ const evidence = [quote, { kind: "CONTEXT_FACT", ref: "f1" }, quote];
 const civil = { kind: "CIVIL_DATE", calendar: "GREGORIAN", day: 31, month: 12, year: 9999, leapMonth: null };
 const clock = { hour: 23, minute: 59, qualifier: "H24" };
 const values = { title: "t".repeat(1800), location: "l".repeat(300), notes: "n".repeat(2000), eventDate: civil, eventTime: clock, reminderDate: { kind: "RELATIVE_DAY", offsetDays: -366 }, reminderTime: clock, calendar: "LUNAR_VN", frequency: "DAILY", occurrenceCount: Number.MAX_SAFE_INTEGER, eventRelation: "BEFORE_EVENT", leadOffsetDays: Number.MAX_SAFE_INTEGER, endDate: { kind: "WEEKDAY", weekday: 7, qualifier: "NEXT_WEEK" } };
+it("wire86 all ten raw singleton value families and CLEAR preserve authored literals ranks and evidence",()=>{
+ const families={title:"literal",location:"venue",eventDate:civil,eventTime:clock,reminderDate:{kind:"RELATIVE_DAY",offsetDays:2},reminderTime:clock,frequency:"DAILY",occurrenceCount:2,eventRelation:"INCLUDING_EVENT",endDate:{kind:"WEEKDAY",weekday:2,qualifier:"NEXT_WEEK"}};
+ for(const [field,value]of Object.entries(families))for(const operation of ["SET","REPLACE","CLEAR"] as const){const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[quote]},changes:[{field,operation,value:operation==="CLEAR"?null:value,evidence:[quote]}]}),raw=wireModule.encodeGoogleLiteEuContextV3(canonical) as Record<string,{rank:string;change:string}>,before=JSON.stringify(raw),inner=JSON.parse(raw[field+"Change"].change);expect(raw[field+"Change"].rank).toBe("0");expect(inner.value===null).toBe(operation==="CLEAR");expect(wireModule.parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});expect(JSON.stringify(raw)).toBe(before);}
+});
 it("wire82 actual raw transport preserves all13 payloads operations mixed ranks and authored rotations",()=>{
  const entries=Object.entries(values);for(const operation of ["SET","REPLACE","CLEAR"] as const)for(let rotation=0;rotation<13;rotation++){
   const ordered=[...entries.slice(rotation),...entries.slice(0,rotation)],canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[quote]},conversationDirective:null,changes:ordered.map(([field,value])=>({field,operation,value:operation==="CLEAR"?null:value,evidence:[quote]}))});
@@ -1255,7 +1267,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-85");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-86");
   expect(createHash("sha256").update(JSON.stringify(schema.schema)).digest("hex")).toBe("7cb6dc6f5d8dd626289c3c1aa63dfb9aecd940977bb3493b47e10fc8b0f93f46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);

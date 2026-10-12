@@ -7,8 +7,15 @@ import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
 const innerEvidenceSentence83=' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.';
+const innerValueSentence86=' SET/REPLACE value grammar: title/location=nonblank NFC text (max1800/300 code points); frequency=STRING ONCE/DAILY/WEEKLY/MONTHLY/YEARLY/UNKNOWN; occurrenceCount=positive safe INTEGER; eventRelation=STRING BEFORE_EVENT/INCLUDING_EVENT/STARTING_ON, never an object. eventTime/reminderTime=exact {hour,minute,qualifier} object (hour0..23,minute0..59,qualifier H24/AM/PM/UNKNOWN; AM/PM hour1..12). eventDate/reminderDate/endDate follow the Final date check\'s exact DateOperand JSON-string/flagged six-key object distinction. CLEAR value=null, never a typed placeholder. No extra value keys, coercion or defaults.';
+const removeValue86=(prompt:string)=>prompt.replace(innerValueSentence86,"");
+it("wire86 serialized singleton values expose all ten families without other policy changes",()=>{
+ const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+ const policy=serializeContextRequest(input).messages[0].content;expect(policy.split(innerValueSentence86)).toHaveLength(2);expect(policy.split("\n").find(line=>line.startsWith("Singletons:"))).toContain(innerValueSentence86);
+ expect(createHash("sha256").update(removeValue86(policy)).digest("hex")).toBe("721991c4d89d39b3949cf36bd44ae30b7c8109d45b0619feb2f951d633abb0bc");
+});
 const oldOrder83='Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; unique across carriers/ordinary, gaps/sole"10" legal. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.';
-const restoreOrder84=(prompt:string)=>prompt.replace(/^Order:.*$/m,oldOrder83);
+const restoreOrder84=(prompt:string)=>removeValue86(prompt).replace(/^Order:.*$/m,oldOrder83);
 it("wire84 serialized global ranks distinguish multiple singleton roots without changing other policy bytes",()=>{
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-08T03:00:00Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
  const policy=serializeContextRequest(input).messages[0].content;
