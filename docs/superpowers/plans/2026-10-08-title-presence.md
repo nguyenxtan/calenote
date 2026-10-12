@@ -1,5 +1,10 @@
 # Title Presence Implementation Plan
 
+### Wire90 serialization-only producer execution
+
+- [ ] RED missing executable nested JSON syntax example; GREEN generated example/source-instantiated unchanged decoder, placeholder refusal and malformed-inner regression. Exact serialization paragraph inverse preserves prior prompt; current prompt pin and wire90 metadata coherent, generic schema/cap16 unchanged.
+- [ ] Gather all prompt/hash/fixture/inverse dependencies; focused/strict67/all326/type/lint/docs/build/diff EXIT0, independent reviewer, then one unchanged frozen full. Local commit/preflight/fresh Formal only after all gates. Settle first failing turn; no same-candidate schema-failure replay or fresh429 bypass; source/semantic/PASS/oracle/model/provider/USD10/UNKNOWN preserved.
+
 ### Wire89 source-known intent execution
 
 - [ ] RED absent sufficient helper and actual producer13/MISSING admission; GREEN source-only Boolean and existing missing-field exclusion, no backend/output semantic change. Whole-clause positive variants and unknown/history/pending/fact/active/ambiguity/control negatives; entire16x4 retained-domain and exact scalar-independent inverse.

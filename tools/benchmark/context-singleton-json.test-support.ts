@@ -3,6 +3,10 @@ import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/in
 const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
+/** Public historical prompt specimen only; immutable hashes remain asserted. */
+export function wire89PromptFixture(prompt:string):string {
+ return prompt.replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
+}
 /** Pure synchronous public pre-wire89 source-condition inverse, never dispatch. */
 export function wire88RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isInitialExplicitReminderIntentKnown").mockReturnValue(false);
