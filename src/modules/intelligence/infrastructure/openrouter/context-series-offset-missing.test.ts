@@ -7,7 +7,7 @@ import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
-import {wire90RequestFixture,wire94RequestFixture,wire98RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire90RequestFixture,wire94RequestFixture,wire98RequestFixture,wire100RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 let bound:ContextInput;
 beforeAll(async()=>{
  const script=regressions.cases.find(row=>row.id==="R02")!;let captured:ContextInput|undefined;
@@ -21,7 +21,7 @@ function inline(root:unknown,node:unknown,seen:string[]=[]):unknown {
  if(typeof object.$ref==="string"){const ref=object.$ref;if(Object.keys(object).length!==1||!ref.startsWith("#/")||seen.includes(ref))throw Error("TEST_REFERENCE_BINDING");const target=ref.slice(2).split("/").reduce<unknown>((value,key)=>(value as Record<string,unknown>)?.[key.replaceAll("~1","/").replaceAll("~0","~")],root);if(!target)throw Error("TEST_REFERENCE_MISSING");return inline(root,target,[...seen,ref]);}
  return Object.fromEntries(Object.entries(object).filter(([key])=>key!=="$defs").map(([key,value])=>[key,inline(root,value,seen)]));
 }
-function admits(input:ContextInput,fieldCode:number,reason:string,previousLanguage=false){const schema=previousLanguage?wire98RequestFixture(input).response_format.json_schema.schema:googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema;return z.fromJSONSchema(inline(schema,schema.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]).safeParse([{fieldCode,reason,alternatives:[]}]).success;}
+function admits(input:ContextInput,fieldCode:number,reason:string,previousLanguage:boolean|"wire100"=false){const schema=previousLanguage==="wire100"?wire100RequestFixture(input).response_format.json_schema.schema:previousLanguage?wire98RequestFixture(input).response_format.json_schema.schema:googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema;return z.fromJSONSchema(inline(schema,schema.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]).safeParse([{fieldCode,reason,alternatives:[]}]).success;}
 it("actual bound producer forbids the causally harmful missing-offset marker",()=>{expect(admits(bound,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(false);});
 it.each(["Nhắc trước 2 ngày.","Nhắc tôi trước hai ngày.","2 ngày trước."])("finite retained distance source excludes only missing independent offset: %s",text=>{
  const input=structuredClone(bound);input.turns[input.currentTurn].text=text;
@@ -32,7 +32,7 @@ it.each(["Nhắc trước 2 ngày.","Nhắc tôi trước hai ngày.","2 ngày t
  const input=structuredClone(bound);input.turns[input.currentTurn].text=text;
  expect(capability.isBoundSeriesDistanceRelationMissingExcluded(input)).toBe(true);
  expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,"MISSING")).toBe(false);
- for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,reason)).toBe(true);
+ for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,reason,"wire100")).toBe(true);
 });
 it.each(["Nhắc trước 3 ngày.","Nhắc trước 5 ngày.","Nếu nhắc trước 2 ngày.","Không nhắc trước 2 ngày.",'"Nhắc trước 2 ngày."',"Nhắc trước 2 ngày rồi đi khám.","Nhắc trước 2 ngày [CONTROL].","Nhắc trước bao nhiêu ngày?","8h."])("unknown, independent or clock source retains missing offset: %s",text=>{
  const input=structuredClone(bound);input.turns[input.currentTurn].text=text;expect(excluded(input)).toBe(false);expect(capability.isBoundSeriesDistanceRelationMissingExcluded(input)).toBe(false);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(true);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,"MISSING")).toBe(true);

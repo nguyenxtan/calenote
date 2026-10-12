@@ -19,9 +19,13 @@ export function wire89PromptFixture(prompt:string):string {
  return wire91PromptFixture(prompt).replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
 }
 /** Previous source language only, never current dispatch or authority. */
+export function wire100RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
+ const inverse=vi.spyOn(capabilityModule,"isBoundRelationUncertaintyAbsent").mockReturnValue(false);
+ try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+}
 export function wire99RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isInitialReminderDateMissingExcluded").mockReturnValue(false);
- try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+ try{return wire100RequestFixture(input);}finally{inverse.mockRestore();}
 }
 export function wire98RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const relation=capabilityModule.isInitialRelationUncertaintyAbsent;
@@ -99,10 +103,11 @@ export function typedSingletonSchemaFixture(...args:Parameters<typeof googleLite
  const offsetUncertaintyInverse=vi.spyOn(capabilityModule,"isWholeSeriesOffsetUncertaintyAbsent").mockReturnValue(false);
  const relationUncertaintyInverse=vi.spyOn(capabilityModule,"isInitialRelationUncertaintyAbsent").mockReturnValue(false);
  const dateMissingInverse=vi.spyOn(capabilityModule,"isInitialReminderDateMissingExcluded").mockReturnValue(false);
+ const boundUncertaintyInverse=vi.spyOn(capabilityModule,"isBoundRelationUncertaintyAbsent").mockReturnValue(false);
  const offsetAlternativeInverse=vi.spyOn(capabilityModule,"isWholeSeriesOffsetAlternativeAbsent").mockReturnValue(false);
  const spy=vi.spyOn(globalThis,"structuredClone").mockImplementation(value=>{const result=clone(value);const node=value as {properties?:{changes?:{maxItems?:unknown}}};if(typeof node?.properties?.changes?.maxItems==="number"&&node.properties.changes.maxItems<=3){if(candidates.length>=16)throw Error("PUBLIC_TYPED_SPECIMEN_BOUND");candidates.push(clone(value) as typeof candidates[number]);}return result;});
  try{const result=googleLiteEuContextWireSchemaV3(...args),matching=new Map<string,typeof result.schema>();
   for(const candidate of candidates){const restored=clone(result.schema);for(const root of roots)restored.properties![root]=candidate.properties![root];if(JSON.stringify(restored)===JSON.stringify(candidate))matching.set(JSON.stringify(candidate),candidate);}
   if(matching.size!==1)throw Error("PUBLIC_TYPED_SPECIMEN_CAPTURE");return {...result,schema:[...matching.values()][0]};
- }finally{spy.mockRestore();dateMissingInverse.mockRestore();offsetUncertaintyInverse.mockRestore();relationUncertaintyInverse.mockRestore();offsetAlternativeInverse.mockRestore();boundRelationInverse.mockRestore();initialSeriesInverse.mockRestore();seriesInverse.mockRestore();inverse.mockRestore();}
+ }finally{spy.mockRestore();boundUncertaintyInverse.mockRestore();dateMissingInverse.mockRestore();offsetUncertaintyInverse.mockRestore();relationUncertaintyInverse.mockRestore();offsetAlternativeInverse.mockRestore();boundRelationInverse.mockRestore();initialSeriesInverse.mockRestore();seriesInverse.mockRestore();inverse.mockRestore();}
 }

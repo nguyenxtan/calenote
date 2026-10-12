@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent, isInitialRelationUncertaintyAbsent, isWholeSeriesOffsetUncertaintyAbsent, isInitialReminderDateMissingExcluded } from "../../../conversation/context-contract/field-capability";
+import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent, isInitialRelationUncertaintyAbsent, isWholeSeriesOffsetUncertaintyAbsent, isInitialReminderDateMissingExcluded, isBoundRelationUncertaintyAbsent } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -808,7 +808,7 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       });
       requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
-    const absentUncertaintyCodes=[...(isInitialRelationUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays]:[])];
+    const absentUncertaintyCodes=[...((isInitialRelationUncertaintyAbsent(primaryEvidenceInput)||isBoundRelationUncertaintyAbsent(primaryEvidenceInput))?[UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays]:[])];
     if(absentUncertaintyCodes.length){
       const items=deref(schema.properties!.uncertainties.items!,schema);
       const branches=(items.anyOf??[items]).flatMap(raw=>{

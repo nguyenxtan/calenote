@@ -2,10 +2,12 @@ import type { ContextInput } from "./contracts";
 import type { SourceEvidence } from "./state";
 import { supportsCadenceOperand } from "./cadence-count-evidence";
 import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-offset-evidence";
-import { supportsEventRelation } from "./event-relation-evidence";
+import { supportsEventRelation, hasEventRelationSourceCue } from "./event-relation-evidence";
 import { CONTROL_PLACEHOLDER } from "./projection";
+import {resolveDateOperand} from "./resolve";
+import {lunarCalendar} from "../../conversation/lunar-calendar";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
-import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
+import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isEventDateOnlySourceText, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
 
 /** Sufficient whole initial reminder source only; no operands or proposal output. */
 export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean {
@@ -35,8 +37,11 @@ export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):b
  * Any occurrence, including a venue, conservatively declines silence. The
  * relation verifier is value support, not cue absence; flexible layout also
  * declines. Original source/evidence text is never normalized or rewritten. */
+function hasCanonicalWholeSourceLayout(text:string):boolean {
+  return !/[^\S ]| {2}/u.test(text);
+}
 function hasConservativeWholeSourceEligibility(text:string):boolean {
-  return !/[^\S ]| {2}/u.test(text)&&!/trước/iu.test(text);
+  return hasCanonicalWholeSourceLayout(text)&&!/trước/iu.test(text);
 }
 
 /** Complete empty initial source has no independently grounded relation
@@ -88,6 +93,38 @@ export function isBoundSeriesDistanceRelationMissingExcluded(input:ContextInput)
   const turn={id:"bound-relation-probe",role:"USER" as const,semanticView:text};
   const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
   return supportsEventRelation("BEFORE_EVENT",[source],[turn],true);
+}
+
+/** Certified source/fact ownership only for the no-slot branch. Neither
+ * matching retained relations nor other pending fields gain this bound. */
+export function isBoundRelationUncertaintyAbsent(input:ContextInput):boolean {
+  if(!isBoundSeriesDistanceRelationMissingExcluded(input))return false;
+  const first=input.turns[0],current=input.turns[input.currentTurn],active=input.activeRequest;
+  if(!active||first?.role!=="USER"||typeof first.text!=="string"||current?.role!=="USER"||typeof current.text!=="string"
+    ||!hasConservativeWholeSourceEligibility(first.text)||!hasCanonicalWholeSourceLayout(current.text)
+    ||hasEventRelationSourceCue(first.text)||!isEventDateOnlySourceText(first.text,input.reference.instant))return false;
+  for(const field of ["eventRelation","reminderDate","endDate","reminderTime","eventTime","calendar"] as const){
+    const slot=active.slots[field];
+    if(!slot||slot.state!=="MISSING"||slot.value!==null||slot.fact!==null||input.facts.some(fact=>fact.field===field))return false;
+  }
+  if(Object.values(active.slots).some(slot=>slot.state==="CONFLICT"))return false;
+  const factual=(field:"frequency"|"occurrenceCount"|"eventDate")=>{
+    const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field);
+    return slot.state==="RESOLVED"&&slot.value!==null&&typeof slot.fact==="string"&&facts.length===1
+      &&facts[0].scope==="REMINDER"&&facts[0].alias===slot.fact&&JSON.stringify(facts[0].value)===JSON.stringify(slot.value)
+      &&facts[0].provenance?.kind==="EXPLICIT_USER"&&facts[0].dependencies?.length===0&&Number.isFinite(Date.parse(facts[0].sourceReferenceTime));
+  };
+  if(!(["frequency","occurrenceCount","eventDate"] as const).every(factual))return false;
+  const frequency=input.facts.find(fact=>fact.field==="frequency")!,count=input.facts.find(fact=>fact.field==="occurrenceCount")!,date=input.facts.find(fact=>fact.field==="eventDate")!;
+  if([frequency,count,date].some(fact=>fact.sourceReferenceTime!==date.sourceReferenceTime)||Date.parse(date.sourceReferenceTime)>Date.parse(input.reference.instant))return false;
+  const probes=cadenceCountSourceProbes(first.text);
+  if(frequency.value!=="DAILY"||probes.frequencies.length!==1||probes.frequencies[0]!=="DAILY"||probes.counts.length!==1||probes.counts[0]!==count.value)return false;
+  const value=active.slots.eventDate.value;
+  if(!value||value.kind!=="CIVIL_DATE"||value.calendar!=="GREGORIAN"||value.year!==null||value.leapMonth!==null)return false;
+  const referenceNow=Date.parse(date.sourceReferenceTime),source=extractTemporalEvidence({text:first.text,referenceNow}).date;
+  if(source.state!=="RESOLVED"||source.source!=="DAY_MONTH")return false;
+  const resolved=resolveDateOperand(value,referenceNow,lunarCalendar);
+  return resolved.status==="RESOLVED"&&resolved.date===source.localDate;
 }
 
 /** No independent offset candidate source exists in the whole initial finite
@@ -232,8 +269,11 @@ export function isInitialEventDateYearNullRequired(input:ContextInput):boolean {
 /** Unique source support is a sufficient lower bound, not availability or an
  * extracted proposal. Candidate values stay private to existing probes. */
 function initialCadenceCountProbes(input:ContextInput) {
-  if(!isInitialIsolatedExamNotesFree(input))return null;
-  const text=input.turns[0].text,length=[...text].length;
+  return isInitialIsolatedExamNotesFree(input)?cadenceCountSourceProbes(input.turns[0].text):null;
+}
+/** Existing private source probes; no operand or evidence leaves this module. */
+function cadenceCountSourceProbes(text:string) {
+  const length=[...text].length;
   const turn={id:"initial-user",role:"USER" as const,semanticView:text};
   const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
   const frequencies=["ONCE","DAILY","WEEKLY","MONTHLY","YEARLY"].filter(value=>supportsCadenceOperand("frequency",value,[source],[turn]));
