@@ -1,5 +1,11 @@
 # Title Presence Implementation Plan
 
+### Wire82 inner predicate evidence closure
+
+- [ ] RED actual raw singleton string value/evidence/extra-key faults: unchanged primary FIELD_CHANGE/STRING plus bounded safe inner paths/types/counts; no private values/keys/source text, no guessed branch. Own provider-wire.ts/.test.ts, necessary existing-projector test and actual gateway test only.
+- [ ] GREEN reuse exactly unique existing field/op branch, shared bounded local-ref inliner, Boolean diagnostic compiler and existing issue projector. Preserve every acceptance/ordering/authority rule and schema/prompt/request byte parity; inert observer/failure behavior. No new schema language or parser.
+- [ ] Focused affected regressions/type/lint/diff, independent C0/I0, local commit. Controller next minimal accounted R02 observation under existing USD10 authority; repair only from structural evidence, fresh full before subsequent Formal. No push/merge/deploy.
+
 ### Wire82 singleton JSON production correction
 
 BASEe8c72c29c82757df2ef6e6f55ef7d57161379f62; approved narrow representation proof in r03-change-controller.md and amended wire82-singleton-json-proposal.md; continuous USD10 conservative authority, no deployment.

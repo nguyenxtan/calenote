@@ -1,5 +1,5 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
-import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, projectCatalogueDiagnostic, type CatalogueDiagnostic, type DateOperandDiagnostic } from "../../../conversation/context-contract/validation-diagnostics";
+import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, projectCatalogueDiagnostic, type CatalogueDiagnostic, type DateOperandDiagnostic, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
 import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
@@ -208,7 +208,8 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
 class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
     readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
-    readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic,readonly catalogue?:CatalogueDiagnostic) { super("WIRE_SHAPE_INVALID"); }
+    readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic,readonly catalogue?:CatalogueDiagnostic,
+    readonly projectedIssues?:Pick<CanonicalValidationDiagnostics,"issues"|"truncated">) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -631,7 +632,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
         if(typeof operation!=="string"||!allowed.includes(operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,operation));
       }
     }
-    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE");
+    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,undefined,singletonPredicateDiagnostics(shape,change,definition.root));
     if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
     emitted.set(definition.field,change);
     ranked.push(entry);
@@ -922,15 +923,34 @@ function parseSingletonChangeJson(value:unknown,path:PropertyKey[]):Record<strin
  };
  scan(0);if(position!==value.length)return fail();return parsed as Record<string,unknown>;
 }
-function singletonTypedProjection(schema:Schema):Schema{
+function boundedTypedRefInliner(schema:Schema):(node:Schema)=>Schema{
  let nodes=0;
  const inline=(node:Schema,depth:number,refs:Set<string>):Schema=>{
   requireShape(depth<=64&&++nodes<=8192&&node&&typeof node==="object"&&!Array.isArray(node));
   if(node.$ref){requireShape(Object.keys(node).length===1&&/^#\/\$defs\/[^/]+$/u.test(node.$ref)&&!refs.has(node.$ref));return inline(at(schema,node.$ref),depth+1,new Set([...refs,node.$ref]));}
   const result=mapSchemas(node,child=>inline(child,depth+1,refs));delete result.$defs;return result;
  };
- const result:Schema={type:"object",properties:Object.fromEntries(singletonJsonRoots.map(root=>[root,inline(schema.properties![root],0,new Set())])),required:[...singletonJsonRoots],additionalProperties:false};
+ return node=>inline(node,0,new Set());
+}
+function singletonTypedProjection(schema:Schema):Schema{
+ const inline=boundedTypedRefInliner(schema);
+ const result:Schema={type:"object",properties:Object.fromEntries(singletonJsonRoots.map(root=>[root,inline(schema.properties![root])])),required:[...singletonJsonRoots],additionalProperties:false};
  requireShape(new TextEncoder().encode(JSON.stringify(result)).length<=524288);return result;
+}
+/** Evidence only after the original predicate refused. Never use parsed data. */
+function singletonPredicateDiagnostics(shape:Schema,change:unknown,root:string):Pick<CanonicalValidationDiagnostics,"issues"|"truncated">|undefined{
+ try{
+  if(!change||typeof change!=="object"||Array.isArray(change))return;
+  const field=Object.getOwnPropertyDescriptor(change,"field"),operation=Object.getOwnPropertyDescriptor(change,"operation");
+  if(!field||!operation||!Object.hasOwn(field,"value")||!Object.hasOwn(operation,"value"))return;
+  const node=deref(shape,providerSchemaV3),branches=(node.anyOf??[node]).map(branch=>deref(branch,providerSchemaV3)).filter(branch=>branch.properties?.field&&branch.properties.operation&&predicate(branch.properties.field,field.value,providerSchemaV3)&&predicate(branch.properties.operation,operation.value,providerSchemaV3));
+  if(branches.length!==1)return;
+  const schema=boundedTypedRefInliner(providerSchemaV3)(branches[0]);requireShape(new TextEncoder().encode(JSON.stringify(schema)).length<=524288);
+  const checked=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(change);if(checked.success)return;
+  const issues=checked.error.issues.map(issue=>({...issue,path:[root,"change",...issue.path]}));
+  const projected=projectCanonicalValidation({[root]:{change}},issues,"calenote-context-3");
+  return {issues:projected.issues.slice(0,23),truncated:projected.truncated||projected.issues.length>23};
+ }catch{return;}
 }
 function singletonJsonTransport(raw:Record<string,unknown>,mode:"encode"|"decode"):Record<string,unknown>{
  const own=(object:object,key:string,path:PropertyKey[])=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor)throw new WireShapeFailure(path,"REQUIRED_PROPERTY");if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(path,"object");return descriptor.value;};
@@ -1029,6 +1049,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
     if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
     if(error instanceof WireShapeFailure&&error.catalogue){const catalogue=projectCatalogueDiagnostic(error.catalogue);if(catalogue)diagnostic.issues[0].catalogue=catalogue;}
+    if(error instanceof WireShapeFailure&&error.projectedIssues){diagnostic.issues.push(...error.projectedIssues.issues.slice(0,23));diagnostic.truncated||=error.projectedIssues.truncated;}
     if(error instanceof WireShapeFailure){const shape=projectUncertaintyWireShape(raw,error.path,uncertaintyFieldByCode);if(shape){diagnostic.issues[0].uncertaintyShape=shape;if(error.path[2]==="fieldCode"&&shape.fieldCode===undefined)delete diagnostic.issues[0].actualSafeToken;}}
     try{observeWireInvalid?.(diagnostic);}catch{ /* Diagnostic observers cannot alter failclosed refusal. */ }
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };

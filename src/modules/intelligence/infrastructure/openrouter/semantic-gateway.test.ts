@@ -271,6 +271,12 @@ describe("observable successor route", () => {
     expect(result).toMatchObject({status:"SUCCESS",interpretation:{semantic:{requestTarget:{evidence:[{kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1}]},changes:[{evidence:[{quote:"nhắc gọi mẹ"}]}]}}});
     expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
   });
+  it("retains decoded singleton predicate issues after the original opaque refusal without payload leakage",async()=>{
+    const payload=encodeFixtureV3(contextOutput,contextInput) as {titleChange:{change:string}},change=JSON.parse(payload.titleChange.change);change.value={PRIVATE_KEY:"PRIVATE_SECRET"};payload.titleChange.change=JSON.stringify(change);let calls=0;
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-inner-diagnostic",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>{calls++;return {status:200,body}},admission).prepare("PRIMARY",contextInput);if(attempt.status!=="READY")throw Error("Expected ready");const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["titleChange","change"],code:"WIRE_SHAPE_INVALID",expected:"FIELD_CHANGE",actualType:"string"},{path:["titleChange","change","value"],code:"invalid_type",expected:"string",actualType:"object"}]}}});expect(JSON.stringify(result)).not.toMatch(/PRIVATE_KEY|PRIVATE_SECRET/);expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});expect(calls).toBe(1);
+  });
   it.each([
     [null,"stop",["choices",0,"message","content"],"invalid_type","null"],
     ["SYNTHETIC_PRIVATE_CONTENT","error",["choices",0,"finish_reason"],"invalid_value","string"],
