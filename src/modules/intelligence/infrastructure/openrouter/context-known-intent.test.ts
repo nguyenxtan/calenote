@@ -4,7 +4,7 @@ import {z} from "zod";
 import {ContextInputSchema,type ContextInput} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
-import {wire88RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire88RequestFixture,wire93RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3} from "./context-provider-wire";
 const input=(text:string)=>ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE","FINITE_DAILY"],unsupported:["YEARLY"],calendars:["GREGORIAN","LUNAR_VN"],limits:{dailyCount:30,horizonDays:366}}});
 const known=(value:ContextInput)=>(capability as unknown as {isInitialExplicitReminderIntentKnown?:(input:ContextInput)=>boolean}).isInitialExplicitReminderIntentKnown?.(value);
@@ -17,7 +17,9 @@ it.each(["Ngày 11/10 đi thi ở Nhắc.","Ngày 11/10 đi thi ở Nhắc-nhắ
 it("wire89 history or unresolved context never becomes initial reminder authority",()=>{const base=input(positives[0]);for(const change of [{turns:[{role:"USER",text:"history"},...base.turns],currentTurn:1},{ambiguities:[{field:"intent",reason:"MISSING",alternatives:[]}]},{pendingQuestion:{scope:"REMINDER",field:"intent",reason:"MISSING",text:"which?",decisionKind:null}}]){const value=ContextInputSchema.parse({...base,...change});expect(known(value)).toBe(false);expect(admits(value,13,"MISSING")).toBe(true);}});
 
 it.each(positives)("wire89 entire field/reason/alternative domain differs only at known intent missing: %s",text=>{
- const value=input(text),current=googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(value),value).schema,prior=wire88RequestFixture(value).response_format.json_schema.schema;
+ // Compare the historical wire89 language through the scoped pre-wire94
+ // constructor. Current wire94's independent marker pairs are tested raw.
+ const value=input(text),current=wire93RequestFixture(value).response_format.json_schema.schema,prior=wire88RequestFixture(value).response_format.json_schema.schema;
  expect(known(value)).toBe(true);const next=z.fromJSONSchema(inline(current,current.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]),old=z.fromJSONSchema(inline(prior,prior.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const count of [0,1,2]){const raw=[{fieldCode,reason,alternatives:Array(count).fill("{}")}];expect(next.safeParse(raw).success,`${fieldCode}/${reason}/${count}`).toBe(fieldCode===13&&reason==="MISSING"?false:old.safeParse(raw).success);}
 });

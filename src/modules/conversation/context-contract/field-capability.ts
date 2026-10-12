@@ -19,6 +19,18 @@ export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean
 }
 export { isBoundReminderClockAnswer } from "./semantic-completeness";
 
+/** Whole initial supported finite notification source proves no relation or
+ * independent offset. Negative producer bound only; no operand is returned. */
+export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):boolean {
+  if(typeof input.reference?.instant!=="string"||!Number.isFinite(Date.parse(input.reference.instant))
+    ||!Array.isArray(input.capabilities?.calendars)||!input.capabilities.calendars.includes("GREGORIAN")
+    ||!isInitialExplicitReminderIntentKnown(input)||!isInitialEventDateOnlySource(input)||!isInitialEventDateYearNullRequired(input)
+    ||!isInitialExplicitReminderClockRequired(input)||!isInitialSupportedCadenceCount(input))return false;
+  const probes=initialCadenceCountProbes(input);
+  return !!probes && !(["BEFORE_EVENT","INCLUDING_EVENT","STARTING_ON"] as const)
+    .some(value=>supportsEventRelation(value,[probes.source],[probes.turn]));
+}
+
 /** Existing matched-count distance grammar grants relation only, not a new
  * independent offset requirement. Producer exclusion only; no operand output. */
 export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):boolean {
@@ -44,6 +56,16 @@ export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):b
     // Negative-only probe of the retained first USER source. This view is
     // never serialized or used as a request, operand, evidence or authority.
     &&!deriveGenerationFieldCapability({...input,currentTurn:0}).allowedNumericFields.includes("leadOffsetDays");
+}
+
+/** Exact existing matched-count USER relation support excludes only a
+ * contradictory MISSING marker. The support probe returns no operand. */
+export function isBoundSeriesDistanceRelationMissingExcluded(input:ContextInput):boolean {
+  if(!isBoundSeriesDistanceOffsetMissingExcluded(input))return false;
+  const text=input.turns[input.currentTurn].text,length=[...text].length;
+  const turn={id:"bound-relation-probe",role:"USER" as const,semanticView:text};
+  const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
+  return supportsEventRelation("BEFORE_EVENT",[source],[turn],true);
 }
 
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */

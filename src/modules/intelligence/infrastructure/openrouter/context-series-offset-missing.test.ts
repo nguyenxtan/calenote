@@ -28,8 +28,14 @@ it.each(["Nhắc trước 2 ngày.","Nhắc tôi trước hai ngày.","2 ngày t
  expect(excluded(input)).toBe(true);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(false);
  for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,reason)).toBe(true);
 });
+it.each(["Nhắc trước 2 ngày.","Nhắc tôi trước hai ngày.","2 ngày trước."])("exact matched-count relation also excludes contradictory missing relation: %s",text=>{
+ const input=structuredClone(bound);input.turns[input.currentTurn].text=text;
+ expect(capability.isBoundSeriesDistanceRelationMissingExcluded(input)).toBe(true);
+ expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,"MISSING")).toBe(false);
+ for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,reason)).toBe(true);
+});
 it.each(["Nhắc trước 3 ngày.","Nhắc trước 5 ngày.","Nếu nhắc trước 2 ngày.","Không nhắc trước 2 ngày.",'"Nhắc trước 2 ngày."',"Nhắc trước 2 ngày rồi đi khám.","Nhắc trước 2 ngày [CONTROL].","Nhắc trước bao nhiêu ngày?","8h."])("unknown, independent or clock source retains missing offset: %s",text=>{
- const input=structuredClone(bound);input.turns[input.currentTurn].text=text;expect(excluded(input)).toBe(false);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(true);
+ const input=structuredClone(bound);input.turns[input.currentTurn].text=text;expect(excluded(input)).toBe(false);expect(capability.isBoundSeriesDistanceRelationMissingExcluded(input)).toBe(false);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(true);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,"MISSING")).toBe(true);
 });
 it("unbound state and inconsistent retained facts grant no exclusion",()=>{
  const cases=[{activeRequest:null},{pendingQuestion:null},{pendingQuestion:{...bound.pendingQuestion!,field:"leadOffsetDays"}},{facts:undefined},{reference:{...bound.reference,instant:"invalid"}}];
@@ -40,14 +46,14 @@ it("independent offset in the retained whole USER source never loses its missing
  const input=structuredClone(bound);input.turns[0].text=input.turns[0].text.replace(/\.$/u,", nhắc trước 5 ngày.");
  expect(excluded(input)).toBe(false);expect(admits(input,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays,"MISSING")).toBe(true);
 });
-it("entire field/reason/alternative domain changes only at the proven missing-offset pair",()=>{
+it("entire field/reason/alternative domain changes only at the proven bound-series missing pairs",()=>{
  const current=googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(bound),bound).schema;
  const prior=wire90RequestFixture(bound).response_format.json_schema.schema;
  const next=z.fromJSONSchema(inline(current,current.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  const old=z.fromJSONSchema(inline(prior,(prior.properties!.uncertainties)) as Parameters<typeof z.fromJSONSchema>[0]);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const count of [0,1,2]){
   const raw=[{fieldCode,reason,alternatives:Array(count).fill("{}")}];
-  expect(next.safeParse(raw).success,`${fieldCode}/${reason}/${count}`).toBe(fieldCode===UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays&&reason==="MISSING"?false:old.safeParse(raw).success);
+  expect(next.safeParse(raw).success,`${fieldCode}/${reason}/${count}`).toBe([UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation,UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays].includes(fieldCode as 10|11)&&reason==="MISSING"?false:old.safeParse(raw).success);
  }
 });
 it("historical constructor never mutates input or leaks its scoped source inverse",()=>{
