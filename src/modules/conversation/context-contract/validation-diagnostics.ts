@@ -65,9 +65,15 @@ export interface CanonicalValidationIssue {
   catalogue?:CatalogueDiagnostic;
   rankControl?:RankControlDiagnostic;
   dateOperand?:DateOperandDiagnostic;
+  singletonJson?:SingletonJsonDiagnostic;
   uncertaintyShape?:UncertaintyWireShape;
   /** carrierCount counts observed non-null object roots, not validated changes. */
   carrierPosition?: {reason:"NON_INTEGER"|"NEGATIVE"|"COLLISION"|"OUT_OF_RANGE"|"UNCLASSIFIED";actualIndex?:number;ordinaryCount:number;carrierCount:number;combinedCount:number;minIndex:0;maxIndex:number;collisionRoots:string[]};
+}
+/** Decoder-owned finite refusal controls; no authored JSON or key names. */
+export interface SingletonJsonDiagnostic {
+  stage:"WIRE_VALUE"|"JSON_PARSE"|"JSON_SCAN"|"TYPED_PREDICATE"|"TYPED_PROJECTION";
+  reason:"WRONG_WIRE_TYPE"|"OVERSIZED"|"INVALID_JSON"|"NON_OBJECT"|"DUPLICATE_KEY"|"DEPTH_LIMIT"|"NODE_LIMIT"|"SCAN_INVALID"|"INVALID_TYPED_ROOT"|"PROJECTION_UNAVAILABLE";
 }
 export interface UncertaintyWireShape {
   index:number;itemType:string;keys:string[];unavailable:boolean;

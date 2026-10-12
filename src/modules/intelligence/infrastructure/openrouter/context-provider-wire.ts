@@ -209,7 +209,8 @@ class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
     readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
     readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic,readonly catalogue?:CatalogueDiagnostic,
-    readonly projectedIssues?:Pick<CanonicalValidationDiagnostics,"issues"|"truncated">) { super("WIRE_SHAPE_INVALID"); }
+    readonly projectedIssues?:Pick<CanonicalValidationDiagnostics,"issues"|"truncated">,
+    readonly singletonJson?:import("../../../conversation/context-contract/validation-diagnostics").SingletonJsonDiagnostic) { super("WIRE_SHAPE_INVALID"); }
 }
 function requireWireKeys(object: Record<string, unknown>, required: string[], allowed: string[], path: PropertyKey[]) {
   for (const key of required) if (!Object.hasOwn(object, key)) throw new WireShapeFailure([...path, key], "REQUIRED_PROPERTY");
@@ -632,7 +633,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
         if(typeof operation!=="string"||!allowed.includes(operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,operation));
       }
     }
-    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,undefined,singletonPredicateDiagnostics(shape,change,definition.root));
+    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,undefined,singletonPredicateDiagnostics(shape,change,definition.root),{stage:"TYPED_PREDICATE",reason:"INVALID_TYPED_ROOT"});
     if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
     emitted.set(definition.field,change);
     ranked.push(entry);
@@ -908,16 +909,18 @@ export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapa
 }
 /** Private lexical syntax guard for a single bounded change envelope only. */
 function parseSingletonChangeJson(value:unknown,path:PropertyKey[]):Record<string,unknown>{
- const fail=():never=>{throw new WireShapeFailure(path,"FIELD_CHANGE_JSON")};
- if(typeof value!=="string"||value.length>32768||new TextEncoder().encode(value).length>32768)return fail();
- let parsed:unknown;try{parsed=JSON.parse(value)}catch{return fail()}
- if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return fail();
+ const fail=(stage:NonNullable<WireShapeFailure["singletonJson"]>["stage"]="JSON_SCAN",reason:NonNullable<WireShapeFailure["singletonJson"]>["reason"]="SCAN_INVALID"):never=>{throw new WireShapeFailure(path,"FIELD_CHANGE_JSON",undefined,undefined,undefined,undefined,undefined,undefined,{stage,reason})};
+ if(typeof value!=="string")return fail("WIRE_VALUE","WRONG_WIRE_TYPE");
+ if(value.length>32768||new TextEncoder().encode(value).length>32768)return fail("WIRE_VALUE","OVERSIZED");
+ let parsed:unknown;try{parsed=JSON.parse(value)}catch{return fail("JSON_PARSE","INVALID_JSON")}
+ if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return fail("JSON_PARSE","NON_OBJECT");
  const token=/[ \t\r\n]*(?:"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\]:,])[ \t\r\n]*/y;
  let position=0,nodes=0;
  const next=()=>{token.lastIndex=position;const match=token.exec(value);if(!match)return fail();position=token.lastIndex;return match[0].trim()};
  const scan=(depth:number,part=next()):void=>{
-  if(depth>8||++nodes>256)return fail();
-  if(part==="{"){const keys=new Set<string>();let key=next();if(key==="}")return;for(;;){if(!key.startsWith('"'))return fail();const decoded=JSON.parse(key) as string;if(keys.has(decoded))return fail();keys.add(decoded);if(next()!==":")return fail();scan(depth+1);const separator=next();if(separator==="}")return;if(separator!==",")return fail();key=next();}}
+  if(depth>8)return fail("JSON_SCAN","DEPTH_LIMIT");
+  if(++nodes>256)return fail("JSON_SCAN","NODE_LIMIT");
+  if(part==="{"){const keys=new Set<string>();let key=next();if(key==="}")return;for(;;){if(!key.startsWith('"'))return fail();const decoded=JSON.parse(key) as string;if(keys.has(decoded))return fail("JSON_SCAN","DUPLICATE_KEY");keys.add(decoded);if(next()!==":")return fail();scan(depth+1);const separator=next();if(separator==="}")return;if(separator!==",")return fail();key=next();}}
   if(part==="["){let first=next();if(first==="]")return;for(;;){scan(depth+1,first);const separator=next();if(separator==="]")return;if(separator!==",")return fail();first=next();}}
   if(["}","]",":",","].includes(part))return fail();
  };
@@ -963,8 +966,8 @@ function singletonJsonTransport(raw:Record<string,unknown>,mode:"encode"|"decode
 function assertSingletonTypedRoots(raw:Record<string,unknown>,input?:ContextInput):void{
   const projection=Object.fromEntries(singletonJsonRoots.map(root=>[root,Object.getOwnPropertyDescriptor(raw,root)?.value]));
   const schema=singletonTypedProjection(typedWireSchemaV3(input?deriveGenerationFieldCapability(input):undefined,input));
-  let checked:ReturnType<z.ZodType["safeParse"]>;try{checked=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(projection)}catch{throw new WireShapeFailure([],"FIELD_CHANGE_JSON")}
-  if(!checked.success){const root=checked.error.issues[0]?.path[0];throw new WireShapeFailure(typeof root==="string"&&(singletonJsonRoots as readonly string[]).includes(root)?[root,"change"]:[],"FIELD_CHANGE_JSON");}
+  let checked:ReturnType<z.ZodType["safeParse"]>;try{checked=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(projection)}catch{throw new WireShapeFailure([],"FIELD_CHANGE_JSON",undefined,undefined,undefined,undefined,undefined,undefined,{stage:"TYPED_PROJECTION",reason:"PROJECTION_UNAVAILABLE"})}
+  if(!checked.success){const root=checked.error.issues[0]?.path[0];throw new WireShapeFailure(typeof root==="string"&&(singletonJsonRoots as readonly string[]).includes(root)?[root,"change"]:[],"FIELD_CHANGE_JSON",undefined,undefined,undefined,undefined,undefined,undefined,{stage:"TYPED_PROJECTION",reason:"INVALID_TYPED_ROOT"});}
 }
 export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretationV3,input?:ContextInput): unknown {
   const parsed = ConversationInterpretationV3Schema.parse(canonical);
@@ -1048,6 +1051,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     const diagnostic=error instanceof EvidencePointerFailure ? projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3") : error instanceof WireShapeFailure ? projectWireValidation(raw, error.path, error.expected, error.extraKeyCount, "calenote-context-3", error.cardinality, error.control) : projectCanonicalValidation(raw, [], "calenote-context-3");
     if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
     if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
+    if(error instanceof WireShapeFailure&&error.singletonJson)diagnostic.issues[0].singletonJson={...error.singletonJson};
     if(error instanceof WireShapeFailure&&error.catalogue){const catalogue=projectCatalogueDiagnostic(error.catalogue);if(catalogue)diagnostic.issues[0].catalogue=catalogue;}
     if(error instanceof WireShapeFailure&&error.projectedIssues){diagnostic.issues.push(...error.projectedIssues.issues.slice(0,23));diagnostic.truncated||=error.projectedIssues.truncated;}
     if(error instanceof WireShapeFailure){const shape=projectUncertaintyWireShape(raw,error.path,uncertaintyFieldByCode);if(shape){diagnostic.issues[0].uncertaintyShape=shape;if(error.path[2]==="fieldCode"&&shape.fieldCode===undefined)delete diagnostic.issues[0].actualSafeToken;}}
