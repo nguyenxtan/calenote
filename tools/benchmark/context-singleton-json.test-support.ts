@@ -19,9 +19,15 @@ export function wire89PromptFixture(prompt:string):string {
  return wire91PromptFixture(prompt).replace(/\nSingleton serialization:[^\n]*\nSerialization example \(syntax only\):[^\n]*\nSerialization example boundary:[^\n]*\n/u,"");
 }
 /** Previous source language only, never current dispatch or authority. */
+export function wire96RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
+ const current=capabilityModule.isInitialFiniteSeriesWithoutRelationSource;
+ if(vi.isMockFunction(current))return serializeContextRequest(input);
+ const inverse=vi.spyOn(capabilityModule,"isInitialFiniteSeriesWithoutRelationSource").mockImplementation(value=>capabilityModule.isInitialExplicitReminderClockRequired(value)&&current(value));
+ try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+}
 export function wire94RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isWholeSeriesOffsetAlternativeAbsent").mockReturnValue(false);
- try{return serializeContextRequest(input);}finally{inverse.mockRestore();}
+ try{return wire96RequestFixture(input);}finally{inverse.mockRestore();}
 }
 export function wire93RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isInitialFiniteSeriesWithoutRelationSource").mockReturnValue(false);

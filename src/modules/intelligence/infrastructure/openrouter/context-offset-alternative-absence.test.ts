@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import * as capability from "../../../conversation/context-contract/field-capability";
-import {wire94RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire94RequestFixture,wire96RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
@@ -25,7 +25,7 @@ function inline(root:unknown,node:unknown,seen:string[]=[]):unknown {
 const prior=wire94RequestFixture;
 function validator(schema:ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]){return z.fromJSONSchema(inline(schema,schema.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);}
 it.each(["initial-clock","initial-clockless","bound"])("whole %s source excludes offset candidates but preserves every admitted reason",kind=>{
- const input=kind==="initial-clock"?initial:kind==="initial-clockless"?initialClockless:bound,current=validator(googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema),old=validator(prior(input).response_format.json_schema.schema);
+ const input=kind==="initial-clock"?initial:kind==="initial-clockless"?initialClockless:bound,current=validator(wire96RequestFixture(input).response_format.json_schema.schema),old=validator(prior(input).response_format.json_schema.schema);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const count of [0,1,2]){
   const raw=[{fieldCode,reason,alternatives:Array(count).fill(JSON.stringify({value:2,evidence:{primaryEvidence:"unavailable",additionalEvidenceJson:"[]"}}))}];
   expect(current.safeParse(raw).success,`${kind}/${fieldCode}/${reason}/${count}`).toBe(fieldCode===UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays&&(count>0||reason==="MISSING")?false:old.safeParse(raw).success);

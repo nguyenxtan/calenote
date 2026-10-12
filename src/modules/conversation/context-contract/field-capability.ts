@@ -25,7 +25,7 @@ export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):b
   if(typeof input.reference?.instant!=="string"||!Number.isFinite(Date.parse(input.reference.instant))
     ||!Array.isArray(input.capabilities?.calendars)||!input.capabilities.calendars.includes("GREGORIAN")
     ||!isInitialExplicitReminderIntentKnown(input)||!isInitialEventDateOnlySource(input)||!isInitialEventDateYearNullRequired(input)
-    ||!isInitialExplicitReminderClockRequired(input)||!isInitialSupportedCadenceCount(input))return false;
+    ||!isInitialSupportedCadenceCount(input))return false;
   const probes=initialCadenceCountProbes(input);
   return !!probes && !(["BEFORE_EVENT","INCLUDING_EVENT","STARTING_ON"] as const)
     .some(value=>supportsEventRelation(value,[probes.source],[probes.turn]));
