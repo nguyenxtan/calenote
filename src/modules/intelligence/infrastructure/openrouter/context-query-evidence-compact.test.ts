@@ -4,6 +4,7 @@ import {ConversationInterpretationV3Schema} from "../../../conversation/context-
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import {encodeGoogleLiteEuContextV3,parseGoogleLiteEuContextSectionsV3,googleLiteEuContextWireSchemaV3} from "./context-provider-wire";
 import {contextWireComplexity} from "../../../../../tools/benchmark/context-wire-complexity";
+import {typedSingletonSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 const evidence={kind:"USER_QUOTE",turn:0,quote:"Có lịch nào ko?",occurrence:1};
 const canonical=(count:number)=>ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"LIST_REMINDERS",requestTarget:null,changes:[],query:{kind:"LIST",period:null,statusScope:"DEFAULT",evidence:Array.from({length:count},()=>evidence)},uncertainties:[{field:"queryRange",reason:"MISSING",alternatives:[]}],conversationDirective:{kind:"ASK_FOR_FIELD",field:"queryRange"},replyProposal:null});
 function wire(){return encodeGoogleLiteEuContextV3(canonical(1)) as {query:{evidence:Record<string,unknown>}};}
@@ -24,7 +25,11 @@ it("provider schema never duplicates nullable evidence slots",()=>{
  expect(text).not.toContain("secondaryEvidence");expect(text).not.toContain("tertiaryEvidence");expect(text).toContain("additionalEvidenceJson");
 });
 it("historical fanout bounds remain for the unchanged remainder; wire31 carrier costs are explicit, not live admission",()=>{
- const schema=googleLiteEuContextWireSchemaV3().schema;
+ // Historical typed-language cost bounds are not the broader opaque upstream
+ // syntax. Retain the original exact remainder envelope independently.
+ const schema=typedSingletonSchemaFixture().schema;
+ const outgoing=googleLiteEuContextWireSchemaV3().schema;
+ for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"]){const node=outgoing.properties![root];if(typeof node==="boolean")throw Error("ROOT_SCHEMA_OBJECT");expect(node.anyOf?.find(branch=>branch.type==="object")?.properties?.change).toEqual({type:"string"});}
  const remainder=structuredClone(schema) as unknown as {properties:Record<string,unknown>;required:string[];$defs:Record<string,unknown>};
  for(const root of ["reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"]){delete remainder.properties[root];remainder.required=remainder.required.filter(key=>key!==root);}
  // Fixed-date definition uses non-null representation sentinels, not date

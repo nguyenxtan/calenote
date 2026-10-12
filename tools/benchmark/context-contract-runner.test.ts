@@ -64,9 +64,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "b581506fbe196fc3f2aab77f70c127ebc347f574193b26c632e52967115f7763",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "ccdaa04f90eeef364c33c40fba24c9fbe511ceeeaf383f851ba17443fa65bd41",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("b581506fbe196fc3f2aab77f70c127ebc347f574193b26c632e52967115f7763");
+    expect(requestSchemaDigest).not.toBe("ccdaa04f90eeef364c33c40fba24c9fbe511ceeeaf383f851ba17443fa65bd41");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -328,7 +328,7 @@ it.each([
   const entry=raw.changes[0];
   if (field === undefined) delete entry.change.field; else entry.change.field = field;
   if (operation === undefined) delete entry.change.operation; else entry.change.operation = operation;
-  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={rank:entry.rank,change:entry.change};raw.changes=[];}
+  if(field==="location"||field==="title"){const object=raw as unknown as Record<string,unknown>;object[field+"Change"]={rank:entry.rank,change:JSON.stringify(entry.change)};raw.changes=[];}
   let diagnostics: unknown;
   expect(parseGoogleLiteEuContextSectionsV3(raw, CONTEXT_PROTOCOL_V3, undefined, value => { diagnostics = value; }).status).toBe("REFUSED");
   expect(diagnostics).toMatchObject({ issues: [expect.objectContaining(field==="location"?{path:["locationChange","change"],expected:"FIELD_CHANGE"}:field==="title"?{path:["titleChange","change",expectedPath],expected:"CONTROL_ENUM"}:{ path: ["changes", 0,"change",expectedPath], expected: operation===undefined?"REQUIRED_PROPERTY":"CONTROL_ENUM" })] });
@@ -347,9 +347,9 @@ it.each(["control-safe", "operation-invalid", "operation-missing", "missing", "p
         const wire = encodeFixtureV3(frozenContextProposal(input, "R01", 0)) as Record<string, unknown>;
         if (mode.startsWith("operation-")) {
           const changed = encodeFixtureV3({ ...frozenContextProposal(input, "R01", 0) as object, intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: input.currentTurn, quote: input.turns[input.currentTurn].text, occurrence: 1 }] }, query: null, uncertainties: [], changes: [{ field: "title", operation: "SET", value: "synthetic", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: input.turns[0].text, occurrence: 1 }] }] },input) as { changes: Array<Record<string, unknown>> };
-          const carrier=(changed as unknown as {titleChange:{change:Record<string,unknown>}}).titleChange;
+          const carrier=(changed as unknown as {titleChange:{change:string}}).titleChange;
           wire.titleChange=carrier;
-          if (mode === "operation-invalid") carrier.change.operation = sentinel; else delete carrier.change.operation;
+          const authored=JSON.parse(carrier.change);if (mode === "operation-invalid") authored.operation = sentinel; else delete authored.operation;carrier.change=JSON.stringify(authored);
         }
         else if (mode === "guidance") wire.replyProposal = { text: sentinel, [sentinel]: sentinel };
         else if (mode === "missing") delete wire.operationCode;
@@ -502,8 +502,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "b581506fbe196fc3f2aab77f70c127ebc347f574193b26c632e52967115f7763",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-81" });
+      providerWireSchemaDigest: "ccdaa04f90eeef364c33c40fba24c9fbe511ceeeaf383f851ba17443fa65bd41",
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-82" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

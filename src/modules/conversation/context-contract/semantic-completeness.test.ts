@@ -151,7 +151,10 @@ it("wire69 service rejects duplicated initial event date ownership atomically",a
  const h=await harness([scriptedProposal({title:"đi thi",eventDate:value,reminderDate:value,frequency:"DAILY",occurrenceCount:2})]);
  await h.turn(0,"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.");
  const state=await h.read(1);expect(state?.slots.title.value??null).toBeNull();expect(state?.slots.reminderDate.value??null).toBeNull();
- expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.reason==="SEMANTIC_REMINDER_DATE_UNOWNED")).toBe(true);
+ // Opaque singleton transport now admits the exact request-local null-only
+ // reminderDate root before canonical/evidence validation. Direct evidence
+ // bypass tests below retain the unchanged ownership guard independently.
+ expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.stage==="CANONICAL"&&e.diagnostic.reason==="SCHEMA_INVALID")).toBe(true);
  expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first("n")).toBe(0);
 });
 it("wire69 event date ownership requires full initial context, adjacent prefix, one token and resolved classifier",()=>{
@@ -164,7 +167,7 @@ it("wire69 event date ownership requires full initial context, adjacent prefix, 
 });
 it("wire69 shared ownership refuses every date mutation or typed alternative, preserving empty MISSING and outside-context values",()=>{
  const msg=message("Ngày 11/10 đi thi."),built=buildContextInputV2({message:msg,context:chat,snapshot:null,observation:observation(null,msg)});if(built.status!=="READY")throw Error("NOT_READY");const evidence=[{kind:"USER_QUOTE",turn:0,quote:msg.text,occurrence:1}],date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
- for(const operation of ["SET","REPLACE","CLEAR"]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"reminderDate",operation,value:operation==="CLEAR"?null:date,evidence}],query:null,uncertainties:[]});const before=JSON.stringify(value);expect(reminderDateCoverageComplete(built.input,value)).toBe(false);expect(JSON.stringify(value)).toBe(before);}
+ for(const operation of ["SET","REPLACE","CLEAR"]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"eventDate",operation:"SET",value:date,evidence},{field:"reminderDate",operation,value:operation==="CLEAR"?null:date,evidence}],query:null,uncertainties:[]});const before=JSON.stringify(value);expect(reminderDateCoverageComplete(built.input,value)).toBe(false);expect(validateEvidenceV3(value,built)).toEqual({status:"REFUSED",reason:"SEMANTIC_REMINDER_DATE_UNOWNED"});expect(JSON.stringify(value)).toBe(before);}
  for(const alternative of [false,true]){const value=SemanticPatchProposalV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"eventDate",operation:"SET",value:date,evidence}],query:null,uncertainties:[{field:"reminderDate",reason:alternative?"AMBIGUOUS":"MISSING",alternatives:alternative?[{value:date,evidence}]:[]}]});expect(reminderDateCoverageComplete(built.input,value)).toBe(!alternative);const diagnostics:DownstreamDiagnostic[]=[];const result=validateEvidenceV3(value,built,d=>diagnostics.push(d));if(alternative)expect(result).toEqual({status:"REFUSED",reason:"SEMANTIC_REMINDER_DATE_UNOWNED"});else expect(result.status).toBe("VALID");expect(JSON.stringify(diagnostics)).not.toContain(msg.text);for(const d of diagnostics)expect(DownstreamDiagnosticSchema.safeParse(d).success).toBe(true);}
 });
 it("wire50 notes predicate declines incomplete trusted contexts and meaningful detail",()=>{
@@ -191,7 +194,7 @@ it("wire50 finite notes rejection diagnostics never disclose authored notes or s
  expect(validateEvidenceV3(value,built,d=>diagnostics.push(d))).toEqual({status:"REFUSED",reason:"SEMANTIC_NOTES_UNOWNED"});expect(diagnostics).toContainEqual({stage:"EVIDENCE",result:"REJECTED",reason:"SEMANTIC_NOTES_UNOWNED"});for(const d of diagnostics)expect(DownstreamDiagnosticSchema.safeParse(d).success).toBe(true);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_NOTES_SENTINEL");expect(JSON.stringify(diagnostics)).not.toContain(msg.text);
 });
 it("wire50 service atomically refuses notes restatement and retains meaningful notes outside boundary",async()=>{
- for(const meaningful of [false,true]){const h=await harness([scriptedProposal({title:"đi thi",notes:meaningful?"mang giấy tờ":"nhắc 3 ngày liên tiếp"})]);await h.turn(0,"Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."+(meaningful?" Ghi chú mang giấy tờ.":""));const state=await h.read(1);
+ for(const meaningful of [false,true]){const h=await harness([scriptedProposal({title:"đi thi",frequency:"DAILY",occurrenceCount:3,notes:meaningful?"mang giấy tờ":"nhắc 3 ngày liên tiếp"})]);await h.turn(0,"Ngày 15/12 đi thi, nhắc 3 ngày liên tiếp giúp tôi."+(meaningful?" Ghi chú mang giấy tờ.":""));const state=await h.read(1);
  if(meaningful)expect(state?.slots.notes.value).toBe("mang giấy tờ");else{expect(state?.slots.notes.value??null).toBeNull();expect(state?.slots.title.value??null).toBeNull();expect(h.events.some(e=>e.event==="POST_CANONICAL_STAGE"&&e.diagnostic.reason==="SEMANTIC_NOTES_UNOWNED")).toBe(true);}
  expect(await h.f.db.prepare("SELECT COUNT(*) AS n FROM reminders").first("n")).toBe(0);}
 });

@@ -43,7 +43,10 @@ it("rejected continuation cannot create a preview or replace the missing clock",
   expect(after?.slots.reminderTime.value).toBeNull();
   expect(after?.pendingReminderQuestion?.field).toBe("reminderTime");
   expect(after?.requestId).toBe(before?.requestId);
-  expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED", reason: "CLOCK_SOURCE_MISSING" }) }));
+  // The new matched null-only clock root refuses before materialization; no
+  // source or canonical acceptance has been weakened. Direct guard persists.
+  expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "CANONICAL", result: "REJECTED", reason: "SCHEMA_INVALID" }) }));
+  expect(check("Đừng bỏ.")).toEqual({status:"REFUSED",reason:"CLOCK_SOURCE_MISSING"});
   expect(await h.f.db.prepare("SELECT count(*) AS n FROM reminders").first<number>("n")).toBe(0);
 });
 

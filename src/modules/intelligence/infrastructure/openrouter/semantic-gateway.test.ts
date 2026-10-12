@@ -260,9 +260,9 @@ describe("observable successor route", () => {
   });
   it("materializes source pointers from the validated dispatch snapshot, not mutable caller input",async()=>{
     const original=structuredClone(contextInput);
-    const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},titleChange:{change:{evidence:{primaryEvidence:string}}}};
+    const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},titleChange:{change:string}};
     payload.requestTarget.evidence.primaryEvidence="U0";
-    payload.titleChange.change.evidence.primaryEvidence="U0";
+    const title=JSON.parse(payload.titleChange.change);title.evidence.primaryEvidence="U0";payload.titleChange.change=JSON.stringify(title);
     const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-pointer",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]});
     const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",original);
     if(attempt.status!=="READY")throw Error("not ready");

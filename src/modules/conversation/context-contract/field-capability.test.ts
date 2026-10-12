@@ -5,13 +5,17 @@ import { CONTROL_PLACEHOLDER } from "./projection";
 import { serializeContextRequest } from "./wire";
 import { z } from "zod";
 import { ConversationInterpretationV3Schema } from "./contracts";
-import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWireSchemaV3, decodeGoogleLiteEuContextTransportV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWireSchemaV3, decodeGoogleLiteEuContextTransportV3 as decodeRawSingletonTransport } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { CONTEXT_PROTOCOL_V3 } from "./protocol";
 import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
 import {encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
+import {typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
+// Original capability language witnesses inspect the captured typed producer
+// AST, not the deliberately broader opaque upstream change-string schema.
+const decodeGoogleLiteEuContextTransportV3=(raw:unknown,selected:Parameters<typeof decodeRawSingletonTransport>[1],invalid?:Parameters<typeof decodeRawSingletonTransport>[2],wireInvalid?:Parameters<typeof decodeRawSingletonTransport>[3],context?:ContextInput)=>decodeRawSingletonTransport(wrapSingletonAuthoringFixture(raw),selected,invalid,wireInvalid,context);
 function noClockCandidateInput(){
  const context=input("Nhắc trước 2 ngày.");context.turns=[{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"Nhắc trước 2 ngày."}];context.currentTurn=2;
  const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
@@ -253,7 +257,7 @@ it.each(["history","CURRENT","pending"] as const)("wire58 %s context preserves s
 // Independent schema-membership fixtures use source-pointer representation,
 // retaining the authored turn index and every field value. No source is filled.
 function encodeGoogleLiteEuContextV3(canonical:Parameters<typeof encodeCanonical>[0]):unknown {
-  const wire=encodeCanonical(canonical);
+  const wire=unwrapSingletonAuthoringFixture(encodeCanonical(canonical));
   const map=(value:unknown):unknown=>{
     if(!value||typeof value!=="object")return value;
     if(Array.isArray(value))return value.map(map);
@@ -313,8 +317,8 @@ it.each([[2026,"Ngày 11/10 đi thi.","REJECTED"],[null,"Ngày 11/10 đi thi.","
 it.each(["numeric-year","wrong-day","valid"] as const)("wire55 actual model-authored object retains source fidelity: %s",async mode=>{
  const value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
  const h=await harness([proposal({title:"đi thi",eventDate:value})],wire=>{
-  const raw=wire as {eventDateChange:{change:{value:Record<string,unknown>}}};
-  raw.eventDateChange.change.value={...raw.eventDateChange.change.value,...(mode==="numeric-year"?{year:2026}:mode==="wrong-day"?{day:10}:{})};return raw;
+  const raw=unwrapSingletonAuthoringFixture(wire) as {eventDateChange:{change:{value:Record<string,unknown>}}};
+  raw.eventDateChange.change.value={...raw.eventDateChange.change.value,...(mode==="numeric-year"?{year:2026}:mode==="wrong-day"?{day:10}:{})};return wrapSingletonAuthoringFixture(raw);
  });
  expect(await h.turn(0,"Ngày 11/10 đi thi.")).toEqual({status:mode==="valid"?"CLARIFICATION_REQUESTED":"REJECTED"});
  const state=await h.read(1);if(mode==="valid")expect(state?.slots.eventDate.value).toEqual(value);else expect(state).toBeNull();
@@ -493,7 +497,7 @@ it("targeted generation availability still cannot grant unavailable CURRENT auth
 });
 it("actual three-turn request uses one shared general enum and one current mutation enum",()=>{
   const context=input("Nhắc 9h.");context.turns=[{role:"USER",text:"Nhắc gọi mẹ."},{role:"ASSISTANT",text:"Lúc nào?"},{role:"USER",text:"9h."}];context.currentTurn=2;
-  const schema=serializeContextRequest(context).response_format.json_schema.schema as unknown as {$defs:Record<string,{type:string;enum?:string[]}>};
+  const schema=typedSingletonSchemaFixture(deriveGenerationFieldCapability(context),context).schema as unknown as {$defs:Record<string,{type:string;enum?:string[]}>};
   expect(schema.$defs.s).toEqual({type:"string",enum:["U0","U2"]});
   const references:string[]=[];let sourceEnums=0,evidenceReferences=0;
   const walk=(value:unknown)=>{if(!value||typeof value!=="object")return;const node=value as Record<string,unknown>;if(node.$ref==="#/$defs/s")references.push(node.$ref);if(node.$ref==="#/$defs/e")evidenceReferences++;if(Array.isArray(node.enum)&&node.enum.some(v=>typeof v==="string"&&/^U\d+$/.test(v)))sourceEnums++;Object.values(node).forEach(walk);};walk(schema);
@@ -522,9 +526,9 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
   const request=serializeContextRequest(context);
   expect(catalogue(context)).toEqual({version:"generation-field-capability-16",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
-  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("eb8ed54ff06701fec85e9f1396f45d46c3adba25457f1596ee693baff3fc435a");
+  expect(createHash("sha256").update(JSON.stringify(request.response_format.json_schema.schema)).digest("hex")).toBe("3eea944d0c30017f52d010524e0abec027cf0bd079375e2b18c035b2dda90f26");
   const withoutCardinality=structuredClone(request.response_format.json_schema.schema) as unknown as {properties:{uncertainties:{maxItems?:number}}};delete withoutCardinality.properties.uncertainties.maxItems;
-  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("4f73284ec79fa68491434ea455ef4df2fc3f17bbcb5c4afe9d9c0a153751cdcb");
+  expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("8e19c7657b9dc30257c15e4058f4801b97db01cc8b4bee89d6a507dea2004545");
   expect(fields(context)).not.toContain("title");
 });
 it.each(["Tiếp tục bản nháp đi thi.","xem lịch đi thi","giúp tôi xem đi thi","không đi thi","nếu đi thi","\"đi thi\"","đi thi [CONTROL]","nhắc trước 2 ngày","giải thích đi thi"])("unasserted exam mention does not force a title: %s",text=>expect(catalogue(input(text)).titlePresenceRequired).toBe(false));
@@ -817,7 +821,7 @@ it("schema specialization never mutates another request and never leaves empty e
 });
 
 function validator(context: ContextInput, ignoreUnsupportedConst = false) {
-  const schema = serializeContextRequest(context).response_format.json_schema.schema;
+  const schema = typedSingletonSchemaFixture(deriveGenerationFieldCapability(context),context).schema;
   const inline = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(inline);
     if (!value || typeof value !== "object") return value;
@@ -828,7 +832,8 @@ function validator(context: ContextInput, ignoreUnsupportedConst = false) {
     }
     return Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$defs" && !(ignoreUnsupportedConst && key === "const")).map(([key, child]) => [key, inline(child)]));
   };
-  return z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+  const typed=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+  return {safeParse:(raw:unknown)=>typed.safeParse(unwrapSingletonAuthoringFixture(raw))};
 }
 it.each(["REPLACE", "CLEAR"] as const)("first R04 task cannot generate title %s without an occupied CURRENT title", operation => {
   const context = input("Tôi thi ngày 11/10 lúc 8h."), check = validator(context);
@@ -906,8 +911,9 @@ it("non-obligated requests expose one title SET representation while preserving 
   expect(check.safeParse({...wire,titleChange:null,changes:[wire.titleChange.change]}).success).toBe(false);
   for(const operation of ["REPLACE","CLEAR"] as const)expect(check.safeParse(encodeGoogleLiteEuContextV3({...canonical,changes:ConversationInterpretationV3Schema.parse({...canonical,changes:[{field:"title",operation,value:operation==="CLEAR"?null:"khác",evidence}]}).changes})).success).toBe(true);
 });
-it("specialized R02 schema exposes only reachable definitions",()=>{
-  const schema=serializeContextRequest(input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.")).response_format.json_schema.schema as unknown as {$defs:Record<string,unknown>};
+it("specialized typed R02 admission schema exposes only reachable definitions before opaque mapping",()=>{
+  const context=input("Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.");
+  const schema=typedSingletonSchemaFixture(deriveGenerationFieldCapability(context),context).schema as unknown as {$defs:Record<string,unknown>};
   const reached=new Set<string>();
   const visit=(value:unknown)=>{
     if(!value||typeof value!=="object")return;

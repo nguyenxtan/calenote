@@ -70,7 +70,11 @@ it("count alternatives cannot borrow an unrelated number", () => {
 it("invalid R05 cadence does not mutate slots or manufacture a preview", async () => {
   const h = await harness([proposal({ title: "đi thi", eventDate: date(), frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT" })]);
   await h.turn(0, "Ngày 11/10 đi thi, nhắc trước 2 ngày.");
-  expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED", reason: "CADENCE_COUNT_NOT_SUPPORTED" }) }));
+  // Exact matched singleton admission now refuses unsupported numeric roots
+  // before evidence materialization; the unchanged direct semantic guard is
+  // independently retained for a bypass reaching that later boundary.
+  expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "CANONICAL", result: "REJECTED", reason: "SCHEMA_INVALID" }) }));
+  expect(check("Ngày 11/10 đi thi, nhắc trước 2 ngày.",{title:"đi thi",eventDate:date(),frequency:"DAILY",occurrenceCount:2,eventRelation:"BEFORE_EVENT"}).result).toEqual({status:"REFUSED",reason:"CADENCE_COUNT_NOT_SUPPORTED"});
   expect((await h.read(1))?.slots.occurrenceCount.value ?? null).toBeNull();
   expect(h.replies.some(r => r.kind === "PREVIEW")).toBe(false);
   expect(await h.f.db.prepare("SELECT count(*) AS n FROM reminders").first<number>("n")).toBe(0);

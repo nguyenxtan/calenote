@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {expect,it} from "vitest";
-import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../src/modules/conversation/context-contract/contracts";
+import {ContextInputSchema,ConversationInterpretationV3Schema,SLOT_NAMES} from "../../src/modules/conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/protocol";
 import {decodeGoogleLiteEuContextTransportV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import {encodeFixtureV3} from "./context-pointer-fixtures";
@@ -17,10 +17,15 @@ it("bound fixture transport preserves all ten authored catalogue positions and s
  const date={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},clock={hour:8,minute:0,qualifier:"H24"},evidence=[{kind:"USER_QUOTE",turn:0,quote:input.turns[0].text,occurrence:1}];
  const values={location:"synthetic",endDate:date,occurrenceCount:2,frequency:"DAILY",eventRelation:"BEFORE_EVENT",eventTime:clock,eventDate:date,reminderTime:clock,reminderDate:date,title:"đi thi"};
  const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:"calenote-context-3",intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:Object.entries(values).map(([field,value])=>({field,operation:"SET",value,evidence})),query:null,uncertainties:[],conversationDirective:null,replyProposal:null}),before=JSON.stringify(canonical);
- const raw=encodeFixtureV3(canonical,input) as Record<string,{rank:string;change:{value:unknown;evidence:{primaryEvidence:string}}}>;
+ const raw=encodeFixtureV3(canonical,input) as Record<string,{rank:string;change:string}>;
  expect(raw).not.toHaveProperty("changeOrder");
- for(const [rank,field] of Object.keys(values).entries()){expect(Object.keys(raw[field+"Change"])).toEqual(["rank","change"]);expect(raw[field+"Change"].rank).toBe(String(rank));expect(raw[field+"Change"]).not.toHaveProperty("index");expect(raw[field+"Change"].change.evidence.primaryEvidence).toBe("U0");}
- expect(raw.eventDateChange.change.value).toEqual(date);expect(raw.reminderDateChange.change.value).toBe(JSON.stringify(date));expect(raw.endDateChange.change.value).toBe(JSON.stringify(date));
- expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
+ for(const [rank,field] of Object.keys(values).entries()){expect(Object.keys(raw[field+"Change"])).toEqual(["rank","change"]);expect(raw[field+"Change"].rank).toBe(String(rank));expect(raw[field+"Change"]).not.toHaveProperty("index");expect(JSON.parse(raw[field+"Change"].change).evidence.primaryEvidence).toBe("U0");}
+ expect(JSON.parse(raw.eventDateChange.change).value).toEqual(date);expect(JSON.parse(raw.reminderDateChange.change).value).toBe(JSON.stringify(date));expect(JSON.parse(raw.endDateChange.change).value).toBe(JSON.stringify(date));
+ // Initial source does not grant all ten fields. The new matched guard must
+ // refuse that authorship, while a context retaining those occupied fields
+ // preserves the same literal canonical payload and authored rank order.
+ expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ const occupied=ContextInputSchema.parse({...input,activeRequest:{lifecycle:"CLARIFYING",slots:Object.fromEntries(SLOT_NAMES.map(field=>[field,Object.hasOwn(values,field)?{state:"PROPOSED",value:Reflect.get(values,field),fact:null}:{state:"MISSING",value:null,fact:null}]))}});
+ expect(decodeGoogleLiteEuContextTransportV3(encodeFixtureV3(canonical,occupied),CONTEXT_PROTOCOL_V3,undefined,undefined,occupied)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});
  expect(JSON.stringify(canonical)).toBe(before);
 });

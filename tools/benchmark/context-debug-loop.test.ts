@@ -25,6 +25,8 @@ import {deriveGenerationFieldCapability} from "../../src/modules/conversation/co
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {isInitialIsolatedExamNotesFree} from "../../src/modules/conversation/context-contract/semantic-completeness";
 import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
+import {typedSingletonSchemaFixture} from "./context-singleton-json.test-support";
+import {unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "./context-singleton-json.test-support";
 it.each(["R02_TURN0_INDEX_POSITION_PROMPT","R02_TURN0_UNCERTAINTY_INTEGER_INTERVALS","R02_TURN0_UNCERTAINTY_WIRE_PROMPT"] as const)("wire64 refuses historical exact request probe %s before physical HTTP",async mode=>{
  const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");},{now:()=>100});expect(calls).toBe(0);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:0});expect(existsSync(join(result.directory,"http-0.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;throw Error("FORBIDDEN");})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(0);}finally{s.cleanup();}
 });
@@ -41,7 +43,7 @@ function restorePublicWire68Request(request:{messages:Array<{content:string}>;re
  for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete canonical[key];
  const input=ContextInputSchema.parse(canonical);
  const initialOnlyNotes=!isInitialIsolatedExamNotesFree(input);
- request.response_format.json_schema.schema=googleLiteEuContextWireSchemaV3({...deriveGenerationFieldCapability(input),reminderDateProposalAllowed:true,notesProposalAllowed:initialOnlyNotes},input).schema;
+ request.response_format.json_schema.schema=typedSingletonSchemaFixture({...deriveGenerationFieldCapability(input),reminderDateProposalAllowed:true,notesProposalAllowed:initialOnlyNotes},input).schema;
  encoded.fieldCapability.notesProposalAllowed=initialOnlyNotes;
  delete encoded.fieldCapability.reminderDateProposalAllowed;encoded.fieldCapability.version="generation-field-capability-11";
  request.messages[1].content=JSON.stringify(encoded);
@@ -179,14 +181,14 @@ it("historical date diagnostic ablation never changes the current strict DateWir
  const schema=structuredClone(acceptedWire46T1Schema) as unknown as ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"];schema.$defs!.__d=historicalDateDefinition();const before=JSON.stringify(schema);
  for(const mode of dateModes)debugProbeSchema(schema,mode);
  expect(JSON.stringify(schema)).toBe(before);
- const raw=encodeGoogleLiteEuContextV3(frozenContextProposal({turns:[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc mỗi ngày 2 ngày"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R02",0) as never) as {eventDateChange:{change:{value:unknown}}};
- expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).not.toBe("REFUSED");
+ const raw=unwrapSingletonAuthoringFixture(encodeGoogleLiteEuContextV3(frozenContextProposal({turns:[{role:"USER",text:"Ngày 11/10 đi thi ở Quang Trung, nhắc mỗi ngày 2 ngày"}],currentTurn:0,activeRequest:null,pendingQuestion:null,facts:[]} as never,"R02",0) as never)) as {eventDateChange:{change:{value:unknown}}};
+ expect(parseGoogleLiteEuContextSectionsV3(wrapSingletonAuthoringFixture(raw),CONTEXT_PROTOCOL_V3).status).not.toBe("REFUSED");
  raw.eventDateChange.change.value=JSON.stringify(raw.eventDateChange.change.value);
- expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+ expect(parseGoogleLiteEuContextSectionsV3(wrapSingletonAuthoringFixture(raw),CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
 function requestBoundSchema(){
  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"Mai 8h nhắc gọi mẹ"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
- return serializeContextRequest(input).response_format.json_schema.schema;
+ return typedSingletonSchemaFixture(deriveGenerationFieldCapability(input),input).schema;
 }
 it("diagnostic evidence ablation follows the exact request-only shared evidence definition",async()=>{
  const schema=await r02Turn1Schema();
@@ -305,7 +307,7 @@ async function r02Turn1Schema(){
   // before reference pooling/pruning. Never used by transport or live dispatch.
   expect(capabilityModule.isBoundMissingReminderClockWithoutCandidates(input)).toBe(true);
   const historicalOnly=vi.spyOn(capabilityModule,"isBoundMissingReminderClockWithoutCandidates").mockReturnValue(false);
-  try{schema=googleLiteEuContextWireSchemaV3({...deriveGenerationFieldCapability(input),notesProposalAllowed:!isInitialIsolatedExamNotesFree(input)},input).schema;}finally{historicalOnly.mockRestore();}
+  try{schema=typedSingletonSchemaFixture({...deriveGenerationFieldCapability(input),notesProposalAllowed:!isInitialIsolatedExamNotesFree(input)},input).schema;}finally{historicalOnly.mockRestore();}
   restorePublicCatalogueWrappers(schema);
   // Public historical structural specimen: restore original source literals and
   // alternative description, then assert immutable635. Never production dispatch.
@@ -516,12 +518,12 @@ expect(hash(JSON.stringify(actual))).toBe(({DATE_CURRENT_NO_SCALAR_BOUNDS:"2391f
    expect(Object.entries(content as object).filter(([key,value])=>key.endsWith("Change")&&value!==null)).toHaveLength(1);expect(carrier.index).toBe(0);
    // Separate current-wire witnesses preserve the evidence-key and LIST
    // ownership stages. They are NOT labelled historical-schema conforming.
-   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:"0",change:structuredClone(carrier.change)}};
+   const currentKey={...structuredClone(content as Record<string,unknown>),eventDateChange:{rank:"0",change:JSON.stringify(carrier.change)}};
    const keyDiagnostics:unknown[]=[];
    expect(decodeGoogleLiteEuContextTransportV3(currentKey,CONTEXT_PROTOCOL_V3,undefined,d=>keyDiagnostics.push(d),ContextInputSchema.parse(input)).status).toBe("REFUSED");
-   expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],expected:"FIELD_CHANGE"}]}]);
+   expect(keyDiagnostics).toMatchObject([{issues:[{path:["eventDateChange","change"],code:"WIRE_SHAPE_INVALID"}]}]);
    const oldKey=structuredClone(currentKey);
-   Object.assign(oldKey.eventDateChange.change,{evidence:{primaryEvidence:"U2",additionalEvidenceJson:"[]"}});
+   const restoredChange=JSON.parse(oldKey.eventDateChange.change);restoredChange.evidence={primaryEvidence:"U2",additionalEvidenceJson:"[]"};oldKey.eventDateChange.change=JSON.stringify(restoredChange);
    const oldKeyDiagnostics:unknown[]=[];
    const oldKeyResult=decodeGoogleLiteEuContextTransportV3(oldKey,CONTEXT_PROTOCOL_V3,d=>oldKeyDiagnostics.push(d),d=>oldKeyDiagnostics.push(d),ContextInputSchema.parse(input));
    expect(oldKeyResult.status).toBe("REFUSED");
@@ -606,7 +608,27 @@ function setup(){
  const load=(patch:Record<string,unknown>={},freshRun?:Parameters<typeof createDebugLoopLoader>[0]["freshRun"])=>{const text=JSON.stringify({...record,...patch});writeFileSync(path,text);return createDebugLoopLoader({accountRoot,campaignRoot,reviewedRecordSha256:hash(text),reviewedOwnerMessageSha256:record.ownerMessageSha256,freshRun})(path,root)};
  return {root,accountRoot,campaignRoot,history,load,record,cleanup:()=>rmSync(accountRoot,{recursive:true,force:true})};
 }
-it.each(["array","string","400","crash"] as const)("R03 bounded uncertainty probe %s always terminates at seven without Formal credit",async variant=>{const s=setup();let calls=0,callbackError:unknown;try{
+it("wire82 keeps both R03 historical transforms as exact pure public specimens, never dispatched",async()=>{
+ const script=(JSON.parse(readFileSync(join(process.cwd(),"src/modules/conversation/context-contract/benchmark/regressions.json"),"utf8")) as {cases:Array<{id:string;turns:Array<{text:string;receipt:string;processingAt?:string}>}>}).cases.find(item=>item.id==="R03");if(!script)throw Error("HISTORICAL_R03_PUBLIC_SCRIPT");
+ let captured:Parameters<SemanticTransport>[0]|undefined;
+ const probe=await createContextContractProbe({sourceSha:candidate,referenceNow:Date.parse(script.turns[0].receipt)},(input,index)=>{
+  const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,"R03",index-1));if(index===1)value.uncertainties=[{field:"queryRange",reason:"MISSING",alternatives:[]}];
+  if(index===2){const wire=serializeContextRequest(input);wire.response_format.json_schema.schema=typedSingletonSchemaFixture(deriveGenerationFieldCapability(input),input).schema;
+   wire.messages[0].content=wire.messages[0].content.replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
+   captured={model:"google/gemini-2.5-flash-lite",...wire,response_format:{...wire.response_format,json_schema:{...wire.response_format.json_schema,strict:true}},provider:{only:["google-vertex/eu"],allow_fallbacks:false,require_parameters:true,data_collection:"deny",zdr:true,max_price:{prompt:.1,completion:.4}}};}
+  return value;
+ });try{for(const turn of script.turns.slice(0,2))await probe.turn(turn.text,turn.receipt,undefined,turn.processingAt);}finally{probe.dispose();}
+ if(!captured)throw Error("HISTORICAL_R03_CAPTURE");const original=captured,before=JSON.stringify(original);
+ expect(hash(JSON.stringify(original.response_format.json_schema.schema))).toBe("e3beb243c453616a4f78099739f1715d5f6b57cd8c6b5b2615a3a723de61762c");expect(hash(original.messages[0].content)).toBe("09b4aec5dc3acfd0c82f788e6e9b9c26a0197a3dee38275cf1bda5d9c07dc6cc");
+ // Recalculation seam ONLY for these pure calls: exact captured historical
+ // public typed AST; never installed during any executor/application request.
+ const specimen=vi.spyOn(wireModule,"googleLiteEuContextWireSchemaV3").mockReturnValue({version:googleLiteEuContextWireSchemaV3().version,schema:original.response_format.json_schema.schema as unknown as ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]});
+ try{const changed=debugR03SingletonChangeRequest(original),uncertainties=debugR03UncertaintiesRequest(original);expect(hash(JSON.stringify(changed.response_format.json_schema.schema))).toBe("9d88ee00b2a31748253b72dad37c8bc9bc1b42b8e18cacb8cb2d2250879220e7");expect(hash(JSON.stringify(uncertainties.response_format.json_schema.schema))).toBe("15857439d179baca0707cb513aef73738bd9f0b1be0b90c13756391d7fe118c6");
+  const restored=structuredClone(changed);for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])restored.response_format.json_schema.schema.properties![root]=original.response_format.json_schema.schema.properties![root];expect(JSON.stringify(restored)).toBe(before);expect(JSON.stringify(original)).toBe(before);
+  for(const axis of ["schema","prompt","source","capability"]){const bad=structuredClone(original);if(axis==="schema")bad.response_format.json_schema.schema.properties!.titleChange={type:"null"};else if(axis==="prompt")bad.messages[0].content+=" ";else{const context=JSON.parse(bad.messages[1].content);if(axis==="source")context.turns[context.currentTurn].text+=" ";else context.fieldCapability.clockOnlyMutations=!context.fieldCapability.clockOnlyMutations;bad.messages[1].content=JSON.stringify(context);}expect(()=>debugR03SingletonChangeRequest(bad),axis).toThrow();}
+ }finally{specimen.mockRestore();}
+});
+it.each(["array","string","400","crash"] as const)("wire82 refuses historical R03 uncertainty target before physical HTTP (%s)",async variant=>{const s=setup();let calls=0,callbackError:unknown;try{
  const targets=deriveBoundedPilotManifest(s.root).targets;
  const result=await runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE",async request=>{try{
   const target=targets[calls++],body=JSON.parse(request.messages[1].content);delete body.numericOwnership;delete body.fieldCapability;delete body.evidenceSources;
@@ -626,17 +648,18 @@ it.each(["array","string","400","crash"] as const)("R03 bounded uncertainty prob
    console.log(JSON.stringify({r03ProbeHashes:{schema:hash(JSON.stringify(request.response_format.json_schema.schema)),originalSchema:hash(JSON.stringify(original.response_format.json_schema.schema)),originalRequest:hash(before),request:hash(JSON.stringify(request))}}));
    if(variant==="400")return {status:400,body:"{}"};if(variant==="crash")throw Error("LOCAL_TEST_CRASH");if(variant==="string")content.uncertainties="[]";}
   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-prefix",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- }catch(error){callbackError=error;throw error;}},{now:()=>100});if(variant==="crash")expect(callbackError).toMatchObject({message:"LOCAL_TEST_CRASH"});else expect(callbackError).toBeUndefined();expect(calls).toBe(7);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:7,applicationLlmCalls:7});
+ }catch(error){callbackError=error;throw error;}},{now:()=>100});expect(callbackError).toBeUndefined();expect(calls).toBe(6);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:6,applicationLlmCalls:7});
  expect(result.responses.slice(0,6).every(x=>x.status==="SUCCESS")).toBe(true);
- if(variant==="string"){expect(result.responses[6]).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["uncertainties"],code:"WIRE_SHAPE_INVALID",actualType:"string"}]}}});expect(result.applicationEvidence[6]).toMatchObject({listStoreReads:0,mutations:0});}
- if(variant==="array")expect(result.responses[6].status).toBe("SUCCESS");
- expect(result.accounting).toMatchObject({confirmedMicrounits:variant==="400"||variant==="crash"?600:700,unknownExposureMicrounits:variant==="400"||variant==="crash"?210944:105472});
+ expect(result.responses[6]).toMatchObject({status:"FAILURE"});expect(result.applicationEvidence[6]).toMatchObject({listStoreReads:0,mutations:0});
+ // The unchanged target guard is inside transport, AFTER reservation. Keep
+ // conservative UNKNOWN accounting; never claim a pre-reservation refusal.
+ expect(result.accounting).toMatchObject({confirmedMicrounits:600,unknownExposureMicrounits:210944});
  const ledger=readFileSync(join(result.directory,"campaign.jsonl"),"utf8").trim().split("\n").map(row=>JSON.parse(row));expect(ledger.filter(row=>row.event==="RESERVE")).toHaveLength(7);
  expect(result.applicationEvidence).toHaveLength(7);expect(result.applicationEvidence[6]).toMatchObject({fixtureId:"R03",turnIndex:1});
- expect(existsSync(join(result.directory,"http-7.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(7);
+ expect(existsSync(join(result.directory,"http-6.json"))).toBe(false);expect(existsSync(join(result.directory,"http-7.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R03_TURN1_UNCERTAINTIES_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(6);
  }finally{s.cleanup()}},120000);
 it.each(["R03_TURN1_UNCERTAINTIES_STRING_BASELINE","R03_TURN1_SINGLETON_CHANGE_STRING_BASELINE"] as const)("R03 prefix prerequisite failure %s never attempts later targets",async mode=>{const s=setup();let calls=0;try{const result=await runDebugLoopExecution(s.load(),candidate,mode,async()=>{calls++;return {status:400,body:"{}"}},{now:()=>100});expect(calls).toBe(1);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:1});expect(existsSync(join(result.directory,"http-1.json"))).toBe(false);}finally{s.cleanup()}});
-it.each(["object","string","400","crash"] as const)("R03 singleton change probe %s preserves prefix and terminates with retained evidence",async variant=>{const s=setup();let calls=0,callbackError:unknown,refusedRoot:string|undefined;try{
+it.each(["object","string","400","crash"] as const)("wire82 refuses historical R03 singleton target before physical HTTP (%s)",async variant=>{const s=setup();let calls=0,callbackError:unknown,refusedRoot:string|undefined;try{
  const targets=deriveBoundedPilotManifest(s.root).targets;
  const result=await runDebugLoopExecution(s.load(),candidate,"R03_TURN1_SINGLETON_CHANGE_STRING_BASELINE" as never,async request=>{try{
   const target=targets[calls++],body=JSON.parse(request.messages[1].content);delete body.numericOwnership;delete body.fieldCapability;delete body.evidenceSources;
@@ -654,11 +677,11 @@ it.each(["object","string","400","crash"] as const)("R03 singleton change probe 
    if(variant==="400")return {status:400,body:"{}"};if(variant==="crash")throw Error("LOCAL_TEST_CRASH");if(variant==="string"){refusedRoot=roots.find(root=>content[root]!==null);expect(refusedRoot).toBeDefined();const carrier=z.record(z.string(),z.unknown()).parse(content[refusedRoot!]);carrier.change=JSON.stringify(carrier.change);content[refusedRoot!]=carrier;}
   }
   return {status:200,body:JSON.stringify({model:request.model,provider:"Google",id:"gen-local-change-prefix",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(content)}}]})};
- }catch(error){callbackError=error;throw error;}},{now:()=>100});if(variant==="crash")expect(callbackError).toMatchObject({message:"LOCAL_TEST_CRASH"});else expect(callbackError).toBeUndefined();expect(calls).toBe(7);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:7,applicationLlmCalls:7});expect(result.applicationEvidence).toHaveLength(7);
+ }catch(error){callbackError=error;throw error;}},{now:()=>100});expect(callbackError).toBeUndefined();expect(calls).toBe(6);expect(result).toMatchObject({terminal:true,pilotCredit:false,providerHttpAttempts:6,applicationLlmCalls:7});expect(result.applicationEvidence).toHaveLength(7);
  expect(result.responses.slice(0,6).every(x=>x.status==="SUCCESS")).toBe(true);
- if(variant==="object")expect(result.responses[6].status).toBe("SUCCESS");if(variant==="string"){expect(result.responses[6]).toMatchObject({status:"FAILURE",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:[refusedRoot,"change"],code:"WIRE_SHAPE_INVALID",actualType:"string"}]}}});expect(result.applicationEvidence[6]).toMatchObject({listStoreReads:0,mutations:0});}
- expect(result.accounting).toMatchObject({confirmedMicrounits:variant==="400"||variant==="crash"?600:700,unknownExposureMicrounits:variant==="400"||variant==="crash"?210944:105472});const ledger=readFileSync(join(result.directory,"campaign.jsonl"),"utf8").trim().split("\n").map(row=>JSON.parse(row));expect(ledger.filter(row=>row.event==="RESERVE")).toHaveLength(7);
- expect(existsSync(join(result.directory,"http-7.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R03_TURN1_SINGLETON_CHANGE_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(7);
+ expect(result.responses[6]).toMatchObject({status:"FAILURE"});expect(result.applicationEvidence[6]).toMatchObject({listStoreReads:0,mutations:0});
+ expect(result.accounting).toMatchObject({confirmedMicrounits:600,unknownExposureMicrounits:210944});const ledger=readFileSync(join(result.directory,"campaign.jsonl"),"utf8").trim().split("\n").map(row=>JSON.parse(row));expect(ledger.filter(row=>row.event==="RESERVE")).toHaveLength(7);
+ expect(existsSync(join(result.directory,"http-6.json"))).toBe(false);expect(existsSync(join(result.directory,"http-7.json"))).toBe(false);await expect(runDebugLoopExecution(s.load(),candidate,"R03_TURN1_SINGLETON_CHANGE_STRING_BASELINE" as never,async()=>{calls++;throw Error("FORBIDDEN")})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(6);
  }finally{s.cleanup()}},120000);
 it("new reviewed debug authority admits conservative UNKNOWN without rewriting stopped history",()=>{const s=setup();try{const before=readFileSync(join(s.history,"campaign.jsonl"),"utf8");expect(inspectDebugLoop(s.load())).toMatchObject({unknownExposureMicrounits:105472,remainingConservativeMicrounits:4894528});expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);}finally{s.cleanup()}});
 it.each([{hardCapMicrounits:10000001},{model:"other"},{provider:"other"},{retry:1},{fallback:"other"},{accountingPolicy:"CONFIRMED_COST_V1"}])("rejects broadened debug policy %j",patch=>{const s=setup();try{expect(()=>s.load(patch)).toThrow()}finally{s.cleanup()}});
@@ -675,7 +698,7 @@ it("new append-only reviewed ten-dollar authority retains historical UNKNOWN and
 it("no authority, even with a transport, cannot dispatch",async()=>{let calls=0;await expect(runDebugLoopExecution(undefined,candidate,"QUERY_ONLY",async()=>{calls++;return {status:400,body:"{}"}})).rejects.toThrow("DEBUG_AUTHORITY_REQUIRED");expect(calls).toBe(0)});
 it("probe performs one durable application-path request; terminal duplicate cannot dispatch again",async()=>{const s=setup();let calls=0;try{const a=s.load(),before=readFileSync(join(s.history,"campaign.jsonl"),"utf8");const result=await runDebugLoopExecution(a,candidate,"V14",async request=>{calls++;expect(request.stream).toBe(false);expect(request.provider.allow_fallbacks).toBe(false);return {status:400,body:"{}"}},{now:()=>100});expect(result).toMatchObject({providerHttpAttempts:1,terminal:true,pilotCredit:false});await expect(runDebugLoopExecution(a,candidate,"V14",async()=>{calls++;return {status:400,body:"{}"}})).rejects.toThrow("DEBUG_EXECUTION_CONSUMED");expect(calls).toBe(1);expect(inspectDebugLoop(a)).toMatchObject({prospectiveUnknownCount:2,unknownExposureMicrounits:210944});expect(readFileSync(join(s.history,"campaign.jsonl"),"utf8")).toBe(before);}finally{s.cleanup()}});
 it("schema probes alter only selected evidence representation and never mutate runtime schema",()=>{
- const schema=googleLiteEuContextWireSchemaV3().schema;restorePublicCatalogueWrappers(schema);
+ const schema=typedSingletonSchemaFixture().schema;restorePublicCatalogueWrappers(schema);
  expect(hash(JSON.stringify(schema))).toBe("fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e");
  const before=JSON.stringify(schema),probe=debugProbeSchema(schema,"QUERY_ONLY") as typeof schema;
  expect(probe.properties!.requestTarget).not.toEqual(schema.properties!.requestTarget);
@@ -686,7 +709,7 @@ it("schema probes alter only selected evidence representation and never mutate r
 it("tampered authority after loading fails before dispatch",async()=>{const s=setup();let calls=0;try{const a=s.load();writeFileSync(join(s.accountRoot,"grant.json"),"{}");await expect(runDebugLoopExecution(a,candidate,"V14",async()=>{calls++;return {status:400,body:"{}"}})).rejects.toThrow("DEBUG_RECORD_BINDING");expect(calls).toBe(0)}finally{s.cleanup()}});
 it.each(["CHANGE_TEXT_ONLY","CHANGE_DATE_ONLY","CHANGE_TIME_ONLY","CHANGE_SCALAR_ONLY","CHANGE_CLEAR_ONLY"] as const)("%s preserves only its semantic evidence group despite coalesced branches",mode=>{
  type ProbeNode={type?:string;enum?:unknown[];const?:unknown;$ref?:string;properties?:Record<string,ProbeNode>;items?:ProbeNode;$defs?:Record<string,ProbeNode>;anyOf?:ProbeNode[]};
- const schema=googleLiteEuContextWireSchemaV3().schema;restorePublicCatalogueWrappers(schema);
+ const schema=typedSingletonSchemaFixture().schema;restorePublicCatalogueWrappers(schema);
  // Public pre-rank schema only: these historical transforms never dispatch
  // through current application authority. Entire immutable schema is pinned.
  expect(hash(JSON.stringify(schema))).toBe("fdb75f2e2e224c005f792c62751790fa7c6703183e236f1921366a5ea516068e");

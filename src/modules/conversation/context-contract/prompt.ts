@@ -7,7 +7,7 @@ Consistency: grounded nonnull SET/REPLACE or resolved CURRENT facts cannot be MI
 
 Title REPLACE/CLEAR require titleCorrectionAllowed=true (occupied CURRENT title), no title obligation; availability grants no NEW/query ownership. titlePresenceRequired=true requires nonnull SET of grounded current USER subject/current USER_TURN evidence, not subject questions.
 
-Singletons: ten schema roots required/nullable unless presence requires nonnull; exclusive SET/REPLACE/CLEAR, never ordinary. Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence. Absent=null/no rank/change; CLEAR ranked despite value=null. One operation/field; ambiguity only uncertainties; excluded reminderTime=null. Order/ownership conflicts refuse/no repair.
+Singletons: ten schema roots required/nullable unless presence requires nonnull; exclusive SET/REPLACE/CLEAR, never ordinary. Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged. Absent=null/no rank/change; CLEAR ranked despite value=null. One operation/field; ambiguity only uncertainties; excluded reminderTime=null. Order/ownership conflicts refuse/no repair.
 
 Order: CURRENT PROPOSAL authored rank STRING "0".."12" exact/no coercion: ONE global space, NEVER restart/array/root; unique across carriers/ordinary, gaps/sole"10" legal. ordinary["1","2"]+singleton"0" valid; ["0","1"]+singleton"0" collides. Not field codes/N-indexes/prior turn/state/root/source. Numeric ordinal order before evidence; ordinary strictly increasing. No field sort/ties/gap fills/defaults.
 

@@ -70,7 +70,7 @@ it("scope or observed revision mismatch cannot grant CURRENT",()=>{
   expect(buildContextInputV2({message:msg,context:chat,snapshot:state,observation:{...seen,observed:{presence:"PRESENT",contextId:state.id,contextRevision:2}}})).toEqual({status:"REFUSED",reason:"CONTEXT_STALE"});
 });
 it("service rejects first-task CURRENT with bounded diagnostics, no partial draft or reminder",async()=>{
-  const h=await harness([proposal({title:"đi thi"},"CURRENT")]);
+  const h=await harness([proposal({title:"đi thi",eventTime:{hour:9,minute:0,qualifier:"H24"}},"CURRENT")]);
   await h.turn(0,"Em thi ngày 20/12 lúc 9h.");
   const state=await h.read(1);
   expect(state?.requestId??null).toBeNull();

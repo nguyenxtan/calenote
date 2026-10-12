@@ -36,7 +36,7 @@ export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
     if(wire.requestTarget)carrier(wire.requestTarget as Record<string,unknown>);
     if(wire.query)carrier(wire.query as Record<string,unknown>);
     (wire.changes as Array<{change:Record<string,unknown>}>).forEach(entry=>carrier(entry.change));
-    for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])if(wire[root])carrier((wire[root] as {change:Record<string,unknown>}).change);
+    for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])if(wire[root]){const wrapper=wire[root] as {change:string};const change=JSON.parse(wrapper.change) as Record<string,unknown>;carrier(change);wrapper.change=JSON.stringify(change);}
     for(const issue of wire.uncertainties as Array<{alternatives:string[]}>)issue.alternatives=issue.alternatives.map(text=>{const a=JSON.parse(text);carrier(a);return JSON.stringify(a);});
     return wire;
   };

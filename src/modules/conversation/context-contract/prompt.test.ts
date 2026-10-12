@@ -6,6 +6,7 @@ import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
+const previousSingletonPrompt=(prompt:string)=>prompt.replace("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}. Inner values unchanged.","Nonnull carrier/ordinary={rank,change}; unchanged authored field/operation/value/evidence.");
 
 it("dispatches the civil source fidelity checkpoint last before output", () => {
   const input = ContextInputV2Schema.parse({ schemaVersion: "calenote-context-input-2", reference: { instant: "2026-09-28T03:00:00Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" }, turns: [{ role: "USER", text: "Ngày 17/12 họp, nhắc ba ngày liên tiếp trước đó." }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [], capabilities: { version: "v1", supported: ["ONCE", "FINITE_DAILY"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } } });
@@ -257,9 +258,9 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
 it("rank transport keeps single active membership and payload ownership",()=>{
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain('Example: titleChange=');
  expect(CONTEXT_CONTRACT_PROMPT).toContain("titlePresenceRequired=true requires nonnull SET of grounded current USER subject/current USER_TURN evidence, not subject questions.");
- expect(CONTEXT_CONTRACT_PROMPT).toContain("Nonnull carrier/ordinary={rank,change}");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent=null/no rank/change; CLEAR ranked despite value=null");
- expect(CONTEXT_CONTRACT_PROMPT).toContain("authored field/operation/value/evidence");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Inner values unchanged");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("exclusive SET/REPLACE/CLEAR, never ordinary");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("ten schema roots required/nullable unless presence requires nonnull");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("One operation/field; ambiguity only uncertainties; excluded reminderTime=null");
@@ -268,7 +269,7 @@ it("rank transport keeps single active membership and payload ownership",()=>{
 it("relative ranks preserve authored order without contiguous chosen-N indexes",()=>{
  const order=CONTEXT_CONTRACT_PROMPT.split("\n").find(line=>line.startsWith("Order:"));
  for(const text of ["CURRENT PROPOSAL authored","rank STRING \"0\"..\"12\" exact/no coercion","unique across carriers/ordinary","gaps/sole\"10\" legal","Not field codes/N-indexes/prior turn/state/root/source","Numeric ordinal order before evidence; ordinary strictly increasing","No field sort/ties/gap fills/defaults"])expect(order).toContain(text);
- expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("b280d4e4d35c54dd1575003021000cd7d1acd471da19bf550efb159b01f8482c");
+ expect(createHash("sha256").update(previousSingletonPrompt(CONTEXT_CONTRACT_PROMPT).split("\n").filter(line=>!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("b280d4e4d35c54dd1575003021000cd7d1acd471da19bf550efb159b01f8482c");
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain("changeOrder");
 });
 it("ordinary arrays and singleton roots share one non-restarting rank space",()=>{
@@ -280,7 +281,7 @@ it("primary evidence selects request-bound strings without granting source scope
   expect(CONTEXT_CONTRACT_PROMPT).toContain("Source availability grants no entailment, current-target authority or fact-scope permission.");
 });
 it("uncertainty candidates distinguish absence from typed grounded MISSING", () => {
- expect(createHash("sha256").update(CONTEXT_CONTRACT_PROMPT.split("\n").filter(line=>!line.startsWith("uncertainties ")&&!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("08902a34a0d1539f5142766d20301065bcf465eb76331e443639b608d5c8e78c");
+ expect(createHash("sha256").update(previousSingletonPrompt(CONTEXT_CONTRACT_PROMPT).split("\n").filter(line=>!line.startsWith("uncertainties ")&&!line.startsWith("Order:")).join("\n")).digest("hex")).toBe("08902a34a0d1539f5142766d20301065bcf465eb76331e443639b608d5c8e78c");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("[] if none; nonnull");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("even MISSING");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent carriers:null; inner null legal");

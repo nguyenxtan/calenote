@@ -1,0 +1,44 @@
+import {vi} from "vitest";
+import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
+/** Controlled fixture authoring only; never called by production transport. */
+function data(object:object,key:PropertyKey){const descriptor=Object.getOwnPropertyDescriptor(object,key);return descriptor&&Object.hasOwn(descriptor,"value")?descriptor.value:undefined;}
+function jsonSafe(value:unknown,depth=0):boolean{
+ if(depth>8)return false;if(value===null||typeof value==="string"||typeof value==="boolean")return true;
+ if(typeof value==="number")return Number.isFinite(value)&&!Object.is(value,-0);
+ if(!value||typeof value!=="object")return false;
+ try{if(Object.getPrototypeOf(value)!==(Array.isArray(value)?Array.prototype:Object.prototype))return false;const keys=Reflect.ownKeys(value);if(keys.some(key=>typeof key!=="string"))return false;
+  if(Array.isArray(value)){const length=data(value,"length");if(!Number.isSafeInteger(length)||length>256||keys.length!==length+1)return false;for(let i=0;i<length;i++)if(!jsonSafe(data(value,String(i)),depth+1))return false;return true;}
+  return keys.every(key=>jsonSafe(data(value,key),depth+1));
+ }catch{return false;}
+}
+function jsonData(value:unknown):unknown{
+ if(!value||typeof value!=="object")return value;
+ if(Array.isArray(value)){const length=data(value,"length");return Array.from({length},(_,index)=>jsonData(data(value,String(index))));}
+ return Object.fromEntries(Reflect.ownKeys(value).map(key=>[key,jsonData(data(value,key))]));
+}
+function authoring<T>(wire:T,unwrap:boolean):T{
+ if(!wire||typeof wire!=="object"||Array.isArray(wire))return wire;
+ const changed=new Map<string,unknown>();
+ for(const root of roots){const carrier=data(wire,root);if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))continue;
+  const change=data(carrier,"change");
+  try{let replacement:unknown;
+   if(unwrap&&typeof change==="string"){replacement=JSON.parse(change);if(!replacement||typeof replacement!=="object"||Array.isArray(replacement))continue;}
+   else if(!unwrap&&change&&typeof change==="object"&&jsonSafe(change))replacement=JSON.stringify(jsonData(change));else continue;
+   const wrapper=Object.create(Object.getPrototypeOf(carrier),Object.getOwnPropertyDescriptors(carrier));Object.defineProperty(wrapper,"change",{value:replacement,writable:true,enumerable:true,configurable:true});changed.set(root,wrapper);
+  }catch{/* Hostile or malformed fixtures retain their original refusal form. */}
+ }
+ if(!changed.size)return wire;
+ const copy=Object.create(Object.getPrototypeOf(wire),Object.getOwnPropertyDescriptors(wire));for(const [root,value]of changed)Object.defineProperty(copy,root,{value,writable:true,enumerable:true,configurable:true});return copy as T;
+}
+export const unwrapSingletonAuthoringFixture=<T>(wire:T):T=>authoring(wire,true);
+export const wrapSingletonAuthoringFixture=<T>(wire:T):T=>authoring(wire,false);
+/** Pure synchronous public-schema specimen capture. Spy always restored. */
+export function typedSingletonSchemaFixture(...args:Parameters<typeof googleLiteEuContextWireSchemaV3>):ReturnType<typeof googleLiteEuContextWireSchemaV3>{
+ const clone=globalThis.structuredClone,candidates:Array<ReturnType<typeof googleLiteEuContextWireSchemaV3>["schema"]>=[];
+ const spy=vi.spyOn(globalThis,"structuredClone").mockImplementation(value=>{const result=clone(value);const node=value as {properties?:{changes?:{maxItems?:unknown}}};if(typeof node?.properties?.changes?.maxItems==="number"&&node.properties.changes.maxItems<=3){if(candidates.length>=16)throw Error("PUBLIC_TYPED_SPECIMEN_BOUND");candidates.push(clone(value) as typeof candidates[number]);}return result;});
+ try{const result=googleLiteEuContextWireSchemaV3(...args),matching=new Map<string,typeof result.schema>();
+  for(const candidate of candidates){const restored=clone(result.schema);for(const root of roots)restored.properties![root]=candidate.properties![root];if(JSON.stringify(restored)===JSON.stringify(candidate))matching.set(JSON.stringify(candidate),candidate);}
+  if(matching.size!==1)throw Error("PUBLIC_TYPED_SPECIMEN_CAPTURE");return {...result,schema:[...matching.values()][0]};
+ }finally{spy.mockRestore();}
+}
