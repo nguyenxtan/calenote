@@ -122,8 +122,14 @@ describe("structured schedule resolution", () => {
     expect(resolveRequest(answered.candidate, now, lunarCalendar)).toMatchObject({ status: "READY", details: { eventDate: "2026-09-29", eventTime: "10:00", notes: null } });
   });
   it.each([
-    [{ title: "&".repeat(500), location: null, notes: null }, ["title"]],
-    [{ title: "gọi mẹ", location: null, notes: "&".repeat(500) }, ["title", "notes"]],
+    { title: "&".repeat(500), location: null, notes: null },
+    { title: "gọi mẹ", location: null, notes: "&".repeat(500) },
+  ])("plain_text_symbols_that_fit_are_not_rejected_due_to_HTML_expansion", values => {
+    expect(resolveRequest(request(values), now, lunarCalendar)).toMatchObject({ status: "READY" });
+  });
+  it.each([
+    [{ title: "&".repeat(1800), location: null, notes: null, occurrenceCount: 30, eventDate: date(11, 11, 2026) }, ["title"]],
+    [{ title: "gọi mẹ", location: null, notes: "&".repeat(2000) }, ["title", "notes"]],
   ])("oversize_complete_render_names_present_text_fields_instead_of_absent_notes", (values, fields) => {
     expect(resolveRequest(request(values), now, lunarCalendar)).toMatchObject({ status: "CLARIFY", fields, reasons: ["DETAILS_TOO_LONG"] });
   });
