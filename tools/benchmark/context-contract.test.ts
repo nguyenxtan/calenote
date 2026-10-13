@@ -587,13 +587,28 @@ it("whole_service_I1_I10_authority_controls: all frozen Layer1 scripts execute t
   expect(scored.detailPassed).toBe(scored.detailPlanned);
 }, 120000);
 
-it("canonical pilot repeats the eight critical originals twice and scores every actual turn", async () => {
+describe.sequential("canonical pilot", { shuffle: false }, () => {
   const corpus = { version: "context-contract-corpus-1", cases: [...regressions.cases, ...development.cases, ...heldout.cases] } as ContextManifest;
   const planned = expandContextCampaign(corpus, "PILOT");
-  expect(planned).toHaveLength(32);
-  expect(planned.filter(script => script.executionId.includes("#"))).toHaveLength(16);
-  const observed = await runContextFixtureCampaign(planned, { sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, frozenContextProposal);
-  const scored = scoreContextCampaign(planned, observed);
-  expect(scored).toMatchObject({ gate: "PASS", plannedScripts: 32, passedScripts: 32, plannedTurns: 84, passedTurns: 84,
-    healthyFullSchemaValid: scored.healthyPlanned, safetyFailures: 0 });
+  const observed: ContextObservation[] = [];
+
+  // Each script already owns a fresh probe; give each its own unchanged test
+  // deadline instead of timing the entire integration campaign as one unit.
+  it.each(planned)("scores every actual turn of $executionId", async script => {
+    const actual = await runContextFixtureCampaign([script], { sourceSha: "a".repeat(40), referenceNow: Date.parse("2026-09-28T03:00:00Z") }, frozenContextProposal);
+    expect(actual).toHaveLength(1);
+    const scored = scoreContextCampaign([script], actual);
+    expect(scored).toMatchObject({ plannedScripts: 1, passedScripts: 1,
+      plannedTurns: script.turns.length, passedTurns: script.turns.length,
+      healthyFullSchemaValid: scored.healthyPlanned, safetyFailures: 0 });
+    observed.push(...actual);
+  });
+
+  it("repeats the eight critical originals twice and scores the complete campaign", () => {
+    expect(planned).toHaveLength(32);
+    expect(planned.filter(script => script.executionId.includes("#"))).toHaveLength(16);
+    const scored = scoreContextCampaign(planned, observed);
+    expect(scored).toMatchObject({ gate: "PASS", plannedScripts: 32, passedScripts: 32, plannedTurns: 84, passedTurns: 84,
+      healthyFullSchemaValid: scored.healthyPlanned, safetyFailures: 0 });
+  });
 });
