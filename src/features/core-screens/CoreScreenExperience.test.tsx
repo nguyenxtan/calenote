@@ -3,12 +3,13 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoreScreenExperience } from "./CoreScreenExperience";
+import { createRouter } from "@/worker/router";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 const user = { displayName: "Mai", email: "mai@example.test", timezone: "Asia/Ho_Chi_Minh" };
-const reminder = { publicId: "R".repeat(22), title: "Gửi báo giá", scheduledAt: Date.UTC(2026, 8, 10, 7), timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
+const reminder = { publicId: "R".repeat(21) + "A", title: "Gửi báo giá", scheduledAt: Date.UTC(2026, 8, 10, 7), timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
 const action = { id: "A".repeat(22), title: "Họp với team vận hành", scheduledAt: Date.UTC(2026, 8, 11, 2), timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -122,14 +123,39 @@ describe("CoreScreenExperience", () => {
     expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
   });
 
-  it("renders Vietnamese reminder status and only exposes the existing cancellation API", async () => {
-    const fetcher = installFetch((path) => path === `/api/reminders/${reminder.publicId}/cancel` ? json({ data: { cancelled: true } }) : undefined);
-    const interaction = userEvent.setup();
+  it("cancels from the web button through the real authenticated Worker route", async () => {
+    let cancelled = false;
+    let routeResult: unknown;
+    const router = createRouter({ remindersOperations: async () => ({
+      requireUser: async () => ({ userId: "owner" }),
+      listReminders: async () => [], createReminder: async () => { throw new Error("unexpected create"); },
+      cancelReminder: async ({ userId, publicId }) => {
+        expect(userId).toBe("owner"); expect(publicId).toBe(reminder.publicId);
+        cancelled = true; return { cancelled: true as const };
+      },
+    }) });
+    const initial = installFetch().getMockImplementation()!;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      if (typeof input === "string" && input.startsWith("/api/reminders/")) {
+        const headers = new Headers(init?.headers);
+        headers.set("origin", "https://localhost:8787");
+        headers.set("cookie", `__Host-calenote_session=${"A".repeat(43)}`);
+        const response = await router(new Request(`https://localhost:8787${input}`, { ...init, headers }),
+          { APP_ORIGIN: "https://localhost:8787", CALENOTE_RUNTIME_ENVIRONMENT: "local" } as unknown as Env,
+          {} as ExecutionContext);
+        routeResult = await response.clone().json();
+        return response;
+      }
+      return initial(input, init);
+    });
     render(<CoreScreenExperience screen="reminders" />);
     expect(await screen.findByText("Sắp tới")).toBeVisible();
     expect(screen.getByRole("tab", { name: "Đang chờ" })).toHaveAttribute("aria-selected", "true");
-    await interaction.click(screen.getByRole("button", { name: `Huỷ ${reminder.title}` }));
-    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/reminders/${reminder.publicId}/cancel`, expect.objectContaining({ method: "POST" })));
+    await userEvent.click(screen.getByRole("button", { name: `Huỷ ${reminder.title}` }));
+    await waitFor(() => expect(routeResult).toEqual({ data: { cancelled: true } }));
+    expect(await screen.findByText("Lời nhắc đã được huỷ.")).toBeVisible();
+    expect(cancelled).toBe(true);
+    expect(screen.queryByRole("button", { name: `Huỷ ${reminder.title}` })).not.toBeInTheDocument();
   });
 
   it("opens an accessible mobile More menu for secondary routes", async () => {

@@ -1,10 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { fixture, now } from "@/modules/conversation/context-contract/infrastructure/d1/test-support";
-import { addConfirmationToken } from "@/modules/conversation/context-contract/confirmation-test-support";
+import { confirmationFixture, addConfirmationToken } from "@/modules/conversation/context-contract/confirmation-test-support";
 import { listDetailedReminders } from "./details-api-service";
 import { D1ReminderApiStore } from "./infrastructure/d1/api-store";
 
 describe("owner reminder details", () => {
+  it.each([1, 2])("rejects missing companions after real V2 confirmation of %i occurrences instead of projecting legacy null details", async count => {
+    const f = await fixture();
+    try {
+      const candidate = await confirmationFixture(count);
+      await addConfirmationToken(candidate);
+      const observed = await f.store.observe(f.scope());
+      if ("failure" in observed) throw new Error(observed.failure);
+      expect((await f.store.apply(f.scope(), observed.observation, { ...f.transition, snapshot: candidate.snapshot, preview: candidate.preview })).status).toBe("APPLIED");
+      const principal = { sessionId: "session", userId: "owner", expiresAt: now + 1_000_000 };
+      expect((await f.store.confirm({ kind: "WEB", principal, chat: candidate.snapshot.scope }, candidate.proof)).status).toBe("COMMITTED");
+      const dependencies = { store: new D1ReminderApiStore(f.db), contextStore: f.store, keyring: f.keyring };
+      const before = await listDetailedReminders(principal, dependencies);
+      expect(before.reminders).toHaveLength(count);
+      expect(before.reminders.every(r => r.details !== null)).toBe(true);
+      await f.db.prepare("DELETE FROM reminder_context_details").run();
+      await expect(listDetailedReminders(principal, dependencies)).rejects.toThrow("INVALID_CONTEXT_DETAILS");
+    } finally { f.close(); }
+  });
   it("keeps a legacy reminder in the OWNER list with null details and excludes another owner", async () => {
     const f = await fixture();
     try {
@@ -22,7 +40,7 @@ describe("owner reminder details", () => {
     const rows = Array.from({ length: 101 }, (_, i) => ({ id: `r${i}`, public_id: `public-${i}`,
       title_ciphertext: new ArrayBuffer(0), title_iv: new ArrayBuffer(0), title_key_version: 1,
       scheduled_at: now + i, timezone: "Asia/Ho_Chi_Minh" as const, status: "PENDING" as const,
-      owner_id: "owner", chat_identity_id: "identity", workspace_id: "workspace", connection_id: "connection", private_chat_id: "chat", has_context_details: 0 }));
+      owner_id: "owner", chat_identity_id: "identity", workspace_id: "workspace", connection_id: "connection", private_chat_id: "chat", has_context_details: 0, expected_context_details: 0 }));
     const result = await listDetailedReminders({ sessionId: "session", userId: "owner", expiresAt: now + 1_000_000 }, {
       store: { listOwnedDetailed: async (_owner, limit) => rows.slice(0, limit) },
       keyring: { decryptSensitive: async () => "🙂".repeat(1800) },

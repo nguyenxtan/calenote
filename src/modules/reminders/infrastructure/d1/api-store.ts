@@ -20,7 +20,13 @@ export class D1ReminderApiStore implements ReminderApiStore {
       `SELECT r.id, r.public_id, r.title_ciphertext, r.title_iv, r.title_key_version,
               r.scheduled_at, r.timezone, r.status, w.owner_user_id owner_id,
               r.chat_identity_id, w.id workspace_id, ci.connection_id, ci.private_chat_id,
-              EXISTS(SELECT 1 FROM reminder_context_details d WHERE d.reminder_id=r.id) has_context_details
+              EXISTS(SELECT 1 FROM reminder_context_details d WHERE d.reminder_id=r.id) has_context_details,
+              (EXISTS(SELECT 1 FROM command_drafts source
+                 WHERE source.id=r.source_draft_id AND source.contract_version=2)
+               OR EXISTS(SELECT 1 FROM reminder_series_occurrences occurrence
+                 JOIN reminder_series series ON series.id=occurrence.series_id
+                 JOIN reminder_series_proposals proposal ON proposal.id=series.proposal_id
+                 WHERE occurrence.reminder_id=r.id AND proposal.contract_version=2)) expected_context_details
        FROM memberships m
        JOIN workspaces w ON w.id=m.workspace_id AND w.kind='PERSONAL' AND w.owner_user_id=m.user_id
        JOIN reminders r ON r.workspace_id=w.id

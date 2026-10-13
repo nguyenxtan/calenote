@@ -1,16 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { renderReminderDetails, DELIVERY_PREFIX } from "./detail-presentation";
+import { sendTelegramText } from "@/modules/connections/providers/telegram";
+import { sendZaloText } from "@/modules/connections/providers/zalo";
 import type { CanonicalDetailsV1 } from "@/modules/conversation/context-contract/state";
 const details: CanonicalDetailsV1 = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung <script>", notes: "nhớ mang giấy tờ & bút", eventDate: "2026-10-11", eventTime: null, calendarProvenance: { calendar: "GREGORIAN", sourceDate: null, provenance: { kind: "EXPLICIT_USER" } }, resolutionVersion: "context-resolution-1" };
 const schedule = [{ index: 0, localDate: "2026-10-09", scheduledAt: Date.parse("2026-10-09T01:00:00Z") }, { index: 1, localDate: "2026-10-10", scheduledAt: Date.parse("2026-10-10T01:00:00Z") }];
 describe("complete reminder detail projection", () => {
+  it.each([{ provider: "telegram", send: sendTelegramText }, { provider: "zalo", send: sendZaloText }])("preserves source symbols through the real $provider plain-text adapter", async ({ send }) => {
+    const rendered = renderReminderDetails("A < B \"quoted\" 'single'", details, schedule);
+    expect(rendered.status).toBe("COMPLETE");
+    if (rendered.status !== "COMPLETE") throw new Error("render failed");
+    const text = DELIVERY_PREFIX + rendered.text;
+    let sent: Record<string, unknown> | undefined;
+    await send("123456789:AAExample_secret-token_123456789", "private-chat", text, async request => {
+      sent = request.body; return { ok: true, result: { message_id: "receipt" } };
+    });
+    expect(sent).toEqual({ chat_id: "private-chat", text });
+    expect(sent?.text).toContain("A < B \"quoted\" 'single'");
+    expect(sent?.text).toContain("Quang Trung <script>");
+    expect(sent?.text).toContain("nhớ mang giấy tờ & bút");
+  });
+  it("budgets source ampersands without HTML expansion at the final plain-text limit", () => {
+    const empty = { ...details, location: null, notes: null };
+    const base = renderReminderDetails("x", empty, schedule);
+    if (base.status !== "COMPLETE") throw new Error("render failed");
+    const title = "&".repeat(2000 - DELIVERY_PREFIX.length - base.text.length + 1);
+    const exact = renderReminderDetails(title, empty, schedule);
+    expect(exact.status).toBe("COMPLETE");
+    if (exact.status === "COMPLETE") expect(exact.text.length + DELIVERY_PREFIX.length).toBe(2000);
+    expect(renderReminderDetails(title + "&", empty, schedule).status).toBe("TOO_LONG");
+  });
   it("event_time_without_event_date_is_still_rejected_at_the_render_boundary", () => {
     expect(renderReminderDetails("gọi mẹ", { ...details, eventDate: null, eventTime: "10:00", notes: null }, schedule)).toEqual({ status: "INVALID" });
   });
-  it("preserves distinct event and every notification, location, notes and safe markup", () => {
+  it("preserves distinct event and every notification, location, notes and plain-text symbols", () => {
     const result = renderReminderDetails("đi thi <b>", details, schedule);
     expect(result.status).toBe("COMPLETE"); if (result.status !== "COMPLETE") return;
-    for (const value of ["đi thi &lt;b&gt;", "Quang Trung &lt;script&gt;", "nhớ mang giấy tờ &amp; bút", "Sự kiện: 2026-10-11", "2026-10-09 08:00", "2026-10-10 08:00"]) expect(result.text).toContain(value);
+    for (const value of ["đi thi <b>", "Quang Trung <script>", "nhớ mang giấy tờ & bút", "Sự kiện: 2026-10-11", "2026-10-09 08:00", "2026-10-10 08:00"]) expect(result.text).toContain(value);
     expect(result.text).not.toContain("2026-10-11 08:00");
   });
   it("exactly_2000_UTF16_including_delivery_prefix_then_one_over_never_clips", () => {

@@ -181,8 +181,8 @@ describe("encrypted companion delivery", () => {
     await seedCompanion(h);
     expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "SENT" });
     const body = h.sendText.mock.calls[0]?.[3];
-    expect(body).toContain("Địa điểm: Quang Trung &lt;b&gt;");
-    expect(body).toContain("Ghi chú: Mang giấy tờ &amp; bút");
+    expect(body).toContain("Địa điểm: Quang Trung <b>");
+    expect(body).toContain("Ghi chú: Mang giấy tờ & bút");
     expect(body).toContain("Sự kiện: 2027-01-16 13:30");
     expect(body).toContain("Thông báo (Asia/Ho_Chi_Minh):");
   });
