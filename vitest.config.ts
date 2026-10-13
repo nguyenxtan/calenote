@@ -16,7 +16,8 @@ export default defineConfig({
     // Disposable workerd/D1 fixtures bind localhost per test. Bound file-level
     // concurrency to avoid intermittent EADDRNOTAVAIL on local macOS runners;
     // tests still exercise their own real concurrent transaction races.
-    maxWorkers: 2,
+    // CI runners have fewer CPU cores; avoid competing heavy benchmark files.
+    maxWorkers: process.env.CI ? 1 : 2,
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],

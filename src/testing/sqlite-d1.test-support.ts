@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import type { DatabaseSync as SqliteDatabase, SQLInputValue } from "node:sqlite";
+
+// Node 22's prefix-only SQLite builtin must load natively, not through Vite's
+// jsdom dependency bundler. This remains the real SQLite-backed D1 fixture.
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
 function sqliteValue(value: unknown): SQLInputValue {
   if (Object.prototype.toString.call(value) === "[object ArrayBuffer]") {
@@ -18,7 +23,7 @@ class SqliteD1Statement {
   private values: SQLInputValue[] = [];
 
   constructor(
-    private readonly database: DatabaseSync,
+    private readonly database: SqliteDatabase,
     private readonly sql: string,
   ) {}
 
