@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -83,10 +83,10 @@ describe("CoreScreenExperience", () => {
     render(<CoreScreenExperience screen="calendar" />);
     await screen.findByRole("heading", { name: "Lịch" });
     await interaction.click(screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true }));
-    expect(screen.getByRole("menu", { name: "Điều hướng thêm", hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
+    expect(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).getByRole("link", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
     await interaction.keyboard("{Escape}");
-    expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tất cả điều hướng", hidden: true })).not.toBeInTheDocument();
   });
 
   it.each(["calendar", "inbox", "reminders"] as const)("has no serious axe violations for %s", async (screenName) => {

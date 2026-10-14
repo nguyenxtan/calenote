@@ -70,7 +70,7 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
         <h2>Tài khoản</h2><p>Thông tin không gian Calenote của bạn.</p>
         <dl className={styles.details}><div><dt>Tên tài khoản</dt><dd>{user.displayName}</dd></div><div><dt>Email đăng nhập</dt><dd>{user.email}</dd></div><div><dt>Múi giờ lời nhắc</dt><dd>Việt Nam · UTC+7</dd></div><div><dt>Đăng nhập</dt><dd>Mã một lần qua bot riêng</dd></div></dl>
         <p className={styles.help}>Tên tài khoản và email hiện chỉ xem. Bạn có thể đặt tên gọi riêng ở Cá nhân hoá. Lịch nhắc hiện hỗ trợ giờ Việt Nam.</p>
-        <p className={styles.help}>Đăng xuất ở menu tài khoản; trên điện thoại, mở mục Thêm → Đăng xuất.</p>
+        <p className={styles.help}>Đăng xuất ở menu tài khoản; trên điện thoại, mở Menu → Đăng xuất.</p>
       </section>
       <section className={styles.settingsCard} id="delivery">
         <h2>Kênh nhận lời nhắc</h2><p>Lời nhắc được gửi qua bot đã kết nối với cuộc trò chuyện riêng của bạn.</p>

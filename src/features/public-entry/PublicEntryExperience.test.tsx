@@ -21,6 +21,15 @@ describe("PublicEntryExperience", () => {
     expect(screen.queryByText(/Google Calendar|Gmail|Slack|WhatsApp|không giới hạn AI/i)).not.toBeInTheDocument();
   });
 
+  it("connects product tasks, help, and settings without presenting a fake chat receipt", () => {
+    render(<PublicEntryExperience />);
+    expect(screen.getByRole("heading", { name: "Một nơi cho những việc đang chờ bạn" })).toBeVisible();
+    expect(screen.getAllByRole("link", { name: /hướng dẫn/i })[0]).toHaveAttribute("href", "/docs");
+    expect(screen.getByRole("link", { name: "Cài đặt" })).toHaveAttribute("href", "/app/settings");
+    expect(screen.getByAltText(/giao diện hôm nay.+dữ liệu mẫu/i)).toHaveAttribute("src", "/guide/today-desktop.jpg");
+    expect(screen.queryByText("Đã hiểu.")).not.toBeInTheDocument();
+  });
+
   it("has no serious or critical accessibility violations", async () => {
     const { container } = render(<PublicEntryExperience />);
     const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

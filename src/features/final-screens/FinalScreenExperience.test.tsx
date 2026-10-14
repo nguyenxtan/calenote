@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -146,10 +146,10 @@ describe("FinalScreenExperience connections", () => {
 
     await screen.findByRole("heading", { name: "Kết nối" });
     await interaction.click(screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true }));
-    expect(screen.getByRole("menu", { name: "Điều hướng thêm", hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
+    expect(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).getByRole("link", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
     await interaction.keyboard("{Escape}");
-    expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tất cả điều hướng", hidden: true })).not.toBeInTheDocument();
   });
 
   it("shows a generic recovery state without exposing a failed response secret", async () => {

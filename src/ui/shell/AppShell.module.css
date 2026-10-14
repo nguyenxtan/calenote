@@ -34,3 +34,18 @@
 .profile small { font-size: 10px; }
 .avatar { background: var(--cn-brand-soft); color: var(--cn-brand-700); font-weight: 600; }
 @media(max-width:900px) { .app { display: block; } .mobileNav .link,.mobileNav .active { min-height: 48px; padding: 6px 2px; font-size: 10px; } }
+
+.rail { overflow-y: auto; }
+.navigation > div:first-child .groupLabel { margin-top: 0; }
+.navigation .groupLabel { margin-top: 18px; color: var(--cn-text-2); }
+.link:focus-visible, .active:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 2px; }
+.mobileAccount { display: grid; gap: 4px; margin: 12px 8px 4px; padding-top: 12px; border-top: 1px solid var(--cn-border); }
+.mobileAccount small { color: var(--cn-text-2); font-size: 12px; }
+.panelHeader { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; }
+.panelHeader button { width: auto; color: var(--cn-brand-700); }
+@media (max-width: 900px) {
+  .mobileNav button.active { width: 100%; border: 0; }
+  .moreMenu { position: fixed; bottom: calc(72px + env(safe-area-inset-bottom)); right: 12px; left: 12px; width: auto; max-height: calc(100dvh - 100px - env(safe-area-inset-bottom)); overflow-y: auto; padding: 12px; }
+  .moreMenu .link, .moreMenu .active { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 10px 12px; font-size: 14px; }
+  .moreMenu .groupLabel { margin: 12px 0 4px; color: var(--cn-text-2); }
+}

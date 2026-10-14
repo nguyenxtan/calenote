@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, MoreHorizontal, Settings2, Sun } from "lucide-react";
+import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, BookOpen, MoreHorizontal, Settings2, Sun } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import type { SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
@@ -23,9 +23,15 @@ const secondary: readonly NavigationItem[] = [
   { href: "/app/settings", label: "Cài đặt", icon: Settings2 },
 ];
 
-function NavLink({ item, active }: { item: NavigationItem; active: boolean }) {
+const groups = [
+  { label: "Ngày của bạn", items: primary },
+  { label: "Không gian", items: secondary },
+  { label: "Trợ giúp", items: [{ href: "/docs", label: "Hướng dẫn", icon: BookOpen }] },
+] as const;
+
+function NavLink({ item, active, onNavigate, linkRef }: { item: NavigationItem; active: boolean; onNavigate?: () => void; linkRef?: React.Ref<HTMLAnchorElement> }) {
   const Icon = item.icon;
-  return <Link className={active ? styles.active : styles.link} href={item.href} aria-current={active ? "page" : undefined}>
+  return <Link ref={linkRef} onClick={onNavigate} className={active ? styles.active : styles.link} href={item.href} aria-current={active ? "page" : undefined}>
     <Icon aria-hidden="true" size={18} strokeWidth={1.9} /> <span>{item.label}</span>
   </Link>;
 }
@@ -36,11 +42,26 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
   const [accountOpen, setAccountOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const firstMoreLink = useRef<HTMLAnchorElement>(null);
-  useEffect(() => { if (!moreOpen) return; firstMoreLink.current?.focus(); const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMoreOpen(false); }; const outside = (event: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false); }; document.addEventListener("keydown", close); document.addEventListener("mousedown", outside); return () => { document.removeEventListener("keydown", close); document.removeEventListener("mousedown", outside); }; }, [moreOpen]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    firstMoreLink.current?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMoreOpen(false); moreTriggerRef.current?.focus(); }
+    };
+    const outside = (event: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const resize = () => { if (window.matchMedia("(min-width: 901px)").matches) setMoreOpen(false); };
+    document.addEventListener("keydown", close);
+    document.addEventListener("mousedown", outside);
+    window.addEventListener("resize", resize);
+    return () => { document.removeEventListener("keydown", close); document.removeEventListener("mousedown", outside); window.removeEventListener("resize", resize); };
+  }, [moreOpen]);
   const closeAccount = useCallback((restoreFocus = false) => {
     setAccountOpen(false);
     if (restoreFocus) queueMicrotask(() => accountTriggerRef.current?.focus());
@@ -88,9 +109,10 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     <aside className={styles.rail} aria-label="Điều hướng Calenote">
       <Link className={styles.brand} href="/app/today" aria-label="Calenote Hôm nay"><CalenoteMark /></Link>
       <nav className={styles.navigation} aria-label="Điều hướng chính">
-        {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
-        <p className={styles.groupLabel}>Không gian</p>
-        {secondary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
+        {groups.map((group) => <div key={group.label}>
+          <p className={styles.groupLabel}>{group.label}</p>
+          {group.items.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
+        </div>)}
       </nav>
       <div className={styles.account} ref={accountRef}>
         <button ref={accountTriggerRef} className={styles.profile} type="button" aria-label={`Tài khoản ${user.displayName}`} aria-controls="account-actions" aria-expanded={accountOpen} onClick={() => { setAccountError(null); setAccountOpen((open) => !open); }}>
@@ -107,7 +129,19 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     <div className={styles.main}>{children}</div>
     <nav className={styles.mobileNav} aria-label="Điều hướng chính trên điện thoại">
       {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
-      <div className={styles.more} ref={moreRef}><button className={styles.link} type="button" aria-label="Mở thêm điều hướng" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal aria-hidden="true" size={19} /><span>Thêm</span></button>{moreOpen && <div className={styles.moreMenu} role="menu" aria-label="Điều hướng thêm"><Link ref={firstMoreLink} role="menuitem" href="/app/connections" onClick={() => setMoreOpen(false)}>Kết nối</Link><Link role="menuitem" href="/app/activity" onClick={() => setMoreOpen(false)}>Hoạt động</Link><Link role="menuitem" href="/app/settings" onClick={() => setMoreOpen(false)}>Cài đặt</Link><button role="menuitem" type="button" disabled={loggingOut} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>{accountError && <p role="alert">{accountError}</p>}</div>}</div>
+      <div className={styles.more} ref={moreRef}>
+        <button ref={moreTriggerRef} className={secondary.some((item) => item.href === activePath) || activePath === "/docs" ? styles.active : styles.link} type="button" aria-label="Mở thêm điều hướng" aria-controls="all-navigation" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal aria-hidden="true" size={19} /><span>Menu</span></button>
+        {moreOpen && <div className={styles.moreMenu} id="all-navigation" role="group" aria-label="Tất cả điều hướng">
+          <header className={styles.panelHeader}><strong>Điều hướng</strong><button type="button" aria-label="Đóng menu" onClick={() => { setMoreOpen(false); moreTriggerRef.current?.focus(); }}>Đóng</button></header>
+          {groups.map((group, groupIndex) => <div key={group.label}>
+            <p className={styles.groupLabel}>{group.label}</p>
+            {group.items.map((item, itemIndex) => <NavLink item={item} active={item.href === activePath} onNavigate={() => setMoreOpen(false)} linkRef={groupIndex === 0 && itemIndex === 0 ? firstMoreLink : undefined} key={item.href} />)}
+          </div>)}
+          <div className={styles.mobileAccount}><strong>{user.displayName}</strong><small>Giờ Việt Nam · GMT+7</small></div>
+          <button type="button" disabled={loggingOut} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>
+          {accountError && <p role="alert">{accountError}</p>}
+        </div>}
+      </div>
     </nav>
   </div>;
 }

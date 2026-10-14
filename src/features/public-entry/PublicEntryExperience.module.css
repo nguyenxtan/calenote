@@ -8,3 +8,22 @@
 .steps h3 { font-weight: 600; }
 .section h2,.trust h2,.final h2 { font-weight: 600; line-height: 1.3; }
 @media(max-width:760px) { .hero { padding: 44px 0; } .hero h1 { font-size: 38px; } .steps { gap: 18px; } }
+
+.header nav { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; font-size: 13px; }
+.header nav a { display: inline-flex; align-items: center; min-height: 44px; }
+.hero { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 40px; }
+.productPreview { margin: 0; }
+.productPreview img { display: block; width: 100%; height: auto; border: 1px solid var(--cn-border); border-radius: 14px; box-shadow: var(--cn-shadow-md); }
+.productPreview figcaption { color: var(--cn-text-2); font-size: 12px; line-height: 1.6; margin-top: 14px; }
+.capabilities { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin-top: 28px; }
+.capabilities article { border: 1px solid var(--cn-border); border-radius: 14px; padding: 24px; }
+.capabilities article > span { color: var(--cn-brand-700); font-size: 12px; }
+.capabilities h3 { font-size: 18px; font-weight: 600; margin: 16px 0 10px; }
+.capabilities p,.signInNote,.helpLinks p { font-size: 14px; color: var(--cn-text-2); line-height: 1.8; }
+.capabilities a,.helpLinks a { display: inline-flex; align-items: center; min-height: 44px; gap: 8px; color: var(--cn-brand-700); font-size: 14px; }
+.signInNote { margin: 20px 0 0; }
+.helpLinks { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 48px 0 0; }
+.helpLinks h2 { font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
+.helpLinks a + a { margin-left: 22px; }
+.page a:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 4px; }
+@media(max-width:760px) { .header { align-items: flex-start; gap: 16px; } .header nav { gap: 8px 14px; justify-content: flex-end; } .hero { grid-template-columns: 1fr; gap: 30px; } .capabilities,.helpLinks { grid-template-columns: 1fr; gap: 18px; } }
