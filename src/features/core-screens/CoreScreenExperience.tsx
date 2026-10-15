@@ -46,6 +46,7 @@ function Calendar({ reminders, retry }: { reminders: Resource<PublicReminder[]>;
   const [month, setMonth] = useState(() => `${vietnamCivilDate(Date.now()).slice(0, 7)}-01`);
   const [selected, setSelected] = useState(() => vietnamCivilDate(Date.now()));
   const [detail, setDetail] = useState<PublicReminder | null>(null);
+  const today = vietnamCivilDate(Date.now());
   const { year, month: monthNumber, days, firstWeekday } = calendarMonth(month);
   const title = new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC", month: "long", year: "numeric" }).format(Date.parse(`${month}T00:00:00Z`));
   const selectedItems = reminders.value?.filter(item => dateKey(item.scheduledAt) === selected).sort((a, b) => a.scheduledAt - b.scheduledAt) ?? [];
@@ -65,7 +66,7 @@ function Calendar({ reminders, retry }: { reminders: Resource<PublicReminder[]>;
           const key = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const count = reminders.value?.filter(item => dateKey(item.scheduledAt) === key).length ?? 0;
           const presentation = calendarDayPresentation(key, day === 1);
-          return <button key={key} type="button" aria-label={`${presentation.accessibleText}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
+          return <button key={key} type="button" aria-label={`${presentation.accessibleText}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} aria-current={key === today ? "date" : undefined} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
             <span className={styles.solarDay}>{day}</span><span className={styles.lunarDay} aria-hidden="true">{presentation.lunarAvailable ? presentation.lunarLabel : "—"}</span>{count > 0 && <i aria-hidden="true" />}
           </button>;
         })}
