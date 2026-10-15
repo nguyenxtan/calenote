@@ -138,7 +138,7 @@ describe("conversation paid-call and semantic safety boundary", () => {
 });
 
 describe('model fallback outside the closed local read-only grammar',()=>{
-  const inputs=['bạn hỗ trợ âm lịch không?','cho xem lịch tháng này','giới thiệu cú pháp giúp tôi'];
+  const inputs=['bạn hỗ trợ âm lịch không?','xem lịch tháng trước','giới thiệu cú pháp giúp tôi'];
   it.each(inputs)('does not invent pending-proposal context for unavailable read-only input: %s',async text=>{
     const h=fixture();h.deps.gateway.prepare=vi.fn(()=>({status:'FAILURE' as const,category:'UNAVAILABLE' as const}));
     expect((await h.handle(text)).status).toBe('REJECTED');

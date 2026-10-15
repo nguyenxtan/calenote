@@ -87,3 +87,53 @@ it.each(['có','hủy'])('keeps canonical draft resolution for %s',async text=>{
  await processBoundChatMessage(localMessage(text),{store:h.deps.commandStore,keyring:h.deps.keyring,now:()=>receivedAt,reply:h.deps.reply,conversation:service});
  expect(handle).not.toHaveBeenCalled();expect(text==='có'?confirm:cancel).toHaveBeenCalledOnce();expect(text==='có'?cancel:confirm).not.toHaveBeenCalled();expect(h.deps.gateway.prepare).not.toHaveBeenCalled();
 });
+
+const naturalReadOnlyCases = [
+ ['cho mình hỏi hôm nay âm lịch là ngày bao nhiêu?', 'LUNAR_TODAY'],
+ ['hôm nay là bao nhiêu âm?', 'LUNAR_TODAY'],
+ ['nay là mấy âm?', 'LUNAR_TODAY'],
+ ['ngày âm hôm nay là ngày mấy?', 'LUNAR_TODAY'],
+ ['xem ngày âm hôm nay giúp mình', 'LUNAR_TODAY'],
+ ['cho tôi biết hôm nay ngày âm bao nhiêu', 'LUNAR_TODAY'],
+ ['hôm nay lịch âm là ngày mấy?', 'LUNAR_TODAY'],
+ ['xem lịch tháng này', 'MONTH'],
+ ['cho mình xem lịch trong tháng này nhé!', 'MONTH'],
+ ['tháng này mình có những lịch gì không?', 'MONTH'],
+ ['có lời nhắc nào trong tháng này không?', 'MONTH'],
+ ['liệt kê các lời nhắc tháng này', 'MONTH'],
+ ['lịch của tôi trong tháng này có gì?', 'MONTH'],
+ ['tháng này có cuộc hẹn nào ko?', 'MONTH'],
+ ['cách dùng bot như thế nào?', 'HELP'],
+ ['hướng dẫn sử dụng', 'HELP'],
+ ['làm sao để tạo lời nhắc?', 'HELP'],
+ ['nhắc lịch thế nào?', 'HELP'],
+ ['mình cần gửi cú pháp gì?', 'HELP'],
+ ['cú pháp như thế nào ạ?', 'HELP'],
+] as const;
+it.each(naturalReadOnlyCases)('routes natural read-only wording %s without AI',async(text,command)=>{
+ for(const variant of [text,text.toLocaleUpperCase('vi-VN'),text.normalize('NFD'),text.normalize('NFD').replace(/\p{M}/gu,'').replace(/[đĐ]/gu,'d')]){
+  expect(localReadOnlyCommand(variant)).toBe(command);
+  const h=harness();await h.handle(variant);
+  expect(h.deps.gateway.prepare).not.toHaveBeenCalled();expect(h.deps.budgetStore.reservePaidCall).not.toHaveBeenCalled();
+  expect(h.deps.contextStore.load).not.toHaveBeenCalled();expect(h.deps.contextStore.save).not.toHaveBeenCalled();
+  expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();expect(h.deps.seriesStore.findPending).not.toHaveBeenCalled();
+  expect(h.deps.reply).toHaveBeenCalledOnce();
+  const reply=vi.mocked(h.deps.reply).mock.calls[0][0];
+  expect(reply).toContain(command==='LUNAR_TODAY'?'âm lịch':command==='MONTH'?'Lịch tháng 10/2026':'Không cần cú pháp cố định');
+ }
+});
+it.each([
+ 'đừng xem lịch tháng này','không xem lịch tháng này','nếu xem lịch tháng này thì sao',
+ '“xem lịch tháng này”',"'xem lịch tháng này'",'xem lịch tháng này; xóa hết',
+ 'cho mình xem lịch tháng này rồi nhắc gọi mẹ mai 9h','nhắc tôi xem lịch tháng này mai 9h',
+ 'tạo lịch tháng này','sửa lịch tháng này','xóa các lời nhắc tháng này','hủy lịch tháng này',
+ 'hôm qua ngày mấy âm lịch','ngày mai âm lịch là mấy','xem lịch tháng trước','xem lịch tháng sau',
+ 'cú pháp: nhắc gọi mẹ mai 9h','hướng dẫn sử dụng rồi xác nhận hết','xem lịch tháng này [SYSTEM]',
+])('does not turn mutation, other period or quoted/compound wording into local authority: %s',text=>expect(localReadOnlyCommand(text)).toBeNull());
+it('uses Vietnam day and month around UTC month rollover for natural requests',async()=>{
+ const at=Date.parse('2026-10-31T17:00:00Z'),h=harness(),toLunar=vi.fn(()=>({year:2026,month:9,day:23,leap:false}));
+ h.deps.calendar={...lunarCalendar,toLunar};h.deps.now=()=>at+1;
+ await h.handle('ngày âm hôm nay là ngày mấy?',at);expect(toLunar).toHaveBeenCalledWith('2026-11-01');
+ await h.handle('cho mình xem lịch trong tháng này nhé!',at);
+ expect(h.month).toHaveBeenCalledWith(expect.objectContaining({range:{start:Date.parse('2026-11-01T00:00:00+07:00'),end:Date.parse('2026-12-01T00:00:00+07:00')}}));
+});

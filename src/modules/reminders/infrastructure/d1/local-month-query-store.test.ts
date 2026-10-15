@@ -22,9 +22,17 @@ import {vi} from 'vitest';
 import worker from '@/worker/index';
 import * as telegram from '@/modules/connections/providers/telegram';
 import {D1SemanticBudgetStore} from '@/modules/semantic/infrastructure/d1/budget-store';
-const localInputs=['hôm nay là ngày mấy âm lịch ?','hôm nay ngày mấy âm lịch','tháng này có lịch gì ko','cú pháp như nào ?'];
+const localInputs=[
+ {text:'hôm nay là ngày mấy âm lịch ?',contains:'âm lịch'},
+ {text:'hôm nay ngày mấy âm lịch',contains:'âm lịch'},
+ {text:'tháng này có lịch gì ko',contains:'Lịch tháng 10/2026'},
+ {text:'cú pháp như nào ?',contains:'Không cần cú pháp cố định'},
+ {text:'HÔM NAY ÂM LỊCH LÀ NGÀY BAO NHIÊU?',contains:'âm lịch'},
+ {text:'cho mình xem lịch trong tháng này nhé!',contains:'Lịch tháng 10/2026'},
+ {text:'hướng dẫn sử dụng',contains:'Không cần cú pháp cố định'},
+];
 const pendingCases=['LEGACY_DRAFT','V2_DRAFT','CANCELLATION'] as const;
-it.each(pendingCases.flatMap(pending=>localInputs.map(text=>({pending,text}))))('real Worker Queue answers $text with $pending intact and no provider dispatch',async({pending,text})=>{
+it.each(pendingCases.flatMap(pending=>localInputs.map(({text,contains})=>({pending,text,contains}))))('real Worker Queue answers $text with $pending intact and no provider dispatch',async({pending,text,contains})=>{
  for(const sql of readFileSync('migrations/0008_finite_reminder_series.sql','utf8').split(/;\s*(?=CREATE|--|$)/u).map(s=>s.trim()).filter(Boolean))await h.db.prepare(sql).run();
  if(pending!=='CANCELLATION')await h.db.prepare("INSERT INTO command_drafts(id,chat_identity_id,source_inbound_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,expires_at,created_at,updated_at) VALUES('pending','chat-one','one-1',zeroblob(16),zeroblob(12),1,?,'Asia/Ho_Chi_Minh','PENDING',?,?,?)").bind(receipt+3600000,receipt+600000,receipt-1,receipt-1).run();
  if(pending==='V2_DRAFT')await h.db.prepare("INSERT INTO conversation_contexts(id,owner_id,chat_identity_id,source_inbound_id,last_inbound_id,claim_marker,revision,status,created_at,updated_at,expires_at,payload_ciphertext,payload_iv,key_version) VALUES('context','one','chat-one','one-1','one-1','claim',1,'DRAFT_READY',?,?,?,zeroblob(16),zeroblob(12),1)").bind(receipt-1,receipt-1,receipt+600000).run();
@@ -47,9 +55,7 @@ it.each(pendingCases.flatMap(pending=>localInputs.map(text=>({pending,text}))))(
   await worker.queue(batch,env,{waitUntil:vi.fn(),passThroughOnException:vi.fn()} as unknown as ExecutionContext);
   expect(send).toHaveBeenCalledOnce();const reply=send.mock.calls[0][2];
   expect(reply).not.toContain('đang chờ');expect(reply).not.toContain('chưa xử lý');
-  if(text.startsWith('hôm nay'))expect(reply).toContain('âm lịch');
-  if(text.startsWith('tháng'))expect(reply).toContain('Lịch tháng 10/2026');
-  if(text.startsWith('cú pháp'))expect(reply).toContain('Cú pháp:');
+  expect(reply).toContain(contains);
   expect(await snapshot()).toEqual(before);expect(network).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled();
   expect(ack).toHaveBeenCalledOnce();expect(retry).not.toHaveBeenCalled();
   expect(await h.db.prepare('SELECT state FROM inbound_updates WHERE id=?').bind(id).first<string>('state')).toBe('PROCESSED');
