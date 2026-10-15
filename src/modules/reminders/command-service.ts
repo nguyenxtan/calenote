@@ -1,3 +1,4 @@
+import { localReadOnlyCommand } from "@/modules/conversation/local-read-only";
 import {
   cryptoRandomBytes,
   randomOpaqueId,
@@ -336,6 +337,9 @@ export async function processBoundChatMessage(
   }
 
   const normalized = normalizeWholeMessage(message.text);
+  if (dependencies.conversation && localReadOnlyCommand(message.text)) {
+    return dependencies.conversation.handle(message, context);
+  }
   if (dependencies.conversation && !normalized.startsWith("/connect")) {
     // Confirmation remains canonical. Only an authenticated V2-owned draft
     // may re-enter contextual dialogue; legacy drafts retain their drain guard.

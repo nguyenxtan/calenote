@@ -136,3 +136,29 @@ describe("conversation paid-call and semantic safety boundary", () => {
     expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
   });
 });
+
+describe('model fallback outside the closed local read-only grammar',()=>{
+  const inputs=['bạn hỗ trợ âm lịch không?','cho xem lịch tháng này','giới thiệu cú pháp giúp tôi'];
+  it.each(inputs)('does not invent pending-proposal context for unavailable read-only input: %s',async text=>{
+    const h=fixture();h.deps.gateway.prepare=vi.fn(()=>({status:'FAILURE' as const,category:'UNAVAILABLE' as const}));
+    expect((await h.handle(text)).status).toBe('REJECTED');
+    expect(h.deps.reply).toHaveBeenCalledOnce();expect(h.deps.reply).toHaveBeenCalledWith('Mình chưa xử lý được yêu cầu này lúc này. Bạn thử lại sau ít phút nhé.');expect(h.deps.reply).not.toHaveBeenCalledWith(expect.stringContaining('đề xuất đang chờ'));
+    expect(h.deps.contextStore.save).not.toHaveBeenCalled();expect(h.deps.seriesStore.propose).not.toHaveBeenCalled();expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();expect(h.deps.list).not.toHaveBeenCalled();expect(h.deps.budgetStore.reservePaidCall).not.toHaveBeenCalled();
+  });
+  it.each(inputs)('does not invent pending-proposal context after mocked model failure: %s',async text=>{
+    const h=fixture();const dispatch=vi.fn(async()=>({status:'FAILURE' as const,category:'PROVIDER_FAILURE' as const,usage:{costMicrounits:null}}));h.deps.gateway.prepare=()=>({status:'READY',model:'fixture/model',provider:'fixture-provider',maximumCostMicrounits:10,dispatch});
+    expect((await h.handle(text)).status).toBe('REJECTED');expect(dispatch).toHaveBeenCalledOnce();expect(h.deps.reply).toHaveBeenCalledWith('Mình chưa xử lý được yêu cầu này lúc này. Bạn thử lại sau ít phút nhé.');expect(h.deps.reply).not.toHaveBeenCalledWith(expect.stringContaining('đề xuất đang chờ'));expect(h.deps.budgetStore.finalizeUsage).toHaveBeenCalledWith(expect.objectContaining({actualCostMicrounits:null}));expect(h.deps.contextStore.save).not.toHaveBeenCalled();expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
+  });
+  it('syntax question maps to existing HELP only when the mock interpretation is HELP',async()=>{
+    const h=fixture();h.dispatch.mockResolvedValue({status:'SUCCESS',usage:{costMicrounits:1},interpretation:{intent:'HELP',title:null,titleState:'NOT_APPLICABLE',targetIntent:null,dialogueAct:'NEW_REQUEST',continuation:'NO',capability:null}});
+    await h.handle(inputs[2]);expect(h.deps.reply).toHaveBeenCalledWith(expect.stringContaining('Bạn nói việc cần nhắc cùng ngày và giờ'));expect(h.deps.contextStore.save).not.toHaveBeenCalled();
+  });
+  it('legacy lunar capability answer gives help, not the requested current lunar date',async()=>{
+    const h=fixture();h.dispatch.mockResolvedValue({status:'SUCCESS',usage:{costMicrounits:1},interpretation:{intent:'HELP',title:null,titleState:'NOT_APPLICABLE',targetIntent:null,dialogueAct:'CAPABILITY',continuation:'NO',capability:'LUNAR'}});
+    await h.handle(inputs[0]);expect(h.deps.reply).toHaveBeenCalledWith(expect.stringContaining('hỗ trợ ngày âm lịch'));expect(h.deps.contextStore.save).not.toHaveBeenCalled();expect(h.deps.list).not.toHaveBeenCalled();
+  });
+  it('legacy monthly list needs a range even with a valid LIST interpretation',async()=>{
+    const h=fixture();h.dispatch.mockResolvedValue({status:'SUCCESS',usage:{costMicrounits:1},interpretation:{intent:'LIST_REMINDERS',title:null,titleState:'NOT_APPLICABLE',targetIntent:null,dialogueAct:'NEW_REQUEST',continuation:'NO',capability:null}});
+    await h.handle(inputs[1]);expect(h.deps.reply).toHaveBeenCalledWith('Bạn muốn xem lời nhắc trong ngày hoặc khoảng thời gian nào?');expect(h.deps.list).not.toHaveBeenCalled();expect(h.deps.contextStore.save).not.toHaveBeenCalled();expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
+  });
+});
