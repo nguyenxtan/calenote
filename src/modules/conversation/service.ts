@@ -1,4 +1,5 @@
 import {localReadOnlyCommand,vietnamReceiptDate,localCalendarMonth,LOCAL_HELP,LOCAL_MONTH_STATUSES,type LocalMonthQuery,type LocalMonthResult} from './local-read-only';
+import { failureDetails, observeConversationFailure, type ConversationFailureDetails, type ConversationFailureObserver, type ConversationFailureStage } from "./failure-observation";
 import { randomOpaqueId } from "@/modules/platform/types";
 import type { Keyring } from "@/modules/security/keyring";
 import { semanticReferenceWallClock, type SemanticGateway, type SemanticAttemptResult } from "@/modules/intelligence/semantic-gateway";
@@ -29,6 +30,7 @@ export interface ConversationServiceDependencies {
   listMonth?(input: LocalMonthQuery): Promise<LocalMonthResult>;
   processingFeedback?: () => void;
   observeTiming?: (value: ConversationTiming) => void;
+  observeFailure?: ConversationFailureObserver;
   tone?: "friendly" | "concise";
   getTone?(ownerId: string): Promise<"friendly" | "concise">;
 }
@@ -40,28 +42,40 @@ const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 export function createConversationService(deps: ConversationServiceDependencies) {
   async function reply(text: string) { try { await deps.reply(text); } catch { /* Never retry an uncertain outbound. */ } }
-  async function finish(scope: ConversationScope, text: string, status: ProcessBoundChatResult["status"] = "REJECTED"): Promise<ProcessBoundChatResult> {
+  async function finish(scope: ConversationScope, text: string, status: ProcessBoundChatResult["status"] = "REJECTED", failure?: ConversationFailureDetails): Promise<ProcessBoundChatResult> {
     if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
+    if (failure) observeConversationFailure(deps.observeFailure, scope.sourceInboundId, failure);
     await reply(text); return { status };
   }
-  async function interpret(scope: ConversationScope, input: ConversationInput): Promise<ConversationModel | null> {
-    const attempt = deps.gateway.prepare("PRIMARY", input);
-    if (attempt.status !== "READY") return null;
-    const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: scope.sourceInboundId, now: deps.now() });
-    if (reservation.status !== "RESERVED") return null;
-    const budgetScope = { ownerId: scope.ownerId, reservationId: reservation.reservationId };
-    if (!Number.isSafeInteger(reservation.reservedMaximumMicrounits) || reservation.reservedMaximumMicrounits < attempt.maximumCostMicrounits) {
-      await deps.budgetStore.releaseOrExpireReservation({ ...budgetScope, reason: "SAFE_FAILURE", now: deps.now() }); return null;
-    }
-    if (!await deps.budgetStore.markDispatched({ ...budgetScope, now: deps.now() })) return null;
-    let result: SemanticAttemptResult<ConversationModel>;
-    const modelStarted = performance.now();
-    try { result = await attempt.dispatch(); } catch { result = { status: "FAILURE", category: "PROVIDER_FAILURE" }; }
-    observeTiming(deps.observeTiming, "MODEL", performance.now() - modelStarted);
-    try { await deps.budgetStore.finalizeUsage({ ...budgetScope, actualCostMicrounits: result.usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* Expiry charges dispatched ceiling. */ }
-    if (result.status !== "SUCCESS") return null;
-    const parsed = ConversationModelSchema.safeParse(result.interpretation);
-    return parsed.success ? parsed.data : null;
+  async function interpret(scope: ConversationScope, input: ConversationInput): Promise<
+    { status: "SUCCESS"; model: ConversationModel } | { status: "FAILURE"; failure: ConversationFailureDetails }> {
+    let stage: ConversationFailureStage = "GATEWAY_PREPARE";
+    const failed = (category: unknown) => ({ status: "FAILURE" as const, failure: failureDetails(stage, category) });
+    try {
+      const attempt = deps.gateway.prepare("PRIMARY", input);
+      if (attempt.status !== "READY") return failed(attempt.category);
+      stage = "BUDGET_RESERVE";
+      const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: scope.sourceInboundId, now: deps.now() });
+      if (reservation.status !== "RESERVED") return failed("BUDGET_EXHAUSTED");
+      const budgetScope = { ownerId: scope.ownerId, reservationId: reservation.reservationId };
+      stage = "BUDGET_FUNDING";
+      if (!Number.isSafeInteger(reservation.reservedMaximumMicrounits) || reservation.reservedMaximumMicrounits < attempt.maximumCostMicrounits) {
+        await deps.budgetStore.releaseOrExpireReservation({ ...budgetScope, reason: "SAFE_FAILURE", now: deps.now() });
+        return failed("RESERVATION_UNDERFUNDED");
+      }
+      stage = "DISPATCH_FENCE";
+      if (!await deps.budgetStore.markDispatched({ ...budgetScope, now: deps.now() })) return failed("DISPATCH_FENCE_DENIED");
+      stage = "MODEL_RESULT";
+      let result: SemanticAttemptResult<ConversationModel>;
+      const modelStarted = performance.now();
+      try { result = await attempt.dispatch(); } catch { result = { status: "FAILURE", category: "PROVIDER_FAILURE" }; }
+      observeTiming(deps.observeTiming, "MODEL", performance.now() - modelStarted);
+      try { await deps.budgetStore.finalizeUsage({ ...budgetScope, actualCostMicrounits: result.usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* Expiry charges dispatched ceiling. */ }
+      if (result.status !== "SUCCESS") return failed(result.category);
+      stage = "MODEL_SCHEMA";
+      const parsed = ConversationModelSchema.safeParse(result.interpretation);
+      return parsed.success ? { status: "SUCCESS", model: parsed.data } : failed("SCHEMA_INVALID");
+    } catch { return failed("LOCAL_FAILURE"); }
   }
   function snapshot(message: BoundChatMessage, prior: ConversationSnapshot | null, request: PendingRequest, draft: boolean): ConversationSnapshot {
     const now = deps.now();
@@ -83,10 +97,12 @@ export function createConversationService(deps: ConversationServiceDependencies)
       const scope: ConversationScope = { ownerId: context.userId, chatIdentityId: context.chatIdentityId,
         sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() };
       const normalized = message.text.normalize("NFC").trim().toLocaleLowerCase("vi-VN");
+      let stage: ConversationFailureStage = "PRECONDITION";
       try {
-        if (context.timezone !== "Asia/Ho_Chi_Minh") return finish(scope, unavailable);
+        if (context.timezone !== "Asia/Ho_Chi_Minh") return finish(scope, unavailable, "REJECTED", failureDetails(stage, "UNSUPPORTED_TIMEZONE"));
         const local = localReadOnlyCommand(message.text);
         if (local) {
+          stage = "READ_ONLY_QUERY";
           if (local === 'HELP') return finish(scope, LOCAL_HELP);
           if (local === 'LUNAR_TODAY') {
             const date = vietnamReceiptDate(message.receivedAt), lunar = date ? deps.calendar.toLunar(date) : null;
@@ -102,12 +118,16 @@ export function createConversationService(deps: ConversationServiceDependencies)
         const deterministic = confirm.has(normalized) || cancel.has(normalized) || greeting.test(normalized)
           || ["help", "/help", "trợ giúp", "hướng dẫn"].includes(normalized);
         if (!deterministic) {
-          if (!await deps.runtimeStore.claimAttempt(scope)) return finish(scope, unavailable);
+          stage = "ATTEMPT_CLAIM";
+          if (!await deps.runtimeStore.claimAttempt(scope)) return finish(scope, unavailable, "REJECTED", failureDetails(stage, "ATTEMPT_CLAIM_DENIED"));
           try { deps.processingFeedback?.(); } catch { /* Managed UX feedback has no business authority. */ }
         }
+        stage = "CONTEXT_LOAD";
         const previous = await deps.contextStore.load(scope);
+        stage = "PENDING_LOAD";
         const pending = await deps.seriesStore.findPending(scope);
         if (confirm.has(normalized)) {
+          stage = "CONFIRM";
           if (!pending) return finish(scope, "Không có đề xuất nào đang chờ xác nhận.");
           if (pending.action === "CANCEL") {
             const result = await deps.seriesStore.cancelRemaining(scope, pending.proposalId, pending.revision);
@@ -120,6 +140,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           await reply("Đã xác nhận chuỗi lời nhắc đúng lịch bạn vừa duyệt."); return { status: "CONFIRMED" };
         }
         if (cancel.has(normalized)) {
+          stage = "CANCEL";
           if (previous && !await deps.contextStore.finish(scope, previous.id, previous.revision, "CANCELLED")) return { status: "SUPERSEDED" };
           if (pending && !await deps.seriesStore.discard(scope, pending.proposalId, pending.revision)) return { status: "SUPERSEDED" };
           return finish(scope, "Mình đã bỏ yêu cầu đang chờ. Lời nhắc đã xác nhận không thay đổi.", "CANCELLED");
@@ -132,12 +153,15 @@ export function createConversationService(deps: ConversationServiceDependencies)
         if (["help", "/help", "trợ giúp", "hướng dẫn"].includes(normalized)) return finish(scope, wording({ kind: "HELP" }));
         if (pending?.action === "CANCEL") return finish(scope, "Bạn đang có đề xuất hủy chuỗi. Gửi “có” để xác nhận hoặc “hủy” để bỏ đề xuất.");
         const priorStatus = previous?.status;
-        if (priorStatus !== undefined && priorStatus !== "CLARIFYING" && priorStatus !== "DRAFT_READY") return finish(scope, unavailable);
-        const model = await interpret(scope, { text: message.text, ...semanticReferenceWallClock(message.receivedAt),
+        if (priorStatus !== undefined && priorStatus !== "CLARIFYING" && priorStatus !== "DRAFT_READY") return finish(scope, unavailable, "REJECTED", failureDetails(stage, "INVALID_LIFECYCLE"));
+        stage = "GATEWAY_PREPARE";
+        const interpreted = await interpret(scope, { text: message.text, ...semanticReferenceWallClock(message.receivedAt),
           ...(previous ? { conversationContext: { title: previous.request.title, status: priorStatus,
             pendingQuestion: previous.request.missing[0] ?? null,
             turns: previous.turns.map(({ userText, outcomeCode }) => ({ userText, outcomeCode })) } } : {}) });
-        if (!model) return finish(scope, unavailable);
+        if (interpreted.status === "FAILURE") return finish(scope, unavailable, "REJECTED", interpreted.failure);
+        const model = interpreted.model;
+        stage = "RECONCILE";
         const { decision } = evaluateConversationTurn({ text: message.text, receivedAt: message.receivedAt,
           sourceInboundId: message.id, model, previous, now: deps.now() }, deps.calendar);
         if (decision.kind === "ABANDON_PENDING") {
@@ -146,12 +170,13 @@ export function createConversationService(deps: ConversationServiceDependencies)
           return finish(scope, wording(decision), "CANCELLED");
         }
         if (decision.kind === "READ_ONLY_LIST") {
+          stage = "READ_ONLY_QUERY";
           const query = reconcileSemanticInterpretation({ text: message.text,
             modelInterpretation: { intent: "LIST_REMINDERS", title: null, titleState: "NOT_APPLICABLE", targetIntent: null },
             temporalEvidence: extractTemporalEvidence({ text: message.text, referenceNow: message.receivedAt }), processingNow: deps.now() });
           if (query.kind !== "QUERY") return finish(scope, "Bạn muốn xem lời nhắc trong ngày hoặc khoảng thời gian nào?");
           const range = semanticQueryRange(query, message.receivedAt);
-          if (!range) return finish(scope, unavailable);
+          if (!range) return finish(scope, unavailable, "REJECTED", failureDetails(stage, "INVALID_RANGE"));
           const rows = await deps.list({ message, context, range });
           const lines = await Promise.all(rows.slice(0, 5).map(async row => {
             const title = await deps.keyring.decryptSensitive("reminder-title", row.id, row.titleKeyVersion, row.encryptedTitle);
@@ -186,16 +211,20 @@ export function createConversationService(deps: ConversationServiceDependencies)
           preview += "\nChưa tạo lời nhắc. Gửi “có” để xác nhận hoặc “hủy” để bỏ. Sau khi xác nhận, chỉ hủy được lần tương lai chưa xử lý.";
           if (preview.length > 2000) return finish(scope, "Nội dung quá dài để hiển thị trọn lịch nhắc. Bạn viết tiêu đề ngắn hơn nhé; mình chưa tạo đề xuất xác nhận.");
         }
+        stage = "CONTEXT_SAVE";
         if (await deps.contextStore.save(scope, previous?.revision ?? null, next) !== "SAVED") return { status: "SUPERSEDED" };
         if (decision.kind === "CLARIFY") return finish(scope, wording(decision), "CLARIFICATION_REQUESTED");
         if (scheduledAt === undefined) {
-          if (!await deps.seriesStore.propose(scope, next.request, next.id, next.revision)) return finish(scope, unavailable);
+          stage = "SERIES_PROPOSE";
+          if (!await deps.seriesStore.propose(scope, next.request, next.id, next.revision)) return finish(scope, unavailable, "REJECTED", failureDetails(stage, "PROPOSAL_DENIED"));
           return finish(scope, preview, "DRAFT_CREATED");
         }
         const draftId = randomOpaqueId();
+        stage = "DRAFT_ENCRYPT";
         const encryptedTitle = await deps.keyring.encryptSensitive("draft-title", draftId, 1, next.request.title!);
         const encryptedCalendarFacts = await deps.keyring.encryptSensitive("reminder-calendar", JSON.stringify([scope.ownerId, scope.chatIdentityId, draftId]), 1,
           JSON.stringify({ calendar: next.request.calendar, eventDate: next.request.eventDate, reminderDate: next.request.reminderDate }));
+        stage = "DRAFT_PERSIST";
         const mutation = await deps.commandStore.createDraft({ message, context, now: deps.now(), auditId: randomOpaqueId(),
           draftId, encryptedTitle, titleKeyVersion: 1, scheduledAt, timezone: "Asia/Ho_Chi_Minh", expiresAt: next.expiresAt,
           encryptedCalendarFacts, enforceConversationOrder: true, conversationFence: { id: next.id, revision: next.revision } });
@@ -204,7 +233,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
       } catch {
         // Do not fall through to V1 after a partially handled V2 request, and
         // never forward exception text containing provider/context material.
-        try { return await finish(scope, unavailable); } catch {
+        try { return await finish(scope, unavailable, "REJECTED", failureDetails(stage, "LOCAL_FAILURE")); } catch {
           await deps.commandStore.rejectMessage(message, randomOpaqueId(), deps.now(), true);
           return { status: "REJECTED" };
         }

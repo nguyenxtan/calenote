@@ -35,6 +35,21 @@ describe("Worker composition root", () => {
   });
 
 
+  it("wires V2 failure metadata using only the explicit allowlisted projection", async () => {
+    const inbound = await import("@/modules/inbound/processor");
+    const process = vi.spyOn(inbound, "processInbound").mockResolvedValue({ status: "REJECTED" });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const root = await import("./composition-root");
+      await (await root.createRuntimeOperations(environment(), { conversationV2: true })).processInbound("inbound");
+      const observer = process.mock.calls[0][1].conversation?.observeFailure;
+      expect(observer).toBeTypeOf("function");
+      const event = { sourceInboundId: "opaque-inbound", stage: "MODEL_RESULT" as const, category: "TIMEOUT" as const, body: "untrusted-content", error: Error("private exception") };
+      await observer!(event);
+      expect(log).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ operation: "conversation_failure", sourceInboundId: "opaque-inbound", stage: "MODEL_RESULT", category: "TIMEOUT" }));
+    } finally { process.mockRestore(); log.mockRestore(); }
+  });
+
   // The complete composition path performs several Web Crypto keyring setups;
   // under the parallel Worker suite it needs an explicit integration budget.
   it("constructs runtime, route capability, and webhook operation boundaries", async () => {

@@ -398,7 +398,10 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;
         },
-        gateway: conversationGateway, budgetStore: semantic.budgetStore, listMonth: input => new D1LocalMonthQueryStore(env.DB).list(input) } } : {}),
+        gateway: conversationGateway, budgetStore: semantic.budgetStore, listMonth: input => new D1LocalMonthQueryStore(env.DB).list(input),
+        observeFailure: failure => console.log(JSON.stringify({ operation: "conversation_failure",
+          sourceInboundId: failure.sourceInboundId, stage: failure.stage, category: failure.category })),
+      } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
