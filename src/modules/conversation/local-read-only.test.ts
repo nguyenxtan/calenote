@@ -137,3 +137,15 @@ it('uses Vietnam day and month around UTC month rollover for natural requests',a
  await h.handle('cho mình xem lịch trong tháng này nhé!',at);
  expect(h.month).toHaveBeenCalledWith(expect.objectContaining({range:{start:Date.parse('2026-11-01T00:00:00+07:00'),end:Date.parse('2026-12-01T00:00:00+07:00')}}));
 });
+it.each([
+ ['hôm nay có lời nhắc gì?', '2026-10-31T00:00:00+07:00', '2026-11-01T00:00:00+07:00'],
+ ['xem lịch hôm nay', '2026-10-31T00:00:00+07:00', '2026-11-01T00:00:00+07:00'],
+ ['mai có lịch gì?', '2026-11-01T00:00:00+07:00', '2026-11-02T00:00:00+07:00'],
+] as const)('answers bounded local day query %s without AI or pending changes', async (text,start,end) => {
+ const h=harness();await h.handle(text,Date.parse('2026-10-31T23:59:00+07:00'));
+ expect(h.month).toHaveBeenCalledWith(expect.objectContaining({range:{start:Date.parse(start),end:Date.parse(end)}}));
+ expect(h.deps.gateway.prepare).not.toHaveBeenCalled();
+ expect(h.deps.contextStore.load).not.toHaveBeenCalled();
+ expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
+});
+it.each(['đừng xem lịch hôm nay','mai có lịch gì rồi tạo nhắc gọi mẹ','nhắc tôi xem lịch hôm nay','"mai có lịch gì?"'])('rejects compound or mutation day query %s',text=>expect(localReadOnlyCommand(text)).toBeNull());

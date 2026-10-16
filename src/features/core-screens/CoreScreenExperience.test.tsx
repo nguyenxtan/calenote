@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +30,77 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 }
 
 describe("CoreScreenExperience", () => {
+  it("serializes cancellation clicks while a response is pending", async () => {
+    let resolveCancel!: (response: Response) => void;
+    let posts = 0;
+    const second = { ...reminder, publicId: "S".repeat(22), title: "Gọi mẹ" };
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      if (String(path).endsWith("/cancel")) {
+        posts += 1;
+        return new Promise<Response>((resolve) => { resolveCancel = resolve; });
+      }
+      return json({ data: { reminders: [reminder, second] } });
+    }));
+    render(<CoreScreenExperience screen="reminders" />);
+    const first = await screen.findByRole("button", { name: "Huỷ Gửi báo giá" });
+    fireEvent.click(first);
+    fireEvent.click(screen.getByRole("button", { name: "Huỷ Gọi mẹ" }));
+    expect(posts).toBe(1);
+    await act(async () => { resolveCancel(json({ data: { cancelled: true } })); });
+  });
+
+  it("does not let a series refresh during cancellation overwrite its committed state", async () => {
+    let resolveCancel!: (response: Response) => void;
+    let resolveStale!: (response: Response) => void;
+    let reads = 0;
+    let confirmed = false;
+    const series = { publicId: "A".repeat(22), title: "Ôn thi", revision: 1, state: "PROPOSED", action: "CREATE",
+      calendarLabel: "Dương lịch", eventLabel: null, occurrences: ["2026-10-08", "2026-10-09", "2026-10-10"].map(localDate => ({ localDate, localTime: "12:00", status: "PROPOSED" })) };
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminder-series") {
+        if (init?.method === "POST") { confirmed = true; return json({ data: { result: "CONFIRMED" } }); }
+        return json({ data: { series: confirmed ? [] : [series] } });
+      }
+      if (String(path).endsWith("/cancel")) return new Promise<Response>((resolve) => { resolveCancel = resolve; });
+      reads += 1;
+      if (reads === 2) return new Promise<Response>((resolve) => { resolveStale = resolve; });
+      return json({ data: { reminders: [{ ...reminder, status: reads >= 3 ? "CANCELLED" : "PENDING" }] } });
+    }));
+    render(<CoreScreenExperience screen="reminders" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Huỷ Gửi báo giá" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Xác nhận tạo chuỗi nhắc" }));
+    await waitFor(() => expect(reads).toBe(2));
+    await act(async () => { resolveCancel(json({ data: { cancelled: true } })); });
+    await waitFor(() => expect(reads).toBe(3));
+    await act(async () => { resolveStale(json({ data: { reminders: [reminder] } })); });
+    expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument();
+  });
+
+  it.each(["lost-response", "conflict"])("reads cancellation state back after %s without claiming success", async (failure) => {
+    let attempted = false;
+    let reads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      if (path === `/api/reminders/${reminder.publicId}/cancel`) {
+        attempted = true;
+        if (failure === "lost-response") throw new TypeError("response lost");
+        return json({ error: { code: "CONFLICT", message: "Lời nhắc đang được gửi, không thể huỷ." } }, 409);
+      }
+      reads += 1;
+      return json({ data: { reminders: [{ ...reminder, status: attempted ? (failure === "lost-response" ? "CANCELLED" : "SENT") : "PENDING" }] } });
+    }));
+    render(<CoreScreenExperience screen="reminders" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Huỷ Gửi báo giá" }));
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(failure === "lost-response" ? "Kết quả huỷ chưa xác định" : "Lời nhắc đang được gửi");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Lời nhắc đã được huỷ.");
+  });
+
   it("loads grouped series from the authenticated API and refreshes after an explicit decision", async () => {
     let confirmed = false;
     const series = { publicId: "A".repeat(22), title: "Ôn thi theo chuỗi", revision: 1, state: "PROPOSED", action: "CREATE",

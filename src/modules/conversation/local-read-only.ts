@@ -1,5 +1,5 @@
 import type {SemanticReminderQuery,QueriedReminder} from '../reminders/semantic-query';
-export type LocalReadOnlyCommand='LUNAR_TODAY'|'MONTH'|'HELP';
+export type LocalReadOnlyCommand='LUNAR_TODAY'|'MONTH'|'TODAY'|'TOMORROW'|'HELP';
 /** Vietnamese read-only question grammar; normalization grants no write authority.
  * Full utterance matching rejects quoted, conditional and compound instructions.
  */
@@ -34,6 +34,14 @@ export function localReadOnlyCommand(text: string): LocalReadOnlyCommand | null 
   ];
   if (monthForms.some(form => new RegExp(`^${form}$`, 'u').test(value))) return 'MONTH';
 
+  for (const [period, command] of [['hom nay', 'TODAY'], ['(?:ngay )?mai', 'TOMORROW']] as const) {
+    const forms = [
+      `${period} (?:${owner} )?co ${plural}${entries} (?:gi|nao)(?: (?:khong|ko|k))?`,
+      `${plural}${entries}(?: cua ${owner})? (?:trong )?${period}`,
+    ];
+    if (forms.some(form => new RegExp(`^${form}$`, 'u').test(value))) return command;
+  }
+
   const helpForms = [
     '(?:cu phap|cach dung(?: bot)?) (?:nhu (?:the )?nao|la gi)',
     '(?:huong dan(?: su dung| dung(?: bot)?)?|tro giup|/help|help)',
@@ -52,11 +60,20 @@ export function localCalendarMonth(at:number):{start:number;end:number;label:str
  const start=Date.UTC(year,month-1,1)-7*3600000,end=Date.UTC(year,month,1)-7*3600000;
  return {start,end,label:`${month}/${year}`};
 }
-export const LOCAL_HELP='Không cần cú pháp cố định. Bạn cứ nói tự nhiên, ví dụ: “mai 9h nhắc mình gọi mẹ”. Mình sẽ hỏi nếu thiếu hoặc mơ hồ về nội dung, ngày giờ và gửi đề xuất để bạn xác nhận trước khi tạo lời nhắc. Hỏi “hôm nay là ngày mấy âm lịch?” để xem ngày âm; “tháng này có lịch gì ko” để xem lời nhắc trong tháng. Gửi “có” để xác nhận đề xuất hoặc “hủy” để bỏ đề xuất. Các câu hỏi xem lịch không tạo hay thay đổi lời nhắc.';
+export function localReadOnlyRange(text:string,at:number):{start:number;end:number;label:string}|null {
+ const command=localReadOnlyCommand(text);
+ if(command==='MONTH')return localCalendarMonth(at);
+ if(command!=='TODAY'&&command!=='TOMORROW')return null;
+ const date=vietnamReceiptDate(at);if(!date)return null;
+ const start=Date.parse(`${date}T00:00:00+07:00`)+(command==='TOMORROW'?86400000:0);
+ if(!vietnamReceiptDate(start+86400000))return null;
+ return {start,end:start+86400000,label:`ngày ${vietnamReceiptDate(start)!.split('-').reverse().join('/')}`};
+}
+export const LOCAL_HELP='Không cần cú pháp cố định. Bạn cứ nói tự nhiên, ví dụ: “mai 9h nhắc mình gọi mẹ”. Mình sẽ hỏi nếu thiếu hoặc mơ hồ về nội dung, ngày giờ và gửi đề xuất để bạn xác nhận trước khi tạo lời nhắc. Hỏi “hôm nay là ngày mấy âm lịch?” để xem ngày âm; “tháng này có lịch gì ko” để xem lời nhắc trong tháng. Hỏi “hôm nay có lời nhắc gì?” hoặc “mai có lịch gì?” để xem lịch từng ngày. Gửi “có” để xác nhận đề xuất hoặc “hủy” để bỏ đề xuất. Các câu hỏi xem lịch không tạo hay thay đổi lời nhắc.';
 export const LOCAL_MONTH_STATUSES={PENDING:'Chờ gửi',CLAIMED:'Đang xử lý',RETRYABLE:'Chờ thử lại',SENT:'Đã gửi',FAILED:'Gửi lỗi',UNCERTAIN:'Chưa rõ kết quả'} as const;
 export type LocalMonthQuery=SemanticReminderQuery;
 export type LocalMonthResult={status:'RESULTS';rows:Array<QueriedReminder&{status:keyof typeof LOCAL_MONTH_STATUSES}>;hasMore:boolean}|{status:'INVALID'|'UNAUTHORIZED'|'STALE'|'UNAVAILABLE'};
 export function isLocalMonthQuery(input:LocalMonthQuery):boolean{
- const expected=localCalendarMonth(input.message.receivedAt);return !!expected&&input.context.timezone==='Asia/Ho_Chi_Minh'&&localReadOnlyCommand(input.message.text)==='MONTH'
+ const expected=localReadOnlyRange(input.message.text,input.message.receivedAt);return !!expected&&input.context.timezone==='Asia/Ho_Chi_Minh'
   &&Number.isSafeInteger(input.context.inboundRowId)&&input.range.start===expected.start&&input.range.end===expected.end;
 }

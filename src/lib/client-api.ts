@@ -5,6 +5,7 @@ type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH";
 
 interface ApiRequestOptions {
   method?: ApiMethod;
+  reminderCursor?: string;
   body?: unknown;
   signal?: AbortSignal;
   authenticated?: boolean;
@@ -134,12 +135,14 @@ export async function apiRequest<T>(
   requireCanonicalApiPath(path);
   const method = options.method ?? "GET";
   const hasBody = options.body !== undefined;
+  if (options.reminderCursor !== undefined && (path !== "/api/reminders" || method !== "GET" || !/^[A-Za-z0-9_-]{1,128}$/u.test(options.reminderCursor))) throw new TypeError("Trang lời nhắc không hợp lệ.");
+  const requestPath = options.reminderCursor === undefined ? path : `${path}?after=${options.reminderCursor}`;
   const headers: Record<string, string> = { accept: "application/json" };
   if (hasBody) headers["content-type"] = "application/json";
 
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(requestPath, {
       method,
       credentials: "same-origin",
       cache: "no-store",

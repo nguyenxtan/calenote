@@ -332,6 +332,22 @@ describe("Task 8 exact browser API contract", () => {
     expect(await failed.text()).not.toContain("D1 unavailable");
   });
 
+  it("returns a bounded reminder page and follows authenticated pagination", async () => {
+    const all = Array.from({ length: 101 }, (_, index) => ({ ...reminder, publicId: String(index).padStart(3, "0"), title: `Việc ${index}` }));
+    const listReminders = vi.fn(async (_userId: string, after?: string) => all.filter(row => after === undefined || row.publicId > after).slice(0, 101));
+    const router = createRouter({ operations: async () => operations({ listReminders }) });
+    const { env } = environment();
+    const get = (suffix: string) => router(new Request(`${ORIGIN}/api/reminders${suffix}`, { headers: { cookie: COOKIE } }), env, context());
+    const first = await get("");
+    const page = await first.json() as { data: { reminders: unknown[]; nextCursor: string } };
+    expect(page.data.reminders).toHaveLength(100);
+    expect(page.data.nextCursor).toBe("099");
+    const last = await get("?after=099");
+    expect(await last.json()).toEqual({ data: { reminders: [all[100]] } });
+    expect(listReminders).toHaveBeenLastCalledWith("user-owner", "099");
+    for (const suffix of ["?after=", "?after=%3Cbad%3E", `?after=${"a".repeat(129)}`, "?after=one&after=two", "?owner=other"]) expect((await get(suffix)).status).toBe(400);
+  });
+
   it("returns only safe authenticated session, connection, and reminder fields", async () => {
     const ops = operations();
     const router = createRouter({ operations: async () => ops });

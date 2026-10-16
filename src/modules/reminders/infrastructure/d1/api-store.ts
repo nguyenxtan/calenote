@@ -14,7 +14,7 @@ function guardedReminderFailure(error: unknown): boolean {
 export class D1ReminderApiStore implements ReminderApiStore {
   constructor(private readonly database: D1Database) {}
 
-  async listOwned(userId: string, limit: number): Promise<OwnedReminderRow[]> {
+  async listOwned(userId: string, limit: number, after: string | null = null): Promise<OwnedReminderRow[]> {
     const result = await this.database
       .prepare(
         `SELECT r.id, r.public_id, r.title_ciphertext, r.title_iv,
@@ -25,14 +25,11 @@ export class D1ReminderApiStore implements ReminderApiStore {
              AND w.owner_user_id = m.user_id
          JOIN reminders r ON r.workspace_id = w.id
          WHERE m.user_id = ? AND m.role = 'OWNER'
-         ORDER BY
-           CASE WHEN r.status IN ('PENDING', 'CLAIMED', 'RETRYABLE') THEN 0 ELSE 1 END,
-           CASE WHEN r.status IN ('PENDING', 'CLAIMED', 'RETRYABLE') THEN r.scheduled_at END ASC,
-           CASE WHEN r.status NOT IN ('PENDING', 'CLAIMED', 'RETRYABLE') THEN r.updated_at END DESC,
-           r.public_id ASC
+           AND (? IS NULL OR r.public_id > ?)
+         ORDER BY r.public_id ASC
          LIMIT ?`,
       )
-      .bind(userId, limit)
+      .bind(userId, after, after, limit)
       .all<OwnedReminderRow>();
     return result.results;
   }

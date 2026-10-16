@@ -189,7 +189,7 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
       const principal = await requireSession(credentials, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
-    listReminders: (userId) => listPublicReminders(userId, { store: reminderStore, keyring }),
+    listReminders: (userId, after) => listPublicReminders(userId, { store: reminderStore, keyring }, { after, limit: 101 }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
   };

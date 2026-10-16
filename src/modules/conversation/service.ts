@@ -1,4 +1,4 @@
-import {localReadOnlyCommand,vietnamReceiptDate,localCalendarMonth,LOCAL_HELP,LOCAL_MONTH_STATUSES,type LocalMonthQuery,type LocalMonthResult} from './local-read-only';
+import {localReadOnlyCommand,vietnamReceiptDate,localReadOnlyRange,LOCAL_HELP,LOCAL_MONTH_STATUSES,type LocalMonthQuery,type LocalMonthResult} from './local-read-only';
 import { failureDetails, observeConversationFailure, type ConversationFailureDetails, type ConversationFailureObserver, type ConversationFailureStage } from "./failure-observation";
 import { randomOpaqueId } from "@/modules/platform/types";
 import type { Keyring } from "@/modules/security/keyring";
@@ -108,12 +108,12 @@ export function createConversationService(deps: ConversationServiceDependencies)
             const date = vietnamReceiptDate(message.receivedAt), lunar = date ? deps.calendar.toLunar(date) : null;
             return finish(scope, lunar ? `Ngày ${displayDate(date!)} dương lịch là ${lunar.day}/${lunar.month}/${lunar.year}${lunar.leap ? ' (tháng nhuận)' : ''} âm lịch Việt Nam.` : 'Mình chưa có dữ liệu âm lịch cho ngày này.');
           }
-          const month = localCalendarMonth(message.receivedAt);
-          if (!month || !deps.listMonth) return finish(scope, 'Mình chưa thể đọc lịch tháng lúc này. Bạn thử lại sau nhé.');
+          const month = localReadOnlyRange(message.text,message.receivedAt);
+          if (!month || !deps.listMonth) return finish(scope, 'Mình chưa thể đọc lịch lúc này. Bạn thử lại sau nhé.');
           const result = await deps.listMonth({ message, context, range: { start: month.start, end: month.end } });
-          if (result.status !== 'RESULTS') return finish(scope, 'Mình chưa thể đọc lịch tháng lúc này. Bạn thử lại sau nhé.');
+          if (result.status !== 'RESULTS') return finish(scope, 'Mình chưa thể đọc lịch lúc này. Bạn thử lại sau nhé.');
           const lines = await Promise.all(result.rows.map(async row => `${new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' }).format(row.scheduledAt)} — ${(await deps.keyring.decryptSensitive('reminder-title', row.id, row.titleKeyVersion, row.encryptedTitle)).slice(0, 200)} (${LOCAL_MONTH_STATUSES[row.status]})`));
-          return finish(scope, `Lịch tháng ${month.label} trong cuộc trò chuyện này: ${lines.length ? '\n' + lines.join('\n') : 'chưa có lời nhắc.'}${result.hasMore ? '\n5 kết quả đầu; còn kết quả khác.' : ''}`, 'REMINDERS_LISTED');
+          return finish(scope, `Lịch ${local === 'MONTH' ? 'tháng ' : ''}${month.label} trong cuộc trò chuyện này: ${lines.length ? '\n' + lines.join('\n') : 'chưa có lời nhắc.'}${result.hasMore ? '\n5 kết quả đầu; còn kết quả khác.' : ''}`, 'REMINDERS_LISTED');
         }
         const deterministic = confirm.has(normalized) || cancel.has(normalized) || greeting.test(normalized)
           || ["help", "/help", "trợ giúp", "hướng dẫn"].includes(normalized);

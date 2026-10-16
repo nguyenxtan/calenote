@@ -159,6 +159,21 @@ describe("authenticated reminder API service on migrated D1", () => {
     expect(JSON.stringify(reminders)).not.toContain("two-private");
   });
 
+  it("pages beyond 100 reminders without crossing ownership", async () => {
+    const account = await setup();
+    for (let index = 0; index < 101; index += 1) await seedReminder(account, `one-${String(index).padStart(3, "0")}`, `Việc ${index}`, "PENDING", NOW + index + 1);
+    await seedReminder(account, "two-hidden", "Private", "PENDING", NOW);
+    const dependencies = { store: account.store, keyring: account.keyring };
+    const first = await listPublicReminders("user-one", dependencies, { limit: 101 });
+    // Delivery changes the old status-based order between page requests.
+    account.db.sqlite.prepare("UPDATE reminders SET status='SENT', updated_at=? WHERE public_id=?").run(NOW + 5000, first[0].publicId);
+    const last = await listPublicReminders("user-one", dependencies, { after: first[99].publicId, limit: 101 });
+    expect(first).toHaveLength(101);
+    expect(last).toHaveLength(1);
+    expect(last[0].title).toBe("Việc 100");
+    expect(first.some(row => row.title === "Private")).toBe(false);
+  });
+
   it("normalizes and encrypts a manual reminder while deriving the personal channel server-side", async () => {
     const account = await setup();
     const result = await createManualReminder(

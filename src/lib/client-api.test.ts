@@ -49,6 +49,15 @@ describe("apiRequest", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("restricts reminder pagination to bounded read requests", async () => {
+    const fetcher = vi.fn(async () => json({ data: { reminders: [] } }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(apiRequest("/api/session", { reminderCursor: "cursor" })).rejects.toThrow();
+    await expect(apiRequest("/api/reminders", { method: "POST", reminderCursor: "cursor" })).rejects.toThrow();
+    await expect(apiRequest("/api/reminders", { reminderCursor: "?secret" })).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("runs centralized unauthorized erasure before exposing an authenticated 401", async () => {
     const events: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async () => json({

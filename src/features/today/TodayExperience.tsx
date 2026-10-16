@@ -3,9 +3,10 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, CircleCheck, RefreshCw, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { loadReminderList } from "@/lib/reminder-list";
 import { AppShell } from "@/ui/shell/AppShell";
 import { ActionDecisionResponseSchema, ActionsResponseSchema, type PublicPendingAction } from "@/contracts/api/actions";
-import { RemindersResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
+import { type PublicReminder } from "@/contracts/api/reminders";
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
 import { projectReminders } from "./projection";
@@ -49,6 +50,7 @@ export function TodayExperience() {
   const [notice, setNotice] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [uncertainIntents, setUncertainIntents] = useState<string[]>([]);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const tick = () => setNow(Date.now()); const timer = setInterval(tick, 30_000); window.addEventListener("focus", tick); return () => { clearInterval(timer); window.removeEventListener("focus", tick); }; }, []);
@@ -64,7 +66,7 @@ export function TodayExperience() {
   const loadReminders = useCallback(async (current: number) => {
     const request = ++reminderRequest.current;
     setReminders((state) => ({ ...state, loading: true, error: null }));
-    try { const data = await apiRequest<unknown>("/api/reminders", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = RemindersResponseSchema.parse({ data }).data.reminders; if (epoch.current === current && request === reminderRequest.current) setReminders({ value: next, loading: false, error: null }); }
+    try { const next = await loadReminderList(clearAndRedirect); if (epoch.current === current && request === reminderRequest.current) setReminders({ value: next, loading: false, error: null }); }
     catch (error) { if (!isAbort(error) && epoch.current === current && request === reminderRequest.current) setReminders((state) => ({ ...state, loading: false, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải nhắc hẹn." })); }
   }, [clearAndRedirect]);
   const loadActions = useCallback(async (current: number) => {
@@ -99,10 +101,19 @@ export function TodayExperience() {
   async function createReminder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!user || mutationLocked.current) return;
     const scheduledAt = vietnamWallClockToEpoch(scheduledFor); const trimmed = title.trim();
+    if (uncertainIntents.includes(JSON.stringify([trimmed, scheduledAt]))) return;
     if (!trimmed || scheduledAt === null) { setCaptureError("Hãy nhập nội dung và thời điểm nhắc hợp lệ."); return; }
     mutationLocked.current = true; setCreating(true); setCaptureError(null); setNotice(null); const current = epoch.current;
     try { await apiRequest<unknown>("/api/reminders", { method: "POST", body: { title: trimmed, scheduledAt, timezone: "Asia/Ho_Chi_Minh" }, authenticated: true, onUnauthorized: clearAndRedirect }); if (epoch.current === current) { setTitle(""); setScheduledFor(""); setNotice("Nhắc hẹn đã được lưu."); await loadReminders(current); } }
-    catch (error) { if (epoch.current === current) setCaptureError(error instanceof AmbiguousMutationError ? "Kết quả chưa xác định. Danh sách đã được làm mới; đừng gửi lại trước khi kiểm tra." : error instanceof ApiResponseError ? error.message : "Chưa thể tạo nhắc hẹn." ); }
+    catch (error) {
+      if (epoch.current === current) {
+        if (error instanceof AmbiguousMutationError) {
+          setUncertainIntents((intents) => [...intents, JSON.stringify([trimmed, scheduledAt])]);
+          setCaptureError("Kết quả chưa xác định. Hãy kiểm tra danh sách lời nhắc; không gửi lại cùng yêu cầu.");
+          await loadReminders(current);
+        } else setCaptureError(error instanceof ApiResponseError ? error.message : "Chưa thể tạo nhắc hẹn.");
+      }
+    }
     finally { if (epoch.current === current) { setCreating(false); mutationLocked.current = false; } }
   }
 
@@ -119,7 +130,7 @@ export function TodayExperience() {
   const upcoming = projection.today;
   const fullDate = (at: number) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(at);
   return <AppShell user={user}><main className={styles.page}><header className={styles.header}><p className={styles.eyebrow}><Sparkles aria-hidden="true" size={14} />Ngày của bạn</p><h1>Chào, {user.displayName}</h1><p>{new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)} · Giờ Việt Nam</p></header>
-    <section className={styles.captureSection} aria-labelledby="quick-capture-title"><h2 className={styles.visuallyHidden} id="quick-capture-title">Tạo lời nhắc nhanh</h2><form className={styles.quickCapture} onSubmit={createReminder}><label className={styles.visuallyHidden} htmlFor="capture-title">Nội dung nhắc hẹn</label><textarea id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bạn muốn Calenote nhắc điều gì?" aria-describedby="capture-help" /><p id="capture-help" className={styles.captureHelp}>Bắt đầu bằng nội dung, rồi chọn thời gian chính xác trước khi lưu.</p><div className={styles.captureFoot}><div>{showManualTime ? <><label htmlFor="capture-time">Thời điểm nhắc</label><input id="capture-time" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></> : <button className={styles.timeTrigger} type="button" onClick={() => setShowManualTime(true)}>Chọn thời gian</button>}{scheduledFor && <p className={styles.selectedTime}>{humanTime(vietnamWallClockToEpoch(scheduledFor) ?? 0)}</p>}</div><button type="submit" disabled={creating}>{creating ? "Đang lưu…" : "Tạo lời nhắc"}</button></div><div className={styles.quickIdeas} aria-label="Gợi ý bắt đầu"><span>Bắt đầu nhanh</span><button type="button" onClick={() => setTitle("Gọi mẹ")}>Nhắc gọi mẹ</button><button type="button" onClick={() => setTitle("Lên kế hoạch tuần")}>Lên kế hoạch tuần</button><button type="button" onClick={() => setTitle("Chuẩn bị cho ngày mai")}>Chuẩn bị cho ngày mai</button></div>{captureError && <p className={styles.inlineError} role="alert">{captureError}</p>}</form></section>
+    <section className={styles.captureSection} aria-labelledby="quick-capture-title"><h2 className={styles.visuallyHidden} id="quick-capture-title">Tạo lời nhắc nhanh</h2><form className={styles.quickCapture} onSubmit={createReminder}><label className={styles.visuallyHidden} htmlFor="capture-title">Nội dung nhắc hẹn</label><textarea id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bạn muốn Calenote nhắc điều gì?" aria-describedby="capture-help" /><p id="capture-help" className={styles.captureHelp}>Bắt đầu bằng nội dung, rồi chọn thời gian chính xác trước khi lưu.</p><div className={styles.captureFoot}><div>{showManualTime ? <><label htmlFor="capture-time">Thời điểm nhắc</label><input id="capture-time" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></> : <button className={styles.timeTrigger} type="button" onClick={() => setShowManualTime(true)}>Chọn thời gian</button>}{scheduledFor && <p className={styles.selectedTime}>{humanTime(vietnamWallClockToEpoch(scheduledFor) ?? 0)}</p>}</div><button type="submit" disabled={creating || uncertainIntents.includes(JSON.stringify([title.trim(), vietnamWallClockToEpoch(scheduledFor)]))}>{creating ? "Đang lưu…" : "Tạo lời nhắc"}</button></div><div className={styles.quickIdeas} aria-label="Gợi ý bắt đầu"><span>Bắt đầu nhanh</span><button type="button" onClick={() => setTitle("Gọi mẹ")}>Nhắc gọi mẹ</button><button type="button" onClick={() => setTitle("Lên kế hoạch tuần")}>Lên kế hoạch tuần</button><button type="button" onClick={() => setTitle("Chuẩn bị cho ngày mai")}>Chuẩn bị cho ngày mai</button></div>{captureError && <p className={styles.inlineError} role="alert">{captureError}</p>}</form></section>
     {notice && <p className={styles.notice} role="status"><CircleCheck aria-hidden="true" size={18} />{notice}</p>}
     <div className={styles.grid}><section aria-labelledby="today-title"><div className={styles.sectionHead}><div><p>Lịch trong ngày</p><h2 id="today-title">Còn lại hôm nay</h2></div></div>{reminders.error ? <LocalError message={reminders.error} onRetry={() => void loadReminders(epoch.current)} /> : reminders.value === null ? <Skeleton /> : upcoming.length === 0 ? <Empty title="Hôm nay không còn lời nhắc sắp tới." text="Bạn có thể thêm lời nhắc mới hoặc xem những ngày tiếp theo bên dưới." /> : <div className={styles.timeline}>{upcoming.map((item) => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{status(item.status)}</p></div></article>)}</div>}</section>
       <aside className={styles.context}>{upcoming[0] && <section className={styles.next}><p>Lời nhắc tiếp theo hôm nay</p><strong>{time(upcoming[0].scheduledAt)}</strong><h2>{upcoming[0].title}</h2><span>{upcoming.length} lời nhắc còn lại</span></section>}</aside></div>

@@ -34,7 +34,28 @@ plans are audit evidence only; they do not override this document.
 
 ## Worker runtime and persistence
 
-### Undeployed Conversation V2 branch — 2026-09-28
+### Latest verified checkpoint — 2026-10-16
+
+Remote `master` was verified at `19df5a3bc16a56ee96835d01b1b3d07f4624fdc4`.
+That source enables Conversation V2 in the Worker composition and contains the
+local lunar-today/month/help read path from `a69180b081dba715fea4ccc58409bcf80f96645f`,
+plus bounded failure observation. The last verified deployment in this task was
+Worker version `b3de4c40-9138-4ea3-99fe-19ca5fc76ed5`, promoted at 100% on
+2026-10-15. This is deployment evidence, not fresh end-to-end AI acceptance.
+
+The two historical CREATE failures remain `UNKNOWN`. Paid inference remains on
+hold. Missing failure events do not prove that the provider succeeded, nor can
+new telemetry reconstruct errors discarded by the previous runtime. Offline
+fixtures and green CI are separate from production provider acceptance.
+
+The feature branch `codex/product-completion` builds on that production source.
+It adds local today/tomorrow reads, ambiguous web-create protection within the
+mounted form, cancellation read-back/order fencing, and bounded keyset pagination
+for web reminder lists. These changes require their own reviewed SHA and release
+authorization; their presence in this document does not mean they are deployed.
+Keyset pagination is not an atomic snapshot across concurrent GET requests.
+
+### Historical undeployed checkpoint — 2026-09-28
 
 The isolated `codex/conversation-v2-live-evaluation` package adds bounded encrypted
 dialogue context, finite daily series, explicit Vietnamese lunar dates, managed
@@ -146,7 +167,11 @@ bounded external-source boundary is described in
 [external-source-boundary.md](./external-source-boundary.md); it is not an
 implemented ICONIC Logistics Platform integration.
 
-## Current limits
+## Historical limits from the earlier checkpoint
+
+The following labels describe the older checkpoint, not the later V2 source or
+its deployment. V1 and the optional semantic fallback labels must not be used to
+infer that the current V2 Worker is disabled.
 
 TELEGRAM_PRODUCTION_BEHAVIOR = PLANNED
 

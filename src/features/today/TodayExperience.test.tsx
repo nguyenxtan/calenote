@@ -126,6 +126,35 @@ describe("TodayExperience", () => {
     expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
   });
 
+  it.each([false, true])("reads back an ambiguous create and blocks its intent even if refresh fails: %s", async (refreshFails) => {
+    let committed = false;
+    let posts = 0;
+    let reads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, options?: RequestInit) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/actions") return json({ data: { actions: [] } });
+      if (options?.method === "POST") { committed = true; posts += 1; throw new TypeError("lost response"); }
+      reads += 1;
+      if (committed && refreshFails) throw new TypeError("read unavailable");
+      return json({ data: { reminders: committed ? [reminder] : [] } });
+    }));
+    const interaction = userEvent.setup();
+    render(<TodayExperience />);
+    await interaction.type(await screen.findByLabelText("Nội dung nhắc hẹn"), "Gọi khách hàng");
+    await interaction.click(screen.getByRole("button", { name: "Chọn thời gian" }));
+    fireEvent.change(screen.getByLabelText("Thời điểm nhắc"), { target: { value: "2027-09-11T09:00" } });
+    await interaction.click(screen.getByRole("button", { name: "Tạo lời nhắc" }));
+    await waitFor(() => expect(reads).toBe(2));
+    expect((await screen.findAllByRole("alert"))[0]).toHaveTextContent("Kết quả chưa xác định");
+    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("button", { name: "Tạo lời nhắc" }).closest("form")!);
+    expect(posts).toBe(1);
+    fireEvent.change(screen.getByLabelText("Nội dung nhắc hẹn"), { target: { value: "Việc khác" } });
+    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Nội dung nhắc hẹn"), { target: { value: "  Gọi khách hàng  " } });
+    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeDisabled();
+  });
+
   it("validates Quick Capture before it can create a reminder", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;

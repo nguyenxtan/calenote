@@ -2,7 +2,7 @@
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {makeContextHarness} from '@/modules/conversation/infrastructure/d1/test-support';
 import {D1LocalMonthQueryStore} from './local-month-query-store';
-import {localCalendarMonth,type LocalMonthQuery} from '@/modules/conversation/local-read-only';
+import {localCalendarMonth,localReadOnlyRange,type LocalMonthQuery} from '@/modules/conversation/local-read-only';
 let h:Awaited<ReturnType<typeof makeContextHarness>>,input:LocalMonthQuery;
 const receipt=Date.parse('2026-10-15T13:39:00+07:00');
 beforeEach(async()=>{h=await makeContextHarness();for(const owner of ['one','two'])await h.db.batch([h.db.prepare("INSERT INTO workspaces(id,kind,owner_user_id,created_at,updated_at) VALUES(?,'PERSONAL',?,1,1)").bind(`space-${owner}`,owner),h.db.prepare("INSERT INTO memberships(workspace_id,user_id,role,created_at) VALUES(?,?,'OWNER',1)").bind(`space-${owner}`,owner)]);await h.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id='one-0'").bind(receipt).run();const rowid=await h.db.prepare("SELECT rowid FROM inbound_updates WHERE id='one-0'").first<number>('rowid');const range=localCalendarMonth(receipt)!;input={message:{id:'one-0',connectionId:'connection-one',providerUserId:'provider-one',privateChatId:'private-one',claimMarker:'claim',text:'tháng này có lịch gì ko',receivedAt:receipt},context:{userId:'one',chatIdentityId:'chat-one',workspaceId:'space-one',timezone:'Asia/Ho_Chi_Minh',inboundRowId:rowid!},range:{start:range.start,end:range.end}}},20000);
@@ -23,6 +23,8 @@ import worker from '@/worker/index';
 import * as telegram from '@/modules/connections/providers/telegram';
 import {D1SemanticBudgetStore} from '@/modules/semantic/infrastructure/d1/budget-store';
 const localInputs=[
+ {text:'hôm nay có lời nhắc gì?',contains:'Lịch ngày 15/10/2026'},
+ {text:'mai có lịch gì?',contains:'Lịch ngày 16/10/2026'},
  {text:'hôm nay là ngày mấy âm lịch ?',contains:'âm lịch'},
  {text:'hôm nay ngày mấy âm lịch',contains:'âm lịch'},
  {text:'tháng này có lịch gì ko',contains:'Lịch tháng 10/2026'},
@@ -61,3 +63,17 @@ it.each(pendingCases.flatMap(pending=>localInputs.map(({text,contains})=>({pendi
   expect(await h.db.prepare('SELECT state FROM inbound_updates WHERE id=?').bind(id).first<string>('state')).toBe('PROCESSED');
  }finally{send.mockRestore();network.mockRestore();reserve.mockRestore()}
 },20000);
+
+it.each(['xem lịch hôm nay','mai có lịch gì?'])('reads only the exact owner day range for %s',async text=>{
+ const range=localReadOnlyRange(text,receipt)!;
+ const query={...input,message:{...input.message,text},range:{start:range.start,end:range.end}};
+ await insert('before','PENDING',range.start-1);
+ await insert('start','PENDING',range.start);
+ await insert('last','SENT',range.end-1);
+ await insert('end','PENDING',range.end);
+ await insert('foreign','PENDING',range.start,'chat-two','two');
+ const store=new D1LocalMonthQueryStore(h.db);
+ expect(await store.list(query)).toMatchObject({status:'RESULTS',hasMore:false,rows:[{id:'start'},{id:'last'}]});
+ expect(await store.list({...query,range:{start:range.start,end:range.end+1}})).toEqual({status:'INVALID'});
+ expect(await store.list({...query,context:{...query.context,userId:'two'}})).toEqual({status:'UNAUTHORIZED'});
+});

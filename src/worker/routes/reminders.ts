@@ -40,8 +40,13 @@ export async function handleListReminders(
   const credentials = requireCanonicalSession(request);
   const operations = await createOperations();
   const principal = await operations.requireUser(credentials);
-  const reminders = await operations.listReminders(principal.userId);
-  return jsonResponse(RemindersResponseSchema.parse({ data: { reminders } }), { headers: authenticatedHeaders() });
+  const params = new URL(request.url).searchParams;
+  const after = params.get("after");
+  if ([...params.keys()].some(key => key !== "after") || params.getAll("after").length > 1 || (after !== null && !/^[A-Za-z0-9_-]{1,128}$/u.test(after))) throw new InvalidRequestError();
+  const reminders = after === null ? await operations.listReminders(principal.userId) : await operations.listReminders(principal.userId, after);
+  const page = reminders.slice(0, 100);
+  const nextCursor = reminders.length > 100 ? page.at(-1)!.publicId : undefined;
+  return jsonResponse(RemindersResponseSchema.parse({ data: { reminders: page, ...(nextCursor === undefined ? {} : { nextCursor }) } }), { headers: authenticatedHeaders() });
 }
 
 export async function handleCreateReminder(

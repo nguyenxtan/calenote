@@ -30,7 +30,7 @@ export interface ConnectionsOperations {
 
 export interface RemindersOperations {
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
-  listReminders(userId: string): Promise<PublicReminder[]>;
+  listReminders(userId: string, after?: string): Promise<PublicReminder[]>;
   createReminder(input: {
     userId: string;
     title: string;

@@ -66,7 +66,7 @@ export interface ManualReminderRecord {
 }
 
 export interface ReminderApiStore {
-  listOwned(userId: string, limit: number): Promise<OwnedReminderRow[]>;
+  listOwned(userId: string, limit: number, after?: string | null): Promise<OwnedReminderRow[]>;
   createManual(record: ManualReminderRecord): Promise<boolean>;
   findOwnedForCancellation(userId: string, publicId: string): Promise<CancellationRow | null>;
   cancelOwned(input: {
@@ -127,8 +127,10 @@ export async function listPublicReminders(
     store: ReminderApiStore;
     keyring: Pick<Keyring, "decryptSensitive">;
   },
+  options: { after?: string; limit: number } = { limit: MAX_LISTED_REMINDERS },
 ): Promise<PublicReminder[]> {
-  const rows = await dependencies.store.listOwned(userId, MAX_LISTED_REMINDERS);
+  if ((options.after !== undefined && !/^[A-Za-z0-9_-]{1,128}$/u.test(options.after)) || !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 101) throw new InvalidReminderError();
+  const rows = await dependencies.store.listOwned(userId, options.limit, options.after ?? null);
   const reminders: PublicReminder[] = [];
   for (const row of rows) {
     const title = await dependencies.keyring.decryptSensitive(
