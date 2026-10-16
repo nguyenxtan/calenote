@@ -32,14 +32,16 @@ wiring. Combining their changes indiscriminately would regress existing behavior
 The architecture document also retained an undeployed September checkpoint as
 current, so this change adds a clearly dated superseding checkpoint.
 
-The historical CREATE failures discarded their detailed category in the old
-runtime. New telemetry cannot recover that lost information. Repeated empty
+The old runtime mapped several failure stages to a generic reply and did not
+retain enough correlated detail to identify the two historical CREATE incidents.
+New telemetry cannot reconstruct that missing evidence. Repeated empty
 telemetry queries cannot establish the cause or prove successful CREATE. This
 is an evidence limit, separate from the reproducible web defects fixed here.
 
 ## Acceptance boundaries
 
-Independent review reproduced the web ambiguity/pagination issues offline.
+Independent review identified the web ambiguity/pagination issues; local
+regression tests reproduced them.
 Regression coverage includes lost responses, failed read-back, concurrent series
 refresh, real D1 ownership, delivery status changes between pages, API contracts,
 and the real Worker Queue path with pending drafts/cancellations.

@@ -45,7 +45,7 @@ Worker version `b3de4c40-9138-4ea3-99fe-19ca5fc76ed5`, promoted at 100% on
 
 The two historical CREATE failures remain `UNKNOWN`. Paid inference remains on
 hold. Missing failure events do not prove that the provider succeeded, nor can
-new telemetry reconstruct errors discarded by the previous runtime. Offline
+new telemetry reconstruct the missing incident details from the previous runtime. Offline
 fixtures and green CI are separate from production provider acceptance.
 
 The feature branch `codex/product-completion` builds on that production source.
