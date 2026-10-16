@@ -1,5 +1,15 @@
 # Calenote AI Semantic Conversation V1
 
+## Successor contract scope — 2026-09-28
+
+The approved rules below remain the historical V1 hybrid contract. The
+[LLM-led context proposal](./2026-09-28-llm-context-contract-design.md) §2
+explicitly identifies which provider/interpretation rules would be superseded
+for its new path and which backend safety rules remain. The successor written
+spec is pending owner review, not implemented or approved for planning. Do not
+apply this V1 document's temporal-output prohibition to that proposed contract,
+and do not treat this notice as runtime activation or renewed live authority.
+
 **Status:** APPROVED ARCHITECTURE — HYBRID TEMPORAL AUTHORITY REFACTOR.
 
 **Baseline:** `a70e7524845322ce3fd973b7166dec6b81835d0a` on

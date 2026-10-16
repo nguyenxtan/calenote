@@ -1,0 +1,2253 @@
+{
+  "version": "context-contract-corpus-1",
+  "cases": [
+    {
+      "id": "H01",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "8 giờ sáng thứ tư nhắc tôi mang máy tính đi làm.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mang máy tính đi làm",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "WEEKDAY",
+                "weekday": 3,
+                "qualifier": "THIS_WEEK"
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-09-30 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mang máy tính đi làm",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-09-30 08:00",
+              "mang máy tính đi làm"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H02",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc đóng tiền điện lúc 18h ngày 2/10.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đóng tiền điện",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 2,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 18,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-02 18:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đóng tiền điện",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-02 18:00",
+              "đóng tiền điện"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H03",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 3/10 lúc 9 giờ nhắc đem hồ sơ tới bưu điện.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đem hồ sơ",
+              "location": "bưu điện",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 3,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 9,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-03 09:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đem hồ sơ",
+              "location": "bưu điện",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-03 09:00",
+              "đem hồ sơ",
+              "bưu điện"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H04",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc tôi đi khám lúc 7h sáng ngày 4/10, địa điểm Bạch Mai.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi khám",
+              "location": "Bạch Mai",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 4,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 7,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-04 07:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đi khám",
+              "location": "Bạch Mai",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-04 07:00",
+              "đi khám",
+              "Bạch Mai"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H05",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Cuối tuần này có lịch nào?",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": {
+              "start": 1790960400000,
+              "end": 1791133200000
+            },
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H06",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Tuần tới tôi đã đặt lời nhắc gì?",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": {
+              "start": 1791133200000,
+              "end": 1791738000000
+            },
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H07",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Hôm qua là ngày nào âm lịch Việt Nam?",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "replyIncludes": [
+              "17/8/2026"
+            ],
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H08",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày mùng một tháng mười âm lịch 2026 đổi ra dương lịch là ngày nào?",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "replyIncludes": [
+              "2026-11-09"
+            ],
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H09",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Mỗi năm vào ngày sinh nhật mẹ, nhắc mua hoa.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "replyIncludes": [
+              "hằng năm chưa được hỗ trợ"
+            ],
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H10",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Mỗi thứ hai nhắc tôi gọi khách hàng.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "gọi khách hàng",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": "WEEKLY",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "replyExcludes": [
+              "Đã lưu"
+            ],
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H11",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc tôi uống thuốc hai ngày liên tiếp, bắt đầu ngày mai lúc 7h.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "uống thuốc",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "RELATIVE_DAY",
+                "offsetDays": 1
+              },
+              "reminderTime": {
+                "hour": 7,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "DAILY",
+              "occurrenceCount": 2,
+              "eventRelation": "STARTING_ON",
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-09-29 07:00",
+              "2026-09-30 07:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "uống thuốc",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-09-29 07:00",
+              "2026-09-30 07:00",
+              "uống thuốc"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H12",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 6/10 bắt đầu nhắc đi bộ ba ngày liền lúc 6h sáng.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi bộ",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 6,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 6,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "DAILY",
+              "occurrenceCount": 3,
+              "eventRelation": "STARTING_ON",
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-06 06:00",
+              "2026-10-07 06:00",
+              "2026-10-08 06:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đi bộ",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-06 06:00",
+              "2026-10-07 06:00",
+              "2026-10-08 06:00",
+              "đi bộ"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H13",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc tôi chuẩn bị bài thuyết trình ngày 8/10 lúc 20h.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "chuẩn bị bài thuyết trình",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 8,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 20,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-08 20:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "chuẩn bị bài thuyết trình",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-08 20:00",
+              "chuẩn bị bài thuyết trình"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H14",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 9/10 lúc 8h nhắc mang quà cho chị ở Cầu Giấy.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mang quà cho chị",
+              "location": "Cầu Giấy",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 9,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-09 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mang quà cho chị",
+              "location": "Cầu Giấy",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-09 08:00",
+              "mang quà cho chị",
+              "Cầu Giấy"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H15",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Tối mai nhớ nhắc tôi nộp bản thảo.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "nộp bản thảo",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "RELATIVE_DAY",
+                "offsetDays": 1
+              },
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "replyExcludes": [
+              "Đã lưu"
+            ],
+            "occurrences": [],
+            "pendingField": "reminderTime",
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H16",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Khoảng 8h ngày 10/10 nhắc tôi đi ga tàu.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi ga tàu",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 10,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "UNKNOWN"
+              },
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "replyExcludes": [
+              "Đã lưu"
+            ],
+            "occurrences": [],
+            "pendingField": "reminderTime",
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H17",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 11/10 đi thi ở Quang Trung, nhắc tôi chuẩn bị giấy tờ.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "chuẩn bị giấy tờ",
+              "location": "Quang Trung",
+              "notes": null,
+              "eventDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "occurrences": [],
+            "pendingField": "reminderTime",
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        },
+        {
+          "text": "Hai ngày trước lúc 8h sáng.",
+          "receipt": "2026-09-28T03:01:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "chuẩn bị giấy tờ",
+              "location": "Quang Trung",
+              "notes": null,
+              "eventDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": "BEFORE_EVENT",
+              "leadOffsetDays": 2,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "replyIncludes": [
+              "2026-10-09 08:00",
+              "chuẩn bị giấy tờ",
+              "Quang Trung"
+            ],
+            "occurrences": [
+              "2026-10-09 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 2,
+            "draftRevision": 2,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "chuẩn bị giấy tờ",
+              "location": "Quang Trung",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": "2026-10-11",
+              "eventTime": null
+            },
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H18",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 12/10 tôi có hẹn ở thư viện, nhắc tôi trước một ngày.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi hẹn",
+              "location": "thư viện",
+              "notes": null,
+              "eventDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 12,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": "BEFORE_EVENT",
+              "leadOffsetDays": 1,
+              "endDate": null
+            },
+            "occurrences": [],
+            "pendingField": "reminderTime",
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        },
+        {
+          "text": "Lúc 9h.",
+          "receipt": "2026-09-28T03:01:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi hẹn",
+              "location": "thư viện",
+              "notes": null,
+              "eventDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 12,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": {
+                "hour": 9,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": "BEFORE_EVENT",
+              "leadOffsetDays": 1,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-11 09:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 2,
+            "draftRevision": 2,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đi hẹn",
+              "location": "thư viện",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": "2026-10-12",
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-11 09:00",
+              "đi hẹn",
+              "thư viện"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H19",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc mua vé tàu 8h ngày 13/10.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mua vé tàu",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 13,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "occurrences": [
+              "2026-10-13 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mua vé tàu",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-13 08:00",
+              "mua vé tàu"
+            ],
+            "canonicalReminders": []
+          }
+        },
+        {
+          "text": "Đổi thành 9h.",
+          "receipt": "2026-09-28T03:01:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mua vé tàu",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 13,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 9,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "replyIncludes": [
+              "09:00",
+              "2026-10-13 09:00",
+              "mua vé tàu"
+            ],
+            "occurrences": [
+              "2026-10-13 09:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 2,
+            "draftRevision": 2,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mua vé tàu",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H20",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc gửi thư 10h ngày 14/10.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "gửi thư",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 14,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 10,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "occurrences": [
+              "2026-10-14 10:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "gửi thư",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-14 10:00",
+              "gửi thư"
+            ],
+            "canonicalReminders": []
+          }
+        },
+        {
+          "text": "Bỏ.",
+          "receipt": "2026-09-28T03:01:00Z",
+          "model": "BYPASS",
+          "expect": {
+            "status": "CANCELLED",
+            "dispatches": 0,
+            "mutations": 0,
+            "fields": {},
+            "source": "BACKEND",
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": null,
+            "draftRevision": null,
+            "queryRange": null,
+            "idleExpiresAt": null,
+            "absoluteExpiresAt": null,
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H21",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc tôi họp nhóm 15h ngày 15/10.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "họp nhóm",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 15,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 15,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-15 15:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "họp nhóm",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-15 15:00",
+              "họp nhóm"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H22",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "16/10 lúc 17h nhắc tôi đón con ở trường.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đón con",
+              "location": "trường",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 16,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 17,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-16 17:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đón con",
+              "location": "trường",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-16 17:00",
+              "đón con",
+              "trường"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H23",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 17/10 lúc 6h nhắc mang giày chạy bộ.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mang giày chạy bộ",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 17,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 6,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-17 06:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mang giày chạy bộ",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-17 06:00",
+              "mang giày chạy bộ"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H24",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Tháng 10 còn buổi hẹn nào?",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": {
+              "start": 1790787600000,
+              "end": 1793466000000
+            },
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H25",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Xem các lời nhắc trong 7 ngày tới.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "REMINDERS_LISTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": null,
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "source": "BACKEND",
+            "occurrences": [],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": null,
+            "queryRange": {
+              "start": 1790528400000,
+              "end": 1791133200000
+            },
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": null,
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "previewFields": {},
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H26",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Nhắc tôi đóng học phí lúc 10h ngày 18/10, ghi chú mang biên lai.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đóng học phí",
+              "location": null,
+              "notes": "mang biên lai",
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 18,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 10,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-18 10:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đóng học phí",
+              "location": null,
+              "notes": "mang biên lai",
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-18 10:00",
+              "đóng học phí",
+              "mang biên lai"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H27",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "19/10 lúc 14h nhắc đi khám ở phòng khám số 3.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "đi khám",
+              "location": "phòng khám số 3",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 19,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 14,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-19 14:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "đi khám",
+              "location": "phòng khám số 3",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-19 14:00",
+              "đi khám",
+              "phòng khám số 3"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H28",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 20/10 lúc 9h nhắc gọi cho bà ngoại.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "gọi cho bà ngoại",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 20,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 9,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-20 09:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "gọi cho bà ngoại",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-20 09:00",
+              "gọi cho bà ngoại"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H29",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 21/10 hẹn gặp bạn ở công viên.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "CLARIFICATION_REQUESTED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "hẹn gặp bạn",
+              "location": "công viên",
+              "notes": null,
+              "eventDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 21,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "eventTime": null,
+              "reminderDate": null,
+              "reminderTime": null,
+              "calendar": null,
+              "frequency": null,
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "occurrences": [],
+            "pendingField": "reminderTime",
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 0,
+            "decisionKind": null,
+            "previewFields": {},
+            "canonicalReminders": [],
+            "replyExcludes": [
+              "Đã lưu"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "H30",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Lúc 8h ngày 22/10 nhắc nộp báo cáo.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "nộp báo cáo",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 22,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-22 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "nộp báo cáo",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-22 08:00",
+              "nộp báo cáo"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H31",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "Ngày 23/10 lúc 19h nhắc mua quà ở siêu thị.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "mua quà",
+              "location": "siêu thị",
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 23,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 19,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-23 19:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "mua quà",
+              "location": "siêu thị",
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-23 19:00",
+              "mua quà",
+              "siêu thị"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "H32",
+      "group": "HELDOUT",
+      "mandatory": false,
+      "turns": [
+        {
+          "text": "24/10 lúc 8h nhắc tôi kiểm tra hộp thư.",
+          "receipt": "2026-09-28T03:00:00Z",
+          "model": "HEALTHY",
+          "expect": {
+            "status": "DRAFT_CREATED",
+            "dispatches": 1,
+            "mutations": 0,
+            "fields": {
+              "title": "kiểm tra hộp thư",
+              "location": null,
+              "notes": null,
+              "eventDate": null,
+              "eventTime": null,
+              "reminderDate": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 24,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "reminderTime": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "calendar": "GREGORIAN",
+              "frequency": "ONCE",
+              "occurrenceCount": null,
+              "eventRelation": null,
+              "leadOffsetDays": null,
+              "endDate": null
+            },
+            "kind": "PREVIEW",
+            "occurrences": [
+              "2026-10-24 08:00"
+            ],
+            "pendingField": null,
+            "contextRevision": 1,
+            "draftRevision": 1,
+            "queryRange": null,
+            "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+            "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+            "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+            "childCount": 0,
+            "transactionCommits": 0,
+            "sendAttempts": 1,
+            "apiPreviews": 1,
+            "previewFields": {
+              "title": "kiểm tra hộp thư",
+              "location": null,
+              "notes": null,
+              "calendar": "GREGORIAN",
+              "eventDate": null,
+              "eventTime": null
+            },
+            "replyIncludes": [
+              "2026-10-24 08:00",
+              "kiểm tra hộp thư"
+            ],
+            "canonicalReminders": []
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -40,6 +40,8 @@ import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure
 import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
 import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { createConversationService, type ConversationServiceDependencies } from "@/modules/conversation/service";
+import { createContextContractService, type ContextContractServiceDependencies } from "@/modules/conversation/context-contract/service";
+import type { ReplyReceipt } from "@/modules/conversation/context-contract/responses";
 import { startProcessingFeedback, observeTiming, type ConversationTiming, type FeedbackLifetime } from "@/modules/conversation/processing-feedback";
 import { executeProviderRequest, postSecretProviderJson } from "@/modules/connections/providers/secret-provider-transport";
 
@@ -157,6 +159,7 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  contextContract?: Omit<ContextContractServiceDependencies, "keyring" | "now" | "reply" | "processingFeedback" | "channel">;
   feedbackLifetime?: FeedbackLifetime;
   observeTiming?: (value: ConversationTiming) => void;
   observeFeedback?: (outcome: "OK" | "FAILED" | "TIMEOUT", elapsedMs: number) => void;
@@ -647,6 +650,19 @@ async function replyAfterTerminal(
   }
 }
 
+/** Receipt-preserving successor adapter. Provider success may lack a reference;
+ * that still proves delivery, but cannot authorize a reply-reference control. */
+async function replyWithReceipt(message: ClaimedInboundMessage, text: string, dependencies: ProcessInboundDependencies): Promise<ReplyReceipt> {
+  let token: string;
+  try { token = await dependencies.keyring.decryptCredential(message.connectionId, message.provider, message.credentialVersion,
+    { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv }); } catch { return { status: "FAILED" }; }
+  try {
+    const receipt = await (dependencies.sendText ?? sendProviderText)(message.provider, token, message.privateChatId, text);
+    if (!receipt || (receipt.providerMessageId !== null && (typeof receipt.providerMessageId !== "string" || receipt.providerMessageId.length > 512))) return { status: "UNCERTAIN" };
+    return { status: "SENT", messageRef: receipt.providerMessageId };
+  } catch { return { status: "UNCERTAIN" }; }
+}
+
 function recordZaloEarlyDiagnostic(
   provider: BotProvider | null,
   recordDiagnostic: ClaimInboundDependencies["recordDiagnostic"],
@@ -808,10 +824,14 @@ export async function processInbound(
       try { await replyAfterTerminal(message, text, dependencies); }
       finally { observeTiming(dependencies.observeTiming, "FINAL_REPLY", performance.now() - eligibleStarted); }
     };
-    const conversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
+    const legacyConversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
       commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback, observeTiming: dependencies.observeTiming,
       list: input => dependencies.store.listSemanticReminders(input),
     }) : undefined;
+    const conversation = dependencies.contextContract ? createContextContractService({ ...dependencies.contextContract,
+      keyring: dependencies.keyring, now, channel: message.provider === "zalo" ? "ZALO" : "TELEGRAM", processingFeedback,
+      reply: async plan => plan.status === "READY" ? replyWithReceipt(message, plan.text, dependencies) : { status: "FAILED" },
+    }) : legacyConversation;
     return processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
       intelligence: dependencies.intelligence,

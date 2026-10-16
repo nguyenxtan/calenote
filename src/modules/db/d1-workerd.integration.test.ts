@@ -22,6 +22,11 @@ import {
 } from "@/modules/onboarding/service";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { createRouter } from "@/worker/router";
+import { fixture as contextContractFixture } from "@/modules/conversation/context-contract/infrastructure/d1/test-support";
+import { migrationStatements } from "@/testing/sqlite-d1.test-support";
+import { addConfirmationToken } from "@/modules/conversation/context-contract/confirmation-test-support";
+import { now as contextNow } from "@/modules/conversation/context-contract/resolution-test-support";
+import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 
 const MASTER = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const NOW = 1_800_000_000_000;
@@ -43,6 +48,96 @@ interface RuntimeFixture {
 }
 
 const instances: Miniflare[] = [];
+
+async function contextContractRuntime() {
+  const instance = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", compatibilityDate: "2026-09-03", d1Databases: { DB: "00000000-0000-0000-0000-000000000009" }, port: 0 }));
+  instances.push(instance);
+  const db = await instance.getD1Database("DB") as unknown as D1Database;
+  for (const name of ["0001_production_mvp", "0002_onboarding_transition_marker", "0003_source_action_foundation", "0004_user_preferences", "0005_semantic_context_and_budget", "0006_semantic_budget_dispatch_fence", "0007_conversation_context_v2", "0008_finite_reminder_series", "0009_llm_context_contract"])
+    for (const sql of migrationStatements(readFileSync(resolve("migrations", name + ".sql"), "utf8"))) await db.prepare(sql).run();
+  return contextContractFixture(db);
+}
+
+describe("context contract transactions on real workerd", () => {
+  it.each(["CHAT","WEB"] as const)("prepared preview remains inert until actual SENT receipt, then %s may confirm",async channel=>{
+    const f=await contextContractRuntime();await addConfirmationToken(f);
+    f.snapshot.pendingDecision!.deliveryState="UNCERTAIN";f.snapshot.pendingDecision!.replyReference=null;
+    f.snapshot.previewReceipt!.deliveryState="UNCERTAIN";f.snapshot.previewReceipt!.replyReference=null;
+    const outbound=f.snapshot.transcript.at(-1)!;outbound.deliveryState="UNCERTAIN";outbound.messageRef=null;
+    expect((await f.save()).result.status).toBe("APPLIED");
+    const chatAuthority={kind:"CHAT",scope:f.scope(1)} as const;
+    const webAuthority={kind:"WEB",principal:{userId:"owner",sessionId:"session",expiresAt:contextNow+1000000},chat:f.snapshot.scope} as const;
+    expect(await f.store.confirm(chatAuthority,f.proof)).toEqual({status:"REJECTED"});
+    expect(await f.store.confirm(webAuthority,f.proof)).toEqual({status:"REJECTED"});
+    expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+    const receipt={contextId:"context",contextRevision:1,draftRevision:1,outboundId:"preview",decisionId:"decision",deliveryState:"SENT",messageRef:"actual-delivery"} as const;
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("RECORDED");
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("RECORDED");
+    expect(await f.store.confirm(channel==="CHAT"?chatAuthority:webAuthority,f.proof)).toMatchObject({status:"COMMITTED",childCount:2});
+    expect(await f.store.recordDelivery(f.scope(),receipt)).toBe("STALE");
+    expect(await f.db.prepare("SELECT count(*) n FROM reminder_context_details").first("n")).toBe(2);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+  },20000);
+  it.each([
+    {name:"earlier timestamp",receivedAt:contextNow-1,sourceRowid:1,committed:false},
+    {name:"same timestamp earlier rowid",receivedAt:contextNow,sourceRowid:20,committed:false},
+    {name:"same timestamp later rowid",receivedAt:contextNow,sourceRowid:1,committed:true},
+    {name:"later timestamp",receivedAt:contextNow+1,sourceRowid:1,committed:true},
+  ])("preview confirmation tuple fence: $name",async({receivedAt,sourceRowid,committed})=>{
+    const f=await contextContractRuntime();
+    await f.db.prepare("UPDATE inbound_updates SET rowid=? WHERE id='old'").bind(sourceRowid).run();
+    f.snapshot.inbound.rowid=sourceRowid;f.snapshot.previewReceipt!.issuedAfterOrder.rowid=sourceRowid;f.snapshot.pendingDecision!.issuedAfterInbound.rowid=sourceRowid;
+    expect((await f.save()).result.status).toBe("APPLIED");
+    await f.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id='in-1'").bind(receivedAt).run();
+    const result=await f.store.confirm({kind:"CHAT",scope:f.scope(1)},f.proof);
+    expect(result.status).toBe(committed?"COMMITTED":"STALE");
+    expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(committed?2:0);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+  },20000);
+  it("preview order is rechecked inside the winning permit after encryption",async()=>{
+    const f=await contextContractRuntime();expect((await f.save()).result.status).toBe("APPLIED");
+    let changed=false;
+    const keys:Keyring={...f.keyring,encryptSensitive:async(...args)=>{
+      if(args[0]==="reminder-title"&&!changed){changed=true;await f.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id='in-1'").bind(contextNow-1).run();}
+      return f.keyring.encryptSensitive(...args);
+    }};
+    expect(await new D1ContextContractStore(f.db,keys).confirm({kind:"CHAT",scope:f.scope(1)},f.proof)).toEqual({status:"STALE"});
+    expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+  },20000);
+  it("concurrent_web_chat_confirmation_has_one_canonical_winner", async () => {
+    const f=await contextContractRuntime();await addConfirmationToken(f);
+    expect((await f.save()).result.status).toBe("APPLIED");
+    const results=await Promise.all([
+      f.store.confirm({kind:"CHAT",scope:f.scope(1)},f.proof),
+      f.store.confirm({kind:"WEB",principal:{userId:"owner",sessionId:"session",expiresAt:contextNow+1000000},chat:f.snapshot.scope},{...f.proof,operationKey:"web-confirm"}),
+    ]);
+    expect(results.filter(r=>r.status==="COMMITTED")).toHaveLength(1);
+    expect(results.filter(r=>r.status==="STALE")).toHaveLength(1);
+    expect(await f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(2);
+    expect(await f.db.prepare("SELECT count(*) n FROM reminder_context_details").first("n")).toBe(2);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+  },20000);
+  it.each([1, 2, 30])("commits %i children and their bound details exactly once", async count => {
+    const f = await contextContractRuntime();
+    const saved = await f.save(count);
+    expect(saved.result.status).toBe("APPLIED");
+    const result = await f.store.confirm({ kind: "CHAT", scope: f.scope(1) }, saved.proof);
+    expect(result).toMatchObject({ status: "COMMITTED", childCount: count });
+    expect(await f.db.prepare("SELECT count(*) n FROM reminder_context_details").first("n")).toBe(count);
+    expect(await f.db.prepare("SELECT count(*) n FROM conversation_contract_write_permits").first("n")).toBe(0);
+    expect(await f.store.confirm({ kind: "CHAT", scope: f.scope(1) }, saved.proof)).toMatchObject({ status: "IDEMPOTENT", childCount: count });
+  }, 20000);
+  it("final_child_detail_failure_rolls_back_all_30_children_and_the_winning_permit", async () => {
+    const f = await contextContractRuntime(); const saved = await f.save(30);
+    expect(saved.result.status).toBe("APPLIED");
+    await f.db.prepare("CREATE TRIGGER final_detail_failure BEFORE INSERT ON reminder_context_details WHEN (SELECT count(*) FROM reminder_context_details)=29 BEGIN SELECT RAISE(ABORT,'synthetic detail failure'); END").run();
+    expect(await f.store.confirm({ kind: "CHAT", scope: f.scope(1) }, saved.proof)).toEqual({ status: "UNCERTAIN" });
+    for (const table of ["reminders", "reminder_series", "reminder_series_occurrences", "reminder_series_context_details", "reminder_context_details", "conversation_contract_write_permits"])
+      expect(await f.db.prepare(`SELECT count(*) n FROM ${table}`).first("n")).toBe(0);
+    expect(await f.db.prepare("SELECT status FROM conversation_contexts").first("status")).toBe("DRAFT_READY");
+  }, 20000);
+});
 
 afterEach(async () => {
   vi.restoreAllMocks();

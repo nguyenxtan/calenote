@@ -48,6 +48,18 @@ production evidence.
 
 ## Product roadmap
 
+### LLM-led conversation understanding — successor design
+
+**DESIGN_DIRECTION_APPROVED / WRITTEN_SPEC_PENDING_REVIEW — 2026-09-28.**
+[The successor contract](./superpowers/specs/2026-09-28-llm-context-contract-design.md)
+lets the LLM interpret contextual temporal operands, query periods and reminder
+relations alongside task details. The backend validates, resolves dates and
+retains confirmation/mutation authority. This addresses the UAT conversation
+failures without adding a competing registry of natural-language exceptions.
+Includes read-only lunar-date queries and Calendar lunar labels; annual
+recurrence is understood but explicitly not executable in this slice.
+No successor implementation, live acceptance or deployment is claimed.
+
 ### Conversation UX and reminder lifecycle
 
 **Existing source capability:** Zalo `sendChatAction("typing")` is wired into

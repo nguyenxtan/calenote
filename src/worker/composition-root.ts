@@ -26,6 +26,8 @@ import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/co
 import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
 import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
 import { cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
+import { listDetailedReminders } from "@/modules/reminders/details-api-service";
+import { PreviewUnavailableError } from "./routes/conversation-previews";
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
@@ -49,6 +51,14 @@ import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createContextContractGateway, createContextHttpTransport } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { parseContextContractRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
+import { createD1ContextContractStoreV3 } from "@/modules/conversation/context-contract/infrastructure/d1/store";
+import { createD1ContextRuntimeStoreV3 } from "@/modules/conversation/context-contract/runtime-store";
+import { CONTEXT_PROTOCOL_V3 } from "@/modules/conversation/context-contract/protocol";
+import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
+import { observeContextEvent } from "@/modules/conversation/context-contract/observability";
 import { D1ConversationStore } from "@/modules/conversation/infrastructure/d1/context-store";
 import { D1ConversationRuntimeStore } from "@/modules/conversation/infrastructure/d1/runtime-store";
 import { D1SeriesStore } from "@/modules/reminders/infrastructure/d1/series-store";
@@ -192,6 +202,19 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
     listReminders: (userId, after) => listPublicReminders(userId, { store: reminderStore, keyring }, { after, limit: 101 }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
+  };
+}
+
+export async function createContextApiOperations(env: Env): Promise<import("./routes/operations").ContextApiOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessions = new D1SessionStore(env.DB);
+  const reminderStore = new D1ReminderApiStore(env.DB);
+  const contextStore = new D1ContextContractStore(env.DB, keyring);
+  return {
+    requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
+    listDetailedReminders: principal => listDetailedReminders(principal, { store: reminderStore, contextStore, keyring }),
+    listPreviews: () => Promise.resolve({ previews: [], hasMore: false }),
+    decidePreview: () => { throw new PreviewUnavailableError(); },
   };
 }
 
@@ -364,7 +387,8 @@ export async function createSemanticCapability(env: Env, suppliedKeyring?: Keyri
 
 export type RuntimeOperations = QueueOperations & ScheduledOperations;
 
-export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
+export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean; contextContract?: "calenote-context-2"; sourceSha?: string } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
+  if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
@@ -372,6 +396,19 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const inboundDispatchStore = new D1InboundDispatchStore(env.DB);
   const loginStore = new D1LoginCodeStore(env.DB);
   const semantic = await createSemanticCapability(env, keyring);
+  const contextPolicy = capabilities.contextContract ? parseContextContractRuntimeConfig(env) : undefined;
+  const contextContract = capabilities.contextContract ? {
+    store: createD1ContextContractStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), calendar: lunarCalendar,
+    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
+    // Dormant until the reviewed capability is enabled after full live PASS.
+    gateway: contextPolicy?.status === "READY" ? createContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
+      : { prepare: () => ({ status: "FAILURE" as const, category: "UNAVAILABLE" as const }) },
+    budgetStore: new D1SemanticBudgetStore(env.DB, { ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
+      maxInputTokens: 12000, maxOutputTokens: 1536, reservationInputTokenExposure: 1048576,
+      promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 }),
+    list: (input: import("@/modules/conversation/context-contract/query").ContextReminderQuery) => new D1SemanticReminderQueryStore(env.DB).listContext(input),
+  } : undefined;
   // A capability is an explicit application composition choice, never an
   // unreviewed environment switch. Existing deployments remain V1 by default.
   const contexts = capabilities.conversationV2 ? new D1ConversationStore(env.DB, keyring) : undefined;
@@ -389,6 +426,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       store: inboundStore,
       keyring,
       semantic,
+      ...(contextContract ? { contextContract } : {}),
       feedbackLifetime,
       observeTiming: timing => console.log(JSON.stringify({ operation: "conversation_timing", ...timing })),
       observeFeedback: (outcome, elapsedMs) => console.log(JSON.stringify({ operation: "processing_feedback", outcome, elapsedMs })),

@@ -1,3 +1,6 @@
+import { ReminderListResponseV2Schema } from "@/contracts/api/reminders-v2";
+import { PreviewResponseV1Schema, PreviewDecisionRequestV1Schema, PreviewDecisionResponseV1Schema, type PreviewDecisionRequestV1 } from "@/contracts/api/conversation-previews";
+
 const MAX_RESPONSE_BYTES = 128 * 1_024;
 const SAFE_FALLBACK = "Calenote chưa thể hoàn tất yêu cầu.";
 
@@ -175,4 +178,20 @@ export async function apiRequest<T>(
     throw invalidResponse(response.status);
   }
   return payload.data as T;
+}
+
+export async function loadDetailedReminders(options: Pick<ApiRequestOptions, "signal" | "onUnauthorized"> = {}) {
+  const data = await apiRequest<unknown>("/api/v2/reminders", { authenticated: true, ...options });
+  return ReminderListResponseV2Schema.shape.data.parse(data);
+}
+
+export async function loadConversationPreviews(options: Pick<ApiRequestOptions, "signal" | "onUnauthorized"> = {}) {
+  const data = await apiRequest<unknown>("/api/v2/conversation-previews", { authenticated: true, ...options });
+  return PreviewResponseV1Schema.shape.data.parse(data);
+}
+
+export async function decideConversationPreview(request: PreviewDecisionRequestV1, options: Pick<ApiRequestOptions, "signal" | "onUnauthorized"> = {}) {
+  const body = PreviewDecisionRequestV1Schema.parse(request);
+  const data = await apiRequest<unknown>("/api/v2/conversation-previews/decision", { method: "POST", body, authenticated: true, ...options });
+  return PreviewDecisionResponseV1Schema.shape.data.parse(data);
 }

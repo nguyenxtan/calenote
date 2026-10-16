@@ -1,0 +1,945 @@
+{
+  "version": "trusted-context-checkpoints-1",
+  "semanticBaselineSha": "25cdd6dc0e590e6ad04ff032a6587804f9803845",
+  "checkpoints": [
+    {
+      "fixture": "R01",
+      "turn": 1,
+      "sourceRevision": "d861b9bbffdd73d6d1251805538c404fd56c7a44",
+      "prerequisiteSha256": "e2c6792919d8a4cfdd8878840a4cf69db1c9777f7504df3b183853c623ee9014",
+      "fixtureSourceSha256": "125bccae68c9dcf8c327fe16c8c882e413863b224007ee7cec892a52530233d4",
+      "accepted": [
+        {
+          "turn": 0,
+          "status": "CLARIFICATION_REQUESTED",
+          "pendingField": "queryRange",
+          "contextRevision": 1
+        }
+      ],
+      "state": {
+        "snapshot": {
+          "schemaVersion": "calenote-context-state-2",
+          "id": "probe-1",
+          "scope": {
+            "ownerId": "owner",
+            "chatIdentityId": "identity",
+            "workspaceId": "workspace",
+            "connectionId": "connection",
+            "chatId": "chat"
+          },
+          "inbound": {
+            "id": "probe-1",
+            "receivedAt": "2026-09-28T03:00:00.000Z",
+            "rowid": 1,
+            "claimMarker": "probe-claim-1"
+          },
+          "requestId": null,
+          "contextRevision": 1,
+          "draftRevision": null,
+          "lifecycle": "NONE",
+          "slots": {
+            "title": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "notes": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "eventDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "frequency": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "eventRelation": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            }
+          },
+          "facts": [
+            {
+              "alias": "f1",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": null,
+              "scope": "QUERY",
+              "field": "queryRange",
+              "value": {
+                "kind": "LIST",
+                "period": null,
+                "statusScope": "DEFAULT",
+                "evidence": [
+                  {
+                    "kind": "USER_QUOTE",
+                    "turn": 0,
+                    "quote": "Có lịch nào ko?",
+                    "occurrence": 1
+                  }
+                ]
+              }
+            }
+          ],
+          "pendingReminderQuestion": null,
+          "pendingQueryQuestion": {
+            "questionId": "out-2519f5f580cba9d73a4e13a0554081536e39925e119383f52933f5a91e9b8ece",
+            "text": "Bạn muốn xem khoảng thời gian nào?",
+            "decisionKind": null,
+            "reason": "MISSING",
+            "noProgressCount": 0,
+            "deliveryState": "SENT",
+            "issuedAfterOrder": {
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "rowid": 1
+            },
+            "scope": "QUERY",
+            "field": "queryRange"
+          },
+          "ambiguities": [
+            {
+              "field": "queryRange",
+              "reason": "MISSING",
+              "alternatives": []
+            }
+          ],
+          "transcript": [
+            {
+              "id": "probe-1",
+              "text": "Có lịch nào ko?",
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "messageRef": "probe-1",
+              "semanticView": "Có lịch nào ko?",
+              "controlSpans": [],
+              "sourceMap": {
+                "normalizationVersion": "nfc-codepoint-v1",
+                "sourceCodePoints": 15,
+                "viewCodePoints": 15,
+                "segments": [
+                  {
+                    "sourceStart": 0,
+                    "sourceEnd": 15,
+                    "viewStart": 0,
+                    "viewEnd": 15,
+                    "kind": "UNCHANGED",
+                    "sourceStride": 1,
+                    "viewStride": 1
+                  }
+                ]
+              },
+              "role": "USER",
+              "kind": "RECEIVED",
+              "deliveryState": "RECEIVED"
+            },
+            {
+              "id": "out-2519f5f580cba9d73a4e13a0554081536e39925e119383f52933f5a91e9b8ece",
+              "text": "Bạn muốn xem khoảng thời gian nào?",
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "messageRef": "synthetic-receipt-1",
+              "semanticView": "Bạn muốn xem khoảng thời gian nào?",
+              "controlSpans": [],
+              "sourceMap": {
+                "normalizationVersion": "nfc-codepoint-v1",
+                "sourceCodePoints": 34,
+                "viewCodePoints": 34,
+                "segments": [
+                  {
+                    "sourceStart": 0,
+                    "sourceEnd": 34,
+                    "viewStart": 0,
+                    "viewEnd": 34,
+                    "kind": "UNCHANGED",
+                    "sourceStride": 1,
+                    "viewStride": 1
+                  }
+                ]
+              },
+              "role": "ASSISTANT",
+              "kind": "CLARIFICATION",
+              "deliveryState": "SENT"
+            }
+          ],
+          "pendingDecision": null,
+          "previewReceipt": null,
+          "controlRegistry": [],
+          "modelAttemptBinding": {
+            "attemptId": "seed-attempt",
+            "observationId": "330c2f3dc575a47f0521febcf6cb2e39ef7bf1b87e2d0792881cc25b2122bfb8",
+            "contextRevision": null,
+            "sourceInboundId": "probe-1",
+            "claimMarker": "probe-claim-1",
+            "inputDigest": "b8ab9160d096533435a6944405b35d72e487290bcc7f3cd5fd243a1f0ed6cb7a",
+            "promptDigest": "d3cf19524393aafcaa495212acb9023414f26ee4fee4453b5491f5f86ee2104d",
+            "contractDigest": "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
+            "contractVersion": "calenote-context-3",
+            "status": "ACCEPTED"
+          },
+          "lastTerminalOutcome": null,
+          "createdAt": "2026-09-28T03:00:00.000Z",
+          "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+          "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+          "draftCreatedAt": null,
+          "draftExpiresAt": null,
+          "capabilityVersion": "capabilities-1",
+          "pendingSemanticCandidate": null
+        },
+        "inbounds": [
+          {
+            "rowid": 1,
+            "id": "probe-1",
+            "received_at": 1790564400000,
+            "transition_marker": "probe-claim-1",
+            "state": "PROCESSED"
+          },
+          {
+            "rowid": 2,
+            "id": "probe-read-1",
+            "received_at": 1790564400001,
+            "transition_marker": "probe-read-claim",
+            "state": "PROCESSING"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "probe-1",
+            "source_inbound_id": "probe-1",
+            "last_inbound_id": "probe-1",
+            "claim_marker": "probe-claim-1",
+            "revision": 1,
+            "status": "CLARIFYING",
+            "created_at": 1790564400000,
+            "updated_at": 1790564400000,
+            "expires_at": 1790566200000,
+            "contract_version": 2
+          }
+        ],
+        "outcomes": [
+          {
+            "rowid": 1,
+            "context_id": "probe-1",
+            "revision": 1,
+            "source_inbound_id": "probe-1",
+            "operation": "SAVE",
+            "created_at": 1790564400000,
+            "operation_key": "73b28a7452d426d83e393cd1a7b98120a9ecb0ceb30d8c8ff6bdc978e67926d9",
+            "proof_hash": null,
+            "result_json": null,
+            "web_session_id": null
+          }
+        ],
+        "ownership": [
+          {
+            "chat_identity_id": "identity",
+            "owner_id": "owner",
+            "context_id": "probe-1",
+            "contract_version": 2
+          }
+        ],
+        "completedTurns": 1
+      }
+    },
+    {
+      "fixture": "R02",
+      "turn": 1,
+      "sourceRevision": "d861b9bbffdd73d6d1251805538c404fd56c7a44",
+      "prerequisiteSha256": "3fe4a7560bc40454cd9d2052c2ecb00633b68bcbd754d6a4cf2284c8462d0698",
+      "fixtureSourceSha256": "125bccae68c9dcf8c327fe16c8c882e413863b224007ee7cec892a52530233d4",
+      "accepted": [
+        {
+          "turn": 0,
+          "status": "CLARIFICATION_REQUESTED",
+          "pendingField": "reminderTime",
+          "contextRevision": 1
+        }
+      ],
+      "state": {
+        "snapshot": {
+          "schemaVersion": "calenote-context-state-2",
+          "id": "probe-1",
+          "scope": {
+            "ownerId": "owner",
+            "chatIdentityId": "identity",
+            "workspaceId": "workspace",
+            "connectionId": "connection",
+            "chatId": "chat"
+          },
+          "inbound": {
+            "id": "probe-1",
+            "receivedAt": "2026-09-28T03:00:00.000Z",
+            "rowid": 1,
+            "claimMarker": "probe-claim-1"
+          },
+          "requestId": "probe-1",
+          "contextRevision": 1,
+          "draftRevision": 1,
+          "lifecycle": "CLARIFYING",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "đi thi",
+              "fact": "f1",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "sourceTurnId": "probe-1",
+                  "sourceMapTurnId": "probe-1",
+                  "quote": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+                  "occurrence": 1,
+                  "sourceSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "viewSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "normalizationVersion": "nfc-codepoint-v1"
+                }
+              ],
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "resolution": {
+                "method": "EXPLICIT_OPERAND",
+                "version": "context-resolution-1",
+                "referenceTime": "2026-09-28T03:00:00.000Z",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "dependencies": []
+              },
+              "proposalRevision": 1
+            },
+            "location": {
+              "state": "RESOLVED",
+              "value": "Quang Trung",
+              "fact": "f2",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "sourceTurnId": "probe-1",
+                  "sourceMapTurnId": "probe-1",
+                  "quote": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+                  "occurrence": 1,
+                  "sourceSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "viewSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "normalizationVersion": "nfc-codepoint-v1"
+                }
+              ],
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "resolution": {
+                "method": "EXPLICIT_OPERAND",
+                "version": "context-resolution-1",
+                "referenceTime": "2026-09-28T03:00:00.000Z",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "dependencies": []
+              },
+              "proposalRevision": 1
+            },
+            "notes": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "fact": "f3",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "sourceTurnId": "probe-1",
+                  "sourceMapTurnId": "probe-1",
+                  "quote": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+                  "occurrence": 1,
+                  "sourceSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "viewSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "normalizationVersion": "nfc-codepoint-v1"
+                }
+              ],
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "resolution": {
+                "method": "EXPLICIT_OPERAND",
+                "version": "context-resolution-1",
+                "referenceTime": "2026-09-28T03:00:00.000Z",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "dependencies": []
+              },
+              "proposalRevision": 1
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "DAILY",
+              "fact": "f4",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "sourceTurnId": "probe-1",
+                  "sourceMapTurnId": "probe-1",
+                  "quote": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+                  "occurrence": 1,
+                  "sourceSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "viewSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "normalizationVersion": "nfc-codepoint-v1"
+                }
+              ],
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "resolution": {
+                "method": "EXPLICIT_OPERAND",
+                "version": "context-resolution-1",
+                "referenceTime": "2026-09-28T03:00:00.000Z",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "dependencies": []
+              },
+              "proposalRevision": 1
+            },
+            "occurrenceCount": {
+              "state": "RESOLVED",
+              "value": 2,
+              "fact": "f5",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "sourceTurnId": "probe-1",
+                  "sourceMapTurnId": "probe-1",
+                  "quote": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+                  "occurrence": 1,
+                  "sourceSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "viewSpan": {
+                    "start": 0,
+                    "end": 64
+                  },
+                  "normalizationVersion": "nfc-codepoint-v1"
+                }
+              ],
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "resolution": {
+                "method": "EXPLICIT_OPERAND",
+                "version": "context-resolution-1",
+                "referenceTime": "2026-09-28T03:00:00.000Z",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "dependencies": []
+              },
+              "proposalRevision": 1
+            },
+            "eventRelation": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null,
+              "evidence": [],
+              "provenance": null,
+              "resolution": null,
+              "proposalRevision": 1
+            }
+          },
+          "facts": [
+            {
+              "alias": "f1",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": "title",
+              "scope": "REMINDER",
+              "field": "title",
+              "value": "đi thi"
+            },
+            {
+              "alias": "f2",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": "location",
+              "scope": "REMINDER",
+              "field": "location",
+              "value": "Quang Trung"
+            },
+            {
+              "alias": "f3",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": "eventDate",
+              "scope": "REMINDER",
+              "field": "eventDate",
+              "value": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              }
+            },
+            {
+              "alias": "f4",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": "frequency",
+              "scope": "REMINDER",
+              "field": "frequency",
+              "value": "DAILY"
+            },
+            {
+              "alias": "f5",
+              "provenance": {
+                "kind": "EXPLICIT_USER"
+              },
+              "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+              "dependencies": [],
+              "evidenceSlot": "occurrenceCount",
+              "scope": "REMINDER",
+              "field": "occurrenceCount",
+              "value": 2
+            }
+          ],
+          "pendingReminderQuestion": {
+            "questionId": "out-2519f5f580cba9d73a4e13a0554081536e39925e119383f52933f5a91e9b8ece",
+            "text": "Bạn muốn được nhắc lúc mấy giờ?",
+            "decisionKind": null,
+            "reason": "MISSING",
+            "noProgressCount": 0,
+            "deliveryState": "SENT",
+            "issuedAfterOrder": {
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "rowid": 1
+            },
+            "scope": "REMINDER",
+            "field": "reminderTime"
+          },
+          "pendingQueryQuestion": null,
+          "ambiguities": [],
+          "transcript": [
+            {
+              "id": "probe-1",
+              "text": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "messageRef": "probe-1",
+              "semanticView": "Ngày 11/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.",
+              "controlSpans": [],
+              "sourceMap": {
+                "normalizationVersion": "nfc-codepoint-v1",
+                "sourceCodePoints": 64,
+                "viewCodePoints": 64,
+                "segments": [
+                  {
+                    "sourceStart": 0,
+                    "sourceEnd": 64,
+                    "viewStart": 0,
+                    "viewEnd": 64,
+                    "kind": "UNCHANGED",
+                    "sourceStride": 1,
+                    "viewStride": 1
+                  }
+                ]
+              },
+              "role": "USER",
+              "kind": "RECEIVED",
+              "deliveryState": "RECEIVED"
+            },
+            {
+              "id": "out-2519f5f580cba9d73a4e13a0554081536e39925e119383f52933f5a91e9b8ece",
+              "text": "Việc cần nhắc: đi thi\nĐịa điểm: Quang Trung\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nTần suất: mỗi ngày\nSố lần: 2\nBạn muốn được nhắc lúc mấy giờ?",
+              "receivedAt": "2026-09-28T03:00:00.000Z",
+              "messageRef": "synthetic-receipt-1",
+              "semanticView": "Việc cần nhắc: đi thi\nĐịa điểm: Quang Trung\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nTần suất: mỗi ngày\nSố lần: 2\nBạn muốn được nhắc lúc mấy giờ?",
+              "controlSpans": [],
+              "sourceMap": {
+                "normalizationVersion": "nfc-codepoint-v1",
+                "sourceCodePoints": 150,
+                "viewCodePoints": 150,
+                "segments": [
+                  {
+                    "sourceStart": 0,
+                    "sourceEnd": 150,
+                    "viewStart": 0,
+                    "viewEnd": 150,
+                    "kind": "UNCHANGED",
+                    "sourceStride": 1,
+                    "viewStride": 1
+                  }
+                ]
+              },
+              "role": "ASSISTANT",
+              "kind": "CLARIFICATION",
+              "deliveryState": "SENT"
+            }
+          ],
+          "pendingDecision": null,
+          "previewReceipt": null,
+          "controlRegistry": [],
+          "modelAttemptBinding": {
+            "attemptId": "seed-attempt",
+            "observationId": "74b5e0b7a6494029cbecab8d7dfd57d00b8bd34f21b41c0e52b1fce3c8a48401",
+            "contextRevision": null,
+            "sourceInboundId": "probe-1",
+            "claimMarker": "probe-claim-1",
+            "inputDigest": "7aede27d94df71abcaff7be4a6de337ffa257cffd790d18a570dd501bf38c734",
+            "promptDigest": "d3cf19524393aafcaa495212acb9023414f26ee4fee4453b5491f5f86ee2104d",
+            "contractDigest": "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
+            "contractVersion": "calenote-context-3",
+            "status": "ACCEPTED"
+          },
+          "lastTerminalOutcome": null,
+          "createdAt": "2026-09-28T03:00:00.000Z",
+          "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+          "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+          "draftCreatedAt": "2026-09-28T03:00:00.000Z",
+          "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+          "capabilityVersion": "capabilities-1",
+          "pendingSemanticCandidate": null
+        },
+        "inbounds": [
+          {
+            "rowid": 1,
+            "id": "probe-1",
+            "received_at": 1790564400000,
+            "transition_marker": "probe-claim-1",
+            "state": "PROCESSED"
+          },
+          {
+            "rowid": 2,
+            "id": "probe-read-1",
+            "received_at": 1790564400001,
+            "transition_marker": "probe-read-claim",
+            "state": "PROCESSING"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "probe-1",
+            "source_inbound_id": "probe-1",
+            "last_inbound_id": "probe-1",
+            "claim_marker": "probe-claim-1",
+            "revision": 1,
+            "status": "CLARIFYING",
+            "created_at": 1790564400000,
+            "updated_at": 1790564400000,
+            "expires_at": 1790565000000,
+            "contract_version": 2
+          }
+        ],
+        "outcomes": [
+          {
+            "rowid": 1,
+            "context_id": "probe-1",
+            "revision": 1,
+            "source_inbound_id": "probe-1",
+            "operation": "SAVE",
+            "created_at": 1790564400000,
+            "operation_key": "73b28a7452d426d83e393cd1a7b98120a9ecb0ceb30d8c8ff6bdc978e67926d9",
+            "proof_hash": null,
+            "result_json": null,
+            "web_session_id": null
+          }
+        ],
+        "ownership": [
+          {
+            "chat_identity_id": "identity",
+            "owner_id": "owner",
+            "context_id": "probe-1",
+            "contract_version": 2
+          }
+        ],
+        "completedTurns": 1
+      }
+    },
+    {
+      "fixture": "R05",
+      "turn": 2,
+      "sourceRevision": "d861b9bbffdd73d6d1251805538c404fd56c7a44",
+      "prerequisiteSha256": "c100a0fc6c9e7ce9c7a60513b5d7c918c82ddc6d37b8d32b30ea01301d512fa9",
+      "fixtureSourceSha256": "125bccae68c9dcf8c327fe16c8c882e413863b224007ee7cec892a52530233d4",
+      "accepted": [
+        {
+          "turn": 0,
+          "status": "CLARIFICATION_REQUESTED",
+          "pendingField": "reminderTime",
+          "contextRevision": 1
+        },
+        {
+          "turn": 1,
+          "status": "CANCELLED",
+          "pendingField": null,
+          "contextRevision": null
+        }
+      ],
+      "state": {
+        "snapshot": null,
+        "inbounds": [
+          {
+            "rowid": 1,
+            "id": "probe-1",
+            "received_at": 1790564400000,
+            "transition_marker": "probe-claim-1",
+            "state": "PROCESSED"
+          },
+          {
+            "rowid": 2,
+            "id": "probe-read-1",
+            "received_at": 1790564400001,
+            "transition_marker": "probe-read-claim",
+            "state": "PROCESSING"
+          },
+          {
+            "rowid": 3,
+            "id": "probe-2",
+            "received_at": 1790564460000,
+            "transition_marker": "probe-claim-2",
+            "state": "PROCESSED"
+          },
+          {
+            "rowid": 4,
+            "id": "probe-read-2",
+            "received_at": 1790564460001,
+            "transition_marker": "probe-read-claim",
+            "state": "PROCESSING"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "probe-1",
+            "source_inbound_id": "probe-1",
+            "last_inbound_id": "probe-2",
+            "claim_marker": "probe-claim-2",
+            "revision": 2,
+            "status": "CANCELLED",
+            "created_at": 1790564400000,
+            "updated_at": 1790564460000,
+            "expires_at": 1790565000000,
+            "contract_version": 2
+          }
+        ],
+        "outcomes": [
+          {
+            "rowid": 1,
+            "context_id": "probe-1",
+            "revision": 1,
+            "source_inbound_id": "probe-1",
+            "operation": "SAVE",
+            "created_at": 1790564400000,
+            "operation_key": "73b28a7452d426d83e393cd1a7b98120a9ecb0ceb30d8c8ff6bdc978e67926d9",
+            "proof_hash": null,
+            "result_json": null,
+            "web_session_id": null
+          },
+          {
+            "rowid": 2,
+            "context_id": "probe-1",
+            "revision": 2,
+            "source_inbound_id": "probe-2",
+            "operation": "FINISH",
+            "created_at": 1790564460000,
+            "operation_key": "50e6baaece073ef4717e4ce722f57a392a812a36bdcda330ec9974c2ab44e133",
+            "proof_hash": null,
+            "result_json": null,
+            "web_session_id": null
+          }
+        ],
+        "ownership": [],
+        "completedTurns": 2
+      }
+    }
+  ]
+}

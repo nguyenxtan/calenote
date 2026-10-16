@@ -1,5 +1,5 @@
 import type { OpenRouterConfig } from "./gateway";
-import type { SemanticGatewayConfig } from "./semantic-gateway";
+import type { ContextRouteAdmission, SemanticGatewayConfig } from "./semantic-gateway";
 
 export const SEMANTIC_BUDGET_CEILINGS = Object.freeze({
   ownerDailyFallbackLimit: 50,
@@ -79,4 +79,20 @@ export function parseSemanticRuntimeConfig(env: Partial<Record<BudgetEnvironment
       paidFallback: undefined,
     },
   };
+}
+
+export type ContextContractRuntimeConfig = Exclude<SemanticRuntimeConfig, { status: "READY" }>
+  | (Extract<SemanticRuntimeConfig, { status: "READY" }> & { routeAdmission: ContextRouteAdmission });
+/** Opt-in parser only; no production composition calls it. Reuse route/budget
+ * checks with the legacy output default, then apply the separate exact wire cap.
+ * READY describes configuration only, never full-route token admission. */
+export function parseContextContractRuntimeConfig(env: Parameters<typeof parseSemanticRuntimeConfig>[0]): ContextContractRuntimeConfig {
+  if ((env.AI_MODE ?? "off") === "off") return { status: "OFF" };
+  if ((env.AI_MAX_OUTPUT_TOKENS !== undefined && env.AI_MAX_OUTPUT_TOKENS !== "1536")
+    || (env.AI_TIMEOUT_MS !== undefined && env.AI_TIMEOUT_MS !== "30000")) return { status: "UNAVAILABLE" };
+  const legacy = parseSemanticRuntimeConfig({ ...env, AI_MAX_OUTPUT_TOKENS: undefined });
+  if (legacy.status !== "READY") return legacy;
+  return { ...legacy, routeAdmission: { status: "UNVERIFIED" }, config: {
+    ...legacy.config, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  } };
 }
