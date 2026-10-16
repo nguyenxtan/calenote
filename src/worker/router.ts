@@ -15,6 +15,7 @@ import {
 } from "@/modules/onboarding/service";
 import {
   InvalidReminderError,
+  ReminderIntentConflictError,
   ReminderChannelUnavailableError,
   ReminderNotCancellableError,
   ReminderNotFoundError,
@@ -140,6 +141,7 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   }
   if (
     error instanceof InvalidReminderError ||
+    error instanceof ReminderIntentConflictError ||
     error instanceof ClientUpgradeRequiredError ||
     error instanceof PreviewUnavailableError ||
     error instanceof ReminderChannelUnavailableError ||

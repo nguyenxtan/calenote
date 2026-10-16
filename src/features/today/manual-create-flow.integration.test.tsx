@@ -65,6 +65,22 @@ it("recovers a committed response lost across remount, then cancels through auth
     expect(localStorage.length).toBe(0);
     expect(db.sqlite.prepare("SELECT COUNT(*) n FROM reminders").get()).toMatchObject({ n: 1 });
     expect(db.sqlite.prepare("SELECT COUNT(*) n FROM audit_events WHERE action='REMINDER_CREATED'").get()).toMatchObject({ n: 1 });
+    const firstCreate = fetcher.mock.calls.find(([path, init]) => path === "/api/reminders" && init?.method === "POST");
+    const original = JSON.parse(String(firstCreate![1]!.body));
+    const post = (path: string, body: unknown) => router(new Request(origin + path, {
+      method: "POST", headers: { cookie: session.cookie.split(";")[0], origin, "content-type": "application/json" }, body: JSON.stringify(body),
+    }), env, ctx);
+    const mismatch = await post("/api/reminders", { ...original, title: "Changed payload" });
+    expect(mismatch.status).toBe(409);
+    expect(await mismatch.json()).toMatchObject({ error: { code: "REMINDER_INTENT_MISMATCH" } });
+    const abandonedId = "abandoned_fixture_intent_1234";
+    const abandoned = await post("/api/reminders/resolve-intent", { intentId: abandonedId });
+    expect(abandoned.status).toBe(200);
+    const delayedCreate = await post("/api/reminders", { ...original, intentId: abandonedId });
+    expect(delayedCreate.status).toBe(409);
+    expect(await delayedCreate.json()).toMatchObject({ error: { code: "REMINDER_INTENT_ABANDONED" } });
+    expect(db.sqlite.prepare("SELECT COUNT(*) n FROM reminders").get()).toMatchObject({ n: 1 });
+    expect(db.sqlite.prepare("SELECT COUNT(*) n FROM audit_events WHERE action='REMINDER_CREATED'").get()).toMatchObject({ n: 1 });
     view.unmount();
     view = render(<CoreScreenExperience screen="reminders" />);
     await userEvent.click(await screen.findByRole("button", { name: "Huỷ Gọi khách fixture" }));

@@ -92,6 +92,15 @@ class ReminderApiError extends Error {
   }
 }
 
+export class ReminderIntentConflictError extends ReminderApiError {
+  constructor(code: "REMINDER_INTENT_ABANDONED" | "REMINDER_INTENT_MISMATCH") {
+    super(code, 409, code === "REMINDER_INTENT_ABANDONED"
+      ? "Yêu cầu trước đã đóng. Hãy thử tạo lại."
+      : "Yêu cầu này đã được dùng cho nội dung khác. Hãy kiểm tra danh sách nhắc hẹn.");
+    this.name = "ReminderIntentConflictError";
+  }
+}
+
 export class InvalidReminderError extends ReminderApiError {
   constructor() {
     super("INVALID_REMINDER", 400, "Thông tin nhắc hẹn chưa hợp lệ.");
@@ -208,8 +217,8 @@ export async function createManualReminder(
     if (!input.intentId) return null;
     const existing = await dependencies.store.findManualIntent(input.userId, input.intentId);
     if (!existing) return null;
-    if (existing.state === "ABANDONED") throw new ReminderApiError("REMINDER_INTENT_ABANDONED", 409, "Yêu cầu trước đã đóng. Hãy thử tạo lại.");
-    if (existing.payload_digest !== payloadDigest) throw new ReminderApiError("REMINDER_INTENT_MISMATCH", 409, "Yêu cầu này đã được dùng cho nội dung khác. Hãy kiểm tra danh sách nhắc hẹn.");
+    if (existing.state === "ABANDONED") throw new ReminderIntentConflictError("REMINDER_INTENT_ABANDONED");
+    if (existing.payload_digest !== payloadDigest) throw new ReminderIntentConflictError("REMINDER_INTENT_MISMATCH");
     return { publicId: existing.public_id, title, scheduledAt: input.scheduledAt, timezone: VIETNAM_TIMEZONE, status: existing.status };
   };
   const existing = await replay();
