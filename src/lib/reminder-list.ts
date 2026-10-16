@@ -16,7 +16,7 @@ export async function loadReminderList(onUnauthorized: () => void): Promise<Publ
       rows.set(reminder.publicId, reminder);
     }
     if (result.nextCursor === undefined) return [...rows.values()];
-    if (result.nextCursor !== result.reminders.at(-1)?.publicId || (cursor !== undefined && result.nextCursor <= cursor) || result.reminders.length !== 100) throw new Error("Invalid reminder page");
+    if (result.nextCursor !== result.reminders.at(-1)?.publicId || (cursor !== undefined && result.nextCursor <= cursor) || result.reminders.length === 0) throw new Error("Invalid reminder page");
     cursor = result.nextCursor;
   }
   throw new Error("Reminder list traversal limit reached");

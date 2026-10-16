@@ -8,6 +8,7 @@ import {
   deterministicRandomBytes,
 } from "@/testing/sqlite-d1.test-support";
 import {
+  resolveManualReminderIntent,
   InvalidReminderError,
   ReminderChannelUnavailableError,
   ReminderNotCancellableError,
@@ -213,6 +214,17 @@ describe("authenticated reminder API service on migrated D1", () => {
     expect(await account.store.resolveManualIntent("user-one", "created_intent_1234")).toEqual({ state: "CREATED", publicId: winner.publicId });
     expect(await account.store.resolveManualIntent("user-two", "created_intent_1234")).toEqual({ state: "ABANDONED" });
     expect(await account.store.resolveManualIntent("user-one", intentId)).toEqual({ state: "ABANDONED" });
+  });
+
+  it("budgets new resolution tombstones while keeping same-intent recovery retryable", async () => {
+    const account = await setup();
+    let calls = 0;
+    const dependencies = { ...account, now: () => NOW, rateLimitStore: { consume: async () => ({ allowed: ++calls === 1, resetAt: NOW + 60_000 }) } };
+    const input = { userId: "user-one", intentId: "resolution_budget_1234" };
+    expect(await resolveManualReminderIntent(input, dependencies)).toEqual({ state: "ABANDONED" });
+    expect(await resolveManualReminderIntent(input, dependencies)).toEqual({ state: "ABANDONED" });
+    expect(calls).toBe(1);
+    await expect(resolveManualReminderIntent({ ...input, intentId: "resolution_other_1234" }, dependencies)).rejects.toBeInstanceOf(RateLimitExceededError);
   });
 
   it("normalizes and encrypts a manual reminder while deriving the personal channel server-side", async () => {

@@ -1,9 +1,15 @@
 // Persist only an opaque pending intent. A request payload never enters storage.
 // Account namespaces prevent another signed-in user from inheriting this intent.
-export async function manualReminderIntent(email: string): Promise<{ id: string; existing: boolean; complete: () => void }> {
+async function accountKey(email: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.toLowerCase()));
   const owner = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-  const key = `calenote:manual-intent:v1:${owner}`;
+  return `calenote:manual-intent:v1:${owner}`;
+}
+export async function hasManualReminderIntent(email: string): Promise<boolean> {
+  return localStorage.getItem(await accountKey(email)) !== null;
+}
+export async function manualReminderIntent(email: string): Promise<{ id: string; existing: boolean; complete: () => void }> {
+  const key = await accountKey(email);
   const stored = localStorage.getItem(key);
   const id = stored && /^[A-Za-z0-9_-]{16,80}$/u.test(stored) ? stored : crypto.randomUUID();
   // Fail before sending if durable browser storage is unavailable.

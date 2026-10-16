@@ -25,7 +25,7 @@ import { D1ReminderApiStore } from "@/modules/reminders/infrastructure/d1/api-st
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
 import { D1ReminderDeliveryStore } from "@/modules/reminders/infrastructure/d1/delivery-store";
 import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/scheduler-store";
-import { cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
+import { resolveManualReminderIntent, cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
 import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
@@ -190,7 +190,7 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
       return { userId: principal.userId };
     },
     listReminders: (userId, after) => listPublicReminders(userId, { store: reminderStore, keyring }, { after, limit: 101 }),
-    resolveReminderIntent: ({ userId, intentId }) => reminderStore.resolveManualIntent(userId, intentId),
+    resolveReminderIntent: (input) => resolveManualReminderIntent(input, { store: reminderStore, keyring, rateLimitStore }),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
   };

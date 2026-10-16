@@ -126,12 +126,12 @@ describe("TodayExperience", () => {
     expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
   });
 
-  it("reuses an opaque persisted intent after lost response and remount", async () => {
+  it.each([0, 404, 429])("retains an opaque intent through create loss, resolution error %s and remount", async (resolutionStatus) => {
     const ids: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, options?: RequestInit) => {
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
-      if (path === "/api/reminders/resolve-intent") { ids.push(JSON.parse(options?.body as string).intentId); return json({ data: { state: "CREATED", publicId: reminder.publicId } }); }
+      if (path === "/api/reminders/resolve-intent") { ids.push(JSON.parse(options?.body as string).intentId); if (ids.length === 2) { if (resolutionStatus) return json({ error: { code: "UNAVAILABLE", message: "Resolution unavailable" } }, resolutionStatus); throw new TypeError("lost resolution response"); } return json({ data: { state: "CREATED", publicId: reminder.publicId } }); }
       if (options?.method === "POST") {
         ids.push(JSON.parse(options.body as string).intentId);
         if (ids.length === 1) throw new TypeError("lost response");
@@ -151,11 +151,15 @@ describe("TodayExperience", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Kết quả chưa xác định");
     expect(JSON.stringify(localStorage)).not.toContain("Gọi khách hàng");
     first.unmount();
+    const second = render(<TodayExperience />);
+    await interaction.click(await screen.findByRole("button", { name: "Kiểm tra lần tạo trước" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(resolutionStatus ? "Resolution unavailable" : "Kết quả chưa xác định");
+    second.unmount();
     render(<TodayExperience />);
-    await submit();
+    await interaction.click(await screen.findByRole("button", { name: "Kiểm tra lần tạo trước" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Nhắc hẹn trước đã được lưu");
-    expect(ids).toHaveLength(2);
-    expect(ids[1]).toBe(ids[0]);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(1);
     expect(localStorage.length).toBe(0);
   });
 

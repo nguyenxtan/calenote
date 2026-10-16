@@ -265,6 +265,21 @@ export async function createManualReminder(
   };
 }
 
+export async function resolveManualReminderIntent(
+  input: { userId: string; intentId: string },
+  dependencies: { store: ReminderApiStore & { resolveManualIntent(userId: string, intentId: string): Promise<{ state: "CREATED" | "ABANDONED"; publicId?: string }> }; keyring: Pick<Keyring, "digestCode">; rateLimitStore: RateLimitStore; now?: Clock },
+): Promise<{ state: "CREATED" | "ABANDONED"; publicId?: string }> {
+  if (!/^[A-Za-z0-9_-]{16,80}$/u.test(input.intentId)) throw new InvalidReminderError();
+  const existing = await dependencies.store.findManualIntent(input.userId, input.intentId);
+  if (existing) return existing.state === "CREATED" ? { state: "CREATED", publicId: existing.public_id } : { state: "ABANDONED" };
+  const now = dependencies.now ?? systemClock;
+  const at = now();
+  const subjectDigest = await dependencies.keyring.digestCode(`rate-limit:reminder-resolve:${input.userId}`);
+  const rate = await consumeRateLimit({ subjectDigest, scope: "reminder-resolve", limit: 30, windowMs: 60_000 }, { store: dependencies.rateLimitStore, now: () => at });
+  if (!rate.allowed) throw new RateLimitExceededError(Math.max(1, Math.ceil((rate.resetAt - at) / 1000)));
+  return dependencies.store.resolveManualIntent(input.userId, input.intentId);
+}
+
 function cancellationConflict(row: CancellationRow): ReminderNotCancellableError | null {
   if (row.status === "CANCELLED") return null;
   if (
