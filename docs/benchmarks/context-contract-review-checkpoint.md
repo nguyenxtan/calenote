@@ -76,3 +76,28 @@ Formal Pilot and Full qualification are still incomplete. Migration 0009 is
 local review material only; provider/model/oracle/budget/protocol are unchanged.
 No paid call, historical HOLD/UNKNOWN release, remote database operation,
 master promotion, production activation, upload or deployment occurred.
+
+## Dormant web factory completion — 2026-10-16
+
+A subsequent factory-level audit found that the existing V3 backing store and
+injected-operation route tests did not establish real application composition:
+`createContextApiOperations` returned an empty preview list and unavailable
+decisions, while its detailed-list path queried migration 0009 unconditionally.
+These were unfinished offline integration boundaries. Spec §8.2 permits dormant
+T1–T10 implementation while provider admission B is unresolved; B still blocks
+network dispatch and release activation.
+
+The factory now accepts the same explicit successor capability/source-SHA shape
+as the runtime factory and rejects opt-in without a valid explicit source SHA.
+Only opt-in selects the canonical V3 store and connects real owner/session-scoped
+preview listing, revision-bound save/decline and complete reminder details.
+Without opt-in, previews remain empty and decisions/details return the typed
+unavailable result before querying successor tables. Router defaults and pages
+remain unchanged. This is composition readiness, not production activation.
+
+The factory regression tests use real local D1-compatible SQLite, a real hashed
+session, an encrypted V3 snapshot, the actual Worker router and the actual store.
+They establish full preview/save/idempotent replay/detail read-back, owner
+isolation, decline/replay, revoked-session refusal and migrations 0001–0008
+safe defaults. No provider, wire, prompt, oracle, budget or protocol changes.
+Formal Pilot, Full qualification and paid HOLD remain unchanged.
