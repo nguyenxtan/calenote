@@ -8,10 +8,74 @@ import type {
 import { contextFromRow, expectedGuardConflict, secondsUntil, type DeliveryContextRow, type OwnedDelivery } from "../../delivery";
 import { DELIVERY_SEND_LEASE_MS, MAX_DELIVERY_ATTEMPTS } from "../../scheduler";
 
+const contractColumns = {
+  conversation_contexts: ["contract_version", "write_marker"],
+  command_drafts: ["contract_version", "write_marker"],
+  reminder_series_proposals: ["contract_version"],
+  reminders: ["context_write_marker"],
+  conversation_context_outcomes: ["operation_key", "proof_hash", "result_json", "web_session_id"],
+} as const;
+const contractObjects = [
+  "idx_context_operation_key", "conversation_contract_ownership", "conversation_contract_write_permits",
+  "command_draft_context_details", "reminder_context_details", "reminder_series_context_details",
+  "fence_conversation_contexts_insert", "fence_conversation_contexts_update",
+  "fence_command_drafts_insert", "fence_command_drafts_update",
+  "fence_reminder_series_proposals_insert", "fence_reminder_series_proposals_update",
+  "fence_semantic_contexts_insert", "fence_semantic_contexts_update", "fence_reminder_insert",
+  "fence_ownership_delete",
+  "ordered_conversation_contexts_insert", "ordered_conversation_contexts_update",
+  "ordered_command_drafts_insert", "ordered_command_drafts_update",
+  "ordered_reminder_series_proposals_insert", "ordered_reminder_series_proposals_update",
+  "ordered_semantic_contexts_insert", "ordered_semantic_contexts_update",
+  "clear_context_contract_markers",
+] as const;
+
+async function hasCompleteContextContract(database: D1Database): Promise<boolean> {
+  // This bounded, read-only fingerprint distinguishes wholly legacy D1 from an
+  // applied 0009 migration. Partial application must never omit companion data.
+  const objects = await database.prepare(
+    `SELECT name FROM sqlite_master WHERE name IN (${contractObjects.map(() => "?").join(",")})`,
+  ).bind(...contractObjects).all<{ name: string }>();
+  const presentObjects = new Set(objects.results.map(row => row.name));
+  let present = presentObjects.size;
+  let expected = contractObjects.length;
+  for (const [table, columns] of Object.entries(contractColumns)) {
+    const rows = await database.prepare(`SELECT name FROM pragma_table_info('${table}')`).all<{ name: string }>();
+    const names = new Set(rows.results.map(row => row.name));
+    for (const column of columns) {
+      expected += 1;
+      if (names.has(column)) present += 1;
+    }
+  }
+  if (present !== 0 && present !== expected) throw new Error("INCOMPLETE_CONTEXT_CONTRACT_SCHEMA");
+  return present === expected;
+}
+
 export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
   constructor(private readonly database: D1Database) {}
 
   async read(reminderId: string): Promise<ReminderDeliveryContext | null> {
+    const hasContextContract = await hasCompleteContextContract(this.database);
+    const detailColumns = hasContextContract ? `
+                CASE WHEN (source.contract_version=2 AND source.chat_identity_id=r.chat_identity_id)
+                   OR (proposal.contract_version=2 AND series.owner_id=w.owner_user_id AND series.chat_identity_id=r.chat_identity_id)
+                  THEN 1 ELSE 0 END AS expected_details,
+                cd.reminder_id AS detail_reminder_id, cd.owner_id AS detail_owner_id,
+                cd.chat_identity_id AS detail_chat_identity_id,
+                cd.encryption_entity_id AS detail_entity_id,
+                cd.payload_version AS detail_payload_version,
+                cd.payload_ciphertext AS detail_ciphertext, cd.payload_iv AS detail_iv,
+                cd.key_version AS detail_key_version` : `
+                0 AS expected_details, NULL AS detail_reminder_id, NULL AS detail_owner_id,
+                NULL AS detail_chat_identity_id, NULL AS detail_entity_id,
+                NULL AS detail_payload_version, NULL AS detail_ciphertext, NULL AS detail_iv,
+                NULL AS detail_key_version`;
+    const detailJoins = hasContextContract ? `
+         LEFT JOIN command_drafts source ON source.id=r.source_draft_id
+         LEFT JOIN reminder_series_occurrences so ON so.reminder_id=r.id
+         LEFT JOIN reminder_series series ON series.id=so.series_id
+         LEFT JOIN reminder_series_proposals proposal ON proposal.id=series.proposal_id
+         LEFT JOIN reminder_context_details cd ON cd.reminder_id=r.id` : "";
     const row = await this.database
       .prepare(
         `SELECT r.id AS reminder_id, r.status AS reminder_status, r.scheduled_at,
@@ -21,19 +85,41 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                 c.encrypted_token_iv, c.credential_version, ci.private_chat_id,
                 d.id AS delivery_id, d.status AS delivery_status,
                 d.attempt_count, d.send_started_at, d.retry_not_before,
-                d.transition_marker AS delivery_marker
+                d.transition_marker AS delivery_marker,
+                w.owner_user_id, r.chat_identity_id, ${detailColumns}
          FROM reminders r
          JOIN workspaces w ON w.id = r.workspace_id
          JOIN chat_identities ci ON ci.id = r.chat_identity_id
          JOIN bot_connections c ON c.id = ci.connection_id
            AND c.user_id = w.owner_user_id
          LEFT JOIN reminder_deliveries d ON d.reminder_id = r.id
+         ${detailJoins}
          WHERE r.id = ?
          LIMIT 1`,
       )
       .bind(reminderId)
       .first<DeliveryContextRow>();
-    return row ? contextFromRow(row) : null;
+    if (!row) return null;
+    const context = contextFromRow(row);
+    const series = hasContextContract ? await this.database.prepare(
+      `SELECT so.series_id FROM reminder_series_occurrences so
+       JOIN reminder_series s ON s.id=so.series_id AND s.owner_id=? AND s.chat_identity_id=?
+       WHERE so.reminder_id=? LIMIT 1`,
+    ).bind(row.owner_user_id, row.chat_identity_id, reminderId).first<{ series_id: string }>() : null;
+    if (series) {
+      const result = await this.database.prepare(
+        `SELECT so.occurrence_index AS idx, r.scheduled_at
+         FROM reminder_series_occurrences so
+         JOIN reminder_series s ON s.id=so.series_id AND s.owner_id=? AND s.chat_identity_id=?
+         JOIN reminders r ON r.id=so.reminder_id AND r.chat_identity_id=?
+         JOIN workspaces w ON w.id=r.workspace_id AND w.owner_user_id=?
+         WHERE so.series_id=? ORDER BY so.occurrence_index`,
+      ).bind(row.owner_user_id, row.chat_identity_id, row.chat_identity_id, row.owner_user_id, series.series_id)
+        .all<{ idx: number; scheduled_at: number }>();
+      context.occurrences = result.results.map(item => ({ index: item.idx, scheduledAt: item.scheduled_at,
+        localDate: new Date(item.scheduled_at + 7 * 3600000).toISOString().slice(0, 10) }));
+    }
+    return context;
   }
 
   private async commitOwnership(

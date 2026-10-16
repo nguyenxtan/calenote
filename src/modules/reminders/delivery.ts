@@ -15,6 +15,11 @@ import type { EncryptedValue, Keyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import { isSafeProviderToken } from "@/modules/connections/token-policy";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
+import { CanonicalDetailsV1Schema } from "@/modules/conversation/context-contract/state";
+import { contextContractEncryptionIdentity } from "@/modules/conversation/context-contract/store";
+import { vietnamCivilDate } from "@/modules/conversation/calendar-presentation";
+import { DELIVERY_PREFIX, renderReminderDetails } from "./detail-presentation";
+import type { SeriesOccurrence } from "./series";
 import {
   DELIVERY_SEND_LEASE_MS,
   MAX_DELIVERY_ATTEMPTS,
@@ -65,6 +70,17 @@ export interface DeliveryContextRow {
   send_started_at: number | null;
   retry_not_before: number | null;
   delivery_marker: string | null;
+  owner_user_id: string;
+  chat_identity_id: string;
+  expected_details: number;
+  detail_reminder_id: string | null;
+  detail_owner_id: string | null;
+  detail_chat_identity_id: string | null;
+  detail_entity_id: string | null;
+  detail_payload_version: string | null;
+  detail_ciphertext: unknown;
+  detail_iv: unknown;
+  detail_key_version: number | null;
 }
 
 export interface ReminderDeliveryContext {
@@ -86,6 +102,12 @@ export interface ReminderDeliveryContext {
   sendStartedAt: number | null;
   retryNotBefore: number | null;
   deliveryMarker: string | null;
+  ownerUserId: string;
+  chatIdentityId: string;
+  expectsDetails: boolean;
+  detail: { encrypted: EncryptedValue; keyVersion: number; entityId: string; payloadVersion: string } | null;
+  detailInvalid: boolean;
+  occurrences: SeriesOccurrence[];
 }
 
 export interface OwnedDelivery {
@@ -160,6 +182,10 @@ export interface ReminderDeliveryStore {
 }
 
 export function contextFromRow(row: DeliveryContextRow): ReminderDeliveryContext {
+  const detailPresent = row.detail_reminder_id !== null;
+  const detailInvalid = detailPresent && (row.detail_reminder_id !== row.reminder_id || row.detail_owner_id !== row.owner_user_id
+    || row.detail_chat_identity_id !== row.chat_identity_id || row.detail_entity_id !== row.reminder_id
+    || row.detail_payload_version !== "calenote-reminder-details-1" || row.detail_key_version !== 1);
   return {
     reminderId: row.reminder_id,
     reminderStatus: row.reminder_status,
@@ -185,6 +211,15 @@ export function contextFromRow(row: DeliveryContextRow): ReminderDeliveryContext
     sendStartedAt: row.send_started_at,
     retryNotBefore: row.retry_not_before,
     deliveryMarker: row.delivery_marker,
+    ownerUserId: row.owner_user_id,
+    chatIdentityId: row.chat_identity_id,
+    expectsDetails: row.expected_details === 1,
+    detailInvalid,
+    detail: detailPresent && !detailInvalid ? {
+      encrypted: { ciphertext: persistedD1Blob(row.detail_ciphertext), iv: persistedD1Blob(row.detail_iv) },
+      keyVersion: row.detail_key_version!, entityId: row.detail_entity_id!, payloadVersion: row.detail_payload_version!,
+    } : null,
+    occurrences: [{ index: 0, scheduledAt: row.scheduled_at, localDate: vietnamCivilDate(row.scheduled_at) }],
   };
 }
 
@@ -331,6 +366,7 @@ export async function deliverReminder(
 
   let title: string;
   let token: string;
+  let text: string;
   try {
     title = await dependencies.keyring.decryptSensitive(
       "reminder-title",
@@ -344,6 +380,16 @@ export async function deliverReminder(
       context.credentialVersion,
       context.encryptedToken,
     );
+    if (context.detailInvalid || (context.expectsDetails && context.detail === null)) throw new Error("INVALID_CONTEXT_DETAILS");
+    if (context.detail) {
+      const plain = await dependencies.keyring.decryptSensitive("context-contract-reminder-details",
+        contextContractEncryptionIdentity({ ownerId: context.ownerUserId, chatIdentityId: context.chatIdentityId }, context.detail.entityId),
+        context.detail.keyVersion, context.detail.encrypted);
+      const details = CanonicalDetailsV1Schema.parse(JSON.parse(plain));
+      const rendered = renderReminderDetails(title, details, context.occurrences);
+      if (rendered.status !== "COMPLETE") throw new Error("INVALID_CONTEXT_DETAILS");
+      text = `${DELIVERY_PREFIX}${rendered.text}`;
+    } else text = `${REMINDER_PREFIX}${title}`;
   } catch {
     return failBeforeProvider(
       reminderId,
@@ -368,7 +414,6 @@ export async function deliverReminder(
       randomBytes,
     );
   }
-  const text = `${REMINDER_PREFIX}${title}`;
   if (text.length > PROVIDER_TEXT_CODE_UNITS) {
     return failBeforeProvider(
       reminderId,

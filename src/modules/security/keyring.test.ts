@@ -4,6 +4,18 @@ import { createKeyring } from "./keyring";
 const TEST_MASTER_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 describe("Keyring", () => {
+  it("isolates_context_contract_state_proposals_and_each_detail_purpose", async () => {
+    const keys=await createKeyring(TEST_MASTER_KEY);
+    const purposes=["context-contract-state","context-contract-proposal","context-contract-draft-details","context-contract-reminder-details","context-contract-series-details"] as const;
+    const entity=JSON.stringify(["owner","chat","entity","calenote-context-2"]);
+    for (const purpose of purposes) {
+      const encrypted=await keys.encryptSensitive(purpose,entity,1,"synthetic-private-details");
+      expect(await keys.decryptSensitive(purpose,entity,1,encrypted)).toBe("synthetic-private-details");
+      for(const other of purposes.filter(p=>p!==purpose))await expect(keys.decryptSensitive(other,entity,1,encrypted)).rejects.toThrow();
+      await expect(keys.decryptSensitive(purpose,JSON.stringify(["other","chat","entity","calenote-context-2"]),1,encrypted)).rejects.toThrow();
+      await expect(keys.decryptSensitive("conversation-context",entity,1,encrypted)).rejects.toThrow();
+    }
+  });
   it("round-trips a credential while producing distinct domain-separated digests", async () => {
     const keys = await createKeyring(TEST_MASTER_KEY);
     const encrypted = await keys.encryptCredential("connection-1", "zalo", 1, "token-value");

@@ -38,6 +38,17 @@ afterEach(async () => {
 });
 
 describe("atomic paid budgets on disposable workerd D1", () => {
+  it("financial exposure reserves full advertised context without changing application token limits", async () => {
+    const exposure = store({ ownerMonthlyCostMicrounits: 500000, globalDailyCostMicrounits: 2000000,
+      maxInputTokens: 12000, maxOutputTokens: 1536, promptPriceMicrounitsPerMillionTokens: 100000,
+      completionPriceMicrounitsPerMillionTokens: 400000, reservationInputTokenExposure: 1048576 });
+    const r = await exposure.reservePaidCall(request(0));
+    expect(r).toMatchObject({ status: "RESERVED", reservedMaximumMicrounits: 105472 });
+    if (r.status !== "RESERVED") return;
+    await exposure.markDispatched({ ownerId: "one", reservationId: r.reservationId, now: NOW });
+    await exposure.finalizeUsage({ ownerId: "one", reservationId: r.reservationId, actualCostMicrounits: 1000, now: NOW + 1 });
+    expect((await windows()).results.every(r => r.finalized_microunits === 1000 && r.reserved_microunits === 0)).toBe(true);
+  });
   it.each([
     { OWNER_DAILY_CALL_LIMIT: "1" },
     { OWNER_MONTHLY_COST_MICROUNITS: "1303" },

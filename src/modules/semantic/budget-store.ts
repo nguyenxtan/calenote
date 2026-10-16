@@ -3,6 +3,8 @@ export interface SemanticBudgetLimits {
   ownerMonthlyCostMicrounits: number;
   globalDailyCostMicrounits: number;
   maxInputTokens: number;
+  /** Financial uncertainty only; never changes accepted application input. */
+  reservationInputTokenExposure?: number;
   maxOutputTokens: number;
   promptPriceMicrounitsPerMillionTokens: number;
   completionPriceMicrounitsPerMillionTokens: number;

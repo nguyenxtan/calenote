@@ -1,5 +1,16 @@
 # Conversation V2 — contextual reminders, finite urgent series, explicit lunar dates
 
+## Successor design notice — 2026-09-28
+
+The user approved the direction of
+[LLM-led context understanding](./2026-09-28-llm-context-contract-design.md).
+Its written spec is pending review, not implemented or active. It proposes
+replacing this document's semantic-only provider contract and raw-text-first
+temporal interpretation with model-proposed structured operands and deterministic
+backend resolution. Confirmation, ownership, encrypted context, budgets and
+canonical mutation controls remain. This V2 document is preserved as the
+historical contract; its acceptance evidence does not approve the successor.
+
 Date: 2026-09-25
 Status: **IMPLEMENTATION_AUTHORIZED — LOCAL_ACCEPTANCE_IN_PROGRESS**
 Inspected source: `9018344f1f8b1e0adf4d7905d3e7e6550f9ee5ad`.

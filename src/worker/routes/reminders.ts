@@ -11,6 +11,11 @@ import { InvalidRequestError } from "./connections";
 const CREATE_BODY_BYTES = 16 * 1_024;
 const EMPTY_BODY_BYTES = 1_024;
 const BODY_TIMEOUT_MS = 5_000;
+export class ClientUpgradeRequiredError extends Error {
+  readonly code = "CLIENT_UPGRADE_REQUIRED";
+  readonly status = 409;
+  constructor() { super("Phiên bản ứng dụng cũ không thể hiển thị đầy đủ nhắc hẹn này. Vui lòng tải lại hoặc cập nhật ứng dụng."); }
+}
 const createSchema = z.object({
   intentId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/u).optional(),
   title: z.string().max(500),
@@ -48,6 +53,7 @@ export async function handleListReminders(
   const page = reminders.slice(0, 100);
   // Leave envelope/cursor headroom beneath the browser's 128KiB response bound.
   while (page.length > 1 && new TextEncoder().encode(JSON.stringify(page)).byteLength > 120 * 1024) page.pop();
+  if (page.some(reminder => reminder.title.length > 500)) throw new ClientUpgradeRequiredError();
   const nextCursor = reminders.length > page.length ? page.at(-1)!.publicId : undefined;
   return jsonResponse(RemindersResponseSchema.parse({ data: { reminders: page, ...(nextCursor === undefined ? {} : { nextCursor }) } }), { headers: authenticatedHeaders() });
 }

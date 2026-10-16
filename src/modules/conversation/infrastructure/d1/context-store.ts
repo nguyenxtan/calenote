@@ -1,6 +1,6 @@
 import type { Keyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
-import { newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import { legacyContractGuard, newerConversationOutcomeSql } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { ConversationSnapshotSchema, type ConversationScope, type ConversationSnapshot } from "../../contracts";
 import { InvalidConversationContextError, type ConversationStore } from "../../context-store";
 
@@ -46,7 +46,7 @@ export class D1ConversationStore implements ConversationStore {
     const row = await this.database.prepare(`SELECT id, revision, status, created_at, expires_at,
       payload_ciphertext, payload_iv, key_version FROM conversation_contexts
       WHERE owner_id = ? AND chat_identity_id = ? AND ${active} AND expires_at > ?
-        AND EXISTS (${ownedInbound}) LIMIT 1`).bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope)).first<ContextRow>();
+        AND EXISTS (${ownedInbound}) ${await legacyContractGuard(this.database, "conversation_contexts")} LIMIT 1`).bind(scope.ownerId, scope.chatIdentityId, scope.now, ...auth(scope)).first<ContextRow>();
     if (!row) return null;
     try {
       const plaintext = await this.keyring.decryptSensitive("conversation-context", encryptionIdentity(scope, row.id), row.key_version, {
@@ -95,7 +95,7 @@ export class D1ConversationStore implements ConversationStore {
       ]);
       return result[expectedRevision === null ? 1 : 0].meta.changes === 1 ? "SAVED" : "STALE";
     } catch (error) {
-      if (error instanceof Error && /UNIQUE constraint failed/iu.test(error.message)) return "STALE";
+      if (error instanceof Error && /UNIQUE constraint failed|CONTEXT_CONTRACT_FENCE/iu.test(error.message)) return "STALE";
       throw error;
     }
   }
@@ -150,7 +150,7 @@ export class D1ConversationStore implements ConversationStore {
     if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new TypeError("Invalid purge bounds");
     const result = await this.database.prepare(`UPDATE conversation_contexts SET status = 'EXPIRED',
       payload_ciphertext = NULL, payload_iv = NULL, key_version = NULL
-      WHERE id IN (SELECT id FROM conversation_contexts WHERE ${active} AND expires_at <= ? ORDER BY expires_at,id LIMIT ?)`)
+      WHERE id IN (SELECT id FROM conversation_contexts WHERE ${active} ${await legacyContractGuard(this.database, "conversation_contexts")} AND expires_at <= ? ORDER BY expires_at,id LIMIT ?)`)
       .bind(now, Math.min(limit, 100)).run();
     return result.meta.changes;
   }

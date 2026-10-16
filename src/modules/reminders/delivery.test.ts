@@ -10,6 +10,11 @@ import {
 } from "@/testing/sqlite-d1.test-support";
 import { MAX_REMINDER_TITLE_CODE_UNITS } from "./parse-vietnamese";
 import type { DeliverReminderDependencies } from "./delivery";
+import { contextContractEncryptionIdentity } from "@/modules/conversation/context-contract/store";
+import type { CanonicalDetailsV1 } from "@/modules/conversation/context-contract/state";
+import { fixture as contextFixture, now as contextNow } from "@/modules/conversation/context-contract/infrastructure/d1/test-support";
+import { addConfirmationToken } from "@/modules/conversation/context-contract/confirmation-test-support";
+import { renderReminderDetails, DELIVERY_PREFIX } from "./detail-presentation";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const now = 1_800_000_000_000;
@@ -29,6 +34,7 @@ async function deliveryModule() {
 }
 
 interface HarnessOptions {
+  contextContract?: boolean;
   title?: string;
   reminderStatus?: "PENDING" | "CLAIMED" | "SENT" | "CANCELLED" | "FAILED" | "RETRYABLE" | "UNCERTAIN";
   claimedAt?: number | null;
@@ -42,7 +48,7 @@ async function createHarness(options: HarnessOptions = {}) {
   const deliveryApi = await deliveryModule();
   expect(deliveryApi).not.toBeNull();
   if (!deliveryApi) throw new Error("delivery module missing");
-  const db = new SqliteD1Database({ conversationV2: true });
+  const db = new SqliteD1Database({ conversationV2: true, contextContract: options.contextContract });
   databases.push(db);
   const keyring = await createKeyring(master);
   const encryptedToken = await keyring.encryptCredential(connectionId, "telegram", 1, token);
@@ -120,6 +126,90 @@ async function createHarness(options: HarnessOptions = {}) {
     setNow(value: number) { currentTime = value; },
   };
 }
+
+const companion: CanonicalDetailsV1 = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung <b>", notes: "Mang giấy tờ & bút", eventDate: "2027-01-16", eventTime: "13:30", calendarProvenance: { calendar: "GREGORIAN", sourceDate: null, provenance: { kind: "EXPLICIT_USER" } }, resolutionVersion: "context-resolution-1" };
+async function seedCompanion(harness: Awaited<ReturnType<typeof createHarness>>) {
+  const entity = contextContractEncryptionIdentity({ ownerId: "user-1", chatIdentityId: "chat-identity-1" }, reminderId);
+  const encrypted = await harness.keyring.encryptSensitive("context-contract-reminder-details", entity, 1, JSON.stringify(companion));
+  harness.db.sqlite.prepare("INSERT INTO reminder_context_details(reminder_id,owner_id,chat_identity_id,encryption_entity_id,payload_version,payload_ciphertext,payload_iv,key_version) VALUES(?,'user-1','chat-identity-1',?,'calenote-reminder-details-1',?,?,1)").run(reminderId, reminderId, new Uint8Array(encrypted.ciphertext), new Uint8Array(encrypted.iv));
+}
+
+describe("encrypted companion delivery", () => {
+  it("details_survive_confirmation_api_delivery through the real shared store and fake transport body", async () => {
+    const f = await contextFixture();
+    try {
+      await addConfirmationToken(f);
+      const encryptedToken = await f.keyring.encryptCredential("connection", "telegram", 1, token);
+      await f.db.prepare("UPDATE bot_connections SET encrypted_token=?,encrypted_token_iv=? WHERE id='connection'")
+        .bind(encryptedToken.ciphertext, encryptedToken.iv).run();
+      expect((await f.save()).result.status).toBe("APPLIED");
+      const committed = await f.store.confirm({ kind: "CHAT", scope: f.scope(1) }, f.proof);
+      expect(committed.status).toBe("COMMITTED");
+      const rows = (await f.db.prepare("SELECT id FROM reminders ORDER BY scheduled_at").all<{ id: string }>()).results;
+      expect(rows).toHaveLength(2);
+      await f.db.prepare("UPDATE reminders SET status='CLAIMED',claimed_at=? WHERE id=?").bind(contextNow + 1, rows[0].id).run();
+      const sent = vi.fn<NonNullable<DeliverReminderDependencies["sendText"]>>(async () => ({ providerMessageId: "actual-fake-receipt" }));
+      expect(await (await deliveryModule())!.deliverReminder(rows[0].id, { store: new D1ReminderDeliveryStore(f.db), keyring: f.keyring,
+        sendText: sent, now: () => contextNow + 1, randomBytes: deterministicRandomBytes() })).toEqual({ status: "SENT" });
+      const projected = renderReminderDetails(f.preview.title, f.preview.details, f.preview.occurrences);
+      expect(projected.status).toBe("COMPLETE");
+      if (projected.status === "COMPLETE") expect(sent.mock.calls[0][3]).toBe(`${DELIVERY_PREFIX}${projected.text}`);
+      expect(sent.mock.calls).toHaveLength(1);
+    } finally { f.close(); }
+  });
+
+  it("keeps pre-0009 legacy delivery and refuses a partial additive schema", async () => {
+    const legacy = await createHarness();
+    expect(await legacy.module.deliverReminder(reminderId, legacy.deps)).toEqual({ status: "SENT" });
+    expect(legacy.sendText.mock.calls[0]?.[3]).toBe("⏰ Nhắc hẹn: gọi cho mẹ");
+    const partial = await createHarness();
+    partial.db.sqlite.exec("ALTER TABLE reminders ADD COLUMN context_write_marker TEXT");
+    await expect(partial.deps.store.read(reminderId)).rejects.toThrow("INCOMPLETE_CONTEXT_CONTRACT_SCHEMA");
+    expect(partial.sendText).not.toHaveBeenCalled();
+    const early = await createHarness();
+    early.db.sqlite.exec("ALTER TABLE command_drafts ADD COLUMN contract_version INTEGER NOT NULL DEFAULT 1");
+    await expect(early.deps.store.read(reminderId)).rejects.toThrow("INCOMPLETE_CONTEXT_CONTRACT_SCHEMA");
+    expect(early.sendText).not.toHaveBeenCalled();
+    const tableOnly = await createHarness();
+    tableOnly.db.sqlite.exec("CREATE TABLE reminder_context_details (reminder_id TEXT, owner_id TEXT, chat_identity_id TEXT, encryption_entity_id TEXT, payload_version TEXT, payload_ciphertext BLOB, payload_iv BLOB, key_version INTEGER)");
+    await expect(tableOnly.deps.store.read(reminderId)).rejects.toThrow("INCOMPLETE_CONTEXT_CONTRACT_SCHEMA");
+    expect(tableOnly.sendText).not.toHaveBeenCalled();
+  });
+
+  it("sends complete decoded details through the actual provider body", async () => {
+    const h = await createHarness({ contextContract: true });
+    await seedCompanion(h);
+    expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "SENT" });
+    const body = h.sendText.mock.calls[0]?.[3];
+    expect(body).toContain("Địa điểm: Quang Trung <b>");
+    expect(body).toContain("Ghi chú: Mang giấy tờ & bút");
+    expect(body).toContain("Sự kiện: 2027-01-16 13:30");
+    expect(body).toContain("Thông báo (Asia/Ho_Chi_Minh):");
+  });
+
+  it("fails corrupt or missing expected companion before any provider send", async () => {
+    const corrupt = await createHarness({ contextContract: true });
+    await seedCompanion(corrupt);
+    corrupt.db.sqlite.prepare("UPDATE reminder_context_details SET payload_ciphertext=? WHERE reminder_id=?").run(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]), reminderId);
+    expect(await corrupt.module.deliverReminder(reminderId, corrupt.deps)).toEqual({ status: "FAILED" });
+    expect(corrupt.sendText).not.toHaveBeenCalled();
+    const f = await contextFixture();
+    try {
+      await addConfirmationToken(f);
+      expect((await f.save()).result.status).toBe("APPLIED");
+      const committed = await f.store.confirm({ kind: "CHAT", scope: f.scope(1) }, f.proof);
+      expect(committed.status).toBe("COMMITTED");
+      const first = await f.db.prepare("SELECT id FROM reminders LIMIT 1").first<{ id: string }>();
+      if (!first) throw new Error("Fixture reminder missing");
+      await f.db.prepare("DELETE FROM reminder_context_details WHERE reminder_id=?").bind(first.id).run();
+      const sendText = vi.fn(async () => ({ providerMessageId: "should-not-send" }));
+      const result = await (await deliveryModule())!.deliverReminder(first.id, { store: new D1ReminderDeliveryStore(f.db), keyring: f.keyring, sendText,
+        now: () => contextNow + 1, randomBytes: deterministicRandomBytes() });
+      expect(result).toEqual({ status: "FAILED" });
+      expect(sendText).not.toHaveBeenCalled();
+    } finally { f.close(); }
+  });
+});
 
 function seedDelivery(
   db: SqliteD1Database,

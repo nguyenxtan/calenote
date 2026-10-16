@@ -1,8 +1,16 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
+import * as gateways from "./semantic-gateway";
+import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
+import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
+import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
+import { serializeContextRequest } from "../../../conversation/context-contract/wire";
+import { readBoundedSemanticResponse } from "../../../../worker/composition-root";
+import { projectProviderEnvelope } from "./envelope-diagnostics";
 
 const input = { text: "nhắc mình", referenceLocalDate: "2026-09-16", referenceLocalTime: "12:00", timezone: "Asia/Ho_Chi_Minh" as const };
 const route = { model: "fixture/model", provider: "fixture-provider", requireZdr: true,
@@ -15,7 +23,613 @@ const success = { status: 200, body: JSON.stringify({ choices: [{ message: { con
 
 afterEach(() => vi.useRealTimers());
 
+describe("bounded choice-level provider error diagnostics", () => {
+  const privateText = "SYNTHETIC_PRIVATE_ERROR_USER_HEADER_URL";
+  it.each([
+    [{ code: 429, message: privateText }, "object", 429],
+    [{ code: 100, message: privateText }, "object", 100],
+    [{ code: 599, message: privateText }, "object", 599],
+    [{ code: 99, message: privateText }, "object", undefined],
+    [{ code: 600, message: privateText }, "object", undefined],
+    [{ code: "429", message: privateText }, "object", undefined],
+    [{ code: 429.5, message: privateText }, "object", undefined],
+    [privateText, "string", undefined],
+    [null, "null", undefined],
+    [[privateText], "array", undefined],
+  ])("projects only structural error metadata for choice and message (case %#)", async (error, errorType, errorCode) => {
+    // Removing either projection must lose these independently located errors;
+    // accepting finish_reason=error must fail the hard-rejection assertions.
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "error", error,
+      message: { content: privateText, error } }], usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    let calls = 0;
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; },
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", canonicalValidationDiagnostics: {
+      state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { errorPresent: false, firstChoice: {
+        choiceErrorPresent: true, choiceErrorType: errorType, messageErrorPresent: true, messageErrorType: errorType,
+      } } } });
+    const diagnostic = result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice;
+    expect(diagnostic?.choiceErrorCode).toBe(errorCode);
+    expect(diagnostic?.messageErrorCode).toBe(errorCode);
+    expect(JSON.stringify(result)).not.toContain(privateText);
+    await attempt.dispatch(); expect(calls).toBe(1);
+  });
+
+  it("distinguishes absent error properties from explicit null without assigning content errors to outer carriers", async () => {
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", choices: [{ finish_reason: "error", message: { content: JSON.stringify({ error: { code: 429, message: privateText } }) } }], usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => ({ status: 200, body }),
+      { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", canonicalValidationDiagnostics: {
+      providerEnvelope: { firstChoice: { choiceErrorPresent: false, choiceErrorType: "undefined", messageErrorPresent: false, messageErrorType: "undefined" } } } });
+    expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.choiceErrorCode).toBeUndefined();
+    expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.messageErrorCode).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(privateText);
+  });
+});
+
+describe("provider error content structural projection", () => {
+  const secret = "SYNTHETIC_PRIVATE_MODEL_ERROR_TEXT";
+  it.each([
+    [JSON.stringify({ error: { code: 429, message: secret }, message: secret }), { state: "JSON", jsonType: "object", errorPresent: true, errorType: "object", errorCode: 429 }],
+    [JSON.stringify({ code: 503, message: secret }), { state: "JSON", jsonType: "object", errorPresent: false, errorType: "undefined", code: 503 }],
+    [JSON.stringify({ error: { code: "429", message: secret } }), { state: "JSON", jsonType: "object", errorPresent: true, errorType: "object" }],
+    [JSON.stringify([secret]), { state: "JSON", jsonType: "array", errorPresent: false, errorType: "undefined" }],
+    [JSON.stringify(secret), { state: "JSON", jsonType: "string", errorPresent: false, errorType: "undefined" }],
+    [secret, { state: "MALFORMED" }],
+    ["x".repeat(32769), { state: "OVERSIZED" }],
+  ])("inspects only bounded finish=error content without retaining values (case %#)", (content, expected) => {
+    const result = projectProviderEnvelope({ error: null, choices: [{ finish_reason: "error", message: { content } }] });
+    expect(result).toMatchObject({ errorPresent: true, errorType: "null", firstChoice: { errorContent: expected } });
+    const diagnostic = result.firstChoice?.errorContent;
+    if (!("errorCode" in expected)) expect(diagnostic?.errorCode).toBeUndefined();
+    if (!("code" in expected)) expect(diagnostic?.code).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(result).length).toBeLessThan(1500);
+  });
+  it.each(["stop", "length", null, "SYNTHETIC_PRIVATE_FINISH"])("never parses ordinary semantic content for finish=%s", finish => {
+    const result = projectProviderEnvelope({ choices: [{ finish_reason: finish, message: { content: JSON.stringify({ error: { code: 429, message: secret } }) } }] });
+    expect(result.firstChoice?.errorContent).toEqual({ state: "NOT_INSPECTED" });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+  it("honors the exact UTF-8 byte ceiling, not only JavaScript string length", () => {
+    const json = '{"error":{"code":429}}';
+    const atBound = json + " ".repeat(32768 - Buffer.byteLength(json));
+    const atResult = projectProviderEnvelope({ choices: [{ finish_reason: "error", message: { content: atBound } }] });
+    expect(atResult.firstChoice?.errorContent).toEqual({ state: "JSON", jsonType: "object", errorPresent: true, errorType: "object", errorCode: 429 });
+    const overBound = atBound.slice(0, -1) + "é";
+    expect(overBound.length).toBe(32768);
+    expect(Buffer.byteLength(overBound)).toBe(32769);
+    const overResult = projectProviderEnvelope({ choices: [{ finish_reason: "error", message: { content: overBound } }] });
+    expect(overResult.firstChoice?.errorContent).toEqual({ state: "OVERSIZED" });
+  });
+});
+
+it.each(["error", "length", "content_filter", "tool_calls", null, 17, "SYNTHETIC_SECRET_finish"]) (
+  "captures exact finite finish control without accepting or leaking content (%s)", async finish => {
+    const privateText = "SYNTHETIC_PRIVATE_MODEL_AND_ERROR";
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", id: "gen-synthetic-envelope", choices: [{ finish_reason: finish, native_finish_reason: "SAFETY", message: { content: privateText, error: { code: 503, message: privateText } } }], error: { code: 503, message: privateText }, usage: { cost: 0, prompt_tokens: 0, completion_tokens: 0 } });
+    let calls = 0;
+    const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: finish === "error" ? "PROVIDER_FAILURE" : "SCHEMA_INVALID", canonicalValidationDiagnostics: {
+      state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { version: "provider-envelope-1", choicesType: "array", choicesCount: 1, errorPresent: true,
+        errorCode: 503, firstChoice: { finishReason: { type: finish === null ? "null" : typeof finish }, nativeFinishReason: { token: "SAFETY" }, contentType: "string", contentByteCount: Buffer.byteLength(privateText), messageErrorPresent: true } }
+    } });
+    if (["error", "length", "content_filter", "tool_calls"].includes(String(finish))) {
+      expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.finishReason.token).toBe(finish);
+    } else expect(result.canonicalValidationDiagnostics?.providerEnvelope?.firstChoice?.finishReason.token).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(privateText);
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET_finish");
+    expect(calls).toBe(1);
+    await attempt.dispatch(); expect(calls).toBe(1);
+  }
+);
+
+it("oversized rejected envelope never runs content diagnostics", async () => {
+  const body = JSON.stringify({ choices: [{ finish_reason: "SYNTHETIC_PRIVATE_FINISH", message: { content: "SYNTHETIC_PRIVATE_CONTENT".repeat(2000) } }] });
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  const attempt = gateways.createContextContractGateway(contextConfig, async () => ({ status: 200, body }), admission).prepare("PRIMARY", contextInput);
+  if (attempt.status !== "READY") throw Error("not ready");
+  const result = await attempt.dispatch();
+  expect(result.status).toBe("FAILURE");
+  expect(result.canonicalValidationDiagnostics?.providerEnvelope).toBeUndefined();
+  expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE");
+});
+
+const contextInput = ContextInputSchema.parse({ schemaVersion: "calenote-context-input-2",
+  reference: { instant: "2026-09-28T03:00:00.000Z", localDate: "2026-09-28", timezone: "Asia/Ho_Chi_Minh" },
+  turns: [{ role: "USER", text: "nhắc gọi mẹ" }], currentTurn: 0, activeRequest: null, facts: [], pendingQuestion: null, ambiguities: [],
+  capabilities: { version: "context-capabilities-1", supported: ["ONCE"], unsupported: ["YEARLY"], calendars: ["GREGORIAN"], limits: { dailyCount: 30, horizonDays: 366 } } });
+const contextConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+  primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true,
+    promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
+const contextOutput = { schemaVersion: "calenote-context-3", intent: "CREATE_REMINDER", requestTarget: { kind: "NEW", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "nhắc gọi mẹ", occurrence: 1 }] },
+  changes: [{ field: "title", operation: "SET", value: "gọi mẹ", evidence: [{ kind: "USER_QUOTE", turn: 0, quote: "gọi mẹ", occurrence: 1 }] }],
+  query: null, uncertainties: [{ field: "reminderTime", reason: "MISSING", alternatives: [] }],
+  conversationDirective: { kind: "ASK_FOR_FIELD", field: "reminderTime" }, replyProposal: { text: "Bạn muốn được nhắc lúc nào?" } };
+const materializedChanges=contextOutput.changes.map(change=>({...change,evidence:[{kind:"USER_QUOTE",turn:0,quote:contextInput.turns[0].text,occurrence:1}]}));
+const contextRequest = (value = contextInput): SemanticJsonRequest => ({ model: "google/gemini-2.5-flash-lite",
+  ...serializeContextRequest(value),
+  provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: 0.1, completion: 0.4 } } });
+const contextResponse = (payload: unknown = contextOutput, finish = "stop") => ({ status: 200, body: JSON.stringify({
+  choices: [{ message: { content: JSON.stringify(encodeFixtureV3(payload,contextInput)) }, finish_reason: finish }] }) });
+
+describe("bounded dispatch exception diagnostics", () => {
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  const sensitive = "SYNTHETIC_PRIVATE_MESSAGE_HEADER_URL_USER_TEXT";
+  // These exercise the real HTTP adapter and gateway. Dropping the catch
+  // projection, echoing arbitrary fields, or retrying breaks the contract.
+  it.each([
+    ["native fetch failure", new TypeError(sensitive, { cause: { code: "ECONNRESET", message: sensitive } }), { errorName: "TypeError", causeCode: "ECONNRESET" }],
+    ["direct network code", Object.assign(new Error(sensitive), { code: "ETIMEDOUT" }), { errorName: "Error", errorCode: "ETIMEDOUT" }],
+    ["early abort", Object.assign(new Error(sensitive), { name: "AbortError", code: "ABORT_ERR" }), { errorName: "AbortError", errorCode: "ABORT_ERR" }],
+    ["unknown name and code", { name: sensitive, code: sensitive, message: sensitive, stack: sensitive, headers: sensitive, url: sensitive }, { errorName: "UNKNOWN" }],
+    ["code lookalike", { name: "TypeError", code: "ECONNRESET_PRIVATE" }, { errorName: "TypeError" }],
+    ["primitive", sensitive, { errorName: "UNKNOWN" }],
+    ["null", null, { errorName: "UNKNOWN" }],
+    ["nested cause", new Error(sensitive, { cause: { code: "PRIVATE", cause: { code: "UND_ERR_CONNECT_TIMEOUT", message: sensitive } } }), { errorName: "Error", causeCode: "UND_ERR_CONNECT_TIMEOUT" }],
+    ["cause beyond bound", new Error(sensitive, { cause: { cause: { cause: { code: "ECONNREFUSED" } } } }), { errorName: "Error" }],
+  ])("projects only finite %s tokens without another dispatch", async (_label, error, tokens) => {
+    let calls = 0;
+    const transport = gateways.createContextHttpTransport("synthetic", async () => { calls++; throw error; });
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "TRANSPORT", ...tokens } });
+    expect(JSON.stringify(result)).not.toContain(sensitive);
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(400);
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(calls).toBe(1);
+  });
+
+  it.each(["getter", "proxy", "cycle"])("contains a hostile %s without invoking diagnostic getters", async mode => {
+    let reads = 0;
+    const error: Record<string, unknown> = {};
+    if (mode === "getter") for (const key of ["name", "code", "cause", "message", "stack"])
+      Object.defineProperty(error, key, { get() { reads++; throw new Error(sensitive); } });
+    else if (mode === "cycle") error.cause = error;
+    const thrown = mode === "proxy" ? new Proxy(error, { getOwnPropertyDescriptor() { throw new Error(sensitive); }, getPrototypeOf() { throw new Error(sensitive); } }) : error;
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { throw thrown; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "TRANSPORT", errorName: "UNKNOWN" } });
+    expect(reads).toBe(0);
+  });
+
+  it("distinguishes a decoder exception after the transport returned", async () => {
+    let calls = 0;
+    const response = { status: 200, get body(): string { throw new SyntaxError(sensitive); } };
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return response; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null },
+      transportDiagnostics: { version: "gateway-exception-1", boundary: "DECODE", errorName: "SyntaxError" } });
+    await attempt.dispatch(); expect(calls).toBe(1);
+  });
+});
+it("actual transport preserves prepared request capability despite caller mutation and duplicate dispatch", async () => {
+  const context = structuredClone(contextInput);
+  context.turns[0].text = "Nhắc trước 2 ngày.";
+  const expected = serializeContextRequest(context), requests: SemanticJsonRequest[] = [];
+  const attempt = gateways.createContextContractGateway(contextConfig, async request => { requests.push(request); return { status: 503, body: "{}" }; },
+    { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 }).prepare("PRIMARY", context);
+  if (attempt.status !== "READY") throw Error("not ready");
+  context.turns[0].text = "Nhắc 2 ngày liên tiếp.";
+  await attempt.dispatch(); await attempt.dispatch();
+  expect(requests).toHaveLength(1);
+  expect(requests[0].messages).toEqual(expected.messages);
+  expect(requests[0].response_format).toEqual(expected.response_format);
+});
+const exchange = (value = contextInput) => ({ requestJson: JSON.stringify(contextRequest(value)),
+  admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response: contextResponse() });
+
+describe("observable successor route", () => {
+  const admission = { status: "OBSERVABLE_CANARY" as const, advertisedContextTokens: 1048576 as const };
+  it("actual context dispatch pins extraction sampling and remains single-attempt", async () => {
+    const captured: SemanticJsonRequest[] = [];
+    const attempt = gateways.createContextContractGateway(contextConfig, async request => {
+      captured.push(request);
+      return contextResponse();
+    }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    await attempt.dispatch();
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({ temperature: 0, stream: false, max_tokens: 1536,
+      provider: { only: ["google-vertex/eu"], allow_fallbacks: false, require_parameters: true, zdr: true, data_collection: "deny" } });
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(captured).toHaveLength(1);
+  });
+  it.each([0, .001])("HTTP200 error finish remains a provider failure with known cost %s and no second dispatch", async cost => {
+    let calls = 0;
+    const body = JSON.stringify({ model: "google/gemini-2.5-flash-lite", provider: "Google", id: "gen-local-provider-error",
+      usage: { cost, prompt_tokens: 100, completion_tokens: 0 }, choices: [{ message: { content: "SYNTHETIC_PRIVATE_CONTENT" }, finish_reason: "error" }] });
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status: 200, body }; }, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { reportedCostUsd: cost },
+      canonicalValidationDiagnostics: { state: "PROVIDER_ENVELOPE_FAILED", providerEnvelope: { firstChoice: { finishReason: { token: "error" } } } } });
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE_CONTENT");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "UNAVAILABLE" });
+    expect(calls).toBe(1);
+  });
+  it("materializes source pointers from the validated dispatch snapshot, not mutable caller input",async()=>{
+    const original=structuredClone(contextInput);
+    const payload=encodeFixtureV3(contextOutput) as {requestTarget:{evidence:{primaryEvidence:string}},titleChange:{change:string}};
+    payload.requestTarget.evidence.primaryEvidence="U0";
+    const title=JSON.parse(payload.titleChange.change);title.evidence.primaryEvidence="U0";payload.titleChange.change=JSON.stringify(title);
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-pointer",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",original);
+    if(attempt.status!=="READY")throw Error("not ready");
+    original.turns[0].text="caller changed this after prepare";
+    const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"SUCCESS",interpretation:{semantic:{requestTarget:{evidence:[{kind:"USER_QUOTE",turn:0,quote:"nhắc gọi mẹ",occurrence:1}]},changes:[{evidence:[{quote:"nhắc gọi mẹ"}]}]}}});
+    expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
+  });
+  it("retains decoded singleton predicate issues after the original opaque refusal without payload leakage",async()=>{
+    const payload=encodeFixtureV3(contextOutput,contextInput) as {titleChange:{change:string}},change=JSON.parse(payload.titleChange.change);change.value={PRIVATE_KEY:"PRIVATE_SECRET"};payload.titleChange.change=JSON.stringify(change);let calls=0;
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-inner-diagnostic",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{message:{content:JSON.stringify(payload)},finish_reason:"stop"}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>{calls++;return {status:200,body}},admission).prepare("PRIMARY",contextInput);if(attempt.status!=="READY")throw Error("Expected ready");const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{state:"WIRE_DECODE_FAILED",validation:{issues:[{path:["titleChange","change"],code:"WIRE_SHAPE_INVALID",expected:"FIELD_CHANGE",actualType:"string"},{path:["titleChange","change","value"],code:"invalid_type",expected:"string",actualType:"object"}]}}});expect(JSON.stringify(result)).not.toMatch(/PRIVATE_KEY|PRIVATE_SECRET/);expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});expect(calls).toBe(1);
+  });
+  it.each([
+    [null,"stop",["choices",0,"message","content"],"invalid_type","null"],
+    ["SYNTHETIC_PRIVATE_CONTENT","error",["choices",0,"finish_reason"],"invalid_value","string"],
+  ])("retains sanitized rejected provider-envelope structure without content", async (content,finish,path,code,actualType) => {
+    const body=JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",id:"gen-synthetic",usage:{cost:0,prompt_tokens:0,completion_tokens:0},choices:[{message:{content},finish_reason:finish}]});
+    const attempt=gateways.createContextContractGateway(contextConfig,async()=>({status:200,body}),admission).prepare("PRIMARY",contextInput);
+    if(attempt.status!=="READY")throw Error("not ready");
+    const result=await attempt.dispatch();
+    expect(result).toMatchObject({status:"FAILURE",category:finish === "error" ? "PROVIDER_FAILURE" : "SCHEMA_INVALID",usage:{costMicrounits:0},canonicalValidationDiagnostics:{state:"PROVIDER_ENVELOPE_FAILED",inputRepresentation:"PROVIDER_ENVELOPE",payloadByteCount:Buffer.byteLength(body),validation:{issues:[expect.objectContaining({path,code,actualType})]}}});
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE_CONTENT");
+    expect(await attempt.dispatch()).toMatchObject({status:"FAILURE",category:"UNAVAILABLE"});
+  });
+  it.each([
+    ["x-request-id", "req-53594e5448455449435f43524544454e5449414c", "SYNTHETIC_CREDENTIAL"],
+    ["traceparent", "00-53594e5448455449435f534543524554-0123456789abcdef-01", "SYNTHETIC_SECRET"],
+    ["traceparent", "00-0123456789abcdef0123456789abcdef-53594e54484b4559-01", "SYNTHKEY"],
+    ["traceparent", "00-53594e5448455449435f43524544454e-5449414c00000000-01", "SYNTHETIC_CREDENTIAL"],
+    ["cf-ray", "53594e54484b4559-SIN", "SYNTHKEY"],
+    ["x-request-id", "req-6e68e1baaf632067e1bb8d69206de1bab9", "synthetic"],
+    ["traceparent", "00-6e68e1baaf632067e1bb8d69206de1ba-b900000000000000-01", "synthetic"],
+  ])("denies reversible known-sensitive payloads in %s before transport return", async (header, value, credential) => {
+    const transport = gateways.createContextHttpTransport(credential, async () => new Response('{"error":{"code":400}}', { status: 400,
+      headers: { "content-type": "application/json", [header]: value } }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.failureDiagnostics).toBeDefined();
+    expect(result.failureDiagnostics?.requestId).toBeUndefined(); expect(result.failureDiagnostics?.traceId).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(value);
+  });
+  it("preserves format-valid unrelated request and trace IDs", async () => {
+    const transport = gateways.createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response('{"error":{"code":400}}', { status: 400,
+      headers: { "content-type": "application/json", "x-request-id": "req-0123456789abcdef", "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01" } }));
+    expect((await transport(contextRequest(), { signal: new AbortController().signal })).failureDiagnostics)
+      .toMatchObject({ requestId: "req-0123456789abcdef", traceId: "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01" });
+  });
+  it.each(["param", "path", "details", "message"])("projects safe root and nested %s causes through the same bounded rules", async shape => {
+    const structuralPath = "response_format.json_schema.schema.properties.changes.items";
+    const root = shape === "message" ? { message: 'Invalid JSON payload received. Unknown name "const" at "generation_config.response_schema": Cannot find field.' }
+      : shape === "details" ? { details: [{ param: structuralPath, message: "SYNTHETIC_PRIVATE_PROSE" }] } : { [shape]: structuralPath };
+    for (const error of [{ code: 400, ...root }, { code: 400, metadata: root }, { code: 400, metadata: { raw: JSON.stringify({ error: root }) } }]) {
+      const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(JSON.stringify({ error }), { status: 400, headers: { "content-type": "application/json" } }));
+      const result = await transport(contextRequest(), { signal: new AbortController().signal });
+      const encoded = JSON.stringify(result.failureDiagnostics?.errorMetadataSanitized ?? null);
+      expect(encoded).toContain(shape === "message" ? "generation_config.response_schema" : structuralPath);
+      expect(encoded).not.toContain("SYNTHETIC_PRIVATE_PROSE");
+      if (shape === "message") expect(encoded).toContain("Unsupported schema construct: const");
+    }
+  });
+  it.each([
+    ["normal JSON", JSON.stringify({ error: { code: 400, message: "Invalid schema for response_format", metadata: { provider_name: "Google", raw: JSON.stringify({ error: { code: "invalid_argument", message: "Invalid schema for response_format", param: "response_format.json_schema.schema.properties.changes.items" } }) } } }), "application/json", "JSON"],
+    ["malformed JSON", '{"error":', "application/json", "MALFORMED_JSON"],
+    ["non JSON", "SYNTHETIC_PRIVATE_BODY", "text/html", "NON_JSON"],
+    ["missing headers", "SYNTHETIC_PRIVATE_BODY", "", "NON_JSON"],
+    ["missing body", null, "application/json", "EMPTY"],
+    ["oversized", "x".repeat(32769), "application/json", "OVERSIZED"],
+  ])("retains bounded sanitized %s HTTP400 evidence through actual boundary", async (_name, body, media, bodyState) => {
+    const transport = gateways.createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(body, { status: 400, headers: media ? { "content-type": media } : {} }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    const result = await attempt.dispatch();
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", failureDiagnostics: { version: "provider-failure-1", httpStatus: 400, bodyState } });
+    const encoded = JSON.stringify(result);
+    expect(encoded).not.toContain("SYNTHETIC_PRIVATE_BODY");
+    expect(new TextEncoder().encode(encoded).byteLength).toBeLessThan(4400);
+    if (_name === "normal JSON") {
+      expect(encoded).toContain("invalid_argument");
+      expect(encoded).toContain("response_format.json_schema.schema.properties.changes.items");
+    }
+  });
+  it("redacts synthetic secrets, request echoes and arbitrary Unicode prose in every projected position, reads body and explicit headers once", async () => {
+    const sentinels = ["SYNTHETIC_CREDENTIAL", "SYNTHETIC_OWNER_ID", "SYNTHETIC_CHAT_ID", "SYNTHETIC_SECRET", "nhắc gọi mẹ", "私密文本"];
+    const body = JSON.stringify({ error: { code: "SYNTHETIC_SECRET", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL nhắc gọi mẹ 私密文本", metadata: {
+      code: "SYNTHETIC_OWNER_ID", param: "SYNTHETIC_CHAT_ID", errors: [{ message: "nhắc gọi mẹ", type: "私密文本" }],
+      raw: JSON.stringify({ error: { message: "api_key=SYNTHETIC_SECRET", code: "invalid_argument", param: "response_format.json_schema" } }),
+    } }, id: "gen-SYNTHETIC_OWNER_ID" });
+    const response = new Response(body, { status: 400, headers: { "content-type": "application/json", "x-request-id": "req-0123456789abcdef", "cf-ray": "0123456789abcdef-SIN", "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01", "x-generation-id": "gen-SYNTHETIC_SECRET", "x-owner": "SYNTHETIC_OWNER_ID" } });
+    const getReader = vi.spyOn(response.body!, "getReader"), headers = vi.spyOn(response.headers, "get");
+    const transport = gateways.createContextHttpTransport(sentinels[0], async () => response);
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result).toHaveProperty("failureDiagnostics");
+    const encoded = JSON.stringify(result);
+    for (const sentinel of sentinels) expect(encoded).not.toContain(sentinel);
+    expect(encoded).toContain("req-0123456789abcdef"); expect(encoded).toContain("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01");
+    expect(encoded).toContain("invalid_argument");
+    expect(getReader).toHaveBeenCalledOnce();
+    const names = headers.mock.calls.map(([name]) => name);
+    expect(new Set(names).size).toBe(names.length); expect(names).not.toContain("x-owner");
+  });
+  it("retains synthetic nested Google unsupported construct and structural path with independent known cost", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic-credential", async () => new Response(JSON.stringify({
+      error: { code: 400, message: "Provider returned error", metadata: { provider_name: "Google", raw: JSON.stringify({ error: {
+        code: "INVALID_ARGUMENT", message: 'Invalid JSON payload received. Unknown name "const" at "generation_config.response_schema": Cannot find field.' } }) } },
+      usage: { cost: .105473, prompt_tokens: 12001, completion_tokens: 100 },
+    }), { status: 400, headers: { "content-type": "application/json" } }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    const result = await attempt.dispatch(), encoded = JSON.stringify(result);
+    expect(result).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 105473, reportedCostUsd: .105473, promptTokens: 12001 } });
+    expect(encoded).toContain("Unsupported schema construct: const"); expect(encoded).toContain("generation_config.response_schema");
+  });
+  it.each(["read-error", "invalid-utf8", "invalid-length", "hostile-metadata", "unsafe-headers", "known-echo"])("contains %s failure safely without another body read", async mode => {
+    let reads = 0;
+    const sensitive = "req-0123456789abcdef";
+    const metadata = { errors: Array.from({ length: 40 }, () => ({ param: "response_format.json_schema.schema.properties.changes.items", message: "Invalid schema" })) };
+    const headers = { "content-type": "application/json", "x-request-id": mode === "unsafe-headers" ? "Authorization: Bearer SYNTHETIC_PRIVATE" : sensitive,
+      "cf-ray": mode === "unsafe-headers" ? "SYNTHETIC_PRIVATE" : "0123456789abcdef-SIN", ...(mode === "invalid-length" ? { "content-length": "invalid" } : {}) };
+    const body = mode === "read-error" ? new ReadableStream<Uint8Array>({ pull(controller) { reads++; controller.error(new Error("SYNTHETIC_PRIVATE")); } })
+      : mode === "invalid-utf8" ? new Uint8Array([255]) : JSON.stringify({ error: { code: 400, message: "SYNTHETIC_PRIVATE", metadata } });
+    const transport = gateways.createContextHttpTransport(mode === "known-echo" ? sensitive : "synthetic", async () => new Response(body, { status: 400, headers }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.failureDiagnostics).toBeDefined();
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_PRIVATE");
+    expect(new TextEncoder().encode(JSON.stringify(result.failureDiagnostics)).byteLength).toBeLessThanOrEqual(4096);
+    if (mode === "read-error") { expect(reads).toBe(1); expect(result.failureDiagnostics?.bodyState).toBe("READ_ERROR"); }
+    if (mode === "invalid-utf8") expect(result.failureDiagnostics?.bodyState).toBe("INVALID_UTF8");
+    if (mode === "invalid-length") expect(result.failureDiagnostics?.bodyState).toBe("INVALID_LENGTH");
+    if (mode === "known-echo" || mode === "unsafe-headers") expect(result.failureDiagnostics?.requestId).toBeUndefined();
+  });
+  it("retains known HTTP failure cost when sibling token accounting is unknown", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(JSON.stringify({ error: { code: 400 },
+      usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } }), { status: 400, headers: { "content-type": "application/json" } }));
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
+  });
+  const providerPayload = (payload:unknown) => encodeFixtureV3(payload,contextInput);
+  const response = (overrides: Record<string, unknown> = {}, payload: unknown = contextOutput) => ({ status: 200, body: JSON.stringify({
+    id: "gen-test-123", model: "google/gemini-2.5-flash-lite", provider: "Google", ...JSON.parse(contextResponse(providerPayload(payload)).body),
+    usage: { cost: .001, prompt_tokens: 12000, completion_tokens: 1536 }, ...overrides,
+  }) });
+  it("reserves full financial exposure and emits versioned provider schema exactly once", async () => {
+    const requests: SemanticJsonRequest[] = [];
+    const gateway = gateways.createContextContractGateway(contextConfig, async request => { requests.push(request); return response(); }, admission);
+    const attempt = gateway.prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") return;
+    expect(attempt.maximumCostMicrounits).toBe(105472);
+    expect(requests).toHaveLength(0);
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true },
+      usage: { costMicrounits: 1000, promptTokens: 12000, completionTokens: 1536 },
+      providerEvidence: { model: "google/gemini-2.5-flash-lite", provider: "Google", location: "UNEXPOSED", generationId: "gen-test-123" } });
+    expect(requests[0].response_format).toEqual(serializeContextRequest(contextInput).response_format);
+    expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
+      name: "calenote_context_3", strict: true, schema: expect.any(Object) } } }]);
+    expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
+      .toBe("43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+    expect(requests).toHaveLength(1);
+  });
+  it.each([
+    { usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } },
+    { usage: { cost: .001, prompt_tokens: null, completion_tokens: 1537 } },
+    { usage: { cost: .001, prompt_tokens: 12000 } }, { usage: { prompt_tokens: 100, completion_tokens: 100 } },
+    { usage: { cost: .001, prompt_tokens: 1.5, completion_tokens: 100 } },
+    { usage: { cost: .105473, prompt_tokens: 100, completion_tokens: 100 } },
+    { model: "other/model" }, { model: undefined }, { provider: "Google AI Studio" },
+    { provider: undefined }, { choices: [{ message: { content: "{}" }, finish_reason: "length" }] },
+  ])("rejects observable limit/route/unknown violations before acceptance %j", async override => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response(override), admission).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status === "READY") expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it("retains known cost on token overflow", async () => {
+    for (const wire of [response({ usage: { cost: .001, prompt_tokens: 12001, completion_tokens: null } })]) {
+      const attempt = gateways.createContextContractGateway(contextConfig, async () => wire, admission).prepare("PRIMARY", contextInput);
+      expect(attempt.status).toBe("READY");
+      if (attempt.status === "READY") expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", usage: { costMicrounits: 1000 } });
+    }
+  });
+  it("preserves valid core while quarantining bad guidance for production backend fallback", async () => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response({}, { ...contextOutput, conversationDirective: { kind: "SAVE" } }), admission)
+      .prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false, directive: { status: "INVALID" },
+      semantic: { changes: materializedChanges } }, usage: { costMicrounits: 1000, reportedCostUsd: .001 } });
+  });
+  it("reports actual known charge even when it exceeds the financial reservation", async () => {
+    const attempt = gateways.createContextContractGateway(contextConfig, async () => response({ usage: { cost: .105473, prompt_tokens: 100, completion_tokens: 100 } }), admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", usage: { costMicrounits: 105473 } });
+  });
+  it("aborts a stalled real transport at the original deadline without retry", async () => {
+    vi.useFakeTimers(); let signal: AbortSignal | undefined, calls = 0;
+    const attempt = gateways.createContextContractGateway(contextConfig, async (_request, options) => {
+      calls++; signal = options.signal; return new Promise(() => {});
+    }, admission).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") return;
+    const pending = attempt.dispatch(); await vi.advanceTimersByTimeAsync(30000);
+    expect(await pending).toMatchObject({ status: "FAILURE", category: "TIMEOUT" });
+    expect(signal?.aborted).toBe(true); expect(calls).toBe(1);
+  });
+  it("HTTP factory separates credential headers and emits the adapted provider body", async () => {
+    expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
+    let seen: { url: string; init: RequestInit } | undefined;
+    const transport = gateways.createContextHttpTransport("synthetic-test-secret", async (url, init) => {
+      seen = { url, init }; return new Response(response().body, { headers: { "content-type": "application/json" } });
+    });
+    const attempt = gateways.createContextContractGateway(contextConfig, transport, admission).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("prepare failed");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", rawResponseBytes: new TextEncoder().encode(response().body).byteLength });
+    expect(seen?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
+    const emitted = JSON.parse(String(seen?.init.body));
+    expect(emitted.response_format).toEqual(serializeContextRequest(contextInput).response_format);
+    expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
+      name: "calenote_context_3", strict: true, schema: expect.any(Object) } } });
+    expect(seen?.init.body).not.toContain("synthetic-test-secret");
+  });
+  it("raw byte evidence measures original HTTP chunks, including BOM, not decoded text or Content-Length", async () => {
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(new Uint8Array([239, 187, 191, 123, 125]),
+      { headers: { "content-type": "application/json", "content-length": "1" } }));
+    expect(await transport(contextRequest(), { signal: new AbortController().signal })).toMatchObject({ body: "{}", rawResponseBytes: 5 });
+  });
+  it("HTTP reader cancels oversized or stalled bodies and rejects non-JSON/invalid UTF8", async () => {
+    expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
+    const cancel = vi.fn();
+    const transport = gateways.createContextHttpTransport("synthetic", async () => new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(32769)); }, cancel,
+    }), { headers: { "content-type": "application/json" } }));
+    const result = await transport(contextRequest(), { signal: new AbortController().signal });
+    expect(result.oversized).toBe(true); expect(cancel).toHaveBeenCalledOnce();
+    const invalid = gateways.createContextHttpTransport("synthetic", async () => new Response(new Uint8Array([255]), { headers: { "content-type": "application/json" } }));
+    await expect(invalid(contextRequest(), { signal: new AbortController().signal })).rejects.toThrow();
+    const html = gateways.createContextHttpTransport("synthetic", async () => new Response("{}", { headers: { "content-type": "text/html" } }));
+    await expect(html(contextRequest(), { signal: new AbortController().signal })).rejects.toThrow();
+    const abort = new AbortController(), stalledCancel = vi.fn();
+    const stalled = gateways.createContextHttpTransport("synthetic", async () => new Response(new ReadableStream({ cancel: stalledCancel }), { headers: { "content-type": "application/json" } }));
+    const pending = stalled(contextRequest(), { signal: abort.signal });
+    await Promise.resolve(); abort.abort();
+    await expect(pending).rejects.toThrow(); expect(stalledCancel).toHaveBeenCalledOnce();
+  });
+});
+function contextGateway(exchanges = [exchange()], cfg = contextConfig) {
+  expect(gateways).toHaveProperty("createContextContractGateway", expect.any(Function));
+  return gateways.createContextContractGateway(cfg, { kind: "OFFLINE_FIXTURE", exchanges });
+}
+
+describe("dormant successor context gateway", () => {
+  it("context_gateway_uses_exact_prompt_schema_and_route", async () => {
+    const attempt = contextGateway().prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(attempt.maximumCostMicrounits).toBe(1815);
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: true,
+      semantic: { changes: materializedChanges, uncertainties: contextOutput.uncertainties },
+      directive: { status: "VALID", value: contextOutput.conversationDirective }, reply: { status: "VALID", value: contextOutput.replyProposal } }, usage: { costMicrounits: null } });
+  });
+  it("prepared_is_not_dispatched_and_dispatch_is_one_shot", async () => {
+    const attempt = contextGateway([{ ...exchange(), response: { status: 429, body: "" } }]).prepare("PRIMARY", contextInput);
+    expect(attempt.status).toBe("READY");
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "RATE_LIMITED" });
+    expect(await attempt.dispatch()).toEqual({ status: "FAILURE", category: "UNAVAILABLE" });
+  });
+  it("real_route_refuses_even_with_forged_fixture_admission_and_never_calls_transport", () => {
+    expect(gateways).toHaveProperty("createContextContractGateway", expect.any(Function));
+    const network = vi.fn(async () => contextResponse());
+    Object.assign(network, { kind: "OFFLINE_FIXTURE", exchanges: [exchange()] });
+    expect(gateways.createContextContractGateway(contextConfig, network).prepare("PRIMARY", contextInput))
+      .toEqual({ status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" });
+    expect(network).not.toHaveBeenCalled();
+  });
+  it.each([12001, -1, NaN, 1.5])("full_request_bound_checked_before_prepare_ready %s", (fullInputTokens) => {
+    expect(contextGateway([{ ...exchange(), admission: { fullInputTokens, billableOverheadMicrounits: 0 } }]).prepare("PRIMARY", contextInput).status).toBe("FAILURE");
+  });
+  it("exact_request_binding_and_billable_overhead_are_required", () => {
+    expect(contextGateway([{ ...exchange(), requestJson: JSON.stringify({ ...contextRequest(), tools: [] }) }]).prepare("PRIMARY", contextInput).status).toBe("FAILURE");
+    expect(contextGateway([{ ...exchange(), admission: { fullInputTokens: 12000, billableOverheadMicrounits: 23 } }]).prepare("PRIMARY", contextInput))
+      .toMatchObject({ status: "READY", maximumCostMicrounits: 1838 });
+  });
+  it.each(["CN-scoped-control", "%43%4e-secret", "authorization: bearer secret", "password=secret", "/connect code"])("no_control_or_secret_in_body %s", text => {
+    const value = { ...contextInput, turns: [{ role: "USER" as const, text }] };
+    expect(contextGateway([exchange(value)]).prepare("PRIMARY", value)).toEqual({ status: "FAILURE", category: "INVALID_INPUT" });
+  });
+  it.each([1800, 1801])("NFC_UTF16_current_gate %s", size => {
+    const value = { ...contextInput, turns: [{ role: "USER" as const, text: "😀".repeat(899) + "ế".repeat(size - 1798) }] };
+    expect(contextGateway([exchange(value)]).prepare("PRIMARY", value).status).toBe(size === 1800 ? "READY" : "FAILURE");
+  });
+  it("guidance_failure_never_redispatches", async () => {
+    const raw = { ...contextOutput, conversationDirective: { kind: "SAVE" }, replyProposal: { text: "😀".repeat(401) } };
+    const attempt = contextGateway([{ ...exchange(), response: contextResponse(raw) }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", interpretation: { fullSchemaValid: false,
+      semantic: { changes: materializedChanges }, directive: { status: "INVALID" }, reply: { status: "INVALID", reason: "REPLY_TOO_LONG" } } });
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it.each([
+    contextResponse(contextOutput, "length"), { status: 200, body: '{"choices":[' },
+    { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(contextOutput).slice(0, -1) }, finish_reason: "stop" }] }) },
+    contextResponse({ ...contextOutput, schemaVersion: "calenote-context-1" }),
+    contextResponse({ ...contextOutput, changes: [...contextOutput.changes, ...contextOutput.changes] }),
+    contextResponse({ ...contextOutput, ownerId: "secret" }),
+    { ...contextResponse(), oversized: true }, { status: 200, body: "ế".repeat(10923) },
+  ])("truncated_json_never_salvaged_and_invalid_core_atomic %#", async response => {
+    const attempt = contextGateway([{ ...exchange(), response }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
+  });
+  it("offline_script_supports_distinct_turns_and_copies_fixture_state", async () => {
+    const second = { ...contextInput, turns: [{ role: "USER" as const, text: "mai" }] };
+    const script = [exchange(), exchange(second)]; const gateway = contextGateway(script);
+    script[0].response.body = "corrupted";
+    for (const value of [contextInput, second]) {
+      const attempt = gateway.prepare("PRIMARY", value);
+      if (attempt.status !== "READY") throw new Error("not ready");
+      expect((await attempt.dispatch()).status).toBe("SUCCESS");
+    }
+    expect(gateway.prepare("PRIMARY", second).status).toBe("FAILURE");
+  });
+  it.each([{ completion_tokens: 1537 }, { prompt_tokens: 12001 }])("reported_token_overflow_rejects_context_output %j", usage => {
+    const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+    const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    return expect(attempt.dispatch()).resolves.toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+  });
+  it.each([null, "unknown", {}, false].flatMap(unknown => [
+    { prompt_tokens: 12001, completion_tokens: unknown }, { prompt_tokens: unknown, completion_tokens: 1537 },
+  ]))("unknown_sibling_cannot_hide_known_token_overflow %j", async usage => {
+    const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+    const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "SCHEMA_INVALID" });
+  });
+  it("unknown_usage_without_known_overflow_remains_unknown", async () => {
+    for (const usage of [{ prompt_tokens: 12000, completion_tokens: null }, { prompt_tokens: null, completion_tokens: 1536 }]) {
+      const body = JSON.parse(contextResponse().body); body.usage = { cost: 0.001, ...usage };
+      const attempt = contextGateway([{ ...exchange(), response: { status: 200, body: JSON.stringify(body) } }]).prepare("PRIMARY", contextInput);
+      if (attempt.status !== "READY") throw new Error("not ready");
+      expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", usage: { costMicrounits: null } });
+    }
+  });
+  it.each([{ maxOutputTokens: 256 }, { maxInputTokens: 12001 }, { maxResponseBytes: 32769 }, { timeoutMs: 1 },
+    { primary: { ...contextConfig.primary, model: "other/model" } }, { primary: { ...contextConfig.primary, requireZdr: false } },
+    { primary: { ...contextConfig.primary, promptPriceMicrounitsPerMillionTokens: 99999 } },
+  ])("successor_rejects_route_or_wire_changes_before_any_preparation %j", override => {
+    expect(() => contextGateway([exchange()], { ...contextConfig, ...override })).toThrow("Invalid context gateway configuration");
+  });
+  it("bounded_stream_reader_cancels_above_32768_without_content_length", async () => {
+    const cancel = vi.fn(); const response = new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new Uint8Array(32768)); controller.enqueue(new Uint8Array(1));
+    }, cancel }));
+    expect(await readBoundedSemanticResponse(response, 32768)).toEqual({ body: "", oversized: true });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});
+
 describe("injected strict semantic gateway", () => {
+  it("legacy_malformed_usage_does_not_change_semantic_success", async () => {
+    const body = JSON.parse(success.body); body.usage = { cost: 0.001, prompt_tokens: 12001, completion_tokens: null };
+    const attempt = createSemanticGateway(config, async () => ({ status: 200, body: JSON.stringify(body) })).prepare("FREE_PRIMARY", input);
+    if (attempt.status !== "READY") throw new Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", usage: { costMicrounits: null } });
+  });
   it("derives the authoritative Vietnamese wall clock instead of sending an epoch to the model", () => {
     expect(semanticReferenceWallClock(Date.parse("2026-09-16T09:00:00+07:00"))).toEqual({
       referenceLocalDate: "2026-09-16", referenceLocalTime: "09:00", timezone: "Asia/Ho_Chi_Minh",

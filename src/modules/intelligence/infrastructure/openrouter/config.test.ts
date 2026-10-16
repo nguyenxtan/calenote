@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { parseOpenRouterRuntimeConfig, parseSemanticRuntimeConfig } from "./config";
+import * as configuration from "./config";
+describe("separate dormant context runtime configuration", () => {
+  const env = { AI_MODE: "privacy", OPENROUTER_API_KEY: "synthetic-config-test-key", OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
+    OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu", AI_MAX_PRIVACY_PRICE: "0.4" };
+  function parse(value: Partial<Record<string, string>> = env) {
+    expect(configuration).toHaveProperty("parseContextContractRuntimeConfig", expect.any(Function));
+    return configuration.parseContextContractRuntimeConfig(value);
+  }
+  it("legacy_gateway_defaults_unchanged", () => {
+    expect(parseSemanticRuntimeConfig(env)).toMatchObject({ status: "READY", config: { maxOutputTokens: 256, maxResponseBytes: 20000 } });
+    expect(parse()).toMatchObject({ status: "READY", routeAdmission: { status: "UNVERIFIED" }, config: {
+      maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
+    }, budgetLimits: { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 500000, globalDailyCostMicrounits: 2000000 } });
+  });
+  it("successor_output_override_does_not_enable_legacy_parser", () => {
+    expect(parse({ ...env, AI_MAX_OUTPUT_TOKENS: "1536" })).toMatchObject({ status: "READY" });
+    expect(parseSemanticRuntimeConfig({ ...env, AI_MAX_OUTPUT_TOKENS: "1536" })).toEqual({ status: "UNAVAILABLE" });
+    expect(parse({})).toEqual({ status: "OFF" });
+  });
+  it.each([{ AI_MAX_OUTPUT_TOKENS: "1537" }, { AI_MAX_INPUT_CHARS: "1801" }, { AI_TIMEOUT_MS: "30001" },
+    { AI_MODE: "free" }, { OPENROUTER_PRIVACY_PROVIDER: "google-vertex" }, { OPENROUTER_FALLBACK_MODELS: "other/model" },
+    { OWNER_DAILY_CALL_LIMIT: "51" }, { OWNER_MONTHLY_COST_MICROUNITS: "500001" }, { GLOBAL_DAILY_COST_MICROUNITS: "2000001" },
+  ])("refuses_invalid_successor_configuration %j", override => expect(parse({ ...env, ...override })).toEqual({ status: "UNAVAILABLE" }));
+});
 describe("OpenRouter runtime configuration", () => {
   const production = () => JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
   const approved = {

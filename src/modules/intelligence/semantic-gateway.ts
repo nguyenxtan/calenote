@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { CanonicalValidationDiagnostics } from "../conversation/context-contract/validation-diagnostics";
+import type { SemanticTransportDiagnostics } from "./infrastructure/openrouter/transport-diagnostics";
 import { LocalDateSchema, LocalTimeSchema, SEMANTIC_TIMEZONE, type ModelSemanticInterpretation } from "../semantic/contracts";
 import { SemanticContextSlotsSchema } from "../semantic/context-store";
 import { TemporalEvidenceSchema } from "../semantic/reconciliation";
@@ -42,22 +44,58 @@ export function semanticReferenceWallClock(referenceTime: number): Pick<Semantic
 }
 export type SemanticTier = "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK";
 export type SemanticFailureCategory = "UNAVAILABLE" | "TIMEOUT" | "RATE_LIMITED" | "PROVIDER_FAILURE"
-  | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT";
+  | "INVALID_JSON" | "SCHEMA_INVALID" | "REQUIRED_FEATURE_UNSUPPORTED" | "INVALID_INPUT" | "ROUTE_ADMISSION_UNVERIFIED";
 export interface SemanticUsage {
   costMicrounits: number | null;
+  /** Validated provider-reported USD, not the rounded accounting amount. */
+  reportedCostUsd?: number;
   promptTokens?: number;
   completionTokens?: number;
+}
+export interface SemanticProviderEvidence {
+  model: "google/gemini-2.5-flash-lite";
+  provider: "Google" | "google-vertex" | "google-vertex/eu";
+  location: "eu" | "UNEXPOSED";
+  generationId: string | null;
+}
+/** Diagnostic-only projection; never conversation state or application response. */
+export interface SemanticFailureDiagnostics {
+  version: "provider-failure-1";
+  httpStatus: number;
+  responseBytes: number;
+  contentType: "application/json" | "text/plain" | "text/html" | "OTHER" | "MISSING";
+  bodyState: "JSON" | "MALFORMED_JSON" | "NON_JSON" | "EMPTY" | "OVERSIZED" | "READ_ERROR" | "INVALID_UTF8" | "INVALID_LENGTH";
+  bodyDigest?: string;
+  errorCode?: string | number;
+  errorMessageSanitized?: string;
+  errorMetadataSanitized?: unknown;
+  requestId?: string;
+  traceId?: string;
+  upstreamProvider?: string;
+}
+export interface CanonicalResponseDiagnostics {
+  state: "VALIDATION_FAILED" | "WIRE_DECODE_FAILED" | "PROVIDER_ENVELOPE_FAILED" | "OVERSIZED"; schemaVersion: "calenote-context-2" | "calenote-context-3";
+  providerWireSchemaVersion: string; payloadByteCount: number; payloadSha256: string | null;
+  inputRepresentation?: "CANONICAL" | "PROVIDER_WIRE" | "PROVIDER_ENVELOPE"; validation?: CanonicalValidationDiagnostics;
+  wireValidation?: CanonicalValidationDiagnostics;
+  providerEnvelope?: import("./infrastructure/openrouter/envelope-diagnostics").ProviderEnvelopeDiagnostics;
+  payloadByteCountIsLowerBound?: boolean;
 }
 export type SemanticAttemptResult<T = ModelSemanticInterpretation> = {
   status: "SUCCESS";
   interpretation: T;
   usage: SemanticUsage;
-} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage };
+  providerEvidence?: SemanticProviderEvidence;
+  /** Actual HTTP chunks consumed; on an early cancelled read this is a prefix. */
+  rawResponseBytes?: number;
+  canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
+} | { status: "FAILURE"; category: SemanticFailureCategory; usage?: SemanticUsage; providerEvidence?: SemanticProviderEvidence; rawResponseBytes?: number; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics; transportDiagnostics?: SemanticTransportDiagnostics };
 export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   status: "READY";
   model: string;
   provider: string;
   maximumCostMicrounits: number;
+  routeAdmission?: "OBSERVABLE_CANARY";
   /** One shot. No adapter retry or hidden provider fallback is permitted. */
   dispatch(): Promise<SemanticAttemptResult<T>>;
 } | { status: "FAILURE"; category: SemanticFailureCategory };
