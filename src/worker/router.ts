@@ -50,7 +50,7 @@ import {
 import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
-import { handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
+import { handleResolveReminderIntent, handleCancelReminder, handleCreateReminder, handleListReminders } from "./routes/reminders";
 import { handleSeries } from "./routes/reminder-series";
 import { createSeriesOperations } from "./composition-root";
 import type { SeriesOperations } from "./routes/operations";
@@ -253,6 +253,7 @@ export function createRouter(options: RouterOptions = {}) {
         return await handleGetPreferences(request, () => preferencesOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/activity") return await handleListActivity(request, () => activityOperationsFactory(env));
+      if (request.method === "POST" && pathname === "/api/reminders/resolve-intent") return await handleResolveReminderIntent(request, appOrigin!, () => remindersOperationsFactory(env));
       if (request.method === "POST" && pathname === "/api/reminders") {
         return await handleCreateReminder(request, appOrigin!, () => remindersOperationsFactory(env));
       }

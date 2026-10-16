@@ -17,7 +17,7 @@ const reminder = { publicId: "R".repeat(22), title: "Gọi khách hàng", schedu
 const action = { id: "A".repeat(22), title: "Họp vận hành ngày mai", scheduledAt: 1_800_000_100_000, timezone: "Asia/Ho_Chi_Minh", status: "PENDING" };
 
 describe("TodayExperience", () => {
-  beforeEach(() => replace.mockReset());
+  beforeEach(() => { replace.mockReset(); localStorage.clear(); });
 
   it("refreshes server delivery state on focus instead of retaining a stale pending reminder", async () => {
     const scheduledAt = Date.parse("2026-09-24T12:00:00+07:00");
@@ -126,33 +126,37 @@ describe("TodayExperience", () => {
     expect(fetcher).not.toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ method: "POST" }));
   });
 
-  it.each([false, true])("reads back an ambiguous create and blocks its intent even if refresh fails: %s", async (refreshFails) => {
-    let committed = false;
-    let posts = 0;
-    let reads = 0;
+  it("reuses an opaque persisted intent after lost response and remount", async () => {
+    const ids: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, options?: RequestInit) => {
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
-      if (options?.method === "POST") { committed = true; posts += 1; throw new TypeError("lost response"); }
-      reads += 1;
-      if (committed && refreshFails) throw new TypeError("read unavailable");
-      return json({ data: { reminders: committed ? [reminder] : [] } });
+      if (path === "/api/reminders/resolve-intent") { ids.push(JSON.parse(options?.body as string).intentId); return json({ data: { state: "CREATED", publicId: reminder.publicId } }); }
+      if (options?.method === "POST") {
+        ids.push(JSON.parse(options.body as string).intentId);
+        if (ids.length === 1) throw new TypeError("lost response");
+        return json({ data: { reminder } }, 201);
+      }
+      return json({ data: { reminders: ids.length ? [reminder] : [] } });
     }));
     const interaction = userEvent.setup();
+    const submit = async () => {
+      await interaction.type(await screen.findByLabelText("Nội dung nhắc hẹn"), "Gọi khách hàng");
+      await interaction.click(screen.getByRole("button", { name: "Chọn thời gian" }));
+      fireEvent.change(screen.getByLabelText("Thời điểm nhắc"), { target: { value: "2027-09-11T09:00" } });
+      await interaction.click(screen.getByRole("button", { name: "Tạo lời nhắc" }));
+    };
+    const first = render(<TodayExperience />);
+    await submit();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Kết quả chưa xác định");
+    expect(JSON.stringify(localStorage)).not.toContain("Gọi khách hàng");
+    first.unmount();
     render(<TodayExperience />);
-    await interaction.type(await screen.findByLabelText("Nội dung nhắc hẹn"), "Gọi khách hàng");
-    await interaction.click(screen.getByRole("button", { name: "Chọn thời gian" }));
-    fireEvent.change(screen.getByLabelText("Thời điểm nhắc"), { target: { value: "2027-09-11T09:00" } });
-    await interaction.click(screen.getByRole("button", { name: "Tạo lời nhắc" }));
-    await waitFor(() => expect(reads).toBe(2));
-    expect((await screen.findAllByRole("alert"))[0]).toHaveTextContent("Kết quả chưa xác định");
-    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeDisabled();
-    fireEvent.submit(screen.getByRole("button", { name: "Tạo lời nhắc" }).closest("form")!);
-    expect(posts).toBe(1);
-    fireEvent.change(screen.getByLabelText("Nội dung nhắc hẹn"), { target: { value: "Việc khác" } });
-    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("Nội dung nhắc hẹn"), { target: { value: "  Gọi khách hàng  " } });
-    expect(screen.getByRole("button", { name: "Tạo lời nhắc" })).toBeDisabled();
+    await submit();
+    expect(await screen.findByRole("status")).toHaveTextContent("Nhắc hẹn trước đã được lưu");
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+    expect(localStorage.length).toBe(0);
   });
 
   it("validates Quick Capture before it can create a reminder", async () => {

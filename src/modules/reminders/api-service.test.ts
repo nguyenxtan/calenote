@@ -174,6 +174,47 @@ describe("authenticated reminder API service on migrated D1", () => {
     expect(first.some(row => row.title === "Private")).toBe(false);
   });
 
+  it("replays a committed intent after response loss, binds payload and isolates owners", async () => {
+    const account = await setup();
+    const dependencies = { ...account, now: () => NOW };
+    const input = { userId: "user-one", title: "Private title", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", intentId: "12345678-1234-1234-1234-123456789abc" };
+    const first = await createManualReminder(input, dependencies);
+    expect(await createManualReminder(input, dependencies)).toEqual(first);
+    await expect(createManualReminder({ ...input, title: "changed" }, dependencies)).rejects.toMatchObject({ code: "REMINDER_INTENT_MISMATCH" });
+    const second = await createManualReminder({ ...input, userId: "user-two" }, dependencies);
+    expect(second.publicId).not.toBe(first.publicId);
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS n FROM reminders").get()).toMatchObject({ n: 2 });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE action = 'REMINDER_CREATED'").get()).toMatchObject({ n: 2 });
+  });
+
+  it("serializes racing requests into one durable reminder and audit", async () => {
+    const account = await setup();
+    const input = { userId: "user-one", title: "race", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh", intentId: "race_intent_12345678" };
+    const results = await Promise.all(Array.from({ length: 5 }, () => createManualReminder(input, { ...account, now: () => NOW })));
+    expect(new Set(results.map(result => result.publicId)).size).toBe(1);
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS n FROM reminders").get()).toMatchObject({ n: 1 });
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS n FROM audit_events").get()).toMatchObject({ n: 1 });
+    expect(await createManualReminder(input, { ...account, now: () => NOW + 120_000 })).toMatchObject({ publicId: results[0].publicId });
+  });
+
+  it("rejects 501 code unit titles before any write", async () => {
+    const account = await setup();
+    await expect(createManualReminder({ userId: "user-one", title: "a".repeat(501), scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh" }, { ...account, now: () => NOW })).rejects.toBeInstanceOf(InvalidReminderError);
+    expect(account.db.sqlite.prepare("SELECT COUNT(*) AS n FROM reminders").get()).toMatchObject({ n: 0 });
+  });
+
+  it("durably abandons a missing intent before delayed create and resolves committed intents", async () => {
+    const account = await setup();
+    const intentId = "abandoned_intent_1234";
+    expect(await account.store.resolveManualIntent("user-one", intentId)).toEqual({ state: "ABANDONED" });
+    const input = { userId: "user-one", intentId, title: "late", scheduledAt: NOW + 60_000, timezone: "Asia/Ho_Chi_Minh" };
+    await expect(createManualReminder(input, { ...account, now: () => NOW })).rejects.toMatchObject({ code: "REMINDER_INTENT_ABANDONED" });
+    const winner = await createManualReminder({ ...input, intentId: "created_intent_1234" }, { ...account, now: () => NOW });
+    expect(await account.store.resolveManualIntent("user-one", "created_intent_1234")).toEqual({ state: "CREATED", publicId: winner.publicId });
+    expect(await account.store.resolveManualIntent("user-two", "created_intent_1234")).toEqual({ state: "ABANDONED" });
+    expect(await account.store.resolveManualIntent("user-one", intentId)).toEqual({ state: "ABANDONED" });
+  });
+
   it("normalizes and encrypts a manual reminder while deriving the personal channel server-side", async () => {
     const account = await setup();
     const result = await createManualReminder(

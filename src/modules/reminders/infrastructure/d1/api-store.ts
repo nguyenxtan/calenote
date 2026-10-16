@@ -34,6 +34,20 @@ export class D1ReminderApiStore implements ReminderApiStore {
     return result.results;
   }
 
+  async findManualIntent(userId: string, intentId: string) {
+    return this.database.prepare(`SELECT i.payload_digest, i.state, r.public_id, r.status
+      FROM manual_reminder_intents i LEFT JOIN reminders r ON r.id = i.reminder_id
+      WHERE i.user_id = ? AND i.intent_id = ?`).bind(userId, intentId)
+      .first<{ payload_digest: string | null; state: "CREATED" | "ABANDONED"; public_id: string; status: OwnedReminderRow["status"] }>();
+  }
+
+  async resolveManualIntent(userId: string, intentId: string): Promise<{ state: "CREATED" | "ABANDONED"; publicId?: string }> {
+    await this.database.prepare(`INSERT OR IGNORE INTO manual_reminder_intents (user_id,intent_id,state) VALUES (?,?,'ABANDONED')`).bind(userId,intentId).run();
+    const row = await this.findManualIntent(userId,intentId);
+    if (!row) throw new Error("Intent resolution unavailable");
+    return row.state === "CREATED" ? { state: row.state, publicId: row.public_id } : { state: row.state };
+  }
+
   async createManual(record: ManualReminderRecord): Promise<boolean> {
     const statements = [
       this.database
@@ -102,6 +116,9 @@ export class D1ReminderApiStore implements ReminderApiStore {
           record.now,
         ),
     ];
+    if (record.intentId) statements.push(this.database.prepare(
+      `INSERT INTO manual_reminder_intents (user_id, intent_id, payload_digest, reminder_id, state) VALUES (?, ?, ?, ?, 'CREATED')`,
+    ).bind(record.userId, record.intentId, record.payloadDigest, record.id));
     try {
       const results = await this.database.batch(statements);
       return results.length === statements.length

@@ -190,6 +190,7 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
       return { userId: principal.userId };
     },
     listReminders: (userId, after) => listPublicReminders(userId, { store: reminderStore, keyring }, { after, limit: 101 }),
+    resolveReminderIntent: ({ userId, intentId }) => reminderStore.resolveManualIntent(userId, intentId),
     createReminder: (input) => createManualReminder(input, { store: reminderStore, keyring, rateLimitStore }),
     cancelReminder: ({ userId, publicId }) => cancelPublicReminder(userId, publicId, { store: reminderStore, keyring, rateLimitStore }),
   };

@@ -62,11 +62,14 @@ export interface ManualReminderRecord {
   scheduledAt: number;
   timezone: typeof VIETNAM_TIMEZONE;
   auditId: string;
+  intentId?: string;
+  payloadDigest?: string;
   now: number;
 }
 
 export interface ReminderApiStore {
   listOwned(userId: string, limit: number, after?: string | null): Promise<OwnedReminderRow[]>;
+  findManualIntent(userId: string, intentId: string): Promise<{ payload_digest: string | null; state: "CREATED" | "ABANDONED"; public_id: string; status: PublicReminderStatus } | null>;
   createManual(record: ManualReminderRecord): Promise<boolean>;
   findOwnedForCancellation(userId: string, publicId: string): Promise<CancellationRow | null>;
   cancelOwned(input: {
@@ -167,6 +170,7 @@ export function normalizeManualReminderTitle(value: string): string {
 export async function createManualReminder(
   input: {
     userId: string;
+    intentId?: string;
     title: string;
     scheduledAt: number;
     timezone: string;
@@ -188,14 +192,29 @@ export async function createManualReminder(
   if (
     input.userId.length === 0
     || title.length === 0
-    || title.length > MAX_REMINDER_TITLE_CODE_UNITS
+    || title.length > Math.min(MAX_REMINDER_TITLE_CODE_UNITS, 500)
+    || (input.intentId !== undefined && !/^[A-Za-z0-9_-]{16,80}$/u.test(input.intentId))
     || input.timezone !== VIETNAM_TIMEZONE
     || !Number.isSafeInteger(input.scheduledAt)
-    || input.scheduledAt <= createdAt
-    || input.scheduledAt - createdAt > MAX_SCHEDULE_AHEAD_MS
+
   ) {
     throw new InvalidReminderError();
   }
+
+  const payloadDigest = input.intentId ? await dependencies.keyring.digestCode(
+    JSON.stringify(["manual-reminder-intent-v1", input.userId, title, input.scheduledAt, input.timezone]),
+  ) : undefined;
+  const replay = async (): Promise<PublicReminder | null> => {
+    if (!input.intentId) return null;
+    const existing = await dependencies.store.findManualIntent(input.userId, input.intentId);
+    if (!existing) return null;
+    if (existing.state === "ABANDONED") throw new ReminderApiError("REMINDER_INTENT_ABANDONED", 409, "Yêu cầu trước đã đóng. Hãy thử tạo lại.");
+    if (existing.payload_digest !== payloadDigest) throw new ReminderApiError("REMINDER_INTENT_MISMATCH", 409, "Yêu cầu này đã được dùng cho nội dung khác. Hãy kiểm tra danh sách nhắc hẹn.");
+    return { publicId: existing.public_id, title, scheduledAt: input.scheduledAt, timezone: VIETNAM_TIMEZONE, status: existing.status };
+  };
+  const existing = await replay();
+  if (existing) return existing;
+  if (input.scheduledAt <= createdAt || input.scheduledAt - createdAt > MAX_SCHEDULE_AHEAD_MS) throw new InvalidReminderError();
 
   const subjectDigest = await dependencies.keyring.digestCode(
     `rate-limit:reminder-create:${input.userId}`,
@@ -218,7 +237,8 @@ export async function createManualReminder(
     REMINDER_TITLE_KEY_VERSION,
     title,
   );
-  const committed = await dependencies.store.createManual({
+  let committed: boolean;
+  try { committed = await dependencies.store.createManual({
     id,
     publicId,
     userId: input.userId,
@@ -227,8 +247,14 @@ export async function createManualReminder(
     scheduledAt: input.scheduledAt,
     timezone: VIETNAM_TIMEZONE,
     auditId: randomOpaqueId(randomBytes),
+    intentId: input.intentId,
+    payloadDigest,
     now: createdAt,
-  });
+  }); } catch (error) {
+    const raced = await replay();
+    if (raced) return raced;
+    throw error;
+  }
   if (!committed) throw new ReminderChannelUnavailableError();
   return {
     publicId,

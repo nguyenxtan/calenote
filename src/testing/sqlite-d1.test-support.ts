@@ -63,6 +63,7 @@ export class SqliteD1Database {
     this.sqlite.exec(
       readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"),
     );
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0010_manual_reminder_intents.sql"), "utf8"));
     this.sqlite.exec(
       readFileSync(
         resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"),

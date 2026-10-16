@@ -12,7 +12,8 @@ const CREATE_BODY_BYTES = 16 * 1_024;
 const EMPTY_BODY_BYTES = 1_024;
 const BODY_TIMEOUT_MS = 5_000;
 const createSchema = z.object({
-  title: z.string(),
+  intentId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/u).optional(),
+  title: z.string().max(500),
   scheduledAt: z.number(),
   timezone: z.literal("Asia/Ho_Chi_Minh"),
 }).strict();
@@ -45,7 +46,9 @@ export async function handleListReminders(
   if ([...params.keys()].some(key => key !== "after") || params.getAll("after").length > 1 || (after !== null && !/^[A-Za-z0-9_-]{1,128}$/u.test(after))) throw new InvalidRequestError();
   const reminders = after === null ? await operations.listReminders(principal.userId) : await operations.listReminders(principal.userId, after);
   const page = reminders.slice(0, 100);
-  const nextCursor = reminders.length > 100 ? page.at(-1)!.publicId : undefined;
+  // Leave envelope/cursor headroom beneath the browser's 128KiB response bound.
+  while (page.length > 1 && new TextEncoder().encode(JSON.stringify(page)).byteLength > 120 * 1024) page.pop();
+  const nextCursor = reminders.length > page.length ? page.at(-1)!.publicId : undefined;
   return jsonResponse(RemindersResponseSchema.parse({ data: { reminders: page, ...(nextCursor === undefined ? {} : { nextCursor }) } }), { headers: authenticatedHeaders() });
 }
 
@@ -88,5 +91,17 @@ export async function handleCancelReminder(
   const operations = await createOperations();
   const principal = await operations.requireUser(credentials);
   const result = await operations.cancelReminder({ userId: principal.userId, publicId });
+  return jsonResponse({ data: result }, { headers: authenticatedHeaders() });
+}
+
+export async function handleResolveReminderIntent(request: Request, appOrigin: string, createOperations: () => Promise<RemindersOperations>): Promise<Response> {
+  requireSameOrigin(request, appOrigin);
+  const credentials = requireCanonicalSession(request);
+  const parsed = z.object({ intentId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/u) }).strict().safeParse(await readBoundedJson(request, EMPTY_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }));
+  if (!parsed.success) throw new InvalidRequestError();
+  const operations = await createOperations();
+  const principal = await operations.requireUser(credentials);
+  if (!operations.resolveReminderIntent) throw new Error("Intent resolution unavailable");
+  const result = await operations.resolveReminderIntent({ userId: principal.userId, intentId: parsed.data.intentId });
   return jsonResponse({ data: result }, { headers: authenticatedHeaders() });
 }

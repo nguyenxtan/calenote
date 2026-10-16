@@ -29,10 +29,12 @@ export interface ConnectionsOperations {
 }
 
 export interface RemindersOperations {
+  resolveReminderIntent?(input: { userId: string; intentId: string }): Promise<{ state: "CREATED" | "ABANDONED"; publicId?: string }>;
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listReminders(userId: string, after?: string): Promise<PublicReminder[]>;
   createReminder(input: {
     userId: string;
+    intentId?: string;
     title: string;
     scheduledAt: number;
     timezone: "Asia/Ho_Chi_Minh";
