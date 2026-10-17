@@ -7,7 +7,7 @@ import { hasManualReminderIntent, manualReminderIntent } from "@/lib/manual-remi
 import { loadReminderList } from "@/lib/reminder-list";
 import { AppShell } from "@/ui/shell/AppShell";
 import { ActionDecisionResponseSchema, ActionsResponseSchema, type PublicPendingAction } from "@/contracts/api/actions";
-import { type PublicReminder } from "@/contracts/api/reminders";
+import { CreateReminderResponseSchema, ResolveReminderIntentResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
 import { projectReminders } from "./projection";
@@ -110,15 +110,18 @@ export function TodayExperience() {
     try { intent = await manualReminderIntent(user.email); if (epoch.current !== current) return;
       if (intent.existing) {
         resolving = true;
-        const resolved = await apiRequest<{ state: "CREATED" | "ABANDONED" }>("/api/reminders/resolve-intent", { method: "POST", body: { intentId: intent.id }, authenticated: true, onUnauthorized: clearAndRedirect });
+        const resolved = await apiRequest<unknown>("/api/reminders/resolve-intent", { method: "POST", body: { intentId: intent.id }, authenticated: true, onUnauthorized: clearAndRedirect });
         if (epoch.current !== current) return;
-        if (resolved.state !== "CREATED" && resolved.state !== "ABANDONED") throw new AmbiguousMutationError();
+        const resolution = ResolveReminderIntentResponseSchema.safeParse(resolved);
+        if (!resolution.success) throw new AmbiguousMutationError();
         intent.complete(); setPendingIntent(false);
-        setNotice(resolved.state === "CREATED" ? "Nhắc hẹn trước đã được lưu. Hãy kiểm tra danh sách trước khi tạo mới." : "Yêu cầu trước đã đóng và chưa tạo nhắc hẹn. Bạn có thể tạo lại.");
+        setNotice(resolution.data.state === "CREATED" ? "Nhắc hẹn trước đã được lưu. Hãy kiểm tra danh sách trước khi tạo mới." : "Yêu cầu trước đã đóng và chưa tạo nhắc hẹn. Bạn có thể tạo lại.");
         await loadReminders(current); return;
       }
       setPendingIntent(true);
-      await apiRequest<unknown>("/api/reminders", { method: "POST", body: { intentId: intent.id, title: trimmed, scheduledAt, timezone: "Asia/Ho_Chi_Minh" }, authenticated: true, onUnauthorized: clearAndRedirect }); if (epoch.current === current) { intent.complete(); setPendingIntent(false); setTitle(""); setScheduledFor(""); setNotice("Nhắc hẹn đã được lưu."); await loadReminders(current); } }
+      const created = await apiRequest<unknown>("/api/reminders", { method: "POST", body: { intentId: intent.id, title: trimmed, scheduledAt, timezone: "Asia/Ho_Chi_Minh" }, authenticated: true, onUnauthorized: clearAndRedirect });
+      if (!CreateReminderResponseSchema.safeParse(created).success) throw new AmbiguousMutationError();
+      if (epoch.current === current) { intent.complete(); setPendingIntent(false); setTitle(""); setScheduledFor(""); setNotice("Nhắc hẹn đã được lưu."); await loadReminders(current); } }
     catch (error) {
       if (epoch.current === current) {
         if (error instanceof AmbiguousMutationError) {

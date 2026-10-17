@@ -14,38 +14,54 @@
 
 Files: reminders API service/D1 API store, authenticated reminder routes/operations/contracts, Today capture/client intent helper, immutable migration0010 and regression suites.
 
-- [ ] Reproduce commit-plus-lost-response followed by reload/retry.
-- [ ] Bind an opaque client intent to authenticated owner and canonical payload using a keyed digest; never persist plaintext titles in browser state.
-- [ ] Commit reminder, audit and receipt atomically; replay must return the same result even after scheduled time passes.
-- [ ] Add explicit ambiguity resolution: return an existing result or atomically tombstone the intent so a delayed original write cannot create afterward.
-- [ ] Test concurrent creates, payload mismatch, owner isolation, resolution races, lost resolution responses and reload recovery through BE–FE boundaries.
-- [ ] Align manual title validation with the public response contract; keep response-size and list traversal bounds.
+- [x] Reproduce commit-plus-lost-response followed by reload/retry.
+- [x] Bind an opaque client intent to authenticated owner and canonical payload using a keyed digest; never persist plaintext titles in browser state.
+- [x] Commit reminder, audit and receipt atomically; replay must return the same result even after scheduled time passes.
+- [x] Add explicit ambiguity resolution: return an existing result or atomically tombstone the intent so a delayed original write cannot create afterward.
+- [x] Test concurrent creates, payload mismatch, owner isolation, resolution races, lost resolution responses and reload recovery through BE–FE boundaries.
+- [x] Align manual title validation with the public response contract; keep response-size and list traversal bounds.
 
 ## 2. Context Contract reconciliation and real UI routing
 
 Files: isolated merge of PR11 into production source; CoreScreenExperience, router/routes, context API composition, calendar presentation, local read-only/failure observation regression suites.
 
-- [ ] Resolve conflicts by preserving production local query handling, telemetry, keyset pagination, lunar/series controls and mutation/read ordering fences.
-- [ ] Correct web cancellation to the canonical DELETE route and test the FE click through the actual Worker router/handler.
-- [ ] Keep default production screens working on schema0001–0008; successor API/UI must not require an unapplied0009 while the feature is dormant.
-- [ ] Preserve Context Contract explicit opt-in and source-SHA requirements. No provider, model, prompt, oracle or budget changes are justified by integration alone.
-- [ ] Reconcile source/progress documentation with exact test and qualification evidence.
+- [x] Resolve conflicts by preserving production local query handling, telemetry, keyset pagination, lunar/series controls and mutation/read ordering fences.
+- [x] Correct web cancellation to the canonical DELETE route and test the FE click through the actual Worker router/handler.
+- [x] Keep default production screens working on schema0001–0008; successor API/UI must not require an unapplied0009 while the feature is dormant.
+- [x] Preserve Context Contract explicit opt-in and source-SHA requirements. No provider, model, prompt, oracle or budget changes are justified by integration alone.
+- [x] Reconcile source/progress documentation with exact test and qualification evidence.
 
 ## 3. UI closure evidence
 
 - [x] Confirm UI24d06a8 is an ancestor of production via PR5 merge f5f5d8e; no missing UI branch port exists.
 - [x] Run focused current UI suites:74 tests in8 suites passed before changes.
-- [ ] Validate the integrated screens and recovery controls with synthetic data, keyboard and accessibility checks.
+- [x] Validate the integrated screens and recovery controls with synthetic data, keyboard and accessibility checks.
 
 ## 4. Final integration and review
 
-- [ ] Integrate the independently tested commits, resolve shared API/client/migration boundaries and inspect the final diff.
-- [ ] Run meaningful offline conversation create/clarify/confirm/list/cancel/delivery checks with injected transports. These are not live provider acceptance.
-- [ ] Run the complete pinned engineering gate once the candidate is frozen, then independent review and exact-head CI.
-- [ ] Publish the reviewable feature PR and exact candidate SHA, recording unapplied migrations and release authority separately.
+- [x] Integrate the independently tested commits, resolve shared API/client/migration boundaries and inspect the final diff.
+- [x] Run meaningful offline conversation create/clarify/confirm/list/cancel/delivery checks with injected transports. These are not live provider acceptance.
+- [x] Run the complete pinned engineering gate once the candidate is frozen, then independent review and exact-head CI.
+- [x] Publish the reviewable feature PR and exact candidate SHA, recording unapplied migrations and release authority separately.
 
 ## Qualification and release boundaries
 
 Wire104/Formal Pilot remains unqualified. Paid HOLD and the historical UNKNOWN settlements remain unchanged; broad completion instructions do not change model/provider/oracle/budget or authorize a paid campaign. Prepare the exact bounded qualification proposal from the current protocol/ledger; do not infer remaining budget from an old PR description. Old missing failure detail cannot be reconstructed by polling newer telemetry.
 
 New source/migrations require exact-SHA deployment authorization. No remote D1 application, production mutation, live CREATE/replay, provider call, master push or deploy is part of this implementation plan.
+
+## Completion evidence and later fixes
+
+The implementation checklist above was completed at the reviewed `eb8f66e`
+checkpoint. Both CI gates passed, 9,976 tests passed with two existing optional
+skips, and independent reviews had no remaining actionable findings. Synthetic
+keyboard/mobile recovery and actual authenticated FE–Worker–SQLite regression
+are distinct from production acceptance. The unchecked historical Context
+Contract plan is superseded for implementation status by the review checkpoint;
+its live qualification and release stages remain blocked, not implicitly done.
+
+The October17 follow-up found concrete receipt-validation, stale-screen refresh
+and stalled-stream-cancellation bugs. See
+[completion status](../../implementation/product-closeout-status.md) for their
+regression evidence and remaining gates. No qualification, migration or release
+checkbox is completed by this implementation checklist.

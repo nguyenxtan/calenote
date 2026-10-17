@@ -13,7 +13,7 @@ const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 
-it("recovers a committed response lost across remount, then cancels through authenticated Worker/D1 without duplicating", async () => {
+it.each(["lost response", "malformed success receipt", "malformed recovery receipt"])("recovers a committed %s across remount, then cancels through authenticated Worker/D1 without duplicating", async failure => {
   const db = new SqliteD1Database({ contextContract: true });
   const origin = "https://calenote.iconiclogs.com";
   const masterKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -34,6 +34,7 @@ it("recovers a committed response lost across remount, then cancels through auth
     const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
     const router = createRouter();
     let creates = 0;
+    let resolutions = 0;
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const path = String(input);
       if (!path.startsWith("/api/")) throw new Error("External transport forbidden");
@@ -44,7 +45,12 @@ it("recovers a committed response lost across remount, then cancels through auth
       if (path === "/api/reminders" && init?.method === "POST") {
         creates += 1;
         expect(response.status).toBe(201);
-        throw new TypeError("Synthetic response loss after committed transaction");
+        if (failure !== "malformed success receipt") throw new TypeError("Synthetic response loss after committed transaction");
+        return new Response(JSON.stringify({ data: {} }), { status: 201, headers: { "content-type": "application/json" } });
+      }
+      if (path === "/api/reminders/resolve-intent") {
+        resolutions += 1;
+        if (failure === "malformed recovery receipt" && resolutions === 1) return new Response(JSON.stringify({ data: { state: "CREATED" } }), { headers: { "content-type": "application/json" } });
       }
       return response;
     });
@@ -60,6 +66,14 @@ it("recovers a committed response lost across remount, then cancels through auth
     view.unmount();
     view = render(<TodayExperience />);
     await userEvent.click(await screen.findByRole("button", { name: "Kiểm tra lần tạo trước" }));
+    if (failure === "malformed recovery receipt") {
+      await screen.findByText(/Kết quả chưa xác định/);
+      expect(localStorage.length).toBe(1);
+      expect(screen.queryByText(/Nhắc hẹn trước đã được lưu/)).not.toBeInTheDocument();
+      view.unmount();
+      view = render(<TodayExperience />);
+      await userEvent.click(await screen.findByRole("button", { name: "Kiểm tra lần tạo trước" }));
+    }
     await screen.findByText(/Nhắc hẹn trước đã được lưu/);
     expect(creates).toBe(1);
     expect(localStorage.length).toBe(0);

@@ -8,3 +8,9 @@ export const PublicReminderSchema = z.object({
 }).strict();
 export const RemindersResponseSchema = z.object({ data: z.object({ reminders: z.array(PublicReminderSchema).max(100), nextCursor: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u).optional() }).strict() }).strict();
 export type PublicReminder = z.infer<typeof PublicReminderSchema>;
+
+export const CreateReminderResponseSchema = z.object({ reminder: PublicReminderSchema }).strict();
+export const ResolveReminderIntentResponseSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("CREATED"), publicId: PublicReminderSchema.shape.publicId }).strict(),
+  z.object({ state: z.literal("ABANDONED") }).strict(),
+]);

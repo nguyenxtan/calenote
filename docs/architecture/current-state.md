@@ -34,26 +34,60 @@ plans are audit evidence only; they do not override this document.
 
 ## Worker runtime and persistence
 
-### Latest verified checkpoint — 2026-10-16
+### Latest recorded production checkpoint — 2026-10-16
 
-Remote `master` was verified at `19df5a3bc16a56ee96835d01b1b3d07f4624fdc4`.
-That source enables Conversation V2 in the Worker composition and contains the
-local lunar-today/month/help read path from `a69180b081dba715fea4ccc58409bcf80f96645f`,
-plus bounded failure observation. The last verified deployment in this task was
-Worker version `b3de4c40-9138-4ea3-99fe-19ca5fc76ed5`, promoted at 100% on
-2026-10-15. This is deployment evidence, not fresh end-to-end AI acceptance.
+The read-only production checkpoint recorded remote `master` at
+`dde4968e0f02e5680880bc5a635e181b4d8e32dc`, active Worker version
+`9e620924-d9da-449b-a1ba-7ef2d8346efe` at 100%, deployment
+`b8979d53-5dc6-4fa4-87f0-7e36906efcac` created at
+2026-10-16T06:43:11Z. This is dated read-back evidence, not a claim of a new
+production inspection or fresh provider acceptance on later dates.
+
+That source enables Conversation V2 and the deterministic local
+solar/lunar today/tomorrow, month-calendar and help paths. It includes bounded
+failure observation, reminder-list keyset pagination and cancellation read-back.
+The UI refresh at `24d06a8` already belongs to production ancestry; it is not an
+unmerged UI task. Keyset pagination is not an atomic snapshot across concurrent
+GET requests. Local reads bypass AI; their implementation does not prove broad
+natural-language AI acceptance.
 
 The two historical CREATE failures remain `UNKNOWN`. Paid inference remains on
-hold. Missing failure events do not prove that the provider succeeded, nor can
-new telemetry reconstruct the missing incident details from the previous runtime. Offline
-fixtures and green CI are separate from production provider acceptance.
+hold. Missing failure events do not prove that the provider succeeded, and new
+telemetry cannot reconstruct missing earlier incident details. Operational paid
+HOLD is an authorization boundary: unchanged `AI_MODE=privacy` configuration is
+not a blanket production AI kill switch.
 
-The feature branch `codex/product-completion` builds on that production source.
-It adds local today/tomorrow reads, ambiguous web-create protection within the
-mounted form, cancellation read-back/order fencing, and bounded keyset pagination
-for web reminder lists. These changes require their own reviewed SHA and release
-authorization; their presence in this document does not mean they are deployed.
-Keyset pagination is not an atomic snapshot across concurrent GET requests.
+### Current feature candidate — PR #11, not deployed
+
+PR #11 reconciles Context Contract with that production baseline. The reviewed
+`eb8f66e16d37915dd7c91cd97fe3118c230ee317` checkpoint passed both exact-head CI
+runs with 9,976 tests and two existing optional skips. Later bugfixes require
+checks for their own HEAD; the earlier green result does not certify them.
+
+The feature implements owner-scoped durable manual CREATE receipts and explicit
+recovery across lost responses/reloads, plus the real canonical web DELETE
+cancellation route and explicitly gated Context Contract APIs. Successor runtime
+and UI remain default off. CREATE/recovery needs migration0010 before new traffic.
+Production D1 read-only inspection on October16 confirmed migrations0001–0008
+applied, exactly0009/0010 pending, and all61 application schema definitions
+matching the baseline. No remote migration is implied by local SQLite tests.
+
+The accounting audit classified all29 prospective claims as DISPATCH followed by
+terminal FINISH(null); existing receipts contain no authenticated numeric cost
+for them. They remain UNKNOWN, not zero-cost settlements. The inspected261-history
+namespace has982 known settlements totaling926,785 ledger microunits,12 historical
+UNKNOWN and29 prospective UNKNOWN. This does not establish a complete owner
+account inventory or fresh budget. Wire104/Formal Pilot/Full remain unqualified;
+model/provider/oracle/budget changes and new paid calls are not authorized.
+
+Migration, master promotion, deployment and successor activation retain separate
+exact-SHA approval gates. Worker rollback does not reverse D1. After successor
+activation the historical dde4968 Worker is not a certified rollback target:
+its old reader lacks successor filtering and companion-detail delivery. The
+current compatibility tests exercise current legacy classes, not that historical
+Worker. Require a successor-capable rollback version and reviewed drain policy.
+See the [wire104 handoff](../runbooks/context-contract-wire104-handoff.md) and
+[offline completion status](../implementation/product-closeout-status.md).
 
 ### Historical undeployed checkpoint — 2026-09-28
 

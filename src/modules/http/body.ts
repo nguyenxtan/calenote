@@ -78,14 +78,15 @@ async function readAtMost(
       if (done) break;
       length += value.byteLength;
       if (length > maximumBytes) {
-        await reader.cancel().catch(() => undefined);
         throw new RequestBodyError("REQUEST_TOO_LARGE", 413);
       }
       chunks.push(value);
     }
   } catch (error) {
     if (error instanceof RequestBodyError) {
-      await reader.cancel().catch(() => undefined);
+      // Cancellation belongs to the stream source and may never settle. It
+      // must not delay the request's size or time bound.
+      void reader.cancel().catch(() => undefined);
       throw error;
     }
     throw new RequestBodyError("INVALID_BODY", 400);

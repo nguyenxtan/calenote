@@ -96,3 +96,30 @@ No further semantic implementation gap was established by this audit. The
 remaining blockers are source-bound qualification, accounting/authority
 readiness, then separately authorized Full and release gates. Runtime and UI
 capabilities remain default off; migration 0009 stays local review only.
+
+## Accounting reconciliation checkpoint — 2026-10-16
+
+The later independent read-only audit classified the29 prospective claims more
+precisely: all have DISPATCH, FINISH with null observedMicrounits, and STOP
+UNKNOWN_USAGE. There are no prospective pre-dispatch claims or missing FINISHes.
+All29 existing response artifacts were projected for accounting metadata only;
+26 report HTTP400 and3 no HTTPstatus, with no numeric bound cost evidence for
+any unresolved call. No financial claim can be reconciled from those artifacts.
+The existing grammar disallows a second FINISH; these are terminal UNKNOWN,
+not open calls to finish with an invented zero.
+
+The same261-history inventory digest remains unchanged. Its41 UNKNOWN comprise
+12 historical and29 prospective. The prospective full request bounds total
+3,058,688 microunits, in addition to1,265,664 historical UNKNOWN exposure and
+926,785 known ledger settlements: conservative retained exposure5,251,137.
+These numbers are safety accounting, not actual spend, a new cap, paid permission
+or complete authenticated account inventory. No UNKNOWN was released and no
+ledger/consumed marker was rewritten. Ordinary confirmed-cost admission remains
+blocked. Keep PAID HOLD and historical incident UNKNOWN.
+
+Offline bugfixes and release preparation after this checkpoint do not qualify
+wire104. Freeze the eventual exact application/harness source anew; the original
+manifest remains unchanged. See
+[completion status](../implementation/product-closeout-status.md) for implementation
+versus qualification/release boundaries. Prior source-bound grants and release
+packets cannot be silently reused for a changed PR HEAD.

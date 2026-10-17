@@ -32,6 +32,9 @@ function Loading() { return <div className={styles.loading} aria-label="Đang t�
 export function CoreScreenExperience({ screen, contextContractEnabled = false }: { screen: CoreScreen; contextContractEnabled?: boolean }) {
   const { replace } = useRouter(); const epoch = useRef(0);
   const reminderRequest = useRef(0);
+  const actionRequest = useRef(0);
+  const previewRequest = useRef(0);
+  const previewMutations = useRef(0);
   const mutationLocked = useRef(false);
   const [user, setUser] = useState<SessionUser | null>(null); const [sessionError, setSessionError] = useState<string | null>(null);
   const [reminders, setReminders] = useState<Resource<ReminderDetailsResponseV2[]>>(empty()); const [actions, setActions] = useState<Resource<PublicPendingAction[]>>(empty());
@@ -56,11 +59,30 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
       if (epoch.current === current && request === reminderRequest.current) setReminders(old => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải lời nhắc." }));
     }
   }, [contextContractEnabled, redirect]);
-  const loadPreviews = useCallback(async (current: number) => { setPreviews((old) => ({ ...old, error: null })); try { const data = await loadConversationPreviews({ onUnauthorized: redirect }); if (epoch.current === current) setPreviews({ value: { previews: data.previews, hasMore: data.hasMore }, error: null }); } catch (error) { if (epoch.current === current) setPreviews((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải bản xem trước." })); } }, [redirect]);
-  const loadActions = useCallback(async (current: number) => { setActions((old) => ({ ...old, error: null })); try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: redirect }); const value = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current) setActions({ value, error: null }); } catch (error) { if (epoch.current === current) setActions((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); } }, [redirect]);
-  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: redirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen]);
+  const loadPreviews = useCallback(async (current: number) => { const request = ++previewRequest.current; setPreviews((old) => ({ ...old, error: null })); try { const data = await loadConversationPreviews({ onUnauthorized: redirect }); if (epoch.current === current && request === previewRequest.current) setPreviews({ value: { previews: data.previews, hasMore: data.hasMore }, error: null }); } catch (error) { if (epoch.current === current && request === previewRequest.current) setPreviews((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải bản xem trước." })); } }, [redirect]);
+  const loadActions = useCallback(async (current: number) => { const request = ++actionRequest.current; setActions((old) => ({ ...old, error: null })); try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: redirect }); const value = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current && request === actionRequest.current) setActions({ value, error: null }); } catch (error) { if (epoch.current === current && request === actionRequest.current) setActions((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); } }, [redirect]);
+  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: redirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); return () => { epoch.current += 1; }; }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen]);
+  useEffect(() => {
+    if (!user) return;
+    let refreshing = false;
+    const current = epoch.current;
+    const refresh = async () => {
+      if (epoch.current !== current || document.visibilityState === "hidden" || refreshing || mutationLocked.current || previewMutations.current > 0) return;
+      refreshing = true;
+      try {
+        if (screen === "inbox") await Promise.all([loadActions(current), ...(contextContractEnabled ? [loadPreviews(current)] : [])]);
+        else await loadReminders(current);
+      } finally { refreshing = false; }
+    };
+    const timer = setInterval(() => void refresh(), 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [user, screen, contextContractEnabled, loadActions, loadPreviews, loadReminders]);
   const decidePreview = async (preview: PublicPreviewV1, action: "SAVE_PREVIEW" | "DECLINE") => {
     const current = epoch.current;
+    previewMutations.current += 1;
+    previewRequest.current += 1;
     try {
       const result = await decideConversationPreview({ schemaVersion: "conversation-previews-1", publicId: preview.publicId,
         draftRevision: preview.draftRevision, previewHash: preview.previewHash, decisionToken: preview.decisionToken,
@@ -74,9 +96,9 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
         if (["PREVIEW_STALE", "PREVIEW_EXPIRED", "PREVIEW_REJECTED"].includes(error.code)) return { status: "STALE" as const };
       }
       throw error;
-    }
+    } finally { previewMutations.current -= 1; }
   };
-  const decide = async (candidate: PublicPendingAction, decision: "approve" | "reject") => { if (mutationLocked.current) return; mutationLocked.current = true; const current = epoch.current; setBusyId(candidate.id); try { const data = await apiRequest<unknown>(`/api/actions/${candidate.id}/${decision}`, { method: "POST", body: {}, authenticated: true, onUnauthorized: redirect }); ActionDecisionResponseSchema.parse({ data }); if (epoch.current === current) { setActions((old) => ({ ...old, value: old.value?.filter((value) => value.id !== candidate.id) ?? null })); setNotice(decision === "approve" ? "Đề xuất đã được duyệt." : "Đề xuất đã được bỏ qua."); } } catch (error) { if (epoch.current === current) setNotice(error instanceof AmbiguousMutationError ? "Kết quả chưa xác định. Hãy làm mới trước khi thử lại." : "Chưa thể xử lý đề xuất."); } finally { mutationLocked.current = false; if (epoch.current === current) setBusyId(null); } };
+  const decide = async (candidate: PublicPendingAction, decision: "approve" | "reject") => { if (mutationLocked.current) return; mutationLocked.current = true; actionRequest.current += 1; const current = epoch.current; setBusyId(candidate.id); try { const data = await apiRequest<unknown>(`/api/actions/${candidate.id}/${decision}`, { method: "POST", body: {}, authenticated: true, onUnauthorized: redirect }); ActionDecisionResponseSchema.parse({ data }); if (epoch.current === current) { setActions((old) => ({ ...old, value: old.value?.filter((value) => value.id !== candidate.id) ?? null })); setNotice(decision === "approve" ? "Đề xuất đã được duyệt." : "Đề xuất đã được bỏ qua."); } } catch (error) { if (epoch.current === current) setNotice(error instanceof AmbiguousMutationError ? "Kết quả chưa xác định. Hãy làm mới trước khi thử lại." : "Chưa thể xử lý đề xuất."); } finally { mutationLocked.current = false; if (epoch.current === current) setBusyId(null); } };
   const cancel = async (reminder: PublicReminder) => { if (mutationLocked.current) return; mutationLocked.current = true; reminderRequest.current += 1; const current = epoch.current; setBusyId(reminder.publicId); try { await apiRequest<unknown>(`/api/reminders/${reminder.publicId}`, { method: "DELETE", body: {}, authenticated: true, onUnauthorized: redirect }); if (epoch.current === current) { setReminders((old) => ({ ...old, value: old.value?.map((value) => value.publicId === reminder.publicId ? { ...value, status: "CANCELLED" } : value) ?? null })); setNotice("Lời nhắc đã được huỷ."); await loadReminders(current); } } catch (error) {
     if (epoch.current === current) {
       setNotice(error instanceof AmbiguousMutationError

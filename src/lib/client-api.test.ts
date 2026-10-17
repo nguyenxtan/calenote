@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AmbiguousMutationError,
   ApiResponseError,
@@ -6,6 +6,8 @@ import {
   loadDetailedReminders,
   loadConversationPreviews,
 } from "./client-api";
+
+afterEach(() => vi.useRealTimers());
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -131,6 +133,39 @@ describe("apiRequest", () => {
       name: "ApiResponseError",
       code: "INVALID_RESPONSE",
     });
+  });
+
+  it.each([
+    { method: "GET", cancellation: "pending" },
+    { method: "GET", cancellation: "rejected" },
+    { method: "POST", cancellation: "pending" },
+    { method: "POST", cancellation: "rejected" },
+  ] as const)("bounds oversized $method responses when cancellation is $cancellation", async ({ method, cancellation }) => {
+    vi.useFakeTimers();
+    const cancel = vi.fn(() => cancellation === "pending"
+      ? new Promise<void>(() => {})
+      : Promise.reject(new Error("Cancellation failed")));
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(131_073)); },
+      cancel,
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    const fetcher = vi.fn(async () => response);
+    vi.stubGlobal("fetch", fetcher);
+    const intent = Object.freeze({ intentId: "manual_intent_123456", title: "Có thể đã được lưu" });
+    const outcome = apiRequest("/api/reminders", { method, ...(method === "POST" ? { body: intent } : {}) })
+      .catch((error: unknown) => error);
+    const bounded = Promise.race([outcome, new Promise(resolve => setTimeout(() => resolve("STILL_PENDING"), 50))]);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    if (method === "GET") expect(await bounded).toMatchObject({ name: "ApiResponseError", code: "INVALID_RESPONSE" });
+    else {
+      expect(await bounded).toBeInstanceOf(AmbiguousMutationError);
+      expect(fetcher).toHaveBeenCalledWith("/api/reminders", expect.objectContaining({ body: JSON.stringify(intent) }));
+      expect(intent.intentId).toBe("manual_intent_123456");
+    }
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it.each(["POST", "PATCH", "DELETE"] as const)("classifies an unsettled %s mutation as ambiguous and never retries it", async (method) => {

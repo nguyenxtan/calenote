@@ -62,7 +62,8 @@ async function readBoundedJson(response: Response): Promise<Record<string, unkno
       if (done) break;
       total += value.byteLength;
       if (total > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
+        // Best-effort cleanup must not delay or replace the size-limit error.
+        void reader.cancel().catch(() => undefined);
         throw invalidResponse(response.status || 502);
       }
       chunks.push(value);

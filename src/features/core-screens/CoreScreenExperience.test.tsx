@@ -33,6 +33,68 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 }
 
 describe("CoreScreenExperience", () => {
+  it.each([false, true])("refreshes delivered reminders on focus (context %s)", async (contextContractEnabled) => {
+    let delivered = false;
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      const rows = [{ ...reminder, status: delivered ? "SENT" : "PENDING", ...(contextContractEnabled ? { details: null } : {}) }];
+      return json({ data: contextContractEnabled ? { schemaVersion: "reminders-2", reminders: rows, hasMore: false, scope: "OWNER" } : { reminders: rows } });
+    }));
+    render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />);
+    await screen.findByRole("button", { name: "Huỷ Gửi báo giá" });
+    delivered = true;
+    await act(async () => { fireEvent.focus(window); });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument());
+  });
+
+  it("refreshes while visible, skips hidden polls and removes refresh listeners on unmount", async () => {
+    const fetcher = installFetch();
+    vi.useFakeTimers();
+    let unmount!: () => void;
+    await act(async () => { ({ unmount } = render(<CoreScreenExperience screen="reminders" />)); });
+    expect(screen.getByRole("button", { name: "Huỷ Gửi báo giá" })).toBeInTheDocument();
+    const reads = () => fetcher.mock.calls.filter(([path]) => path === "/api/reminders").length;
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(reads()).toBe(2);
+      visibility.mockReturnValue("hidden");
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); fireEvent.focus(window); });
+      expect(reads()).toBe(2);
+      visibility.mockReturnValue("visible");
+      await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+      expect(reads()).toBe(3);
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); fireEvent.focus(window); });
+      expect(reads()).toBe(3);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not restore a decided inbox action from an older focus refresh", async () => {
+    let actionReads = 0;
+    let resolveStale!: (response: Response) => void;
+    let resolveDecision!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      if (init?.method === "POST") return new Promise<Response>(resolve => { resolveDecision = resolve; });
+      actionReads += 1;
+      if (actionReads === 2) return new Promise<Response>(resolve => { resolveStale = resolve; });
+      return json({ data: { actions: [action] } });
+    }));
+    render(<CoreScreenExperience screen="inbox" />);
+    const approve = await screen.findByRole("button", { name: "Đồng ý Họp với team vận hành" });
+    await act(async () => { fireEvent.focus(window); });
+    expect(actionReads).toBe(2);
+    fireEvent.click(approve);
+    await act(async () => { fireEvent.focus(window); });
+    expect(actionReads).toBe(2);
+    await act(async () => { resolveDecision(json({ data: { decision: "APPROVED", reminderPublicId: reminder.publicId } })); });
+    await act(async () => { resolveStale(json({ data: { actions: [action] } })); });
+    expect(screen.queryByRole("button", { name: "Đồng ý Họp với team vận hành" })).not.toBeInTheDocument();
+  });
+
   it("serializes cancellation clicks while a response is pending", async () => {
     let resolveCancel!: (response: Response) => void;
     let posts = 0;
