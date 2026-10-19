@@ -43,8 +43,8 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
     const reference = args.shift() ?? "";
     // A public code only filters an already authenticated chat+connection list.
     // Never derive identity or choose a latest item from its presence.
-    const matches = reference.length >= 8 ? (await service.resolveReference(scope, reference)).filter(item => item.progress !== "UNTRACKED") : [];
-    if (matches.length !== 1 || verb === "chưa xong") return selection(tracked);
+    const matches = reference.length >= 8 ? await service.resolveReference(scope, reference) : [];
+    if (matches.length !== 1 || matches[0].progress === "UNTRACKED" || verb === "chưa xong") return selection(tracked);
     const item = matches[0];
     const timeInput = args.join(" ");
     const action = verb === "xong" ? "DONE" : verb === "dừng theo dõi" ? "STOP" : verb === "hoãn" ? "SNOOZE" : "RESCHEDULE";

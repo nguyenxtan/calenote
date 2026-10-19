@@ -37,6 +37,11 @@ describe("provider-neutral follow-through commands", () => {
     expect((await h.handle(message("xong ABCDEF01"), context)).text).toContain("Chọn mã việc");
     expect(h.actions).toHaveLength(0);
   });
+  it("refuses a bounded resolver collision even when one match is untracked", async () => {
+    const h = harness([{ ...item, publicId: "ABCDEF01old", progress: "UNTRACKED" }, item, { ...item, publicId: "ABCDEF01third" }]);
+    expect((await h.handle(message("xong ABCDEF01"), context)).text).toContain("Chọn mã việc");
+    expect(h.actions).toHaveLength(0);
+  });
   it("does not accept another chat's code as authority", async () => {
     const h = harness([]);
     expect((await h.handle(message(`xong ${item.publicId}`), context)).text).toContain("trong cuộc trò chuyện này");
