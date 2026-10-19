@@ -1,0 +1,21 @@
+.panel { margin: 24px 0; padding: 24px; min-width: 0; border: 1px solid var(--cn-border); border-radius: var(--cn-r-lg); background: var(--cn-surface); color: var(--cn-text); }
+.panel header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.panel h2,.panel h3,.panel p { margin:0 0 8px; overflow-wrap:anywhere; }
+.eyebrow,.help { color:var(--cn-text-2); font-size:.9rem; }
+.panel button,.panel input,.panel select,.panel summary { min-height:44px; }
+.panel button { border:1px solid var(--cn-border-strong); border-radius:var(--cn-r-sm); padding:9px 13px; background:var(--cn-surface); color:var(--cn-text); cursor:pointer; max-width:100%; white-space:normal; }
+.panel button:disabled { opacity:.55; cursor:wait; }
+.panel button[aria-pressed=true] { color:var(--cn-brand-700); background:var(--cn-brand-soft); border-color:var(--cn-brand-500); }
+.panel :is(button,input,select,summary):focus-visible { outline:2px solid var(--cn-focus); outline-offset:3px; }
+.filters,.actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.list { display:grid; gap:12px; }
+.item { border:1px solid var(--cn-border); border-radius:var(--cn-r-md); padding:18px; min-width:0; }
+.item>p { font-size:.9rem; color:var(--cn-text-2); }
+.panel details { border-top:1px solid var(--cn-border); margin-top:12px; padding-top:8px; }
+.panel summary { cursor:pointer; padding:10px 0; }
+.panel label { display:grid; gap:6px; margin:12px 0; }
+.panel input,.panel select { border:1px solid var(--cn-border-strong); border-radius:var(--cn-r-sm); background:var(--cn-surface); color:var(--cn-text); padding:8px; width:100%; min-width:0; max-width:100%; }
+.message,.preview { border:1px solid var(--cn-border-strong); background:var(--cn-surface-subtle); border-radius:var(--cn-r-md); padding:16px; margin:12px 0; }
+.empty { padding:20px 0; color:var(--cn-text-2); }
+.panel ol { margin:0; padding-left:20px; overflow-wrap:anywhere; }
+@media(max-width:600px) { .panel { padding:16px; } .item {padding:14px;} .actions>button { flex:1 1 130px; } }

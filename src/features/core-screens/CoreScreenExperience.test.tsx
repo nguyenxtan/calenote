@@ -20,6 +20,7 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
   const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     void init;
     const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+    if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
     if (path === "/api/session") return json({ data: { user } });
     if (path === "/api/v2/reminders") return json({ data: { schemaVersion: "reminders-2", reminders: [{ ...reminder, details: null }], hasMore: false, scope: "OWNER" } });
     if (path === "/api/v2/conversation-previews") return json({ data: { schemaVersion: "conversation-previews-1", previews: [], hasMore: false } });
@@ -36,6 +37,7 @@ describe("CoreScreenExperience", () => {
   it.each([false, true])("refreshes delivered reminders on focus (context %s)", async (contextContractEnabled) => {
     let delivered = false;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
@@ -77,6 +79,7 @@ describe("CoreScreenExperience", () => {
     let resolveStale!: (response: Response) => void;
     let resolveDecision!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
@@ -102,6 +105,7 @@ describe("CoreScreenExperience", () => {
     let posts = 0;
     const second = { ...reminder, publicId: "S".repeat(22), title: "Gọi mẹ" };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
@@ -127,6 +131,7 @@ describe("CoreScreenExperience", () => {
     const series = { publicId: "A".repeat(22), title: "Ôn thi", revision: 1, state: "PROPOSED", action: "CREATE",
       calendarLabel: "Dương lịch", eventLabel: null, occurrences: ["2026-10-08", "2026-10-09", "2026-10-10"].map(localDate => ({ localDate, localTime: "12:00", status: "PROPOSED" })) };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") {
@@ -152,6 +157,7 @@ describe("CoreScreenExperience", () => {
     let attempted = false;
     let reads = 0;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
@@ -306,6 +312,7 @@ describe("CoreScreenExperience", () => {
 it("keeps default pages on complete legacy keyset reads without requesting Context endpoints", async () => {
   const second = { ...reminder, publicId: "S".repeat(22), title: "Trang lời nhắc thứ hai" };
   const fetcher = vi.fn(async (path: string | URL | Request) => {
+    if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
     if (path === "/api/session") return json({ data: { user } });
     if (path === "/api/reminder-series") return json({ data: { series: [] } });
     if (path === "/api/actions") return json({ data: { actions: [] } });
