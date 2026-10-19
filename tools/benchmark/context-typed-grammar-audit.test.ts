@@ -23,8 +23,8 @@ it('isolates the singleton numeric disjunction from the exact failing request an
  expect(range).toEqual({type:'integer',minimum:0,maximum:15});
  const oldCode=z.fromJSONSchema(old.properties.uncertainties.items.properties.fieldCode as Parameters<typeof z.fromJSONSchema>[0]),newCode=z.fromJSONSchema(range as Parameters<typeof z.fromJSONSchema>[0]);
  for(const value of [-2,-1,...Array.from({length:16},(_,i)=>i),16,17,.5,'0',null])expect(newCode.safeParse(value).success).toBe(oldCode.safeParse(value).success);
- old.properties.uncertainties.items.properties.fieldCode=range;
- expect(current).toEqual(old); // Only this expanded path changes, not a size-based rewrite.
+ // Later correlation preservation deliberately changes other object branches;
+ // the exact fieldCode domain proof above remains independent of those branches.
 });
 it('refuses cyclic or unbound reference audits',()=>{
  expect(()=>expandTypedSchemaReferences({type:'object',properties:{x:{$ref:'#/$defs/a'}},$defs:{a:{$ref:'#/$defs/a'}}})).toThrow();
@@ -42,4 +42,18 @@ it('preserves holes in R02 input-selected field-code domains',()=>{
  const generated=expandTypedSchemaReferences(googleLiteEuTypedContextWireSchemaV3(input).schema) as {properties:{uncertainties:{items:{properties:{fieldCode:Parameters<typeof z.fromJSONSchema>[0]}}}}};
  const validator=z.fromJSONSchema(generated.properties.uncertainties.items.properties.fieldCode);
  for(let value=-1;value<=16;value++)expect(validator.safeParse(value).success).toBe(codes.has(value));
+});
+
+it('preserves correlated QueryPeriod controls instead of admitting cross-variant combinations',()=>{
+ const input=read('typed105-r01-before.json').input;
+ const findPeriod=(value:unknown):unknown=>{if(!value||typeof value!=='object')return undefined;const node=value as Record<string,unknown>,properties=node.properties as Record<string,unknown>|undefined;if(properties?.period)return properties.period;if(Array.isArray(node.anyOf))for(const branch of node.anyOf){const found=findPeriod(branch);if(found)return found;}return undefined;};
+ const strict=expandTypedSchemaReferences(googleLiteEuTypedContextValidationSchemaV3(input).schema) as {properties:{query:unknown}},generated=expandTypedSchemaReferences(googleLiteEuTypedContextWireSchemaV3(input).schema) as typeof strict;
+ const validator=(value:unknown)=>z.fromJSONSchema(value as Parameters<typeof z.fromJSONSchema>[0]);
+ const a=validator(findPeriod(strict.properties.query)),b=validator(findPeriod(generated.properties.query));
+ const operand={kind:'RELATIVE_DAY',offsetDays:0};
+ const mixed={kind:'DAY',date:operand,offset:1,from:operand,through:operand};
+ expect(a.safeParse(mixed).success).toBe(false);expect(b.safeParse(mixed).success).toBe(false);
+ for(const kind of ['DAY','WEEK','MONTH','WEEKEND','REST_OF_MONTH','NEXT_7_DAYS','UPCOMING','DATE_BOUNDS'])for(const date of [null,operand])for(const offset of [null,-1,0,1])for(const from of [null,operand])for(const through of [null,operand]){
+  const value={kind,date,offset,from,through};expect(b.safeParse(value).success).toBe(a.safeParse(value).success);
+ }
 });

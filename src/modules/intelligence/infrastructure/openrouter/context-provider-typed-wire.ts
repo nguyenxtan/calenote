@@ -145,7 +145,16 @@ function factorGenerationUnions(root:Schema):Schema {
    const shell=node.type==="object"&&node.properties?{...node,properties:undefined,keys:Object.keys(node.properties).sort()}:node.type==="array"&&node.items?{...node,items:undefined}:node.type==="string"&&Object.keys(node).every(key=>key==="type"||key==="enum")?{type:"string"}:node;
    const key=JSON.stringify(shell),prior=groups.get(key);if(prior)prior.push(node);else groups.set(key,[node]);
   }
-  const factored=[...groups.values()].map(nodes=>{
+  // Keep discriminated object alternatives correlated. Independently unioning
+  // sibling fields creates a Cartesian product (for example DAY + range dates).
+  // For these kind-bearing objects, merge only one differing property.
+  const correlated=[...groups.values()].flatMap(nodes=>{
+   const first=nodes[0];
+   if(first.type!=="object"||!first.properties?.kind||nodes.length===1)return [nodes];
+   const changed=Object.keys(first.properties).filter(key=>nodes.some(node=>JSON.stringify(node.properties![key])!==JSON.stringify(first.properties![key])));
+   return changed.length>1?nodes.map(node=>[node]):[nodes];
+  });
+  const factored=correlated.map(nodes=>{
    const first=nodes[0];if(nodes.length===1)return first;
    if(first.type==="object"&&first.properties)return {...first,properties:Object.fromEntries(Object.keys(first.properties).map(key=>[key,union(nodes.map(node=>node.properties![key]))]))};
    if(first.type==="array"&&first.items)return {...first,items:union(nodes.map(node=>node.items!))};
