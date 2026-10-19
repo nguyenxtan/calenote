@@ -182,6 +182,7 @@ function verifyRequest(email: string, ip: string): Request {
 async function applyMigration(db: D1Database, file: string): Promise<void> {
   const source = readFileSync(resolve(process.cwd(), file), "utf8");
   const statements = source
+    .replace(/^\s*--.*$/gmu, "")
     .split(";")
     .map((statement) => statement.trim())
     .filter(Boolean);
