@@ -16,6 +16,9 @@ it('runs follow-through through the actual Worker session, keyring and migrated 
  const req=(path:string,body?:unknown)=>new Request(origin+path,{method:body?'POST':'GET',headers:{origin,cookie:session.cookie.split(';')[0],'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
  let r=await route(req('/api/v1/follow-through'),env,ctx);expect(r.status).toBe(200);expect(r.headers.get('cache-control')).toContain('no-store');
  const listed=await r.json() as {data:{items:{publicId:string;progress:string;revision:number}[]}};expect(listed.data.items[0]).toMatchObject({publicId:'route-public',progress:'OPEN',revision:0});
+ r=await route(req('/api/v1/follow-through/history?publicId=route-public'),env,ctx);expect(r.status).toBe(200);expect(await r.json()).toMatchObject({data:{history:[{publicId:'route-public'}]}});
+ r=await route(req('/api/v1/follow-through/history?publicId=foreign'),env,ctx);expect(r.status).toBe(404);
+ r=await route(req('/api/v1/follow-through/history?publicId=route-public&cursor=bad'),env,ctx);expect(r.status).toBe(400);
  const action={action:'DONE',publicId:'route-public',expectedRevision:0,idempotencyKey:'route-done'};
  r=await route(req('/api/v1/follow-through/actions',action),env,ctx);expect(r.status).toBe(200);const result=await r.json();expect(result).toMatchObject({data:{item:{progress:'DONE',revision:1}}});
  r=await route(req('/api/v1/follow-through/actions',action),env,ctx);expect(r.status).toBe(200);expect(await r.json()).toEqual(result);

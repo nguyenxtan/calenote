@@ -5,7 +5,14 @@ export async function loadFollowThroughPage(cursor: string | undefined, onUnauth
         return apiRequest<unknown>('/api/v1/follow-through', { authenticated: true, onUnauthorized });
     if (!/^[A-Za-z0-9_-]{1,128}$/u.test(cursor))
         throw new Error('Trang tiến độ không hợp lệ.');
-    const response = await fetch(`/api/v1/follow-through?cursor=${encodeURIComponent(cursor)}`, { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { accept: 'application/json' } });
+    return loadBoundedFollowThrough(`/api/v1/follow-through?cursor=${encodeURIComponent(cursor)}`,onUnauthorized);
+}
+export async function loadFollowThroughHistory(publicId:string,cursor:string,onUnauthorized:()=>void):Promise<unknown>{
+    if(!/^[A-Za-z0-9_-]{1,128}$/u.test(publicId)||!/^(0|[1-9][0-9]{0,14})$/u.test(cursor))throw new Error("Trang lịch sử không hợp lệ.");
+    return loadBoundedFollowThrough(`/api/v1/follow-through/history?publicId=${encodeURIComponent(publicId)}&cursor=${encodeURIComponent(cursor)}`,onUnauthorized);
+}
+async function loadBoundedFollowThrough(path:string,onUnauthorized:()=>void):Promise<unknown>{
+    const response = await fetch(path, { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { accept: 'application/json' } });
     if (response.status === 401)
         onUnauthorized();
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json') || !response.body)

@@ -23,7 +23,7 @@ function result(item: FollowThroughItem): FollowThroughChatResult {
   return { handled: true, text: `${state}. Mã việc: ${item.publicId}.` };
 }
 function selection(items: FollowThroughItem[]): FollowThroughChatResult {
-  return { handled: true, text: items.length ? `Chọn mã việc trong cuộc trò chuyện này:\n${items.slice(0, 5).map(item => `${item.publicId}: ${item.title.slice(0, 100)}`).join("\n")}\nVí dụ: xong <mã việc>.` : "Không tìm thấy việc được theo dõi trong cuộc trò chuyện này." };
+  return { handled: true, text: items.length ? `Chọn mã việc trong cuộc trò chuyện này:\n${items.filter(item => item.progress === "OPEN").slice(0, 5).map(item => `${item.publicId}: ${item.title.slice(0, 100)}`).join("\n")}\nVí dụ: xong <mã việc>.` : "Không tìm thấy việc được theo dõi trong cuộc trò chuyện này." };
 }
 
 export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now): FollowThroughChatHandler {

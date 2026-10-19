@@ -34,7 +34,7 @@ it('applies immutable0014 and races independent work mutations on actual workerd
  ]);
  }
  const finished=await a.act(scope,{action:'DONE',publicId:'long-public',expectedRevision:0,idempotencyKey:'long-done'});
- expect(finished.progress).toBe('DONE');expect(finished.history).toHaveLength(49);
+ expect(finished.progress).toBe('DONE');expect(finished.history).toHaveLength(10);let allHistory=[...finished.history],cursor=finished.historyCursor;while(cursor){const page=await a.history(scope,finished.publicId,cursor);allHistory=[...allHistory,...page.history];cursor=page.nextCursor;}expect(allHistory).toHaveLength(49);
  expect((await db.prepare('PRAGMA foreign_key_check').all()).results).toHaveLength(0);
  expect(await db.prepare('SELECT count(*) FROM follow_through_spawn_permits').first('count(*)')).toBe(0);
  }finally{await mf.dispose();}

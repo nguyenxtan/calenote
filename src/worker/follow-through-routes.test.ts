@@ -9,6 +9,7 @@ function request(path:string,method='GET',body?:unknown,options:{cookie?:boolean
 it('rejects missing sessions before creating follow-through operations',async()=>{
  const create=vi.fn();const route=createRouter({followThroughOperations:create});
  const response=await route(request('/api/v1/follow-through','GET',undefined,{cookie:false}),env,context);
+ expect((await route(request('/api/v1/follow-through/history?publicId=work','GET',undefined,{cookie:false}),env,context)).status).toBe(401);
  expect(response.status).toBe(401);expect(response.headers.get('vary')).toBe('Cookie');expect(create).not.toHaveBeenCalled();
 });
 it('rejects cross-origin actions and oversized JSON before accessing work',async()=>{

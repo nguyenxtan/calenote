@@ -1,5 +1,5 @@
 import { createFollowThroughOperations } from './composition-root';
-import { handleListFollowThrough, handleFollowThroughAction, type FollowThroughOperations } from './routes/follow-through';
+import { handleFollowThroughHistory, handleListFollowThrough, handleFollowThroughAction, type FollowThroughOperations } from './routes/follow-through';
 import { FollowThroughError } from '@/contracts/api/follow-through';
 import { createEmailDiscoveryOperations, createAccountOperations } from "./composition-root";
 import { handleContinueEmail, type EmailDiscoveryOperations } from "./routes/auth-continue";
@@ -258,6 +258,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
       if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
       if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through/history" && request.method === "GET") return await handleFollowThroughHistory(request, () => followThroughOperationsFactory(env));
       if (pathname === "/api/v1/follow-through" && request.method === "GET") return await handleListFollowThrough(request, () => followThroughOperationsFactory(env));
       if (pathname === "/api/v1/follow-through/actions" && request.method === "POST") return await handleFollowThroughAction(request, appOrigin!, () => followThroughOperationsFactory(env));
       if (pathname === "/api/account/profile" && request.method === "GET") return await handleGetProfile(request, () => accountOperationsFactory(env));

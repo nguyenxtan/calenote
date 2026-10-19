@@ -1,12 +1,12 @@
 import type { D1FollowThroughService } from '@/modules/follow-through/service';
-import { FollowThroughActionSchema, FollowThroughItemSchema, FollowThroughListSchema } from '@/contracts/api/follow-through';
+import { FollowThroughHistorySchema, FollowThroughActionSchema, FollowThroughItemSchema, FollowThroughListSchema } from '@/contracts/api/follow-through';
 import { parseSessionCredentials, SessionAuthError, type SessionCredentials } from '@/modules/auth/session';
 import { readBoundedJson } from '@/modules/http/body';
 import { jsonResponse, requireSameOrigin } from '@/modules/http/security';
 
 export interface FollowThroughOperations {
   requireUser(credentials: SessionCredentials): Promise<{userId:string}>;
-  service: Pick<D1FollowThroughService, 'list'|'act'>;
+  service: Pick<D1FollowThroughService, 'list'|'act'|'history'>;
   consume(userId:string): Promise<void>;
 }
 type Factory=()=>Promise<FollowThroughOperations>;
@@ -30,4 +30,10 @@ export async function handleFollowThroughAction(request:Request,origin:string,cr
   const ops=await create(),principal=await ops.requireUser(auth);
   await ops.consume(principal.userId);
   return jsonResponse({data:{item:FollowThroughItemSchema.parse(await ops.service.act({userId:principal.userId},parsed.data))}},{headers:{vary:'Cookie'}});
+}
+export async function handleFollowThroughHistory(request:Request,create:Factory) {
+  const auth=credentials(request),ops=await create(),principal=await ops.requireUser(auth);
+  const params=new URL(request.url).searchParams,publicId=params.get('publicId'),cursor=params.get('cursor');
+  if(!publicId||!/^[A-Za-z0-9_-]{1,128}$/u.test(publicId)||(cursor!==null&&!/^(0|[1-9][0-9]{0,14})$/u.test(cursor)))return jsonResponse({error:{code:'INVALID',message:'Trang lịch sử không hợp lệ.'}},{status:400,headers:{vary:'Cookie'}});
+  return jsonResponse({data:FollowThroughHistorySchema.parse(await ops.service.history({userId:principal.userId},publicId,cursor??undefined))},{headers:{vary:'Cookie'}});
 }

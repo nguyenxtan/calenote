@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import { FollowThroughActionSchema, FollowThroughItemSchema, FollowThroughListSchema, type FollowThroughAction, type FollowThroughItem } from '@/contracts/api/follow-through';
+import { FollowThroughHistorySchema, FollowThroughActionSchema, FollowThroughItemSchema, FollowThroughListSchema, type FollowThroughAction, type FollowThroughItem } from '@/contracts/api/follow-through';
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from '@/lib/client-api';
 import { absoluteTime, postponeAt, vietnamTime } from './time';
-import { loadFollowThroughPage } from './list-client';
+import { loadFollowThroughHistory, loadFollowThroughPage } from './list-client';
 import styles from './FollowThroughPanel.module.css';
 const labels = { OPEN: 'Chưa xong', DONE: 'Đã xong', STOPPED: 'Đã dừng', UNTRACKED: 'Chưa theo dõi' };
 const delivery = (value: string) => ({ SENT: 'Đã gửi', PENDING: 'Chờ gửi', CLAIMED: 'Đang chuẩn bị', RETRYABLE: 'Chờ thử lại', FAILED: 'Gửi thất bại', UNCERTAIN: 'Chưa xác định', CANCELLED: 'Đã huỷ' }[value] ?? value);
@@ -138,15 +138,21 @@ export function FollowThroughPanel({ ownerKey, onUnauthorized, onChanged, reload
  <div className={styles.filters} aria-label="Lọc tiến độ">{(['OPEN', 'DONE', 'STOPPED', 'UNTRACKED'] as const).map(value => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{labels[value]}</button>)}</div>
  {storageBlocked && <p role="alert">Không thể đọc bộ nhớ yêu cầu trước. Các thao tác tạm khoá; hãy khôi phục quyền lưu trữ và tải lại trang.</p>}{error && <p role="alert" className={styles.message}>{error}</p>}{notice && <p role="status">{notice}</p>}{pending && <div className={styles.message}><p>Yêu cầu trước đang chờ xác nhận. Các thao tác mới tạm khoá.</p><button type="button" disabled={busy} onClick={() => void submit(pending)}>{busy ? 'Đang kiểm tra…' : 'Kiểm tra yêu cầu trước'}</button></div>}
  {preview && <section aria-label="Xác nhận thay đổi" className={styles.preview}><h3>{actionLabel(preview.request)} · {preview.title}</h3><p>Bot: {preview.destination}</p>{preview.request.scheduledAt && <p>Thời điểm mới: <strong>{absoluteTime(preview.request.scheduledAt)}</strong></p>}{preview.request.action === 'POLICY' && preview.request.enabled && <p>Nhắc tiếp sau {preview.request.intervalMinutes} phút kể từ lần gửi thành công, tối đa 3 lần. Bot giữ nguyên. {preview.policyPreview}</p>}{['DONE', 'STOP'].includes(preview.request.action) && <p>Các lần gửi chưa bắt đầu sẽ dừng. Lời nhắc đã bắt đầu gửi vẫn có thể đến.</p>}<div className={styles.actions}><button ref={confirmationRef} type="button" onClick={() => void submit(preview.request)}>Xác nhận</button><button type="button" onClick={cancelPreview}>Quay lại</button></div></section>}
- {!loaded ? <p>Đang tải tiến độ…</p> : items.filter(item => item.progress === filter).length === 0 ? <p className={styles.empty}>Không có việc trong mục này.</p> : <div className={styles.list}>{items.filter(item => item.progress === filter).map(item => <WorkItem key={`${item.publicId}:${item.revision}`} item={item} disabled={Boolean(pending) || busy || Boolean(preview) || storageBlocked} prepare={prepare}/>)}</div>}
+ {!loaded ? <p>Đang tải tiến độ…</p> : items.filter(item => item.progress === filter).length === 0 ? <p className={styles.empty}>Không có việc trong mục này.</p> : <div className={styles.list}>{items.filter(item => item.progress === filter).map(item => <WorkItem key={`${item.publicId}:${item.revision}:${JSON.stringify(item.history)}`} onUnauthorized={()=>callbacks.current.onUnauthorized?.()} item={item} disabled={Boolean(pending) || busy || Boolean(preview) || storageBlocked} prepare={prepare}/>)}</div>}
  {nextCursor && <button type="button" disabled={loadingMore || busy} onClick={() => void loadMore()}>{loadingMore ? 'Đang tải thêm…' : 'Tải thêm việc'}</button>}
  </section>;
 }
-function WorkItem({ item, disabled, prepare }: {
+function WorkItem({ item, disabled, prepare, onUnauthorized }: {
     item: FollowThroughItem;
+    onUnauthorized: () => void;
     disabled: boolean;
     prepare: (item: FollowThroughItem, action: FollowThroughAction['action'], extra?: Partial<FollowThroughAction>) => void;
 }) {
+    const [history,setHistory]=useState(item.history);
+    const [historyCursor,setHistoryCursor]=useState(item.historyCursor);
+    const [historyBusy,setHistoryBusy]=useState(false);
+    const [historyError,setHistoryError]=useState(false);
+    const loadHistory=async()=>{if(historyBusy||!historyCursor)return;setHistoryBusy(true);setHistoryError(false);try{const page=FollowThroughHistorySchema.parse(await loadFollowThroughHistory(item.publicId,historyCursor,onUnauthorized));setHistory(old=>[...old,...page.history.filter(run=>!old.some(prior=>prior.publicId===run.publicId))]);setHistoryCursor(page.nextCursor);}catch{setHistoryError(true);}finally{setHistoryBusy(false);}};
     const [when, setWhen] = useState('');
     const [invalid, setInvalid] = useState(false);
     const [interval, setFollowInterval] = useState<30 | 120 | 1440>(item.intervalMinutes);
@@ -160,5 +166,5 @@ function WorkItem({ item, disabled, prepare }: {
             return;
         } prepare(item, 'RESCHEDULE', { scheduledAt: at }); }}>Đổi lịch</button>{invalid && <p role="alert">Chọn ngày giờ hợp lệ trong tương lai, theo giờ Việt Nam.</p>}
  <label>Khoảng nhắc tiếp<select value={interval} disabled={disabled} onChange={event => setFollowInterval(Number(event.target.value) as 30 | 120 | 1440)}><option value={30}>30 phút</option><option value={120}>2 giờ</option><option value={1440}>24 giờ</option></select></label><p>Nhắc tiếp: {item.followUpEnabled ? 'Đang bật' : 'Đang tắt'} · Đã dùng {item.followUpCount}/3</p>{item.followUpCount >= 3 ? <><p>Đã đạt giới hạn 3 lần. Không tự gửi thêm.</p>{item.followUpEnabled && <button type="button" disabled={disabled} onClick={() => prepare(item, 'POLICY', { enabled: false, intervalMinutes: interval })}>Tắt nhắc tiếp</button>}</> : <button type="button" disabled={disabled} onClick={() => prepare(item, 'POLICY', { enabled: !item.followUpEnabled, intervalMinutes: interval })}>{item.followUpEnabled ? 'Tắt nhắc tiếp' : 'Bật nhắc tiếp'}</button>}{item.nextFollowUpAt !== null && <p>{item.nextFollowUpAt<now?'Thời điểm nhắc tiếp đã qua · đang tạm dừng. Hãy đổi lịch hoặc tắt/bật lại chính sách để tiếp tục.':'Nhắc tiếp dự kiến:'} {absoluteTime(item.nextFollowUpAt)}</p>}{item.deliveryStatus === 'UNCERTAIN' && <p>Chưa xác định kết quả gửi; không tự nhắc tiếp.</p>}</details></>}
- <details><summary>Lịch sử gửi nhắc · {item.history.length}</summary><ol>{item.history.map(run => <li key={run.publicId}>{absoluteTime(run.scheduledAt)} · {({ ORIGINAL: 'Lời nhắc gốc', SNOOZE: 'Hoãn', RESCHEDULE: 'Đổi lịch', FOLLOW_UP: 'Nhắc tiếp' }[run.kind] ?? run.kind)} · {delivery(run.deliveryStatus)}</li>)}</ol></details></article>;
+ <details><summary>Lịch sử gửi nhắc · {history.length}</summary><ol>{history.map(run => <li key={run.publicId}>{absoluteTime(run.scheduledAt)} · {({ ORIGINAL: 'Lời nhắc gốc', SNOOZE: 'Hoãn', RESCHEDULE: 'Đổi lịch', FOLLOW_UP: 'Nhắc tiếp' }[run.kind] ?? run.kind)} · {delivery(run.deliveryStatus)}</li>)}</ol>{historyError&&<p role="alert">Chưa thể tải lịch sử. Hãy thử lại.</p>}{historyCursor&&<button type="button" disabled={historyBusy} onClick={()=>void loadHistory()}>{historyBusy?'Đang tải lịch sử…':'Tải lịch sử cũ hơn'}</button>}</details></article>;
 }
