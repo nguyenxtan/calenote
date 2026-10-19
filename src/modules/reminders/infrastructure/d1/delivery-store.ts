@@ -51,11 +51,44 @@ async function hasCompleteContextContract(database: D1Database): Promise<boolean
   return present === expected;
 }
 
+const followThroughColumns = {
+  follow_through_items: ["id", "public_id", "root_reminder_id", "owner_user_id", "workspace_id", "chat_identity_id", "connection_id", "progress", "revision", "current_reminder_id", "completed_at", "follow_up_enabled", "interval_minutes", "follow_up_count", "next_follow_up_at", "created_at", "updated_at", "mutation_marker"],
+  follow_through_runs: ["item_id", "reminder_id", "kind", "ordinal", "lineage_key"],
+  follow_through_action_receipts: ["scope", "idempotency_key", "payload_digest", "item_id", "expected_revision", "resulting_revision", "result_json"],
+  follow_through_spawn_permits: ["reminder_id", "item_id", "marker"],
+} as const;
+async function hasFollowThrough(database: D1Database): Promise<boolean> {
+  const names = [...Object.keys(followThroughColumns), "track_new_reminder"];
+  const objects = await database.prepare(`SELECT name FROM sqlite_master WHERE name IN (${names.map(() => "?").join(",")})`).bind(...names).all<{ name: string }>();
+  if (objects.results.length === 0) return false;
+  if (objects.results.length !== names.length) throw new Error("INCOMPLETE_FOLLOW_THROUGH_SCHEMA");
+  for (const [table, columns] of Object.entries(followThroughColumns)) {
+    const result = await database.prepare(`SELECT name FROM pragma_table_info('${table}')`).all<{ name: string }>();
+    const present = new Set(result.results.map(row => row.name));
+    if (columns.some(column => !present.has(column))) throw new Error("INCOMPLETE_FOLLOW_THROUGH_SCHEMA");
+  }
+  return true;
+}
+
+// Evaluated in the same write transaction as SENDING acquisition. The snapshot
+// revision ties the rendered controls and payload to the current work run.
+function followThroughFence(enabled: boolean): string {
+  return enabled ? `AND (
+    (NOT EXISTS(SELECT 1 FROM follow_through_runs fr WHERE fr.reminder_id=r.id)
+     AND NOT EXISTS(SELECT 1 FROM follow_through_items fi WHERE fi.root_reminder_id=r.id OR fi.current_reminder_id=r.id))
+    OR EXISTS(SELECT 1 FROM follow_through_runs fr JOIN follow_through_items fi ON fi.id=fr.item_id
+      WHERE fr.reminder_id=r.id AND fi.current_reminder_id=r.id AND fi.progress='OPEN'
+      AND fi.public_id=? AND fi.revision=? AND fi.connection_id=c.id
+      AND fi.chat_identity_id=r.chat_identity_id AND fi.workspace_id=w.id AND fi.owner_user_id=w.owner_user_id)
+  )` : "";
+}
+
 export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
   constructor(private readonly database: D1Database) {}
 
   async read(reminderId: string): Promise<ReminderDeliveryContext | null> {
     const hasContextContract = await hasCompleteContextContract(this.database);
+    const tracked = await hasFollowThrough(this.database);
     const detailColumns = hasContextContract ? `
                 CASE WHEN (source.contract_version=2 AND source.chat_identity_id=r.chat_identity_id)
                    OR (proposal.contract_version=2 AND series.owner_id=w.owner_user_id AND series.chat_identity_id=r.chat_identity_id)
@@ -101,6 +134,14 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
       .first<DeliveryContextRow>();
     if (!row) return null;
     const context = contextFromRow(row);
+    if (tracked) {
+      const work = await this.database.prepare(`SELECT fi.public_id,fi.revision,fr.kind
+        FROM follow_through_runs fr JOIN follow_through_items fi ON fi.id=fr.item_id
+        WHERE fr.reminder_id=? AND fi.owner_user_id=? AND fi.chat_identity_id=? AND fi.connection_id=?`)
+        .bind(reminderId,row.owner_user_id,row.chat_identity_id,row.connection_id)
+        .first<{ public_id: string; revision: number; kind: string }>();
+      if (work) context.followThrough = { publicId: work.public_id, revision: work.revision, kind: work.kind };
+    }
     const series = hasContextContract ? await this.database.prepare(
       `SELECT so.series_id FROM reminder_series_occurrences so
        JOIN reminder_series s ON s.id=so.series_id AND s.owner_id=? AND s.chat_identity_id=?
@@ -216,7 +257,11 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
     deliveryId: string,
     marker: string,
     now: number,
+    followThrough?: { publicId: string; revision: number },
   ): Promise<AcquireDeliveryResult> {
+    const tracked = await hasFollowThrough(this.database);
+    const fence = followThroughFence(tracked);
+    const fenceBindings = tracked ? [followThrough?.publicId ?? "", followThrough?.revision ?? -1] : [];
     const inserted = await this.commitOwnership(
       this.database.prepare(
         `INSERT OR IGNORE INTO reminder_deliveries (
@@ -232,12 +277,13 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
            AND c.user_id = w.owner_user_id
          WHERE r.id = ? AND r.status IN ('CLAIMED', 'RETRYABLE')
            AND c.state = 'ACTIVE_BOUND'
+           ${fence}
            AND NOT EXISTS (
              SELECT 1 FROM reminder_deliveries d WHERE d.reminder_id = r.id
            )
          `,
       )
-        .bind(deliveryId, now, marker, now, now, reminderId),
+        .bind(deliveryId, now, marker, now, now, reminderId, ...fenceBindings),
       reminderId,
       marker,
       now,
@@ -266,9 +312,10 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
              WHERE r.id = reminder_deliveries.reminder_id
                AND r.status IN ('CLAIMED', 'RETRYABLE')
                AND c.state = 'ACTIVE_BOUND'
+               ${fence}
            )`,
       )
-        .bind(now, marker, now, reminderId, MAX_DELIVERY_ATTEMPTS, now),
+        .bind(now, marker, now, reminderId, MAX_DELIVERY_ATTEMPTS, now, ...fenceBindings),
       reminderId,
       marker,
       now,

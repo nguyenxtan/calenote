@@ -108,6 +108,7 @@ export interface ReminderDeliveryContext {
   detail: { encrypted: EncryptedValue; keyVersion: number; entityId: string; payloadVersion: string } | null;
   detailInvalid: boolean;
   occurrences: SeriesOccurrence[];
+  followThrough?: { publicId: string; revision: number; kind: string };
 }
 
 export interface OwnedDelivery {
@@ -150,6 +151,7 @@ export interface ReminderDeliveryStore {
     deliveryId: string,
     marker: string,
     now: number,
+    followThrough?: { publicId: string; revision: number },
   ): Promise<AcquireDeliveryResult>;
   finalizeSuccess(
     reminderId: string,
@@ -414,6 +416,11 @@ export async function deliverReminder(
       randomBytes,
     );
   }
+  if (context.followThrough) {
+    const ref = context.followThrough.publicId;
+    if (context.followThrough.kind === "FOLLOW_UP") text = `🔁 Theo dõi việc: ${text}\nBạn đã hoàn tất chưa?`;
+    text += `\nMã việc: ${ref}\nxong ${ref} · hoãn ${ref} 15 phút\nđổi lịch ${ref} YYYY-MM-DD HH:mm\ndừng theo dõi ${ref}`;
+  }
   if (text.length > PROVIDER_TEXT_CODE_UNITS) {
     return failBeforeProvider(
       reminderId,
@@ -430,6 +437,7 @@ export async function deliverReminder(
     randomOpaqueId(randomBytes),
     ownershipMarker,
     startedAt,
+    context.followThrough,
   );
   if (acquired.status !== "OWNED") return acquired;
 

@@ -1,6 +1,11 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { Worker } from "node:worker_threads";
 import { D1ReminderDeliveryStore } from "./infrastructure/d1/delivery-store";
 import { ProviderOperationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
@@ -34,6 +39,7 @@ async function deliveryModule() {
 }
 
 interface HarnessOptions {
+  followThrough?: boolean;
   contextContract?: boolean;
   title?: string;
   reminderStatus?: "PENDING" | "CLAIMED" | "SENT" | "CANCELLED" | "FAILED" | "RETRYABLE" | "UNCERTAIN";
@@ -49,6 +55,7 @@ async function createHarness(options: HarnessOptions = {}) {
   expect(deliveryApi).not.toBeNull();
   if (!deliveryApi) throw new Error("delivery module missing");
   const db = new SqliteD1Database({ conversationV2: true, contextContract: options.contextContract });
+  if (options.followThrough) db.sqlite.exec(readFileSync("migrations/0014_reminder_follow_through.sql", "utf8"));
   databases.push(db);
   const keyring = await createKeyring(master);
   const encryptedToken = await keyring.encryptCredential(connectionId, "telegram", 1, token);
@@ -128,9 +135,9 @@ async function createHarness(options: HarnessOptions = {}) {
 }
 
 const companion: CanonicalDetailsV1 = { schemaVersion: "calenote-reminder-details-1", location: "Quang Trung <b>", notes: "Mang giấy tờ & bút", eventDate: "2027-01-16", eventTime: "13:30", calendarProvenance: { calendar: "GREGORIAN", sourceDate: null, provenance: { kind: "EXPLICIT_USER" } }, resolutionVersion: "context-resolution-1" };
-async function seedCompanion(harness: Awaited<ReturnType<typeof createHarness>>) {
+async function seedCompanion(harness: Awaited<ReturnType<typeof createHarness>>, value: CanonicalDetailsV1 = companion) {
   const entity = contextContractEncryptionIdentity({ ownerId: "user-1", chatIdentityId: "chat-identity-1" }, reminderId);
-  const encrypted = await harness.keyring.encryptSensitive("context-contract-reminder-details", entity, 1, JSON.stringify(companion));
+  const encrypted = await harness.keyring.encryptSensitive("context-contract-reminder-details", entity, 1, JSON.stringify(value));
   harness.db.sqlite.prepare("INSERT INTO reminder_context_details(reminder_id,owner_id,chat_identity_id,encryption_entity_id,payload_version,payload_ciphertext,payload_iv,key_version) VALUES(?,'user-1','chat-identity-1',?,'calenote-reminder-details-1',?,?,1)").run(reminderId, reminderId, new Uint8Array(encrypted.ciphertext), new Uint8Array(encrypted.iv));
 }
 
@@ -676,5 +683,144 @@ describe("cancellation handoff", () => {
       cancelled_at: null,
     });
     expect(harness.db.sqlite.prepare("SELECT COUNT(*) AS count FROM reminder_deliveries").get()).toEqual({ count: 0 });
+  });
+});
+
+
+describe("follow-through delivery controls", () => {
+  it("appends explicit scoped controls to the original delivery", async () => {
+    const h = await createHarness();
+    const read = h.deps.store.read.bind(h.deps.store);
+    vi.spyOn(h.deps.store, "read").mockImplementation(async id => ({ ...(await read(id))!, followThrough: { publicId: "ABCD1234", revision: 1, kind: "ORIGINAL" } }));
+    await h.module.deliverReminder(reminderId, h.deps);
+    expect(h.sendText.mock.calls[0][3]).toContain("xong ABCD1234");
+    expect(h.sendText.mock.calls[0][3]).toContain("hoãn ABCD1234 15 phút");
+    expect(h.sendText.mock.calls[0][3]).toContain("dừng theo dõi ABCD1234");
+  });
+  it("distinguishes follow-ups and asks whether work is complete", async () => {
+    const h = await createHarness();
+    const read = h.deps.store.read.bind(h.deps.store);
+    vi.spyOn(h.deps.store, "read").mockImplementation(async id => ({ ...(await read(id))!, followThrough: { publicId: "ABCD1234", revision: 2, kind: "FOLLOW_UP" } }));
+    await h.module.deliverReminder(reminderId, h.deps);
+    expect(h.sendText.mock.calls[0][3]).toContain("Theo dõi việc: ");
+    expect(h.sendText.mock.calls[0][3]).toContain("Bạn đã hoàn tất chưa?");
+  });
+});
+
+
+describe("migrated follow-through acquisition fence", () => {
+  it.each(["DONE", "STOPPED"])("blocks a stale provider acquisition after %s commits", async progress => {
+    const h = await createHarness({ contextContract: true, followThrough: true });
+    const original = h.deps.store.acquire.bind(h.deps.store);
+    vi.spyOn(h.deps.store, "acquire").mockImplementation(async (...args) => {
+      h.db.sqlite.prepare("UPDATE follow_through_items SET progress=?,revision=revision+1").run(progress);
+      return original(...args);
+    });
+    expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "NOOP" });
+    expect(h.sendText).not.toHaveBeenCalled();
+    expect(h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM reminder_deliveries").get()).toEqual({ n: 0 });
+  });
+  it("blocks revision changes between read and acquisition", async () => {
+    const h = await createHarness({ contextContract: true, followThrough: true });
+    const original = h.deps.store.acquire.bind(h.deps.store);
+    vi.spyOn(h.deps.store, "acquire").mockImplementation(async (...args) => {
+      h.db.sqlite.exec("UPDATE follow_through_items SET revision=revision+1");
+      return original(...args);
+    });
+    expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "NOOP" });
+    expect(h.sendText).not.toHaveBeenCalled();
+  });
+  it("fails closed on a partially present feature schema", async () => {
+    const h = await createHarness();
+    h.db.sqlite.exec("CREATE TABLE follow_through_items(id TEXT)");
+    await expect(h.deps.store.acquire(reminderId, "delivery", "marker", now)).rejects.toThrow("INCOMPLETE_FOLLOW_THROUGH_SCHEMA");
+  });
+  it("allows an already acquired send to settle after completion", async () => {
+    const h = await createHarness({ contextContract: true, followThrough: true });
+    h.sendText.mockImplementation(async () => {
+      h.db.sqlite.exec("UPDATE follow_through_items SET progress='DONE',revision=revision+1");
+      return { providerMessageId: "already-started" };
+    });
+    expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "SENT" });
+    expect(h.db.sqlite.prepare("SELECT status FROM reminder_deliveries").get()).toEqual({ status: "SENT" });
+    expect(h.db.sqlite.prepare("SELECT progress FROM follow_through_items").get()).toEqual({ progress: "DONE" });
+  });
+});
+
+
+describe("independent SQLite transaction acquisition races", () => {
+  it("serializes Done versus provider acquisition across independent connections", async () => {
+    const h = await createHarness({ contextContract: true, followThrough: true });
+    const directory = mkdtempSync(join(tmpdir(), "calenote-delivery-race-"));
+    const filename = join(directory, "race.sqlite");
+    h.db.sqlite.prepare("VACUUM INTO ?").run(filename);
+    const sqlite = new DatabaseSync(filename);
+    const connection = Object.assign(Object.create(SqliteD1Database.prototype), { sqlite }) as SqliteD1Database;
+    sqlite.exec("PRAGMA busy_timeout=5000");
+    const store = new D1ReminderDeliveryStore(connection as unknown as D1Database);
+    const snapshot = (await store.read(reminderId))!.followThrough;
+    const gate = new SharedArrayBuffer(4);
+    const worker = new Worker(`
+      const { parentPort, workerData } = require('node:worker_threads');
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(workerData.filename);
+      db.exec('PRAGMA busy_timeout=5000');
+      parentPort.postMessage('ready');
+      Atomics.wait(new Int32Array(workerData.gate),0,0);
+      db.exec("BEGIN IMMEDIATE; UPDATE follow_through_items SET progress='DONE',revision=revision+1; COMMIT");
+      db.close();
+      parentPort.postMessage('done');
+    `, { eval: true, workerData: { filename, gate } });
+    try {
+      const done = new Promise<void>((resolve, reject) => {
+        worker.on("message", message => { if (message === "done") resolve(); });
+        worker.on("error", reject);
+      });
+      await new Promise<void>((resolve, reject) => {
+        worker.on("message", message => { if (message === "ready") resolve(); });
+        worker.on("error", reject);
+      });
+      Atomics.store(new Int32Array(gate), 0, 1);
+      Atomics.notify(new Int32Array(gate), 0);
+      const acquired = await store.acquire(reminderId, "race-delivery", "race-marker", now, snapshot);
+      await done;
+      expect(["OWNED", "NOOP"]).toContain(acquired.status);
+      expect(sqlite.prepare("SELECT progress,revision FROM follow_through_items").get()).toMatchObject({ progress: "DONE", revision: 1 });
+      if (acquired.status === "OWNED") {
+        await store.finalizeSuccess(reminderId, "race-marker", "pre-acquired-receipt", "race-audit", now);
+        expect(sqlite.prepare("SELECT status FROM reminder_deliveries").get()).toEqual({ status: "SENT" });
+      } else expect(sqlite.prepare("SELECT COUNT(*) AS n FROM reminder_deliveries").get()).toEqual({ n: 0 });
+      expect(await store.acquire(reminderId, "late-delivery", "late-marker", now + 1, snapshot)).not.toMatchObject({ status: "OWNED" });
+    } finally {
+      await worker.terminate();
+      sqlite.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+
+describe("follow-through guard coverage", () => {
+  it("checks the complete controls against the provider message limit before acquisition", async () => {
+    const h = await createHarness({ contextContract: true, followThrough: true, title: "a".repeat(400) });
+    await seedCompanion(h, { ...companion, location: null, eventDate: null, eventTime: null, notes: "n".repeat(1400) });
+    expect(await h.module.deliverReminder(reminderId, h.deps)).toEqual({ status: "FAILED" });
+    expect(h.sendText).not.toHaveBeenCalled();
+    expect(h.db.sqlite.prepare("SELECT safe_error_code FROM reminder_deliveries").get()).toEqual({ safe_error_code: "MESSAGE_TOO_LONG" });
+  });
+  it.each(["current_reminder_id='replaced-run'", "connection_id='different-original-bot'"])("fences graph changes %s before initial and retry acquisition", async assignment => {
+    const h = await createHarness({ contextContract: true, followThrough: true });
+    // Independent graph changes leave the old reminder claim untouched, proving
+    // the work fence itself stops acquisition without relying on cancellation.
+    const snapshot = (await h.deps.store.read(reminderId))!.followThrough;
+    const replacement = await h.keyring.encryptSensitive("reminder-title", "replaced-run", 1, "replacement");
+    h.db.sqlite.prepare("INSERT INTO reminders(id,public_id,workspace_id,chat_identity_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,created_at,updated_at) VALUES('replaced-run','replacement-public','workspace-1','chat-identity-1',?,?,1,?,'Asia/Ho_Chi_Minh','PENDING',?,?)").run(new Uint8Array(replacement.ciphertext), new Uint8Array(replacement.iv), now + 60_000, now, now);
+    const credential = await h.keyring.encryptCredential("different-original-bot", "telegram", 1, token);
+    h.db.sqlite.prepare("INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at) VALUES('different-original-bot','user-1','telegram','replacement-connection','other-provider-bot','Other',?,?,'other-fingerprint',1,'ACTIVE_BOUND',?,?)").run(new Uint8Array(credential.ciphertext), new Uint8Array(credential.iv), now, now);
+    h.db.sqlite.exec(`UPDATE follow_through_items SET ${assignment} WHERE id='${reminderId}'`);
+    expect(await h.deps.store.acquire(reminderId, "guard-first", "first", now, snapshot)).toEqual({ status: "NOOP" });
+    h.db.sqlite.prepare("INSERT INTO reminder_deliveries(id,reminder_id,status,attempt_count,retry_not_before,created_at,updated_at) VALUES('guard-retry',?,'RETRYABLE',1,?,?,?)").run(reminderId, now - 1, now, now);
+    expect(await h.deps.store.acquire(reminderId, "guard-retry", "second", now, snapshot)).toEqual({ status: "NOOP" });
+    expect(h.db.sqlite.prepare("SELECT status,attempt_count FROM reminder_deliveries").get()).toEqual({ status: "RETRYABLE", attempt_count: 1 });
   });
 });
