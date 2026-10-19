@@ -42,6 +42,15 @@ function installSettingsFetch() { const fetcher=vi.fn(async (input:string|URL|Re
 describe("FinalScreenExperience connections", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("announces session loading without exposing a personal shell or a large page heading", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<FinalScreenExperience screen="activity" />);
+    expect(screen.getByRole("status", { name: "Đang mở Calenote" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Calenote" })).toBeVisible();
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+  });
+
   it("renders only the supported providers with bound, unbound, and attention states", async () => {
     installFetch(json({ data: { connections: [
       { publicId: "T".repeat(22), provider: "telegram", displayName: "Mai Telegram", handle: "@mai", state: "ACTIVE_BOUND" },

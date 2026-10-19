@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/ui/loading/AppLoading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, Link2, RefreshCw, Clock3 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,7 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
   async function rotateConnectCode(publicId: string) { if (connectionMutationPending) return; setConnectionMutationPending(true); setConnectionError(null); setConnectionNotice(null); try { const data = ConnectCodeResultSchema.parse(await apiRequest<unknown>(`/api/connections/${publicId}/connect-code`, { method: "POST", body: {}, authenticated: true, onUnauthorized: () => replace("/login") })); setConnectCodes((current) => ({ ...current, [publicId]: { command: data.connectCommand, expiresAt: data.expiresAt } })); } catch (reason) { setConnectionError(safeMutationMessage(reason, "Chưa thể tạo mã kết nối. Vui lòng thử lại.")); } finally { setConnectionMutationPending(false); } }
   async function copyConnectCode(command: string) { try { if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable"); await navigator.clipboard.writeText(command); setConnectionNotice("Đã sao chép mã kết nối."); } catch { setConnectionError("Chưa thể sao chép mã. Bạn có thể sao chép thủ công."); } }
 
+  if (!user && !error) return <AppLoading />;
   if (!user) return <main className={styles.entry}><section><h1>{error ? "Chưa mở được Calenote" : "Đang mở Calenote"}</h1>{error && <button onClick={() => void load()}>Thử lại</button>}</section></main>;
   return <AppShell user={user} activePath={`/app/${screen}`}><main className={styles.page}><header><p>{screen === "connections" ? "Kênh hỗ trợ" : screen === "activity" ? "Hoạt động" : "Không gian cá nhân"}</p><h1>{screen === "connections" ? "Kết nối" : screen === "activity" ? "Hoạt động" : "Cài đặt"}</h1><span>{screen === "connections" ? "Kết nối những nơi bạn muốn Calenote hỗ trợ." : screen === "activity" ? "Những thay đổi quan trọng gần đây." : "Điều chỉnh cách Calenote đồng hành cùng bạn."}</span></header>{error ? <LoadError retry={load} /> : screen === "connections" ? <><AddBotPanel onAdded={load}/>{connections&&<PrimaryLoginPanel connections={connections}/>}<Connections disconnectConnection={disconnectConnection} value={connections} pending={connectionMutationPending} notice={connectionNotice} error={connectionError} connectCodes={connectCodes} retryWebhook={retryWebhook} rotateConnectCode={rotateConnectCode} copyConnectCode={copyConnectCode} /></> : screen === "activity" ? <ActivityFeed value={activities} /> : preferences ? <SettingsPanel user={user} value={preferences} save={save} notice={settingsNotice} busy={saving} /> : <Loading />}</main></AppShell>;
 }

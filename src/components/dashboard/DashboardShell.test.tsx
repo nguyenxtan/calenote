@@ -77,7 +77,7 @@ function routeFetcher(routes: Record<string, Reply[]>): ReturnType<typeof vi.fn>
 async function renderAuthenticated(fetcher: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetcher);
   render(<DashboardShell />);
-  expect(screen.getByRole("status")).toHaveTextContent("Đang xác thực phiên");
+  expect(screen.getByRole("status")).toHaveTextContent("Đang chuẩn bị không gian của bạn");
   expect(screen.queryByText("Ngọc An")).not.toBeInTheDocument();
   await screen.findByRole("heading", { name: "Chào, Ngọc An" });
 }
@@ -95,7 +95,7 @@ describe("DashboardShell", () => {
 
     render(<DashboardShell />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Đang xác thực phiên");
+    expect(screen.getByRole("status")).toHaveTextContent("Đang chuẩn bị không gian của bạn");
     expect(screen.queryByText("Ngọc An")).not.toBeInTheDocument();
     resolveSession(json({ error: {
       code: "UNAUTHENTICATED",

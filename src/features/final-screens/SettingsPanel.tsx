@@ -56,8 +56,13 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
             </select></label>
           </div>
           {draft.addressStyle === "custom" && <label className={styles.customName}>Bạn muốn được gọi là gì?<input disabled={busy} maxLength={80} value={draft.customDisplayName ?? ""} onChange={event => edit({ ...draft, customDisplayName: event.target.value })} placeholder="Ví dụ: Tân" /></label>}
-          <label><input type="checkbox" disabled={busy} checked={draft.reminderConfirmation === "preview"} onChange={event => edit({ ...draft, reminderConfirmation: event.target.checked ? "preview" : "auto" })} />Xem trước và xác nhận trước khi tạo lời nhắc</label>
-          <p className={styles.help}>Mặc định, yêu cầu nhắc rõ nội dung và ngày giờ trong Zalo hoặc Telegram được tạo ngay. Bật lựa chọn này để xem trước rồi xác nhận. Áp dụng chung cho tài khoản.</p>
+          <div className={styles.confirmationSetting}>
+            <label className={styles.switchRow}>
+              <span id="confirmation-label">Xem trước và xác nhận trước khi tạo lời nhắc</span>
+              <input className={styles.confirmationSwitch} type="checkbox" role="switch" aria-labelledby="confirmation-label" aria-describedby="confirmation-help" disabled={busy} checked={draft.reminderConfirmation === "preview"} onChange={event => edit({ ...draft, reminderConfirmation: event.target.checked ? "preview" : "auto" })} />
+            </label>
+            <p id="confirmation-help" className={styles.help}>Mặc định, yêu cầu nhắc rõ nội dung và ngày giờ trong Zalo hoặc Telegram được tạo ngay. Bật lựa chọn này để xem trước rồi xác nhận. Áp dụng chung cho tài khoản.</p>
+          </div>
           <div className={styles.preview}><span>Ví dụ giọng điệu</span><p>{preview}</p><small>Minh hoạ cách diễn đạt; nội dung phản hồi thực tế tuỳ tình huống.</small></div>
           <div className={styles.saveRow}><button className={styles.primary} type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu cá nhân hoá"}</button><span role="status">{editedSinceSubmit ? "Có thay đổi chưa lưu." : notice}</span></div>
           {validation && <p role="alert" className={styles.mutationError}>{validation}</p>}

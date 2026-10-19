@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/ui/loading/AppLoading";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, CircleCheck, RefreshCw, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -156,6 +157,7 @@ export function TodayExperience() {
     finally { if (epoch.current === current) { setDecidingId(null); mutationLocked.current = false; } }
   }
 
+  if (sessionState !== "error" && (sessionState !== "ready" || !user)) return <AppLoading />;
   if (sessionState !== "ready" || !user) return <main className={styles.entry}><section className={styles.entryCard}>{sessionState === "error" ? <><h1>Chưa mở được Calenote</h1><p>{sessionError}</p><button type="button" onClick={() => void start()}>Thử lại</button></> : <><h1>Đang mở Calenote</h1><p>Calenote chưa hiển thị dữ liệu cá nhân.</p></>}</section></main>;
 
   const projection = projectReminders(reminders.value ?? [], now);

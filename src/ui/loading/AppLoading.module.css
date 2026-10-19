@@ -1,0 +1,35 @@
+.page { min-height: 100dvh; display: grid; align-content: center; padding: 40px 24px; background: var(--cn-bg); }
+.frame { width: min(100%, 960px); margin: 0 auto; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.status { display: flex; align-items: center; gap: 12px; }
+.status p { margin: 0 0 4px; color: var(--cn-text); font-size: 14px; font-weight: 600; }
+.status span { color: var(--cn-text-3); font-size: 12px; }
+.status .spinner { width: 20px; height: 20px; flex: 0 0 auto; border: 2px solid var(--cn-brand-soft); border-top-color: var(--cn-brand-500); border-radius: 50%; animation: turn 1s linear infinite; }
+.skeleton { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 36px; padding: 32px; border: 1px solid var(--cn-border); border-radius: 20px; background: var(--cn-surface); }
+.skeleton i { display: block; height: 10px; border-radius: 6px; background: var(--cn-surface-subtle); }
+.sidebar { display: grid; gap: 24px; align-content: start; padding-top: 8px; border-right: 1px solid var(--cn-border); padding-right: 28px; }
+.sidebar i:first-child { background: var(--cn-brand-soft); height: 32px; margin-top: -8px; }
+.sidebar i:nth-child(3) { width: 75%; }
+.content { display: grid; gap: 28px; min-width: 0; }
+.title { display: grid; gap: 12px; }
+.title i:first-child { width: 42%; height: 20px; }
+.title i:last-child { width: 64%; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cards > div { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--cn-border); border-radius: 12px; }
+.cards i:first-child { width: 30px; height: 30px; border-radius: 9px; background: var(--cn-brand-soft); }
+.cards i:last-child { width: 60%; }
+.rows { display: grid; gap: 22px; padding-top: 4px; }
+.rows i:nth-child(2) { width: 84%; }
+.rows i:nth-child(3) { width: 68%; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .status .spinner { animation: none; } }
+@media (max-width: 600px) {
+  .page { padding: 28px 20px; }
+  .header { align-items: flex-start; flex-direction: column; gap: 24px; }
+  .skeleton { grid-template-columns: 1fr; padding: 24px; }
+  .sidebar { display: none; }
+  .cards { grid-template-columns: 1fr; }
+  .cards > div:last-child { display: none; }
+  .title i:first-child { width: 58%; }
+  .title i:last-child { width: 80%; }
+}

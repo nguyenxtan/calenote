@@ -22,7 +22,7 @@
 .iconTile { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: var(--cn-brand-soft); color: var(--cn-brand-700); }
 .fieldGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
 .settingsCard label { display: grid; gap: 9px; font-size: 13px; font-weight: 500; }
-.settingsCard input,.settingsCard select { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--cn-border-strong); border-radius: 10px; background: #fff; font-size: 14px; }
+.settingsCard input:not([type="checkbox"]),.settingsCard select { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--cn-border-strong); border-radius: 10px; background: #fff; font-size: 14px; }
 .customName { margin-top: 20px; }
 .preview { margin: 24px 0; padding: 18px; border-radius: 12px; background: var(--cn-bg); border: 1px solid var(--cn-border); }
 .preview > span { display: block; color: var(--cn-brand-700); font-size: 11px; letter-spacing: .04em; font-weight: 600; margin-bottom: 8px; }
@@ -67,3 +67,16 @@
 .disconnect section { margin-top: 14px; padding: 18px; border: 1px solid var(--cn-border-strong); border-radius: 12px; }
 .disconnect section button { min-height: 44px; margin: 8px 12px 0 0; }
 .connectCode code { overflow-wrap: anywhere; }
+
+.confirmationSetting { margin-top: 24px; padding: 18px; border: 1px solid var(--cn-border); border-radius: 12px; background: var(--cn-bg); }
+.settingsCard .switchRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; cursor: pointer; }
+.switchRow > span { min-width: 0; line-height: 1.6; color: var(--cn-text); }
+.settingsCard .confirmationSwitch { appearance: none; -webkit-appearance: none; display: block; position: relative; flex: 0 0 44px; width: 44px; height: 26px; min-height: 0; margin: 0; padding: 0; border: 1px solid var(--cn-border-strong); border-radius: 20px; background: #92867c; border-color: #92867c; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease; }
+.confirmationSwitch::before { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0002; transition: transform 160ms ease; }
+.settingsCard .confirmationSwitch:checked { background: var(--cn-brand-500); border-color: var(--cn-brand-500); }
+.confirmationSwitch:checked::before { transform: translateX(18px); }
+.confirmationSwitch:focus-visible { outline: 3px solid var(--cn-brand-700); outline-offset: 4px; }
+.confirmationSwitch:disabled { cursor: wait; opacity: .55; }
+.confirmationSetting .help { margin: 6px 64px 0 0; }
+@media (max-width: 520px) { .confirmationSetting { padding: 14px; } .confirmationSetting .help { margin-right: 0; } }
+@media (prefers-reduced-motion: reduce) { .confirmationSwitch,.confirmationSwitch::before { transition: none; } }

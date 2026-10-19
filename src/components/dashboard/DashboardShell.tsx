@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/ui/loading/AppLoading";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -447,6 +448,7 @@ export function DashboardShell() {
     }
   }
 
+  if (entryState !== "error" && (entryState !== "ready" || !user)) return <AppLoading />;
   if (entryState !== "ready" || !user) {
     return (
       <main className={styles.entryPage}>

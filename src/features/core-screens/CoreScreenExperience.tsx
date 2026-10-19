@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/ui/loading/AppLoading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleCheck, RotateCcw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -108,7 +109,7 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
     }
   } finally { mutationLocked.current = false; if (epoch.current === current) setBusyId(null); } };
   if (sessionError) return <main className={styles.entry}><LocalError message={sessionError} retry={() => location.reload()} /></main>;
-  if (!user) return <main className={styles.entry}><Loading /></main>;
+  if (!user) return <AppLoading />;
   return <AppShell user={user} activePath={path}><main className={styles.page}>{notice && <p className={styles.notice} role="status"><CircleCheck size={17} aria-hidden="true" />{notice}</p>}{screen === "calendar" ? <Calendar reminders={reminders} hasMore={reminderHasMore} retry={() => void loadReminders(epoch.current)} /> : screen === "inbox" ? <><Inbox actions={actions} busyId={busyId} decide={decide} retry={() => void loadActions(epoch.current)} />{contextContractEnabled && <ContextPreviewPanel previews={previews.value?.previews ?? []} loading={previews.value === null && previews.error === null} error={previews.error} hasMore={previews.value?.hasMore ?? false} onDecision={decidePreview} onRetry={() => void loadPreviews(epoch.current)} />}</> : <Reminders reminders={reminders} hasMore={reminderHasMore} busyId={busyId} cancel={cancel} retry={() => void loadReminders(epoch.current)} />}{screen !== "calendar" && <ReminderSeriesPanel onUnauthorized={redirect} onChanged={() => void loadReminders(epoch.current)} />}</main></AppShell>;
 }
 
