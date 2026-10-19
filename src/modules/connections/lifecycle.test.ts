@@ -54,3 +54,13 @@ it('requires selecting the alternate primary before disconnecting the current pr
  db.sqlite.exec("UPDATE primary_login_channels SET connection_id='alternate',transition_marker='explicit-alternate' WHERE user_id='u'");
  expect(await store.disconnect('u','public',101,'allowed')).toBe(true);
 });
+it.each(['login','reminder'] as const)('blocks disconnect when a %s delivery has an uncertain provider outcome',async kind=>{
+ const {db,store}=setup();
+ if(kind==='login')db.sqlite.exec(`INSERT INTO login_codes(id,user_id,connection_id,code_ciphertext,code_iv,code_key_version,expires_at,delivery_status,created_at,updated_at)
+  VALUES ('login','u','c',x'01',zeroblob(12),1,1000,'UNCERTAIN',1,1)`);
+ else db.sqlite.exec(`INSERT INTO workspaces VALUES ('workspace','u','PERSONAL',1,1);
+  INSERT INTO reminders(id,public_id,workspace_id,chat_identity_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,created_at,updated_at)
+   VALUES ('reminder','reminder-public','workspace','chat',x'01',zeroblob(12),1,100,'Asia/Ho_Chi_Minh','UNCERTAIN',1,1);
+  INSERT INTO reminder_deliveries(id,reminder_id,status,created_at,updated_at) VALUES ('delivery','reminder','UNCERTAIN',1,1);`);
+ expect(await store.disconnect('u','public',100,'uncertain')).toBe(false);
+});

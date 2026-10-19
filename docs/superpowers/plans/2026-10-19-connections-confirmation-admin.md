@@ -48,3 +48,5 @@
 - Ruling: multi-bot add must preserve usable login/manual creation. Added minimal primary selection0013 and explicit manual target bound into intent digest; no implicit selection among ambiguous existing bots.
 - Targeted evidence: connections236tests; V2runtime42; prefs33; compatibility105; admin23; explicitmanualtarget/UI20+14. Typecheck/lint/build passed before immutable fullsuite.
 - Initial fullsuite aborted130 while concurrent source edits changed provenance. Re-run on clean commit; no benchmark guard weakened.
+
+- Independentreview found unconditionallease release after ambiguousprovidercompletion; RED/GREEN actualSQLite/ContextContract tests nowretainleases for timeout/invalidreceipt/typingfailure, release only provenpre-dispatch or settledsuccess. UNCERTAINlogin/reminder blocksdisconnect. PrimaryUI staleGET/mismatchedPATCH fix alsoRED/GREEN8tests. No provider/networkauthority change.

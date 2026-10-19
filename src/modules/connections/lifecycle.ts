@@ -36,9 +36,9 @@ export class D1ConnectionLifecycleStore {
                 AND length(ci.private_chat_id)>0 AND length(ci.provider_user_id)>0)
             AND NOT EXISTS(SELECT 1 FROM inbound_updates i WHERE i.connection_id=bot_connections.id AND i.state='PROCESSING')
             AND NOT EXISTS(SELECT 1 FROM connection_egress e WHERE e.connection_id=bot_connections.id)
-            AND NOT EXISTS(SELECT 1 FROM login_codes l WHERE l.connection_id=bot_connections.id AND l.delivery_status='SENDING')
+            AND NOT EXISTS(SELECT 1 FROM login_codes l WHERE l.connection_id=bot_connections.id AND l.delivery_status IN ('SENDING','UNCERTAIN'))
             AND NOT EXISTS(SELECT 1 FROM reminder_deliveries d JOIN reminders r ON r.id=d.reminder_id JOIN chat_identities ci ON ci.id=r.chat_identity_id
-              WHERE ci.connection_id=bot_connections.id AND d.status='SENDING') RETURNING id`)
+              WHERE ci.connection_id=bot_connections.id AND d.status IN ('SENDING','UNCERTAIN')) RETURNING id`)
           .bind(disconnectMarker,now,userId,publicId),
         this.db.prepare(`UPDATE connect_codes SET consumed_at=COALESCE(consumed_at,?) WHERE connection_id IN
           (SELECT id FROM bot_connections WHERE user_id=? AND public_id=?) AND ${changed}`)

@@ -637,6 +637,10 @@ async function reserveConnectionEgress(message: ClaimedInboundMessage, dependenc
   return marker;
 }
 
+function validSendReceipt(receipt: SendReceipt | undefined): receipt is SendReceipt {
+  return !!receipt && (receipt.providerMessageId === null || (typeof receipt.providerMessageId === "string" && receipt.providerMessageId.length <= 512));
+}
+
 async function replyAfterTerminal(
   message: ClaimedInboundMessage,
   text: string,
@@ -644,24 +648,20 @@ async function replyAfterTerminal(
 ): Promise<boolean> {
   const reservation=await reserveConnectionEgress(message,dependencies);
   if (!reservation) return false;
+  let dispatched=false;
+  let settled=false;
   try {
-    const token = await dependencies.keyring.decryptCredential(
-      message.connectionId,
-      message.provider,
-      message.credentialVersion,
-      { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
-    );
-    await (dependencies.sendText ?? sendProviderText)(
-      message.provider,
-      token,
-      message.privateChatId,
-      text,
-    );
-    return true;
-  } catch {
-    // Binding/help replies are best effort after the terminal database transition.
-    return false;
-  } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
+    const token=await dependencies.keyring.decryptCredential(message.connectionId,message.provider,message.credentialVersion,
+      {ciphertext:message.encryptedToken,iv:message.encryptedTokenIv});
+    dispatched=true;
+    const receipt=await (dependencies.sendText ?? sendProviderText)(message.provider,token,message.privateChatId,text);
+    settled=validSendReceipt(receipt);
+    return settled;
+  } catch { return false; }
+  finally {
+    // A rejected/invalid provider result cannot prove the request stopped.
+    if (!dispatched || settled) await dependencies.connectionEgress?.finishEgress(reservation);
+  }
 }
 
 /** Receipt-preserving successor adapter. Provider success may lack a reference;
@@ -669,16 +669,19 @@ async function replyAfterTerminal(
 async function replyWithReceipt(message: ClaimedInboundMessage, text: string, dependencies: ProcessInboundDependencies): Promise<ReplyReceipt> {
   const reservation=await reserveConnectionEgress(message,dependencies);
   if (!reservation) return {status:"FAILED"};
+  let dispatched=false;
+  let settled=false;
   try {
-  let token: string;
-  try { token = await dependencies.keyring.decryptCredential(message.connectionId, message.provider, message.credentialVersion,
-    { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv }); } catch { return { status: "FAILED" }; }
-  try {
-    const receipt = await (dependencies.sendText ?? sendProviderText)(message.provider, token, message.privateChatId, text);
-    if (!receipt || (receipt.providerMessageId !== null && (typeof receipt.providerMessageId !== "string" || receipt.providerMessageId.length > 512))) return { status: "UNCERTAIN" };
-    return { status: "SENT", messageRef: receipt.providerMessageId };
-  } catch { return { status: "UNCERTAIN" }; }
-  } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
+    let token:string;
+    try { token=await dependencies.keyring.decryptCredential(message.connectionId,message.provider,message.credentialVersion,
+      {ciphertext:message.encryptedToken,iv:message.encryptedTokenIv}); } catch { return {status:"FAILED"}; }
+    dispatched=true;
+    const receipt=await (dependencies.sendText ?? sendProviderText)(message.provider,token,message.privateChatId,text);
+    if (!validSendReceipt(receipt)) return {status:"UNCERTAIN"};
+    settled=true;
+    return {status:"SENT",messageRef:receipt.providerMessageId};
+  } catch { return {status:"UNCERTAIN"}; }
+  finally { if (!dispatched || settled) await dependencies.connectionEgress?.finishEgress(reservation); }
 }
 
 function recordZaloEarlyDiagnostic(
@@ -819,6 +822,8 @@ export async function processInbound(
         send: async signal => {
           const reservation=await reserveConnectionEgress(message,dependencies);
           if (!reservation) { releaseDispatch(); return; }
+          let dispatched=false;
+          let settled=false;
           try {
           const token = await dependencies.keyring.decryptCredential(
             message.connectionId,
@@ -829,13 +834,15 @@ export async function processInbound(
           if (signal.aborted) return;
           observeTiming(dependencies.observeTiming, "TYPING_DISPATCH", performance.now() - eligibleStarted);
           releaseDispatch();
+          dispatched=true;
           await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
             message.provider,
             token,
             message.privateChatId,
             signal,
           );
-          } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
+          settled=true;
+          } finally { if (!dispatched || settled) await dependencies.connectionEgress?.finishEgress(reservation); }
         }
       });
       // V1 waits only for local credential preparation/dispatch, never provider

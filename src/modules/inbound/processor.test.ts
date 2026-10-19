@@ -646,3 +646,16 @@ it('refuses to disconnect while a terminal reply is already reserved and cleans 
  expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:0});
  expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(true);
 });
+it.each(['timeout','invalid-receipt','decrypt-failed'] as const)('retains uncertain egress but releases proven pre-dispatch failure: %s',async outcome=>{
+ const {database,deps,inboundId,sendText}=await setup();
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'zalo','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ if(outcome==='timeout')sendText.mockRejectedValue(new Error('provider timed out'));
+ if(outcome==='invalid-receipt')sendText.mockResolvedValue({providerMessageId:123} as never);
+ if(outcome==='decrypt-failed')vi.spyOn(deps.keyring,'decryptCredential').mockRejectedValue(new Error('bad ciphertext'));
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:outcome==='decrypt-failed'?0:1});
+ expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(outcome==='decrypt-failed');
+});
