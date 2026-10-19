@@ -23,7 +23,8 @@ function result(item: FollowThroughItem): FollowThroughChatResult {
   return { handled: true, text: `${state}. Mã việc: ${item.publicId}.` };
 }
 function selection(items: FollowThroughItem[]): FollowThroughChatResult {
-  return { handled: true, text: items.length ? `Chọn mã việc trong cuộc trò chuyện này:\n${items.filter(item => item.progress === "OPEN").slice(0, 5).map(item => `${item.publicId}: ${item.title.slice(0, 100)}`).join("\n")}\nVí dụ: xong <mã việc>.` : "Không tìm thấy việc được theo dõi trong cuộc trò chuyện này." };
+  items=items.filter(item=>item.progress=== "OPEN").slice(0,5);
+  return { handled: true, text: items.length ? `Chọn mã việc trong cuộc trò chuyện này:\n${items.map(item => `${item.publicId}: ${item.title.slice(0, 100)}`).join("\n")}\nVí dụ: xong <mã việc>.` : "Không tìm thấy việc được theo dõi trong cuộc trò chuyện này." };
 }
 
 export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now): FollowThroughChatHandler {
@@ -37,7 +38,7 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
     const idempotencyKey = `chat-${message.id}`;
     const prior = await service.receipt(scope, idempotencyKey);
     if (prior) return result(prior);
-    const page = await service.list(scope);
+    const page = await service.list({...scope,progress:"OPEN"});
     const tracked = page.items.filter(item => item.progress !== "UNTRACKED");
     const args = (command[3] ?? "").split(" ");
     const reference = args.shift() ?? "";

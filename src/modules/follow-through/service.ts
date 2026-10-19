@@ -34,7 +34,7 @@ export class D1FollowThroughService {
  async history(s:FollowThroughScope,publicId:string,cursor?:string){if(!await this.available())throw new FollowThroughError('BLOCKED');const r=await this.row(s,publicId);if(!r)throw new FollowThroughError('NOT_FOUND');return this.historyPage(r,cursor);}
  private async item(r:Row):Promise<FollowThroughItem>{const page=await this.historyPage(r);return {publicId:r.public_id,title:await this.keyring.decryptSensitive('reminder-title',r.current_reminder_id,r.title_key_version,{ciphertext:persistedD1Blob(r.title_ciphertext),iv:persistedD1Blob(r.title_iv)}),progress:r.progress??'UNTRACKED',revision:r.revision??0,currentReminderPublicId:r.reminder_public_id,scheduledAt:r.scheduled_at,deliveryStatus:r.status,destinationLabel:r.destination_label,followUpEnabled:r.follow_up_enabled===1,intervalMinutes:r.interval_minutes??120,followUpCount:r.follow_up_count??0,nextFollowUpAt:r.next_follow_up_at??null,completedAt:r.completed_at??null,history:page.history,historyHasMore:Boolean(page.nextCursor),...(page.nextCursor?{historyCursor:page.nextCursor}:{})};}
  async resolveReference(s:FollowThroughScope,reference:string):Promise<FollowThroughItem[]>{if(!/^[A-Za-z0-9_-]{8,128}$/u.test(reference)||!await this.available())return [];const rows=(await this.statement(select+" AND substr(COALESCE(i.public_id,r.public_id),1,?)=? ORDER BY COALESCE(i.public_id,r.public_id) LIMIT 2",[...this.args(s),reference.length,reference]).all<Row>()).results;return Promise.all(rows.map(r=>this.item(r)));}
- async list(s:FollowThroughScope):Promise<FollowThroughList>{if(!await this.available())throw new FollowThroughError('BLOCKED');const rows=(await this.statement(select+' AND COALESCE(i.public_id,r.public_id)>? ORDER BY COALESCE(i.public_id,r.public_id) LIMIT 11',[...this.args(s),s.cursor??'']).all<Row>()).results;return {items:await Promise.all(rows.slice(0,10).map(r=>this.item(r))),...(rows.length>10?{nextCursor:rows[9].public_id}:{})};}
+ async list(s:FollowThroughScope):Promise<FollowThroughList>{if(!await this.available())throw new FollowThroughError('BLOCKED');const rows=(await this.statement(select+" AND (? IS NULL OR i.progress=?) AND COALESCE(i.public_id,r.public_id)>? ORDER BY COALESCE(i.public_id,r.public_id) LIMIT 11",[...this.args(s),s.progress??null,s.progress??null,s.cursor??'']).all<Row>()).results;return {items:await Promise.all(rows.slice(0,10).map(r=>this.item(r))),...(rows.length>10?{nextCursor:rows[9].public_id}:{})};}
  private async loadReceipt(s:FollowThroughScope,key:string){return this.statement(`SELECT receipt.payload_digest,receipt.result_json FROM follow_through_action_receipts receipt JOIN follow_through_items i ON i.id=receipt.item_id JOIN workspaces w ON w.id=i.workspace_id AND w.owner_user_id=i.owner_user_id AND w.kind='PERSONAL' JOIN memberships m ON m.workspace_id=w.id AND m.user_id=w.owner_user_id AND m.role='OWNER' JOIN chat_identities ci ON ci.id=i.chat_identity_id AND ci.connection_id=i.connection_id JOIN bot_connections c ON c.id=ci.connection_id AND c.user_id=w.owner_user_id WHERE receipt.scope=? AND receipt.idempotency_key=? AND i.owner_user_id=? AND (? IS NULL OR i.chat_identity_id=?) AND (? IS NULL OR i.connection_id=?)`,[this.scopeKey(s),key,...this.args(s)]).first<{payload_digest:string;result_json:string}>();}
  async receipt(s:FollowThroughScope,key:string):Promise<FollowThroughItem|null>{if(!await this.available())return null;const r=await this.loadReceipt(s,key);return r?this.decodeReceipt(this.scopeKey(s),key,r.result_json):null;}
  async act(s:FollowThroughScope,raw:FollowThroughAction):Promise<FollowThroughItem>{return this.mutate(s,raw,false);}
@@ -42,7 +42,7 @@ export class D1FollowThroughService {
   if((s.inboundUpdateId&&!s.claimMarker)||(!s.inboundUpdateId&&s.claimMarker))throw new FollowThroughError('INVALID');
   const parsed=FollowThroughActionSchema.safeParse(raw);if(!parsed.success)throw new FollowThroughError('INVALID');const input=parsed.data;
   if(!await this.available())throw new FollowThroughError('BLOCKED');
-  const payload=JSON.stringify([input.action,input.publicId,input.expectedRevision,input.scheduledAt??null,input.intervalMinutes??null,input.enabled??null,automatic]);
+  const payload=JSON.stringify([input.action,input.publicId,input.expectedRevision,automatic?null:input.scheduledAt??null,input.intervalMinutes??null,input.enabled??null,automatic]);
   const digest=await this.keyring.digestCode(payload),scope=this.scopeKey(s);
   const prior=await this.loadReceipt(s,input.idempotencyKey);
   if(prior){if(prior.payload_digest!==digest)throw new FollowThroughError('CONFLICT');return this.decodeReceipt(scope,input.idempotencyKey,prior.result_json);}
@@ -51,8 +51,9 @@ export class D1FollowThroughService {
   if(input.action==='ADOPT'&&r.progress!==null)throw new FollowThroughError('CONFLICT');
   if(input.action!=='ADOPT'&&r.progress===null)throw new FollowThroughError('INVALID');
   if(r.progress&&r.progress!=='OPEN'&&!(input.action==='DONE'&&r.progress==='DONE'))throw new FollowThroughError('CONFLICT');
+  const old=await this.item(r);
   const now=(this.options.now??Date.now)(),marker=randomOpaqueId(),statements:D1PreparedStatement[]=[];
-  const old=await this.item(r);let result:FollowThroughItem={...old,revision:old.revision+1};
+  let result:FollowThroughItem={...old,revision:old.revision+1};
   if(input.action==='ADOPT')statements.push(this.statement(`INSERT INTO follow_through_items(id,public_id,root_reminder_id,owner_user_id,workspace_id,chat_identity_id,connection_id,current_reminder_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,[r.id,r.public_id,r.root_reminder_id,s.userId,r.workspace_id,r.chat_identity_id,r.connection_id,r.current_reminder_id,now,now]),this.statement("INSERT INTO follow_through_runs(item_id,reminder_id,kind,ordinal,lineage_key) VALUES(?,?,'ORIGINAL',0,?)",[r.id,r.current_reminder_id,r.id]));
   if(input.action==='ADOPT')result.progress='OPEN';
   if(input.action==='DONE'){if(old.progress==='DONE')result.revision=old.revision;result.progress='DONE';result.completedAt=old.completedAt??now;result.nextFollowUpAt=null;}
@@ -65,6 +66,9 @@ export class D1FollowThroughService {
   }
   const spawn=input.action==='SNOOZE'||input.action==='RESCHEDULE';
   if(spawn){
+   // Automatic scheduling uses the mutation clock after schema/receipt/owner preflight.
+   // Leave enough time for the atomic child transaction; manual deadlines stay strict.
+   if(automatic)input.scheduledAt=now+60000;
    if(!input.scheduledAt||input.scheduledAt<=now||input.scheduledAt-now>366*86400000)throw new FollowThroughError('INVALID');
    if(r.connection_state!=='ACTIVE_BOUND')throw new FollowThroughError('BLOCKED');
    if(automatic&&(r.status!=='SENT'||!old.followUpEnabled||old.followUpCount>=3))throw new FollowThroughError('BLOCKED');
@@ -100,6 +104,6 @@ export class D1FollowThroughService {
   // Observe definitive sends only. Old elapsed policies are paused visibly instead of replayed.
   await this.statement(`UPDATE follow_through_items SET next_follow_up_at=(SELECT d.sent_at+interval_minutes*60000 FROM reminder_deliveries d WHERE d.reminder_id=current_reminder_id AND d.status='SENT' AND d.sent_at IS NOT NULL) WHERE progress='OPEN' AND follow_up_enabled=1 AND follow_up_count<3 AND next_follow_up_at IS NULL AND EXISTS(SELECT 1 FROM reminders r JOIN reminder_deliveries d ON d.reminder_id=r.id WHERE r.id=current_reminder_id AND r.status='SENT' AND d.status='SENT' AND d.sent_at IS NOT NULL)`).run();
   const rows=(await this.statement(`SELECT i.public_id,i.owner_user_id,i.revision,i.next_follow_up_at,i.current_reminder_id FROM follow_through_items i JOIN reminders r ON r.id=i.current_reminder_id JOIN reminder_deliveries d ON d.reminder_id=r.id JOIN bot_connections c ON c.id=i.connection_id WHERE i.progress='OPEN' AND i.follow_up_enabled=1 AND i.follow_up_count<3 AND i.next_follow_up_at<=? AND i.next_follow_up_at>? AND r.status='SENT' AND d.status='SENT' AND c.state='ACTIVE_BOUND' ORDER BY i.next_follow_up_at LIMIT ?`,[now,now-60000,limit]).all<{public_id:string;owner_user_id:string;revision:number;next_follow_up_at:number;current_reminder_id:string}>()).results;
-  let count=0;for(const r of rows){try{await this.mutate({userId:r.owner_user_id},{action:'RESCHEDULE',publicId:r.public_id,expectedRevision:r.revision,idempotencyKey:`auto_${r.current_reminder_id}`,scheduledAt:(this.options.now??Date.now)()+1000},true);count++;}catch(e){if(!(e instanceof FollowThroughError))throw e;}}return count;
+  let count=0;for(const r of rows){try{await this.mutate({userId:r.owner_user_id},{action:'RESCHEDULE',publicId:r.public_id,expectedRevision:r.revision,idempotencyKey:`auto_${r.current_reminder_id}`,scheduledAt:now+60000},true);count++;}catch(e){if(!(e instanceof FollowThroughError))throw e;}}return count;
  }
 }

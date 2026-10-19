@@ -2,7 +2,7 @@ import { z } from "zod";
 const id = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/u);
 export const FollowThroughActionSchema = z.object({ action:z.enum(['ADOPT','DONE','STOP','SNOOZE','RESCHEDULE','POLICY']),publicId:id,expectedRevision:z.number().int().min(0),idempotencyKey:id,scheduledAt:z.number().int().optional(),intervalMinutes:z.union([z.literal(30),z.literal(120),z.literal(1440)]).optional(),enabled:z.boolean().optional() }).strict();
 export type FollowThroughAction = z.infer<typeof FollowThroughActionSchema>;
-export interface FollowThroughScope { userId:string; chatIdentityId?:string; connectionId?:string; cursor?:string; inboundUpdateId?:string; claimMarker?:string }
+export interface FollowThroughScope { userId:string; chatIdentityId?:string; connectionId?:string; progress?:'OPEN'; cursor?:string; inboundUpdateId?:string; claimMarker?:string }
 export interface FollowThroughItem { publicId:string; title:string; progress:'OPEN'|'DONE'|'STOPPED'|'UNTRACKED'; revision:number; currentReminderPublicId:string; scheduledAt:number; deliveryStatus:string; destinationLabel:string; followUpEnabled:boolean; intervalMinutes:30|120|1440; followUpCount:number; nextFollowUpAt:number|null; completedAt:number|null; historyHasMore?:boolean; historyCursor?:string; history:{publicId:string;kind:string;scheduledAt:number;deliveryStatus:string}[] }
 export interface FollowThroughList { items:FollowThroughItem[];nextCursor?:string }
 export class FollowThroughError extends Error { constructor(public readonly code:'NOT_FOUND'|'CONFLICT'|'INVALID'|'BLOCKED'){super(code);this.name='FollowThroughError';} }
