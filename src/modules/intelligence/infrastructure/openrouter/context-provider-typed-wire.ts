@@ -131,6 +131,15 @@ function factorGenerationUnions(root:Schema):Schema {
  };
  const union=(raw:Schema[]):Schema=>{
   const branches=[...new Map(raw.flatMap(node=>Object.keys(node).length===1&&node.anyOf?node.anyOf:[node]).map(node=>[JSON.stringify(node),node])).values()];
+  // A finite integer control domain can use one integer range instead of N
+  // singleton ranges inside a repeated object. Coalesce adjacent integers only;
+  // preserve gaps and every extra constraint rather than broadening acceptance.
+  if(branches.length>1&&branches.every(node=>node.type==="integer"&&Number.isSafeInteger(node.minimum)&&node.minimum===node.maximum&&Object.keys(node).every(key=>["type","minimum","maximum"].includes(key)))){
+   const points=[...new Set(branches.map(node=>node.minimum!))].sort((a,b)=>a-b);
+   const ranges:Schema[]=[];
+   for(const point of points){const last=ranges.at(-1);if(last&&point===last.maximum!+1)last.maximum=point;else ranges.push({type:"integer",minimum:point,maximum:point});}
+   if(ranges.length<branches.length)return ranges.length===1?ranges[0]:{anyOf:ranges};
+  }
   const groups=new Map<string,Schema[]>();
   for(const node of branches){
    const shell=node.type==="object"&&node.properties?{...node,properties:undefined,keys:Object.keys(node.properties).sort()}:node.type==="array"&&node.items?{...node,items:undefined}:node.type==="string"&&Object.keys(node).every(key=>key==="type"||key==="enum")?{type:"string"}:node;
