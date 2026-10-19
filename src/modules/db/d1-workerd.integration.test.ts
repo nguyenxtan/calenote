@@ -206,6 +206,7 @@ async function migratedRuntime(
   await applyMigration(db, "migrations/0001_production_mvp.sql");
   await applyMigration(db, "migrations/0002_onboarding_transition_marker.sql");
   await applyMigration(db, "migrations/0003_source_action_foundation.sql");
+  await applyMigration(db, "migrations/0013_primary_login_channel.sql");
 
   const keyring = await createKeyring(MASTER);
   const encrypted = await keyring.encryptCredential("connection-workerd", "telegram", 1, TOKEN);
@@ -352,7 +353,7 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
     await expect(fixture.db.prepare(
       "SELECT state, transition_marker FROM bot_connections WHERE id = 'connection-workerd'",
     ).first()).resolves.toEqual({ state: "ACTIVE_BOUND", transition_marker: "marker-workerd" });
-  // Each case boots a real Miniflare/workerd D1 and applies three migrations.
+  // Each case boots a real Miniflare/workerd D1 and applies the login eligibility migration.
   }, 20_000);
 
   // The same real workerd bootstrap needs an explicit full-suite integration budget.
