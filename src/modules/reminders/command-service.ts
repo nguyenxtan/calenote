@@ -82,6 +82,8 @@ interface CommandMutationBase {
 
 export interface CreateDraftMutation extends CommandMutationBase {
   conversationFence?: { id: string; revision: number };
+  /** The validated CREATE request itself supplies confirmation; persisted in the same fenced batch. */
+  autoConfirm?: { reminderId: string; reminderPublicId: string; encryptedTitle: EncryptedValue; titleKeyVersion: number };
   draftId: string;
   encryptedTitle: EncryptedValue;
   titleKeyVersion: number;
@@ -117,6 +119,7 @@ export interface ReminderCommandStore {
 }
 
 export interface ProcessBoundChatDependencies {
+  getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
   conversation?: {
     handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult>;
     ownsPendingDraft?(message: BoundChatMessage, context: BoundChatContext, draftId: string): Promise<boolean>;
@@ -478,7 +481,13 @@ export async function processBoundChatMessage(
     TITLE_KEY_VERSION,
     candidate.title,
   );
+  const auto = await dependencies.getReminderConfirmation?.(context.userId) === "auto";
+  const reminderId = auto ? randomOpaqueId(randomBytes) : null;
+  const autoConfirm = reminderId ? { reminderId, reminderPublicId: randomOpaqueId(randomBytes),
+    encryptedTitle: await dependencies.keyring.encryptSensitive("reminder-title", reminderId, TITLE_KEY_VERSION, candidate.title),
+    titleKeyVersion: TITLE_KEY_VERSION } : undefined;
   const result = await dependencies.store.createDraft({
+    autoConfirm,
     message,
     context,
     draftId,
@@ -495,6 +504,6 @@ export async function processBoundChatMessage(
   if (result === "CONFLICT") {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
-  await bestEffortReply(dependencies, draftReply(candidate));
-  return { status: "DRAFT_CREATED" };
+  await bestEffortReply(dependencies, auto ? `Đã tạo lời nhắc. ${draftReply(candidate).split(". Gửi")[0]}.` : draftReply(candidate));
+  return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
 }

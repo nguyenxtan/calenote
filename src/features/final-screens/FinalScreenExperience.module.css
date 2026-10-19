@@ -57,3 +57,13 @@
 @media(max-width: 1100px) { .settingsLayout { grid-template-columns: 1fr; } .settingsNav { position: static; display: flex; flex-wrap: wrap; gap: 4px; } .settingsNav a { background: var(--cn-surface); border: 1px solid var(--cn-border); } }
 @media(max-width: 900px) { .page { padding: 28px 20px 32px; } .page header h1 { font-size: 26px; } .settingsCard { padding: 22px; } .settingsNav svg { display: none; } }
 @media(max-width: 520px) { .fieldGrid,.densityChoices { grid-template-columns: 1fr; } .details div { grid-template-columns: 1fr; gap: 4px; } .settingsCard { padding: 20px; } .settingsNav a { padding: 8px 10px; font-size: 12px; } }
+
+.addBot { margin-bottom: 24px; padding: 22px; border: 1px solid var(--cn-border); border-radius: 16px; background: white; }
+.addBot form { max-width: 560px; display: grid; gap: 14px; margin-top: 18px; }
+.addBot label { display: grid; gap: 8px; font-size: 14px; }
+.addBot input, .addBot select { min-height: 44px; width: 100%; padding: 10px; border: 1px solid var(--cn-border-strong); border-radius: 8px; }
+.addBot p, .disconnect p { font-size: 13px; line-height: 1.6; color: var(--cn-text-2); }
+.disconnect { margin-top: 14px; }
+.disconnect section { margin-top: 14px; padding: 18px; border: 1px solid var(--cn-border-strong); border-radius: 12px; }
+.disconnect section button { min-height: 44px; margin: 8px 12px 0 0; }
+.connectCode code { overflow-wrap: anywhere; }

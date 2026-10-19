@@ -1086,3 +1086,21 @@ describe("migrated-D1 login verification", () => {
       .toEqual({ count: 1 });
   });
 });
+
+it('sends login only to the explicitly selected primary when two bots are bound',async()=>{
+ const account=await setupBoundAccount();
+ account.db.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'second',user_id,'zalo','second-public','second-provider','Second bot',encrypted_token,encrypted_token_iv,'second-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='${CONNECTION_ID}';
+ INSERT INTO chat_identities VALUES ('second-chat','second','second-user','second-private',NULL,1);
+ INSERT INTO primary_login_channels VALUES ('${USER_ID}','${CONNECTION_ID}','explicit',1);`);
+ await issue(account);expect(row(account.db).connection_id).toBe(CONNECTION_ID);
+ account.db.sqlite.exec(`UPDATE primary_login_channels SET connection_id='second',transition_marker='explicit-second' WHERE user_id='${USER_ID}'`);
+ await issue(account,{now:NOW+1});expect(row(account.db).connection_id).toBe('second');
+});
+it('does not silently choose a bot if an existing multi-bot account has no primary',async()=>{
+ const account=await setupBoundAccount();
+ account.db.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'second',user_id,'zalo','second-public','second-provider','Second bot',encrypted_token,encrypted_token_iv,'second-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='${CONNECTION_ID}';
+ INSERT INTO chat_identities VALUES ('second-chat','second','second-user','second-private',NULL,1);`);
+ await expect(issue(account)).resolves.toEqual({accepted:true});expect(account.db.sqlite.prepare('SELECT COUNT(*) AS n FROM login_codes').get()).toEqual({n:0});
+});

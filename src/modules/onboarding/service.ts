@@ -72,6 +72,7 @@ export interface SafeAuditEvent {
   id: string;
   actorUserId: string;
   action:
+    | "CONNECTION_ADDED"
     | "ONBOARDING_CREATED"
     | "ONBOARDING_RECOVERED"
     | "WEBHOOK_ACTIVATED"
@@ -719,7 +720,8 @@ export async function retryWebhook(
   const now = dependencies.now ?? systemClock;
   const currentTime = now();
   if (
-    connection.state === "ACTIVE_BOUND"
+    connection.transitionMarker?.startsWith("disconnected:")
+    || connection.state === "ACTIVE_BOUND"
     || (connection.state === "VALIDATING"
       && connection.updatedAt >= currentTime - ACTIVATION_LEASE_MS)
   ) {

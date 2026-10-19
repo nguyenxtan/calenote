@@ -243,6 +243,8 @@ export class D1LoginCodeStore implements LoginCodeStore {
       JOIN bot_connections c ON c.user_id = u.id AND c.state = 'ACTIVE_BOUND'
       JOIN chat_identities ci ON ci.connection_id = c.id
       WHERE u.email = ? COLLATE NOCASE
+        AND (c.id=(SELECT p.connection_id FROM primary_login_channels p WHERE p.user_id=u.id)
+          OR NOT EXISTS(SELECT 1 FROM primary_login_channels p WHERE p.user_id=u.id))
       GROUP BY u.id
       HAVING COUNT(*) = 1`;
     const statements = [

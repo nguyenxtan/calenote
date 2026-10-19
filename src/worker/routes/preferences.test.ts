@@ -11,7 +11,7 @@ import type { SessionCredentials } from "@/modules/auth/session";
 
 const origin = "https://calenote.iconiclogs.com";
 const ownerBearer = "A".repeat(43);
-const otherBearer = "B".repeat(43);
+const otherBearer = `${"B".repeat(42)}A`;
 
 interface PreferencesOperations {
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
@@ -84,6 +84,27 @@ function router(preferences: PreferencesOperations) {
 }
 
 describe("preferences routes", () => {
+  it("round trips account confirmation mode through authenticated API and real SQLite", async () => {
+    const { SqliteD1Database } = await import("@/testing/sqlite-d1.test-support");
+    const { D1UserPreferencesStore } = await import("@/modules/db/preferences-store");
+    const db = new SqliteD1Database({ conversationV2: true });
+    try {
+      db.sqlite.exec("INSERT INTO users(id,email,display_name,timezone,created_at,updated_at) VALUES('owner','owner@example.test','Owner','Asia/Ho_Chi_Minh',1,1),('other','other@example.test','Other','Asia/Ho_Chi_Minh',1,1)");
+      const store = new D1UserPreferencesStore(db as unknown as D1Database);
+      const publicValue = (value: UserPreferences) => ({ addressStyle: value.addressStyle, customDisplayName: value.customDisplayName, tone: value.tone, reminderConfirmation: value.reminderConfirmation });
+      const app = router({ requireUser: operations().requireUser,
+        getPreferences: async userId => publicValue(await getUserPreferences(userId, store)),
+        savePreferences: async ({ userId, preferences }) => publicValue(await saveUserPreferences(userId, preferences, store, 100)) });
+      const saved = await app(authenticatedRequest("/api/preferences", ownerBearer, { reminderConfirmation: "preview" }), environment(), context());
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({ data: { preferences: { reminderConfirmation: "preview" } } });
+      for (const [bearer, mode] of [[ownerBearer, "preview"], [otherBearer, "auto"]]) {
+        const response = await app(request("/api/preferences", { headers: { cookie: `__Host-calenote_session=${bearer}` } }), environment(), context());
+        expect(await response.json()).toMatchObject({ data: { preferences: { reminderConfirmation: mode } } });
+      }
+      expect((await app(authenticatedRequest("/api/preferences", ownerBearer, { reminderConfirmation: "invalid" }), environment(), context())).status).toBe(400);
+    } finally { db.close(); }
+  });
   it("rejects unauthenticated preference reads before constructing operations", async () => {
     const factory = vi.fn(async () => operations());
     const response = await createRouter({ preferencesOperations: factory } as RouterOptions)(

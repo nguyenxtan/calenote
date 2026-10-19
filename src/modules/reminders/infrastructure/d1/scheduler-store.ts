@@ -18,7 +18,7 @@ export class D1ReminderSchedulerStore implements ReminderSchedulerStore {
                 r.transition_marker, r.updated_at
          FROM reminders r
          LEFT JOIN reminder_deliveries d ON d.reminder_id = r.id
-         WHERE (
+         WHERE EXISTS(SELECT 1 FROM chat_identities ci JOIN bot_connections c ON c.id=ci.connection_id WHERE ci.id=r.chat_identity_id AND c.state='ACTIVE_BOUND') AND (
            (r.status = 'PENDING' AND r.scheduled_at <= ?
              AND (d.reminder_id IS NULL OR d.status = 'PENDING'))
            OR
@@ -102,6 +102,7 @@ export class D1ReminderSchedulerStore implements ReminderSchedulerStore {
          SET status = 'CLAIMED', claimed_at = ?, transition_marker = ?, updated_at = ?
          WHERE id = ? AND status = ? AND scheduled_at = ?
            AND claimed_at IS ? AND transition_marker IS ? AND updated_at = ?
+           AND EXISTS(SELECT 1 FROM chat_identities ci JOIN bot_connections c ON c.id=ci.connection_id WHERE ci.id=reminders.chat_identity_id AND c.state='ACTIVE_BOUND')
            AND ${stateEligibility}
          RETURNING id`,
       )

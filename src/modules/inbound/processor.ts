@@ -159,6 +159,8 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
+  connectionEgress?: { reserveEgress(connectionId:string,id:string,now:number):Promise<boolean>; finishEgress(id:string):Promise<void> };
   contextContract?: Omit<ContextContractServiceDependencies, "keyring" | "now" | "reply" | "processingFeedback" | "channel">;
   feedbackLifetime?: FeedbackLifetime;
   observeTiming?: (value: ConversationTiming) => void;
@@ -369,6 +371,7 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
            state = 'PENDING' OR
            (state = 'PROCESSING' AND (processing_started_at IS NULL OR processing_started_at <= ?))
          )
+           AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.state IN ('VALIDATING','ACTIVE_UNBOUND','ACTIVE_BOUND','WEBHOOK_FAILED'))
            AND attempt_count < ?
          RETURNING id`,
       )
@@ -400,6 +403,9 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
         throw new InboundClaimFailure(row.provider, "ENCRYPTED_VALUE_MALFORMED");
       }
     }
+
+    const disabled = await this.database.prepare(`SELECT 1 AS disabled FROM inbound_updates i JOIN bot_connections c ON c.id=i.connection_id WHERE i.id=? AND c.state='SUSPENDED'`).bind(inboundId).first();
+    if (disabled) return {status:"TERMINAL"};
 
     const current = await this.database
       .prepare("SELECT state, processing_started_at, attempt_count FROM inbound_updates WHERE id = ? LIMIT 1")
@@ -625,11 +631,19 @@ function parseConnectCommand(text: string): string | null {
   return CONNECT_COMMAND.exec(text.trim())?.[1] ?? null;
 }
 
+async function reserveConnectionEgress(message: ClaimedInboundMessage, dependencies: ProcessInboundDependencies): Promise<string | null> {
+  const marker=randomOpaqueId(dependencies.randomBytes ?? cryptoRandomBytes);
+  if (dependencies.connectionEgress && !await dependencies.connectionEgress.reserveEgress(message.connectionId,marker,(dependencies.now ?? systemClock)())) return null;
+  return marker;
+}
+
 async function replyAfterTerminal(
   message: ClaimedInboundMessage,
   text: string,
   dependencies: ProcessInboundDependencies,
 ): Promise<boolean> {
+  const reservation=await reserveConnectionEgress(message,dependencies);
+  if (!reservation) return false;
   try {
     const token = await dependencies.keyring.decryptCredential(
       message.connectionId,
@@ -647,12 +661,15 @@ async function replyAfterTerminal(
   } catch {
     // Binding/help replies are best effort after the terminal database transition.
     return false;
-  }
+  } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
 }
 
 /** Receipt-preserving successor adapter. Provider success may lack a reference;
  * that still proves delivery, but cannot authorize a reply-reference control. */
 async function replyWithReceipt(message: ClaimedInboundMessage, text: string, dependencies: ProcessInboundDependencies): Promise<ReplyReceipt> {
+  const reservation=await reserveConnectionEgress(message,dependencies);
+  if (!reservation) return {status:"FAILED"};
+  try {
   let token: string;
   try { token = await dependencies.keyring.decryptCredential(message.connectionId, message.provider, message.credentialVersion,
     { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv }); } catch { return { status: "FAILED" }; }
@@ -661,6 +678,7 @@ async function replyWithReceipt(message: ClaimedInboundMessage, text: string, de
     if (!receipt || (receipt.providerMessageId !== null && (typeof receipt.providerMessageId !== "string" || receipt.providerMessageId.length > 512))) return { status: "UNCERTAIN" };
     return { status: "SENT", messageRef: receipt.providerMessageId };
   } catch { return { status: "UNCERTAIN" }; }
+  } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
 }
 
 function recordZaloEarlyDiagnostic(
@@ -799,6 +817,9 @@ export async function processInbound(
         releaseDispatch(); dependencies.observeFeedback?.(outcome, elapsed);
       },
         send: async signal => {
+          const reservation=await reserveConnectionEgress(message,dependencies);
+          if (!reservation) { releaseDispatch(); return; }
+          try {
           const token = await dependencies.keyring.decryptCredential(
             message.connectionId,
             message.provider,
@@ -814,6 +835,7 @@ export async function processInbound(
             message.privateChatId,
             signal,
           );
+          } finally { await dependencies.connectionEgress?.finishEgress(reservation); }
         }
       });
       // V1 waits only for local credential preparation/dispatch, never provider
@@ -834,6 +856,7 @@ export async function processInbound(
     }) : legacyConversation;
     return processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
+      getReminderConfirmation: dependencies.getReminderConfirmation,
       intelligence: dependencies.intelligence,
       semantic,
     });

@@ -132,6 +132,52 @@ export class D1OnboardingStore implements OnboardingStore {
     return statement.bind(...values);
   }
 
+  async commitOwnedConnection(connection: AccountGraph["connection"], audit: SafeAuditEvent): Promise<void> {
+    if (audit.actorUserId !== connection.userId || audit.targetUserId !== connection.userId || audit.targetConnectionId !== connection.id || audit.action !== "CONNECTION_ADDED") throw new OnboardingConflictError();
+    try {
+      const results = await this.database.batch([
+        this.database.prepare(`INSERT OR IGNORE INTO primary_login_channels(user_id,connection_id,transition_marker,updated_at)
+          SELECT user_id,MIN(c.id),?,? FROM bot_connections c JOIN chat_identities ci ON ci.connection_id=c.id
+          WHERE c.user_id=? AND c.state='ACTIVE_BOUND' GROUP BY c.user_id HAVING COUNT(*)=1`)
+          .bind(audit.id,connection.createdAt,connection.userId),
+        this.database
+        .prepare(
+          `INSERT INTO bot_connections (
+            id, user_id, provider, public_id, provider_bot_id, display_name, handle,
+            account_type, can_join_groups, encrypted_token, encrypted_token_iv,
+            token_fingerprint, credential_version, state, webhook_registered_at,
+            created_at, updated_at, transition_marker
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .bind(
+          connection.id,
+          connection.userId,
+          connection.provider,
+          connection.publicId,
+          connection.providerBotId,
+          connection.displayName,
+          connection.handle,
+          connection.accountType,
+          connection.canJoinGroups === null ? null : Number(connection.canJoinGroups),
+          connection.encryptedToken,
+          connection.encryptedTokenIv,
+          connection.tokenFingerprint,
+          connection.credentialVersion,
+          connection.state,
+          connection.createdAt,
+          connection.createdAt,
+          connection.transitionMarker,
+        ),
+        this.prepareAudit(audit),
+      ]);
+      if (results.length !== 3) throw new Error("Connection batch result was incomplete");
+      results.slice(1).forEach(result => requireChange(result, "Connection insert did not commit"));
+    } catch (error) {
+      if (uniqueConstraint(error)) throw new OnboardingConflictError();
+      throw error;
+    }
+  }
+
   async commitAccountGraph(graph: AccountGraph): Promise<void> {
     const statements = [
       this.database
@@ -329,6 +375,7 @@ export class D1OnboardingStore implements OnboardingStore {
          JOIN bot_connections c ON c.user_id = u.id
          WHERE u.email = ? COLLATE NOCASE AND c.provider = ?
            AND c.token_fingerprint = ? AND c.provider_bot_id = ?
+           AND (c.transition_marker IS NULL OR c.transition_marker NOT LIKE 'disconnected:%')
          LIMIT 1`,
       )
       .bind(input.email, input.provider, input.tokenFingerprint, input.providerBotId)
@@ -383,6 +430,7 @@ export class D1OnboardingStore implements OnboardingStore {
          SET state = 'VALIDATING', transition_marker = ?, updated_at = ?
          WHERE id = ? AND user_id = ? AND state = ? AND updated_at = ?
            AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))
+           AND (transition_marker IS NULL OR transition_marker NOT LIKE 'disconnected:%')
            AND (
              state IN ('WEBHOOK_FAILED', 'SUSPENDED')
              OR (state = 'VALIDATING' AND updated_at < ?)

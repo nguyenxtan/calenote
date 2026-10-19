@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, BookOpen, MoreHorizontal, Settings2, Sun } from "lucide-react";
+import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, BookOpen, MoreHorizontal, Settings2, Sun, ShieldCheck } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import type { SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
@@ -38,6 +39,17 @@ function NavLink({ item, active, onNavigate, linkRef }: { item: NavigationItem; 
 
 export function AppShell({ user, children, activePath = "/app/today" }: { user: SessionUser; children: ReactNode; activePath?: string }) {
   const { replace } = useRouter();
+  const [adminGrant, setAdminGrant] = useState<{email:string;allowed:boolean} | null>(null);
+  const adminAccess = adminGrant?.email === user.email && adminGrant.allowed;
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    void apiRequest<unknown>("/api/admin/access", { authenticated: true, signal: controller.signal })
+      .then(value => { const parsed = z.object({allowed:z.literal(true)}).strict().safeParse(value); if(active) setAdminGrant({email:user.email,allowed:parsed.success}); })
+      .catch(() => { if (active) setAdminGrant({email:user.email,allowed:false}); });
+    return () => { active = false; controller.abort(); };
+  }, [user.email]);
+  const navigationGroups = adminAccess ? [...groups, { label: "Quản trị", items: [{ href: "/app/admin", label: "Quản trị", icon: ShieldCheck }] }] : groups;
   const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -109,7 +121,7 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     <aside className={styles.rail} aria-label="Điều hướng Calenote">
       <Link className={styles.brand} href="/app/today" aria-label="Calenote Hôm nay"><CalenoteMark /></Link>
       <nav className={styles.navigation} aria-label="Điều hướng chính">
-        {groups.map((group) => <div key={group.label}>
+        {navigationGroups.map((group) => <div key={group.label}>
           <p className={styles.groupLabel}>{group.label}</p>
           {group.items.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
         </div>)}
@@ -130,10 +142,10 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     <nav className={styles.mobileNav} aria-label="Điều hướng chính trên điện thoại">
       {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
       <div className={styles.more} ref={moreRef}>
-        <button ref={moreTriggerRef} className={secondary.some((item) => item.href === activePath) || activePath === "/docs" ? styles.active : styles.link} type="button" aria-label="Mở thêm điều hướng" aria-controls="all-navigation" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal aria-hidden="true" size={19} /><span>Menu</span></button>
+        <button ref={moreTriggerRef} className={secondary.some((item) => item.href === activePath) || (activePath === "/docs" || activePath === "/app/admin") ? styles.active : styles.link} type="button" aria-label="Mở thêm điều hướng" aria-controls="all-navigation" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal aria-hidden="true" size={19} /><span>Menu</span></button>
         {moreOpen && <div className={styles.moreMenu} id="all-navigation" role="group" aria-label="Tất cả điều hướng">
           <header className={styles.panelHeader}><strong>Điều hướng</strong><button type="button" aria-label="Đóng menu" onClick={() => { setMoreOpen(false); moreTriggerRef.current?.focus(); }}>Đóng</button></header>
-          {groups.map((group, groupIndex) => <div key={group.label}>
+          {navigationGroups.map((group, groupIndex) => <div key={group.label}>
             <p className={styles.groupLabel}>{group.label}</p>
             {group.items.map((item, itemIndex) => <NavLink item={item} active={item.href === activePath} onNavigate={() => setMoreOpen(false)} linkRef={groupIndex === 0 && itemIndex === 0 ? firstMoreLink : undefined} key={item.href} />)}
           </div>)}

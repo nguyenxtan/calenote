@@ -100,3 +100,29 @@ describe("unified navigation", () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+
+describe("admin discovery", () => {
+ it("shows admin navigation only after the server grants access", async () => {
+  vi.stubGlobal("fetch",vi.fn(async()=>json({data:{allowed:true}})));
+  renderShell();
+  expect(await screen.findByRole("link",{name:"Quản trị"})).toHaveAttribute("href","/app/admin");
+ });
+ it("does not infer admin from the user profile or unavailable access endpoint",async()=>{
+  vi.stubGlobal("fetch",vi.fn(async()=>json({error:{code:"FORBIDDEN"}},403)));
+  renderShell();
+  await waitFor(()=>expect(fetch).toHaveBeenCalled());
+  expect(screen.queryByRole("link",{name:"Quản trị"})).not.toBeInTheDocument();
+ });
+});
+
+it("removes a previous admin navigation grant when the account changes or the response is malformed",async()=>{
+ const fetcher=vi.fn().mockResolvedValueOnce(json({data:{allowed:true}})).mockResolvedValueOnce(json({data:{allowed:true,unexpected:"field"}}));
+ vi.stubGlobal("fetch",fetcher);
+ const view=renderShell();
+ expect(await screen.findByRole("link",{name:"Quản trị"})).toBeVisible();
+ view.rerender(<AppShell user={{...account,email:"another@example.invalid"}}><main>Other account</main></AppShell>);
+ expect(screen.queryByRole("link",{name:"Quản trị"})).not.toBeInTheDocument();
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));
+ expect(screen.queryByRole("link",{name:"Quản trị"})).not.toBeInTheDocument();
+});

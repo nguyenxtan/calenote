@@ -202,8 +202,8 @@ describe("FinalScreenExperience settings", () => {
     await screen.findByRole("heading", { name: "Cài đặt" });
     expect(screen.getByRole("heading", { name: "Quyền riêng tư & trợ lý" })).toBeVisible();
     expect(screen.getByText(/chế độ riêng tư/i)).toBeVisible();
-    expect(screen.getByText(/Calenote xử lý ngày giờ/i)).toBeVisible();
-    expect(screen.getByText(/chỉ tạo lời nhắc sau bước xác nhận/i)).toBeVisible();
+    expect(screen.getByText(/Calenote kiểm tra ngày giờ/i)).toBeVisible();
+    expect(screen.getByText(/tạo lời nhắc theo lựa chọn xác nhận/i)).toBeVisible();
     expect(screen.queryByText(/miễn phí|chi phí rất thấp/i)).not.toBeInTheDocument();
   });
 });

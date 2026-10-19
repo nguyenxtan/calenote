@@ -266,7 +266,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
            WHERE id = ? AND state = 'PROCESSING' AND transition_marker = ?
              AND EXISTS (
                SELECT 1 FROM command_drafts
-               WHERE id = ? AND source_inbound_id = ? AND status = 'PENDING'
+               WHERE id = ? AND source_inbound_id = ? AND status = '${input.autoConfirm ? 'CONFIRMED' : 'PENDING'}'
              )`,
         )
         .bind(
@@ -285,8 +285,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                SELECT ? FROM inbound_updates i
                JOIN command_drafts d ON d.source_inbound_id = i.id
                WHERE i.id = ? AND i.state = 'PROCESSED' AND i.transition_marker = ?
-                 AND d.id = ? AND d.status = 'PENDING'
-             ), NULL), ?, 'REMINDER_DRAFT_CREATED', ?, ?, 'SUCCESS', ?
+                 AND d.id = ? AND d.status = '${input.autoConfirm ? 'CONFIRMED' : 'PENDING'}'
+             ), NULL), ?, '${input.autoConfirm ? 'REMINDER_CONFIRMED' : 'REMINDER_DRAFT_CREATED'}', ?, ?, 'SUCCESS', ?
            )`,
         )
         .bind(
@@ -306,6 +306,29 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         (draft_id,payload_ciphertext,payload_iv,key_version)
         SELECT id,?,?,1 FROM command_drafts WHERE id = ? AND source_inbound_id = ? AND status = 'PENDING'`)
         .bind(input.encryptedCalendarFacts.ciphertext, input.encryptedCalendarFacts.iv, input.draftId, input.message.id));
+    }
+    if (input.autoConfirm) {
+      const automatic = input.autoConfirm;
+      // Insert a real draft first, then resolve it before terminalizing the inbound.
+      // All identity, ordering, context, calendar and audit fences remain one transaction.
+      statements.splice(statements.length - 2, 0,
+        this.database.prepare(`UPDATE command_drafts SET status='CONFIRMED', resolution_inbound_id=?, updated_at=?
+          WHERE id=? AND source_inbound_id=? AND status='PENDING' AND scheduled_at>? AND expires_at>?`)
+          .bind(input.message.id, input.now, input.draftId, input.message.id, input.now, input.now),
+        this.database.prepare(`INSERT INTO reminders
+          (id,public_id,workspace_id,chat_identity_id,source_draft_id,title_ciphertext,title_iv,title_key_version,scheduled_at,timezone,status,created_at,updated_at)
+          VALUES(?,?,COALESCE((SELECT w.id FROM command_drafts d
+            JOIN chat_identities ci ON ci.id=d.chat_identity_id
+            JOIN bot_connections c ON c.id=ci.connection_id AND c.state='ACTIVE_BOUND'
+            JOIN workspaces w ON w.owner_user_id=c.user_id AND w.kind='PERSONAL'
+            JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
+            JOIN inbound_updates i ON i.id=d.source_inbound_id
+            WHERE d.id=? AND d.status='CONFIRMED' AND d.resolution_inbound_id=?
+              AND ci.id=? AND c.user_id=? AND i.state='PROCESSING' AND i.transition_marker=?),NULL),?,?,?,?,?,?,?,'PENDING',?,?)`)
+          .bind(automatic.reminderId, automatic.reminderPublicId, input.draftId, input.message.id,
+            input.context.chatIdentityId, input.context.userId, input.message.claimMarker,
+            input.context.chatIdentityId, input.draftId, automatic.encryptedTitle.ciphertext,
+            automatic.encryptedTitle.iv, automatic.titleKeyVersion, input.scheduledAt, input.timezone, input.now, input.now));
     }
     try {
       await this.database.batch(statements);

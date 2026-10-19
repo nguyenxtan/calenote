@@ -1,3 +1,7 @@
+import { D1PrimaryLoginStore, PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
+import { addConnection } from "@/modules/connections/add-service";
+import { D1ConnectionLifecycleStore, ConnectionDisconnectError } from "@/modules/connections/lifecycle";
+import { randomOpaqueId, cryptoRandomBytes } from "@/modules/platform/types";
 import {D1LocalMonthQueryStore} from '@/modules/reminders/infrastructure/d1/local-month-query-store';
 import { D1DashboardStore } from "@/modules/auth/dashboard-service";
 import {
@@ -184,6 +188,17 @@ export async function createConnectionsOperations(env: Env): Promise<Connections
       return { userId: principal.userId };
     },
     listConnections: (userId) => dashboardStore.listConnections(userId),
+    getPrimaryLogin: userId => new D1PrimaryLoginStore(env.DB).get(userId),
+    selectPrimaryLogin: async ({userId,publicId}) => {
+      if(!await new D1PrimaryLoginStore(env.DB).select(userId,publicId,Date.now(),randomOpaqueId(cryptoRandomBytes))) throw new PrimaryLoginSelectionError();
+      return {publicId};
+    },
+    addConnection: ({userId,provider,token}) => addConnection(userId,{provider,token},{store,keyring,rateLimitStore,verifyToken:verifyBotToken,registerWebhook,appOrigin:env.APP_ORIGIN}),
+    disconnectConnection: async ({userId,publicId}) => {
+      const changed = await new D1ConnectionLifecycleStore(env.DB).disconnect(userId,publicId,Date.now(),randomOpaqueId(cryptoRandomBytes));
+      if (!changed) throw new ConnectionDisconnectError();
+      return {disconnected:true};
+    },
     rotateConnectCode: (input) => rotateConnectCode(input, { store, keyring, rateLimitStore }),
     retryWebhook: (input) => retryConnectionWebhook(input, { store, keyring, rateLimitStore, registerWebhook, appOrigin: env.APP_ORIGIN }),
   };
@@ -271,6 +286,7 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         addressStyle: preferences.addressStyle,
         customDisplayName: preferences.customDisplayName,
         tone: preferences.tone,
+        reminderConfirmation: preferences.reminderConfirmation ?? "auto",
       };
     },
     savePreferences: async ({ userId, preferences }) => {
@@ -279,6 +295,7 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         addressStyle: saved.addressStyle,
         customDisplayName: saved.customDisplayName,
         tone: saved.tone,
+        reminderConfirmation: saved.reminderConfirmation ?? "auto",
       };
     },
   };
@@ -434,6 +451,8 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
+      connectionEgress: new D1ConnectionLifecycleStore(env.DB),
+      getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
       keyring,
       semantic,
       ...(contextContract ? { contextContract } : {}),
@@ -442,6 +461,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       observeFeedback: (outcome, elapsedMs) => console.log(JSON.stringify({ operation: "processing_feedback", outcome, elapsedMs })),
       ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
         runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
+        getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
         getTone: async (ownerId: string) => {
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;

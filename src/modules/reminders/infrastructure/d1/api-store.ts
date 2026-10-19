@@ -96,7 +96,7 @@ export class D1ReminderApiStore implements ReminderApiStore {
              JOIN bot_connections c
                ON c.user_id = u.id AND c.state = 'ACTIVE_BOUND'
              JOIN chat_identities ci ON ci.connection_id = c.id
-             WHERE u.id = ?
+             WHERE u.id = ? AND (? IS NULL OR c.public_id = ?)
              GROUP BY u.id
              HAVING COUNT(*) = 1
            ) AS eligible`,
@@ -112,6 +112,8 @@ export class D1ReminderApiStore implements ReminderApiStore {
           record.now,
           record.now,
           record.userId,
+          record.connectionPublicId ?? null,
+          record.connectionPublicId ?? null,
         ),
       this.database
         .prepare(

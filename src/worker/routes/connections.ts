@@ -1,3 +1,4 @@
+import { AddConnectionInputSchema } from "@/modules/connections/add-service";
 import { z } from "zod";
 import { ConnectionsResponseSchema } from "@/contracts/api/connections";
 import { parseSessionCredentials, SessionAuthError, type SessionCredentials } from "@/modules/auth/session";
@@ -82,4 +83,43 @@ export async function handleWebhookRetry(
   const principal = await operations.requireUser(credentials);
   const result = await operations.retryWebhook({ userId: principal.userId, publicId });
   return jsonResponse({ data: result }, { headers: { vary: "Cookie" } });
+}
+
+export async function handleAddConnection(
+  request:Request, appOrigin:string,
+  createOperations:()=>Promise<Pick<ConnectionsOperations,"requireUser"|"addConnection">>,
+):Promise<Response> {
+  requireSameOrigin(request,appOrigin);
+  const credentials=sessionCredentials(request);
+  const parsed=AddConnectionInputSchema.safeParse(await readBoundedJson(request,MAX_BODY_BYTES,{timeoutMs:BODY_TIMEOUT_MS}));
+  if (!parsed.success) throw new InvalidRequestError();
+  const operations=await createOperations();
+  const principal=await operations.requireUser(credentials);
+  const result=await operations.addConnection({userId:principal.userId,...parsed.data});
+  return jsonResponse({data:result},{status:201,headers:{vary:"Cookie"}});
+}
+
+export async function handleDisconnectConnection(
+  request:Request,appOrigin:string,publicId:string,
+  createOperations:()=>Promise<Pick<ConnectionsOperations,"requireUser"|"disconnectConnection">>,
+):Promise<Response> {
+  requireSameOrigin(request,appOrigin);
+  const credentials=sessionCredentials(request);
+  if (publicId.length!==22 || base64UrlToBytes(publicId)?.byteLength!==16) throw new InvalidRequestError();
+  if (!emptyObjectSchema.safeParse(await readBoundedJson(request,MAX_BODY_BYTES,{timeoutMs:BODY_TIMEOUT_MS})).success) throw new InvalidRequestError();
+  const operations=await createOperations();
+  const principal=await operations.requireUser(credentials);
+  const result=await operations.disconnectConnection({userId:principal.userId,publicId});
+  return jsonResponse({data:result},{headers:{vary:"Cookie"}});
+}
+
+export async function handleGetPrimaryLogin(request:Request,createOperations:()=>Promise<Pick<ConnectionsOperations,"requireUser"|"getPrimaryLogin">>):Promise<Response>{
+ const credentials=sessionCredentials(request);const operations=await createOperations();const principal=await operations.requireUser(credentials);
+ return jsonResponse({data:await operations.getPrimaryLogin(principal.userId)},{headers:{vary:"Cookie"}});
+}
+export async function handleSelectPrimaryLogin(request:Request,appOrigin:string,createOperations:()=>Promise<Pick<ConnectionsOperations,"requireUser"|"selectPrimaryLogin">>):Promise<Response>{
+ requireSameOrigin(request,appOrigin);const credentials=sessionCredentials(request);
+ const parsed=z.object({publicId:z.string().length(22).refine(value=>base64UrlToBytes(value)?.byteLength===16)}).strict().safeParse(await readBoundedJson(request,MAX_BODY_BYTES,{timeoutMs:BODY_TIMEOUT_MS}));
+ if(!parsed.success)throw new InvalidRequestError();const operations=await createOperations();const principal=await operations.requireUser(credentials);
+ return jsonResponse({data:await operations.selectPrimaryLogin({userId:principal.userId,publicId:parsed.data.publicId})},{headers:{vary:"Cookie"}});
 }

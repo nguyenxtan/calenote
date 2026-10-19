@@ -21,6 +21,14 @@ function storeWith(initial?: UserPreferences): UserPreferencesStore & { saved?: 
 }
 
 describe("user preferences", () => {
+  it("defaults chat creation to auto and persists preview per account without resetting it on older patches", async () => {
+    const automatic = await saveUserPreferences("user-1", {}, storeWith(), 100);
+    expect(automatic.reminderConfirmation).toBe("auto");
+    const manual = await saveUserPreferences("user-1", { reminderConfirmation: "preview" }, storeWith(automatic), 101);
+    expect(manual.reminderConfirmation).toBe("preview");
+    expect((await saveUserPreferences("user-1", { tone: "concise" }, storeWith(manual), 102)).reminderConfirmation).toBe("preview");
+    await expect(saveUserPreferences("user-1", { reminderConfirmation: "invalid" as never }, storeWith(), 103)).rejects.toBeInstanceOf(InvalidUserPreferencesError);
+  });
   it("uses stable defaults without forcing onboarding", async () => {
     const store = storeWith();
 

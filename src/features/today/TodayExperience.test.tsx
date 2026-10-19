@@ -239,3 +239,24 @@ describe("TodayExperience", () => {
     expect(result.violations).toEqual([]);
   });
 });
+
+it('requires an explicit bot choice when two connected bots can receive a web reminder',async()=>{
+ const fetcher=vi.fn(async(path:string|URL|Request,options?:RequestInit)=>{
+  if(path==='/api/session')return json({data:{user}});
+  if(path==='/api/connections')return json({data:{connections:[{publicId:'AAAAAAAAAAAAAAAAAAAAAA',provider:'zalo',displayName:'Zalo fixture',handle:null,state:'ACTIVE_BOUND'},{publicId:'CCCCCCCCCCCCCCCCCCCCCA',provider:'telegram',displayName:'Telegram fixture',handle:null,state:'ACTIVE_BOUND'}]}});
+  if(path==='/api/actions')return json({data:{actions:[]}});
+  if(path==='/api/reminders'&&options?.method==='POST')return json({data:{reminder}},201);
+  return json({data:{reminders:[]}});
+ });
+ vi.stubGlobal('fetch',fetcher);localStorage.clear();
+ const interaction=userEvent.setup();render(<TodayExperience/>);
+ const target=await screen.findByLabelText('Bot nhận lời nhắc');
+ await interaction.type(screen.getByLabelText('Nội dung nhắc hẹn'),'Nhắc fixture');
+ await interaction.click(screen.getByRole('button',{name:'Chọn thời gian'}));
+ fireEvent.change(screen.getByLabelText('Thời điểm nhắc'),{target:{value:'2026-10-20T09:00'}});
+ await interaction.click(screen.getByRole('button',{name:'Tạo lời nhắc'}));
+ expect(fetcher).not.toHaveBeenCalledWith('/api/reminders',expect.objectContaining({method:'POST'}));
+ await interaction.selectOptions(target,'CCCCCCCCCCCCCCCCCCCCCA');
+ await interaction.click(screen.getByRole('button',{name:'Tạo lời nhắc'}));
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/reminders',expect.objectContaining({method:'POST',body:expect.stringContaining('"connectionPublicId":"CCCCCCCCCCCCCCCCCCCCCA"')})));
+});

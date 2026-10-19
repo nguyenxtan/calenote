@@ -7,6 +7,7 @@ interface PreferencesRow {
   custom_display_name: string | null;
   tone: UserPreferences["tone"];
   updated_at: number;
+  reminder_confirmation: "auto" | "preview";
 }
 
 function fromRow(row: PreferencesRow): UserPreferences {
@@ -16,6 +17,7 @@ function fromRow(row: PreferencesRow): UserPreferences {
     customDisplayName: row.custom_display_name,
     tone: row.tone,
     updatedAt: row.updated_at,
+    reminderConfirmation: row.reminder_confirmation,
   };
 }
 
@@ -26,7 +28,7 @@ export class D1UserPreferencesStore implements UserPreferencesStore {
     const row = await this.database
       .prepare(
         `SELECT preferences.user_id, preferences.address_style,
-                preferences.custom_display_name, preferences.tone, preferences.updated_at
+                preferences.custom_display_name, preferences.tone, preferences.updated_at, preferences.reminder_confirmation
          FROM user_preferences preferences
          JOIN users user ON user.id = preferences.user_id
          WHERE preferences.user_id = ?
@@ -40,12 +42,13 @@ export class D1UserPreferencesStore implements UserPreferencesStore {
   async save(preferences: UserPreferences): Promise<UserPreferences> {
     const result = await this.database
       .prepare(
-        `INSERT INTO user_preferences (user_id, address_style, custom_display_name, tone, updated_at)
-         SELECT ?, ?, ?, ?, ? FROM users WHERE users.id = ?
+        `INSERT INTO user_preferences (user_id, address_style, custom_display_name, tone, updated_at, reminder_confirmation)
+         SELECT ?, ?, ?, ?, ?, ? FROM users WHERE users.id = ?
          ON CONFLICT (user_id) DO UPDATE SET
            address_style = excluded.address_style,
            custom_display_name = excluded.custom_display_name,
            tone = excluded.tone,
+           reminder_confirmation = excluded.reminder_confirmation,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -54,6 +57,7 @@ export class D1UserPreferencesStore implements UserPreferencesStore {
         preferences.customDisplayName,
         preferences.tone,
         preferences.updatedAt,
+        preferences.reminderConfirmation ?? "auto",
         preferences.userId,
       )
       .run();

@@ -69,6 +69,8 @@ export class SqliteD1Database {
       readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"),
     );
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0010_manual_reminder_intents.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0011_connection_disconnect.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0013_primary_login_channel.sql"), "utf8"));
     this.sqlite.exec(
       readFileSync(
         resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"),
@@ -83,7 +85,7 @@ export class SqliteD1Database {
     );
     if (options.conversationV2 || options.contextContract) {
       for (const migration of [
-        "0004_user_preferences", "0005_semantic_context_and_budget",
+        "0004_user_preferences", "0012_user_preferences_reminder_confirmation", "0005_semantic_context_and_budget",
         "0006_semantic_budget_dispatch_fence", "0007_conversation_context_v2",
         "0008_finite_reminder_series",
       ]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${migration}.sql`), "utf8"));

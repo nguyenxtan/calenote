@@ -1,3 +1,7 @@
+import { PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
+import { ConnectionDisconnectError } from "@/modules/connections/lifecycle";
+import { handleAdminOverview } from './routes/admin-overview';
+import { createAdminOverviewOperations } from '@/modules/admin/composition';
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { InvalidUserPreferencesError } from "@/modules/preferences/service";
@@ -44,6 +48,10 @@ import {
 } from "./routes/actions";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import {
+  handleGetPrimaryLogin,
+  handleSelectPrimaryLogin,
+  handleAddConnection,
+  handleDisconnectConnection,
   handleConnectCodeRotation,
   handleListConnections,
   handleWebhookRetry,
@@ -119,6 +127,8 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   ) {
     return { code: error.code, message: error.message, status: error.status };
   }
+  if (error instanceof PrimaryLoginSelectionError) return {code:error.code,message:error.message,status:error.status};
+  if (error instanceof ConnectionDisconnectError) return {code:error.code,message:error.message,status:error.status};
   if (error instanceof InvalidRequestError) {
     return { code: error.code, message: error.message, status: error.status };
   }
@@ -231,6 +241,7 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
+      if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
         return await handleRequestLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
@@ -307,6 +318,11 @@ export function createRouter(options: RouterOptions = {}) {
           () => connectionsOperationsFactory(env),
         );
       }
+      if (pathname === "/api/connections/primary-login" && request.method === "GET") return await handleGetPrimaryLogin(request,()=>connectionsOperationsFactory(env));
+      if (pathname === "/api/connections/primary-login" && request.method === "PATCH") return await handleSelectPrimaryLogin(request,appOrigin!,()=>connectionsOperationsFactory(env));
+      if (request.method === "POST" && pathname === "/api/connections") return await handleAddConnection(request,appOrigin!,()=>connectionsOperationsFactory(env));
+      const disconnectMatch = request.method === "POST" ? /^\/api\/connections\/([^/]+)\/disconnect$/u.exec(pathname) : null;
+      if (disconnectMatch) return await handleDisconnectConnection(request,appOrigin!,disconnectMatch[1],()=>connectionsOperationsFactory(env));
       const retryMatch = request.method === "POST"
         ? /^\/api\/connections\/([^/]+)\/webhook-retry$/u.exec(pathname)
         : null;

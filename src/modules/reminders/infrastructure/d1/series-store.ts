@@ -172,7 +172,7 @@ export class D1SeriesStore implements SeriesStore {
     }
   }
 
-  async confirm(scope: MutationScope, proposalId: string, revision: number): ReturnType<SeriesStore["confirm"]> {
+  async confirm(scope: MutationScope, proposalId: string, revision: number, creationRequest = false): ReturnType<SeriesStore["confirm"]> {
     const row = await this.read(scope, proposalId, revision);
     if (!row || row.action !== "CREATE") return { status: "STALE" };
     const existing = await this.db.prepare("SELECT id FROM reminder_series WHERE proposal_id = ?").bind(row.id).first<string>("id");
@@ -187,7 +187,8 @@ export class D1SeriesStore implements SeriesStore {
     const claimArgs = [proposalId, marker];
     const statements = [this.db.prepare(`UPDATE reminder_series_proposals SET status = 'CONFIRMED', transaction_marker = ?, resolution_inbound_id = ?
       WHERE id = ? AND revision = ? AND status = 'PENDING' AND expires_at > ? AND owner_id = ? AND chat_identity_id = ?
-        AND EXISTS (${authority(scope)}) AND ${ordering(scope)}
+        AND EXISTS (${authority(scope)}) AND ${creationRequest && !scope.webSessionId
+          ? "source_inbound_id = ?" : ordering(scope)}
         AND EXISTS (SELECT 1 FROM conversation_contexts c WHERE c.id = context_id AND c.revision = context_revision
           AND c.status = 'DRAFT_READY' AND c.expires_at > ? AND c.owner_id = ? AND c.chat_identity_id = ?)
         AND NOT EXISTS (SELECT 1 FROM command_drafts WHERE chat_identity_id = ? AND status = 'PENDING' AND expires_at > ?)`)

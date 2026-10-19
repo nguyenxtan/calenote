@@ -1,0 +1,14 @@
+.page { max-width: 960px; margin: auto; padding: 40px 24px 80px; color: var(--cn-text); }
+.page h1 { font-size: 30px; margin: 20px 0 8px; }
+.page h2 { font-size: 20px; margin: 0 0 18px; }
+.page p { font-size: 14px; line-height: 1.7; color: var(--cn-text-2); }
+.page section { border: 1px solid var(--cn-border); border-radius: 14px; background: white; padding: 24px; margin: 24px 0; }
+.page table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.page th, .page td { padding: 14px 8px; border-bottom: 1px solid var(--cn-border); vertical-align: top; overflow-wrap: anywhere; }
+.page th { text-align: left; font-weight: 500; width: 60%; }
+.page td { text-align: right; }
+.page a { color: var(--cn-brand-700); min-height: 44px; display: inline-flex; align-items: center; }
+.page button { padding: 12px 20px; min-height: 44px; background: var(--cn-brand-700); color: white; border: none; border-radius: 10px; }
+.page button:focus-visible, .page a:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 4px; }
+.updated { font-size: 12px; }
+@media(max-width:600px) { .page { padding: 24px 16px; } .page section { padding: 18px 12px; } .page h1 { font-size: 25px; } }

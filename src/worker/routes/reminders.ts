@@ -18,6 +18,7 @@ export class ClientUpgradeRequiredError extends Error {
 }
 const createSchema = z.object({
   intentId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/u).optional(),
+  connectionPublicId: z.string().regex(/^[A-Za-z0-9_-]{22}$/u).optional(),
   title: z.string().max(500),
   scheduledAt: z.number(),
   timezone: z.literal("Asia/Ho_Chi_Minh"),

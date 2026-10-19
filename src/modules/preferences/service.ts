@@ -4,11 +4,14 @@ export type AddressStyle = (typeof ADDRESS_STYLES)[number];
 export const TONES = ["concise", "friendly", "professional", "playful"] as const;
 export type Tone = (typeof TONES)[number];
 
+export type ReminderConfirmation = "auto" | "preview";
+
 export interface UserPreferences {
   userId: string;
   addressStyle: AddressStyle;
   customDisplayName: string | null;
   tone: Tone;
+  reminderConfirmation?: ReminderConfirmation;
   updatedAt: number;
 }
 
@@ -16,6 +19,7 @@ export interface UserPreferencesInput {
   addressStyle?: AddressStyle;
   customDisplayName?: string | null;
   tone?: Tone;
+  reminderConfirmation?: ReminderConfirmation;
 }
 
 export interface UserPreferencesStore {
@@ -27,6 +31,7 @@ export const DEFAULT_USER_PREFERENCES = {
   addressStyle: "ban",
   customDisplayName: null,
   tone: "friendly",
+  reminderConfirmation: "auto",
 } as const satisfies Omit<UserPreferences, "userId" | "updatedAt">;
 
 export class InvalidUserPreferencesError extends Error {
@@ -47,6 +52,9 @@ function isTone(value: unknown): value is Tone {
 }
 
 function normalizeInput(input: UserPreferencesInput): UserPreferencesInput {
+  if (input.reminderConfirmation !== undefined && !["auto", "preview"].includes(input.reminderConfirmation)) {
+    throw new InvalidUserPreferencesError("reminderConfirmation is not supported");
+  }
   if (input.addressStyle !== undefined && !isAddressStyle(input.addressStyle)) {
     throw new InvalidUserPreferencesError("addressStyle is not supported");
   }
@@ -74,7 +82,7 @@ export async function getUserPreferences(
   store: UserPreferencesStore,
 ): Promise<UserPreferences> {
   if (userId.trim().length === 0) throw new InvalidUserPreferencesError("userId is required");
-  return (await store.get(userId)) ?? { ...DEFAULT_USER_PREFERENCES, userId, updatedAt: 0 };
+  return { ...DEFAULT_USER_PREFERENCES, userId, updatedAt: 0, ...await store.get(userId) };
 }
 
 export async function saveUserPreferences(

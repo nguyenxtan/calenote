@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { D1ConnectionLifecycleStore } from "@/modules/connections/lifecycle";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
@@ -94,6 +95,8 @@ class SqliteD1Database {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0011_connection_disconnect.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0013_primary_login_channel.sql"), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new SqliteStatement(this.sqlite, sql, () => this.blobReadsAsArrays) as unknown as D1PreparedStatement;
@@ -618,4 +621,28 @@ describe("non-connect processor handoff", () => {
     });
     expect(sendText).toHaveBeenCalledTimes(1);
   });
+});
+
+it.each(["telegram","zalo"] as const)("fences a terminal %s bind reply when disconnect wins before send reservation",async provider=>{
+ const {database,store,deps,inboundId,sendText}=await setup({provider});
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'telegram','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ const bind=store.bindPrivateChat.bind(store);vi.spyOn(store,'bindPrivateChat').mockImplementation(async input=>{
+  const bound=await bind(input);expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now,'disconnect-before-send')).toBe(true);return bound;
+ });
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});expect(sendText).not.toHaveBeenCalled();
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:0});
+});
+it('refuses to disconnect while a terminal reply is already reserved and cleans the reservation after settlement',async()=>{
+ const {database,deps,inboundId,sendText}=await setup();
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'zalo','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ sendText.mockImplementation(async()=>{expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now,'blocked-during-send')).toBe(false);return {providerMessageId:'receipt'};});
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:0});
+ expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(true);
 });

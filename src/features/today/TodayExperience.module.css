@@ -42,3 +42,7 @@
 .history a { color: var(--cn-brand-700); }
 .next strong { font-size: 30px; font-weight: 600; }
 @media(max-width: 900px) { .page { padding: 28px 20px 32px; } .header h1 { font-size: 26px; } .grid { grid-template-columns: 1fr; } .quickCapture { padding: 20px; } }
+
+.targetChoice { display: grid; gap: 8px; margin: 16px 0; font-size: 13px; color: var(--cn-text-2); }
+.targetChoice select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--cn-border); border-radius: 10px; background: white; color: var(--cn-text); font: inherit; }
+.targetChoice select:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 2px; }

@@ -8,6 +8,7 @@ import { loadReminderList } from "@/lib/reminder-list";
 import { AppShell } from "@/ui/shell/AppShell";
 import { ActionDecisionResponseSchema, ActionsResponseSchema, type PublicPendingAction } from "@/contracts/api/actions";
 import { CreateReminderResponseSchema, ResolveReminderIntentResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
+import { ConnectionsResponseSchema, type PublicConnection } from "@/contracts/api/connections";
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
 import { projectReminders } from "./projection";
@@ -46,6 +47,17 @@ export function TodayExperience() {
   const [reminders, setReminders] = useState<Resource<PublicReminder[]>>(EMPTY_REMINDERS);
   const [actions, setActions] = useState<Resource<PublicPendingAction[]>>(EMPTY_ACTIONS);
   const [title, setTitle] = useState("");
+  const [connectionChoices, setConnectionChoices] = useState<PublicConnection[] | null>(null);
+  const [connectionPublicId, setConnectionPublicId] = useState("");
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const controller = new AbortController();
+    void apiRequest<unknown>("/api/connections", { authenticated: true, signal: controller.signal })
+      .then(value => { const connections = ConnectionsResponseSchema.parse({data:value}).data.connections.filter(c=>c.state==="ACTIVE_BOUND"); if(active) setConnectionChoices(connections); })
+      .catch(()=>{ if(active) setConnectionChoices(null); });
+    return ()=>{ active=false; controller.abort(); };
+  }, [user]);
   const [scheduledFor, setScheduledFor] = useState("");
   const [showManualTime, setShowManualTime] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -62,7 +74,7 @@ export function TodayExperience() {
   const actionRequest = useRef(0);
 
   const clearAndRedirect = useCallback(() => {
-    epoch.current += 1; setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS); setSessionState("redirecting"); replace("/login");
+    epoch.current += 1; setConnectionChoices(null); setConnectionPublicId(""); setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS); setSessionState("redirecting"); replace("/login");
   }, [replace]);
 
   const loadReminders = useCallback(async (current: number) => {
@@ -79,7 +91,7 @@ export function TodayExperience() {
   }, [clearAndRedirect]);
 
   const start = useCallback(async () => {
-    const current = epoch.current + 1; epoch.current = current; setSessionState("checking"); setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS);
+    const current = epoch.current + 1; epoch.current = current; setSessionState("checking"); setConnectionChoices(null); setConnectionPublicId(""); setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS);
     try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); setSessionState("ready"); void loadReminders(current); void loadActions(current); }
     catch (error) { if (!isAbort(error) && epoch.current === current) { setSessionState("error"); setSessionError("Chưa thể xác thực phiên. Vui lòng thử lại."); } }
   }, [clearAndRedirect, loadActions, loadReminders]);
@@ -103,6 +115,7 @@ export function TodayExperience() {
   async function createReminder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!user || mutationLocked.current) return;
     const scheduledAt = vietnamWallClockToEpoch(scheduledFor); const trimmed = title.trim();
+    if (!pendingIntent && (connectionChoices?.length ?? 0) > 1 && !connectionPublicId) { setCaptureError("Chọn bot nhận lời nhắc trước khi tạo."); return; }
     if (!pendingIntent && (!trimmed || scheduledAt === null)) { setCaptureError("Hãy nhập nội dung và thời điểm nhắc hợp lệ."); return; }
     mutationLocked.current = true; setCreating(true); setCaptureError(null); setNotice(null); const current = epoch.current;
     let resolving = false;
@@ -119,7 +132,7 @@ export function TodayExperience() {
         await loadReminders(current); return;
       }
       setPendingIntent(true);
-      const created = await apiRequest<unknown>("/api/reminders", { method: "POST", body: { intentId: intent.id, title: trimmed, scheduledAt, timezone: "Asia/Ho_Chi_Minh" }, authenticated: true, onUnauthorized: clearAndRedirect });
+      const created = await apiRequest<unknown>("/api/reminders", { method: "POST", body: { intentId: intent.id, title: trimmed, scheduledAt, timezone: "Asia/Ho_Chi_Minh", ...(connectionPublicId ? {connectionPublicId} : {}) }, authenticated: true, onUnauthorized: clearAndRedirect });
       if (!CreateReminderResponseSchema.safeParse(created).success) throw new AmbiguousMutationError();
       if (epoch.current === current) { intent.complete(); setPendingIntent(false); setTitle(""); setScheduledFor(""); setNotice("Nhắc hẹn đã được lưu."); await loadReminders(current); } }
     catch (error) {
@@ -149,7 +162,7 @@ export function TodayExperience() {
   const upcoming = projection.today;
   const fullDate = (at: number) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(at);
   return <AppShell user={user}><main className={styles.page}><header className={styles.header}><p className={styles.eyebrow}><Sparkles aria-hidden="true" size={14} />Ngày của bạn</p><h1>Chào, {user.displayName}</h1><p>{new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)} · Giờ Việt Nam</p></header>
-    <section className={styles.captureSection} aria-labelledby="quick-capture-title"><h2 className={styles.visuallyHidden} id="quick-capture-title">Tạo lời nhắc nhanh</h2><form className={styles.quickCapture} onSubmit={createReminder}><label className={styles.visuallyHidden} htmlFor="capture-title">Nội dung nhắc hẹn</label><textarea id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bạn muốn Calenote nhắc điều gì?" aria-describedby="capture-help" /><p id="capture-help" className={styles.captureHelp}>Bắt đầu bằng nội dung, rồi chọn thời gian chính xác trước khi lưu.</p><div className={styles.captureFoot}><div>{showManualTime ? <><label htmlFor="capture-time">Thời điểm nhắc</label><input id="capture-time" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></> : <button className={styles.timeTrigger} type="button" onClick={() => setShowManualTime(true)}>Chọn thời gian</button>}{scheduledFor && <p className={styles.selectedTime}>{humanTime(vietnamWallClockToEpoch(scheduledFor) ?? 0)}</p>}</div><button type="submit" disabled={creating}>{creating ? "Đang lưu…" : pendingIntent ? "Kiểm tra lần tạo trước" : "Tạo lời nhắc"}</button></div><div className={styles.quickIdeas} aria-label="Gợi ý bắt đầu"><span>Bắt đầu nhanh</span><button type="button" onClick={() => setTitle("Gọi mẹ")}>Nhắc gọi mẹ</button><button type="button" onClick={() => setTitle("Lên kế hoạch tuần")}>Lên kế hoạch tuần</button><button type="button" onClick={() => setTitle("Chuẩn bị cho ngày mai")}>Chuẩn bị cho ngày mai</button></div>{captureError && <p className={styles.inlineError} role="alert">{captureError}</p>}</form></section>
+    <section className={styles.captureSection} aria-labelledby="quick-capture-title"><h2 className={styles.visuallyHidden} id="quick-capture-title">Tạo lời nhắc nhanh</h2><form className={styles.quickCapture} onSubmit={createReminder}><label className={styles.visuallyHidden} htmlFor="capture-title">Nội dung nhắc hẹn</label><textarea id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bạn muốn Calenote nhắc điều gì?" aria-describedby="capture-help" /><p id="capture-help" className={styles.captureHelp}>Bắt đầu bằng nội dung, rồi chọn thời gian chính xác trước khi lưu.</p>{connectionChoices && connectionChoices.length > 1 && <label className={styles.targetChoice}>Bot nhận lời nhắc<select aria-label="Bot nhận lời nhắc" value={connectionPublicId} disabled={creating || pendingIntent} onChange={event=>setConnectionPublicId(event.target.value)}><option value="">Chọn bot nhận nhắc</option>{connectionChoices.map(c=><option key={c.publicId} value={c.publicId}>{c.provider === "zalo" ? "Zalo" : "Telegram"} · {c.displayName}</option>)}</select></label>}<div className={styles.captureFoot}><div>{showManualTime ? <><label htmlFor="capture-time">Thời điểm nhắc</label><input id="capture-time" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></> : <button className={styles.timeTrigger} type="button" onClick={() => setShowManualTime(true)}>Chọn thời gian</button>}{scheduledFor && <p className={styles.selectedTime}>{humanTime(vietnamWallClockToEpoch(scheduledFor) ?? 0)}</p>}</div><button type="submit" disabled={creating}>{creating ? "Đang lưu…" : pendingIntent ? "Kiểm tra lần tạo trước" : "Tạo lời nhắc"}</button></div><div className={styles.quickIdeas} aria-label="Gợi ý bắt đầu"><span>Bắt đầu nhanh</span><button type="button" onClick={() => setTitle("Gọi mẹ")}>Nhắc gọi mẹ</button><button type="button" onClick={() => setTitle("Lên kế hoạch tuần")}>Lên kế hoạch tuần</button><button type="button" onClick={() => setTitle("Chuẩn bị cho ngày mai")}>Chuẩn bị cho ngày mai</button></div>{captureError && <p className={styles.inlineError} role="alert">{captureError}</p>}</form></section>
     {notice && <p className={styles.notice} role="status"><CircleCheck aria-hidden="true" size={18} />{notice}</p>}
     <div className={styles.grid}><section aria-labelledby="today-title"><div className={styles.sectionHead}><div><p>Lịch trong ngày</p><h2 id="today-title">Còn lại hôm nay</h2></div></div>{reminders.error ? <LocalError message={reminders.error} onRetry={() => void loadReminders(epoch.current)} /> : reminders.value === null ? <Skeleton /> : upcoming.length === 0 ? <Empty title="Hôm nay không còn lời nhắc sắp tới." text="Bạn có thể thêm lời nhắc mới hoặc xem những ngày tiếp theo bên dưới." /> : <div className={styles.timeline}>{upcoming.map((item) => <article className={styles.reminder} key={item.publicId}><time>{time(item.scheduledAt)}</time><span className={styles.dot} aria-hidden="true" /><div><h3>{item.title}</h3><p>{status(item.status)}</p></div></article>)}</div>}</section>
       <aside className={styles.context}>{upcoming[0] && <section className={styles.next}><p>Lời nhắc tiếp theo hôm nay</p><strong>{time(upcoming[0].scheduledAt)}</strong><h2>{upcoming[0].title}</h2><span>{upcoming.length} lời nhắc còn lại</span></section>}</aside></div>

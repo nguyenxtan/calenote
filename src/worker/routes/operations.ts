@@ -31,6 +31,10 @@ export interface AuthOperations {
 }
 
 export interface ConnectionsOperations {
+  getPrimaryLogin(userId:string):Promise<{publicId:string|null}>;
+  selectPrimaryLogin(input:{userId:string;publicId:string}):Promise<{publicId:string}>;
+  addConnection(input:{userId:string;provider:"zalo"|"telegram";token:string}):Promise<import("@/modules/connections/add-service").AddConnectionResult>;
+  disconnectConnection(input:{userId:string;publicId:string}):Promise<{disconnected:true}>;
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listConnections(userId: string): Promise<PublicConnection[]>;
   rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
@@ -44,6 +48,7 @@ export interface RemindersOperations {
   createReminder(input: {
     userId: string;
     intentId?: string;
+    connectionPublicId?: string;
     title: string;
     scheduledAt: number;
     timezone: "Asia/Ho_Chi_Minh";

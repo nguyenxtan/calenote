@@ -18,7 +18,9 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
   });
   const [appearanceNotice, setAppearanceNotice] = useState("");
   const address = ({ ban: "bạn", anh_chi: "anh/chị", ong_tui: "ông", minh: "mình", sep: "sếp", custom: draft.customDisplayName || "bạn" })[draft.addressStyle];
-  const preview = ({ concise: `${address}, lời nhắc đã sẵn sàng. Xác nhận nhé?`, friendly: `Mình ghi nhận rồi nha. ${address} xác nhận thời gian giúp mình nhé!`, professional: `Lời nhắc đã được chuẩn bị. Mời ${address} kiểm tra và xác nhận.`, playful: `Sẵn sàng rồi đây! ${address} chốt giờ để mình nhớ giúp nhé.` })[draft.tone];
+  const preview = draft.reminderConfirmation !== "preview"
+    ? ({ concise: `${address}, đã tạo lời nhắc.`, friendly: `Mình đã tạo lời nhắc cho ${address} rồi nha!`, professional: `Lời nhắc của ${address} đã được tạo.`, playful: `Đã chốt lịch cho ${address}! Đến giờ mình sẽ nhắc nhé.` })[draft.tone]
+    : ({ concise: `${address}, lời nhắc đã sẵn sàng. Xác nhận nhé?`, friendly: `Mình ghi nhận rồi nha. ${address} xác nhận thời gian giúp mình nhé!`, professional: `Lời nhắc đã được chuẩn bị. Mời ${address} kiểm tra và xác nhận.`, playful: `Sẵn sàng rồi đây! ${address} chốt giờ để mình nhớ giúp nhé.` })[draft.tone];
   async function submit(event: FormEvent) {
     event.preventDefault();
     const name = draft.customDisplayName?.trim() || null;
@@ -54,6 +56,8 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
             </select></label>
           </div>
           {draft.addressStyle === "custom" && <label className={styles.customName}>Bạn muốn được gọi là gì?<input disabled={busy} maxLength={80} value={draft.customDisplayName ?? ""} onChange={event => edit({ ...draft, customDisplayName: event.target.value })} placeholder="Ví dụ: Tân" /></label>}
+          <label><input type="checkbox" disabled={busy} checked={draft.reminderConfirmation === "preview"} onChange={event => edit({ ...draft, reminderConfirmation: event.target.checked ? "preview" : "auto" })} />Xem trước và xác nhận trước khi tạo lời nhắc</label>
+          <p className={styles.help}>Mặc định, yêu cầu nhắc rõ nội dung và ngày giờ trong Zalo hoặc Telegram được tạo ngay. Bật lựa chọn này để xem trước rồi xác nhận. Áp dụng chung cho tài khoản.</p>
           <div className={styles.preview}><span>Ví dụ giọng điệu</span><p>{preview}</p><small>Minh hoạ cách diễn đạt; nội dung phản hồi thực tế tuỳ tình huống.</small></div>
           <div className={styles.saveRow}><button className={styles.primary} type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu cá nhân hoá"}</button><span role="status">{editedSinceSubmit ? "Có thay đổi chưa lưu." : notice}</span></div>
           {validation && <p role="alert" className={styles.mutationError}>{validation}</p>}
@@ -78,8 +82,8 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
         <a className={styles.destination} href="/app/activity"><span><strong>Lịch sử hoạt động</strong><small>Xem những thay đổi quan trọng của tài khoản</small></span><ArrowUpRight size={19} /></a>
       </section>
       <section className={styles.settingsCard} id="privacy">
-        <h2>Quyền riêng tư & trợ lý</h2><p>Trợ lý hoạt động ở chế độ riêng tư. Calenote xử lý ngày giờ và chỉ tạo lời nhắc sau bước xác nhận của bạn.</p>
-        <ul className={styles.privacyList}><li>Nội dung nhạy cảm được mã hoá khi lưu trữ.</li><li>Trợ lý giúp hiểu ý định và nội dung lời nhắc.</li><li>Bạn luôn kiểm tra thời gian trước khi xác nhận.</li></ul>
+        <h2>Quyền riêng tư & trợ lý</h2><p>Trợ lý hoạt động ở chế độ riêng tư. Calenote kiểm tra ngày giờ và tạo lời nhắc theo lựa chọn xác nhận của bạn.</p>
+        <ul className={styles.privacyList}><li>Nội dung nhạy cảm được mã hoá khi lưu trữ.</li><li>Trợ lý giúp hiểu ý định và nội dung lời nhắc.</li><li>Yêu cầu còn thiếu hoặc chưa rõ thông tin sẽ được hỏi lại.</li></ul>
         <a className={styles.textLink} href="/docs">Tìm hiểu cách Calenote hoạt động →</a>
       </section>
     </div>

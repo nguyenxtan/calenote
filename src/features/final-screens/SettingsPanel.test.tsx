@@ -7,6 +7,17 @@ import { SettingsPanel } from "./SettingsPanel";
 const user = { displayName: "Mai", email: "mai@example.test", timezone: "Asia/Ho_Chi_Minh" } as const;
 const value = { addressStyle: "ban", customDisplayName: null, tone: "friendly" } as const;
 describe("Settings controls", () => {
+  it("saves preview confirmation only after explicit settings submit", async () => {
+    const save = vi.fn().mockResolvedValue(true), interaction = userEvent.setup();
+    render(<SettingsPanel user={user} value={value} save={save} notice={null} busy={false} />);
+    const toggle = screen.getByRole("checkbox", { name: /Xem trước và xác nhận/ });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText("Mình đã tạo lời nhắc cho bạn rồi nha!")).toBeVisible();
+    await interaction.click(toggle);
+    expect(save).not.toHaveBeenCalled();
+    await interaction.click(screen.getByRole("button", { name: "Lưu cá nhân hoá" }));
+    expect(save).toHaveBeenCalledWith({ ...value, reminderConfirmation: "preview" });
+  });
   it("replaces an old save confirmation when the draft changes", async () => {
     const interaction = userEvent.setup();
     render(<SettingsPanel user={user} value={value} save={vi.fn()} notice="Cài đặt đã được lưu." busy={false} />);
