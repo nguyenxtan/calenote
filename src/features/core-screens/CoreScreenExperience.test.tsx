@@ -37,6 +37,7 @@ describe("CoreScreenExperience", () => {
     let delivered = false;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       const rows = [{ ...reminder, status: delivered ? "SENT" : "PENDING", ...(contextContractEnabled ? { details: null } : {}) }];
       return json({ data: contextContractEnabled ? { schemaVersion: "reminders-2", reminders: rows, hasMore: false, scope: "OWNER" } : { reminders: rows } });
@@ -77,6 +78,7 @@ describe("CoreScreenExperience", () => {
     let resolveDecision!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       if (init?.method === "POST") return new Promise<Response>(resolve => { resolveDecision = resolve; });
       actionReads += 1;
@@ -101,6 +103,7 @@ describe("CoreScreenExperience", () => {
     const second = { ...reminder, publicId: "S".repeat(22), title: "Gọi mẹ" };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       if (String(path).startsWith("/api/reminders/")) {
         posts += 1;
@@ -125,6 +128,7 @@ describe("CoreScreenExperience", () => {
       calendarLabel: "Dương lịch", eventLabel: null, occurrences: ["2026-10-08", "2026-10-09", "2026-10-10"].map(localDate => ({ localDate, localTime: "12:00", status: "PROPOSED" })) };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") {
         if (init?.method === "POST") { confirmed = true; return json({ data: { result: "CONFIRMED" } }); }
         return json({ data: { series: confirmed ? [] : [series] } });
@@ -149,6 +153,7 @@ describe("CoreScreenExperience", () => {
     let reads = 0;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       if (path === `/api/reminders/${reminder.publicId}`) {
         attempted = true;
