@@ -168,8 +168,23 @@ export async function executeObservableSingleTargetValidation(input:ObservableEx
   if(!input.singleTarget||input.profile!=="PILOT"||input.accountingPolicy!=="CONFIRMED_COST_V1"||input.pilotPrefix||input.boundedPilot)throw Error("INVALID_SINGLE_TARGET_SCOPE");
   return executeObservable(input,false,true);
 }
-async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false) {
-  if (input.wireProtocol !== undefined && (input.wireProtocol !== "TYPED_105" || input.profile !== "PILOT" || !input.boundedPilot || input.singleTarget || input.pilotPrefix || replayOnly || turnZeroOnly)) throw new Error("INVALID_TYPED_105_SCOPE");
+// Only a live branded compiler launch can obtain this key. Public replay and
+// single-target APIs keep rejecting TYPED_105; Formal76 remains independent.
+const typedCompilerBridgeKey=Object.freeze({});
+export function isTypedCompilerBridgeKey(value:unknown){return value===typedCompilerBridgeKey;}
+export async function runTypedCompilerDiagnosticExecution(launch:import('./context-typed-compiler-launcher').TypedCompilerLaunch){
+ const {takeTypedCompilerExecution}=await import('./context-typed-compiler-launcher');
+ const input=takeTypedCompilerExecution(launch,typedCompilerBridgeKey);
+ if(input.wireProtocol!=="TYPED_105"||input.singleTarget?.fixture!=="R01"||input.singleTarget.turn!==0||input.profile!=="PILOT"||input.boundedPilot||input.pilotPrefix)throw Error("COMPILER_TARGET_SCOPE");
+ return executeObservable(input,false,true,typedCompilerBridgeKey);
+}
+async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false, compilerKey?:unknown) {
+  const compilerDiagnostic=compilerKey===typedCompilerBridgeKey;
+  let compilerLedgerUncertain=false;
+  const persist=<Args extends unknown[],Result>(operation:(...args:Args)=>Result)=>(...args:Args):Result=>{try{return operation(...args);}catch(error){if(compilerDiagnostic)compilerLedgerUncertain=true;throw error;}};
+  const ledgerOps={appendCampaignEvent:persist(appendCampaignEvent),reserveCampaignCall:persist(reserveCampaignCall),markCampaignDispatched:persist(markCampaignDispatched),finishCampaignCall:persist(finishCampaignCall),settleCampaignCanary:persist(settleCampaignCanary),completeCampaign:persist(completeCampaign)};
+
+  if (input.wireProtocol !== undefined && !compilerDiagnostic && (input.wireProtocol !== "TYPED_105" || input.profile !== "PILOT" || !input.boundedPilot || input.singleTarget || input.pilotPrefix || replayOnly || turnZeroOnly)) throw new Error("INVALID_TYPED_105_SCOPE");
   if (input.accountingPolicy && ((!turnZeroOnly && !input.boundedPilot) || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
   if (input.boundedPilot && (input.accountingPolicy !== "CONFIRMED_COST_V1" || input.profile !== "PILOT" || turnZeroOnly || replayOnly || input.pilotPrefix)) throw new Error("INVALID_BOUNDED_PILOT_SCOPE");
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
@@ -184,7 +199,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   if(selected&&((selected.turn>0&&!input.singleTarget!.contextSeedDigest)||(input.singleTarget!.contextSeedDigest&&input.singleTarget!.contextSeedDigest!==selected.contextSeedDigest)))throw Error("SINGLE_TARGET_CONTEXT_SEED_BINDING");
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
-  appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
+  ledgerOps.appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(input.debugBudgetAuthoritySha256 ? {debugBudgetAuthoritySha256:input.debugBudgetAuthoritySha256} : {}),
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
@@ -243,7 +258,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     return response;
   });
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
-  const stop = (reason: string) => { if (!stopped()) appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
+  const stop = (reason: string) => { if (!stopped()) ledgerOps.appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
   let activeTarget: {fixtureId:string;turnIndex:number}|undefined;
   const gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105"} = { ...(input.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), prepare(tier, context) {
     const preparedTarget=activeTarget;
@@ -253,18 +268,18 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       const reservationId = `call-${applicationLlmCalls + 1}`;
       if(input.boundedPilot){if(!preparedTarget)throw new Error("BOUNDED_TARGET_MISSING");input.boundedPilot.beforeDispatch(preparedTarget,reservationId);}
-      const reserved = reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
+      const reserved = ledgerOps.reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
         reservationId, maximumMicrounits: input.accountingPolicy ? 0 : prepared.maximumCostMicrounits, now: now(), startedAt });
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
-      markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
+      ledgerOps.markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
       outboundDigest = null; httpStatus = null; queryDiagnostics=undefined; requestSchemaProof={};
       if(input.wireProtocol === "TYPED_105")schemaProof=initialSchemaProof();
       let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
       try { parsed = await prepared.dispatch(); }
       catch (error) {
         if (turnZeroOnly || input.boundedPilot) {
-          finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: null });
+          ledgerOps.finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: null });
           if(input.boundedPilot&&preparedTarget){input.boundedPilot.settled(preparedTarget,reservationId,null);input.boundedPilot.outcome(preparedTarget,false);}
           stop("SINGLE_REPLAY_PROVIDER_EXCEPTION");
         }
@@ -274,7 +289,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       // application. Runtime T5 core/guidance quarantine remains unchanged.
       const result = parsed.status === "SUCCESS" && (isUnreconciledListInterpretation(parsed.interpretation)?!listTransportGuidanceValid(parsed.interpretation):!parsed.interpretation.fullSchemaValid)
         ? { status: "FAILURE" as const, category: "SCHEMA_INVALID" as const, usage: parsed.usage, providerEvidence: parsed.providerEvidence, rawResponseBytes: parsed.rawResponseBytes, canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : parsed;
-      finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
+      ledgerOps.finishCampaignCall(input.directory, { runId: input.runId, reservationId, at: now(), observedMicrounits: result.usage?.costMicrounits ?? null,
         ...(input.accountingPolicy && result.usage?.reportedCostUsd !== undefined ? {reportedCostUsd:result.usage.reportedCostUsd}: {}) });
       if(input.boundedPilot&&preparedTarget)input.boundedPilot.settled(preparedTarget,reservationId,result.usage?.costMicrounits??null);
       responses.push({ call: applicationLlmCalls, runId: input.runId, ...healthyTurns[applicationLlmCalls - 1], status: result.status, ...schemaProof, ...requestSchemaProof, ...(result.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: result.canonicalValidationDiagnostics } : {}), ...(result.status === "FAILURE" ? { category: result.category, ...(result.failureDiagnostics ? { failureDiagnostics: result.failureDiagnostics } : {}), ...(result.transportDiagnostics ? { transportDiagnostics: result.transportDiagnostics } : {}) } : {}),
@@ -334,7 +349,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
           && facts.passedTurns === 1 && facts.detailPassed === facts.detailPlanned && facts.safetyFailures === 0;
         if (!canaryPassed && observed.actualDispatches === 1) {
           if (applicationLlmCalls !== 1 || httpCount() !== 1 || responses.length !== 1) stop("CANARY_COUNTER_MISMATCH");
-          if (!stopped()) settleCampaignCanary(input.directory, { runId: input.runId, at: now(), accepted });
+          if (!stopped()) ledgerOps.settleCampaignCanary(input.directory, { runId: input.runId, at: now(), accepted });
           canaryPassed = accepted && !stopped();
         }
         if (!accepted && (!canaryPassed || !toleratedQuality)) stop("APPLICATION_ORACLE_FAILED");
@@ -364,16 +379,17 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     const scopedReplayPassed = replayOnly && score.passedTurns === 1 && score.healthyFullSchemaValid === 1 && score.detailPassed === score.detailPlanned && score.safetyFailures === 0 && score.failedMandatory.length === 0;
     if (turnZeroOnly) stop("SINGLE_REPLAY_TERMINAL");
     else if ((!scopedReplayPassed && score.gate !== "PASS") || !canaryPassed || score.actualDispatches !== httpCount() || applicationLlmCalls !== httpCount()) stop("CAMPAIGN_GATE_FAILED");
-    else completeCampaign(input.directory, { runId: input.runId, at: now() });
+    else ledgerOps.completeCampaign(input.directory, { runId: input.runId, at: now() });
   } catch { stop("EXECUTION_FAILED"); }
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
+  if(compilerDiagnostic&&(compilerLedgerUncertain||finalLedger.some(row=>row.event==="RESERVE"&&!finalLedger.some(finish=>finish.event==="FINISH"&&finish.reservationId===row.reservationId))))throw Error("COMPILER_LEDGER_PERSISTENCE_UNCERTAIN");
   const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
     ...(selected ? {contextSeedProof:{version:selected.contextSeed.version,digest:selected.contextSeedDigest,semanticBaselineSha:selected.contextSeed.semanticBaselineSha,fixture:selected.fixture,turn:selected.turn,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}} : {}),
     ...(turnZeroOnly ? { executionKind: selected?"SINGLE_TARGET_VALIDATION":"SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),
     ...(replayOnly ? { replayOnly: true, historicalRouteAdmission: "PASS", offlineSeedExecutions, seed, seedFailure, applicationFacts, fullPilotGate: "NOT_RUN" } : {}),
-    actualProviderCalls: httpCount(), responses, applicationEvidence, actionEvidence, score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
+    actualProviderCalls: httpCount(), responses, applicationEvidence, actionEvidence, score:compilerDiagnostic?null:score, syntheticFaultControlsPlanned: planned.filter(s => s.turns.every(t => t.model === "INJECTED_REFUSAL")).length,
     syntheticFaultTurnsCompleted, providerReportedUsdTotal: responses.reduce((sum, r) => sum + (r.usage?.reportedCostUsd ?? 0), 0),
     retainedMicrounits: finalLedger.filter(r => r.event === "RESERVE").reduce((sum, reservation) => {
       const finish = finalLedger.find(r => r.event === "FINISH" && r.reservationId === reservation.reservationId);
