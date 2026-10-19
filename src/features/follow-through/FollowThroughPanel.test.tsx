@@ -99,7 +99,16 @@ it('supports keyboard confirmation with no automated accessibility violations', 
     done.focus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('region', { name: 'Xác nhận thay đổi' })).toBeVisible();
+    expect(screen.getByRole('button',{name:'Xác nhận'})).toHaveFocus();
     await user.click(screen.getByRole('button', { name: 'Quay lại' }));
     expect(screen.queryByRole('region', { name: 'Xác nhận thay đổi' })).not.toBeInTheDocument();
+    expect(done).toHaveFocus();
     expect((await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations).toEqual([]);
+});
+it.each([401,429])('preserves committed unknown receipt through retry rejection %s',async(status)=>{
+ const bodies:unknown[]=[];vi.stubGlobal('fetch',vi.fn(async(_,options?:RequestInit)=>{if(options?.method==='POST'){bodies.push(JSON.parse(options.body as string));if(bodies.length===1)throw new TypeError('lost');if(bodies.length===2)return new Response(JSON.stringify({error:{code:'RETRY_LATER',message:'Retry later'}}),{status,headers:{'content-type':'application/json'}});return json({item:{...item,progress:'DONE',revision:2}});}return json({items:[item]});}));
+ const user=userEvent.setup();const view=render(<FollowThroughPanel ownerKey="owner"/>);await screen.findByText('Tiến độ: Chưa xong');await user.click(within(screen.getByRole('article')).getByRole('button',{name:'Đã xong'}));await user.click(screen.getByRole('button',{name:'Xác nhận'}));await screen.findByText(/Kết quả chưa xác định/);await user.click(screen.getByRole('button',{name:'Kiểm tra yêu cầu trước'}));await waitFor(()=>expect(bodies).toHaveLength(2));expect(sessionStorage.length).toBe(1);view.unmount();render(<FollowThroughPanel ownerKey="owner"/>);await user.click(await screen.findByRole('button',{name:'Kiểm tra yêu cầu trước'}));await waitFor(()=>expect(bodies).toHaveLength(3));expect(bodies[2]).toEqual(bodies[0]);
+});
+it('discards pagination that settles after a newer refresh',async()=>{
+ let resolvePage!:(response:Response)=>void;let reads=0;vi.stubGlobal('fetch',vi.fn(async(path:string|URL|Request)=>{if(String(path).includes('?cursor='))return new Promise<Response>(resolve=>{resolvePage=resolve;});reads++;return json({items:[{...item,revision:reads}],...(reads===1?{nextCursor:'work1'}:{})});}));const user=userEvent.setup();render(<FollowThroughPanel ownerKey="owner"/>);await user.click(await screen.findByRole('button',{name:'Tải thêm việc'}));await user.click(screen.getByRole('button',{name:'Làm mới'}));await waitFor(()=>expect(reads).toBe(2));resolvePage(json({items:[{...item,publicId:'stale',title:'Stale work'}],nextCursor:'stale'}));await waitFor(()=>expect(screen.queryByText('Stale work')).not.toBeInTheDocument());expect(screen.queryByRole('button',{name:'Tải thêm việc'})).not.toBeInTheDocument();
 });
