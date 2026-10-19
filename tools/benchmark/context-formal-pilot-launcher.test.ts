@@ -1,4 +1,5 @@
 import {it,expect,vi} from 'vitest';
+import {currentFixtureCandidate} from './current-candidate.test-support';
 import {mkdtempSync,mkdirSync,realpathSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -9,10 +10,11 @@ import {deriveBoundedPilotManifest} from './context-bounded-pilot';
 import {loadFormalPilotLaunch,inspectFormalPilotLaunch,runFormalPilotLaunch} from './context-formal-pilot-launcher';
 vi.mock('./register-conversation-loader.mjs',()=>({assertLoadedCandidateModules:vi.fn(()=>({loadedApplicationProof:'PASS'}))}));
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+const candidate=currentFixtureCandidate();
 function setup(){
  const root=process.cwd(),accountRoot=realpathSync(mkdtempSync(join(tmpdir(),'formal-launch-'))),campaignRoot=join(accountRoot,'campaign');mkdirSync(join(campaignRoot,'PILOT'),{recursive:true});
  appendCampaignEvent(join(campaignRoot,'PILOT'),{event:'BEGIN',runId:'history',sourceSha:'a'.repeat(40),profile:'PILOT',provenanceDigest:'b'.repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1});
- const candidate='b11c7d439ab79467f1e2c843723f4548d0a3e29f',proof=candidateValidationProof(root,candidate),manifest=deriveBoundedPilotManifest(root),ownerMessagePath=join(accountRoot,'owner.txt'),proposalPath=join(accountRoot,'proposal.json');
+ const proof=candidateValidationProof(root,candidate),manifest=deriveBoundedPilotManifest(root),ownerMessagePath=join(accountRoot,'owner.txt'),proposalPath=join(accountRoot,'proposal.json');
  writeFileSync(ownerMessagePath,'SYNTHETIC fresh paid approval for one FORMAL_PILOT only.');writeFileSync(proposalPath,'SYNTHETIC frozen proposal');
  const ownerMessageSha256=hash(readFileSync(ownerMessagePath,'utf8')),proposalSha256=hash(readFileSync(proposalPath,'utf8'));
  const debugPath=join(accountRoot,'debug.json'),debug={version:'t11-debug-loop-authority-1',operation:'T11_SCHEMA_DEBUG_THROUGH_FORMAL_PILOT',accountRoot,campaignRoot,hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu',retry:0,fallback:'none',stream:false,manifestSha256:manifest.manifestSha256,ownerMessagePath,ownerMessageSha256};writeFileSync(debugPath,JSON.stringify(debug));

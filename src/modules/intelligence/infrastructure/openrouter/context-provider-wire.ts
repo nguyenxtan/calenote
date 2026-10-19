@@ -217,7 +217,7 @@ function requireWireKeys(object: Record<string, unknown>, required: string[], al
   const extra = Object.keys(object).filter(key => !allowed.includes(key)).length;
   if (extra) throw new WireShapeFailure(path, "object", extra);
 }
-function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path: PropertyKey[] = [], root: Schema = original, canonicalEvidenceJson = false): unknown {
+function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path: PropertyKey[] = [], root: Schema = original, canonicalEvidenceJson = false, typedTransport = false): unknown {
   const node = deref(raw, root), plan = taggedPlan(node, root);
   const requireShape = (condition: unknown, expected = node.type ?? "UNION") => { if (!condition) throw new WireShapeFailure(path, expected); };
   if (plan) {
@@ -241,7 +241,7 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
     }
     const branch = plan.branches[matches[0]];
     if (direction === "decode") {
-      requireWireKeys(object, canonicalEvidenceJson ? branch.required! : plan.keys, plan.keys, path);
+      requireWireKeys(object, canonicalEvidenceJson || typedTransport ? branch.required! : plan.keys, plan.keys, path);
       // Encoded evidence uses canonical refs: only selected active keys are
       // required. Optional known legacy padding is never authority. All other
       // provider objects still require their declared transport keys.
@@ -249,21 +249,21 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
       // never read or traverse their values; only the selected branch supplies
       // canonical fields. Its active values still pass codec and validation.
     } else requireShape(predicate(branch, value, root));
-    const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction, [...path, key], root)]));
+    const result = Object.fromEntries(Object.entries(branch.properties!).map(([key, child]) => [key, codec(child, object[key], direction, [...path, key], root, false, typedTransport)]));
     if (direction === "encode") { for (const key of plan.keys) if (!Object.hasOwn(result, key)) result[key] = null; }
     else requireShape(predicate(branch, result, root));
     return result;
   }
   if (node.anyOf || node.oneOf) {
     const results: unknown[] = [], failures: WireShapeFailure[] = [];
-    for (const branch of node.anyOf ?? node.oneOf!) try { const result = codec(branch, value, direction, path, root); if (predicate(branch, direction === "encode" ? value : result, root)) results.push(result); } catch (error) { if (error instanceof WireShapeFailure) failures.push(error); }
+    for (const branch of node.anyOf ?? node.oneOf!) try { const result = codec(branch, value, direction, path, root, false, typedTransport); if (predicate(branch, direction === "encode" ? value : result, root)) results.push(result); } catch (error) { if (error instanceof WireShapeFailure) failures.push(error); }
     if (results.length === 0 && failures.length) throw failures.sort((a, b) => b.path.length - a.path.length)[0];
     requireShape(results.length > 0 && (!!node.anyOf || results.length === 1) && results.every(result => equal(result, results[0]))); return results[0];
   }
   if (node.type === "array") {
     // Active V3 semantic evidence uses the same bounded wire representation.
     // Canonical arrays and JSON-encoded uncertainty alternatives stay strict.
-    if (root === originalV3 && path.at(-1) === "evidence") {
+    if (!typedTransport && root === originalV3 && path.at(-1) === "evidence") {
       const keys = ["primaryEvidence", "additionalEvidenceJson"];
       if (direction === "encode") {
         requireShape(Array.isArray(value) && predicate(node, value, root));
@@ -302,12 +302,12 @@ function codec(raw: Schema, value: unknown, direction: "encode" | "decode", path
         ...(node.minItems !== undefined ? { minItems: Number(node.minItems) } : {}),
         ...(node.maxItems !== undefined ? { maxItems: Number(node.maxItems) } : {}) });
     }
-    return items.map((item, index) => codec(node.items!, item, direction, [...path, index], root));
+    return items.map((item, index) => codec(node.items!, item, direction, [...path, index], root, false, typedTransport));
   }
   if (node.type === "object") {
     requireShape(value && typeof value === "object" && !Array.isArray(value));
     requireWireKeys(value as Record<string, unknown>, node.required!, node.required!, path);
-    return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction, [...path, key], root)]));
+    return Object.fromEntries(Object.entries(node.properties!).map(([key, child]) => [key, codec(child, (value as Record<string, unknown>)[key], direction, [...path, key], root, false, typedTransport)]));
   }
   if (!predicate(node, value, root)) {
     const domain = node.enum ?? (Object.hasOwn(node, "const") ? [node.const] : undefined);
@@ -565,7 +565,7 @@ const providerSchemaV3 = indexedReminderSchema(operationSchema(outgoingSemanticK
 /** Move only explicitly model-authored carrier data; order and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
 const singletonChangeDefinitions=[{field:"title",root:"titleChange"},{field:"reminderDate",root:"reminderDateChange"},{field:"reminderTime",root:"reminderTimeChange"},{field:"eventDate",root:"eventDateChange"},{field:"eventTime",root:"eventTimeChange"},{field:"eventRelation",root:"eventRelationChange"},{field:"frequency",root:"frequencyChange"},{field:"occurrenceCount",root:"occurrenceCountChange"},{field:"endDate",root:"endDateChange"},{field:"location",root:"locationChange"}] as const;
-function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false):Record<string,unknown>{
+function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false,typedTransport=false):Record<string,unknown>{
   const definitions=singletonChangeDefinitions;
   const own=(object:object,key:string,path:PropertyKey[])=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor)throw new WireShapeFailure(path,"REQUIRED_PROPERTY");if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(path,"object");return descriptor.value;};
   const ranks=new Set<number>(),ranked:Array<{rank:number;change:unknown}>=[];
@@ -633,7 +633,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
         if(typeof operation!=="string"||!allowed.includes(operation))throw new WireShapeFailure([definition.root,"change","operation"],"CONTROL_ENUM",undefined,undefined,projectControlEnum(allowed,operation));
       }
     }
-    if(!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,undefined,singletonPredicateDiagnostics(shape,change,definition.root),{stage:"TYPED_PREDICATE",reason:"INVALID_TYPED_ROOT"});
+    if(!typedTransport&&!predicate(shape,change,providerSchemaV3))throw new WireShapeFailure([definition.root,"change"],"FIELD_CHANGE",undefined,undefined,undefined,undefined,undefined,singletonPredicateDiagnostics(shape,change,definition.root),{stage:"TYPED_PREDICATE",reason:"INVALID_TYPED_ROOT"});
     if(authored.length)throw new WireShapeFailure([definition.root],duplicate);
     emitted.set(definition.field,change);
     ranked.push(entry);
@@ -1086,3 +1086,13 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
     return { status: "REFUSED", reason: "SEMANTIC_PATCH_INVALID" };
   }
 }
+
+/** Structural primitives shared with the separately versioned typed transport.
+ * Existing wire104 calls retain their default behavior and exact bytes. */
+export const contextTypedWirePrimitives = Object.freeze({
+ selectedSchema:typedWireSchemaV3, originalSchema:originalV3,
+ canonicalCodec:(raw:unknown,direction:"encode"|"decode")=>codec(originalV3,raw,direction,[],originalV3,false,true),
+ indexedChanges:(raw:Record<string,unknown>,direction:"encode"|"decode",required=false)=>indexedChangeCarriers(raw,direction,required,false,true),
+ canonicalField:(key:string,value:unknown)=>codec(originalV3.properties![key],value,"decode",[key],originalV3,false,true),
+ operationValues, singletonChangeDefinitions,
+});

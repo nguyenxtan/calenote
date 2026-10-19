@@ -24,6 +24,8 @@ import { resolveQuery } from "./query";
 import { computeEffectiveDirectiveV3, validateDirectiveV3, selectGuidance } from "./guidance";
 import { digest } from "./confirmation";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
+import { CONTEXT_TYPED_PROMPT } from "./typed-prompt";
+import { CONTEXT_TYPED_PROTOCOL_V3 } from "./typed-protocol";
 import { InterpretationJsonSchema } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
 import { projectSemanticView } from "./projection";
@@ -38,7 +40,7 @@ import type { ContextObservation } from "./state";
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
-  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput>; budgetStore: SemanticBudgetStore;
+  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105"}; budgetStore: SemanticBudgetStore;
   keyring: Pick<Keyring, "decryptSensitive">; calendar: LunarCalendarAdapter;
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
   now(): number; reply(plan: ReplyPlan): Promise<ReplyReceipt>;
@@ -66,7 +68,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
       const traceId = createContextTraceId();
       type EventFields = ContextObservationEvent extends infer E ? E extends ContextObservationEvent ? Omit<E, "traceId" | "sourceSha" | "contractVersion" | "promptVersion" | "mode"> : never : never;
       const emit = (event: EventFields) => { try { deps.observe?.({ traceId, sourceSha: deps.sourceSha, mode: deps.mode,
-        contractVersion: "calenote-context-3", promptVersion: "calenote-context-3", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+        contractVersion: "calenote-context-3", promptVersion: deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROTOCOL_V3.promptVersion : "calenote-context-3", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
       let sendObservation: ContextObservation | undefined;
       let failureSnapshot: ContextSnapshotV2 | null = null, failureReceived: ContextSnapshotV2 | undefined;
       let downstreamCount = 0;
@@ -176,8 +178,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
           emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: "google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
-          const inputDigest = await digest(built.input), promptDigest = await digest(CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
-          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: CONTEXT_PROTOCOL_V3 });
+          const inputDigest = await digest(built.input), promptDigest = await digest(deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROMPT : CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
+          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROTOCOL_V3 : CONTEXT_PROTOCOL_V3 });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });
           if (reservation.status !== "RESERVED") { emit({ event: "REQUEST_REJECTED", reason: "BUDGET_EXHAUSTED" }); return finish("BUDGET"); }

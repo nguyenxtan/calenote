@@ -52,19 +52,21 @@ describe("Worker composition root", () => {
 
   it("keeps observable HTTP gateway wiring dormant behind the explicit successor capability", async () => {
     const gateway = await import("@/modules/intelligence/infrastructure/openrouter/semantic-gateway");
-    const factory = vi.spyOn(gateway, "createContextContractGateway");
+    const factory = vi.spyOn(gateway, "createTypedContextContractGateway");
+    const historical = vi.spyOn(gateway, "createContextContractGateway");
     const root = await import("./composition-root");
     const env = { ...environment(), AI_MODE: "privacy", OPENROUTER_API_KEY: "test-only-key", OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
       OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu", AI_MAX_PRIVACY_PRICE: "0.4" } as Env;
     try {
       await root.createRuntimeOperations(env); expect(factory).not.toHaveBeenCalled();
       await root.createRuntimeOperations(env, { contextContract: "calenote-context-2", sourceSha: "a".repeat(40) });
-      expect(factory).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxInputTokens: 12000, maxOutputTokens: 1536 }), expect.any(Function),
+      expect(factory).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxInputTokens: 12000, maxOutputTokens: 1536, protocol: expect.objectContaining({ wireVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-typed-objects-105" }) }), expect.any(Function),
         { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
+      expect(historical).not.toHaveBeenCalled();
       const source = await readFile(resolve(process.cwd(), "src/worker/composition-root.ts"), "utf8");
       expect(source).toContain("createContextHttpTransport(contextPolicy.apiKey)");
       expect(source).toContain("reservationInputTokenExposure: 1048576");
-    } finally { factory.mockRestore(); }
+    } finally { factory.mockRestore(); historical.mockRestore(); }
   });
   it.each([undefined, "unknown", "g".repeat(40)])("successor capability refuses missing or invalid source SHA %s", async sourceSha => {
     const root = await import("./composition-root");

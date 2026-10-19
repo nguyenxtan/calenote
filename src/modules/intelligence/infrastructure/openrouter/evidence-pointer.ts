@@ -76,7 +76,29 @@ export function expandPrimaryEvidenceSourceCodes(raw:unknown,input:ContextInput)
 }
 /** Only explicit source pointers are expanded. No value search or repair. */
 export function materializeProviderEvidence(raw:unknown,input?:ContextInput,strictPointers=false):unknown {
- const ref=(value:unknown,path:Path):unknown=>{
+ const ref=(value:unknown,path:Path)=>materializeTypedEvidencePointer(value,path,input,strictPointers);
+ const json=(value:unknown,path:Path,map:(v:unknown)=>unknown):unknown=>{
+  if(typeof value!=="string"||new TextEncoder().encode(value).byteLength>32768)return value;
+  let parsed:unknown;try{parsed=JSON.parse(value);}catch{return value;}
+  const mapped=map(parsed);
+  return mapped===parsed?value:JSON.stringify(mapped);
+ };
+ const refs=(value:unknown,path:Path):unknown=>Array.isArray(value)?value.map((v,i)=>ref(v,[...path,i])):value;
+ const carrier=(value:unknown,path:Path):unknown=>{
+  if(!object(value))return value;
+  return {...value,primaryEvidence:json(value.primaryEvidence,[...path,"primaryEvidence"],v=>ref(v,[...path,"primaryEvidence"])),additionalEvidenceJson:json(value.additionalEvidenceJson,[...path,"additionalEvidenceJson"],v=>refs(v,[...path,"additionalEvidenceJson"]))};
+ };
+ const item=(value:unknown,path:Path):unknown=>object(value)&&Object.hasOwn(value,"evidence")?{...value,evidence:carrier(value.evidence,[...path,"evidence"])}:value;
+ if(!object(raw))return raw;
+ // Branch selection stays in the decoder. Do not inspect inactive query
+ // padding or traverse arbitrary business/advisory strings.
+ const query=typeof raw.operationCode==="string"&&["3","4","5"].includes(raw.operationCode)?item(raw.query,["query"]):raw.query;
+ return {...raw,requestTarget:item(raw.requestTarget,["requestTarget"]),query,
+  changes:Array.isArray(raw.changes)?raw.changes.map((v,i)=>item(v,["changes",i])):raw.changes,
+  uncertainties:Array.isArray(raw.uncertainties)?raw.uncertainties.map((v,i)=>!object(v)||!Array.isArray(v.alternatives)?v:{...v,alternatives:v.alternatives.map((a,j)=>json(a,["uncertainties",i,"alternatives",j],parsed=>!object(parsed)||!Object.hasOwn(parsed,"evidence")?parsed:{...parsed,evidence:carrier(parsed.evidence,["uncertainties",i,"alternatives",j,"evidence"])}))}):raw.uncertainties};
+}
+
+export function materializeTypedEvidencePointer(value:unknown,path:Path,input:ContextInput|undefined,strictPointers=true):unknown {
   const fail:(reason:EvidencePointerDiagnostic["reason"])=>never=reason=>{throw new EvidencePointerFailure(path,projectEvidencePointerStructure(reason,value,input));};
   if(strictPointers&&object(value)&&value.kind==="USER_QUOTE")fail("STRICT_USER_QUOTE");
   if(!object(value)||!["USER_TURN","USER_SEGMENT"].includes(String(value.kind)))return value;
@@ -101,24 +123,4 @@ export function materializeProviderEvidence(raw:unknown,input?:ContextInput,stri
   const expanded={kind:"USER_QUOTE",turn:value.turn,quote,occurrence};
   if(!EvidenceRefSchema.safeParse(expanded).success)fail("EXPANDED_REF_INVALID");
   return expanded;
- };
- const json=(value:unknown,path:Path,map:(v:unknown)=>unknown):unknown=>{
-  if(typeof value!=="string"||new TextEncoder().encode(value).byteLength>32768)return value;
-  let parsed:unknown;try{parsed=JSON.parse(value);}catch{return value;}
-  const mapped=map(parsed);
-  return mapped===parsed?value:JSON.stringify(mapped);
- };
- const refs=(value:unknown,path:Path):unknown=>Array.isArray(value)?value.map((v,i)=>ref(v,[...path,i])):value;
- const carrier=(value:unknown,path:Path):unknown=>{
-  if(!object(value))return value;
-  return {...value,primaryEvidence:json(value.primaryEvidence,[...path,"primaryEvidence"],v=>ref(v,[...path,"primaryEvidence"])),additionalEvidenceJson:json(value.additionalEvidenceJson,[...path,"additionalEvidenceJson"],v=>refs(v,[...path,"additionalEvidenceJson"]))};
- };
- const item=(value:unknown,path:Path):unknown=>object(value)&&Object.hasOwn(value,"evidence")?{...value,evidence:carrier(value.evidence,[...path,"evidence"])}:value;
- if(!object(raw))return raw;
- // Branch selection stays in the decoder. Do not inspect inactive query
- // padding or traverse arbitrary business/advisory strings.
- const query=typeof raw.operationCode==="string"&&["3","4","5"].includes(raw.operationCode)?item(raw.query,["query"]):raw.query;
- return {...raw,requestTarget:item(raw.requestTarget,["requestTarget"]),query,
-  changes:Array.isArray(raw.changes)?raw.changes.map((v,i)=>item(v,["changes",i])):raw.changes,
-  uncertainties:Array.isArray(raw.uncertainties)?raw.uncertainties.map((v,i)=>!object(v)||!Array.isArray(v.alternatives)?v:{...v,alternatives:v.alternatives.map((a,j)=>json(a,["uncertainties",i,"alternatives",j],parsed=>!object(parsed)||!Object.hasOwn(parsed,"evidence")?parsed:{...parsed,evidence:carrier(parsed.evidence,["uncertainties",i,"alternatives",j,"evidence"])}))}):raw.uncertainties};
-}
+ }

@@ -15,9 +15,15 @@ import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from 
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import { projectProviderEnvelope } from "./envelope-diagnostics";
 import { projectTransportException, type SemanticTransportDiagnostics } from "./transport-diagnostics";
+import { serializeTypedContextRequest } from "../../../conversation/context-contract/typed-wire";
+import { CONTEXT_TYPED_PROTOCOL_V3, isContextTypedProtocolV3, type ContextTypedProtocolV3 } from "../../../conversation/context-contract/typed-protocol";
+import { decodeGoogleLiteEuTypedContextTransportV3 } from "./context-provider-typed-wire";
 
-async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
-  const version = googleLiteEuContextWireSchema().version;
+// A selected request and decoder travel together; model output cannot select a codec.
+type ContextWireSelection = "HISTORICAL_104" | "TYPED_105";
+
+async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput,selection:ContextWireSelection): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
+  const version = selection === "TYPED_105" ? CONTEXT_TYPED_PROTOCOL_V3.wireVersion : googleLiteEuContextWireSchema().version;
   if (response.oversized || response.body.length > config.maxResponseBytes || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
     return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null }, canonicalValidationDiagnostics: {
       state: "OVERSIZED", schemaVersion: "calenote-context-3", providerWireSchemaVersion: version,
@@ -27,7 +33,9 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   let validation: CanonicalValidationDiagnostics | undefined, wireValidation: CanonicalValidationDiagnostics | undefined;
   const observe = (value: CanonicalValidationDiagnostics) => { validation = value; };
   const output = z.unknown().transform((raw, ctx): ContextGatewayInterpretation => {
-    const parsed = parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; },input);
+    const parsed = selection === "TYPED_105"
+      ? decodeGoogleLiteEuTypedContextTransportV3(raw, CONTEXT_TYPED_PROTOCOL_V3, observe, value => { wireValidation = value; }, input)
+      : parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; },input);
     if (parsed.status === "PARSED") return parsed.value;
     ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
   });
@@ -89,7 +97,7 @@ export interface SemanticJsonRequest {
   messages: Array<{ role: "system" | "user"; content: string }>;
   max_tokens: number;
   temperature?: number;
-  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema } };
+  response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema | ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"] } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
     zdr?: true; max_price: { prompt: number; completion: number } };
 }
@@ -345,7 +353,7 @@ export function createContextHttpTransport(apiKey: string,
     } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
   };
 }
-async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
+async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig,input:ContextInput,selection:ContextWireSelection): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
   if (response.status !== 200 && response.failureDiagnostics) {
     let rawUsage: unknown;
@@ -358,7 +366,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
         ...(cost.success ? { reportedCostUsd: cost.data.cost } : {}), ...(tokens.success ? { promptTokens: tokens.data.prompt_tokens, completionTokens: tokens.data.completion_tokens } : {}) }, failureDiagnostics: response.failureDiagnostics };
   }
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes)
-    return decodeContextResponse(response, config, maximum,input);
+    return decodeContextResponse(response, config, maximum,input,selection);
   let raw: unknown;
   try { raw = JSON.parse(response.body); } catch { return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" }; }
   const accounting = z.object({ usage: z.unknown().optional() }).safeParse(raw);
@@ -378,7 +386,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   if (!observed.success) return fail("SCHEMA_INVALID");
   const evidence = { model: observed.data.model, provider: observed.data.provider,
     location: observed.data.location ?? "UNEXPOSED" as const, generationId: observed.data.id ?? null };
-  const parsed = await decodeContextResponse(response, config, maximum,input);
+  const parsed = await decodeContextResponse(response, config, maximum,input,selection);
   // Runtime retains independently valid core and quarantines bad guidance (T5).
   // Strict campaign full-schema admission is a separate evaluation gate.
   if (parsed.status !== "SUCCESS") return { ...fail(parsed.category), providerEvidence: evidence, ...(parsed.canonicalValidationDiagnostics ? { canonicalValidationDiagnostics: parsed.canonicalValidationDiagnostics } : {}) };
@@ -406,10 +414,21 @@ const offlineSchema = z.strictObject({ kind: z.literal("OFFLINE_FIXTURE"), excha
  * Offline scripts are copied plain data and have no callback/network capability.
  * T7 still owns original-source/snapshot admission, evidence, budgets and events. */
 export type ContextGatewayConfig = SemanticGatewayConfig & { protocol: ContextProtocolV3 };
+/** Explicit historical104 entry point for frozen specimens/campaigns. */
 export function createContextContractGateway(rawConfig: ContextGatewayConfig,
   transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
-  const { protocol, ...configuration } = rawConfig;
-  if (!isContextProtocolV3(protocol)) throw new TypeError("Selected context protocol required");
+  if (!isContextProtocolV3(rawConfig.protocol)) throw new TypeError("Selected historical context protocol required");
+  return createSelectedContextContractGateway(rawConfig, transport, admission, "HISTORICAL_104");
+}
+export function createTypedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextTypedProtocolV3},
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire: "TYPED_OBJECTS_105"} {
+  if (!isContextTypedProtocolV3(rawConfig.protocol)) throw new TypeError("Selected typed context protocol required");
+  return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "TYPED_105"), contextWire: "TYPED_OBJECTS_105" as const});
+}
+function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextProtocolV3 | ContextTypedProtocolV3},
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission, selection: ContextWireSelection): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
+  const { protocol: _protocol, ...configuration } = rawConfig;
+  void _protocol;
   const config = configSchema.parse(configuration);
   const route = config.primary;
   if (!route || route.model !== "google/gemini-2.5-flash-lite" || route.provider !== "google-vertex/eu" || !route.requireZdr
@@ -428,7 +447,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
     // Fail before exposing a reservation amount. No env flag/caller assertion
     // can convert local token measurements into full-route admission.
     if (!offline?.success && !observable) return { status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" };
-    const wire = serializeContextRequest(input.data);
+    const wire = selection === "TYPED_105" ? serializeTypedContextRequest(input.data) : serializeContextRequest(input.data);
     const request: SemanticJsonRequest = { model: route.model, ...wire,
       response_format: { ...wire.response_format, json_schema: { ...wire.response_format.json_schema, strict: true } }, provider: {
       only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,
@@ -448,7 +467,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
               Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => {
                 boundary = "DECODE";
                 return ({
-                ...await decodeObservableResponse(response, config,input.data), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
+                ...await decodeObservableResponse(response, config,input.data,selection), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               }); }),
               new Promise<SemanticAttemptResult<ContextGatewayInterpretation>>(resolve => { timer = setTimeout(() => {
@@ -476,7 +495,7 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
       async dispatch() {
         if (dispatched) return { status: "FAILURE", category: "UNAVAILABLE" };
         dispatched = true;
-        return decodeContextResponse(fixture.response, config, maximumCostMicrounits,input.data);
+        return decodeContextResponse(fixture.response, config, maximumCostMicrounits,input.data,selection);
       },
     };
   } };

@@ -51,12 +51,13 @@ import { createNullIntelligenceGateway } from "@/modules/intelligence/service";
 import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligence/contracts";
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { createContextContractGateway, createContextHttpTransport } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createTypedContextContractGateway, createContextHttpTransport } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { parseContextContractRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
 import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 import { createD1ContextContractStoreV3 } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 import { createD1ContextRuntimeStoreV3 } from "@/modules/conversation/context-contract/runtime-store";
 import { CONTEXT_PROTOCOL_V3 } from "@/modules/conversation/context-contract/protocol";
+import { CONTEXT_TYPED_PROTOCOL_V3 } from "@/modules/conversation/context-contract/typed-protocol";
 import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
 import { observeContextEvent } from "@/modules/conversation/context-contract/observability";
 import { D1ConversationStore } from "@/modules/conversation/infrastructure/d1/context-store";
@@ -411,7 +412,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     store: createD1ContextContractStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), calendar: lunarCalendar,
     sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
     // Dormant until the reviewed capability is enabled after full live PASS.
-    gateway: contextPolicy?.status === "READY" ? createContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
+    gateway: contextPolicy?.status === "READY" ? createTypedContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
       { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
       : { prepare: () => ({ status: "FAILURE" as const, category: "UNAVAILABLE" as const }) },
     budgetStore: new D1SemanticBudgetStore(env.DB, { ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),

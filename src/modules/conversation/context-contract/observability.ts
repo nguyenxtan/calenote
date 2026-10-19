@@ -8,7 +8,7 @@ const reason = z.enum(["AUTH_INVALID", "CONTEXT_INVALID", "DUPLICATE", "DISABLED
   "EVIDENCE_INVALID", "REQUIRED_FEATURE_UNSUPPORTED", "STALE", "EXPIRED", "INVALID", "UNCERTAIN", "UNSUPPORTED",
   "SEMANTIC_INPUT_TOO_LONG", "CONTEXT_SNAPSHOT_TOO_LARGE", "NO_PROGRESS", "DELIVERY_FAILED"]);
 const base = { traceId: z.uuidv4(), sourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
-  contractVersion: z.literal("calenote-context-3"), promptVersion: z.literal("calenote-context-3"),
+  contractVersion: z.literal("calenote-context-3"), promptVersion: z.enum(["calenote-context-3", "calenote-context-typed-objects-105"]),
   mode: z.enum(["OFFLINE_FIXTURE", "LIVE"]),
   contextRevisionBefore: safeCount.nullable().optional(), contextRevisionAfter: safeCount.nullable().optional(),
   draftRevisionBefore: safeCount.nullable().optional(), draftRevisionAfter: safeCount.nullable().optional(),
