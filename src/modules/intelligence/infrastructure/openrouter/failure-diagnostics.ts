@@ -109,7 +109,8 @@ export async function projectProviderFailure(input: {
     else if (/\bunsupported parameters?\b/iu.test(value)) category = "Unsupported parameter";
     else if (/\bcontext length\b/iu.test(value)) category = "Context length exceeded";
     else if (/\bschema\b/iu.test(value) && /\btoo many states\b/iu.test(value)) category = "Schema state limit exceeded";
-    else if (/\bschema\b/iu.test(value) && /\bnesting (?:depth )?(?:exceeded|limit)\b/iu.test(value)) category = "Schema nesting limit exceeded";
+    else if (/\bschema\b/iu.test(value) && /(?:\bnesting (?:depth )?(?:exceeded|limit)\b|\bmaximum (?:allowed )?nesting depth\b|\btoo deeply nested\b)/iu.test(value)) category = "Schema nesting limit exceeded";
+    else if (/\bschema\b/iu.test(value) && /\btoo large\b/iu.test(value)) category = "Schema size limit exceeded";
     else if (/\bschema\b/iu.test(value) && /\btoo complex\b/iu.test(value)) category = "Schema complexity limit exceeded";
     if (category && !echoes(category)) return category;
     return "[REDACTED]";

@@ -64,3 +64,14 @@ describe("structural provider causes", () => {
     expect(JSON.stringify(result.errorMetadataSanitized)).not.toContain(secret);
   });
 });
+
+it.each([
+ ["The response schema exceeds the maximum allowed nesting depth. SYNTHETIC_SECRET", "Schema nesting limit exceeded"],
+ ["The schema is too deeply nested. SYNTHETIC_SECRET", "Schema nesting limit exceeded"],
+ ["The response schema has too many states for serving. SYNTHETIC_SECRET", "Schema state limit exceeded"],
+ ["The response schema is too large. SYNTHETIC_SECRET", "Schema size limit exceeded"],
+])("retains schema rejection category for %s without provider prose", async(message,expected)=>{
+ const result=await project({metadata:{raw:JSON.stringify({error:{code:400,status:"INVALID_ARGUMENT",message}})}},["SYNTHETIC_SECRET"]);
+ expect(JSON.stringify(result.errorMetadataSanitized)).toContain(expected);
+ expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET");
+});

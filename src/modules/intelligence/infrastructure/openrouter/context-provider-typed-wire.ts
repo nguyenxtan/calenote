@@ -24,16 +24,29 @@ function shareTypedDefinitions(root:Schema):Schema {
  const inline=(node:Schema,depth=0):Schema=>{if(depth>64)throw Error("TYPED_SCHEMA_DEPTH");const resolved=resolve(node,source),result=map(resolved,child=>inline(child,depth+1));delete result.$defs;return result;};
  const coalesce=(node:Schema):Schema=>{
   const result=map(node,coalesce);if(!result.anyOf)return result;
-  const branches=[...result.anyOf];
+  // Associativity and singleton elimination only; never distribute a union
+  // across sibling constraints or widen a field/reason/value correlation.
+  const branches=result.anyOf.flatMap(branch=>Object.keys(branch).length===1&&branch.anyOf?branch.anyOf:[branch]);
+  const integerPoints=(schema:Schema):Schema[]|undefined=>{
+   if(Object.keys(schema).length===1&&schema.anyOf){const points=schema.anyOf.map(integerPoints);return points.every(Boolean)?points.flatMap(value=>value!):undefined;}
+   return schema.type==="integer"&&Number.isSafeInteger(schema.minimum)&&schema.minimum===schema.maximum&&Object.keys(schema).every(key=>["type","minimum","maximum"].includes(key))?[schema]:undefined;
+  };
   for(let left=0;left<branches.length;left++)for(let right=left+1;right<branches.length;right++){
    const a=branches[left],b=branches[right];if(a.type!=="object"||b.type!=="object"||!a.properties||!b.properties)continue;
    if(JSON.stringify({...a,properties:undefined})!==JSON.stringify({...b,properties:undefined})||JSON.stringify(Object.keys(a.properties))!==JSON.stringify(Object.keys(b.properties)))continue;
    const changed=Object.keys(a.properties).filter(key=>JSON.stringify(a.properties![key])!==JSON.stringify(b.properties![key]));if(changed.length!==1)continue;
    const key=changed[0],x=a.properties[key],y=b.properties[key];
-   if(x.type!=="string"||y.type!=="string"||!x.enum?.length||!y.enum?.length||Object.keys(x).some(k=>k!=="type"&&k!=="enum")||Object.keys(y).some(k=>k!=="type"&&k!=="enum"))continue;
-   a.properties[key]={type:"string",enum:[...new Set([...x.enum,...y.enum])]};branches.splice(right--,1);
+   if(x.type==="string"&&y.type==="string"&&x.enum?.length&&y.enum?.length&&Object.keys(x).every(k=>k==="type"||k==="enum")&&Object.keys(y).every(k=>k==="type"||k==="enum")){
+    a.properties[key]={type:"string",enum:[...new Set([...x.enum,...y.enum])]};
+   }else{
+    const leftPoints=integerPoints(x),rightPoints=integerPoints(y);if(!leftPoints||!rightPoints)continue;
+    // Keep non-contiguous integer domains exact with supported numeric bounds;
+    // a min/max interval here would admit unrelated uncertainty fields.
+    a.properties[key]={anyOf:[...new Map([...leftPoints,...rightPoints].map(point=>[point.minimum,point])).values()]};
+   }
+   branches.splice(right--,1);
   }
-  return {...result,anyOf:branches};
+  return branches.length===1&&Object.keys(result).length===1?branches[0]:{...result,anyOf:branches};
  };
  root=coalesce(inline({...root,$defs:undefined}));
  const counts=new Map<string,number>();

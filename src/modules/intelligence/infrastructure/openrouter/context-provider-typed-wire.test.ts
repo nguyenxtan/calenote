@@ -2,6 +2,8 @@
 import {readListTransport} from "../../../conversation/context-contract/list-period-transport";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
+import {readFileSync} from "node:fs";
+import {z} from "zod";
 import {expect,it} from "vitest";
 import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_TYPED_PROTOCOL_V3} from "../../../conversation/context-contract/typed-protocol";
@@ -81,4 +83,26 @@ it("typed105 preserves selected year-null and cross-carrier rank restrictions",(
  expect(decodeGoogleLiteEuTypedContextTransportV3(dated,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
  const ranked=structuredClone(wire);(ranked.eventDateChange as {rank:number}).rank=(ranked.titleChange as {rank:number}).rank;
  expect(decodeGoogleLiteEuTypedContextTransportV3(ranked,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
+});
+
+it("typed105 factors identical uncertainty shells without widening field/value/reason correlations",()=>{
+ const frozen=JSON.parse(readFileSync(new URL("./__fixtures__/typed105-r01-before.json",import.meta.url),"utf8"));
+ const selected=ContextInputSchema.parse(frozen.input),before=z.fromJSONSchema(frozen.schema),schema=googleLiteEuTypedContextWireSchemaV3(selected).schema;
+ const after=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+ const root=schema as unknown as {$defs:Record<string,Record<string,unknown>>;properties:Record<string,Record<string,unknown>>};
+ const resolve=(v:Record<string,unknown>):Record<string,unknown>=>v.$ref?resolve(root.$defs[String(v.$ref).slice(8)]):v;
+ const uncertainties=resolve(root.properties.uncertainties),items=resolve(uncertainties.items as Record<string,unknown>);
+ expect((items.anyOf as unknown[]).length).toBe(12);
+ const wire=encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(selected,"R01",0)),selected) as Record<string,unknown>;
+ const values=[null,0,1,2,-1,30,31,366,367,"CURRENT","NEW","ONCE","FINITE_DAILY","BEFORE_EVENT","AFTER_EVENT","GREGORIAN","LUNAR_VN","sample",true,{kind:"RELATIVE_DAY",offsetDays:1},{kind:"DAY",date:{kind:"RELATIVE_DAY",offsetDays:1}}];
+ const reasons=new Set<string>(["UNKNOWN"]);
+ const collectReasons=(node:unknown):void=>{if(!node||typeof node!=="object")return;if(Array.isArray(node)){node.forEach(collectReasons);return;}const value=node as Record<string,unknown>,properties=value.properties as Record<string,{enum?:string[];const?:string}>|undefined;if(properties?.reason){for(const reason of properties.reason.enum??[])reasons.add(reason);if(properties.reason.const)reasons.add(properties.reason.const);}Object.values(value).forEach(collectReasons);};
+ collectReasons(frozen.schema);let accepted=0,rejected=0;
+ for(let fieldCode=0;fieldCode<=18;fieldCode++)for(const reason of reasons)for(const value of values){
+  const candidate={...wire,uncertainties:[{fieldCode,reason,alternatives:[{value,evidence:{primaryEvidence:"U0",additionalEvidence:[]}}]}]};
+  const valid=before.safeParse(candidate).success;if(valid)accepted++;else rejected++;
+  expect(after.safeParse(candidate).success,JSON.stringify({fieldCode,reason,value})).toBe(valid);
+ }
+ expect(accepted).toBeGreaterThan(10);expect(rejected).toBeGreaterThan(10);
+ expect(JSON.stringify(schema).length).toBeLessThan(JSON.stringify(frozen.schema).length);
 });
