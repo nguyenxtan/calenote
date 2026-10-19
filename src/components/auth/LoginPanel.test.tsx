@@ -77,15 +77,16 @@ describe("LoginPanel", () => {
     expect(await screen.findByLabelText("Email")).toBeVisible();
   });
 
-  it("shows the same generic accepted message and a correctly configured six-digit input", async () => {
+  it("classifies before requesting a code and shows the generic accepted message and a correctly configured six-digit input", async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(json({ data: { next: "LOGIN" } }))
       .mockResolvedValueOnce(json({ data: { accepted: true } }, 202));
     await revealLogin(fetcher);
 
     await user.type(screen.getByLabelText("Email"), "Owner@Example.com");
-    await user.click(screen.getByRole("button", { name: "Gửi mã qua bot" }));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
     const generic = "Nếu email có kết nối hợp lệ, mã 6 số đã được gửi đến cuộc chat riêng với bot.";
     expect(await screen.findByText(generic)).toBeVisible();
@@ -95,7 +96,7 @@ describe("LoginPanel", () => {
     expect(code).toHaveAttribute("inputmode", "numeric");
     expect(code).toHaveAttribute("autocomplete", "one-time-code");
     expect(code).toHaveAttribute("maxlength", "6");
-    expect(fetcher).toHaveBeenNthCalledWith(2, "/api/auth/request-code", expect.objectContaining({
+    expect(fetcher).toHaveBeenNthCalledWith(3, "/api/auth/request-code", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ email: "owner@example.com" }),
       credentials: "same-origin",
@@ -107,16 +108,17 @@ describe("LoginPanel", () => {
     const user = userEvent.setup();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(json({ data: { next: "LOGIN" } }))
       .mockResolvedValueOnce(json({ data: { accepted: true } }, 202))
       .mockResolvedValueOnce(json({ data: { authenticated: true } }));
     await revealLogin(fetcher);
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
-    await user.click(screen.getByRole("button", { name: "Gửi mã qua bot" }));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
     await user.type(await screen.findByLabelText("Mã 6 số"), "012345");
     await user.click(screen.getByRole("button", { name: "Xác nhận đăng nhập" }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/today"));
-    expect(fetcher).toHaveBeenNthCalledWith(3, "/api/auth/verify-code", expect.objectContaining({
+    expect(fetcher).toHaveBeenNthCalledWith(4, "/api/auth/verify-code", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ email: "owner@example.com", code: "012345" }),
     }));
@@ -127,6 +129,7 @@ describe("LoginPanel", () => {
     const user = userEvent.setup();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(json({ data: { next: "LOGIN" } }))
       .mockResolvedValueOnce(json({ data: { accepted: true } }, 202))
       .mockResolvedValueOnce(json({ error: {
         code: "INVALID_LOGIN_CODE",
@@ -134,7 +137,7 @@ describe("LoginPanel", () => {
       } }, 401));
     await revealLogin(fetcher);
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
-    await user.click(screen.getByRole("button", { name: "Gửi mã qua bot" }));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
     const code = await screen.findByLabelText("Mã 6 số");
     await user.type(code, "654321");
     await user.click(screen.getByRole("button", { name: "Xác nhận đăng nhập" }));
@@ -149,13 +152,23 @@ describe("LoginPanel", () => {
     const user = userEvent.setup();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(json({data:{next:"LOGIN"}}))
       .mockRejectedValueOnce(new TypeError("connection reset"));
     await revealLogin(fetcher);
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
-    await user.click(screen.getByRole("button", { name: "Gửi mã qua bot" }));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/không rõ yêu cầu gửi mã đã hoàn tất/i);
     expect(screen.getByRole("alert")).toHaveTextContent(/không tự gửi lại/i);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not imply an OTP was sent when discovery itself is interrupted", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated()).mockRejectedValueOnce(new TypeError("offline"));
+    await revealLogin(fetcher);
+    await userEvent.setup().type(screen.getByLabelText("Email"), "old@example.com");
+    await userEvent.setup().click(screen.getByRole("button", {name:"Tiếp tục"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa thể kiểm tra email");
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -165,17 +178,18 @@ describe("LoginPanel", () => {
     const pending = new Promise<Response>((resolve) => { resolveRequest = resolve; });
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
-      .mockReturnValueOnce(pending);
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce(json({ data: { accepted: true } }, 202));
     await revealLogin(fetcher);
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
-    const submit = screen.getByRole("button", { name: "Gửi mã qua bot" });
+    const submit = screen.getByRole("button", { name: "Tiếp tục" });
 
     await user.click(submit);
     await user.click(submit);
     expect(submit).toBeDisabled();
     expect(fetcher).toHaveBeenCalledTimes(2);
 
-    resolveRequest(json({ data: { accepted: true } }, 202));
+    resolveRequest(json({ data: { next: "LOGIN" } }));
     expect(await screen.findByLabelText("Mã 6 số")).toBeVisible();
   });
 
@@ -183,11 +197,12 @@ describe("LoginPanel", () => {
     const user = userEvent.setup();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(json({ data: { next: "LOGIN" } }))
       .mockResolvedValueOnce(json({ data: { accepted: true } }, 202))
       .mockResolvedValueOnce(json({ data: { authenticated: true } }));
     await revealLogin(fetcher);
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
-    await user.click(screen.getByRole("button", { name: "Gửi mã qua bot" }));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
     await user.type(await screen.findByLabelText("Mã 6 số"), "123456");
     await user.click(screen.getByRole("button", { name: "Xác nhận đăng nhập" }));
 
@@ -196,6 +211,35 @@ describe("LoginPanel", () => {
       expect(url).not.toContain("owner@example.com");
       expect(url).not.toContain("123456");
     }
+  });
+
+  it("sends a new email to setup without requesting OTP or exposing email in the URL", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated()).mockResolvedValueOnce(json({data:{next:"SETUP"}}));
+    await revealLogin(fetcher);
+    await userEvent.setup().type(screen.getByLabelText("Email"), "new@example.com");
+    await userEvent.setup().click(screen.getByRole("button", {name:"Tiếp tục"}));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/onboarding"));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(sessionStorage.getItem("calenote:onboarding-email")).toBe("new@example.com");
+  });
+  it("explains exact bot proof recovery without issuing a code or granting access", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated()).mockResolvedValueOnce(json({data:{next:"RECOVERY"}}));
+    await revealLogin(fetcher);
+    await userEvent.setup().type(screen.getByLabelText("Email"), "old@example.com");
+    await userEvent.setup().click(screen.getByRole("button", {name:"Tiếp tục"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/token của đúng bot/i);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Mã 6 số")).not.toBeInTheDocument();
+  });
+  it("rejects malformed discovery responses before issuing a code", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated()).mockResolvedValueOnce(json({data:{next:"LOGIN",userId:"private"}}));
+    await revealLogin(fetcher);
+    await userEvent.setup().type(screen.getByLabelText("Email"), "old@example.com");
+    await userEvent.setup().click(screen.getByRole("button", {name:"Tiếp tục"}));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("has no serious or critical accessibility violations in the email step", async () => {

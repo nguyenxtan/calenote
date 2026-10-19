@@ -1,3 +1,7 @@
+import { D1EmailDiscoveryStore, continueWithEmail } from "@/modules/auth/email-discovery";
+import type { EmailDiscoveryOperations } from "./routes/auth-continue";
+import { D1AccountService } from "@/modules/account/service";
+import type { AccountOperations } from "./routes/account";
 import { D1PrimaryLoginStore, PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
 import { addConnection } from "@/modules/connections/add-service";
 import { D1ConnectionLifecycleStore, ConnectionDisconnectError } from "@/modules/connections/lifecycle";
@@ -487,5 +491,24 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
         return 0;
       }
     } } : {}),
+  };
+}
+
+export async function createEmailDiscoveryOperations(env: Env): Promise<EmailDiscoveryOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1EmailDiscoveryStore(env.DB);
+  const rateLimitStore = new D1RateLimitStore(env.DB);
+  return { continueEmail: input => continueWithEmail(input, { store, keyring, rateLimitStore }) };
+}
+export async function createAccountOperations(env: Env): Promise<AccountOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessions = new D1SessionStore(env.DB);
+  const account = new D1AccountService(env.DB);
+  return {
+    requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
+    getProfile: userId => account.getProfile(userId),
+    updateProfile: (userId, input) => account.updateProfile(userId, input),
+    listSessions: principal => account.listSessions(principal),
+    revokeOtherSessions: principal => account.revokeOtherSessions(principal),
   };
 }

@@ -20,6 +20,8 @@ import {
   ApiResponseError,
   apiRequest,
 } from "@/lib/client-api";
+import { ContinueEmailResponseSchema } from "@/contracts/api/auth-continue";
+import { getDefaultAppPath } from "@/lib/appearance-preferences";
 import styles from "./LoginPanel.module.css";
 
 const GENERIC_ACCEPTED =
@@ -37,6 +39,7 @@ export function LoginPanel() {
   const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [recovery, setRecovery] = useState(false);
   const sessionAbortRef = useRef<AbortController | null>(null);
   const mutationAbortRef = useRef<AbortController | null>(null);
   const requestLockRef = useRef(false);
@@ -56,7 +59,7 @@ export function LoginPanel() {
     void apiRequest("/api/session", { signal: controller.signal }).then(() => {
       if (controller.signal.aborted) return;
       setEntryState("redirecting");
-      replace("/app/today");
+      replace(getDefaultAppPath());
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
@@ -101,10 +104,29 @@ export function LoginPanel() {
     setRequesting(true);
     setErrorMessage("");
     setMessage("");
+    setRecovery(false);
     const controller = new AbortController();
     mutationAbortRef.current?.abort();
     mutationAbortRef.current = controller;
+    let requestingCode = false;
     try {
+      const submitted = normalizedEmail;
+      const value = await apiRequest<unknown>("/api/auth/continue", {
+        method: "POST", body: { email: submitted }, signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const { data: { next } } = ContinueEmailResponseSchema.parse({ data: value });
+      if (next === "SETUP") {
+        try { sessionStorage.setItem("calenote:onboarding-email", submitted); } catch { /* The user can re-enter the email if browser storage is unavailable. */ }
+        replace("/onboarding");
+        return;
+      }
+      if (next === "RECOVERY") {
+        setRecovery(true);
+        setErrorMessage("Email này đã có tài khoản nhưng kênh nhận mã chưa sẵn sàng. Chỉ có thể tiếp tục thiết lập với token của đúng bot đã sở hữu. Email hoặc token bot mới không cấp quyền truy cập. Nếu không còn token cũ, hiện chưa thể khôi phục tại đây.");
+        return;
+      }
+      requestingCode = true;
       await apiRequest("/api/auth/request-code", {
         method: "POST",
         body: { email: normalizedEmail },
@@ -116,7 +138,9 @@ export function LoginPanel() {
       setStep("code");
     } catch (error) {
       if (controller.signal.aborted) return;
-      if (error instanceof AmbiguousMutationError) {
+      if (error instanceof AmbiguousMutationError && !requestingCode) {
+        setErrorMessage("Chưa thể kiểm tra email. Hãy thử lại để tiếp tục; chưa yêu cầu gửi mã đăng nhập.");
+      } else if (error instanceof AmbiguousMutationError) {
         setErrorMessage(
           "Không rõ yêu cầu gửi mã đã hoàn tất hay chưa. Calenote sẽ không tự gửi lại; hãy kiểm tra cuộc chat trước khi chủ động thử lần nữa.",
         );
@@ -147,7 +171,7 @@ export function LoginPanel() {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      replace("/app/today");
+      replace(getDefaultAppPath());
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
@@ -229,23 +253,25 @@ export function LoginPanel() {
             <>
               <p className={styles.eyebrow}>Bước 1 · Email</p>
               <h2 id="login-title">Đăng nhập vào Calenote</h2>
-              <p className={styles.lead}>Nhập email đã dùng khi kết nối bot. Phản hồi luôn giống nhau để bảo vệ tài khoản.</p>
+              <p className={styles.lead}>Nhập email để tiếp tục. Email mới sẽ bắt đầu kết nối bot; tài khoản đã có bot sẽ nhận mã đăng nhập.</p>
               <form className={styles.form} onSubmit={requestCode}>
                 <label>
                   <span>Email</span>
                   <input
                     type="email"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => { setEmail(event.target.value); setRecovery(false); setErrorMessage(""); }}
+                    disabled={requesting}
                     autoComplete="email"
                     maxLength={254}
                     required
                   />
                 </label>
                 {errorMessage ? <div className={styles.error} role="alert" tabIndex={-1} ref={errorRef}>{errorMessage}</div> : null}
+                {recovery ? <Link href="/onboarding">Tiếp tục với đúng bot đã kết nối</Link> : null}
                 <button type="submit" className={styles.primaryButton} disabled={!emailValid || requesting}>
                   {requesting ? <span className={styles.spinner} aria-hidden="true" /> : <MessageCircle size={17} />}
-                  {requesting ? "Đang yêu cầu…" : "Gửi mã qua bot"}
+                  {requesting ? "Đang yêu cầu…" : "Tiếp tục"}
                   {!requesting ? <ArrowRight size={17} /> : null}
                 </button>
               </form>

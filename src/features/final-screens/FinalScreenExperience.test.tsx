@@ -37,7 +37,7 @@ function installRecoveryFetch(initial: unknown, refresh: unknown, mutations: Rec
   return fetcher;
 }
 
-function installSettingsFetch() { const fetcher=vi.fn(async (input:string|URL|Request, init?:RequestInit)=>{const path=typeof input==="string"?input:input instanceof URL?input.pathname:new URL(input.url).pathname;if(path==="/api/session")return json({data:{user}});if(path==="/api/preferences"&&init?.method==="PATCH")return json({data:{preferences:{addressStyle:"ong_tui",customDisplayName:null,tone:"friendly"}}});if(path==="/api/preferences")return json({data:{preferences:{addressStyle:"ban",customDisplayName:null,tone:"concise"}}});return json({error:{code:"NOT_FOUND",message:"no"}},404);});vi.stubGlobal("fetch",fetcher);return fetcher; }
+function installSettingsFetch() { const fetcher=vi.fn(async (input:string|URL|Request, init?:RequestInit)=>{const path=typeof input==="string"?input:input instanceof URL?input.pathname:new URL(input.url).pathname;if(path==="/api/session")return json({data:{user}});if(path==="/api/connections")return json({data:{connections:[]}});if(path==="/api/account/sessions")return json({data:{sessions:[]}});if(path==="/api/connections/primary-login")return json({data:{publicId:null}});if(path==="/api/preferences"&&init?.method==="PATCH")return json({data:{preferences:{addressStyle:"ong_tui",customDisplayName:null,tone:"friendly"}}});if(path==="/api/preferences")return json({data:{preferences:{addressStyle:"ban",customDisplayName:null,tone:"concise"}}});return json({error:{code:"NOT_FOUND",message:"no"}},404);});vi.stubGlobal("fetch",fetcher);return fetcher; }
 
 describe("FinalScreenExperience connections", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -215,4 +215,43 @@ describe("FinalScreenExperience settings", () => {
     expect(screen.getByText(/tạo lời nhắc theo lựa chọn xác nhận/i)).toBeVisible();
     expect(screen.queryByText(/miễn phí|chi phí rất thấp/i)).not.toBeInTheDocument();
   });
+});
+
+it('loads account settings with real channels/sessions and updates shell after profile readback',async()=>{
+ const interaction=userEvent.setup();let displayName='Mai';let sessions=[{id:'current',createdAt:1,expiresAt:200,current:true},{id:'other',createdAt:1,expiresAt:200,current:false}];
+ const fetcher=vi.fn(async(path:string,init?:RequestInit)=>{
+ if(path==='/api/session')return json({data:{user:{...user,displayName}}});
+ if(path==='/api/preferences')return json({data:{preferences:{addressStyle:'ban',customDisplayName:null,tone:'friendly'}}});
+ if(path==='/api/connections')return json({data:{connections:[{publicId:'T'.repeat(22),provider:'telegram',displayName:'My bot',handle:null,state:'ACTIVE_BOUND'}]}});
+ if(path==='/api/connections/primary-login')return json({data:{publicId:'T'.repeat(22)}});
+ if(path==='/api/account/sessions')return json({data:{sessions}});
+ if(path==='/api/account/profile'&&init?.method==='PATCH'){displayName='An';return json({data:{user:{...user,displayName}}});}
+ if(path==='/api/account/sessions/revoke-others'){sessions=sessions.filter(s=>s.current);return json({data:{revoked:1}});}
+ return json({error:{code:'NOT_FOUND',message:'missing'}},404);
+ });vi.stubGlobal('fetch',fetcher);
+ render(<FinalScreenExperience screen="settings"/>);
+ const name=await screen.findByRole('textbox',{name:'Tên tài khoản'});await interaction.clear(name);await interaction.type(name,'An');await interaction.click(screen.getByRole('button',{name:'Lưu tên tài khoản'}));
+ await screen.findByText('Đã lưu tên tài khoản.');expect(screen.getAllByRole('button',{name:/An/}).length).toBeGreaterThan(0);
+ expect(screen.getByText('My bot')).toBeVisible();expect(screen.getByText('Phiên hiện tại')).toBeVisible();
+ await interaction.click(screen.getByRole('button',{name:'Đăng xuất các phiên khác'}));await interaction.click(screen.getByRole('button',{name:'Xác nhận đăng xuất phiên khác'}));
+ await screen.findByText('Đã đăng xuất các phiên khác. Phiên hiện tại vẫn hoạt động.');expect(screen.queryByText('Phiên khác 2')).toBeNull();
+ expect(fetcher).toHaveBeenCalledWith('/api/account/sessions/revoke-others',expect.objectContaining({method:'POST',body:'{}'}));
+});
+it('reports ambiguous profile or session save without inventing a successful readback',async()=>{
+ const interaction=userEvent.setup();let revokeCommitted=false;
+ vi.stubGlobal('fetch',vi.fn(async(path:string,init?:RequestInit)=>{
+ if(path==='/api/session')return json({data:{user}});
+ if(path==='/api/preferences')return json({data:{preferences:{addressStyle:'ban',customDisplayName:null,tone:'friendly'}}});
+ if(path==='/api/connections')return json({data:{connections:[]}});
+ if(path==='/api/connections/primary-login')return json({data:{publicId:null}});
+ if(path==='/api/account/profile'&&init?.method==='PATCH')return json({data:{user:{...user,displayName:'An',unexpected:'unsafe'}}});
+ if(path==='/api/account/sessions/revoke-others'){revokeCommitted=true;return json({data:{revoked:1}});}
+ if(path==='/api/account/sessions'){if(revokeCommitted)return json({error:{code:'UNAVAILABLE',message:'retry'}},503);return json({data:{sessions:[{id:'current',createdAt:1,expiresAt:200,current:true},{id:'other',createdAt:1,expiresAt:200,current:false}]}});}
+ return json({error:{code:'NOT_FOUND',message:'missing'}},404);
+ }));
+ render(<FinalScreenExperience screen="settings"/>);
+ const name=await screen.findByRole('textbox',{name:'Tên tài khoản'});await interaction.clear(name);await interaction.type(name,'An');await interaction.click(screen.getByRole('button',{name:'Lưu tên tài khoản'}));
+ expect(await screen.findByText('Chưa xác nhận được việc lưu tên. Hãy tải lại để kiểm tra.')).toBeVisible();expect(screen.queryByText('Đã lưu tên tài khoản.')).toBeNull();expect(screen.getAllByRole('button',{name:/Mai/}).length).toBeGreaterThan(0);
+ await interaction.click(screen.getByRole('button',{name:'Đăng xuất các phiên khác'}));await interaction.click(screen.getByRole('button',{name:'Xác nhận đăng xuất phiên khác'}));
+ expect(await screen.findByText('Chưa xác nhận được việc đăng xuất. Hãy tải lại danh sách trước khi thử lại.')).toBeVisible();expect(screen.queryByText('Đã đăng xuất các phiên khác. Phiên hiện tại vẫn hoạt động.')).toBeNull();
 });

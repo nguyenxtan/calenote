@@ -1,3 +1,7 @@
+import { createEmailDiscoveryOperations, createAccountOperations } from "./composition-root";
+import { handleContinueEmail, type EmailDiscoveryOperations } from "./routes/auth-continue";
+import { handleGetProfile, handleUpdateProfile, handleGetSessions, handleRevokeOtherSessions, type AccountOperations } from "./routes/account";
+import { InvalidAccountInputError } from "@/modules/account/service";
 import { PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
 import { ConnectionDisconnectError } from "@/modules/connections/lifecycle";
 import { handleAdminOverview } from './routes/admin-overview';
@@ -82,6 +86,8 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+  emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
+  accountOperations?: (env: Env) => Promise<AccountOperations>;
   seriesOperations?: (env: Env) => Promise<SeriesOperations>;
   authOperations?: (env: Env) => Promise<AuthOperations>;
   actionsOperations?: (env: Env) => Promise<ActionsOperations>;
@@ -117,6 +123,7 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   if (error instanceof InvalidLoginCodeError) {
     return { code: error.code, message: error.message, status: error.status };
   }
+  if (error instanceof InvalidAccountInputError) return {code:error.code,message:"Thông tin tài khoản chưa hợp lệ.",status:error.status};
   if (error instanceof InvalidUserPreferencesError) {
     return { code: "INVALID_PREFERENCES", message: "Tùy chọn hiển thị chưa hợp lệ.", status: 400 };
   }
@@ -194,6 +201,8 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 export function createRouter(options: RouterOptions = {}) {
   const seriesOperationsFactory = options.seriesOperations
     ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
+  const emailDiscoveryOperationsFactory = options.emailDiscoveryOperations ?? createEmailDiscoveryOperations;
+  const accountOperationsFactory = options.accountOperations ?? createAccountOperations;
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
@@ -242,6 +251,11 @@ export function createRouter(options: RouterOptions = {}) {
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
       if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
+      if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
+      if (pathname === "/api/account/profile" && request.method === "GET") return await handleGetProfile(request, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/profile" && request.method === "PATCH") return await handleUpdateProfile(request, appOrigin!, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/sessions" && request.method === "GET") return await handleGetSessions(request, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/sessions/revoke-others" && request.method === "POST") return await handleRevokeOtherSessions(request, appOrigin!, () => accountOperationsFactory(env));
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
         return await handleRequestLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
@@ -335,7 +349,8 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname === "/api/auth/logout"
+      const authenticated = pathname.startsWith("/api/account/")
+        || pathname === "/api/auth/logout"
         || pathname === "/api/session"
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")

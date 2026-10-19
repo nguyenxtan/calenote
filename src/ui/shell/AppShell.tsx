@@ -1,5 +1,6 @@
 "use client";
 
+import { APPEARANCE_EVENT, applyAppearancePreferences, parseAppearanceEvent, readAppearancePreferences } from "@/lib/appearance-preferences";
 import Link from "next/link";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
@@ -86,7 +87,12 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
     document.addEventListener("mousedown", outside);
     return () => { document.removeEventListener("keydown", close); document.removeEventListener("mousedown", outside); };
   }, [accountOpen, closeAccount]);
-  useEffect(() => { try { document.documentElement.dataset.density = window.localStorage.getItem("calenote-ui-density") === "compact" ? "compact" : "comfortable"; } catch { /* Storage is optional; retain comfortable layout. */ } }, []);
+  useEffect(() => {
+    applyAppearancePreferences(readAppearancePreferences());
+    const changed = (event: Event) => applyAppearancePreferences(parseAppearanceEvent(event) ?? readAppearancePreferences());
+    window.addEventListener(APPEARANCE_EVENT, changed); window.addEventListener("storage", changed);
+    return () => { window.removeEventListener(APPEARANCE_EVENT, changed); window.removeEventListener("storage", changed); };
+  }, []);
   const initial = user.displayName.trim().slice(0, 1).toLocaleUpperCase("vi-VN") || "C";
 
   async function logout() {

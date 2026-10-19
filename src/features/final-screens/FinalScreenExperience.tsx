@@ -8,6 +8,7 @@ import { z } from "zod";
 import { ConnectionsResponseSchema, type PublicConnection } from "@/contracts/api/connections";
 import { ActivityResponseSchema, type PublicActivity } from "@/contracts/api/activity";
 import { PreferencesResponseSchema, type PublicPreferences } from "@/contracts/api/preferences";
+import { ProfileResponseSchema, SessionsResponseSchema, RevokeSessionsResponseSchema, type PublicSession } from "@/contracts/api/account";
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { ApiResponseError, apiRequest } from "@/lib/client-api";
 import { AppShell } from "@/ui/shell/AppShell";
@@ -30,6 +31,9 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
   const [connections, setConnections] = useState<PublicConnection[] | null>(null);
   const [activities, setActivities] = useState<PublicActivity[] | null>(null);
   const [preferences, setPreferences] = useState<PublicPreferences | null>(null);
+  const [sessions, setSessions] = useState<PublicSession[]>([]);
+  const profileLock = useRef(false);
+  const revokeLock = useRef(false);
   const saveLock = useRef(false);
   const [saving, setSaving] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
@@ -45,7 +49,16 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
       setUser(session);
       if (screen === "connections") setConnections(ConnectionsResponseSchema.parse({ data: await apiRequest<unknown>("/api/connections", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.connections);
       if (screen === "activity") setActivities(ActivityResponseSchema.parse({ data: await apiRequest<unknown>("/api/activity", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.activities);
-      if (screen === "settings") setPreferences(PreferencesResponseSchema.parse({ data: await apiRequest<unknown>("/api/preferences", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.preferences);
+      if (screen === "settings") {
+        const [prefs, channels, activeSessions] = await Promise.all([
+          apiRequest<unknown>("/api/preferences", { authenticated: true, onUnauthorized: () => replace("/login") }),
+          apiRequest<unknown>("/api/connections", { authenticated: true, onUnauthorized: () => replace("/login") }),
+          apiRequest<unknown>("/api/account/sessions", { authenticated: true, onUnauthorized: () => replace("/login") }),
+        ]);
+        setPreferences(PreferencesResponseSchema.parse({data:prefs}).data.preferences);
+        setConnections(ConnectionsResponseSchema.parse({data:channels}).data.connections);
+        setSessions(SessionsResponseSchema.parse({data:activeSessions}).data.sessions);
+      }
     } catch { setError(true); }
   }, [replace, screen]);
   useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
@@ -56,6 +69,23 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
     try { const result = PreferencesResponseSchema.parse({ data: await apiRequest<unknown>("/api/preferences", { method: "PATCH", body: patch, authenticated: true, onUnauthorized: () => replace("/login") }) }); setPreferences(result.data.preferences); setSettingsNotice("Cài đặt đã được lưu."); return true; }
     catch { setSettingsNotice("Chưa xác nhận được việc lưu. Hãy tải lại để kiểm tra trước khi thử lại."); return false; }
     finally { saveLock.current = false; setSaving(false); }
+  }
+  async function saveProfile(displayName: string): Promise<boolean> {
+    if (profileLock.current) return false;
+    profileLock.current = true;
+    try {
+      const result = ProfileResponseSchema.parse({ data: await apiRequest<unknown>("/api/account/profile", { method: "PATCH", body: { displayName }, authenticated: true, onUnauthorized: () => replace("/login") }) });
+      setUser(result.data.user); return true;
+    } catch { return false; } finally { profileLock.current = false; }
+  }
+  async function revokeOthers(): Promise<boolean> {
+    if (revokeLock.current) return false;
+    revokeLock.current = true;
+    try {
+      RevokeSessionsResponseSchema.parse({ data: await apiRequest<unknown>("/api/account/sessions/revoke-others", { method: "POST", body: {}, authenticated: true, onUnauthorized: () => replace("/login") }) });
+      const result = SessionsResponseSchema.parse({ data: await apiRequest<unknown>("/api/account/sessions", { authenticated: true, onUnauthorized: () => replace("/login") }) });
+      setSessions(result.data.sessions); return true;
+    } catch { return false; } finally { revokeLock.current = false; }
   }
   async function disconnectConnection(publicId:string) {
     if(connectionMutationPending)return;
@@ -72,7 +102,7 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
 
   if (!user && !error) return <AppLoading />;
   if (!user) return <main className={styles.entry}><section><h1>{error ? "Chưa mở được Calenote" : "Đang mở Calenote"}</h1>{error && <button onClick={() => void load()}>Thử lại</button>}</section></main>;
-  return <AppShell user={user} activePath={`/app/${screen}`}><main className={styles.page}><header><p>{screen === "connections" ? "Kênh hỗ trợ" : screen === "activity" ? "Hoạt động" : "Không gian cá nhân"}</p><h1>{screen === "connections" ? "Kết nối" : screen === "activity" ? "Hoạt động" : "Cài đặt"}</h1><span>{screen === "connections" ? "Kết nối những nơi bạn muốn Calenote hỗ trợ." : screen === "activity" ? "Những thay đổi quan trọng gần đây." : "Điều chỉnh cách Calenote đồng hành cùng bạn."}</span></header>{error ? <LoadError retry={load} /> : screen === "connections" ? <><AddBotPanel onAdded={load}/>{connections&&<PrimaryLoginPanel connections={connections}/>}<Connections disconnectConnection={disconnectConnection} value={connections} pending={connectionMutationPending} notice={connectionNotice} error={connectionError} connectCodes={connectCodes} retryWebhook={retryWebhook} rotateConnectCode={rotateConnectCode} copyConnectCode={copyConnectCode} /></> : screen === "activity" ? <ActivityFeed value={activities} /> : preferences ? <SettingsPanel user={user} value={preferences} save={save} notice={settingsNotice} busy={saving} /> : <Loading />}</main></AppShell>;
+  return <AppShell user={user} activePath={`/app/${screen}`}><main className={styles.page}><header><p>{screen === "connections" ? "Kênh hỗ trợ" : screen === "activity" ? "Hoạt động" : "Không gian cá nhân"}</p><h1>{screen === "connections" ? "Kết nối" : screen === "activity" ? "Hoạt động" : "Cài đặt"}</h1><span>{screen === "connections" ? "Kết nối những nơi bạn muốn Calenote hỗ trợ." : screen === "activity" ? "Những thay đổi quan trọng gần đây." : "Điều chỉnh cách Calenote đồng hành cùng bạn."}</span></header>{error ? <LoadError retry={load} /> : screen === "connections" ? <><AddBotPanel onAdded={load}/>{connections&&<PrimaryLoginPanel connections={connections}/>}<Connections disconnectConnection={disconnectConnection} value={connections} pending={connectionMutationPending} notice={connectionNotice} error={connectionError} connectCodes={connectCodes} retryWebhook={retryWebhook} rotateConnectCode={rotateConnectCode} copyConnectCode={copyConnectCode} /></> : screen === "activity" ? <ActivityFeed value={activities} /> : preferences ? <SettingsPanel user={user} saveProfile={saveProfile} sessions={sessions} revokeOthers={revokeOthers} connections={connections ?? undefined} value={preferences} save={save} notice={settingsNotice} busy={saving} /> : <Loading />}</main></AppShell>;
 }
 
 function ActivityFeed({ value }: { value: PublicActivity[] | null }) { if (value === null) return <Loading />; if (!value.length) return <Empty title="Chưa có hoạt động nào." text="Những thay đổi quan trọng sẽ xuất hiện ở đây." />; const copy = { REMINDER_CREATED: "Đã tạo lời nhắc", REMINDER_CANCELLED: "Đã huỷ lời nhắc", CONNECT_CODE_ROTATED: "Đã làm mới mã kết nối", CHAT_BOUND: "Đã kết nối kênh" } as const; return <ol className={styles.activityList}>{value.map((item, index) => <li className={styles.activityItem} key={`${item.createdAt}-${index}`}><span className={styles.iconTile}><Clock3 size={18} aria-hidden="true" /></span><div><h2>{copy[item.action]}</h2><time dateTime={new Date(item.createdAt).toISOString()}>{new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</time></div></li>)}</ol>; }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppearancePreferences } from "@/lib/use-appearance-preferences";
 import { AppLoading } from "@/ui/loading/AppLoading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleCheck, RotateCcw, X } from "lucide-react";
@@ -134,33 +135,36 @@ function Calendar({ reminders, hasMore, retry }: { reminders: Resource<ReminderD
   const [month, setMonth] = useState(() => `${vietnamCivilDate(Date.now()).slice(0, 7)}-01`);
   const [selected, setSelected] = useState(() => vietnamCivilDate(Date.now()));
   const [detail, setDetail] = useState<ReminderDetailsResponseV2 | null>(null);
-  const { year, month: monthNumber, days, firstWeekday } = calendarMonth(month);
+  const appearance = useAppearancePreferences();
+  const { year, month: monthNumber, days, firstWeekday: mondayOffset } = calendarMonth(month);
+  const firstWeekday = appearance.weekStart === "sunday" ? (mondayOffset + 1) % 7 : mondayOffset;
+  const weekdays = appearance.weekStart === "sunday" ? "CN T2 T3 T4 T5 T6 T7" : "T2 T3 T4 T5 T6 T7 CN";
   const title = new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC", month: "long", year: "numeric" }).format(Date.parse(`${month}T00:00:00Z`));
   const selectedItems = reminders.value?.filter(item => dateKey(item.scheduledAt) === selected).sort((a, b) => a.scheduledAt - b.scheduledAt) ?? [];
   return <>
-    <header className={styles.header}><p>Lịch cá nhân</p><h1>Lịch</h1><span>Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam.</span></header>
+    <header className={styles.header}><p>Lịch cá nhân</p><h1>Lịch</h1><span>{appearance.showLunar ? "Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam." : "Dương lịch · giờ Việt Nam."}</span></header>
     {hasMore && <p className={styles.partialNotice}>Danh sách lời nhắc của chủ tài khoản chỉ hiển thị một phần. Lịch có thể còn lời nhắc khác; cuộc trò chuyện chỉ thấy kênh đang dùng.</p>}
-    <section className={styles.calendar} aria-label="Lịch âm dương">
+    <section className={styles.calendar} aria-label={appearance.showLunar ? "Lịch âm dương" : "Lịch dương"}>
       <div className={styles.period}>
         <button type="button" aria-label="Tháng trước" onClick={() => setMonth(shiftCalendarMonth(month, -1))}><ChevronLeft aria-hidden="true" /></button>
         <h2>{title}</h2>
         <button type="button" aria-label="Tháng sau" onClick={() => setMonth(shiftCalendarMonth(month, 1))}><ChevronRight aria-hidden="true" /></button>
         <button type="button" onClick={() => { const today = vietnamCivilDate(Date.now()); setMonth(`${today.slice(0, 7)}-01`); setSelected(today); setDetail(null); }}>Hôm nay</button>
       </div>
-      <div className={styles.week} aria-label="Các ngày trong tuần">{"T2 T3 T4 T5 T6 T7 CN".split(" ").map(day => <span key={day}>{day}</span>)}</div>
+      <div className={styles.week} aria-label="Các ngày trong tuần">{weekdays.split(" ").map(day => <span key={day}>{day}</span>)}</div>
       <div className={styles.month}>{Array.from({ length: firstWeekday }, (_, index) => <span key={`empty-${index}`} aria-hidden="true" />)}
         {Array.from({ length: days }, (_, index) => {
           const day = index + 1;
           const key = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const count = reminders.value?.filter(item => dateKey(item.scheduledAt) === key).length ?? 0;
           const presentation = calendarDayPresentation(key, day === 1);
-          return <button key={key} type="button" aria-label={`${presentation.accessibleText}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
-            <span className={styles.solarDay}>{day}</span><span className={styles.lunarDay} aria-hidden="true">{presentation.lunarAvailable ? presentation.lunarLabel : "—"}</span>{count > 0 && <i aria-hidden="true" />}
+          return <button key={key} type="button" aria-label={`${appearance.showLunar ? presentation.accessibleText : `Dương lịch ${key}`}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
+            <span className={styles.solarDay}>{day}</span>{appearance.showLunar && <span className={styles.lunarDay} aria-hidden="true">{presentation.lunarAvailable ? presentation.lunarLabel : "—"}</span>}{count > 0 && <i aria-hidden="true" />}
           </button>;
         })}
       </div>
     </section>
-    <section className={styles.agenda} aria-labelledby="agenda-title"><h2 id="agenda-title">{dateLabel(Date.parse(`${selected}T05:00:00Z`))} · {selected.slice(0, 4)}</h2><p>{calendarDayPresentation(selected).fullLabel}</p>
+    <section className={styles.agenda} aria-labelledby="agenda-title"><h2 id="agenda-title">{dateLabel(Date.parse(`${selected}T05:00:00Z`))} · {selected.slice(0, 4)}</h2>{appearance.showLunar && <p>{calendarDayPresentation(selected).fullLabel}</p>}
       {reminders.error ? <LocalError message={reminders.error} retry={retry} /> : reminders.value === null ? <Loading /> : selectedItems.length === 0 ? <Empty title="Ngày này đang khá thoáng." text="Chưa có lời nhắc nào." /> : selectedItems.map(item => <button className={styles.agendaItem} key={item.publicId} type="button" onClick={() => setDetail(item)}><time>{clock(item.scheduledAt)}</time><span><strong>{item.title}</strong><small>{status(item.status)}</small></span></button>)}
     </section>
     {detail && <ReminderDetail reminder={detail} close={() => setDetail(null)} />}

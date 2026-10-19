@@ -61,18 +61,9 @@ describe("Settings controls", () => {
     expect(screen.getByRole("button", { name: "Đang lưu…" })).toBeDisabled();
     expect(screen.getByLabelText("Cách xưng hô")).toBeDisabled();
   });
-  it("stores browser density without a server mutation and exposes real destination links", async () => {
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) });
-    const save = vi.fn(), interaction = userEvent.setup();
-    render(<SettingsPanel user={user} value={value} save={save} notice={null} busy={false} />);
-    await interaction.click(screen.getByRole("button", { name: /Gọn/ }));
-    expect(document.documentElement.dataset.density).toBe("compact");
-    expect(window.localStorage.getItem("calenote-ui-density")).toBe("compact");
-    expect(save).not.toHaveBeenCalled();
+  it("exposes real connection destinations", () => {
+    render(<SettingsPanel user={user} value={value} save={vi.fn()} notice={null} busy={false} />);
     expect(screen.getByRole("link", { name: /Quản lý Zalo/ })).toHaveAttribute("href", "/app/connections");
-    await interaction.click(screen.getByRole("button", { name: /Thoáng/ }));
-    expect(document.documentElement.dataset.density).toBe("comfortable");
   });
   it("has accessible fields, headings and links", async () => {
     const { container } = render(<SettingsPanel user={user} value={value} save={vi.fn()} notice={null} busy={false} />);

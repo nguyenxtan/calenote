@@ -321,3 +321,15 @@ it("keeps default pages on complete legacy keyset reads without requesting Conte
   await screen.findByRole("heading", { name: "Hộp thư" });
   expect(fetcher.mock.calls.some(([path]) => String(path).startsWith("/api/v2/"))).toBe(false);
 });
+
+it("uses Sunday-first calendar and hides lunar display when chosen on this device", async () => {
+  vi.stubGlobal("localStorage", {getItem:(key:string)=>key==="calenote-appearance-v1"?JSON.stringify({weekStart:"sunday",showLunar:false}):null,setItem:vi.fn()});
+  installFetch();
+  render(<CoreScreenExperience screen="calendar" />);
+  await screen.findByRole("heading", {name:"Lịch"});
+  await waitFor(()=>expect(screen.getByLabelText("Các ngày trong tuần").firstElementChild).toHaveTextContent("CN"));
+  const day=screen.getByRole("button",{name:/Dương lịch 2026-09-01,/});
+  expect(day).not.toHaveAccessibleName(/Âm lịch/);
+  expect(screen.queryByText("Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam.")).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
