@@ -1,6 +1,6 @@
 # Personal Follow-through V1 — design for owner review
 
-Status: DESIGN ONLY. No runtime, schema, scheduler, provider or production change.
+Status: Owner approved V1; implementation candidate is on `codex/follow-through-v1`. This document is the approved design. Runtime/schema qualification and rollout authority remain separate; see `docs/operations/2026-10-19-follow-through-v1.md`.
 Source inspected:96aa3786f3a09554932075265c5f1a44a3f43f69 (includes auth/Settings work in PR14). The older b11c7d4 audit supplied by the owner is historical; this design is grounded in current source.
 
 ## Outcome and scope

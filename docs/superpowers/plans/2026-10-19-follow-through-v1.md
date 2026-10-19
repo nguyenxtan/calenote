@@ -21,12 +21,16 @@ Base: c8119bc (design), appbase96aa378; feature branchcodex/follow-through-v1. A
 3 Root owns worker versionedroutes/factory/router/Cron wiring, Today/Reminders FollowThroughPanel and browser interactions, testfixture plumbing and finalintegration. Backend andruntime work independently with explicit interface updates.
 
 ## Tasks
-- [ ] Backend RED: owned creation/adoption, progress, receipts/replay/staleCAS, no leakedciphertext/plaintext, childtitle/details encryption, limit and connectionguards. GREEN atomicSQL/migration.
-- [ ] Runtime RED: acquired send vsDone/currentrun fence; inactivebot, uncertainty, limit/restart; explicit provider-neutral chatref and ambiguity forZalo/Telegram. GREEN guard/handler/render.
-- [ ] Root RED: real versionedroutes/session/keyring/SQLite,401/404/origin/limits, CAS actionrequests; UI preview/pending/retry/readback and oldcompat. GREEN composition/Cron/UI.
+- [x] Backend RED: owned creation/adoption, progress, receipts/replay/staleCAS, no leakedciphertext/plaintext, childtitle/details encryption, limit and connectionguards. GREEN atomicSQL/migration.
+- [x] Runtime RED: acquired send vsDone/currentrun fence; inactivebot, uncertainty, limit/restart; explicit provider-neutral chatref and ambiguity forZalo/Telegram. GREEN guard/handler/render.
+- [x] Root RED: real versionedroutes/session/keyring/SQLite,401/404/origin/limits, CAS actionrequests; UI preview/pending/retry/readback and oldcompat. GREEN composition/Cron/UI.
 - [ ] Task reviews, fix Critical/Important; desktop1280/mobile375/keyboard/accessibility synthetic fixture QA.
 - [ ] Freeze clean immutablecandidate then run one fullsuite; build/type/lint/docs/types/dryrun; finalwholebranchreview, draftPR and evidencepacket. No checkout or source edits during qualifiedfullsuite.
 
 ## Rulings
 - Initial implementation may use additional ephemeral creation/spawn capability table plus scoped SQL triggers; costs some schema complexity but keeps all current creation paths atomic and preserves core reminder statuses.
 - No native providerbuttons/newLLM; explicit scoped shortcodes with ambiguity refusal. Webowner may seeallownedwork; chatonlyoriginalidentity/connection.
+
+## Implementation qualification
+
+Implementation includes scoped review fixes for uncertain receipt recovery, stale pagination, appearance scaling, constant D1 bindings, delayed Cron timestamps and paged long histories. Final immutable-SHA full-suite/gate outcomes are recorded in the external evidence packet, rather than inferred from task checks. List/history pages contain at most10 rows; older history remains accessible through an owned versioned endpoint. Production remains unchanged.
