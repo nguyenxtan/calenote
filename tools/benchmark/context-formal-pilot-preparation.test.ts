@@ -1,12 +1,13 @@
 // @vitest-environment node
 import {it,expect,vi} from 'vitest';
+import {currentFixtureCandidate} from './current-candidate.test-support';
 import {mkdtempSync,mkdirSync,realpathSync,readFileSync,rmSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall} from './context-contract-live';
 import {prepareTypedFormalPilot,inspectTypedFormalPilotPreparation} from './context-formal-pilot-preparation';
 import {loadFormalPilotLaunch,runFormalPilotLaunch} from './context-formal-pilot-launcher';
-const candidate='575c659896862bbdc182632ae1ac3438fe98283b';
+const candidate=currentFixtureCandidate();
 function fixture(){const accountRoot=realpathSync(mkdtempSync(join(tmpdir(),'prepared105-'))),campaignRoot=join(accountRoot,'history'),directory=join(campaignRoot,'PILOT');mkdirSync(directory,{recursive:true});
  appendCampaignEvent(directory,{event:'BEGIN',runId:'unknown',sourceSha:'a'.repeat(40),profile:'PILOT',provenanceDigest:'b'.repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1});
  reserveCampaignCall(directory,{runId:'unknown',profile:'PILOT',provenanceDigest:'b'.repeat(64),reservationId:'unknown',maximumMicrounits:100000,now:1,startedAt:1});markCampaignDispatched(directory,{runId:'unknown',reservationId:'unknown',at:1});finishCampaignCall(directory,{runId:'unknown',reservationId:'unknown',at:1,observedMicrounits:null});appendCampaignEvent(directory,{event:'STOP',runId:'unknown',at:1,reason:'TERMINAL'});
@@ -14,7 +15,9 @@ function fixture(){const accountRoot=realpathSync(mkdtempSync(join(tmpdir(),'pre
 it('prepares and rechecks HOLD without touching history or granting credential/dispatch authority',async()=>{
  const f=fixture(),network=vi.fn(),key=vi.fn();vi.stubGlobal('fetch',network);
  try{const before=readFileSync(join(f.directory,'campaign.jsonl'),'utf8'),names=readdirSync(f.accountRoot);
+  expect(()=>prepareTypedFormalPilot(process.cwd(),'575c659896862bbdc182632ae1ac3438fe98283b',f.accountRoot,f.campaignRoot)).toThrow(/VALIDATION_APPLICATION/);
   const packet=prepareTypedFormalPilot(process.cwd(),candidate,f.accountRoot,f.campaignRoot);
+  expect(packet.evaluationCandidateSha).toBe(candidate);
   expect(packet).toMatchObject({paid:'HOLD',status:'PREPARED_HOLD',wireProtocol:'TYPED_105',hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',retry:0,fullStarted:false,model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu'});
   expect(packet.accounting).toMatchObject({unknownCount:1,conservativeRetainedMicrounits:100000,remainingConservativeMicrounits:9900000});
   expect(inspectTypedFormalPilotPreparation(process.cwd(),packet)).toEqual(packet);

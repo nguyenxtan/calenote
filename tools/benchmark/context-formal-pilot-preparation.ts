@@ -12,14 +12,15 @@ import {contextCampaignMaximumReservation} from './context-contract-runner';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/typed-protocol';
 import {CONTEXT_TYPED_PROMPT} from '../../src/modules/conversation/context-contract/typed-prompt';
 import {InterpretationJsonSchema} from '../../src/modules/conversation/context-contract/contracts';
-const candidate='575c659896862bbdc182632ae1ac3438fe98283b';
 const hash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 function checkRoot(root:string){if(realpathSync(root)!==root||realpathSync(process.cwd())!==root||fileURLToPath(new URL('../../',import.meta.url)).replace(/\/$/u,'')!==root)throw Error('PREPARATION_EXECUTING_ROOT');}
 function lifecycle(accountRoot:string){return readdirSync(accountRoot).filter(name=>name.startsWith('.')&&name.endsWith('.json')).sort().map(name=>{
  const path=join(accountRoot,name),stat=lstatSync(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>65536)throw Error('PREPARATION_LIFECYCLE_BINDING');return {name,sha256:hash(readFileSync(path))};
 });}
 export function prepareTypedFormalPilot(root:string,evaluationCandidateSha:string,accountRoot:string,campaignRoot:string){
- checkRoot(root);if(evaluationCandidateSha!==candidate)throw Error('PREPARATION_CANDIDATE_BINDING');
+ // Preparation is read-only. Immutable source proof below binds the caller's
+ // exact candidate; a historical preparation SHA is not a standing grant.
+ checkRoot(root);if(!/^[a-f0-9]{40}$/u.test(evaluationCandidateSha))throw Error('PREPARATION_CANDIDATE_BINDING');
  const path=relative(accountRoot,campaignRoot);
  if(!isAbsolute(accountRoot)||realpathSync(accountRoot)!==accountRoot||!isAbsolute(campaignRoot)||!path||path.startsWith('..')||isAbsolute(path)||realpathSync(campaignRoot)!==campaignRoot)throw Error('PREPARATION_PATH_BINDING');
  if(existsSync(join(accountRoot,'account.lock')))throw Error('PREPARATION_ACCOUNT_LOCKED');
