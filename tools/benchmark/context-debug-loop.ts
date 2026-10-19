@@ -320,7 +320,7 @@ export async function loadTrustedDebugLoop(root:string,path:string,trust:DebugLo
  loadedChecks.set(a,(candidate,harness)=>{loader.assertLoadedCandidateModules(root,candidate,harness)});
  const proof=candidateValidationProof(root,candidate);loadedChecks.get(a)!(candidate,proof.harnessRevisionSha);inspectDebugLoop(a);return a;
 }
-export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candidate:string,mode:DebugProbeMode|"FORMAL_PILOT",transport:SemanticTransport,options:{now?:()=>number}={}){
+export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candidate:string,mode:DebugProbeMode|"FORMAL_PILOT",transport:SemanticTransport,options:{now?:()=>number;beforeExecution?:(directory:string)=>Promise<void>}={}){
  const initial=grant(a);if(mode!=="FORMAL_PILOT"&&mode!==integerOrderProbeMode&&!DEBUG_PROBE_MODES.includes(mode))throw Error("DEBUG_PROBE_SCOPE");
  if(mode===integerOrderProbeMode&&candidate!=="ee61a225e66056324ffd55214213692e5b9efbc7")throw Error("DEBUG_INTEGER_ORDER_CANDIDATE");
  if(initial.trust.freshRun){if(mode!=="FORMAL_PILOT")throw Error("DEBUG_FRESH_MODE_BINDING");inspectDebugLoopFreshRun(a,candidate,options);}
@@ -332,6 +332,7 @@ export async function runDebugLoopExecution(a:DebugLoopAuthority|undefined,candi
  const id=fresh?.id??baseExecutionId(r.ownerMessageSha256,candidate,mode),leaf=fresh?.directory??join(r.campaignRoot,"debug-loop-executions",id,"PILOT");
  if(existsSync(leaf))throw Error("DEBUG_EXECUTION_CONSUMED");
  const before=inspectDebugLoop(a);
+ await options.beforeExecution?.(leaf);
  if(fresh)appendCandidateValidationRecord(r.accountRoot,fresh.marker,{parentDirectory:fresh.record.parentDirectory,childDirectory:leaf,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256});
  mkdirSync(leaf,{recursive:true,mode:0o700});
  appendCandidateValidationRecord(r.accountRoot,join(leaf,"execution.json"),{authoritySha256:g.trust.reviewedRecordSha256,...proof,mode,manifestSha256:r.manifestSha256,accounting:before,...(fresh?{freshRun:{parentDirectory:fresh.record.parentDirectory,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256}}:{})});
