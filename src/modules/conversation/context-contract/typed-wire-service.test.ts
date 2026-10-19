@@ -30,3 +30,13 @@ it("typed105 refuses reintroduced nested change JSON before any draft or reminde
   expect(await h.f.db.prepare("SELECT count(*) as n FROM reminders").first("n")).toBe(0);
   expect(h.events.some(e=>e.event === "RESPONSE_RECEIVED" && e.outcome === "FAILURE" && e.reason === "SCHEMA_INVALID")).toBe(true);
 });
+
+it("typed105 enforces local title bounds before mutation even when generation permits a string",async()=>{
+ const h=await typedHarness([proposal({title:"đi thi",eventDate:date(11,10,null),location:"Quang Trung"})],wire=>{
+  const value=structuredClone(wire) as {titleChange:{change:{value:unknown}}};value.titleChange.change.value="x".repeat(2001);return value;
+ });
+ await h.turn(0,"Ngày 11/10 đi thi ở Quang Trung.");
+ expect((await h.read(1))?.slots.title.value??null).toBeNull();
+ expect(await h.f.db.prepare("SELECT count(*) as n FROM reminders").first("n")).toBe(0);
+ expect(h.events.some(e=>e.event==="RESPONSE_RECEIVED"&&e.outcome==="FAILURE"&&e.reason==="SCHEMA_INVALID")).toBe(true);
+});

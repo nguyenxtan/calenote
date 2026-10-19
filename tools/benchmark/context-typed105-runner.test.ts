@@ -1,5 +1,6 @@
 // @vitest-environment node
 import {expect,it} from 'vitest';
+import {z} from 'zod';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -27,6 +28,8 @@ it.each([false,true])('typed105 frozen formal pilot uses typed application path 
   const raw=JSON.parse(request.messages[1].content);for(const key of ['numericOwnership','fieldCapability','evidenceSources'])delete raw[key];
   const input=ContextInputSchema.parse(raw),item=healthy[calls++];
   const wire=encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,item.id,item.index)),input) as Record<string,unknown>;
+  const generation=z.fromJSONSchema(request.response_format.json_schema.schema as Parameters<typeof z.fromJSONSchema>[0]);
+  expect(generation.safeParse(wire).success,JSON.stringify({fixture:item.id,turn:item.index})).toBe(true);
   if(malformed)wire.query=JSON.stringify(wire.query);
   return {status:200,body:JSON.stringify({model:request.model,provider:'Google',id:`gen-typed-${calls}`,choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}],usage:{cost:.001,prompt_tokens:100,completion_tokens:100}})};
  }});

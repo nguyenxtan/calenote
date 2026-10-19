@@ -76,8 +76,8 @@ function shareTypedDefinitions(root:Schema):Schema {
  const compact=rename(result);compact.$defs=Object.fromEntries(Object.entries(compact.$defs!).map(([name,node])=>[aliases.get(name)!,node]));
  return compact;
 }
-/** The full input selects a generation language before the provider call. */
-export function googleLiteEuTypedContextWireSchemaV3(input:ContextInput) {
+/** Full input-bound acceptance language. Never relax this for provider admission. */
+export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const parsed=ContextInputSchema.parse(input),capability=deriveGenerationFieldCapability(parsed);
  let schema=core.selectedSchema(capability,parsed) as Schema;
  const transform=(node:Schema):Schema=>{
@@ -120,6 +120,21 @@ export function googleLiteEuTypedContextWireSchemaV3(input:ContextInput) {
  const enums=(node:Schema):Schema=>{const result=map(node,enums);delete result.$schema;if(typeof result.const==="string"){result.enum=[result.const];delete result.const;}return result;};
  return {version:CONTEXT_TYPED_PROTOCOL_V3.wireVersion,schema:shareTypedDefinitions(enums(schema))};
 }
+/** Provider generation is a typed structural superset, not the acceptance gate.
+ * Variable scalar/length bounds multiply Google's grammar states. Keep exact
+ * discriminators, input-selected types/enums and empty-only arrays on the wire;
+ * enforce every removed domain constraint against the original schema below. */
+export function googleLiteEuTypedContextWireSchemaV3(input:ContextInput) {
+ const selected=googleLiteEuTypedContextValidationSchemaV3(input);
+ const structural=(node:Schema):Schema=>{
+  const result=map(node,structural);
+  for(const key of ["minLength","maxLength","pattern","minItems"])delete result[key];
+  if(result.maxItems!==0)delete result.maxItems;
+  if(result.minimum===undefined||result.minimum!==result.maximum){delete result.minimum;delete result.maximum;}
+  return result;
+ };
+ return {...selected,schema:shareTypedDefinitions(structural(selected.schema))};
+}
 function mapEvidence(raw:unknown,transform:(evidence:unknown)=>unknown):unknown {
  if(Array.isArray(raw))return raw.map(value=>mapEvidence(value,transform));if(!object(raw))return raw;
  return Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,key==="evidence"?transform(value):mapEvidence(value,transform)]));
@@ -154,7 +169,7 @@ export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpret
 export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {
  if(!isContextTypedProtocolV3(selected))return {status:"REFUSED" as const,reason:"ENVELOPE_INVALID" as const};
  try {
-  const schema=googleLiteEuTypedContextWireSchemaV3(input).schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+  const schema=googleLiteEuTypedContextValidationSchemaV3(input).schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
   if(!object(raw))throw Error("TYPED_ENVELOPE_INVALID");
   let candidate:Record<string,unknown>={...raw,conversationDirective:null,replyProposal:null};
   let unsupported:ListPeriodProposal|undefined;

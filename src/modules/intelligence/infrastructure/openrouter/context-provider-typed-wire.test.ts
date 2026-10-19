@@ -2,12 +2,13 @@
 import {readListTransport} from "../../../conversation/context-contract/list-period-transport";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
+import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {z} from "zod";
 import {expect,it} from "vitest";
 import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_TYPED_PROTOCOL_V3} from "../../../conversation/context-contract/typed-protocol";
-import {googleLiteEuTypedContextWireSchemaV3,encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from "./context-provider-typed-wire";
+import {googleLiteEuTypedContextWireSchemaV3,googleLiteEuTypedContextValidationSchemaV3,encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from "./context-provider-typed-wire";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const minimal={schemaVersion:"calenote-context-3",intent:"HELP",requestTarget:null,changes:[],query:null,uncertainties:[],conversationDirective:{kind:"HELP",topic:"GENERAL"},replyProposal:null};
@@ -87,7 +88,7 @@ it("typed105 preserves selected year-null and cross-carrier rank restrictions",(
 
 it("typed105 factors identical uncertainty shells without widening field/value/reason correlations",()=>{
  const frozen=JSON.parse(readFileSync(new URL("./__fixtures__/typed105-r01-before.json",import.meta.url),"utf8"));
- const selected=ContextInputSchema.parse(frozen.input),before=z.fromJSONSchema(frozen.schema),schema=googleLiteEuTypedContextWireSchemaV3(selected).schema;
+ const selected=ContextInputSchema.parse(frozen.input),before=z.fromJSONSchema(frozen.schema),schema=googleLiteEuTypedContextValidationSchemaV3(selected).schema;
  const after=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
  const root=schema as unknown as {$defs:Record<string,Record<string,unknown>>;properties:Record<string,Record<string,unknown>>};
  const resolve=(v:Record<string,unknown>):Record<string,unknown>=>v.$ref?resolve(root.$defs[String(v.$ref).slice(8)]):v;
@@ -105,4 +106,33 @@ it("typed105 factors identical uncertainty shells without widening field/value/r
  }
  expect(accepted).toBeGreaterThan(10);expect(rejected).toBeGreaterThan(10);
  expect(JSON.stringify(schema).length).toBeLessThan(JSON.stringify(frozen.schema).length);
+});
+
+it("typed105 separates low-state generation constraints from strict input-bound acceptance",()=>{
+ const frozen=JSON.parse(readFileSync(new URL("./__fixtures__/typed105-r01-before.json",import.meta.url),"utf8"));
+ const selected=ContextInputSchema.parse(frozen.input),generation=googleLiteEuTypedContextWireSchemaV3(selected).schema,strict=googleLiteEuTypedContextValidationSchemaV3(selected).schema;
+ expect(createHash("sha256").update(JSON.stringify(strict)).digest("hex")).toBe("0363d0b00e38f19c6cedc652eb97a2906b0129af7fce38e1ccd620adb5081f14");
+ const json=JSON.stringify(generation);expect(json).not.toMatch(/"(?:maxLength|minLength|pattern|minItems)":/u);
+ const schemas=(node:unknown):void=>{if(!node||typeof node!=="object")return;if(Array.isArray(node)){node.forEach(schemas);return;}const raw=node as Record<string,unknown>;if(raw.maximum!==undefined||raw.minimum!==undefined)expect(raw.minimum).toBe(raw.maximum);if(raw.maxItems!==undefined)expect(raw.maxItems).toBe(0);Object.values(raw).forEach(schemas);};schemas(generation);
+ const broad=z.fromJSONSchema(generation as Parameters<typeof z.fromJSONSchema>[0]),strictValidator=z.fromJSONSchema(strict as Parameters<typeof z.fromJSONSchema>[0]);
+ const good=encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(selected,"R01",0)),selected) as Record<string,unknown>;
+ expect(broad.safeParse(good).success).toBe(true);expect(strictValidator.safeParse(good).success).toBe(true);
+ const evidenceRefs=[{kind:"USER_QUOTE",turn:0,quote:selected.turns[0].text,occurrence:1}];
+ const titled=encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:evidenceRefs},changes:[{field:"title",operation:"SET",value:"synthetic",evidence:evidenceRefs}]}),selected) as Record<string,unknown>;
+ expect(strictValidator.safeParse(titled).success).toBe(true);expect(broad.safeParse(titled).success).toBe(true);
+ const invalid=structuredClone(titled),carrier=invalid.titleChange as {rank:number;change:{value:unknown;evidence:{primaryEvidence:string;additionalEvidence:unknown[]}}};
+ carrier.change.value="x".repeat(2001);
+ expect(broad.safeParse(invalid).success).toBe(true);
+ // The historical wire already leaves title length to the canonical validator.
+ expect(strictValidator.safeParse(invalid).success).toBe(true);
+ expect(decodeGoogleLiteEuTypedContextTransportV3(invalid,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
+ const extra=structuredClone(titled),evidence=(extra.titleChange as typeof carrier).change.evidence;evidence.additionalEvidence=Array.from({length:3},()=>({kind:"USER_TURN",turn:0}));
+ expect(broad.safeParse(extra).success).toBe(true);expect(strictValidator.safeParse(extra).success).toBe(false);
+ expect(decodeGoogleLiteEuTypedContextTransportV3(extra,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
+ const dated=encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence:evidenceRefs},changes:[{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:1},evidence:evidenceRefs}]}),selected) as Record<string,unknown>;
+ expect(strictValidator.safeParse(dated).success).toBe(true);
+ ((dated.eventDateChange as {change:{value:{offsetDays:number}}}).change.value).offsetDays=367;
+ expect(broad.safeParse(dated).success).toBe(true);expect(strictValidator.safeParse(dated).success).toBe(false);
+ expect(decodeGoogleLiteEuTypedContextTransportV3(dated,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
+ expect(JSON.stringify(generation).length).toBeLessThan(JSON.stringify(strict).length);
 });
