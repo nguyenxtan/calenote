@@ -1,3 +1,6 @@
+import { createFollowThroughOperations } from './composition-root';
+import { handleFollowThroughHistory, handleListFollowThrough, handleFollowThroughAction, type FollowThroughOperations } from './routes/follow-through';
+import { FollowThroughError } from '@/contracts/api/follow-through';
 import { createEmailDiscoveryOperations, createAccountOperations } from "./composition-root";
 import { handleContinueEmail, type EmailDiscoveryOperations } from "./routes/auth-continue";
 import { handleGetProfile, handleUpdateProfile, handleGetSessions, handleRevokeOtherSessions, type AccountOperations } from "./routes/account";
@@ -86,6 +89,7 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+  followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
   emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
   accountOperations?: (env: Env) => Promise<AccountOperations>;
   seriesOperations?: (env: Env) => Promise<SeriesOperations>;
@@ -108,6 +112,7 @@ function requestBodyMessage(code: RequestBodyError["code"]): string {
 }
 
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
+  if (error instanceof FollowThroughError) return {code:error.code,message: error.code === "CONFLICT" ? "Việc đã thay đổi. Hãy tải lại trước khi thao tác." : error.code === "NOT_FOUND" ? "Không tìm thấy việc này." : error.code === "BLOCKED" ? "Kênh nhận nhắc hiện không sẵn sàng." : "Thao tác chưa hợp lệ.",status:error.code === "NOT_FOUND" ? 404 : error.code === "CONFLICT" ? 409 : error.code === "BLOCKED" ? 409 : 400};
   if (error instanceof ServiceUnavailableError) {
     return { code: "SERVICE_UNAVAILABLE", message: error.message, status: 503 };
   }
@@ -202,6 +207,7 @@ export function createRouter(options: RouterOptions = {}) {
   const seriesOperationsFactory = options.seriesOperations
     ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
   const emailDiscoveryOperationsFactory = options.emailDiscoveryOperations ?? createEmailDiscoveryOperations;
+  const followThroughOperationsFactory = options.followThroughOperations ?? createFollowThroughOperations;
   const accountOperationsFactory = options.accountOperations ?? createAccountOperations;
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
@@ -252,6 +258,9 @@ export function createRouter(options: RouterOptions = {}) {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
       if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
       if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through/history" && request.method === "GET") return await handleFollowThroughHistory(request, () => followThroughOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through" && request.method === "GET") return await handleListFollowThrough(request, () => followThroughOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through/actions" && request.method === "POST") return await handleFollowThroughAction(request, appOrigin!, () => followThroughOperationsFactory(env));
       if (pathname === "/api/account/profile" && request.method === "GET") return await handleGetProfile(request, () => accountOperationsFactory(env));
       if (pathname === "/api/account/profile" && request.method === "PATCH") return await handleUpdateProfile(request, appOrigin!, () => accountOperationsFactory(env));
       if (pathname === "/api/account/sessions" && request.method === "GET") return await handleGetSessions(request, () => accountOperationsFactory(env));
@@ -349,7 +358,7 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname.startsWith("/api/account/")
+      const authenticated = pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
         || pathname === "/api/session"
         || pathname === "/api/connections"

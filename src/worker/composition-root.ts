@@ -1,3 +1,6 @@
+import { createFollowThroughChatHandler } from '@/modules/follow-through/chat-adapter';
+import { D1FollowThroughService } from '@/modules/follow-through/service';
+import type { FollowThroughOperations } from './routes/follow-through';
 import { D1EmailDiscoveryStore, continueWithEmail } from "@/modules/auth/email-discovery";
 import type { EmailDiscoveryOperations } from "./routes/auth-continue";
 import { D1AccountService } from "@/modules/account/service";
@@ -456,6 +459,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
       connectionEgress: new D1ConnectionLifecycleStore(env.DB),
+      followThrough: createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring)),
       getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
       keyring,
       semantic,
@@ -478,6 +482,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
+    processFollowThrough: (now, limit) => new D1FollowThroughService(env.DB,keyring).processDue(now,limit),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, { store: loginStore, enqueue: (job) => env.JOBS.send(job) }),
@@ -510,5 +515,20 @@ export async function createAccountOperations(env: Env): Promise<AccountOperatio
     updateProfile: (userId, input) => account.updateProfile(userId, input),
     listSessions: principal => account.listSessions(principal),
     revokeOtherSessions: principal => account.revokeOtherSessions(principal),
+  };
+}
+
+export async function createFollowThroughOperations(env: Env): Promise<FollowThroughOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1SessionStore(env.DB);
+  const rateStore = new D1RateLimitStore(env.DB);
+  return {
+    requireUser: credentials => requireSession(credentials, {store,keyring}),
+    service: new D1FollowThroughService(env.DB,keyring),
+    consume: async userId => {
+      const subjectDigest=await keyring.digestCode(`follow-through:${userId}`);
+      const result=await consumeRateLimit({subjectDigest,scope:'follow-through-action',limit:60,windowMs:60_000},{store:rateStore});
+      if(!result.allowed) throw new RateLimitExceededError(Math.max(1,Math.ceil((result.resetAt-Date.now())/1000)));
+    },
   };
 }

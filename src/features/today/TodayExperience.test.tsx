@@ -24,6 +24,7 @@ describe("TodayExperience", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(scheduledAt - 10_000);
     let sent = false;
     const fetcher = vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
       return json({ data: { reminders: [{ ...reminder, scheduledAt, status: sent ? "SENT" : "PENDING" }] } });
@@ -47,6 +48,7 @@ describe("TodayExperience", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(midnight - 20_000);
     let sent = false;
     const fetcher = vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
       return json({ data: { reminders: [{ ...reminder, scheduledAt: midnight + 10_000, status: sent ? "SENT" : "PENDING" }] } });
@@ -71,6 +73,7 @@ describe("TodayExperience", () => {
     let resolveSession!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return new Promise<Response>((resolve) => { resolveSession = resolve; });
       if (path === "/api/reminders") return Promise.resolve(json({ data: { reminders: [reminder] } }));
       if (path === "/api/actions") return Promise.resolve(json({ data: { actions: [action] } }));
@@ -92,6 +95,7 @@ describe("TodayExperience", () => {
   it("keeps reminders visible when the Actions region fails locally", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [reminder] } });
       if (path === "/api/actions") return json({ error: { code: "INTERNAL_ERROR", message: "Không thể tải đề xuất." } }, 500);
@@ -107,6 +111,7 @@ describe("TodayExperience", () => {
   it("approves a proposal only through its existing decision endpoint", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [reminder] } });
       if (path === "/api/actions") return json({ data: { actions: [action] } });
@@ -129,6 +134,7 @@ describe("TodayExperience", () => {
   it.each([0, 404, 429])("retains an opaque intent through create loss, resolution error %s and remount", async (resolutionStatus) => {
     const ids: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, options?: RequestInit) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
       if (path === "/api/reminders/resolve-intent") { ids.push(JSON.parse(options?.body as string).intentId); if (ids.length === 2) { if (resolutionStatus) return json({ error: { code: "UNAVAILABLE", message: "Resolution unavailable" } }, resolutionStatus); throw new TypeError("lost resolution response"); } return json({ data: { state: "CREATED", publicId: reminder.publicId } }); }
@@ -166,6 +172,7 @@ describe("TodayExperience", () => {
   it("validates Quick Capture before it can create a reminder", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [] } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
@@ -188,6 +195,7 @@ describe("TodayExperience", () => {
   it("offers quick-start ideas without creating a reminder or inventing a time", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [] } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
@@ -206,6 +214,7 @@ describe("TodayExperience", () => {
   it("rejects a proposal only through its existing decision endpoint", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [] } });
       if (path === "/api/actions") return json({ data: { actions: [action] } });
@@ -226,6 +235,7 @@ describe("TodayExperience", () => {
   it("provides accessible desktop and mobile navigation", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminders") return json({ data: { reminders: [] } });
       if (path === "/api/actions") return json({ data: { actions: [] } });
@@ -242,6 +252,7 @@ describe("TodayExperience", () => {
 
 it('requires an explicit bot choice when two connected bots can receive a web reminder',async()=>{
  const fetcher=vi.fn(async(path:string|URL|Request,options?:RequestInit)=>{
+  if(path==='/api/v1/follow-through')return json({data:{items:[]}});
   if(path==='/api/session')return json({data:{user}});
   if(path==='/api/connections')return json({data:{connections:[{publicId:'AAAAAAAAAAAAAAAAAAAAAA',provider:'zalo',displayName:'Zalo fixture',handle:null,state:'ACTIVE_BOUND'},{publicId:'CCCCCCCCCCCCCCCCCCCCCA',provider:'telegram',displayName:'Telegram fixture',handle:null,state:'ACTIVE_BOUND'}]}});
   if(path==='/api/actions')return json({data:{actions:[]}});

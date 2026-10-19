@@ -29,6 +29,7 @@ export interface QueueOperations {
 }
 
 export interface ScheduledOperations {
+  processFollowThrough?(now: number, limit: number): Promise<unknown>;
   purgeConversationContexts?(now: number, limit: number): Promise<unknown>;
   claimDueReminders(now: number, limit: number): Promise<unknown>;
   redriveInboundOrphans(now: number, limit: number): Promise<unknown>;
@@ -141,7 +142,10 @@ export async function runScheduledWork(
   operations: ScheduledOperations,
 ): Promise<void> {
   await Promise.allSettled([
-    operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT),
+    (async () => {
+      if (operations.processFollowThrough) await operations.processFollowThrough(controller.scheduledTime, CRON_REMINDER_LIMIT);
+      return operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT);
+    })(),
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
     ...(operations.purgeConversationContexts ? [operations.purgeConversationContexts(controller.scheduledTime, 100)] : []),

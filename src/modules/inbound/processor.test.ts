@@ -659,3 +659,30 @@ it.each(['timeout','invalid-receipt','decrypt-failed'] as const)('retains uncert
  expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:outcome==='decrypt-failed'?0:1});
  expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(outcome==='decrypt-failed');
 });
+
+describe("follow-through before semantic turns", () => {
+  it.each(["telegram", "zalo"] as const)("uses the exact bound %s identity and durable inbound dedup", async provider => {
+    const h = await setup({ provider, state: "ACTIVE_BOUND", text: "xong ABCDEF01" });
+    h.database.sqlite.exec(readFileSync("migrations/0005_semantic_context_and_budget.sql", "utf8"));
+    h.database.sqlite.prepare("INSERT INTO chat_identities VALUES ('identity-1','connection-1','provider-user-1','chat-1','Sender',?)").run(now);
+    const handler = vi.fn<NonNullable<ProcessInboundDependencies["followThrough"]>>(async () => ({ handled: true as const, text: "Đã xong." }));
+    h.deps.followThrough = handler;
+    h.sendText.mockImplementation(async () => {
+      expect(h.database.sqlite.prepare("SELECT state FROM inbound_updates").get()).toEqual({ state: "PROCESSED" });
+      return { providerMessageId: "follow-through-reply" };
+    });
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "FOLLOW_THROUGH_HANDLED" });
+    expect(handler.mock.calls[0][1]).toMatchObject({ userId: "user-1", chatIdentityId: "identity-1", workspaceId: "workspace-1" });
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "TERMINAL" });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(h.sendText).toHaveBeenCalledTimes(1);
+    expect(h.database.sqlite.prepare("SELECT COUNT(*) AS n FROM command_drafts").get()).toEqual({ n: 0 });
+  });
+  it("never invokes the handler for an unmatched private identity", async () => {
+    const h = await setup({ state: "ACTIVE_BOUND", text: "xong ABCDEF01" });
+    const handler = vi.fn(async () => ({ handled: true as const, text: "must not run" }));
+    h.deps.followThrough = handler;
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "REJECTED" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+});

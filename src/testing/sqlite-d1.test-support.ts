@@ -32,7 +32,9 @@ class SqliteD1Statement {
     return this as unknown as D1PreparedStatement;
   }
 
-  async run<T>(): Promise<D1Result<T>> {
+  async run<T>(): Promise<D1Result<T>> { return this.runSync<T>(); }
+
+  runSync<T>(): D1Result<T> {
     const statement = this.database.prepare(this.sql);
     const returnsRows = /\bRETURNING\b/iu.test(this.sql);
     const results = returnsRows ? statement.all(...this.values) as T[] : [];
@@ -62,9 +64,12 @@ class SqliteD1Statement {
 }
 
 export class SqliteD1Database {
-  readonly sqlite = new DatabaseSync(":memory:");
+  readonly sqlite: SqliteDatabase;
 
-  constructor(options: { conversationV2?: boolean; contextContract?: boolean } = {}) {
+  constructor(options: { conversationV2?: boolean; contextContract?: boolean; filename?: string; skipInit?: boolean } = {}) {
+    this.sqlite = new DatabaseSync(options.filename ?? ":memory:");
+    this.sqlite.exec("PRAGMA busy_timeout=5000");
+    if(options.skipInit) return;
     this.sqlite.exec(
       readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"),
     );
@@ -101,7 +106,7 @@ export class SqliteD1Database {
     this.sqlite.exec("BEGIN IMMEDIATE");
     try {
       const results: D1Result<T>[] = [];
-      for (const statement of statements) results.push(await statement.run<T>());
+      for (const statement of statements) results.push((statement as unknown as SqliteD1Statement).runSync<T>());
       this.sqlite.exec("COMMIT");
       return results;
     } catch (error) {

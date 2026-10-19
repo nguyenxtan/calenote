@@ -1,3 +1,4 @@
+import type { FollowThroughChatHandler } from "@/modules/follow-through/chat-adapter";
 import type {
   BotProvider,
   ProviderRequester,
@@ -159,6 +160,7 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  followThrough?: FollowThroughChatHandler;
   getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
   connectionEgress?: { reserveEgress(connectionId:string,id:string,now:number):Promise<boolean>; finishEgress(id:string):Promise<void> };
   contextContract?: Omit<ContextContractServiceDependencies, "keyring" | "now" | "reply" | "processingFeedback" | "channel">;
@@ -239,6 +241,7 @@ export async function sendProviderProcessingFeedback(
 }
 
 export type ProcessInboundResult =
+  | { status: "FOLLOW_THROUGH_HANDLED" }
   | { status: "BOUND" }
   | { status: "REJECTED" }
   | { status: "SUPERSEDED" }
@@ -801,6 +804,17 @@ export async function processInbound(
   }
 
   if (message.connectionState === "ACTIVE_BOUND") {
+    if (dependencies.followThrough) {
+      const context = await dependencies.store.findBoundContext(message);
+      if (context) {
+        const handled = await dependencies.followThrough(message, context);
+        if (handled.handled) {
+          if (!await dependencies.store.completeSemanticMessage(message, context, now())) return { status: "SUPERSEDED" };
+          await replyAfterTerminal(message, handled.text, dependencies);
+          return { status: "FOLLOW_THROUGH_HANDLED" };
+        }
+      }
+    }
     // Common monotonic origin includes bound identity/claim preparation,
     // context, inference and persistence, not just the final transport call.
     const eligibleStarted = performance.now();
