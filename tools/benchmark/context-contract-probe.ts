@@ -1,3 +1,7 @@
+import { serializeTypedContextRequest } from "../../src/modules/conversation/context-contract/typed-wire";
+import { CONTEXT_TYPED_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/typed-protocol";
+import { encodeGoogleLiteEuTypedContextV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-typed-wire";
+import { ContextInputSchema, ConversationInterpretationV3Schema } from "../../src/modules/conversation/context-contract/contracts";
 import type {ContextGatewayInterpretation} from "../../src/modules/conversation/context-contract/list-period-transport";
 /** Isolated synthetic D1 probe through the production successor service and
  * gateway. The only substituted boundaries are the provider exchange and the
@@ -7,7 +11,7 @@ import { createKeyring } from "../../src/modules/security/keyring";
 import { D1ContextContractStore, createD1ContextContractStoreV3 } from "../../src/modules/conversation/context-contract/infrastructure/d1/store";
 import { createD1ContextRuntimeStoreV3 } from "../../src/modules/conversation/context-contract/runtime-store";
 import { createContextContractService } from "../../src/modules/conversation/context-contract/service";
-import { createContextContractGateway, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type ContextOfflineTransport, type ContextGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createTypedContextContractGateway, createContextContractGateway, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type ContextOfflineTransport, type ContextGatewayConfig } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { D1SemanticBudgetStore } from "../../src/modules/semantic/infrastructure/d1/budget-store";
 import { D1SemanticReminderQueryStore } from "../../src/modules/reminders/infrastructure/d1/semantic-query-store";
 import { D1ReminderApiStore } from "../../src/modules/reminders/infrastructure/d1/api-store";
@@ -35,7 +39,7 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
   completionPriceMicrounitsPerMillionTokens: 400000, reservationTtlMs: 300000 };
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
-export interface ProbeConfig { sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
+export interface ProbeConfig { wireProtocol?: "TYPED_105"; sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
   liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
@@ -65,7 +69,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     let lastSnapshot: ContextSnapshotV2 | null = null;
     const store = new D1ContextContractStore(db, keyring, () => now, CONTEXT_PROTOCOL_V3);
     const service = createContextContractService({ store: createD1ContextContractStoreV3({ db, keyring, clock: () => now, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db, keyring, protocol: CONTEXT_PROTOCOL_V3 }),
-      gateway: { prepare(tier, input) {
+      gateway: { ...(config.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), prepare(tier, input) {
         inputs.push(structuredClone(input));
         if (config.liveGateway && index > (config.offlineSeedTurns ?? 0)) {
           const prepared = config.liveGateway.prepare(tier, input), hold = delayed;
@@ -74,7 +78,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           return { ...prepared, dispatch: async () => { hold.signalStarted(); await hold.waiting; return prepared.dispatch(); } };
         }
         const proposed = fixture(input, index);
-        const wire = serializeContextRequest(input);
+        const wire = config.wireProtocol === "TYPED_105" ? serializeTypedContextRequest(input) : serializeContextRequest(input);
         const request = { model: gatewayConfig.primary!.model, ...wire, provider: {
           only: [gatewayConfig.primary!.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,
           max_price: { prompt: 0.1, completion: 0.4 },
@@ -83,10 +87,10 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
           ? proposed.fixtureFault === "TIMEOUT" ? { status: 408, body: "" }
             : proposed.fixtureFault === "INVALID_JSON" ? { status: 200, body: "not-json" }
               : { status: 200, body: JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }) }
-          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(encodeFixtureV3(proposed,input)) }, finish_reason: "stop" }] }) };
+          : { status: 200, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(config.wireProtocol === "TYPED_105" ? encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(proposed), ContextInputSchema.parse(input)) : encodeFixtureV3(proposed,input)) }, finish_reason: "stop" }] }) };
         const transport: ContextOfflineTransport = { kind: "OFFLINE_FIXTURE", exchanges: [{ requestJson: JSON.stringify(request),
           admission: { fullInputTokens: 12000, billableOverheadMicrounits: 0 }, response }] };
-        const offlinePrepared = createContextContractGateway(gatewayConfig, transport).prepare(tier, input);
+        const offlinePrepared = (config.wireProtocol === "TYPED_105" ? createTypedContextContractGateway({...gatewayConfig, protocol: CONTEXT_TYPED_PROTOCOL_V3}, transport) : createContextContractGateway(gatewayConfig, transport)).prepare(tier, input);
         // Same local reservation exposure as the later observable turn, while
         // the seed dispatch remains declarative OFFLINE_FIXTURE only.
         const prepared = config.liveGateway && offlinePrepared.status === "READY"
