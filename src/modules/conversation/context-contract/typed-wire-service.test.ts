@@ -40,3 +40,17 @@ it("typed105 enforces local title bounds before mutation even when generation pe
  expect(await h.f.db.prepare("SELECT count(*) as n FROM reminders").first("n")).toBe(0);
  expect(h.events.some(e=>e.event==="RESPONSE_RECEIVED"&&e.outcome==="FAILURE"&&e.reason==="SCHEMA_INVALID")).toBe(true);
 });
+
+it("typed105 rejects factored generation field/value mismatches before any mutation",async()=>{
+ const base=proposal({title:"đi thi",eventDate:date(11,10,null),location:"Quang Trung"});
+ const h=await typedHarness([input=>{
+  const value=base(input) as {requestTarget:{evidence:unknown}};
+  return {...value,uncertainties:[{field:"leadOffsetDays",reason:"AMBIGUOUS",alternatives:[{value:2,evidence:value.requestTarget.evidence}]}]};
+ }],wire=>{
+  const value=structuredClone(wire) as {uncertainties:Array<{alternatives:Array<{value:unknown}>}>};value.uncertainties[0].alternatives[0].value="invalid-number";return value;
+ });
+ await h.turn(0,"Ngày 11/10 đi thi ở Quang Trung.");
+ expect((await h.read(1))?.slots.title.value??null).toBeNull();
+ expect(await h.f.db.prepare("SELECT count(*) as n FROM reminders").first("n")).toBe(0);
+ expect(h.events.some(e=>e.event==="RESPONSE_RECEIVED"&&e.outcome==="FAILURE"&&e.reason==="SCHEMA_INVALID")).toBe(true);
+});

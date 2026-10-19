@@ -120,6 +120,36 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const enums=(node:Schema):Schema=>{const result=map(node,enums);delete result.$schema;if(typeof result.const==="string"){result.enum=[result.const];delete result.const;}return result;};
  return {version:CONTEXT_TYPED_PROTOCOL_V3.wireVersion,schema:shareTypedDefinitions(enums(schema))};
 }
+/** Factor generation-only unions by exact object/array shell. Correlations
+ * between sibling values are deliberately left to the unchanged strict gate.
+ * Different key sets remain distinct typed objects; no padding or JSON strings. */
+function factorGenerationUnions(root:Schema):Schema {
+ const inline=(node:Schema,depth=0):Schema=>{
+  if(depth>64)throw Error("TYPED_SCHEMA_DEPTH");
+  const resolved=resolve(node,root),body={...resolved};delete body.$defs;
+  return map(body,child=>inline(child,depth+1));
+ };
+ const union=(raw:Schema[]):Schema=>{
+  const branches=[...new Map(raw.flatMap(node=>Object.keys(node).length===1&&node.anyOf?node.anyOf:[node]).map(node=>[JSON.stringify(node),node])).values()];
+  const groups=new Map<string,Schema[]>();
+  for(const node of branches){
+   const shell=node.type==="object"&&node.properties?{...node,properties:undefined,keys:Object.keys(node.properties).sort()}:node.type==="array"&&node.items?{...node,items:undefined}:node.type==="string"&&Object.keys(node).every(key=>key==="type"||key==="enum")?{type:"string"}:node;
+   const key=JSON.stringify(shell),prior=groups.get(key);if(prior)prior.push(node);else groups.set(key,[node]);
+  }
+  const factored=[...groups.values()].map(nodes=>{
+   const first=nodes[0];if(nodes.length===1)return first;
+   if(first.type==="object"&&first.properties)return {...first,properties:Object.fromEntries(Object.keys(first.properties).map(key=>[key,union(nodes.map(node=>node.properties![key]))]))};
+   if(first.type==="array"&&first.items)return {...first,items:union(nodes.map(node=>node.items!))};
+   if(first.type==="string")return nodes.some(node=>!node.enum)?{type:"string" as const}:{type:"string" as const,enum:[...new Set(nodes.flatMap(node=>node.enum!))]};
+   throw Error("TYPED_GENERATION_UNION_SHAPE");
+  });
+  return factored.length===1?factored[0]:{anyOf:factored};
+ };
+ // Generation is a superset. Inclusive unions avoid exclusive-branch overlap
+ // after widening children; the strict local schema retains original oneOf.
+ const factor=(node:Schema):Schema=>{const result=map(node,factor),branches=result.anyOf??result.oneOf;return branches&&Object.keys(result).length===1?union(branches):result;};
+ return factor(inline(root));
+}
 /** Provider generation is a typed structural superset, not the acceptance gate.
  * Variable scalar/length bounds multiply Google's grammar states. Keep exact
  * discriminators, input-selected types/enums and empty-only arrays on the wire;
@@ -133,7 +163,7 @@ export function googleLiteEuTypedContextWireSchemaV3(input:ContextInput) {
   if(result.minimum===undefined||result.minimum!==result.maximum){delete result.minimum;delete result.maximum;}
   return result;
  };
- return {...selected,schema:shareTypedDefinitions(structural(selected.schema))};
+ return {...selected,schema:shareTypedDefinitions(factorGenerationUnions(structural(selected.schema)))};
 }
 function mapEvidence(raw:unknown,transform:(evidence:unknown)=>unknown):unknown {
  if(Array.isArray(raw))return raw.map(value=>mapEvidence(value,transform));if(!object(raw))return raw;

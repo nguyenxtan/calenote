@@ -136,3 +136,19 @@ it("typed105 separates low-state generation constraints from strict input-bound 
  expect(decodeGoogleLiteEuTypedContextTransportV3(dated,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,selected).status).toBe("REFUSED");
  expect(JSON.stringify(generation).length).toBeLessThan(JSON.stringify(strict).length);
 });
+
+it("typed105 factors object/array union shells without weakening strict field-value correlation",()=>{
+ const generation=googleLiteEuTypedContextWireSchemaV3(input).schema as unknown as {$defs:Record<string,Record<string,unknown>>;properties:Record<string,Record<string,unknown>>};
+ const resolve=(node:Record<string,unknown>):Record<string,unknown>=>node.$ref?resolve(generation.$defs[String(node.$ref).slice(8)]):node;
+ const items=resolve(resolve(generation.properties.uncertainties).items as Record<string,unknown>);
+ expect(items.type).toBe("object");expect(items.anyOf).toBeUndefined();
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,uncertainties:[{field:"leadOffsetDays",reason:"AMBIGUOUS",alternatives:[{value:2,evidence}]}]});
+ const wire=encodeGoogleLiteEuTypedContextV3(canonical,input) as {uncertainties:Array<{alternatives:Array<{value:unknown}>}>};
+ const validator=z.fromJSONSchema(generation as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(validator.safeParse(wire).success).toBe(true);
+ wire.uncertainties[0].alternatives[0].value="text-for-a-numeric-field";
+ expect(validator.safeParse(wire).success).toBe(true);
+ expect(decodeGoogleLiteEuTypedContextTransportV3(wire,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
+ const structural=(node:unknown):void=>{if(!node||typeof node!=="object")return;if(Array.isArray(node)){node.forEach(structural);return;}const value=node as Record<string,unknown>;expect(value.oneOf).toBeUndefined();if(value.type==="object"){expect(value.additionalProperties).toBe(false);expect(new Set(value.required as string[])).toEqual(new Set(Object.keys(value.properties as object)));}Object.values(value).forEach(structural);};structural(generation);
+});
