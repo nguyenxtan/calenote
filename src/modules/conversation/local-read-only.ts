@@ -43,6 +43,7 @@ export function localReadOnlyCommand(text: string): LocalReadOnlyCommand | null 
   }
 
   const helpForms = [
+    '(?:format|cu phap)(?: (?:nhu (?:the )?nao|la gi))?',
     '(?:cu phap|cach dung(?: bot)?) (?:nhu (?:the )?nao|la gi)',
     '(?:huong dan(?: su dung| dung(?: bot)?)?|tro giup|/help|help)',
     '(?:lam sao|lam the nao) de (?:tao loi nhac|nhac lich)',
