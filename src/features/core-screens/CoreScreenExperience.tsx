@@ -1,5 +1,7 @@
 "use client";
 
+import { useSessionLoader } from "@/ui/shell/SessionNavigation";
+
 import { useAppearancePreferences } from "@/lib/use-appearance-preferences";
 import { FollowThroughPanel } from "@/features/follow-through/FollowThroughPanel";
 import { AppLoading } from "@/ui/loading/AppLoading";
@@ -11,7 +13,7 @@ import type { ReminderDetailsResponseV2 } from "@/contracts/api/reminders-v2";
 import type { PublicPreviewV1 } from "@/contracts/api/conversation-previews";
 import { ContextPreviewPanel } from "./ContextPreviewPanel";
 import { type PublicReminder } from "@/contracts/api/reminders";
-import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
+import { type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest, decideConversationPreview, loadConversationPreviews, loadDetailedReminders } from "@/lib/client-api";
 import { loadReminderList } from "@/lib/reminder-list";
 import { AppShell } from "@/ui/shell/AppShell";
@@ -33,6 +35,7 @@ function Empty({ title, text }: { title: string; text: string }) { return <div c
 function Loading() { return <div className={styles.loading} aria-label="Đang tải"><span /><span /><span /></div>; }
 
 export function CoreScreenExperience({ screen, contextContractEnabled = false }: { screen: CoreScreen; contextContractEnabled?: boolean }) {
+  const loadSession = useSessionLoader();
   const { replace } = useRouter(); const epoch = useRef(0);
   const reminderRequest = useRef(0);
   const actionRequest = useRef(0);
@@ -64,7 +67,7 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
   }, [contextContractEnabled, redirect]);
   const loadPreviews = useCallback(async (current: number) => { const request = ++previewRequest.current; setPreviews((old) => ({ ...old, error: null })); try { const data = await loadConversationPreviews({ onUnauthorized: redirect }); if (epoch.current === current && request === previewRequest.current) setPreviews({ value: { previews: data.previews, hasMore: data.hasMore }, error: null }); } catch (error) { if (epoch.current === current && request === previewRequest.current) setPreviews((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải bản xem trước." })); } }, [redirect]);
   const loadActions = useCallback(async (current: number) => { const request = ++actionRequest.current; setActions((old) => ({ ...old, error: null })); try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: redirect }); const value = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current && request === actionRequest.current) setActions({ value, error: null }); } catch (error) { if (epoch.current === current && request === actionRequest.current) setActions((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); } }, [redirect]);
-  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: redirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); return () => { epoch.current += 1; }; }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen]);
+  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const next = await loadSession(redirect); if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); return () => { epoch.current += 1; }; }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen, loadSession]);
   useEffect(() => {
     if (!user) return;
     let refreshing = false;

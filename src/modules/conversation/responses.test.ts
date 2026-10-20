@@ -27,3 +27,15 @@ it("keeps greeting, abandonment and failure honest", () => {
     expect(text).not.toMatch(/đã tạo|đã xoá lời nhắc|đã xóa lời nhắc/iu);
   }
 });
+it.each([
+  { addressStyle: 'sep' as const, customDisplayName: null, expected: 'sếp' },
+  { addressStyle: 'custom' as const, customDisplayName: 'Chị Tuyền', expected: 'Chị Tuyền' },
+  { addressStyle: 'ong_tui' as const, customDisplayName: null, expected: 'ông' },
+])('uses saved address in greeting and clarification: $addressStyle', preferences => {
+  const input = { previousQuestion:null, tone:'friendly' as const, lunarAvailable:true, preferences };
+  const greeting = composeConversationReply({ ...input, decision:{kind:'GREET'} });
+  const question = composeConversationReply({ ...input, decision:{kind:'CLARIFY',request,field:'time'} });
+  expect(greeting).toContain(preferences.expected);
+  expect(question.toLocaleLowerCase('vi-VN')).toContain(preferences.expected.toLocaleLowerCase('vi-VN'));
+  expect(question).not.toMatch(/Bạn muốn/u);
+});

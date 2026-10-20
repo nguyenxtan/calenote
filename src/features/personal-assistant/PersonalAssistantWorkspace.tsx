@@ -1,11 +1,13 @@
 "use client";
 
+import { useSessionLoader } from "@/ui/shell/SessionNavigation";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { PersonalAssistantDocumentSchema, PersonalAssistantEnvelopeSchema, type PersonalAssistantDocument, type PersonalAssistantEnvelope, type PersonalLifeEvent } from "@/contracts/api/personal-assistant";
-import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
+import { type SessionUser } from "@/contracts/api/session";
 import { ApiResponseError, apiRequest } from "@/lib/client-api";
 import { planLifeEvents } from "@/modules/personal-assistant/calendar";
 import { AppShell } from "@/ui/shell/AppShell";
@@ -16,14 +18,15 @@ const BriefSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), o
 
 const dateTime = (time: number) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "medium", timeStyle: "short" }).format(time);
 export function PersonalAssistantWorkspace() {
+  const loadSession = useSessionLoader();
   const { replace } = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loadError, setLoadError] = useState(false);
   const load = useCallback(async () => {
     setLoadError(false);
-    try { setUser(SessionResponseSchema.parse({ data: await apiRequest("/api/session", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.user); }
+    try { setUser(await loadSession(() => replace("/login"))); }
     catch { setLoadError(true); }
-  }, [replace]);
+  }, [replace, loadSession]);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
   if (!user) return <main className={styles.page}>{loadError ? <><p role="alert">Chưa thể xác nhận phiên đăng nhập.</p><button onClick={() => void load()}>Thử lại</button></> : <p role="status">Đang mở không gian cá nhân…</p>}</main>;
   return <AppShell user={user} activePath="/app/personal"><PersonalAssistantPanel onUnauthorized={() => replace("/login")} /></AppShell>;

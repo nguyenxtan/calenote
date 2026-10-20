@@ -1,5 +1,7 @@
 "use client";
 
+import { useSessionLoader } from "@/ui/shell/SessionNavigation";
+
 import { AppLoading } from "@/ui/loading/AppLoading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, Link2, RefreshCw, Clock3 } from "lucide-react";
@@ -9,7 +11,7 @@ import { ConnectionsResponseSchema, type PublicConnection } from "@/contracts/ap
 import { ActivityResponseSchema, type PublicActivity } from "@/contracts/api/activity";
 import { PreferencesResponseSchema, type PublicPreferences } from "@/contracts/api/preferences";
 import { ProfileResponseSchema, SessionsResponseSchema, RevokeSessionsResponseSchema, type PublicSession } from "@/contracts/api/account";
-import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
+import { type SessionUser } from "@/contracts/api/session";
 import { ApiResponseError, apiRequest } from "@/lib/client-api";
 import { AppShell } from "@/ui/shell/AppShell";
 import { PrimaryLoginPanel } from "./PrimaryLoginPanel";
@@ -25,6 +27,7 @@ function status(state: PublicConnection["state"]): string { if (state === "ACTIV
 function safeMutationMessage(error: unknown, fallback: string): string { return error instanceof ApiResponseError ? error.message : fallback; }
 
 export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
+  const loadSession = useSessionLoader();
   const { replace } = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [error, setError] = useState(false);
@@ -45,7 +48,7 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
   const load = useCallback(async () => {
     setError(false);
     try {
-      const session = SessionResponseSchema.parse({ data: await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.user;
+      const session = await loadSession(() => replace("/login"));
       setUser(session);
       if (screen === "connections") setConnections(ConnectionsResponseSchema.parse({ data: await apiRequest<unknown>("/api/connections", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.connections);
       if (screen === "activity") setActivities(ActivityResponseSchema.parse({ data: await apiRequest<unknown>("/api/activity", { authenticated: true, onUnauthorized: () => replace("/login") }) }).data.activities);
@@ -60,7 +63,7 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
         setSessions(SessionsResponseSchema.parse({data:activeSessions}).data.sessions);
       }
     } catch { setError(true); }
-  }, [replace, screen]);
+  }, [replace, screen, loadSession]);
   useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
 
   async function save(patch: PublicPreferences): Promise<boolean> {

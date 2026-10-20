@@ -1,3 +1,5 @@
+import { getUserPreferences } from "@/modules/preferences/service";
+import { D1UserPreferencesStore } from "@/modules/db/preferences-store";
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { migrationStatements } from "@/testing/sqlite-d1.test-support";
@@ -38,7 +40,7 @@ async function harness(reminderConfirmation: "auto" | "preview" = "preview") {
   const replies: string[] = [];
   let currentModel = create(); let index = 0; let time = NOW;
   const dispatch = vi.fn(async () => ({ status: "SUCCESS" as const, interpretation: currentModel, usage: { costMicrounits: 1 } }));
-  const service = createConversationService({ getReminderConfirmation: async () => reminderConfirmation, contextStore: h.store, seriesStore, commandStore, runtimeStore,
+  const service = createConversationService({ getReplyPreferences: ownerId => getUserPreferences(ownerId,new D1UserPreferencesStore(h.db)), getReminderConfirmation: async () => reminderConfirmation, contextStore: h.store, seriesStore, commandStore, runtimeStore,
     calendar: lunarCalendar, keyring: h.keyring, now: () => time, reply: async text => { replies.push(text); },
     list: input => new D1SemanticReminderQueryStore(h.db).list(input),
     budgetStore: new D1SemanticBudgetStore(h.db, { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 500000,
@@ -467,4 +469,16 @@ describe("guarded conversation V2 integration", () => {
     expect(await h.db.prepare("SELECT count(*) n FROM reminder_series_proposals").first("n")).toBe(0);
     expect(await h.count()).toBe(0);
   });
+});
+
+it("reads changed address on the next turn without rewriting owner titles", async () => {
+ const h=await harness();
+ await h.db.prepare("INSERT INTO user_preferences(user_id,address_style,tone,updated_at) VALUES('one','sep','friendly',1)").run();
+ expect((await h.send("chào")).reply).toContain("sếp");
+ await h.db.prepare("UPDATE user_preferences SET address_style='custom',custom_display_name='Chị Tuyền' WHERE user_id='one'").run();
+ expect((await h.send("chào")).reply).toContain("Chị Tuyền");
+ const title="Bạn muốn mình gọi Mình Bạn";
+ const result=await h.send("mai 8h nhắc "+title,create({title}));
+ expect(result.reply).toContain(title);
+ expect(h.dispatch).toHaveBeenCalledTimes(1);
 });

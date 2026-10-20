@@ -1,3 +1,4 @@
+import type { UserPreferences } from "@/modules/preferences/service";
 import type { MissingField } from "./contracts";
 import type { ConversationDecision } from "./reconcile";
 
@@ -15,7 +16,7 @@ const questions: Record<MissingField, string> = {
 const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 /** Wording is a stable projection of a decision; never another model call. */
-export function composeConversationReply(input: {
+function composeBaseReply(input: {
   decision: ConversationDecision; previousQuestion: MissingField | null;
   tone: "friendly" | "concise"; lunarAvailable: boolean;
 }): string {
@@ -42,4 +43,22 @@ export function composeConversationReply(input: {
       return prefix + questions[decision.field];
     }
   }
+}
+
+export type ReplyPreferences = Pick<UserPreferences, "addressStyle" | "customDisplayName"> & Partial<Pick<UserPreferences, "tone">>;
+/** Only application-owned prose. Never run replacement over titles, lists or previews. */
+export function addressConversationText(text: string, preferences?: ReplyPreferences): string {
+  if (!preferences || preferences.addressStyle === "ban") return text;
+  const custom = preferences.customDisplayName?.replace(/[\r\n\t]/gu, " ").trim().slice(0,80);
+  const address = ({ban:"bạn",anh_chi:"anh/chị",ong_tui:"ông",minh:"mình",sep:"sếp",custom:custom || "bạn"})[preferences.addressStyle];
+  const self = preferences.addressStyle === "ong_tui" ? "tui" : preferences.addressStyle === "minh" ? "tớ" : "mình";
+  return text.replace(/(^|[^\p{L}\p{N}_])(bạn|Bạn|mình|Mình)(?=$|[^\p{L}\p{N}_])/gu, (_match, prefix:string, word:string) => {
+    const replacement = word.toLowerCase() === "bạn" ? address : self;
+    const capitalized = word[0] === word[0].toUpperCase() && preferences.addressStyle !== "custom"
+      ? replacement[0].toLocaleUpperCase("vi-VN") + replacement.slice(1) : replacement;
+    return prefix + capitalized;
+  });
+}
+export function composeConversationReply(input: Parameters<typeof composeBaseReply>[0] & { preferences?: ReplyPreferences }): string {
+  return addressConversationText(composeBaseReply(input), input.preferences);
 }

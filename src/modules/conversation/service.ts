@@ -17,7 +17,7 @@ import type { ConversationStore } from "./context-store";
 import type { ConversationRuntimeStore } from "./infrastructure/d1/runtime-store";
 import type { LunarCalendarAdapter } from "./lunar-calendar";
 import { evaluateConversationTurn } from "./turn";
-import { composeConversationReply } from "./responses";
+import { addressConversationText, type ReplyPreferences, composeConversationReply } from "./responses";
 import { observeTiming, type ConversationTiming } from "./processing-feedback";
 
 export interface ConversationServiceDependencies {
@@ -33,6 +33,7 @@ export interface ConversationServiceDependencies {
   observeTiming?: (value: ConversationTiming) => void;
   observeFailure?: ConversationFailureObserver;
   tone?: "friendly" | "concise";
+  getReplyPreferences?(ownerId: string): Promise<ReplyPreferences>;
   getTone?(ownerId: string): Promise<"friendly" | "concise">;
 }
 const confirm = new Set(["có", "ok", "1", "xác nhận"]);
@@ -43,7 +44,7 @@ const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 export function createConversationService(deps: ConversationServiceDependencies) {
   async function reply(text: string) { try { await deps.reply(text); } catch { /* Never retry an uncertain outbound. */ } }
-  async function finish(scope: ConversationScope, text: string, status: ProcessBoundChatResult["status"] = "REJECTED", failure?: ConversationFailureDetails): Promise<ProcessBoundChatResult> {
+  async function terminalFinish(scope: ConversationScope, text: string, status: ProcessBoundChatResult["status"] = "REJECTED", failure?: ConversationFailureDetails): Promise<ProcessBoundChatResult> {
     if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
     if (failure) observeConversationFailure(deps.observeFailure, scope.sourceInboundId, failure);
     await reply(text); return { status };
@@ -97,6 +98,11 @@ export function createConversationService(deps: ConversationServiceDependencies)
     async handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult> {
       const scope: ConversationScope = { ownerId: context.userId, chatIdentityId: context.chatIdentityId,
         sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() };
+      let preferences: ReplyPreferences | undefined;
+      try { preferences = await deps.getReplyPreferences?.(scope.ownerId); } catch { /* Wording never changes authority or retries a send. */ }
+      const finish: typeof terminalFinish = (scope, text, status = "REJECTED", failure) => terminalFinish(scope,
+        status === "REMINDERS_LISTED" || status === "DRAFT_CREATED" ? text : addressConversationText(text, preferences), status, failure);
+      const sendProse = (text: string) => reply(addressConversationText(text, preferences));
       const normalized = message.text.normalize("NFC").trim().toLocaleLowerCase("vi-VN");
       let stage: ConversationFailureStage = "PRECONDITION";
       try {
@@ -133,12 +139,12 @@ export function createConversationService(deps: ConversationServiceDependencies)
           if (pending.action === "CANCEL") {
             const result = await deps.seriesStore.cancelRemaining(scope, pending.proposalId, pending.revision);
             if (result !== "CANCELLED") return finish(scope, "Đề xuất hủy không còn hiệu lực; chưa thay đổi chuỗi nhắc.");
-            await reply("Đã hủy các lần nhắc tương lai chưa được gửi xử lý. Lần đang gửi hoặc chưa rõ kết quả không thể thu hồi.");
+            await sendProse("Đã hủy các lần nhắc tương lai chưa được gửi xử lý. Lần đang gửi hoặc chưa rõ kết quả không thể thu hồi.");
             return { status: "CANCELLED" };
           }
           const result = await deps.seriesStore.confirm(scope, pending.proposalId, pending.revision);
           if (result.status !== "CONFIRMED") return finish(scope, "Đề xuất không còn hiệu lực. Bạn gửi lại yêu cầu để xem lịch mới nhé.");
-          await reply("Đã xác nhận chuỗi lời nhắc đúng lịch bạn vừa duyệt."); return { status: "CONFIRMED" };
+          await sendProse("Đã xác nhận chuỗi lời nhắc đúng lịch bạn vừa duyệt."); return { status: "CONFIRMED" };
         }
         if (cancel.has(normalized)) {
           stage = "CANCEL";
@@ -147,7 +153,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           return finish(scope, "Mình đã bỏ yêu cầu đang chờ. Lời nhắc đã xác nhận không thay đổi.", "CANCELLED");
         }
         let tone = deps.tone ?? "friendly";
-        try { tone = await deps.getTone?.(scope.ownerId) ?? tone; } catch { /* Personalization is best-effort, not authority. */ }
+        try { tone = preferences?.tone ? (preferences.tone === "concise" || preferences.tone === "professional" ? "concise" : "friendly") : await deps.getTone?.(scope.ownerId) ?? tone; } catch { /* Personalization is best-effort, not authority. */ }
         const wording = (decision: Parameters<typeof composeConversationReply>[0]["decision"]) => composeConversationReply({ decision,
           previousQuestion: previous?.request.missing[0] ?? null, tone, lunarAvailable: true });
         if (greeting.test(normalized)) return finish(scope, wording({ kind: "GREET" }));
@@ -223,7 +229,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           if (auto) {
             const result = await deps.seriesStore.confirm(scope, proposed.proposalId, proposed.revision, true);
             if (result.status !== "CONFIRMED") return finish(scope, unavailable);
-            await reply(`Đã tạo chuỗi lời nhắc.\n${preview}`); return { status: "CONFIRMED" };
+            await reply(addressConversationText("Đã tạo chuỗi lời nhắc.", preferences) + `\n${preview}`); return { status: "CONFIRMED" };
           }
           return finish(scope, preview, "DRAFT_CREATED");
         }
@@ -240,7 +246,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           draftId, encryptedTitle, titleKeyVersion: 1, scheduledAt, timezone: "Asia/Ho_Chi_Minh", expiresAt: next.expiresAt,
           encryptedCalendarFacts, enforceConversationOrder: true, conversationFence: { id: next.id, revision: next.revision } });
         if (mutation !== "COMMITTED") return { status: "SUPERSEDED" };
-        await reply(auto ? `Đã tạo lời nhắc.\n${preview}` : preview); return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
+        await reply(auto ? addressConversationText("Đã tạo lời nhắc.", preferences) + `\n${preview}` : preview); return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
       } catch {
         // Do not fall through to V1 after a partially handled V2 request, and
         // never forward exception text containing provider/context material.

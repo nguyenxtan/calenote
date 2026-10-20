@@ -160,7 +160,13 @@ export async function apiRequest<T>(
     throw new ApiNetworkError();
   }
 
-  if (response.status === 401 && options.authenticated) options.onUnauthorized?.();
+  if (response.status === 401 && options.authenticated) {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("calenote-session-changed"));
+    options.onUnauthorized?.();
+  }
+  if (response.ok && method !== "GET" && ["/api/auth/logout", "/api/account/profile"].includes(path) && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("calenote-session-changed"));
+  }
   let payload: Record<string, unknown>;
   try {
     payload = await readBoundedJson(response);

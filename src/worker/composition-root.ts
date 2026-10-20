@@ -480,6 +480,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
         runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
         getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
+        getReplyPreferences: async (ownerId: string) => getUserPreferences(ownerId, new D1UserPreferencesStore(env.DB)),
         getTone: async (ownerId: string) => {
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;

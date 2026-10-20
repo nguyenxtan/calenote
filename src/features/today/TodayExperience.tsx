@@ -1,5 +1,7 @@
 "use client";
 
+import { useSessionLoader } from "@/ui/shell/SessionNavigation";
+
 import { FollowThroughPanel } from "@/features/follow-through/FollowThroughPanel";
 import { AppLoading } from "@/ui/loading/AppLoading";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +13,7 @@ import { AppShell } from "@/ui/shell/AppShell";
 import { ActionDecisionResponseSchema, ActionsResponseSchema, type PublicPendingAction } from "@/contracts/api/actions";
 import { CreateReminderResponseSchema, ResolveReminderIntentResponseSchema, type PublicReminder } from "@/contracts/api/reminders";
 import { ConnectionsResponseSchema, type PublicConnection } from "@/contracts/api/connections";
-import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
+import { type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
 import { projectReminders } from "./projection";
 import styles from "./TodayExperience.module.css";
@@ -42,6 +44,7 @@ function status(status: PublicReminder["status"]): string { return ({ PENDING: "
 function isAbort(error: unknown): boolean { return error instanceof Error && error.name === "AbortError"; }
 
 export function TodayExperience() {
+  const loadSession = useSessionLoader();
   const { replace } = useRouter();
   const [sessionState, setSessionState] = useState<SessionState>("checking");
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -94,9 +97,9 @@ export function TodayExperience() {
 
   const start = useCallback(async () => {
     const current = epoch.current + 1; epoch.current = current; setSessionState("checking"); setConnectionChoices(null); setConnectionPublicId(""); setUser(null); setReminders(EMPTY_REMINDERS); setActions(EMPTY_ACTIONS);
-    try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: clearAndRedirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); setSessionState("ready"); void loadReminders(current); void loadActions(current); }
+    try { const next = await loadSession(clearAndRedirect); if (epoch.current !== current) return; setUser(next); setSessionState("ready"); void loadReminders(current); void loadActions(current); }
     catch (error) { if (!isAbort(error) && epoch.current === current) { setSessionState("error"); setSessionError("Chưa thể xác thực phiên. Vui lòng thử lại."); } }
-  }, [clearAndRedirect, loadActions, loadReminders]);
+  }, [clearAndRedirect, loadActions, loadReminders, loadSession]);
   useEffect(() => { void start(); return () => { epoch.current += 1; }; }, [start]);
   useEffect(() => {
     if (sessionState !== "ready") return;
