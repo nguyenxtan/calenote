@@ -12,3 +12,5 @@
 .page button:focus-visible, .page a:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 4px; }
 .updated { font-size: 12px; }
 @media(max-width:600px) { .page { padding: 24px 16px; } .page section { padding: 18px 12px; } .page h1 { font-size: 25px; } }
+
+.navigation { display: flex; flex-wrap: wrap; gap: 8px 24px; border-bottom: 1px solid var(--cn-border); margin-top: 20px; padding-bottom: 8px; font-size: 14px; }

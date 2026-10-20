@@ -1,0 +1,30 @@
+.history { scroll-margin-top: 24px; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.heading .eyebrow { margin: 0 0 6px; color: var(--cn-brand-700); font-size: 12px; font-weight: 650; letter-spacing: .04em; }
+.heading h2 { margin: 0; scroll-margin-top: 64px; }
+.count { color: var(--cn-text-2); font-size: 12px; padding: 7px 10px; border: 1px solid var(--cn-border); border-radius: 999px; }
+.history .intro { margin: 16px 0 24px; }
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.card { border: 1px solid var(--cn-border); border-radius: 14px; overflow: hidden; }
+.card[open] { border-color: var(--cn-brand-600); }
+.summary { display: block; padding: 22px; cursor: pointer; position: relative; list-style: none; min-height: 44px; }
+.summary::-webkit-details-marker { display: none; }
+.summary:focus-visible, .commitLink:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: -4px; border-radius: 12px; }
+.meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; color: var(--cn-text-2); font-size: 12px; }
+.tag { background: #fff1e8; color: var(--cn-brand-700); border-radius: 6px; padding: 4px 8px; font-weight: 600; }
+.summary h3 { margin: 13px 0 8px; font-size: 18px; line-height: 1.5; color: var(--cn-text); }
+.summary p { margin: 0 0 16px; }
+.version { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-right: 90px; font-size: 12px; color: var(--cn-text-2); }
+.version code { background: var(--cn-bg); border: 1px solid var(--cn-border); border-radius: 5px; padding: 3px 6px; color: var(--cn-text); }
+.expand { position: absolute; right: 22px; bottom: 24px; color: var(--cn-brand-700); font-size: 12px; font-weight: 600; display: flex; gap: 8px; }
+.card[open] .expand > span { transform: rotate(180deg); }
+.body { border-top: 1px solid var(--cn-border); padding: 22px; }
+.body h4 { margin: 0 0 10px; font-size: 14px; }
+.body ul { margin: 0 0 20px; padding-left: 20px; }
+.body li { color: var(--cn-text-2); font-size: 14px; line-height: 1.8; margin: 8px 0; overflow-wrap: anywhere; }
+.verification { background: var(--cn-bg); border-radius: 10px; padding: 16px; }
+.verification p { margin: 0; }
+.body .caveat { margin: 16px 0 0; }
+.body .commitLink { gap: 8px; font-size: 13px; margin-top: 12px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 600px) { .summary, .body { padding: 16px; } .summary h3 { font-size: 17px; } .expand { right: 16px; bottom: 19px; } .verification { padding: 12px; } }
