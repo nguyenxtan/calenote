@@ -35,6 +35,8 @@ it('keeps small prompt unambiguous and publishes the complete immutable field co
  const {UNCERTAINTY_FIELD_WIRE_CODE_V1}=await import('./context-provider-wire');
  expect(CONTEXT_SMALL_PROMPT).toContain(JSON.stringify(UNCERTAINTY_FIELD_WIRE_CODE_V1));
  for(const phrase of ['Core roots:','Ten singleton roots required','extras use {','entries {field,operation,value,evidence}','Absent carriers:null'])expect(CONTEXT_SMALL_PROMPT).not.toContain(phrase);
+ expect(CONTEXT_SMALL_PROMPT).not.toContain('WEEK,MONTH,WEEKEND(offset');expect(CONTEXT_SMALL_PROMPT).not.toContain('period=null');
+ for(const phrase of ['MONTH_CURRENT','MONTH_PREVIOUS','MONTH_NEXT','There is NO offset field'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
  for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','Omission=KEEP'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
 });
 
@@ -58,7 +60,7 @@ it('rejects malformed dates/period references and ranks but quarantines optional
  expect(decode(list).status).toBe('PARSED');
  for(const index of [-1,.5,999]){const altered=structuredClone(list);altered.query[0].period[0].date=index;expect(decode(altered).status).toBe('REFUSED');}
  const inactive=structuredClone(list);inactive.query[0].period[0].offset=1;expect(decode(inactive).status).toBe('REFUSED');
- const unsupported=structuredClone(list);unsupported.query[0].period[0].kind='UNSUPPORTED_PERIOD';expect(decode(unsupported).status).toBe('PARSED');
+ const unsupported=structuredClone(list);unsupported.query[0].period[0].kind='UNSUPPORTED';unsupported.query[0].period[0].unsupportedKind='UNSUPPORTED_PERIOD';expect(decode(unsupported).status).toBe('PARSED');
 });
 
 it('reports exact finite small-table refusal controls without retaining authored content',()=>{
@@ -190,7 +192,7 @@ it('owns queryRange alternative periods and refuses mixed or wrong-owner alterna
  const canonical=ConversationInterpretationV3Schema.parse({...proposal,uncertainties:[{field:'queryRange',reason:'AMBIGUOUS',alternatives:[{value:{kind:'MONTH',offset:0},evidence},{value:{kind:'WEEK',offset:1},evidence}]}]});
  const wire=encodeSmallContextV3(canonical,input);
  expect(wire.periods).toEqual([]);
- expect(wire.uncertainties[0].alternatives[0]).toMatchObject({value:null,text:null,date:[],period:[{kind:'MONTH',offset:0}]});
+ expect(wire.uncertainties[0].alternatives[0]).toMatchObject({value:null,text:null,date:[],period:[{kind:'MONTH_CURRENT'}]});
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
  for(const patch of [{period:[]},{value:0},{text:'MONTH'},{period:[...wire.uncertainties[0].alternatives[0].period,...wire.uncertainties[0].alternatives[0].period]}]){const invalid=structuredClone(wire);Object.assign(invalid.uncertainties[0].alternatives[0],patch);expect(decode(invalid).status).toBe('REFUSED');}
  const mixedDate=structuredClone(wire);mixedDate.uncertainties[0].alternatives[0].date=[{kind:'RELATIVE_DAY',calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:0,weekday:null,qualifier:null}];expect(decode(mixedDate).status).toBe('REFUSED');
@@ -210,11 +212,35 @@ it('projects nested typed query failures without retaining authored query conten
   expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE_QUERY_SENTINEL');
  }
 });
-it('reports nested period offset constraints instead of collapsing them to query',()=>{
+it('rejects legacy authored offsets at generation instead of passing them to typed query validation',()=>{
  const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
  const wire=encodeSmallContextV3(canonical,input);wire.query[0].period[0].offset=2;
  const diagnostics:Array<{issues:Array<{path:Array<string|number>}>}>=[];
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
- expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')==='query.period.offset'))).toBe(true);
+ expect(z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(false);
+ expect(diagnostics).toHaveLength(1);
+});
+
+it('encodes all nine relative periods as typed finite controls without nullable offsets',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ for(const kind of ['WEEK','MONTH','WEEKEND'])for(const [offset,label] of [[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']] as const){
+  const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind,offset},evidence},uncertainties:[{field:'queryRange',reason:'AMBIGUOUS',alternatives:[{value:{kind,offset},evidence}]}]});
+  const wire=encodeSmallContextV3(canonical,input);
+  expect(wire.query[0].period[0].kind).toBe(`${kind}_${label}`);
+  expect(wire.query[0].period[0]).not.toHaveProperty('offset');
+  expect(wire.uncertainties[0].alternatives[0].period[0].kind).toBe(`${kind}_${label}`);
+  expect(generation.safeParse(wire).success).toBe(true);
+  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
+  for(const invalid of [{kind,offset:null},{offset:null},{kind:`${kind}_OTHER`},{unsupportedKind:'MONTH'}]){const bad=structuredClone(wire);Object.assign(bad.query[0].period[0],invalid);expect(generation.safeParse(bad).success&&decode(bad).status==='PARSED').toBe(false);expect(decode(bad).status).toBe('REFUSED');}
+ }
+});
+it('preserves explicit unsupported periods without permitting recognized-kind null-offset bypasses',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
+ const wire=encodeSmallContextV3(canonical,input);
+ for(const unsupportedKind of [null,'MONTH','WEEK','WEEKEND','DAY','UNSUPPORTED',...['WEEK','MONTH','WEEKEND'].flatMap(kind=>['PREVIOUS','CURRENT','NEXT'].map(label=>`${kind}_${label}`))]){const bad=structuredClone(wire);Object.assign(bad.query[0].period[0],{kind:'UNSUPPORTED',unsupportedKind});expect(decode(bad).status).toBe('REFUSED');}
+ const unknown=structuredClone(wire);Object.assign(unknown.query[0].period[0],{kind:'UNSUPPORTED',unsupportedKind:'UNSUPPORTED_PERIOD'});expect(decode(unknown).status).toBe('PARSED');
+ const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:CONTEXT_SMALL_PROTOCOL_V3.promptVersion.replace('values-5','values-4'),wireVersion:CONTEXT_SMALL_PROTOCOL_V3.wireVersion.replace('values-5','values-4')};expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
 });

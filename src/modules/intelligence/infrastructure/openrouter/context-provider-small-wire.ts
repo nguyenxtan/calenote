@@ -16,6 +16,10 @@ const arr=(items:unknown)=>({type:'array',items});
 const dateKeys=['kind','calendar','day','month','year','leapMonth','offsetDays','weekday','qualifier'] as const;
 const dateFields:Record<string,readonly string[]>={CIVIL_DATE:['kind','calendar','day','month','year','leapMonth'],RELATIVE_DAY:['kind','offsetDays'],WEEKDAY:['kind','weekday','qualifier']};
 const periodFields:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['kind','offset'],MONTH:['kind','offset'],WEEKEND:['kind','offset'],REST_OF_MONTH:['kind'],NEXT_7_DAYS:['kind'],UPCOMING:['kind'],DATE_BOUNDS:['kind','from','through']};
+// A finite transport control carries both relative kind and offset. No default
+// or repair of model-authored offsets is possible at the canonical boundary.
+const relativePeriods:Record<string,{kind:string;offset:number}>=Object.fromEntries(['WEEK','MONTH','WEEKEND'].flatMap(kind=>[[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']].map(([offset,label])=>[`${kind}_${label}`,{kind,offset:Number(offset)}])));
+const periodCodes=['DAY',...Object.keys(relativePeriods),'REST_OF_MONTH','NEXT_7_DAYS','UPCOMING','DATE_BOUNDS','UNSUPPORTED'];
 const fieldNames=Object.keys(UNCERTAINTY_FIELD_WIRE_CODE_V1);
 function uncertaintyField(code:number):string {const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,value])=>value===code);if(!entry)throw Error('SMALL_FIELD_CODE_INVALID');return entry[0];}
 type Family='texts'|'integers'|'dates'|'clocks'|'periods';
@@ -34,7 +38,7 @@ export function smallContextSchemaV3(input:ContextInput){
  const evidence=arr({type:'string',enum:[...codes]});
  const date=obj({kind:{type:'string',enum:Object.keys(dateFields)},calendar:nullableString,day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:nullableString});
  const dateCell={...arr(date),maxItems:1};
- const period=obj({kind:str,date:dateCell,offset:{type:['number','null']},from:dateCell,through:dateCell});
+ const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
  const periodCell={...arr(period),maxItems:1};
  const schema=obj({operationCode:{type:'string',enum:Array.from({length:12},(_,i)=>String(i))},targetEvidence:evidence,
   changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
@@ -64,7 +68,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  const out:SmallContextWire={operationCode:raw.operationCode as string,targetEvidence:[],changes:[],query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
  const store=(name:Family,value:unknown):number=>{const rows=out[name] as unknown[];const old=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(value));if(old>=0)return old;rows.push(value);return rows.length-1;};
  const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...Object.fromEntries(dateKeys.map(key=>[key,null])),...value}];};
- const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{kind:value.kind,date:date(value.date),offset:value.offset??null,from:date(value.from),through:date(value.through)}];};
+ const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');return store(type,value);};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
  if(record(raw.requestTarget))out.targetEvidence=evidence(raw.requestTarget.evidence);
@@ -87,7 +91,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  const at=(name:Family,index:unknown):unknown=>{requireValue(typeof index==='number'&&Number.isSafeInteger(index)&&index>=0&&index<parsed[name].length,'TABLE_REFERENCE_INVALID',name);used[name].add(index);return parsed[name][index];};
  const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))requireValue(item===null,'INACTIVE_VALUE_NON_NULL');return Object.fromEntries(keys.map(key=>[key,value[key]]));};
  const date=(rows:Row[]):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','dates');if(!rows.length)return null;const row=rows[0],keys=dateFields[String(row.kind)];requireValue(keys);return active(row,keys);};
- const period=(rows:Row[],padded:boolean):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','periods');if(!rows.length)return null;const row=rows[0];const value:Row={...row,date:date(row.date as Row[]),from:date(row.from as Row[]),through:date(row.through as Row[])};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
+ const period=(rows:Row[],padded:boolean):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','periods');if(!rows.length)return null;const row=rows[0],relative=Object.hasOwn(relativePeriods,String(row.kind))?relativePeriods[String(row.kind)]:undefined;const unsupported=row.kind==='UNSUPPORTED';requireValue(unsupported?typeof row.unsupportedKind==='string'&&!Object.hasOwn(periodFields,row.unsupportedKind)&&!periodCodes.includes(row.unsupportedKind):row.unsupportedKind===null,'INACTIVE_VALUE_NON_NULL');const value:Row={kind:unsupported?row.unsupportedKind:relative?.kind??row.kind,date:date(row.date as Row[]),offset:relative?.offset??null,from:date(row.from as Row[]),through:date(row.through as Row[])};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
  const value=(field:string,index:unknown):unknown=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');return at(type,index);};
  const authoredValue=(field:string,row:{value:number|null;text:string|null;date:Row[];period?:Row[]}):unknown=>{
   if(family(field)==='periods'){requireValue(row.value===null&&row.text===null&&row.date.length===0&&row.period?.length===1,'CHANGE_VALUE_INVALID');return period(row.period,false);}
