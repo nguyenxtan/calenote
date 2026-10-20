@@ -205,7 +205,7 @@ function predicate(raw: Schema, value: unknown, root: Schema): boolean {
   if (node.type === "object") return !!value && typeof value === "object" && !Array.isArray(value) && node.required!.every(key => Object.hasOwn(value, key)) && Object.keys(value).every(key => Object.hasOwn(node.properties!, key)) && Object.entries(value).every(([key, child]) => predicate(node.properties![key], child, root));
   return true;
 }
-class WireShapeFailure extends Error {
+export class WireShapeFailure extends Error {
   constructor(readonly path: PropertyKey[], readonly expected: string, readonly extraKeyCount?: number,
     readonly cardinality?: { actualCount: number; minItems?: number; maxItems?: number },
     readonly control?: ReturnType<typeof projectControlEnum>, readonly dateOperand?:DateOperandDiagnostic,readonly catalogue?:CatalogueDiagnostic,

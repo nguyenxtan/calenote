@@ -35,7 +35,7 @@ export function projectCatalogueDiagnostic(raw:unknown):CatalogueDiagnostic|unde
  }catch{return;}
 }
 
-const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
+const keys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal field fieldCode operation value evidence primaryEvidence additionalEvidence additionalEvidenceJson kind calendar day month year leapMonth offsetDays weekday qualifier hour minute turn quote occurrence ref period statusScope date outputCalendar topic offset from through reason alternatives issue queryKind text".split(" "));
 const rootKeys = new Set("schemaVersion operationCode intent requestTarget dialogueAct continuation changes query uncertainties controlEvidence conversationDirective replyProposal".split(" "));
 for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange","index","rank","change"])keys.add(key);
 for(const key of ["changeOrder","titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])rootKeys.add(key);
@@ -54,6 +54,7 @@ export interface SmallTableDiagnostic {
   table?:"texts"|"integers"|"dates"|"clocks"|"periods";
 }
 export interface CanonicalValidationIssue {
+  typedDecoder?:{stage:"SCHEMA"|"PERIOD"|"INDEXED_CHANGES"|"EVIDENCE"|"UNCERTAINTIES"|"CANONICAL_CODEC"|"INTERPRETATION";reason:"WIRE_SHAPE_INVALID"|"EVIDENCE_POINTER_INVALID"|"INTERNAL_FAILURE"};
   smallTables?:SmallTableDiagnostic;
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;

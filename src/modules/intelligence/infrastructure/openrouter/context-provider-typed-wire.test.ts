@@ -152,3 +152,35 @@ it("typed105 keeps field-value correlation in both generation and strict accepta
  expect(decodeGoogleLiteEuTypedContextTransportV3(wire,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input).status).toBe("REFUSED");
  const structural=(node:unknown):void=>{if(!node||typeof node!=="object")return;if(Array.isArray(node)){node.forEach(structural);return;}const value=node as Record<string,unknown>;expect(value.oneOf).toBeUndefined();if(value.type==="object"){expect(value.additionalProperties).toBe(false);expect(new Set(value.required as string[])).toEqual(new Set(Object.keys(value.properties as object)));}Object.values(value).forEach(structural);};structural(generation);
 });
+
+it("preserves nonempty bounded diagnostics for post-schema typed decoder failures",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const base=ConversationInterpretationV3Schema.parse({...minimal,intent:"LIST_REMINDERS",query:{kind:"LIST",period:{kind:"MONTH",offset:0},statusScope:"DEFAULT",evidence}});
+ const raw=encodeGoogleLiteEuTypedContextV3(base,input) as Record<string,unknown>;
+ const query=raw.query as Record<string,unknown>;
+ (query.evidence as Record<string,unknown>).additionalEvidence=[{kind:"USER_SEGMENT",turn:0,segment:999}];
+ // Structurally valid pointers still require request-bound source validation.
+ expect(z.fromJSONSchema(googleLiteEuTypedContextValidationSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(raw).success).toBe(true);
+ const diagnostics:unknown[]=[];
+ expect(decodeGoogleLiteEuTypedContextTransportV3(raw,CONTEXT_TYPED_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe("REFUSED");
+ expect(diagnostics).toHaveLength(1);
+ expect(diagnostics[0]).toMatchObject({issues:[{path:["query","evidence","additionalEvidence",0],typedDecoder:{stage:"EVIDENCE",reason:"EVIDENCE_POINTER_INVALID"}}]});
+});
+
+it("retains rank failure diagnostics and never exposes exception text or repairs input",()=>{
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:"synthetic",occurrence:1}];
+ const value=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},changes:[{field:"title",operation:"SET",value:"private sentinel",evidence},{field:"eventDate",operation:"SET",value:{kind:"RELATIVE_DAY",offsetDays:1},evidence}]});
+ const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Record<string,unknown>;
+ (raw.eventDateChange as {rank:number}).rank=(raw.titleChange as {rank:number}).rank;
+ const before=JSON.stringify(raw),diagnostics:unknown[]=[];
+ expect(decodeGoogleLiteEuTypedContextTransportV3(raw,CONTEXT_TYPED_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe("REFUSED");
+ expect(diagnostics[0]).toMatchObject({issues:[{expected:"CHANGE_RANK",typedDecoder:{stage:"INDEXED_CHANGES",reason:"WIRE_SHAPE_INVALID"}}]});
+ expect(JSON.stringify(diagnostics)).not.toContain("private sentinel");expect(JSON.stringify(raw)).toBe(before);
+ expect(decodeGoogleLiteEuTypedContextTransportV3(raw,CONTEXT_TYPED_PROTOCOL_V3,undefined,()=>{throw Error("private observer sentinel");},input).status).toBe("REFUSED");
+});
+it("unexpected typed decoder failures emit one finite fallback issue",()=>{
+ const diagnostics:unknown[]=[];
+ expect(decodeGoogleLiteEuTypedContextTransportV3(null,CONTEXT_TYPED_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe("REFUSED");
+ expect(diagnostics[0]).toMatchObject({issues:[{typedDecoder:{stage:"SCHEMA",reason:"INTERNAL_FAILURE"}}]});
+ expect((diagnostics[0] as {issues:unknown[]}).issues).toHaveLength(1);
+});

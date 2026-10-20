@@ -2,12 +2,13 @@ import {z} from "zod";
 import {ContextInputSchema,ConversationInterpretationV3Schema,DateOperandSchema,QueryPeriodSchema,IntentSchema,SlotValueSchemas,parseInterpretationSectionsV3,type ContextInput,type ConversationInterpretationV3} from "../../../conversation/context-contract/contracts";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_TYPED_PROTOCOL_V3,isContextTypedProtocolV3} from "../../../conversation/context-contract/typed-protocol";
-import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
-import {primaryEvidenceSourceCodebook,materializeTypedEvidencePointer,evidenceSourceCatalogue} from "./evidence-pointer";
+import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V1,WireShapeFailure} from "./context-provider-wire";
+import {primaryEvidenceSourceCodebook,materializeTypedEvidencePointer,evidenceSourceCatalogue,EvidencePointerFailure} from "./evidence-pointer";
 import {projectCanonicalValidation,projectWireValidation} from "../../../conversation/context-contract/validation-diagnostics";
 import {CONTROL_PLACEHOLDER} from "../../../conversation/context-contract/projection";
 import {issueListTransport,type ListPeriodProposal,type DecodedListCore} from "../../../conversation/context-contract/list-period-transport";
 type Schema={ [key:string]:unknown; type?:"object"|"array"|"string"|"number"|"boolean"|"null"|"integer"; $ref?:string; properties?:Record<string,Schema>; required?:string[]; $defs?:Record<string,Schema>; anyOf?:Schema[]; oneOf?:Schema[]; items?:Schema; enum?:Array<string|number|boolean|null>;const?:string|number|boolean|null;minimum?:number;maximum?:number };
+type DecoderStage=NonNullable<import("../../../conversation/context-contract/validation-diagnostics").CanonicalValidationIssue["typedDecoder"]>["stage"];
 type Observer=Parameters<typeof parseInterpretationSectionsV3>[1];
 const jsonSchema=(schema:z.ZodType)=>z.toJSONSchema(schema,{unrepresentable:"any",io:"input"}) as Schema;
 const object=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==="object"&&!Array.isArray(value);
@@ -185,9 +186,9 @@ export function googleLiteEuTypedContextWireSchemaV3(input:ContextInput) {
  };
  return {...selected,schema:shareTypedDefinitions(factorGenerationUnions(structural(selected.schema)))};
 }
-function mapEvidence(raw:unknown,transform:(evidence:unknown)=>unknown):unknown {
- if(Array.isArray(raw))return raw.map(value=>mapEvidence(value,transform));if(!object(raw))return raw;
- return Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,key==="evidence"?transform(value):mapEvidence(value,transform)]));
+function mapEvidence(raw:unknown,transform:(evidence:unknown,path:Array<string|number>)=>unknown,path:Array<string|number>=[]):unknown {
+ if(Array.isArray(raw))return raw.map((value,index)=>mapEvidence(value,transform,[...path,index]));if(!object(raw))return raw;
+ return Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,key==="evidence"?transform(value,[...path,key]):mapEvidence(value,transform,[...path,key])]));
 }
 /** Offline authoring helper; never repairs or selects evidence for a provider. */
 export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {
@@ -218,11 +219,13 @@ export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpret
 }
 export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {
  if(!isContextTypedProtocolV3(selected))return {status:"REFUSED" as const,reason:"ENVELOPE_INVALID" as const};
+ let stage:DecoderStage="SCHEMA";
  try {
   const schema=googleLiteEuTypedContextValidationSchemaV3(input).schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
   if(!object(raw))throw Error("TYPED_ENVELOPE_INVALID");
   let candidate:Record<string,unknown>={...raw,conversationDirective:null,replyProposal:null};
   let unsupported:ListPeriodProposal|undefined;
+  stage="PERIOD";
   if(raw.operationCode==="3"&&object(raw.query)&&object(raw.query.period)){
    const period=raw.query.period,known=["DAY","DATE_BOUNDS","WEEK","WEEKEND","MONTH","REST_OF_MONTH","NEXT_7_DAYS","UPCOMING"];
    if(!known.includes(String(period.kind))){
@@ -232,12 +235,18 @@ export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:u
     candidate={...candidate,query:{...raw.query,period:null}};
    }
   }
+  stage="SCHEMA";
   const checked=validator.safeParse(candidate);
   if(!checked.success){observeWireInvalid?.(projectCanonicalValidation(raw,checked.error.issues,"calenote-context-3"));return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};}
+  stage="INDEXED_CHANGES";
   const unfolded=core.indexedChanges(checked.data as Record<string,unknown>,"decode",deriveGenerationFieldCapability(input).titlePresenceRequired),book=primaryEvidenceSourceCodebook(input);
-  const evidenced=mapEvidence(unfolded,raw=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,["evidence",index],input));}) as Record<string,unknown>;
+  stage="EVIDENCE";
+  const evidenced=mapEvidence(unfolded,(raw,path)=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,index===0?[...path,"primaryEvidence"]:[...path,"additionalEvidence",index-1],input));}) as Record<string,unknown>;
+  stage="UNCERTAINTIES";
   evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
+  stage="CANONICAL_CODEC";
   const decoded=core.canonicalCodec(core.operationValues(evidenced,"decode"),"decode") as Record<string,unknown>;
+  stage="INTERPRETATION";
   for(const key of ["conversationDirective","replyProposal"]){try{decoded[key]=core.canonicalField(key,raw[key]);}catch{decoded[key]=key==="conversationDirective"?{kind:"INVALID_PROVIDER_WIRE"}:raw[key];}}
   decoded.schemaVersion=selected.canonicalVersion;
   if(object(decoded.query)&&decoded.query.kind==="LIST")decoded.query={...decoded.query,statusScope:"DEFAULT"};
@@ -246,5 +255,21 @@ export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:u
    return {status:"PARSED" as const,value:issueListTransport({core:{...canonicalCore,query} as DecodedListCore,period:unsupported??(period===null?{status:"ABSENT"}:{status:"KNOWN",value:period as z.infer<typeof QueryPeriodSchema>}),guidance:{conversationDirective,replyProposal}})};
   }
   return parseInterpretationSectionsV3(decoded,observeInvalid);
- }catch {try{observeWireInvalid?.(projectCanonicalValidation(raw,[],"calenote-context-3"));}catch{/* Observers cannot alter refusal. */}return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};}
+ }catch(error) {
+  try {
+  // Preserve trusted structural failures; never retain exception messages or
+  // authored payloads. Even an unexpected failure has one bounded issue.
+  const diagnostic=error instanceof WireShapeFailure
+   ?projectWireValidation(raw,error.path,error.expected,error.extraKeyCount,"calenote-context-3",error.cardinality,error.control)
+   :error instanceof EvidencePointerFailure
+    ?projectWireValidation(raw,error.path,"EVIDENCE_SOURCE_POINTER",undefined,"calenote-context-3")
+    :projectWireValidation(raw,[],"object",undefined,"calenote-context-3");
+  if(!(error instanceof WireShapeFailure)&&!(error instanceof EvidencePointerFailure))delete diagnostic.issues[0].expected;
+  diagnostic.issues[0].typedDecoder={stage,reason:error instanceof WireShapeFailure?"WIRE_SHAPE_INVALID":error instanceof EvidencePointerFailure?"EVIDENCE_POINTER_INVALID":"INTERNAL_FAILURE"};
+  if(error instanceof EvidencePointerFailure)diagnostic.issues[0].evidencePointer=error.diagnostic;
+  if(error instanceof WireShapeFailure&&error.dateOperand)diagnostic.issues[0].dateOperand=error.dateOperand;
+  observeWireInvalid?.(diagnostic);
+  }catch{/* Diagnostic projection and observers cannot alter refusal. */}
+  return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};
+ }
 }
