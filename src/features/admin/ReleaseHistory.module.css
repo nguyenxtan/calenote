@@ -4,6 +4,8 @@
 .heading h2 { margin: 0; scroll-margin-top: 64px; }
 .count { color: var(--cn-text-2); font-size: 12px; padding: 7px 10px; border: 1px solid var(--cn-border); border-radius: 999px; }
 .history .intro { margin: 16px 0 24px; }
+.runtime { margin: 0 0 20px; padding: 16px; border: 1px solid var(--cn-border); border-radius: 10px; background: var(--cn-bg); overflow-wrap: anywhere; }
+.runtime p { margin: 8px 0 0; font-size: 13px; color: var(--cn-text-2); }
 .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
 .card { border: 1px solid var(--cn-border); border-radius: 14px; overflow: hidden; }
 .card[open] { border-color: var(--cn-brand-600); }

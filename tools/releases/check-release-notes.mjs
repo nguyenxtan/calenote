@@ -12,7 +12,10 @@ export function validateCatalog(catalog){
   for(const field of ['title','summary','verification'])requireValue(typeof note[field]==='string'&&note[field].trim().length>0,`Missing ${field}`);
   for(const field of ['changes','memberChanges'])requireValue(Array.isArray(note[field])&&note[field].length>0&&note[field].every(value=>typeof value==='string'&&value.trim().length>0),`Missing ${field}`);
   requireValue(['Sửa lỗi','Tính năng'].includes(note.kind),'Invalid release kind');
-  if(index===0)requireValue(note.commit===null&&note.releasedAt===null,'Current bundle must not invent its own commit or live verification timestamp');
+  if(index===0){
+   requireValue(note.commit===null&&note.releasedAt===null,'Current bundle must not invent its own commit or live verification timestamp');
+   requireValue(!/(?:chưa|đã)\s+(?:phát hành|triển khai|release|deploy)|đang\s+(?:kiểm tra|kiểm thử|test)/iu.test(note.verification),'Current verification must describe test scope, not transient runtime status');
+  }
   else requireValue(/^[a-f0-9]{40}$/.test(note.commit)&&Number.isFinite(Date.parse(note.releasedAt)),'Historical release needs a commit and timestamp');
  });
  const history=catalog.notes.slice(1);

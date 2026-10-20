@@ -1,10 +1,29 @@
 {
-  "latestId": "2026-10-20-all-bot-addressing",
+  "latestId": "2026-10-20-release-runtime-status",
   "notes": [
     {
-      "id": "2026-10-20-all-bot-addressing",
+      "id": "2026-10-20-release-runtime-status",
       "commit": null,
       "releasedAt": null,
+      "title": "Trạng thái cập nhật theo phiên bản đang chạy",
+      "summary": "Quản trị đọc mã phiên bản từ máy chủ đang trả lời, tách biệt với ghi chú kiểm thử.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Bỏ ghi chú trạng thái phát hành đóng cứng trong mục cập nhật mới.",
+        "Đọc định danh phiên bản từ metadata Worker; thay đổi theo lần phát hành hoặc quay về bản cũ, không cần sửa ghi chú thủ công.",
+        "Thiếu metadata, môi trường thử nghiệm hoặc mất kết nối được ghi rõ; không suy ra production từ CI, ngày upload hoặc cache.",
+        "Giữ API cũ cho chuông member; quản trị yêu cầu thêm metadata. Bổ sung gate ngăn ghi chú trạng thái tạm thời quay lại."
+      ],
+      "memberChanges": [
+        "Thông tin cập nhật hiển thị nhất quán hơn; mục quản trị nhận đúng phiên bản đang chạy."
+      ],
+      "verification": "Phạm vi kiểm thử: API xác thực, metadata thiếu/sai, local/preview, đổi phiên bản và rollback, làm mới thất bại, tương thích chuông member, desktop/mobile và bàn phím. Kết quả live của mỗi lần phát hành được ghi riêng trong báo cáo triển khai.",
+      "caveat": "Mã Worker thuộc yêu cầu hiện tại, không chứng minh 100% lưu lượng hay mọi tính năng đã kiểm thử live. Thời điểm tạo phiên bản không được dùng làm thời điểm phát hành."
+    },
+    {
+      "id": "2026-10-20-all-bot-addressing",
+      "commit": "78334ca3bb6703164cffa1e42b408c321687d959",
+      "releasedAt": "2026-10-20T16:39:35+07:00",
       "title": "Cách xưng hô đồng bộ trong tin nhắc và phản hồi bot",
       "summary": "Dùng cách gọi đã lưu cho tin nhắc, mã đăng nhập và các nhóm phản hồi bot còn lại.",
       "kind": "Sửa lỗi",
@@ -20,7 +39,7 @@
         "Đổi cách xưng hô sẽ áp dụng khi bot gửi tin tiếp theo, kể cả lời nhắc đã tạo trước đó.",
         "Nội dung bạn nhập và mã xác nhận được giữ nguyên; tin gần giới hạn độ dài ưu tiên hiển thị đủ nội dung."
       ],
-      "verification": "Đang kiểm tra tự động bằng dữ liệu và kênh gửi mẫu. Chưa phát hành bản này hoặc kiểm thử gửi production.",
+      "verification": "Đối chiếu Worker 100%, 133 tài nguyên và schema giữ nguyên. Live Zalo: tin nhắc tự động, trợ giúp, trí nhớ, danh sách việc và hoàn tất gọi đúng Sếp; một nhắc thử đã hoàn tất. Quản trị và chuông member có mục mới. Không phát sinh dispatch AI. Telegram và OTP mới chỉ có bằng chứng kiểm thử local.",
       "caveat": "Không bật thêm Pilot AI hay thay đổi kênh gửi. Phản hồi chưa xác minh danh tính vẫn trung tính; nội dung dữ liệu/model trong bản xem trước được giữ nguyên sau lời gọi mở đầu."
     },
     {

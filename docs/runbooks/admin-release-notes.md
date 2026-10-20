@@ -1,12 +1,12 @@
 # Admin release notes
 
-The admin overview renders ReleaseHistory only after the existing admin overview request succeeds. Loading,401,403 and failed requests do not render the history. This adds no permission, backend endpoint, binding, database or deployment operation.
+The admin overview renders ReleaseHistory only after the existing admin overview request succeeds. Loading,401,403 and failed requests do not render the history. No admin permission is added. The shared catalogue, opt-in runtime endpoint and read-only metadata binding are documented in [release notifications](release-notifications.md).
 
-The catalogue in `src/features/admin/release-notes.ts` contains editorial, non-confidential release information. It ships in static web assets; hiding the admin UI does not make its text secret. Never include customer records, identities, credentials, provider payloads, private evidence paths or internal incident secrets.
+The catalogue in `src/modules/releases/catalog.json` contains editorial, non-confidential release information. Authenticated runtime API supplies the notes; hiding the admin UI does not make their text secret. Never include customer records, identities, credentials, provider payloads, private evidence paths or internal incident secrets.
 
 ## Adding a release
 
-After a release has an authoritative production readback, add its full immutable commit, actual promotion time with timezone, short title, user-visible changes and narrowly scoped live verification. Retain material limitations and corrections to earlier notes. Newest verified promotion first; never mark an unshipped candidate as released, infer live success from CI, or call the latest catalogue item the currently active Worker. This is historical editorial content, not a live deployment lookup.
+Archive a release only after authoritative production readback, with its full immutable commit, actual promotion time with timezone, user-visible changes and narrowly scoped live verification. Retain material limitations and corrections. The first entry describes this bundle, without a self-referential commit or invented promotion timestamp; its separate runtime status shows the responding version. Historical notes remain editorial evidence. Neither current runtime identity nor CI proves all features have passed live tests.
 
 The catalogue is reviewed with application code and reaches the UI on a subsequent authorized web release. A deployment is not automatically followed by a catalogue commit or another production deploy. Pending candidates and unselected concepts are excluded. User approval for a specific release remains required by AGENTS.md.
 

@@ -9,6 +9,12 @@ export const ReleaseNoteSchema = z.object({
 }).strict();
 export const ReleaseCatalogSchema=z.object({latestId:z.string().min(1).max(100),notes:z.array(ReleaseNoteSchema).min(1).max(100)}).strict()
  .refine(value=>value.notes[0].id===value.latestId&&new Set(value.notes.map(note=>note.id)).size===value.notes.length,"Invalid release ordering");
-export const ProductUpdatesSchema=z.object({readerId:z.string().min(1).max(128),catalog:ReleaseCatalogSchema}).strict();
+export const ServingReleaseSchema=z.discriminatedUnion('status',[
+ z.object({status:z.literal('SERVING'),versionId:z.string().uuid(),tag:z.string().regex(/^[a-f0-9]{40}$/u).nullable()}).strict(),
+ z.object({status:z.literal('NON_PRODUCTION')}).strict(),
+ z.object({status:z.literal('UNKNOWN')}).strict(),
+]);
+export type ServingRelease=z.infer<typeof ServingReleaseSchema>;
+export const ProductUpdatesSchema=z.object({readerId:z.string().min(1).max(128),catalog:ReleaseCatalogSchema,runtime:ServingReleaseSchema.optional()}).strict();
 export type ReleaseNote=z.infer<typeof ReleaseNoteSchema>;
 export type ReleaseCatalog=z.infer<typeof ReleaseCatalogSchema>;

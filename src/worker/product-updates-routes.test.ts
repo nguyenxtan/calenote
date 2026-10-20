@@ -21,3 +21,15 @@ it('rejects anonymous/expired sessions and unsupported methods',async()=>{
  expect((await s.route(request('__Host-calenote_session='+'A'.repeat(43)),env,context)).status).toBe(401);
  expect((await s.route(request(undefined,'POST'),env,context)).status).toBe(404);
 });
+
+it('exposes opt-in runtime identity from the responding Worker, keeping legacy/member responses compatible',async()=>{
+ const s=fixture(),versionId='5479e5bc-6cd0-4628-b7ca-8f249cfc0ef9',tag='78334ca3bb6703164cffa1e42b408c321687d959';
+ const current={...env,CF_VERSION_METADATA:{id:versionId,tag,timestamp:'2026-10-20T09:38:00Z'}} as Env;
+ const url=origin+'/api/product-updates/runtime';
+ const response=await s.route(new Request(url,{headers:{cookie:'__Host-calenote_session='+'A'.repeat(43)}}),current,context);
+ expect(await response.json()).toEqual({data:{readerId:'member-owned',catalog:releaseCatalog,runtime:{status:'SERVING',versionId,tag}}});
+ expect(response.headers.get('cache-control')).toBe('no-store');expect(response.headers.get('vary')).toBe('Cookie');
+ const legacy=await s.route(request('__Host-calenote_session='+'A'.repeat(43)),current,context);
+ expect((await legacy.json() as {data:object}).data).not.toHaveProperty('runtime');
+ const anonymous=await s.route(new Request(url),current,context);expect(anonymous.status).toBe(401);expect(await anonymous.text()).not.toContain(versionId);
+});

@@ -291,7 +291,7 @@ export function createRouter(options: RouterOptions = {}) {
         requireSameOrigin(request,appOrigin!);
         return jsonResponse({error:{code:"EMAIL_VERIFICATION_REQUIRED",message:"Xác minh email tại trang đăng ký trước khi kết nối bot."}},{status:410});
       }
-      if (request.method === "GET" && pathname === "/api/product-updates") return await handleProductUpdates(request,()=>authOperationsFactory(env));
+      if (request.method === "GET" && (pathname === "/api/product-updates" || pathname === "/api/product-updates/runtime")) return await handleProductUpdates(request,()=>authOperationsFactory(env),env);
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
       }

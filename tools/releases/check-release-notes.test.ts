@@ -20,3 +20,10 @@ it('rejects out-of-order or duplicate historical commits',()=>{
  const out=source();[out.notes[1],out.notes[2]]=[out.notes[2],out.notes[1]];expect(()=>validateCatalog(out)).toThrow(/newest first/);
  const duplicate=source();duplicate.notes[2].commit=duplicate.notes[1].commit;expect(()=>validateCatalog(duplicate)).toThrow(/Duplicate historical commits/);
 });
+
+it('rejects transient release claims in the current verification note',()=>{
+ for(const text of ['Chưa phát hành bản này hoặc kiểm thử gửi production.','Đang kiểm tra tự động.','Đã triển khai production.']){
+  const current=source();current.notes[0].verification=text;
+  expect(()=>validateCatalog(current)).toThrow(/runtime status/);
+ }
+});
