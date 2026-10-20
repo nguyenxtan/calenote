@@ -15,7 +15,7 @@ it('preserves canonical interpretation through typed tables without heterogeneou
  const wire=encodeSmallContextV3(proposal,input),selected=smallContextSchemaV3(input);
  expect(z.fromJSONSchema(selected.schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
  expect(JSON.stringify(selected.schema)).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
- expect(JSON.stringify(selected.schema).length).toBeLessThan(8000);
+ expect(JSON.stringify(selected.schema).length).toBeLessThan(16000);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(proposal,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
 });
 it('rejects unknown, fractional, negative or unused value references without coercion',()=>{
@@ -43,14 +43,14 @@ it('rejects malformed dates/period references and ranks but quarantines optional
  const base=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:'synthetic',evidence},{field:'eventDate',operation:'SET',value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null},evidence}],query:null,uncertainties:[]});
  const wire=encodeSmallContextV3(base,input);expect(decode(wire).status).toBe('PARSED');
  for(const change of [
-  (w:typeof wire)=>{w.dates[0].offsetDays=1;},
-  (w:typeof wire)=>{w.dates[0].year=10000;},
+  (w:typeof wire)=>{w.changes[1].date[0].offsetDays=1;},
+  (w:typeof wire)=>{w.changes[1].date[0].year=10000;},
   (w:typeof wire)=>{w.changes[1].rank=w.changes[0].rank;},
   (w:typeof wire)=>{w.changes.reverse();},
   (w:typeof wire)=>{w.changes[0].rank=13;},
   (w:typeof wire)=>{w.changes[0].evidence=[];},
   (w:typeof wire)=>{w.changes[0].operation='CLEAR';},
-  (w:typeof wire)=>{w.dates=Array.from({length:129},()=>structuredClone(w.dates[0]));},
+  (w:typeof wire)=>{w.dates=Array.from({length:129},()=>structuredClone(w.changes[1].date[0]));},
  ]){const altered=structuredClone(wire);change(altered);expect(decode(altered).status,change.toString()).toBe('REFUSED');}
  const malformedAdvice={...wire,directive:[{kind:'APPROVE'}],reply:[{text:123}]};
  const parsed=decode(malformedAdvice);expect(parsed.status).toBe('PARSED');
@@ -73,7 +73,7 @@ it('reports exact finite small-table refusal controls without retaining authored
 it('distinguishes malformed generation shape from invalid table references',()=>{
  const diagnostics:unknown[]=[];
  const wire=encodeSmallContextV3(proposal,input);
- wire.query=[{period:3,date:null,outputCalendar:null,topic:null,evidence:['U0']}];
+ wire.query=[{period:3,date:[],outputCalendar:null,topic:null,evidence:['U0']}];
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
  expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'TABLE_REFERENCE_INVALID',table:'periods'}}]});
  diagnostics.length=0;
@@ -122,4 +122,39 @@ it('keeps inline uncertainty text canonical and rejects mixed or missing value o
  expect(wire.texts).toEqual([]);expect(wire.uncertainties.at(-1)!.alternatives[0]).toMatchObject({value:null,text:'LIST_REMINDERS'});
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
  for(const patch of [{value:0},{text:null}]){const invalid=structuredClone(wire);Object.assign(invalid.uncertainties.at(-1)!.alternatives[0],patch);expect(decode(invalid).status).toBe('REFUSED');}
+});
+
+it('owns typed dates at their consumer and forbids root orphan dates in generation',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const civil={kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null};
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'eventDate',operation:'SET',value:civil,evidence}],query:null,uncertainties:[]});
+ const wire=encodeSmallContextV3(canonical,input);
+ expect(wire.dates).toEqual([]);
+ expect(wire.changes[0]).toMatchObject({value:null,text:null,date:[civil]});
+ const generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(generation.safeParse({...wire,dates:[civil]}).success).toBe(false);
+ expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
+});
+
+it('rejects dates in inactive owner cells and preserves inline date alternatives',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const civil={kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null};
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},query:null,changes:[{field:'title',operation:'SET',value:'synthetic',evidence}],uncertainties:[{field:'eventDate',reason:'AMBIGUOUS',alternatives:[{value:civil,evidence}]}]});
+ const wire=encodeSmallContextV3(canonical,input);expect(decode(wire).status).toBe('PARSED');
+ expect(wire.dates).toEqual([]);expect(wire.uncertainties[0].alternatives[0]).toMatchObject({value:null,text:null,date:[civil]});
+ expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
+ const cell=wire.uncertainties[0].alternatives[0].date;
+ const wrongOwner=structuredClone(wire);wrongOwner.changes[0].date=structuredClone(cell);expect(decode(wrongOwner).status).toBe('REFUSED');
+ for(const patch of [{date:[]},{date:[...cell,...cell]},{value:0},{text:'not a date'}]){const invalid=structuredClone(wire);Object.assign(invalid.uncertainties[0].alternatives[0],patch);expect(decode(invalid).status).toBe('REFUSED');}
+ const cleared=structuredClone(wire);cleared.changes[0].operation='CLEAR';cleared.changes[0].text=null;cleared.changes[0].date=structuredClone(cell);expect(decode(cleared).status).toBe('REFUSED');
+});
+it('R01 month query forbids root dates and inactive month boundary dates',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
+ const wire=encodeSmallContextV3(canonical,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(wire.dates).toEqual([]);expect(wire.periods[0]).toMatchObject({date:[],from:[],through:[]});expect(decode(wire).status).toBe('PARSED');
+ const cell=[{kind:'RELATIVE_DAY',calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:0,weekday:null,qualifier:null}];
+ expect(generation.safeParse({...wire,dates:cell}).success).toBe(false);expect(decode({...wire,dates:cell}).status).toBe('REFUSED');
+ for(const key of ['date','from','through']){const invalid=structuredClone(wire);invalid.periods[0][key]=cell;expect(decode(invalid).status).toBe('REFUSED');}
+ const bad=structuredClone(wire);bad.query[0].date=cell;expect(decode(bad).status).toBe('REFUSED');
 });

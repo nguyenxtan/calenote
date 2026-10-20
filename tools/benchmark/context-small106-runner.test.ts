@@ -39,7 +39,7 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   if(fieldCapability.eventDateYearNullRequired){
    const bad=structuredClone(wire) as unknown as ReturnType<typeof encodeSmallContextV3>;
    const row=bad.changes.find(change=>change.field==='eventDate');
-   if(row?.value!==null&&row?.value!==undefined){bad.dates[row.value].year=2026;expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
+   if(row?.date[0]){row.date[0].year=2026;expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
   }
   if(malformed)wire.query=JSON.stringify(wire.query);
   return {status:200,body:JSON.stringify({model:request.model,provider:'Google',id:`gen-typed-${calls}`,choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}],usage:{cost:.001,prompt_tokens:100,completion_tokens:100}})};
