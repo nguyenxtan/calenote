@@ -38,19 +38,30 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 describe("CoreScreenExperience", () => {
   it.each([false, true])("refreshes delivered reminders on focus (context %s)", async (contextContractEnabled) => {
     let delivered = false;
+    const reads: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
       if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      expect(path).toBe(contextContractEnabled ? "/api/v2/reminders" : "/api/reminders");
+      reads.push(delivered ? "SENT" : "PENDING");
       const rows = [{ ...reminder, status: delivered ? "SENT" : "PENDING", ...(contextContractEnabled ? { details: null } : {}) }];
       return json({ data: contextContractEnabled ? { schemaVersion: "reminders-2", reminders: rows, hasMore: false, scope: "OWNER" } : { reminders: rows } });
     }));
-    render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />);
-    await screen.findByRole("button", { name: "Huỷ Gửi báo giá" });
+    // A committed reminder can precede the passive focus subscription. Drain
+    // asynchronous mount work before simulating a user returning to the tab.
+    await act(async () => { render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />); });
+    expect(screen.getByRole("button", { name: "Huỷ Gửi báo giá" })).toBeInTheDocument();
+    expect(reads).toEqual(["PENDING"]);
     delivered = true;
     await act(async () => { fireEvent.focus(window); });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument());
+    expect(reads).toEqual(["PENDING", "SENT"]);
+    expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Không có lời nhắc đang chờ gửi." })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Tất cả" }));
+    expect(screen.getByRole("heading", { name: reminder.title })).toBeInTheDocument();
+    expect(screen.getByText("Đã nhắc")).toBeInTheDocument();
   });
 
   it("refreshes while visible, skips hidden polls and removes refresh listeners on unmount", async () => {
