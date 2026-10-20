@@ -19,11 +19,15 @@ import { serializeTypedContextRequest } from "../../../conversation/context-cont
 import { CONTEXT_TYPED_PROTOCOL_V3, isContextTypedProtocolV3, type ContextTypedProtocolV3 } from "../../../conversation/context-contract/typed-protocol";
 import { decodeGoogleLiteEuTypedContextTransportV3 } from "./context-provider-typed-wire";
 
+import {serializeSmallContextRequest} from "../../../conversation/context-contract/small-wire";
+import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3,type ContextSmallProtocolV3} from "../../../conversation/context-contract/small-protocol";
+import {decodeSmallContextV3} from "./context-provider-small-wire";
+
 // A selected request and decoder travel together; model output cannot select a codec.
-type ContextWireSelection = "HISTORICAL_104" | "TYPED_105";
+type ContextWireSelection = "HISTORICAL_104" | "TYPED_105" | "SMALL_106";
 
 async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput,selection:ContextWireSelection): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
-  const version = selection === "TYPED_105" ? CONTEXT_TYPED_PROTOCOL_V3.wireVersion : googleLiteEuContextWireSchema().version;
+  const version = selection === "SMALL_106" ? CONTEXT_SMALL_PROTOCOL_V3.wireVersion : selection === "TYPED_105" ? CONTEXT_TYPED_PROTOCOL_V3.wireVersion : googleLiteEuContextWireSchema().version;
   if (response.oversized || response.body.length > config.maxResponseBytes || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes) {
     return { status: "FAILURE", category: "SCHEMA_INVALID", usage: { costMicrounits: null }, canonicalValidationDiagnostics: {
       state: "OVERSIZED", schemaVersion: "calenote-context-3", providerWireSchemaVersion: version,
@@ -33,7 +37,9 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   let validation: CanonicalValidationDiagnostics | undefined, wireValidation: CanonicalValidationDiagnostics | undefined;
   const observe = (value: CanonicalValidationDiagnostics) => { validation = value; };
   const output = z.unknown().transform((raw, ctx): ContextGatewayInterpretation => {
-    const parsed = selection === "TYPED_105"
+    const parsed = selection === "SMALL_106"
+      ? decodeSmallContextV3(raw, CONTEXT_SMALL_PROTOCOL_V3, observe, value => { wireValidation = value; }, input)
+      : selection === "TYPED_105"
       ? decodeGoogleLiteEuTypedContextTransportV3(raw, CONTEXT_TYPED_PROTOCOL_V3, observe, value => { wireValidation = value; }, input)
       : parseGoogleLiteEuContextSections(raw, CONTEXT_PROTOCOL_V3, observe, value => { wireValidation = value; },input);
     if (parsed.status === "PARSED") return parsed.value;
@@ -425,7 +431,12 @@ export function createTypedContextContractGateway(rawConfig: SemanticGatewayConf
   if (!isContextTypedProtocolV3(rawConfig.protocol)) throw new TypeError("Selected typed context protocol required");
   return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "TYPED_105"), contextWire: "TYPED_OBJECTS_105" as const});
 }
-function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextProtocolV3 | ContextTypedProtocolV3},
+export function createSmallContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextSmallProtocolV3},
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire: "SMALL_TABLES_106"} {
+  if (!isContextSmallProtocolV3(rawConfig.protocol)) throw new TypeError("Selected small context protocol required");
+  return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "SMALL_106"), contextWire: "SMALL_TABLES_106" as const});
+}
+function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextProtocolV3 | ContextTypedProtocolV3 | ContextSmallProtocolV3},
   transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission, selection: ContextWireSelection): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
   const { protocol: _protocol, ...configuration } = rawConfig;
   void _protocol;
@@ -447,7 +458,7 @@ function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig &
     // Fail before exposing a reservation amount. No env flag/caller assertion
     // can convert local token measurements into full-route admission.
     if (!offline?.success && !observable) return { status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" };
-    const wire = selection === "TYPED_105" ? serializeTypedContextRequest(input.data) : serializeContextRequest(input.data);
+    const wire = selection === "SMALL_106" ? serializeSmallContextRequest(input.data) : selection === "TYPED_105" ? serializeTypedContextRequest(input.data) : serializeContextRequest(input.data);
     const request: SemanticJsonRequest = { model: route.model, ...wire,
       response_format: { ...wire.response_format, json_schema: { ...wire.response_format.json_schema, strict: true } }, provider: {
       only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,

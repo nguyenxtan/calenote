@@ -1,3 +1,5 @@
+import {serializeSmallContextRequest} from "../../src/modules/conversation/context-contract/small-wire";
+import {CONTEXT_SMALL_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/small-protocol";
 import { isDeepStrictEqual } from "node:util";
 import { serializeTypedContextRequest } from "../../src/modules/conversation/context-contract/typed-wire";
 import { CONTEXT_TYPED_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/typed-protocol";
@@ -7,7 +9,7 @@ import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
-import { createTypedContextContractGateway, createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createSmallContextContractGateway, createTypedContextContractGateway, createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { numericOwnershipCatalogue } from "../../src/modules/conversation/context-contract/wire";
 import { deriveGenerationFieldCapability } from "../../src/modules/conversation/context-contract/field-capability";
@@ -41,7 +43,7 @@ export interface RequestSchemaProof { requestWireSchemaDigest: string; fieldCapa
 /** Compare actual outbound bytes to independently rederived request capability.
  * A supplied digest/catalogue never authorizes a schema or a proposed value.
  */
-export function verifyContextRequestSchema(request: Parameters<SemanticTransport>[0], wireProtocol?: "TYPED_105"): RequestSchemaProof {
+export function verifyContextRequestSchema(request: Parameters<SemanticTransport>[0], wireProtocol?: "TYPED_105" | "SMALL_106"): RequestSchemaProof {
   const canonicalInput = JSON.parse(request.messages[1].content);
   const { numericOwnership, fieldCapability } = canonicalInput;
   delete canonicalInput.numericOwnership; delete canonicalInput.fieldCapability; delete canonicalInput.evidenceSources;
@@ -49,9 +51,9 @@ export function verifyContextRequestSchema(request: Parameters<SemanticTransport
   if (digest(JSON.stringify(numericOwnership)) !== digest(JSON.stringify(numericOwnershipCatalogue(context)))) throw new Error("NUMERIC_OWNERSHIP_CATALOGUE_CHANGED");
   const expected = deriveGenerationFieldCapability(context);
   if (digest(JSON.stringify(fieldCapability)) !== digest(JSON.stringify(expected))) throw new Error("FIELD_CAPABILITY_CHANGED");
-  if (wireProtocol === "TYPED_105") {
-    const selected = serializeTypedContextRequest(context);
-    if (digest(selected.messages[0].content) !== "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01") throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
+  if (wireProtocol === "TYPED_105" || wireProtocol === "SMALL_106") {
+    const selected = wireProtocol === "SMALL_106" ? serializeSmallContextRequest(context) : serializeTypedContextRequest(context);
+    if (digest(selected.messages[0].content) !== (wireProtocol === "SMALL_106" ? "aba60b880901917e187aa8d5f95c2ab8d9709aa018af8b231b0fb6cd2dfc93cb" : "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01")) throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
     for (const key of Object.keys(selected) as Array<keyof typeof selected>) {
       if (!isDeepStrictEqual(request[key], selected[key])) throw new Error("TYPED_PROVIDER_REQUEST_CHANGED");
     }
@@ -67,7 +69,7 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
   downstreamDiagnostics: import("../../src/modules/conversation/context-contract/downstream").DownstreamDiagnostic[];
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
-  wireProtocol?: "TYPED_105";
+  wireProtocol?: "TYPED_105" | "SMALL_106";
   debugBudgetAuthoritySha256?: string;
   singleTarget?: {fixture:string;turn:number;manifestSha256:string;contextSeedDigest?:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
@@ -175,7 +177,7 @@ export function isTypedCompilerBridgeKey(value:unknown){return value===typedComp
 export async function runTypedCompilerDiagnosticExecution(launch:import('./context-typed-compiler-launcher').TypedCompilerLaunch){
  const {takeTypedCompilerExecution}=await import('./context-typed-compiler-launcher');
  const input=takeTypedCompilerExecution(launch,typedCompilerBridgeKey);
- if(input.wireProtocol!=="TYPED_105"||input.singleTarget?.fixture!=="R01"||input.singleTarget.turn!==0||input.profile!=="PILOT"||input.boundedPilot||input.pilotPrefix)throw Error("COMPILER_TARGET_SCOPE");
+ if(!["TYPED_105","SMALL_106"].includes(input.wireProtocol??"")||input.singleTarget?.fixture!=="R01"||input.singleTarget.turn!==0||input.profile!=="PILOT"||input.boundedPilot||input.pilotPrefix)throw Error("COMPILER_TARGET_SCOPE");
  return executeObservable(input,false,true,typedCompilerBridgeKey);
 }
 async function executeObservable(input: ObservableExecution, replayOnly = false, turnZeroOnly = false, compilerKey?:unknown) {
@@ -184,7 +186,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const persist=<Args extends unknown[],Result>(operation:(...args:Args)=>Result)=>(...args:Args):Result=>{try{return operation(...args);}catch(error){if(compilerDiagnostic)compilerLedgerUncertain=true;throw error;}};
   const ledgerOps={appendCampaignEvent:persist(appendCampaignEvent),reserveCampaignCall:persist(reserveCampaignCall),markCampaignDispatched:persist(markCampaignDispatched),finishCampaignCall:persist(finishCampaignCall),settleCampaignCanary:persist(settleCampaignCanary),completeCampaign:persist(completeCampaign)};
 
-  if (input.wireProtocol !== undefined && !compilerDiagnostic && (input.wireProtocol !== "TYPED_105" || input.profile !== "PILOT" || !input.boundedPilot || input.singleTarget || input.pilotPrefix || replayOnly || turnZeroOnly)) throw new Error("INVALID_TYPED_105_SCOPE");
+  if (input.wireProtocol !== undefined && !compilerDiagnostic && (!["TYPED_105","SMALL_106"].includes(input.wireProtocol) || input.profile !== "PILOT" || !input.boundedPilot || input.singleTarget || input.pilotPrefix || replayOnly || turnZeroOnly)) throw new Error("INVALID_TYPED_105_SCOPE");
   if (input.accountingPolicy && ((!turnZeroOnly && !input.boundedPilot) || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
   if (input.boundedPilot && (input.accountingPolicy !== "CONFIRMED_COST_V1" || input.profile !== "PILOT" || turnZeroOnly || replayOnly || input.pilotPrefix)) throw new Error("INVALID_BOUNDED_PILOT_SCOPE");
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
@@ -232,23 +234,23 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const canonicalSchemaDigest = digest(JSON.stringify(InterpretationJsonSchema));
   const providerWire = googleLiteEuContextWireSchemaV3();
   const providerWireSchemaDigest = digest(JSON.stringify(providerWire.schema));
-  const initialSchemaProof = (): Pick<ResponseEvidence, "canonicalSchemaDigest" | "providerWireSchemaDigest" | "providerWireSchemaVersion"> => input.wireProtocol === "TYPED_105"
-    ? {canonicalSchemaDigest,providerWireSchemaDigest:null,providerWireSchemaVersion:CONTEXT_TYPED_PROTOCOL_V3.wireVersion}
+  const initialSchemaProof = (): Pick<ResponseEvidence, "canonicalSchemaDigest" | "providerWireSchemaDigest" | "providerWireSchemaVersion"> => input.wireProtocol !== undefined
+    ? {canonicalSchemaDigest,providerWireSchemaDigest:null,providerWireSchemaVersion:input.wireProtocol === "SMALL_106" ? CONTEXT_SMALL_PROTOCOL_V3.wireVersion : CONTEXT_TYPED_PROTOCOL_V3.wireVersion}
     : { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   let schemaProof = initialSchemaProof();
   let requestSchemaProof: Partial<RequestSchemaProof> = {};
-  const gatewayFactory = input.wireProtocol === "TYPED_105"
+  const gatewayFactory = input.wireProtocol === "SMALL_106" ? (transport:SemanticTransport)=>createSmallContextContractGateway({...config,protocol:CONTEXT_SMALL_PROTOCOL_V3},transport,{status:"OBSERVABLE_CANARY",advertisedContextTokens:contextCampaignAdvertisedContextTokens}) : input.wireProtocol === "TYPED_105"
     ? (transport: SemanticTransport) => createTypedContextContractGateway({ ...config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, transport, { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens })
     : (transport: SemanticTransport) => createContextContractGateway(config, transport, { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });
   const actual = gatewayFactory(async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== (input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
+    if (digest(request.messages[0].content) !== (input.wireProtocol === "SMALL_106" ? "aba60b880901917e187aa8d5f95c2ab8d9709aa018af8b231b0fb6cd2dfc93cb" : input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request, input.wireProtocol);
-    if (input.wireProtocol === "TYPED_105") schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest: requestSchemaProof.requestWireSchemaDigest!, providerWireSchemaVersion: CONTEXT_TYPED_PROTOCOL_V3.wireVersion };
+    if (input.wireProtocol !== undefined) schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest: requestSchemaProof.requestWireSchemaDigest!, providerWireSchemaVersion: input.wireProtocol === "SMALL_106" ? CONTEXT_SMALL_PROTOCOL_V3.wireVersion : CONTEXT_TYPED_PROTOCOL_V3.wireVersion };
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();
     if (remaining <= 0) throw new Error("AUTHORIZATION_EXPIRED");
@@ -260,7 +262,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const stopped = () => readCampaignLedger(input.directory).some(r => r.event === "STOP");
   const stop = (reason: string) => { if (!stopped()) ledgerOps.appendCampaignEvent(input.directory, { event: "STOP", runId: input.runId, at: now(), reason }); };
   let activeTarget: {fixtureId:string;turnIndex:number}|undefined;
-  const gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105"} = { ...(input.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), prepare(tier, context) {
+  const gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106"} = { ...(input.wireProtocol === "SMALL_106" ? {contextWire:"SMALL_TABLES_106" as const} : input.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), prepare(tier, context) {
     const preparedTarget=activeTarget;
     const prepared = actual.prepare(tier, context); if (prepared.status !== "READY") return prepared;
     return { ...prepared, async dispatch() {
@@ -274,7 +276,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       ledgerOps.markCampaignDispatched(input.directory, { runId: input.runId, reservationId, at: now() }); applicationLlmCalls++;
       outboundDigest = null; httpStatus = null; queryDiagnostics=undefined; requestSchemaProof={};
-      if(input.wireProtocol === "TYPED_105")schemaProof=initialSchemaProof();
+      if(input.wireProtocol !== undefined)schemaProof=initialSchemaProof();
       let parsed: Awaited<ReturnType<typeof prepared.dispatch>>;
       try { parsed = await prepared.dispatch(); }
       catch (error) {
