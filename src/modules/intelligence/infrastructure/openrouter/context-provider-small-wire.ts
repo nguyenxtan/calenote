@@ -1,4 +1,4 @@
-import {projectWireValidation} from "../../../conversation/context-contract/validation-diagnostics";
+import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
 import {ContextInputSchema,SLOT_NAMES,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
@@ -50,7 +50,12 @@ export interface SmallContextWire {
  directive:Row[];reply:Array<{text:string}>;texts:string[];integers:number[];dates:Row[];clocks:Row[];periods:Row[];
 }
 const record=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v);
-function requireValue(valid:unknown):asserts valid {if(!valid)throw Error('SMALL_TYPED_VALUE_INVALID');}
+class SmallTableError extends Error {
+ constructor(readonly diagnostic:SmallTableDiagnostic){super('SMALL_TYPED_VALUE_INVALID');}
+}
+function requireValue(valid:unknown,reason:SmallTableDiagnostic['reason']='INVALID_TABLE_VALUE',table?:Family):asserts valid {
+ if(!valid)throw new SmallTableError({reason,...(table?{table}:{})});
+}
 /** Offline authoring only. No repair/coercion helper is used for model data. */
 export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):SmallContextWire {
  const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
@@ -75,24 +80,24 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  // Guidance retains the existing quarantine boundary rather than poisoning core.
  const parsed=z.fromJSONSchema(smallContextSchemaV3(input).schema as JsonSchema).parse({...raw,directive:[],reply:[]}) as unknown as SmallContextWire;
  const book=primaryEvidenceSourceCodebook(input),used:Record<Family,Set<number>>={texts:new Set(),integers:new Set(),dates:new Set(),clocks:new Set(),periods:new Set()};
- for(const name of Object.keys(used) as Family[])requireValue(parsed[name].length<=128);
- requireValue(parsed.changes.length<=13&&parsed.query.length<=1&&parsed.uncertainties.length<=4);
- const at=(name:Family,index:unknown):unknown=>{requireValue(typeof index==='number'&&Number.isSafeInteger(index)&&index>=0&&index<parsed[name].length);used[name].add(index);return parsed[name][index];};
- const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))requireValue(item===null);return Object.fromEntries(keys.map(key=>[key,value[key]]));};
+ for(const name of Object.keys(used) as Family[])requireValue(parsed[name].length<=128,'TABLE_CAPACITY_EXCEEDED',name);
+ requireValue(parsed.changes.length<=13&&parsed.query.length<=1&&parsed.uncertainties.length<=4,'COLLECTION_CARDINALITY_INVALID');
+ const at=(name:Family,index:unknown):unknown=>{requireValue(typeof index==='number'&&Number.isSafeInteger(index)&&index>=0&&index<parsed[name].length,'TABLE_REFERENCE_INVALID',name);used[name].add(index);return parsed[name][index];};
+ const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))requireValue(item===null,'INACTIVE_VALUE_NON_NULL');return Object.fromEntries(keys.map(key=>[key,value[key]]));};
  const date=(index:unknown):Row=>{const row=at('dates',index) as Row,keys=dateFields[String(row.kind)];requireValue(keys);return active(row,keys);};
  const period=(index:unknown,padded:boolean):Row=>{const row=at('periods',index) as Row;const value:Row={...row,date:row.date===null?null:date(row.date),from:row.from===null?null:date(row.from),through:row.through===null?null:date(row.through)};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
  const value=(field:string,index:unknown):unknown=>{const type=family(field);return type==='dates'?date(index):type==='periods'?period(index,false):at(type,index);};
- const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3);const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
+ const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
  const result:Row={operationCode:parsed.operationCode,requestTarget:parsed.targetEvidence.length?{evidence:evidence(parsed.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
  const fields=new Set<string>(),ranks=new Set<number>();let previous=-1;
- for(const row of parsed.changes){requireValue(!fields.has(row.field)&&Number.isSafeInteger(row.rank)&&row.rank>previous&&!ranks.has(row.rank));fields.add(row.field);ranks.add(row.rank);previous=row.rank;
-  requireValue(row.operation==='CLEAR'?row.value===null:row.value!==null);
+ for(const row of parsed.changes){requireValue(!fields.has(row.field)&&Number.isSafeInteger(row.rank)&&row.rank>previous&&!ranks.has(row.rank),'CHANGE_ORDER_INVALID');fields.add(row.field);ranks.add(row.rank);previous=row.rank;
+  requireValue(row.operation==='CLEAR'?row.value===null:row.value!==null,'CHANGE_VALUE_INVALID');
   const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.value===null?null:value(row.field,row.value),evidence:evidence(row.evidence)}};
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);
  }
  if(parsed.query[0]){const q=parsed.query[0];result.query={period:q.period===null?null:period(q.period,true),date:q.date===null?null:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
  result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:value(field,a.value),evidence:evidence(a.evidence)}))};});
- for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length);
+ for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length,'UNUSED_TABLE_ROWS',name);
  result.conversationDirective=Array.isArray(raw.directive)&&raw.directive.length<=1?(raw.directive[0]??null):{kind:'INVALID_PROVIDER_WIRE'};
  result.replyProposal=Array.isArray(raw.reply)&&raw.reply.length<=1?(raw.reply[0]??null):{invalid:true};
  return result;
@@ -100,5 +105,12 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
 export function decodeSmallContextV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput){
  if(!isContextSmallProtocolV3(selected))return {status:'REFUSED' as const,reason:'ENVELOPE_INVALID' as const};
  try{return decodeGoogleLiteEuTypedContextTransportV3(expandSmall(raw,input),CONTEXT_TYPED_PROTOCOL_V3,observeInvalid,observeWireInvalid,input);}
- catch{try{observeWireInvalid?.(projectWireValidation(raw,[],"SMALL_TYPED_TABLES",undefined,"calenote-context-3"));}catch{/* Diagnostics cannot alter refusal. */}return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
+ catch(error){try{
+  const shape=error instanceof z.ZodError;
+  const table=shape?(['texts','integers','dates','clocks','periods'] as const).find(name=>name===error.issues[0]?.path[0]):undefined;
+  const diagnostic=error instanceof SmallTableError?error.diagnostic:{reason:shape?'GENERATION_SHAPE_INVALID' as const:'INVALID_TABLE_VALUE' as const,...(table?{table}:{})};
+  const projection=projectWireValidation(raw,shape?(error.issues[0]?.path??[]):[],"SMALL_TYPED_TABLES",undefined,"calenote-context-3");
+  projection.issues[0].smallTables=diagnostic;
+  observeWireInvalid?.(projection);
+ }catch{/* Diagnostics cannot alter refusal. */}return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
 }

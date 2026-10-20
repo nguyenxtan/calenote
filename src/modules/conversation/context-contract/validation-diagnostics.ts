@@ -49,7 +49,12 @@ export interface EvidencePointerDiagnostic {
   requestedTurn?:number;requestedSegment?:number;
   sourceRole:"USER"|"ASSISTANT"|"MISSING"|"UNKNOWN";unknownKeyCount:number;unknownKeyCountTruncated:boolean;
 }
+export interface SmallTableDiagnostic {
+  reason:"GENERATION_SHAPE_INVALID"|"INVALID_TABLE_VALUE"|"TABLE_REFERENCE_INVALID"|"TABLE_CAPACITY_EXCEEDED"|"UNUSED_TABLE_ROWS"|"COLLECTION_CARDINALITY_INVALID"|"EVIDENCE_CARDINALITY_INVALID"|"INACTIVE_VALUE_NON_NULL"|"CHANGE_ORDER_INVALID"|"CHANGE_VALUE_INVALID";
+  table?:"texts"|"integers"|"dates"|"clocks"|"periods";
+}
 export interface CanonicalValidationIssue {
+  smallTables?:SmallTableDiagnostic;
   path: Array<string | number>; code: string; expected?: string; actualType: string;
   classification: "missing" | "extra" | "value"; unknownPathSegments: number; extraKeyCount?: number;
   constraint?: "ARRAY_CARDINALITY" | "CONTROL_ENUM"; actualCount?: number; minItems?: number; maxItems?: number;

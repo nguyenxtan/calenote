@@ -60,3 +60,31 @@ it('rejects malformed dates/period references and ranks but quarantines optional
  const inactive=structuredClone(list);inactive.periods[0].offset=1;expect(decode(inactive).status).toBe('REFUSED');
  const unsupported=structuredClone(list);unsupported.periods[0].kind='UNSUPPORTED_PERIOD';expect(decode(unsupported).status).toBe('PARSED');
 });
+
+it('reports exact finite small-table refusal controls without retaining authored content',()=>{
+ const privateText='private synthetic sentinel never log';
+ const wire=encodeSmallContextV3(proposal,input);wire.texts.push(privateText);
+ const diagnostics:unknown[]=[];
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics).toHaveLength(1);
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'UNUSED_TABLE_ROWS',table:'texts'}}]});
+ expect(JSON.stringify(diagnostics)).not.toContain(privateText);
+});
+it('distinguishes malformed generation shape from invalid table references',()=>{
+ const diagnostics:unknown[]=[];
+ const wire=encodeSmallContextV3(proposal,input);
+ wire.query=[{period:3,date:null,outputCalendar:null,topic:null,evidence:['U0']}];
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'TABLE_REFERENCE_INVALID',table:'periods'}}]});
+ diagnostics.length=0;
+ expect(decodeSmallContextV3({...wire,periods:'private malformed sentinel'},CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'GENERATION_SHAPE_INVALID',table:'periods'}}]});
+ expect(JSON.stringify(diagnostics)).not.toContain('private malformed sentinel');
+});
+
+it('a throwing diagnostics observer cannot alter refusal or cause output repair',()=>{
+ const wire=encodeSmallContextV3(proposal,input);wire.texts.push('unreferenced');
+ const before=JSON.stringify(wire);
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,()=>{throw Error('observer');},input).status).toBe('REFUSED');
+ expect(JSON.stringify(wire)).toBe(before);
+});
