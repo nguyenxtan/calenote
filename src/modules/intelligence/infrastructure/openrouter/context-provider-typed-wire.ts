@@ -120,8 +120,8 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const enums=(node:Schema):Schema=>{const result=map(node,enums);delete result.$schema;if(typeof result.const==="string"){result.enum=[result.const];delete result.const;}return result;};
  return {version:CONTEXT_TYPED_PROTOCOL_V3.wireVersion,schema:shareTypedDefinitions(enums(schema))};
 }
-/** Factor generation-only unions by exact object/array shell. Correlations
- * between sibling values are deliberately left to the unchanged strict gate.
+/** Factor generation-only unions by exact object/array shell. Discriminator
+ * correlations stay intact; other sibling constraints retain the strict gate.
  * Different key sets remain distinct typed objects; no padding or JSON strings. */
 function factorGenerationUnions(root:Schema):Schema {
  const inline=(node:Schema,depth=0):Schema=>{
@@ -146,11 +146,13 @@ function factorGenerationUnions(root:Schema):Schema {
    const key=JSON.stringify(shell),prior=groups.get(key);if(prior)prior.push(node);else groups.set(key,[node]);
   }
   // Keep discriminated object alternatives correlated. Independently unioning
-  // sibling fields creates a Cartesian product (for example DAY + range dates).
-  // For these kind-bearing objects, merge only one differing property.
+  // sibling fields creates a Cartesian product (DAY + range dates, or a numeric
+  // uncertainty field + every date/time/query value under nested arrays).
+  // Both kind and fieldCode select the sibling value language. Merge only one
+  // differing property; identical value/reason shells can still share codes.
   const correlated=[...groups.values()].flatMap(nodes=>{
    const first=nodes[0];
-   if(first.type!=="object"||!first.properties?.kind||nodes.length===1)return [nodes];
+   if(first.type!=="object"||!(first.properties?.kind||first.properties?.fieldCode)||nodes.length===1)return [nodes];
    const changed=Object.keys(first.properties).filter(key=>nodes.some(node=>JSON.stringify(node.properties![key])!==JSON.stringify(first.properties![key])));
    return changed.length>1?nodes.map(node=>[node]):[nodes];
   });

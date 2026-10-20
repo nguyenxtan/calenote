@@ -7,6 +7,11 @@ import {auditTypedNumericChoiceUnions,expandTypedSchemaReferences} from './conte
 import {googleLiteEuTypedContextWireSchemaV3,googleLiteEuTypedContextValidationSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-typed-wire';
 import {serializeContextRequest} from '../../src/modules/conversation/context-contract/wire';
 const read=(name:string)=>JSON.parse(readFileSync(`src/modules/intelligence/infrastructure/openrouter/__fixtures__/${name}`,'utf8'));
+const uncertaintyCodes=(schema:unknown)=>{
+ const root=expandTypedSchemaReferences(schema) as {properties:{uncertainties:{items:{anyOf?:Array<{properties:{fieldCode:unknown}}>;properties?:{fieldCode:unknown}}}}};
+ const item=root.properties.uncertainties.items;
+ return z.fromJSONSchema((item.properties?.fieldCode??{anyOf:item.anyOf!.map(branch=>branch.properties.fieldCode)}) as Parameters<typeof z.fromJSONSchema>[0]);
+};
 it('isolates the singleton numeric disjunction from the exact failing request and admitted104 control',()=>{
  const frozen=read('typed105-c44-r01-generation.json'),input=read('typed105-r01-before.json').input;
  expect(createHash('sha256').update(JSON.stringify(frozen)).digest('hex')).toBe('8617d57ad8aa3a75b0c41be2f5efeca99c4ed72686e97b99b9a36d288f73057f');
@@ -16,12 +21,11 @@ it('isolates the singleton numeric disjunction from the exact failing request an
  expect(createHash('sha256').update(JSON.stringify(admitted)).digest('hex')).toBe('492a283db43db63cd3e05c8ec24168837085b13f2a5e0759cabf648bdd190678');
  expect(auditTypedNumericChoiceUnions(admitted)).toEqual([]);
  const after=googleLiteEuTypedContextWireSchemaV3(input).schema;
- expect(auditTypedNumericChoiceUnions(after)).toEqual([]);
+ // Correlated branches may share smaller exact code sets. The old global
+ // sixteen-way discriminator is absent; prove the overall domain below.
+ expect(auditTypedNumericChoiceUnions(after).every(row=>row.points.length<16)).toBe(true);
  const old=expandTypedSchemaReferences(frozen) as {properties:{uncertainties:{items:{properties:{fieldCode:unknown}}}}};
- const current=expandTypedSchemaReferences(after) as typeof old;
- const range=current.properties.uncertainties.items.properties.fieldCode;
- expect(range).toEqual({type:'integer',minimum:0,maximum:15});
- const oldCode=z.fromJSONSchema(old.properties.uncertainties.items.properties.fieldCode as Parameters<typeof z.fromJSONSchema>[0]),newCode=z.fromJSONSchema(range as Parameters<typeof z.fromJSONSchema>[0]);
+ const oldCode=z.fromJSONSchema(old.properties.uncertainties.items.properties.fieldCode as Parameters<typeof z.fromJSONSchema>[0]),newCode=uncertaintyCodes(after);
  for(const value of [-2,-1,...Array.from({length:16},(_,i)=>i),16,17,.5,'0',null])expect(newCode.safeParse(value).success).toBe(oldCode.safeParse(value).success);
  // Later correlation preservation deliberately changes other object branches;
  // the exact fieldCode domain proof above remains independent of those branches.
@@ -39,8 +43,7 @@ it('preserves holes in R02 input-selected field-code domains',()=>{
  const collect=(value:unknown):void=>{if(!value||typeof value!=='object')return;if(Array.isArray(value)){value.forEach(collect);return;}const node=value as Record<string,unknown>;const properties=node.properties as Record<string,unknown>|undefined;if(properties?.fieldCode){const points=(field:unknown):void=>{const raw=field as Record<string,unknown>;if(Array.isArray(raw.anyOf))raw.anyOf.forEach(points);else if(typeof raw.minimum==='number'&&raw.minimum===raw.maximum)codes.add(raw.minimum);};points(properties.fieldCode);}Object.values(node).forEach(collect);};
  collect(strict.properties.uncertainties.items);
  expect([...codes].sort((a,b)=>a-b)).toEqual([0,1,2,3,4,5,6,7,12,13,14,15]);
- const generated=expandTypedSchemaReferences(googleLiteEuTypedContextWireSchemaV3(input).schema) as {properties:{uncertainties:{items:{properties:{fieldCode:Parameters<typeof z.fromJSONSchema>[0]}}}}};
- const validator=z.fromJSONSchema(generated.properties.uncertainties.items.properties.fieldCode);
+ const validator=uncertaintyCodes(googleLiteEuTypedContextWireSchemaV3(input).schema);
  for(let value=-1;value<=16;value++)expect(validator.safeParse(value).success).toBe(codes.has(value));
 });
 
