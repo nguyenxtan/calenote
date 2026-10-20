@@ -44,3 +44,11 @@ Profile106-inline-values-3 replaces shared date indexes with consumer-owned type
 Date objects retain explicit primitive member types and inactive-null checks. There is no JSON-in-string, heterogeneous union, recursive reference, calendar conversion, inferred year or runtime deletion of provider data. Canonical contracts, typed105 decoder, frozen corpus and oracle remain unchanged. Protocol/prompt identities advance together; prompt SHA25642e3d96ad586ce16b8e8bf7833fabb5bee37a59313ba9570029a44fdddd788d4. No previous paid grant applies to this new source.
 
 Paid admission and Pilot success for inline-values-3 are UNVERIFIED. This section describes preparation only; the external source-bound packet records offline verification and CI separately. The default and terminal paid state remains HOLD.
+
+## Follow-up b1a2ed6 and inline-values-4 preparation
+
+The separately approved b1a2ed6 Formal Pilot STOPPED after two HTTP200 responses: R01/0 passed, R01/1 failed WIRE_DECODE_FAILED with TABLE_REFERENCE_INVALID in periods. No raw body was retained, so the actual invalid index is unknown. Reported cost $0.0015341; ledger debit1535microunits. UNKNOWN48 unchanged, remaining4001109 of10000000 microunits. Paid HOLD; no retry/Full/deploy.
+
+Profile106-inline-values-4 removes period indexes from the provider grammar. Query.period and queryRange alternative.period own [] or [one typed padded period object], with typed date cells inside. Root periods is constrained empty. QueryRange alternatives require null value/text and empty date; other alternative types require empty period. Non-LIST query periods, inactive members, legacy indexes, duplicate cells, orphan rows and mixed values are rejected, never repaired. Clocks and integers retain strict indexed-table checks. No heterogeneous unions, references or JSON-in-string are added. Canonical contracts, typed105 decoder, corpus, oracle, model and provider remain unchanged.
+
+This is offline preparation only. Paid compiler admission and Pilot success remain UNVERIFIED. No consumed authority can be reused. The external immutable source-bound proposal and separate CI evidence govern any later explicitly approved run.
