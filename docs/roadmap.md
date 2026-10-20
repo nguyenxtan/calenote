@@ -160,3 +160,8 @@ Do not call a roadmap item complete from a UI placeholder, a mock, a valid token
 or a green webhook verification alone. Completion requires the reviewed contract,
 appropriate automated coverage, safe operational evidence, and—where a provider
 journey is claimed—an observed end-to-end interaction.
+
+
+## Personal assistant expansion — 2026-10-20 feature candidate
+
+Implemented locally after c8c522b: annual/one-off solar/lunar life events, explicit deadline offsets, encrypted user-edited memories with deterministic chat lookup, opt-in daily brief/review, and user release-update bell. This does not establish production rollout or full live provider qualification. See [implementation and release gates](./runbooks/personal-assistant.md). Billing, native apps, voice, email and external calendar sync remain outside this approved slice. Earlier dated NOT_IMPLEMENTED statements above describe their historical checkpoints, not a current capability inventory.

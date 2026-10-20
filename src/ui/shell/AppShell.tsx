@@ -24,6 +24,7 @@ const secondary: readonly NavigationItem[] = [
   { href: "/app/connections", label: "Kết nối", icon: Link2 },
   { href: "/app/activity", label: "Hoạt động", icon: Activity },
   { href: "/app/settings", label: "Cài đặt", icon: Settings2 },
+  { href: "/app/personal", label: "Bàn việc cá nhân", icon: BookOpen },
 ];
 
 const groups = [

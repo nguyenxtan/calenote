@@ -29,6 +29,7 @@ export interface QueueOperations {
 }
 
 export interface ScheduledOperations {
+  processPersonalAssistant?(now:number,limit:number):Promise<unknown>;
   processFollowThrough?(now: number, limit: number): Promise<unknown>;
   purgeConversationContexts?(now: number, limit: number): Promise<unknown>;
   claimDueReminders(now: number, limit: number): Promise<unknown>;
@@ -143,6 +144,7 @@ export async function runScheduledWork(
 ): Promise<void> {
   await Promise.allSettled([
     (async () => {
+      if (operations.processPersonalAssistant) await operations.processPersonalAssistant(controller.scheduledTime, 20).catch(() => undefined);
       if (operations.processFollowThrough) await operations.processFollowThrough(controller.scheduledTime, CRON_REMINDER_LIMIT);
       return operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT);
     })(),

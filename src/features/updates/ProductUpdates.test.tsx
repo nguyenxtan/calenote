@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, act } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { ProductUpdates } from "./ProductUpdates";
+import { ProductUpdates, updates } from "./ProductUpdates";
 beforeEach(() => {
  localStorage.clear();
  HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
@@ -29,6 +29,6 @@ it("stays usable if browser storage is unavailable", () => {
 });
 it("updates the unread indicator when another tab acknowledges the current release", () => {
  render(<ProductUpdates />);
- act(() => { localStorage.setItem("calenote.product-updates.read", "2026-10-20"); window.dispatchEvent(new Event("storage")); });
+ act(() => { localStorage.setItem("calenote.product-updates.read", updates[0].id); window.dispatchEvent(new Event("storage")); });
  expect(screen.getByRole("button", { name: "Có gì mới" })).toBeVisible();
 });

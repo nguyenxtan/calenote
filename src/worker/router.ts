@@ -1,3 +1,5 @@
+import { createPersonalAssistantOperations } from "./composition-root";
+import { handleGetPersonalAssistantBrief, handleGetPersonalAssistant, handlePutPersonalAssistant, type PersonalAssistantOperations } from "./routes/personal-assistant";
 import { createFollowThroughOperations } from './composition-root';
 import { handleFollowThroughHistory, handleListFollowThrough, handleFollowThroughAction, type FollowThroughOperations } from './routes/follow-through';
 import { FollowThroughError } from '@/contracts/api/follow-through';
@@ -89,6 +91,7 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+ personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
   followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
   emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
   accountOperations?: (env: Env) => Promise<AccountOperations>;
@@ -204,6 +207,7 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
+  const personalAssistantOperationsFactory = options.personalAssistantOperations ?? createPersonalAssistantOperations;
   const seriesOperationsFactory = options.seriesOperations
     ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
   const emailDiscoveryOperationsFactory = options.emailDiscoveryOperations ?? createEmailDiscoveryOperations;
@@ -256,6 +260,9 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
+      if (pathname === "/api/v1/personal-assistant/brief" && request.method === "GET") return await handleGetPersonalAssistantBrief(request,()=>personalAssistantOperationsFactory(env));
+      if (pathname === "/api/v1/personal-assistant" && request.method === "GET") return await handleGetPersonalAssistant(request,()=>personalAssistantOperationsFactory(env));
+      if (pathname === "/api/v1/personal-assistant" && request.method === "PUT") return await handlePutPersonalAssistant(request,appOrigin!,()=>personalAssistantOperationsFactory(env));
       if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
       if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
       if (pathname === "/api/v1/follow-through/history" && request.method === "GET") return await handleFollowThroughHistory(request, () => followThroughOperationsFactory(env));
@@ -358,7 +365,7 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
+      const authenticated = pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
         || pathname === "/api/session"
         || pathname === "/api/connections"

@@ -1,3 +1,7 @@
+import { createPersonalMemoryChatHandler } from "@/modules/personal-assistant/chat";
+import { D1PersonalAssistantStore } from "@/modules/personal-assistant/store";
+import { personalBrief, D1PersonalAssistantRuntime } from "@/modules/personal-assistant/runtime";
+import type { PersonalAssistantOperations } from "./routes/personal-assistant";
 import { createFollowThroughChatHandler } from '@/modules/follow-through/chat-adapter';
 import { D1FollowThroughService } from '@/modules/follow-through/service';
 import type { FollowThroughOperations } from './routes/follow-through';
@@ -459,7 +463,10 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
       connectionEgress: new D1ConnectionLifecycleStore(env.DB),
-      followThrough: createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring)),
+      followThrough: async (message,context) => {
+        const memory=await createPersonalMemoryChatHandler(new D1PersonalAssistantStore(env.DB,keyring))(message,context);
+        return memory.handled ? memory : createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring))(message,context);
+      },
       getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
       keyring,
       semantic,
@@ -482,6 +489,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
+    processPersonalAssistant: (now, limit) => new D1PersonalAssistantRuntime(env.DB,keyring).processDue(now,limit),
     processFollowThrough: (now, limit) => new D1FollowThroughService(env.DB,keyring).processDue(now,limit),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
@@ -531,4 +539,13 @@ export async function createFollowThroughOperations(env: Env): Promise<FollowThr
       if(!result.allowed) throw new RateLimitExceededError(Math.max(1,Math.ceil((result.resetAt-Date.now())/1000)));
     },
   };
+}
+
+export async function createPersonalAssistantOperations(env: Env): Promise<PersonalAssistantOperations> {
+ const keyring=await createRouteKeyring(env),sessions=new D1SessionStore(env.DB),rateStore=new D1RateLimitStore(env.DB);
+ return {requireUser:credentials=>requireSession(credentials,{store:sessions,keyring}),store:new D1PersonalAssistantStore(env.DB,keyring),getBrief:userId=>personalBrief(env.DB,keyring,userId,Date.now()),consume:async userId=>{
+ const subjectDigest=await keyring.digestCode(`personal-assistant:${userId}`);
+ const rate=await consumeRateLimit({subjectDigest,scope:'personal-assistant',limit:60,windowMs:60_000},{store:rateStore});
+ if(!rate.allowed)throw new RateLimitExceededError(Math.max(1,Math.ceil((rate.resetAt-Date.now())/1000)));
+ }};
 }

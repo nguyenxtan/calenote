@@ -4,7 +4,7 @@ import { PreviewResponseV1Schema, PreviewDecisionRequestV1Schema, PreviewDecisio
 const MAX_RESPONSE_BYTES = 128 * 1_024;
 const SAFE_FALLBACK = "Calenote chưa thể hoàn tất yêu cầu.";
 
-type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH";
+type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
 
 interface ApiRequestOptions {
   method?: ApiMethod;
