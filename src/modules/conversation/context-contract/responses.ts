@@ -1,3 +1,4 @@
+import { addressProse, botSalutation, type BotReplyPreferences } from "@/modules/preferences/wording";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 import type { IssueFieldSchema } from "./contracts";
 import type { z } from "zod";
@@ -139,4 +140,36 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
   let start = 0;
   const spans = parts.map(part => { const span = { kind: part.kind, start, end: start + part.text.length, ...(part.handle ? { handle: part.handle } : {}) }; start = span.end + 1; return span; });
   return { status: "READY", text, source, kind, spans };
+}
+
+/** Add only application-owned addressing; payload and control surfaces are opaque.
+ * Offsets are JavaScript UTF-16 units, matching ReplySpan's contract. */
+export function addressContextReply(plan: ReadyReplyPlan, preferences?: BotReplyPreferences): ReplyPlan {
+  const salutation = escape(botSalutation(preferences));
+  if (!salutation) return plan;
+  const literalNotices = new Set<string>([...Object.values(notices), ...Object.values(failures)]);
+  const literalDecisions = new Set<string>((["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"] as const).map(decisionQuestion));
+  const replacements = plan.spans.map(span => {
+    const original = plan.text.slice(span.start, span.end);
+    const knownNotice = plan.kind === "NOTICE" && plan.spans.length === 1 && span.kind === "FACT" && literalNotices.has(original);
+    const knownDecision = plan.kind === "DECISION" && span.kind === "QUESTION" && literalDecisions.has(original);
+    // Equality alone is insufficient: an owner fact may equal application prose.
+    return plan.source === "BACKEND" && (knownNotice || knownDecision) ? escape(addressProse(original, preferences)) : original;
+  });
+  const changed = replacements.some((replacement, index) => replacement !== plan.text.slice(plan.spans[index].start, plan.spans[index].end));
+  let text = changed ? "" : salutation, cursor = 0;
+  const spans: ReplySpan[] = [];
+  for (let index = 0; index < plan.spans.length; index++) {
+    const span = plan.spans[index];
+    if (span.start < cursor || span.end < span.start || span.end > plan.text.length) return { status: "INVALID" };
+    text += plan.text.slice(cursor, span.start);
+    const start = text.length;
+    text += replacements[index];
+    spans.push({ ...span, start, end: text.length });
+    cursor = span.end;
+  }
+  text += plan.text.slice(cursor);
+  if (!text.isWellFormed()) return { status: "INVALID" };
+  if (text.length > 2000) return { status: "TOO_LONG", units: text.length, limit: 2000 };
+  return { ...plan, text, spans };
 }

@@ -1,10 +1,32 @@
 {
-  "latestId": "2026-10-20-address-navigation",
+  "latestId": "2026-10-20-all-bot-addressing",
   "notes": [
     {
-      "id": "2026-10-20-address-navigation",
+      "id": "2026-10-20-all-bot-addressing",
       "commit": null,
       "releasedAt": null,
+      "title": "Cách xưng hô đồng bộ trong tin nhắc và phản hồi bot",
+      "summary": "Dùng cách gọi đã lưu cho tin nhắc, mã đăng nhập và các nhóm phản hồi bot còn lại.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Dùng chung bộ định dạng cách gọi theo chủ tài khoản; đọc cài đặt hiện tại khi gửi thay vì lưu cứng lúc tạo lời nhắc.",
+        "Mở rộng tới nhắc tự động, nhắc tiếp, mã đăng nhập qua bot, lệnh xác nhận/hủy, follow-through, trí nhớ và bản xem trước.",
+        "Giữ nguyên tiêu đề, dữ liệu ghi nhớ, mã điều khiển và OTP. Bản xem trước giữ đúng vị trí tham chiếu và nội dung đã lưu.",
+        "Phần xưng hô thêm vào quá dài được bỏ để giữ nguyên nội dung; chat chưa xác minh không nhận tên riêng của chủ tài khoản."
+      ],
+      "memberChanges": [
+        "Tin nhắc tự động và nhắc tiếp dùng cách xưng hô đã lưu.",
+        "Mã đăng nhập và các phản hồi về xác nhận, hoãn, hoàn tất, trí nhớ cũng dùng cách gọi của bạn.",
+        "Đổi cách xưng hô sẽ áp dụng khi bot gửi tin tiếp theo, kể cả lời nhắc đã tạo trước đó.",
+        "Nội dung bạn nhập và mã xác nhận được giữ nguyên; tin gần giới hạn độ dài ưu tiên hiển thị đủ nội dung."
+      ],
+      "verification": "Đang kiểm tra tự động bằng dữ liệu và kênh gửi mẫu. Chưa phát hành bản này hoặc kiểm thử gửi production.",
+      "caveat": "Không bật thêm Pilot AI hay thay đổi kênh gửi. Phản hồi chưa xác minh danh tính vẫn trung tính; nội dung dữ liệu/model trong bản xem trước được giữ nguyên sau lời gọi mở đầu."
+    },
+    {
+      "id": "2026-10-20-address-navigation",
+      "commit": "9c9d20fdee2e62f36e4c3cc5723fc6990c11db3c",
+      "releasedAt": "2026-10-20T14:26:50+07:00",
       "title": "Bot dùng cách xưng hô đã lưu, chuyển menu bớt chờ",
       "summary": "Áp dụng cách gọi trong hội thoại và giảm bước kiểm tra phiên lặp khi chuyển trang.",
       "kind": "Sửa lỗi",
@@ -16,7 +38,7 @@
         "Bot gọi theo cách xưng hô đã lưu khi chào và hỏi thêm trong hội thoại.",
         "Chuyển giữa các menu liên tiếp bớt thời gian chờ kiểm tra đăng nhập lại."
       ],
-      "verification": "Đang kiểm tra hồi quy và bản dựng local; chưa phát hành hoặc đo hiệu năng production của bản sửa.",
+      "verification": "Đã đối chiếu triển khai 100% và 133 tài nguyên. Live lời chào gọi đúng sếp; chuyển Lịch–Lời nhắc–Lịch không kiểm tra phiên lặp. Lượt chào chuẩn không gọi AI. Một lần nhập nhầm trong kiểm thử có dispatch AI, được ghi riêng trong báo cáo; chi phí thực tế chưa đối soát.",
       "caveat": "Không thay đổi Pilot AI, provider hoặc lịch nhắc. Cách xưng hô mới chưa áp dụng cho mọi mẫu tin nhắc tự động và nhánh bot khác."
     },
     {

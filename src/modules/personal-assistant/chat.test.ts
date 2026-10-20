@@ -43,3 +43,23 @@ it('returns bounded no-match guidance and safely handles storage failures', asyn
   expect(failure.handled && failure.text).toContain('Chưa thể đọc');
   expect(JSON.stringify(failure)).not.toContain('SECRET');
 });
+it('addresses saved prose while preserving memory text and refreshing preferences', async () => {
+  const h = harness(); h.document.memories = [{ id: 'one', label: 'Bạn muốn mình', value: 'Bạn muốn mình' }];
+  const prefs = vi.fn().mockResolvedValueOnce({ addressStyle: 'sep' }).mockResolvedValueOnce({ addressStyle: 'custom', customDisplayName: 'Lan' }).mockRejectedValueOnce(new Error('secret'));
+  const handle = createPersonalMemoryChatHandler({ get: h.get }, prefs);
+  const first = await handle(message('trí nhớ'), context);
+  expect(first.handled && first.text).toContain('Trí nhớ sếp đã lưu:\nBạn muốn mình: Bạn muốn mình');
+  const second = await handle(message('/memory missing'), context);
+  expect(second.handled && second.text).toContain('Lan có thể');
+  const fallback = await handle(message('/memory missing'), context);
+  expect(fallback.handled && fallback.text).toContain('Bạn có thể');
+});
+it('does not let a long salutation truncate any existing memory output', async () => {
+  const h = harness();
+  h.document.memories = Array.from({ length: 5 }, (_, i) => ({ id: `id-${i}`, label: 'L'.repeat(90), value: 'V'.repeat(240) }));
+  const baseline = await h.handle(message('/memory'), context);
+  const handle = createPersonalMemoryChatHandler({ get: h.get }, async () => ({ addressStyle: 'custom', customDisplayName: '😀'.repeat(80) }));
+  const personalized = await handle(message('/memory'), context);
+  expect(personalized.handled && personalized.text.length).toBeLessThanOrEqual(1800);
+  expect(personalized.handled && personalized.text.split('\n').slice(1)).toEqual(baseline.handled && baseline.text.split('\n').slice(1));
+});

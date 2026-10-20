@@ -1,3 +1,4 @@
+import { addressProse, botSalutation, type BotReplyPreferences } from "@/modules/preferences/wording";
 import type {
   BotProvider,
   SendReceipt,
@@ -242,6 +243,7 @@ type SendText = (
 ) => Promise<SendReceipt>;
 
 export interface DeliverReminderDependencies {
+  getReplyPreferences?(ownerId: string): Promise<BotReplyPreferences>;
   store: ReminderDeliveryStore;
   keyring: Pick<Keyring, "decryptSensitive" | "decryptCredential">;
   sendText?: SendText;
@@ -416,11 +418,24 @@ export async function deliverReminder(
       randomBytes,
     );
   }
+  let replyPreferences: BotReplyPreferences | undefined;
+  try {
+    replyPreferences = await dependencies.getReplyPreferences?.(context.ownerUserId);
+  } catch {
+    // Address preferences are optional; delivery ownership and retry fences remain authoritative.
+  }
+  let fallbackText = text;
+  if (context.detail) text = `${addressProse(DELIVERY_PREFIX, replyPreferences)}${text.slice(DELIVERY_PREFIX.length)}`;
   if (context.followThrough) {
     const ref = context.followThrough.publicId;
-    if (context.followThrough.kind === "FOLLOW_UP") text = `🔁 Theo dõi việc: ${text}\nBạn đã hoàn tất chưa?`;
-    text += `\nMã việc: ${ref}\nxong ${ref} · hoãn ${ref} 15 phút\nđổi lịch ${ref} YYYY-MM-DD HH:mm\ndừng theo dõi ${ref}`;
+    if (context.followThrough.kind === "FOLLOW_UP") text = `🔁 Theo dõi việc: ${text}\n${addressProse("Bạn đã hoàn tất chưa?", replyPreferences)}`;
+    if (context.followThrough.kind === "FOLLOW_UP") fallbackText = `🔁 Theo dõi việc: ${fallbackText}\nBạn đã hoàn tất chưa?`;
+    const controls = `\nMã việc: ${ref}\nxong ${ref} · hoãn ${ref} 15 phút\nđổi lịch ${ref} YYYY-MM-DD HH:mm\ndừng theo dõi ${ref}`;
+    text += controls;
+    fallbackText += controls;
   }
+  text = `${botSalutation(replyPreferences)}${text}`;
+  if (text.length > PROVIDER_TEXT_CODE_UNITS && fallbackText.length <= PROVIDER_TEXT_CODE_UNITS) text = fallbackText;
   if (text.length > PROVIDER_TEXT_CODE_UNITS) {
     return failBeforeProvider(
       reminderId,

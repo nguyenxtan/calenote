@@ -1,3 +1,4 @@
+import type { BotReplyPreferences } from "@/modules/preferences/wording";
 import {isUnreconciledListInterpretation, type ContextGatewayInterpretation} from "./list-period-transport";
 import {reconcileListPeriodV3} from "./list-period-reconciliation";
 import type { BoundChatContext, BoundChatMessage, ProcessBoundChatResult } from "@/modules/reminders/command-service";
@@ -16,7 +17,7 @@ import type { ConversationScope } from "../contracts";
 import { buildContextInputV2 } from "./context";
 import { selectControl } from "./decisions";
 import { transitionConversationV3, type ConversationTransitionV3 } from "./transition";
-import { composeContextReply, type FailureReason, type ReadyReplyPlan } from "./responses";
+import { addressContextReply, composeContextReply, type FailureReason, type ReadyReplyPlan } from "./responses";
 import { validateEvidenceV3, validateGuidancePrivacy } from "./evidence";
 import { mergePatchV3 } from "./merge";
 import { resolveRequest } from "./resolve";
@@ -43,6 +44,7 @@ export interface ContextContractServiceDependencies {
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
   now(): number; reply(plan: ReplyPlan): Promise<ReplyReceipt>;
   list(input: ContextReminderQuery): Promise<ContextQueryResult>;
+  getReplyPreferences?: (ownerId: string) => Promise<BotReplyPreferences>;
   processingFeedback?: () => void | Promise<void>;
   observe?: (event: ContextObservationEvent) => void;
 }
@@ -67,6 +69,30 @@ export function createContextContractService(deps: ContextContractServiceDepende
       type EventFields = ContextObservationEvent extends infer E ? E extends ContextObservationEvent ? Omit<E, "traceId" | "sourceSha" | "contractVersion" | "promptVersion" | "mode"> : never : never;
       const emit = (event: EventFields) => { try { deps.observe?.({ traceId, sourceSha: deps.sourceSha, mode: deps.mode,
         contractVersion: "calenote-context-3", promptVersion: "calenote-context-3", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+      let preferences: BotReplyPreferences | undefined;
+      const address = (reply: ReadyReplyPlan): ReadyReplyPlan => {
+        const result = addressContextReply(reply, preferences);
+        // Addressing is optional; never clip an authoritative payload to fit it.
+        return result.status === "READY" ? result : reply;
+      };
+      const addressTransition = (transition: Exclude<ConversationTransitionV3, { kind: string }>) => {
+        const reply = address(transition.reply);
+        if (reply === transition.reply) return;
+        const outbound = transition.snapshot.transcript.at(-1);
+        if (!outbound || outbound.role !== "ASSISTANT" || outbound.text !== transition.reply.text) return;
+        const projection = projectSemanticView(reply.text, transition.snapshot.controlRegistry.map(control => control.handle));
+        if (projection.status !== "READY") return;
+        const previous = { ...outbound };
+        Object.assign(outbound, { text: reply.text, semanticView: projection.text, sourceMap: projection.sourceMap, controlSpans: projection.controlSpans });
+        if (new TextEncoder().encode(encodeContextSnapshotV2(transition.snapshot)).length > 16384) { Object.assign(outbound, previous); return; }
+        const question = reply.spans.find(span => span.kind === "QUESTION");
+        if (question) {
+          const text = reply.text.slice(question.start, question.end);
+          if (transition.snapshot.pendingReminderQuestion?.questionId === outbound.id) transition.snapshot.pendingReminderQuestion.text = text;
+          if (transition.snapshot.pendingQueryQuestion?.questionId === outbound.id) transition.snapshot.pendingQueryQuestion.text = text;
+        }
+        transition.reply = reply;
+      };
       let sendObservation: ContextObservation | undefined;
       let failureSnapshot: ContextSnapshotV2 | null = null, failureReceived: ContextSnapshotV2 | undefined;
       let downstreamCount = 0;
@@ -88,6 +114,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         if (sendObservation && failureSnapshot && failureReceived) {
           const transition = await transitionConversationV3({ snapshot: failureSnapshot, received: failureReceived, failure: reason, control: { kind: "NONE" }, authority, now: deps.now(), channel: deps.channel });
           if (!("kind" in transition)) {
+            addressTransition(transition);
             const { reply, ...stored } = transition;
             const applied = await deps.store.apply(scope, sendObservation, stored);
             if (applied.status !== "APPLIED") return { status: "SUPERSEDED" };
@@ -100,7 +127,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         }
         if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
         const reply = composeContextReply({ kind: "FAILURE", reason });
-        if (reply.status === "READY") { if (downstreamCount > 0) downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: reply.source }); await send(reply); }
+        if (reply.status === "READY") { if (downstreamCount > 0) downstream({ stage: "REPLY", result: "PASS", reason: "NONE", replySource: reply.source }); await send(address(reply)); }
         return { status: "REJECTED" };
       };
       const confirm = async (proof: DecisionProof): Promise<ProcessBoundChatResult> => {
@@ -110,7 +137,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         emit({ event: "CONFIRMATION_VALIDATED", result: success ? "VALID" : "INVALID" });
         if (success) emit({ event: result.status === "COMMITTED" ? "MUTATION_COMMITTED" : "MUTATION_IDEMPOTENT_SKIP" });
         else if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
-        const reply = composeContextReply({ kind: "MUTATION", result }); if (reply.status === "READY") await send(reply);
+        const reply = composeContextReply({ kind: "MUTATION", result }); if (reply.status === "READY") await send(address(reply));
         return { status: success ? "CONFIRMED" : "REJECTED" };
       };
       try {
@@ -125,6 +152,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         if (observed.observation.scope.workspaceId !== context.workspaceId || observed.observation.scope.connectionId !== message.connectionId
           || observed.observation.scope.chatId !== message.privateChatId || observed.observation.inbound.rowid !== context.inboundRowId
           || Date.parse(observed.observation.inbound.receivedAt) !== message.receivedAt || context.timezone !== "Asia/Ho_Chi_Minh") return finish("CONTEXT");
+        try { preferences = await deps.getReplyPreferences?.(context.userId); } catch { preferences = undefined; }
         const control = selectControl(message.text, prior?.pendingDecision ?? null, authority, { snapshot: prior ?? undefined, now: scope.now });
         const normalized = normalizedControl(message.text);
         // UI vocabulary without a decision is not authority over an active
@@ -244,6 +272,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           if (!transition.confirmationProof) return finish("STALE");
           return confirm(transition.confirmationProof);
         }
+        addressTransition(transition);
         const { reply, ...stored } = transition;
         const applied = await deps.store.apply(scope, observed.observation, stored);
         if (applied.status !== "APPLIED") { emit({ event: "TRANSITION_REJECTED", reason: applied.status === "IDEMPOTENT" ? "DUPLICATE" : applied.status }); return { status: "SUPERSEDED" }; }

@@ -1,3 +1,4 @@
+import { botSalutation } from "@/modules/preferences/wording";
 import {localReadOnlyCommand,vietnamReceiptDate,localReadOnlyRange,LOCAL_HELP,LOCAL_MONTH_STATUSES,type LocalMonthQuery,type LocalMonthResult} from './local-read-only';
 import { failureDetails, observeConversationFailure, type ConversationFailureDetails, type ConversationFailureObserver, type ConversationFailureStage } from "./failure-observation";
 import { randomOpaqueId } from "@/modules/platform/types";
@@ -100,9 +101,14 @@ export function createConversationService(deps: ConversationServiceDependencies)
         sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() };
       let preferences: ReplyPreferences | undefined;
       try { preferences = await deps.getReplyPreferences?.(scope.ownerId); } catch { /* Wording never changes authority or retries a send. */ }
+      const personalized = (text: string, containsOwnerData = false) => {
+        const prose = containsOwnerData ? text : addressConversationText(text, preferences);
+        const candidate = (containsOwnerData || !/(?:^|[^\p{L}])(bạn|Bạn)(?:$|[^\p{L}])/u.test(text) ? botSalutation(preferences) : "") + prose;
+        return candidate.length <= 2000 ? candidate : text;
+      };
       const finish: typeof terminalFinish = (scope, text, status = "REJECTED", failure) => terminalFinish(scope,
-        status === "REMINDERS_LISTED" || status === "DRAFT_CREATED" ? text : addressConversationText(text, preferences), status, failure);
-      const sendProse = (text: string) => reply(addressConversationText(text, preferences));
+        personalized(text, status === "REMINDERS_LISTED" || status === "DRAFT_CREATED"), status, failure);
+      const sendProse = (text: string) => reply(personalized(text));
       const normalized = message.text.normalize("NFC").trim().toLocaleLowerCase("vi-VN");
       let stage: ConversationFailureStage = "PRECONDITION";
       try {
@@ -229,7 +235,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           if (auto) {
             const result = await deps.seriesStore.confirm(scope, proposed.proposalId, proposed.revision, true);
             if (result.status !== "CONFIRMED") return finish(scope, unavailable);
-            await reply(addressConversationText("Đã tạo chuỗi lời nhắc.", preferences) + `\n${preview}`); return { status: "CONFIRMED" };
+            await reply(personalized("Đã tạo chuỗi lời nhắc." + `\n${preview}`, true)); return { status: "CONFIRMED" };
           }
           return finish(scope, preview, "DRAFT_CREATED");
         }
@@ -246,7 +252,7 @@ export function createConversationService(deps: ConversationServiceDependencies)
           draftId, encryptedTitle, titleKeyVersion: 1, scheduledAt, timezone: "Asia/Ho_Chi_Minh", expiresAt: next.expiresAt,
           encryptedCalendarFacts, enforceConversationOrder: true, conversationFence: { id: next.id, revision: next.revision } });
         if (mutation !== "COMMITTED") return { status: "SUPERSEDED" };
-        await reply(auto ? addressConversationText("Đã tạo lời nhắc.", preferences) + `\n${preview}` : preview); return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
+        await reply(personalized(auto ? "Đã tạo lời nhắc." + `\n${preview}` : preview, true)); return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
       } catch {
         // Do not fall through to V1 after a partially handled V2 request, and
         // never forward exception text containing provider/context material.

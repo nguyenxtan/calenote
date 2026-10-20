@@ -1,3 +1,4 @@
+import { addressProse, type BotReplyPreferences } from "@/modules/preferences/wording";
 import { prepareSession, type SessionRecord } from "@/modules/auth/session";
 import type { BotProvider, SendReceipt } from "@/modules/connections/contracts";
 import { ProviderOperationError, ProviderVerificationError } from "@/modules/connections/provider-error";
@@ -1197,6 +1198,7 @@ type SendText = (
 ) => Promise<SendReceipt>;
 
 export interface DeliverLoginCodeDependencies {
+  getReplyPreferences?(ownerId: string): Promise<BotReplyPreferences>;
   store: LoginCodeStore;
   keyring: Pick<Keyring, "decryptSensitive" | "decryptCredential">;
   sendText?: SendText;
@@ -1236,6 +1238,7 @@ export async function deliverLoginCode(
 
   let code: string;
   let token: string;
+  let text: string;
   try {
     code = await dependencies.keyring.decryptSensitive(
       "login-code",
@@ -1272,12 +1275,20 @@ export async function deliverLoginCode(
     }
   }
 
+  let replyPreferences: BotReplyPreferences | undefined;
+  try {
+    replyPreferences = await dependencies.getReplyPreferences?.(delivery.userId);
+  } catch {
+    // Optional presentation lookup cannot prevent login delivery.
+  }
+  text = `${addressProse("Mã đăng nhập Calenote của bạn: ", replyPreferences)}${code}. Mã có hiệu lực trong 10 phút.`;
+  if (text.length > 2_000) text = `Mã đăng nhập Calenote của bạn: ${code}. Mã có hiệu lực trong 10 phút.`;
+
   const marker = randomOpaqueId(randomBytes);
   const acquired = await dependencies.store.acquireDelivery(delivery, marker, now());
   if (acquired.status !== "OWNED") return acquired;
   const attemptCount = delivery.attemptCount + 1;
 
-  const text = `Mã đăng nhập Calenote của bạn: ${code}. Mã có hiệu lực trong 10 phút.`;
   try {
     await (dependencies.sendText ?? sendProviderText)(
       delivery.provider,

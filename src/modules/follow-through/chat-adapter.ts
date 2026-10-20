@@ -1,3 +1,4 @@
+import { botSalutation, type BotReplyPreferences } from "@/modules/preferences/wording";
 import type { BoundChatMessage, BoundChatContext } from "@/modules/reminders/command-service";
 import { FollowThroughError } from "@/contracts/api/follow-through";
 import type { FollowThroughAction, FollowThroughItem, FollowThroughList, FollowThroughScope } from "@/contracts/api/follow-through";
@@ -27,8 +28,9 @@ function selection(items: FollowThroughItem[]): FollowThroughChatResult {
   return { handled: true, text: items.length ? `Chọn mã việc trong cuộc trò chuyện này:\n${items.map(item => `${item.publicId}: ${item.title.slice(0, 100)}`).join("\n")}\nVí dụ: xong <mã việc>.` : "Không tìm thấy việc được theo dõi trong cuộc trò chuyện này." };
 }
 
-export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now): FollowThroughChatHandler {
-  return async (message, context) => {
+export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now, getReplyPreferences?: (ownerId: string) => Promise<BotReplyPreferences>): FollowThroughChatHandler {
+  const handle: FollowThroughChatHandler =
+  async (message, context) => {
     const text = message.text.normalize("NFC").trim().replace(/\s+/gu, " ");
     const command = /^(?:(xác nhận) )?(dừng theo dõi|chưa xong|xong|hoãn|đổi lịch)(?: (.*))?$/iu.exec(text);
     if (!command) return { handled: false };
@@ -69,5 +71,12 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
       if (!(error instanceof FollowThroughError)) throw error;
       return { handled: true, text: error.code === "CONFLICT" ? "Việc vừa thay đổi. Chọn lại mã việc và gửi lệnh mới sau khi kiểm tra." : "Chưa thay đổi việc. Kiểm tra mã việc, trạng thái và bot gốc trong cuộc trò chuyện này." };
     }
+  };
+  return async (message, context) => {
+    const result = await handle(message, context);
+    if (!result.handled) return result;
+    let preferences: BotReplyPreferences | undefined;
+    try { preferences = await getReplyPreferences?.(context.userId); } catch { /* Presentation lookup is best effort. */ }
+    return { ...result, text: botSalutation(preferences) + result.text };
   };
 }

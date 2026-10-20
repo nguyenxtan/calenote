@@ -13,6 +13,7 @@ it.each(["zalo", "telegram"] as const)("composes migrated %s private-chat action
     h.sqlite!.sqlite.exec(readFileSync("migrations/0014_reminder_follow_through.sql", "utf8"));
     await h.db.prepare("DELETE FROM inbound_updates").run();
     const now = Date.now();
+    await h.db.prepare("INSERT INTO user_preferences(user_id,address_style,tone,updated_at) VALUES('owner','sep','friendly',1)").run();
     const credential = provider === "telegram" ? "123456789:AAExample_secret-token_123456789" : "synthetic-zalo-token";
     const encrypted = await h.keyring.encryptCredential("connection", provider, 1, credential);
     await h.db.prepare("UPDATE bot_connections SET provider=?,encrypted_token=?,encrypted_token_iv=? WHERE id='connection'").bind(provider, encrypted.ciphertext, encrypted.iv).run();
@@ -40,11 +41,14 @@ it.each(["zalo", "telegram"] as const)("composes migrated %s private-chat action
     expect(await service.receipt(scope, "chat-chat-command")).toMatchObject({ progress: "DONE", revision: 1 });
     expect(await operations.processInbound("chat-command")).toEqual({ status: "TERMINAL" });
     expect(requester).toHaveBeenCalledTimes(1);
+    expect(requester.mock.calls[0][0].body?.text).toMatch(/^Sếp, /u);
     // Simulate process loss after the action transaction but before inbound
     // terminalization. Reclaim changes the claim marker; the receipt key stays.
+    await h.db.prepare("UPDATE user_preferences SET address_style='custom',custom_display_name='Chị Tuyền' WHERE user_id='owner'").run();
     await h.db.prepare("UPDATE inbound_updates SET state='PENDING',processed_at=NULL,processing_started_at=NULL,transition_marker=NULL WHERE id='chat-command'").run();
     expect(await operations.processInbound("chat-command")).toEqual({ status: "FOLLOW_THROUGH_HANDLED" });
     expect(requester).toHaveBeenCalledTimes(2);
+    expect(requester.mock.calls[1][0].body?.text).toMatch(/^Chị Tuyền, /u);
     expect(network).not.toHaveBeenCalled();
     expect(await h.db.prepare("SELECT count(*) AS n FROM follow_through_action_receipts").first()).toEqual({ n: 1 });
     expect(await h.db.prepare("SELECT count(*) AS n FROM semantic_budget_windows").first()).toEqual({ n: 0 });

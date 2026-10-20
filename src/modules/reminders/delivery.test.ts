@@ -824,3 +824,56 @@ describe("follow-through guard coverage", () => {
     expect(h.db.sqlite.prepare("SELECT status,attempt_count FROM reminder_deliveries").get()).toEqual({ status: "RETRYABLE", attempt_count: 1 });
   });
 });
+
+
+describe("delivery-time saved addressing", () => {
+  it.each(["sep", "custom", "ong_tui"] as const)("addresses %s without rewriting title or controls", async addressStyle => {
+    const title = "Bạn gọi cho mình và tôi";
+    const h = await createHarness({ title });
+    const read = h.deps.store.read.bind(h.deps.store);
+    vi.spyOn(h.deps.store, "read").mockImplementation(async id => ({ ...(await read(id))!, followThrough: { publicId: "ABCD1234", revision: 2, kind: "FOLLOW_UP" } }));
+    const preferences = { addressStyle, customDisplayName: addressStyle === "custom" ? "Bạn An" : null };
+    const getReplyPreferences = vi.fn(async () => preferences);
+    await expect(h.module.deliverReminder(reminderId, { ...h.deps, getReplyPreferences })).resolves.toEqual({ status: "SENT" });
+    const text = h.sendText.mock.calls[0][3];
+    expect(getReplyPreferences).toHaveBeenCalledWith("user-1");
+    expect(text).toContain(title);
+    expect(text).toContain("Mã việc: ABCD1234\nxong ABCD1234 · hoãn ABCD1234 15 phút\nđổi lịch ABCD1234 YYYY-MM-DD HH:mm\ndừng theo dõi ABCD1234");
+    expect(text).not.toContain("Bạn đã hoàn tất chưa?");
+    if (addressStyle === "sep") expect(text).toMatch(/^Sếp, /u);
+    if (addressStyle === "custom") expect(text).toMatch(/^Bạn An, /u);
+  });
+
+  it("reads the latest preference after reminder creation and preserves encrypted details", async () => {
+    const h = await createHarness({ contextContract: true, title: "Bạn và mình" });
+    await seedCompanion(h, { ...companion, notes: "Bạn nhớ tôi", location: "Nhà bạn" });
+    let customDisplayName = "Tên cũ";
+    const getReplyPreferences = vi.fn(async () => ({ addressStyle: "custom" as const, customDisplayName }));
+    customDisplayName = "Tên mới";
+    await expect(h.module.deliverReminder(reminderId, { ...h.deps, getReplyPreferences })).resolves.toEqual({ status: "SENT" });
+    const text = h.sendText.mock.calls[0][3];
+    expect(text).toMatch(/^Tên mới, /u);
+    expect(text).toContain("Bạn và mình");
+    expect(text).toContain("Bạn nhớ tôi");
+    expect(text).toContain("Nhà bạn");
+  });
+
+  it("falls back when preference lookup fails", async () => {
+    const h = await createHarness();
+    await expect(h.module.deliverReminder(reminderId, { ...h.deps, getReplyPreferences: async () => { throw new Error("unavailable"); } })).resolves.toEqual({ status: "SENT" });
+    expect(h.sendText.mock.calls[0][3]).toBe("⏰ Nhắc hẹn: gọi cho mẹ");
+  });
+
+  it("falls back on salutation overflow without truncating the original payload", async () => {
+    const h = await createHarness({ contextContract: true, title: "a".repeat(400) });
+    await seedCompanion(h, { ...companion, location: null, eventDate: null, eventTime: null, notes: "n".repeat(1470) });
+    const original = await h.deps.store.read(reminderId);
+    const acquire = vi.spyOn(h.deps.store, "acquire");
+    await expect(h.module.deliverReminder(reminderId, { ...h.deps, getReplyPreferences: async () => ({ addressStyle: "custom", customDisplayName: "A".repeat(2000) }) })).resolves.toEqual({ status: "SENT" });
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(original).not.toBeNull();
+    expect(h.sendText.mock.calls[0][3]).toMatch(/^Nhắc bạn: /u);
+    expect(h.sendText.mock.calls[0][3]).toContain("n".repeat(1470));
+    expect(h.sendText.mock.calls[0][3].length).toBeLessThanOrEqual(2000);
+  });
+});

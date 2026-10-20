@@ -686,3 +686,17 @@ describe("follow-through before semantic turns", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 });
+
+describe('private addressing at the binding boundary',()=>{
+ it('addresses a successful bind using the connection owner, not sender display name',async()=>{
+  const h=await setup();const preferences=vi.fn(async()=>({addressStyle:'custom' as const,customDisplayName:'Chị Tuyền'}));h.deps.getReplyPreferences=preferences;
+  expect(await processInbound(h.inboundId,h.deps)).toEqual({status:'BOUND'});
+  expect(preferences).toHaveBeenCalledExactlyOnceWith('user-1');
+  expect(h.sendText.mock.calls[0][3]).toBe('Chị Tuyền, Đã kết nối cuộc trò chuyện riêng này với Calenote.');
+ });
+ it('does not disclose or even fetch owner naming for an unverified chat',async()=>{
+  const h=await setup({text:'hello'});const preferences=vi.fn(async()=>({addressStyle:'custom' as const,customDisplayName:'private name'}));h.deps.getReplyPreferences=preferences;
+  expect(await processInbound(h.inboundId,h.deps)).toEqual({status:'REJECTED'});
+  expect(preferences).not.toHaveBeenCalled();expect(h.sendText.mock.calls[0][3]).not.toContain('private name');
+ });
+});

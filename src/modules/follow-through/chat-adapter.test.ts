@@ -81,3 +81,26 @@ describe("provider-neutral follow-through commands", () => {
     expect(h.scopes).toHaveLength(0);
   });
 });
+it('salutes without rewriting titles, destinations or confirmation commands', async () => {
+  const saved = { ...item, title: 'Bạn muốn mình', destinationLabel: 'Bạn muốn mình' };
+  const prefs = async () => ({ addressStyle: 'sep' as const, customDisplayName: null });
+  const service = { list: async () => ({ items: [saved] }), resolveReference: async () => [saved], receipt: async () => null, act: async () => saved };
+  const handle = createFollowThroughChatHandler(service, () => now, prefs);
+  const selection = await handle(message('xong'), context);
+  expect(selection.handled && selection.text).toContain(`Sếp, Chọn mã việc trong cuộc trò chuyện này:\n${saved.publicId}: Bạn muốn mình`);
+  const preview = await handle(message('hoãn ABCDEF01 15 phút'), context);
+  expect(preview.handled && preview.text).toContain('qua Bạn muốn mình.\nĐể xác nhận: xác nhận hoãn ABCDEF0123456789abcdef');
+});
+it('refreshes custom addressing and safely falls back after a preference lookup failure', async () => {
+  let calls = 0;
+  const service = { list: async () => ({ items: [] }), resolveReference: async () => [], receipt: async () => null, act: async () => item };
+  const handle = createFollowThroughChatHandler(service, () => now, async owner => {
+    expect(owner).toBe('owner');
+    if (++calls === 2) throw new Error('private failure');
+    return { addressStyle: 'custom', customDisplayName: 'Bạn muốn mình' };
+  });
+  const addressed = await handle(message('xong'), context);
+  expect(addressed.handled && addressed.text).toBe('Bạn muốn mình, Không tìm thấy việc được theo dõi trong cuộc trò chuyện này.');
+  const fallback = await handle(message('xong'), context);
+  expect(fallback.handled && fallback.text).toBe('Không tìm thấy việc được theo dõi trong cuộc trò chuyện này.');
+});

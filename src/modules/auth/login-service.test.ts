@@ -1104,3 +1104,45 @@ it('does not silently choose a bot if an existing multi-bot account has no prima
  INSERT INTO chat_identities VALUES ('second-chat','second','second-user','second-private',NULL,1);`);
  await expect(issue(account)).resolves.toEqual({accepted:true});expect(account.db.sqlite.prepare('SELECT COUNT(*) AS n FROM login_codes').get()).toEqual({n:0});
 });
+
+
+describe("login delivery saved addressing", () => {
+  it.each(["sep", "custom", "ong_tui"] as const)("uses current %s addressing and preserves OTP and expiry", async addressStyle => {
+    const account = await setupBoundAccount();
+    await issue(account);
+    const login = row(account.db);
+    const code = await decryptedCode(account.keyring, login);
+    let customDisplayName = "Tên cũ";
+    const getReplyPreferences = vi.fn(async () => ({ addressStyle, customDisplayName: addressStyle === "custom" ? customDisplayName : null }));
+    customDisplayName = "Bạn An";
+    const sendText = vi.fn(async () => ({ providerMessageId: "receipt" }));
+    await expect(deliverLoginCode(login.id, { store: account.store, keyring: account.keyring, sendText, getReplyPreferences, now: () => NOW + 1 })).resolves.toEqual({ status: "SENT" });
+    const text = (sendText.mock.calls as unknown[][])[0][3] as string;
+    expect(getReplyPreferences).toHaveBeenCalledWith(USER_ID);
+    expect(text).toContain(`${code}. Mã có hiệu lực trong 10 phút.`);
+    expect(text).not.toContain("của bạn:");
+    if (addressStyle === "sep") expect(text).toContain("của sếp:");
+    if (addressStyle === "custom") expect(text).toContain("của Bạn An:");
+  });
+
+  it("keeps login delivery available when preference lookup fails", async () => {
+    const account = await setupBoundAccount();
+    await issue(account);
+    const login = row(account.db);
+    const code = await decryptedCode(account.keyring, login);
+    const sendText = vi.fn(async () => ({ providerMessageId: "receipt" }));
+    await expect(deliverLoginCode(login.id, { store: account.store, keyring: account.keyring, sendText, getReplyPreferences: async () => { throw new Error("unavailable"); }, now: () => NOW + 1 })).resolves.toEqual({ status: "SENT" });
+    expect((sendText.mock.calls as unknown[][])[0][3]).toBe(`Mã đăng nhập Calenote của bạn: ${code}. Mã có hiệu lực trong 10 phút.`);
+  });
+});
+
+
+it("bounds an oversized saved login address while preserving the exact code", async () => {
+  const account = await setupBoundAccount();
+  await issue(account);
+  const login = row(account.db);
+  const code = await decryptedCode(account.keyring, login);
+  const sendText = vi.fn(async () => ({ providerMessageId: "receipt" }));
+  await expect(deliverLoginCode(login.id, { store: account.store, keyring: account.keyring, sendText, getReplyPreferences: async () => ({ addressStyle: "custom", customDisplayName: "A".repeat(2000) }), now: () => NOW + 1 })).resolves.toEqual({ status: "SENT" });
+  expect((sendText.mock.calls as unknown[][])[0][3]).toBe(`Mã đăng nhập Calenote của ${"A".repeat(80)}: ${code}. Mã có hiệu lực trong 10 phút.`);
+});

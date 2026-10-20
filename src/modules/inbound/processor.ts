@@ -1,3 +1,4 @@
+import { addressProse, botSalutation, type BotReplyPreferencesGetter } from "@/modules/preferences/wording";
 import type { FollowThroughChatHandler } from "@/modules/follow-through/chat-adapter";
 import type {
   BotProvider,
@@ -160,6 +161,7 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  getReplyPreferences?: BotReplyPreferencesGetter;
   followThrough?: FollowThroughChatHandler;
   getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
   connectionEgress?: { reserveEgress(connectionId:string,id:string,now:number):Promise<boolean>; finishEgress(id:string):Promise<void> };
@@ -786,7 +788,14 @@ export async function processInbound(
       throw new Error("Unable to bind private chat");
     }
     if (bound) {
-      const confirmationSent = await replyAfterTerminal(message, BIND_SUCCESS_REPLY, dependencies);
+      let bindReply = BIND_SUCCESS_REPLY;
+      // Only successful binding proves this private chat may receive the owner's preferred name.
+      try {
+        const preferences = await dependencies.getReplyPreferences?.(message.connectionUserId);
+        const candidate = botSalutation(preferences) + addressProse(bindReply, preferences);
+        if (candidate.length <= 2000) bindReply = candidate;
+      } catch { /* Presentation fallback; never retry an uncertain send. */ }
+      const confirmationSent = await replyAfterTerminal(message, bindReply, dependencies);
       recordZaloBindDiagnostic(message, dependencies, {
         bind_transaction_completed: true,
         bind_succeeded: true,
@@ -878,6 +887,7 @@ export async function processInbound(
     return processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
       getReminderConfirmation: dependencies.getReminderConfirmation,
+      getReplyPreferences: dependencies.getReplyPreferences,
       intelligence: dependencies.intelligence,
       semantic,
     });

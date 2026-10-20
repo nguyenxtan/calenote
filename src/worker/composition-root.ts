@@ -431,6 +431,7 @@ export type RuntimeOperations = QueueOperations & ScheduledOperations;
 export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean; contextContract?: "calenote-context-2"; sourceSha?: string } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
   if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  const getReplyPreferences = (ownerId: string) => getUserPreferences(ownerId, new D1UserPreferencesStore(env.DB));
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
@@ -440,7 +441,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const contextPolicy = capabilities.contextContract ? parseContextContractRuntimeConfig(env) : undefined;
   const contextContract = capabilities.contextContract ? {
     store: createD1ContextContractStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), calendar: lunarCalendar,
-    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
+    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent, getReplyPreferences,
     // Dormant until the reviewed capability is enabled after full live PASS.
     gateway: contextPolicy?.status === "READY" ? createContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
       { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
@@ -465,10 +466,11 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
+      getReplyPreferences,
       connectionEgress: new D1ConnectionLifecycleStore(env.DB),
       followThrough: async (message,context) => {
-        const memory=await createPersonalMemoryChatHandler(new D1PersonalAssistantStore(env.DB,keyring))(message,context);
-        return memory.handled ? memory : createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring))(message,context);
+        const memory=await createPersonalMemoryChatHandler(new D1PersonalAssistantStore(env.DB,keyring), getReplyPreferences)(message,context);
+        return memory.handled ? memory : createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring), Date.now, getReplyPreferences)(message,context);
       },
       getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
       keyring,
@@ -480,7 +482,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
         runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
         getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
-        getReplyPreferences: async (ownerId: string) => getUserPreferences(ownerId, new D1UserPreferencesStore(env.DB)),
+        getReplyPreferences,
         getTone: async (ownerId: string) => {
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;
@@ -491,8 +493,8 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
-    deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
-    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
+    deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring, getReplyPreferences }),
+    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring, getReplyPreferences }),
     purgeEmailRegistrationChallenges: async (now,limit) => {
       if(!await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_registration_challenges'").first())return;
       return env.DB.prepare('DELETE FROM email_registration_challenges WHERE email IN (SELECT email FROM email_registration_challenges WHERE expires_at<? ORDER BY expires_at LIMIT ?)').bind(now-86_400_000,Math.min(100,Math.max(1,limit))).run();
