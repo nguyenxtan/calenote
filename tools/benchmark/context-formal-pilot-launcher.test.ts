@@ -2,6 +2,7 @@ import {it,expect,vi} from 'vitest';
 import {currentFixtureCandidate} from './current-candidate.test-support';
 import {inspectConservativeDebugCost} from './context-confirmed-cost';
 import {ContextInputSchema,ConversationInterpretationV3Schema} from '../../src/modules/conversation/context-contract/contracts';
+import {encodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
 import {encodeGoogleLiteEuTypedContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-typed-wire';
 import {mkdtempSync,mkdirSync,realpathSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -14,17 +15,18 @@ import {loadFormalPilotLaunch,inspectFormalPilotLaunch,runFormalPilotLaunch,take
 vi.mock('./register-conversation-loader.mjs',()=>({assertLoadedCandidateModules:vi.fn(()=>({loadedApplicationProof:'PASS'}))}));
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const candidate=currentFixtureCandidate();
-function setup(typed=false){
+function setup(typed:boolean|"SMALL_106"=false){
+ const small=typed==="SMALL_106",wireProtocol=small?"SMALL_106" as const:"TYPED_105" as const;
  const root=process.cwd(),accountRoot=realpathSync(mkdtempSync(join(tmpdir(),'formal-launch-'))),campaignRoot=join(accountRoot,'campaign');mkdirSync(join(campaignRoot,'PILOT'),{recursive:true});
  appendCampaignEvent(join(campaignRoot,'PILOT'),{event:'BEGIN',runId:'history',sourceSha:'a'.repeat(40),profile:'PILOT',provenanceDigest:'b'.repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1});
  if(typed){const directory=join(campaignRoot,'PILOT');reserveCampaignCall(directory,{runId:'history',profile:'PILOT',provenanceDigest:'b'.repeat(64),reservationId:'unknown',maximumMicrounits:100000,now:1,startedAt:1});markCampaignDispatched(directory,{runId:'history',reservationId:'unknown',at:1});finishCampaignCall(directory,{runId:'history',reservationId:'unknown',at:1,observedMicrounits:null});appendCampaignEvent(directory,{event:'STOP',runId:'history',at:1,reason:'TERMINAL'});}
  const proof=candidateValidationProof(root,candidate),manifest=deriveBoundedPilotManifest(root),ownerMessagePath=join(accountRoot,'owner.txt'),proposalPath=join(accountRoot,'proposal.json');
  writeFileSync(ownerMessagePath,'SYNTHETIC fresh paid approval for one FORMAL_PILOT only.');writeFileSync(proposalPath,'SYNTHETIC frozen proposal');
  const ownerMessageSha256=hash(readFileSync(ownerMessagePath,'utf8')),proposalSha256=hash(readFileSync(proposalPath,'utf8'));
- const debugPath=join(accountRoot,'debug.json'),debug={version:typed?'t11-debug-loop-authority-2':'t11-debug-loop-authority-1',...(typed?{wireProtocol:'TYPED_105'}:{}),operation:'T11_SCHEMA_DEBUG_THROUGH_FORMAL_PILOT',accountRoot,campaignRoot,hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu',retry:0,fallback:'none',stream:false,manifestSha256:manifest.manifestSha256,ownerMessagePath,ownerMessageSha256};writeFileSync(debugPath,JSON.stringify(debug));
- const record={version:typed?'formal-pilot-launch-authority-2':'formal-pilot-launch-authority-1',...(typed?{wireProtocol:'TYPED_105'}:{}),paid:'AUTHORIZED_ONE_FORMAL_PILOT',mode:'FORMAL_PILOT',executions:1,accountRoot,campaignRoot,...proof,manifestSha256:manifest.manifestSha256,inventoryDigest:auditCampaignAccountRoot(accountRoot).inventoryDigest,proposalPath,proposalSha256,ownerMessagePath,ownerMessageSha256,debugRecordPath:debugPath,debugRecordSha256:hash(readFileSync(debugPath,'utf8')),hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu',retry:0,fallback:'none',stream:false,maxProviderHttpRequests:76,totalFixtures:32,totalTurns:84,timeCeilingMinutes:20};
+ const debugPath=join(accountRoot,'debug.json'),debug={version:small?'t11-debug-loop-authority-3':typed?'t11-debug-loop-authority-2':'t11-debug-loop-authority-1',...(typed?{wireProtocol}:{}),operation:'T11_SCHEMA_DEBUG_THROUGH_FORMAL_PILOT',accountRoot,campaignRoot,hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu',retry:0,fallback:'none',stream:false,manifestSha256:manifest.manifestSha256,ownerMessagePath,ownerMessageSha256};writeFileSync(debugPath,JSON.stringify(debug));
+ const record={version:small?'formal-pilot-launch-authority-3':typed?'formal-pilot-launch-authority-2':'formal-pilot-launch-authority-1',...(typed?{wireProtocol}:{}),paid:'AUTHORIZED_ONE_FORMAL_PILOT',mode:'FORMAL_PILOT',executions:1,accountRoot,campaignRoot,...proof,manifestSha256:manifest.manifestSha256,inventoryDigest:auditCampaignAccountRoot(accountRoot).inventoryDigest,proposalPath,proposalSha256,ownerMessagePath,ownerMessageSha256,debugRecordPath:debugPath,debugRecordSha256:hash(readFileSync(debugPath,'utf8')),hardCapMicrounits:10000000,accountingPolicy:'CONSERVATIVE_DEBUG_V1',model:'google/gemini-2.5-flash-lite',provider:'google-vertex/eu',retry:0,fallback:'none',stream:false,maxProviderHttpRequests:76,totalFixtures:32,totalTurns:84,timeCeilingMinutes:20};
  const path=join(accountRoot,'launch.json');
- const load=(patch:Record<string,unknown>={})=>{const text=JSON.stringify({...record,...patch});writeFileSync(path,text);return loadFormalPilotLaunch(root,path,{accountRoot,campaignRoot,...(typed?{wireProtocol:"TYPED_105" as const}:{}),...proof,manifestSha256:manifest.manifestSha256,inventoryDigest:record.inventoryDigest,reviewedRecordSha256:hash(text),reviewedOwnerMessageSha256:ownerMessageSha256,reviewedProposalSha256:proposalSha256});};
+ const load=(patch:Record<string,unknown>={})=>{const text=JSON.stringify({...record,...patch});writeFileSync(path,text);return loadFormalPilotLaunch(root,path,{accountRoot,campaignRoot,...(typed?{wireProtocol}:{}),...proof,manifestSha256:manifest.manifestSha256,inventoryDigest:record.inventoryDigest,reviewedRecordSha256:hash(text),reviewedOwnerMessageSha256:ownerMessageSha256,reviewedProposalSha256:proposalSha256});};
  return {root,accountRoot,campaignRoot,record,path,load,cleanup:()=>rmSync(accountRoot,{recursive:true,force:true})};
 }
 it('missing authority refuses before credential callback',async()=>{const key=vi.fn();await expect(runFormalPilotLaunch(undefined,key)).rejects.toThrow('FORMAL_AUTHORITY_REQUIRED');expect(key).not.toHaveBeenCalled();});
@@ -36,10 +38,10 @@ it('key is acquired under lock after both durable fences; credential failure can
 it('account changes between load and run refuse before key',async()=>{const s=setup();try{const a=s.load(),key=vi.fn();mkdirSync(join(s.accountRoot,'other','PILOT'),{recursive:true});appendCampaignEvent(join(s.accountRoot,'other','PILOT'),{event:'BEGIN',runId:'new',sourceSha:'a'.repeat(40),profile:'PILOT',provenanceDigest:'b'.repeat(64),cumulativeAuthorizedMicrounits:1500000,cumulativeRetainedMicrounits:0,startedAt:1});await expect(runFormalPilotLaunch(a,key)).rejects.toThrow('FORMAL_INVENTORY_DRIFT');expect(key).not.toHaveBeenCalled();}finally{s.cleanup();}});
 it('pre-existing account lock blocks key and proposal consumption',async()=>{const s=setup();try{const a=s.load(),p=inspectFormalPilotLaunch(a),key=vi.fn();writeFileSync(join(s.accountRoot,'account.lock'),'SYNTHETIC');await expect(runFormalPilotLaunch(a,key)).rejects.toThrow('ACCOUNT_LOCKED');expect(key).not.toHaveBeenCalled();expect(existsSync(p.proposalMarker)).toBe(false);}finally{s.cleanup();}});
 it('concurrent launch cannot obtain a second key',async()=>{const s=setup();try{const a=s.load();let entered!:()=>void,release!:(v:string)=>void;const ready=new Promise<void>(resolve=>{entered=resolve;});const pending=new Promise<string>(resolve=>{release=resolve;});const key=vi.fn(async()=>{entered();return pending;});const first=runFormalPilotLaunch(a,key);await ready;await expect(runFormalPilotLaunch(a,key)).rejects.toThrow();release('');await expect(first).rejects.toThrow('CREDENTIAL_INVALID');expect(key).toHaveBeenCalledTimes(1);}finally{s.cleanup();}});
-it.each([false,true])('one frozen formal run uses 76 fake HTTP calls and cannot be repeated (typed105=%s)',async typed=>{
+it.each([false,true,"SMALL_106"] as const)('one frozen formal run uses 76 fake HTTP calls and cannot be repeated (typed105=%s)',async typed=>{
  const s=setup(typed);try{
   const {frozenContextProposal,encodeFixtureV3}=await import('./context-pointer-fixtures');const a=s.load(),targets=deriveBoundedPilotManifest(s.root).targets;let calls=0;
-  vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init:RequestInit)=>{const request=JSON.parse(String(init.body)),target=targets[calls++];expect(request.model).toBe('google/gemini-2.5-flash-lite');expect(request.provider.only).toEqual(['google-vertex/eu']);const input=JSON.parse(request.messages[1].content);for(const key of ['numericOwnership','fieldCapability','evidenceSources'])delete input[key];const bound=ContextInputSchema.parse(input);const proposal=frozenContextProposal(bound,target.fixtureId,target.turnIndex);const content=typed?encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(proposal),bound):encodeFixtureV3(proposal,bound);return new Response(JSON.stringify({model:request.model,provider:'Google',id:'gen-synthetic-formal',usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}]}),{status:200,headers:{'content-type':'application/json'}});}));
+  vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init:RequestInit)=>{const request=JSON.parse(String(init.body)),target=targets[calls++];expect(request.model).toBe('google/gemini-2.5-flash-lite');expect(request.provider.only).toEqual(['google-vertex/eu']);const input=JSON.parse(request.messages[1].content);for(const key of ['numericOwnership','fieldCapability','evidenceSources'])delete input[key];const bound=ContextInputSchema.parse(input);const proposal=frozenContextProposal(bound,target.fixtureId,target.turnIndex);const content=typed==="SMALL_106"?encodeSmallContextV3(ConversationInterpretationV3Schema.parse(proposal),bound):typed?encodeGoogleLiteEuTypedContextV3(ConversationInterpretationV3Schema.parse(proposal),bound):encodeFixtureV3(proposal,bound);return new Response(JSON.stringify({model:request.model,provider:'Google',id:'gen-synthetic-formal',usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}]}),{status:200,headers:{'content-type':'application/json'}});}));
   const key=vi.fn(async()=> 'SYNTHETIC_ONLY');const result=await runFormalPilotLaunch(a,key);
   expect(result).toMatchObject({pilotCredit:true,providerHttpAttempts:76,physicalProviderHttpAttempts:76});expect(result.score).toMatchObject({passedScripts:32,passedTurns:84,safetyFailures:0});expect(key).toHaveBeenCalledTimes(1);expect(calls).toBe(76);
   if(typed)expect(inspectConservativeDebugCost(s.accountRoot,10000000,105472)).toMatchObject({unknownCount:1,conservativeRetainedMicrounits:107600});
@@ -93,5 +95,31 @@ it('typed105 concurrent entry before the lock cannot overwrite the owned executi
  try{const a=s.load(),first=runFormalPilotLaunch(a,key);
   await expect(runFormalPilotLaunch(a,key)).rejects.toThrow('FORMAL_EXECUTION_IN_PROGRESS');
   await ready;release('');await expect(first).rejects.toThrow('CREDENTIAL_INVALID');expect(key).toHaveBeenCalledTimes(1);
+ }finally{s.cleanup();}
+});
+
+it('small106 cannot use typed105 authority or downgrade debug protocol',()=>{
+ const s=setup("SMALL_106");try{
+  expect(()=>s.load({version:'formal-pilot-launch-authority-2'})).toThrow();
+  expect(()=>s.load({wireProtocol:'TYPED_105'})).toThrow();
+  const debug=JSON.parse(readFileSync(s.record.debugRecordPath,'utf8'));debug.version='t11-debug-loop-authority-2';debug.wireProtocol='TYPED_105';
+  writeFileSync(s.record.debugRecordPath,JSON.stringify(debug));expect(()=>s.load({debugRecordSha256:hash(JSON.stringify(debug))})).toThrow('FORMAL_PROTOCOL_BINDING');
+ }finally{s.cleanup();}
+});
+it('small106 stops at first provider rejection with no retry and no grant reuse',async()=>{
+ const s=setup("SMALL_106"),network=vi.fn(async(_url:unknown,init:RequestInit)=>{
+  const request=JSON.parse(String(init.body));expect(request.messages[0].content).toContain('106');
+  return new Response(JSON.stringify({error:{code:429}}),{status:429,headers:{'content-type':'application/json'}});
+ });try{vi.stubGlobal('fetch',network);const a=s.load(),key=vi.fn(async()=> 'SYNTHETIC_ONLY');
+ const r=await runFormalPilotLaunch(a,key);expect(r.pilotCredit).toBe(false);expect(network).toHaveBeenCalledTimes(1);
+ await expect(runFormalPilotLaunch(a,key)).rejects.toThrow();expect(key).toHaveBeenCalledTimes(1);
+ }finally{vi.unstubAllGlobals();s.cleanup();}
+},30000);
+it('small106 cannot bypass Formal launcher through public debug entry points',async()=>{
+ const s=setup("SMALL_106"),debug=await import('./context-debug-loop'),transport=vi.fn(),hook=vi.fn();try{
+ const a=debug.createDebugLoopLoader({accountRoot:s.accountRoot,campaignRoot:s.campaignRoot,reviewedRecordSha256:s.record.debugRecordSha256,reviewedOwnerMessageSha256:s.record.ownerMessageSha256,wireProtocol:'SMALL_106'})(s.record.debugRecordPath,s.root);
+ await expect(debug.runDebugLoopExecution(a,candidate,'FORMAL_PILOT',transport,{beforeExecution:hook})).rejects.toThrow('DEBUG_TYPED_FORMAL_LAUNCHER_REQUIRED');
+ await expect(debug.runTrustedDebugLoopExecution(a,candidate,'FORMAL_PILOT','SYNTHETIC_ONLY')).rejects.toThrow('DEBUG_TYPED_FORMAL_LAUNCHER_REQUIRED');
+ expect(transport).not.toHaveBeenCalled();expect(hook).not.toHaveBeenCalled();expect(existsSync(join(s.accountRoot,'account.lock'))).toBe(false);
  }finally{s.cleanup();}
 });

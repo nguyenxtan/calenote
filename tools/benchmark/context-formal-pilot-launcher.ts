@@ -21,9 +21,10 @@ const historicalRecordSchema=z.strictObject({version:z.literal('formal-pilot-lau
 const recordSchema=z.discriminatedUnion('version',[
  historicalRecordSchema,
  historicalRecordSchema.extend({version:z.literal('formal-pilot-launch-authority-2'),wireProtocol:z.literal('TYPED_105')}),
+ historicalRecordSchema.extend({version:z.literal('formal-pilot-launch-authority-3'),wireProtocol:z.literal('SMALL_106')}),
 ]);
 export interface FormalPilotTrust {
- wireProtocol?:"TYPED_105";accountRoot:string;campaignRoot:string;evaluationCandidateSha:string;harnessRevisionSha:string;candidateProofSha256:string;harnessProofSha256:string;manifestSha256:string;inventoryDigest:string;
+ wireProtocol?:"TYPED_105"|"SMALL_106";accountRoot:string;campaignRoot:string;evaluationCandidateSha:string;harnessRevisionSha:string;candidateProofSha256:string;harnessProofSha256:string;manifestSha256:string;inventoryDigest:string;
  reviewedRecordSha256:string;reviewedOwnerMessageSha256:string;reviewedProposalSha256:string;
 }
 const brand:unique symbol=Symbol('FormalPilotLaunch');
@@ -38,13 +39,13 @@ function verify(g:Grant,options:{underLock?:boolean;owned?:boolean;excluded?:str
  const {trust:t,root}=g;if(realpathSync(root)!==root||realpathSync(process.cwd())!==root||!fileURLToPath(import.meta.url).startsWith(root+'/tools/benchmark/'))throw Error('FORMAL_EXECUTING_ROOT');
  if(realpathSync(t.accountRoot)!==t.accountRoot)throw Error('FORMAL_PATH_BINDING');contained(t.accountRoot,t.campaignRoot);
  const text=read(t.accountRoot,g.path);if(hash(text)!==t.reviewedRecordSha256)throw Error('FORMAL_RECORD_BINDING');const r=recordSchema.parse(JSON.parse(text));
- const wireProtocol=r.version==='formal-pilot-launch-authority-2'?r.wireProtocol:undefined;
+ const wireProtocol=r.version!=='formal-pilot-launch-authority-1'?r.wireProtocol:undefined;
  if(wireProtocol!==t.wireProtocol)throw Error('FORMAL_PROTOCOL_BINDING');
  for(const k of ['accountRoot','campaignRoot','evaluationCandidateSha','harnessRevisionSha','candidateProofSha256','harnessProofSha256','manifestSha256','inventoryDigest'] as const)if(r[k]!==t[k])throw Error('FORMAL_TRUST_BINDING');
  if(r.ownerMessageSha256!==t.reviewedOwnerMessageSha256||r.proposalSha256!==t.reviewedProposalSha256||hash(read(r.accountRoot,r.ownerMessagePath))!==r.ownerMessageSha256||hash(read(r.accountRoot,r.proposalPath))!==r.proposalSha256)throw Error('FORMAL_APPROVAL_BINDING');
  if(hash(read(r.accountRoot,r.debugRecordPath))!==r.debugRecordSha256)throw Error('FORMAL_DEBUG_BINDING');
  const debug=JSON.parse(read(r.accountRoot,r.debugRecordPath));
- if(wireProtocol!==debug.wireProtocol||(wireProtocol?debug.version!=='t11-debug-loop-authority-2':debug.version!=='t11-debug-loop-authority-1'))throw Error('FORMAL_PROTOCOL_BINDING');
+ if(wireProtocol!==debug.wireProtocol||debug.version!==(wireProtocol==='SMALL_106'?'t11-debug-loop-authority-3':wireProtocol==='TYPED_105'?'t11-debug-loop-authority-2':'t11-debug-loop-authority-1'))throw Error('FORMAL_PROTOCOL_BINDING');
  for(const k of ['accountRoot','campaignRoot','ownerMessagePath','ownerMessageSha256','hardCapMicrounits','accountingPolicy','model','provider','retry','fallback','stream','manifestSha256'] as const)if(debug[k]!==r[k])throw Error('FORMAL_DEBUG_BINDING');
  const proof=candidateValidationProof(root,r.evaluationCandidateSha);
  for(const k of ['evaluationCandidateSha','harnessRevisionSha','candidateProofSha256','harnessProofSha256'] as const)if(proof[k]!==r[k])throw Error('FORMAL_SOURCE_BINDING');
@@ -61,7 +62,7 @@ function verify(g:Grant,options:{underLock?:boolean;owned?:boolean;excluded?:str
 export function loadFormalPilotLaunch(root:string,path:string,trust:FormalPilotTrust):FormalPilotLaunch{
  const g:Grant={root,path,trust:Object.freeze({...trust}),debug:undefined as unknown as DebugLoopAuthority};
  const {record:r}=verify(g);
- g.debug=createDebugLoopLoader({accountRoot:r.accountRoot,campaignRoot:r.campaignRoot,reviewedRecordSha256:r.debugRecordSha256,reviewedOwnerMessageSha256:r.ownerMessageSha256,...(r.version==='formal-pilot-launch-authority-2'?{wireProtocol:r.wireProtocol}:{})})(r.debugRecordPath,root);
+ g.debug=createDebugLoopLoader({accountRoot:r.accountRoot,campaignRoot:r.campaignRoot,reviewedRecordSha256:r.debugRecordSha256,reviewedOwnerMessageSha256:r.ownerMessageSha256,...(r.version!=='formal-pilot-launch-authority-1'?{wireProtocol:r.wireProtocol}:{})})(r.debugRecordPath,root);
  inspectDebugLoop(g.debug);const a=Object.freeze({}) as FormalPilotLaunch;grants.set(a,g);return a;
 }
 function grant(a:FormalPilotLaunch|undefined){const g=a&&grants.get(a);if(!g)throw Error('FORMAL_AUTHORITY_REQUIRED');return g;}
@@ -75,7 +76,7 @@ export function takeFormalPilotExecution(a:FormalPilotLaunch,key:unknown){
  const g=grant(a),execution=activeExecutions.get(a);
  if(!running.has(a)||!execution)throw Error('FORMAL_EXECUTION_DELEGATION_REQUIRED');
  const v=verify(g);
- if(v.record.version!=='formal-pilot-launch-authority-2'||execution.debug!==g.debug||execution.candidate!==v.record.evaluationCandidateSha)throw Error('FORMAL_PROTOCOL_BINDING');
+ if(v.record.version==='formal-pilot-launch-authority-1'||execution.debug!==g.debug||execution.candidate!==v.record.evaluationCandidateSha)throw Error('FORMAL_PROTOCOL_BINDING');
  activeExecutions.delete(a);return execution;
 }
 export async function runFormalPilotLaunch(a:FormalPilotLaunch|undefined,acquireCredential:()=>Promise<string>){
@@ -96,8 +97,8 @@ export async function runFormalPilotLaunch(a:FormalPilotLaunch|undefined,acquire
    if(!key||/[\r\n]/u.test(key))throw Error('CREDENTIAL_INVALID');
    verify(g,{underLock:true,owned:true});loaded();
   }});
-  if(initial.record.version==='formal-pilot-launch-authority-2')activeExecutions.set(a!,execution);
-  const result=initial.record.version==='formal-pilot-launch-authority-2'
+  if(initial.record.version!=='formal-pilot-launch-authority-1')activeExecutions.set(a!,execution);
+  const result=initial.record.version!=='formal-pilot-launch-authority-1'
    ? await runFormalPilotDebugExecution(a!)
    : await runDebugLoopExecution(g.debug,execution.candidate,'FORMAL_PILOT',execution.transport,{beforeExecution:execution.beforeExecution});
   return {...result,physicalProviderHttpAttempts};
