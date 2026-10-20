@@ -1,3 +1,5 @@
+// Notification polling has its own API/lifecycle tests; isolate it from these request-order fixtures.
+vi.mock("@/features/updates/ProductUpdates", () => ({ ProductUpdates: () => null }));
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";

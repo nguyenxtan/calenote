@@ -146,7 +146,7 @@ export function AppShell({ user, children, activePath = "/app/today" }: { user: 
         </div>}
       </div>
     </aside>
-    <div className={styles.main}><ProductUpdates />{children}</div>
+    <div className={styles.main}><ProductUpdates key={user.email} />{children}</div>
     <nav className={styles.mobileNav} aria-label="Điều hướng chính trên điện thoại">
       {primary.map((item) => <NavLink item={item} active={item.href === activePath} key={item.href} />)}
       <div className={styles.more} ref={moreRef}>

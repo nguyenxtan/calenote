@@ -1,3 +1,4 @@
+import { handleProductUpdates } from './routes/product-updates';
 import { createEmailRegistrationOperations } from "./composition-root";
 import { EmailRegistrationError } from "@/modules/auth/email-registration";
 import { handleRequestEmailRegistration,handleVerifyEmailRegistration,type EmailRegistrationOperations } from "./routes/email-registration";
@@ -290,6 +291,7 @@ export function createRouter(options: RouterOptions = {}) {
         requireSameOrigin(request,appOrigin!);
         return jsonResponse({error:{code:"EMAIL_VERIFICATION_REQUIRED",message:"Xác minh email tại trang đăng ký trước khi kết nối bot."}},{status:410});
       }
+      if (request.method === "GET" && pathname === "/api/product-updates") return await handleProductUpdates(request,()=>authOperationsFactory(env));
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
       }
@@ -373,6 +375,7 @@ export function createRouter(options: RouterOptions = {}) {
     } catch (error) {
       const authenticated = pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
+        || pathname === "/api/product-updates"
         || pathname === "/api/session"
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")

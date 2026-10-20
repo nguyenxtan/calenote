@@ -28,3 +28,4 @@
 .body .commitLink { gap: 8px; font-size: 13px; margin-top: 12px; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 600px) { .summary, .body { padding: 16px; } .summary h3 { font-size: 17px; } .expand { right: 16px; bottom: 19px; } .verification { padding: 12px; } }
+.version code{max-width:100%;min-width:0;overflow-wrap:anywhere;white-space:normal}

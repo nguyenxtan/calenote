@@ -1,0 +1,140 @@
+{
+  "latestId": "2026-10-20-email-categories",
+  "notes": [
+    {
+      "id": "2026-10-20-email-categories",
+      "commit": null,
+      "releasedAt": null,
+      "title": "Email rõ ràng hơn, phân loại ngày đáng nhớ linh hoạt hơn",
+      "summary": "Email OTP có giao diện HTML, thêm email chào mừng và loại sự kiện riêng.",
+      "kind": "Tính năng",
+      "changes": [
+        "Email xác minh có bản HTML và bản chữ dự phòng.",
+        "Welcome được thử gửi một lần sau đăng ký xác minh thành công, không gửi mỗi lần đăng nhập.",
+        "Tạo, đổi tên, xóa loại riêng; dùng lại tên trùng và gợi ý phân loại theo tiêu đề.",
+        "Quản trị và chuông thành viên dùng chung lịch sử từ máy chủ; tab đang mở kiểm tra cập nhật mỗi phút khi đang hiển thị."
+      ],
+      "memberChanges": [
+        "Email mã xác minh dễ đọc hơn, có mã nổi bật và thời hạn rõ ràng.",
+        "Tài khoản mới nhận email chào mừng sau khi xác minh thành công.",
+        "Tự thêm loại như Chăm xe, Sức khỏe; đổi tên hoặc xóa loại vẫn giữ sự kiện.",
+        "Có gợi ý loại theo tên sự kiện; bạn chọn để áp dụng.",
+        "Chuông Có gì mới cho biết những tính năng vừa cập nhật."
+      ],
+      "verification": "Đã kiểm tra tự động và giao diện bằng dữ liệu mẫu. Email HTML/welcome và thông báo trên production cần kiểm tra riêng sau phát hành.",
+      "caveat": "Gợi ý loại trong giao diện là quy tắc có giới hạn. Pilot AI và tự tạo loại qua chat chưa hoàn tất. Trạng thái đã đọc được lưu riêng theo tài khoản trên trình duyệt."
+    },
+    {
+      "id": "fba90c7",
+      "commit": "fba90c752e30b6a7a574ced44abcfaff5c57892c",
+      "releasedAt": "2026-10-20T11:24:49+07:00",
+      "title": "Đăng ký bằng email trước, kết nối bot sau",
+      "summary": "Xác minh email bằng OTP cùng Bàn việc cá nhân và chuông cập nhật.",
+      "kind": "Tính năng",
+      "changes": [
+        "Tạo tài khoản sau khi xác minh OTP email, có thể đăng nhập trước khi kết nối bot.",
+        "Thêm Bàn việc cá nhân: ngày đáng nhớ âm/dương, thông tin ghi nhớ, bản tin sáng/tối tùy chọn.",
+        "Thêm chuông Có gì mới cho thành viên."
+      ],
+      "memberChanges": [
+        "Đăng ký bằng Gmail hoặc email khác, nhập mã xác minh rồi kết nối bot khi sẵn sàng.",
+        "Lưu sinh nhật, ngày giỗ, hạn gia hạn và thông tin muốn ghi nhớ trong Bàn việc cá nhân.",
+        "Chọn bật riêng bản tin buổi sáng hoặc nhìn lại buổi tối. Mặc định đều tắt."
+      ],
+      "verification": "Đã đối chiếu triển khai, migration 0015–0017 và tài nguyên công khai. Live OTP được xác minh, tạo tài khoản/phiên khi chưa có bot; dùng một email thử.",
+      "caveat": "Chưa kiểm tra gửi bản tin tự động hay thêm bot thật trong đợt này. Pilot AI chưa hoàn tất."
+    },
+    {
+      "id": "c8c522b",
+      "commit": "c8c522bbf2a2995f19f0b03da18920d1a67769ab",
+      "releasedAt": "2026-10-20T09:42:10+07:00",
+      "title": "Biểu tượng Calenote trên tab trình duyệt",
+      "summary": "Dùng biểu tượng Calenote cho favicon của website.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Khai báo biểu tượng SVG Calenote trong metadata trang."
+      ],
+      "memberChanges": [
+        "Tab trình duyệt có biểu tượng Calenote để dễ tìm lại."
+      ],
+      "verification": "Đã đối chiếu phiên bản triển khai và tài nguyên favicon; biểu tượng cũng xuất hiện trong cửa sổ Chrome kiểm thử đăng ký sau đó."
+    },
+    {
+      "id": "0b0b426",
+      "commit": "0b0b426e014532f86407db9cdeeb6dd8c1ed2027",
+      "releasedAt": "2026-10-20T09:11:42+07:00",
+      "title": "Thêm lịch sử cập nhật trong quản trị",
+      "summary": "Chủ tài khoản quản trị xem thay đổi và giới hạn kiểm tra theo từng mốc.",
+      "kind": "Tính năng",
+      "changes": [
+        "Thêm mục Lịch sử cập nhật trong trang quản trị, có liên kết commit và phạm vi kiểm chứng."
+      ],
+      "memberChanges": [
+        "Lịch sử phiên bản được bổ sung trong khu vực quản trị."
+      ],
+      "verification": "Nhật ký phát hành xác nhận phiên bản đã được triển khai và đọc lại khớp. Không dùng nhật ký này thay cho kiểm tra giao diện."
+    },
+    {
+      "commit": "48d7890c5716623d75f9bfca477ba813fc516b37",
+      "releasedAt": "2026-10-20T08:39:36+07:00",
+      "title": "Sửa phản hồi tạo lời nhắc",
+      "summary": "Tạo nhắc thành công được phản hồi đúng, tránh bấm lại vì thông báo lỗi sai.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Sửa trường hợp lời nhắc đã được lưu nhưng form lại báo chưa kết nối cuộc trò chuyện riêng.",
+        "Giữ cơ chế khoá nút trong lúc lưu và kiểm tra chống tạo trùng; không thay đổi giờ hay kênh nhận nhắc."
+      ],
+      "verification": "Live: form báo lưu thành công; thử bấm đúp chỉ tạo một lời nhắc và một yêu cầu lưu. Reload vẫn có đúng một việc. Lời nhắc thử đã được đóng.",
+      "id": "48d7890",
+      "memberChanges": [
+        "Tạo nhắc thành công được phản hồi đúng, tránh bấm lại vì thông báo lỗi sai.",
+        "Sửa trường hợp lời nhắc đã được lưu nhưng form lại báo chưa kết nối cuộc trò chuyện riêng.",
+        "Giữ cơ chế khoá nút trong lúc lưu và kiểm tra chống tạo trùng; không thay đổi giờ hay kênh nhận nhắc."
+      ]
+    },
+    {
+      "commit": "da44543892e0748b3225d51150c57a3fee7c2415",
+      "releasedAt": "2026-10-20T08:04:36+07:00",
+      "title": "Theo dõi việc đến khi hoàn tất",
+      "summary": "Follow-through V1 cùng cải tiến đăng nhập, tài khoản và giao diện.",
+      "kind": "Tính năng",
+      "changes": [
+        "Thêm tiến độ Chưa xong / Đã xong / Đã dừng, tách biệt với trạng thái đã gửi lời nhắc.",
+        "Cho phép đánh dấu Xong, hoãn, đổi lịch, dừng theo dõi và xem lịch sử; việc cũ chỉ được theo dõi khi bạn chọn bật.",
+        "Nhắc tiếp là tuỳ chọn, mặc định tắt: 30 phút, 2 giờ hoặc 24 giờ, tối đa ba lần. Có lệnh điều khiển trong Zalo và Telegram.",
+        "Email mới đi tới thiết lập bot; tài khoản cũ phải xác minh qua bot trước khi vào. Giữ kênh đăng nhập chính và luồng khôi phục có xác minh.",
+        "Settings thêm tên tài khoản, quản lý phiên, công tắc xác nhận, khoảng cách Thoáng / Gọn, cỡ chữ, trang mở đầu và lựa chọn lịch. Làm lại màn chờ."
+      ],
+      "verification": "Live đã kiểm tra Xong, Hoãn 15 phút, Dừng, lưu/khôi phục tên và khoảng cách hiển thị; dashboard quản trị vẫn truy cập được.",
+      "caveat": "Lỗi phản hồi tạo nhắc phát hiện ở bản này đã được sửa trong 48d7890. Lệnh chat Zalo/Telegram, OTP mới và chu kỳ nhắc tiếp tự động chưa có kiểm chứng live đầy đủ ở đợt phát hành này.",
+      "id": "da44543",
+      "memberChanges": [
+        "Follow-through V1 cùng cải tiến đăng nhập, tài khoản và giao diện.",
+        "Thêm tiến độ Chưa xong / Đã xong / Đã dừng, tách biệt với trạng thái đã gửi lời nhắc.",
+        "Cho phép đánh dấu Xong, hoãn, đổi lịch, dừng theo dõi và xem lịch sử; việc cũ chỉ được theo dõi khi bạn chọn bật.",
+        "Nhắc tiếp là tuỳ chọn, mặc định tắt: 30 phút, 2 giờ hoặc 24 giờ, tối đa ba lần. Có lệnh điều khiển trong Zalo và Telegram."
+      ]
+    },
+    {
+      "commit": "66eea693115be47500fdb134b2b2ce01174af977",
+      "releasedAt": "2026-10-19T21:08:15+07:00",
+      "title": "Kết nối bot, tuỳ chọn xác nhận và quản trị",
+      "summary": "Bổ sung quản lý Zalo / Telegram và số liệu vận hành cho chủ tài khoản quản trị.",
+      "kind": "Tính năng",
+      "changes": [
+        "Thêm giao diện thêm/ngắt kết nối Zalo và Telegram; bảo vệ kênh đăng nhập cuối cùng và cho chọn bot nhận mã đăng nhập.",
+        "Cho chọn tạo nhắc ngay khi chat đã đủ thông tin, hoặc xem trước rồi xác nhận.",
+        "Thêm dashboard số tài khoản, hoạt động được ghi nhận và ngân sách AI ghi sổ. Các khoản chưa có nguồn đối soát được ghi rõ là chưa có dữ liệu."
+      ],
+      "verification": "Live đã kiểm tra Settings, dashboard, từ chối ngắt kênh cuối cùng, tạo/huỷ nhắc trên web và một lần gửi Zalo được nhà cung cấp chấp nhận.",
+      "caveat": "Chưa kiểm chứng live đầy đủ việc thêm/ngắt bot thứ hai hoặc Telegram. Ngân sách ghi sổ không phải hoá đơn hay chi phí thực tế đã đối soát.",
+      "id": "66eea69",
+      "memberChanges": [
+        "Bổ sung quản lý Zalo / Telegram và số liệu vận hành cho chủ tài khoản quản trị.",
+        "Thêm giao diện thêm/ngắt kết nối Zalo và Telegram; bảo vệ kênh đăng nhập cuối cùng và cho chọn bot nhận mã đăng nhập.",
+        "Cho chọn tạo nhắc ngay khi chat đã đủ thông tin, hoặc xem trước rồi xác nhận.",
+        "Thêm dashboard số tài khoản, hoạt động được ghi nhận và ngân sách AI ghi sổ. Các khoản chưa có nguồn đối soát được ghi rõ là chưa có dữ liệu."
+      ]
+    }
+  ]
+}
