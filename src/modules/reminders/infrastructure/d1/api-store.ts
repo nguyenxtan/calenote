@@ -149,8 +149,12 @@ export class D1ReminderApiStore implements ReminderApiStore {
     ).bind(record.userId, record.intentId, record.payloadDigest, record.id));
     try {
       const results = await this.database.batch(statements);
+      // D1 includes track_new_reminder trigger writes in the INSERT metadata.
+      // The eligible HAVING COUNT(*) = 1 still permits exactly one root row;
+      // audit/intent statements keep their exact single-row assertions.
       return results.length === statements.length
-        && results.every((result) => d1Changes(result) === 1);
+        && d1Changes(results[0]) >= 1
+        && results.slice(1).every((result) => d1Changes(result) === 1);
     } catch (error) {
       if (guardedReminderFailure(error)) return false;
       throw error;
