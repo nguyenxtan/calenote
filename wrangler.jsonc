@@ -20,7 +20,7 @@
   },
   "vars": {
     "APP_ORIGIN": "https://calenote.iconiclogs.com",
-    "REGISTRATION_EMAIL_FROM": "no-reply@iconiclogs.com",
+    "REGISTRATION_EMAIL_FROM": "no-reply@calenote-mail.iconiclogs.com",
     "CALENOTE_RUNTIME_ENVIRONMENT": "production",
     "AI_MODE": "privacy",
     "OPENROUTER_PRIVACY_MODEL": "google/gemini-2.5-flash-lite",
@@ -33,7 +33,7 @@
     "OWNER_MONTHLY_COST_MICROUNITS": "500000",
     "GLOBAL_DAILY_COST_MICROUNITS": "2000000"
   },
-  "send_email": [{ "name": "REGISTRATION_EMAIL", "allowed_sender_addresses": ["no-reply@iconiclogs.com"] }],
+  "send_email": [{ "name": "REGISTRATION_EMAIL", "allowed_sender_addresses": ["no-reply@calenote-mail.iconiclogs.com"] }],
   "secrets": {
     "required": ["CALENOTE_MASTER_KEY", "OPENROUTER_API_KEY"]
   },
