@@ -64,3 +64,13 @@ it('commits a revision while its migration trigger cancels queued generated work
     expect((await persisted.get('owner')).revision).toBe(3);
   } finally { h.close(); }
 });
+
+it('persists private categories without changing reminder scheduling fingerprint',async()=>{
+ const base={...document(),events:[{id:'event',title:'Xe',kind:'BIRTHDAY' as const,calendar:'SOLAR' as const,month:1,day:1,time:'08:00',leapPolicy:'REGULAR' as const,missingDayPolicy:'SKIP' as const,leadDays:[0],enabled:false}]};
+ await store.put('one',0,base);
+ const before=await db.prepare('SELECT schedule_fingerprint FROM personal_assistant_documents').first();
+ await store.put('one',1,{...base,categories:[{id:'car',name:'Chăm xe'}],events:[{...base.events[0],kind:'OTHER',categoryId:'car'}]});
+ expect(await db.prepare('SELECT schedule_fingerprint FROM personal_assistant_documents').first()).toEqual(before);
+ expect((await store.get('one')).document.categories).toEqual([{id:'car',name:'Chăm xe'}]);
+ expect((await store.get('two')).document.categories).toBeUndefined();
+});

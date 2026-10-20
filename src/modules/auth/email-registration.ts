@@ -9,6 +9,7 @@ export const EMAIL_REGISTRATION_TTL_MS = 10 * 60_000;
 export interface EmailRegistrationSender {
   /** One attempt only. A rejection (including an unknown outcome) disables this challenge. */
   send(input: { to: string; code: string; expiresAt: number }): Promise<void>;
+  sendWelcome?(input: { to: string; displayName: string }): Promise<void>;
 }
 export interface EmailRegistrationDependencies {
   database: D1Database;
@@ -96,5 +97,27 @@ export async function verifyEmailRegistration(input: {challengeId: string;email:
     db.prepare("INSERT INTO sessions SELECT ?,id,?,?,NULL,? FROM users WHERE id=? AND EXISTS(SELECT 1 FROM email_registration_challenges WHERE id=? AND verification_marker=?)").bind(session.record.id,session.record.digest,session.record.expiresAt,now,userId,input.challengeId,marker),
   ]);
   if (!await db.prepare("SELECT id FROM sessions WHERE id=? AND user_id=?").bind(session.record.id,userId).first()) throw new EmailRegistrationError("INVALID_CODE");
+  // Successful first registration only. Reserve before sending: unknown outcomes
+  // are never retried, and delivery failure must not invalidate a verified session.
+  if (!existing && deps.sender?.sendWelcome) {
+    try {
+      const claimed = await db.prepare(`INSERT INTO email_welcome_deliveries(user_id,status,attempted_at)
+        SELECT ?, 'ATTEMPTED', ? WHERE EXISTS(SELECT 1 FROM email_registration_challenges WHERE id=? AND verification_marker=?)
+        ON CONFLICT(user_id) DO NOTHING RETURNING user_id`).bind(userId,now,input.challengeId,marker).first();
+      if (claimed) {
+        const user = await db.prepare('SELECT display_name FROM users WHERE id=?').bind(userId).first<{display_name:string}>();
+        try {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              deps.sender.sendWelcome({to:parsed.data.email,displayName:user?.display_name ?? 'bạn'}),
+              new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('WELCOME_TIMEOUT')), 5000); }),
+            ]);
+          } finally { if (timer !== undefined) clearTimeout(timer); }
+          await db.prepare("UPDATE email_welcome_deliveries SET status='SENT' WHERE user_id=?").bind(userId).run();
+        } catch { /* ATTEMPTED means failed or unknown, never automatic resend. */ }
+      }
+    } catch { /* Welcome mail must not turn a committed registration into an error. */ }
+  }
   return {userId,workspaceId,session};
 }

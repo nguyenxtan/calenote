@@ -9,10 +9,11 @@ import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session
 import { ApiResponseError, apiRequest } from "@/lib/client-api";
 import { planLifeEvents } from "@/modules/personal-assistant/calendar";
 import { AppShell } from "@/ui/shell/AppShell";
+import { EventCategoryField, CategoryManager, addEventCategory } from "./EventCategories";
 import styles from "./PersonalAssistantWorkspace.module.css";
 
 const BriefSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), openCount: z.number().int().nonnegative(), overdueCount: z.number().int().nonnegative(), doneTodayCount: z.number().int().nonnegative(), next: z.array(z.object({ title: z.string().min(1).max(500), scheduledAt: z.number().int() }).strict()).max(5) }).strict();
-const kinds = { BIRTHDAY: "Sinh nhật", MEMORIAL: "Ngày giỗ", RENEWAL: "Gia hạn", OTHER: "Ngày khác" };
+
 const dateTime = (time: number) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "medium", timeStyle: "short" }).format(time);
 export function PersonalAssistantWorkspace() {
   const { replace } = useRouter();
@@ -56,7 +57,7 @@ export function PersonalAssistantPanel({ onUnauthorized }: { onUnauthorized: () 
   async function save() {
     if (!draft || !saved || lock.current) return;
     const parsed = PersonalAssistantDocumentSchema.safeParse(draft);
-    if (!parsed.success) { setError(parsed.error.issues.some(issue => issue.code === "custom" && issue.path.length === 0) ? "Không gian cá nhân vượt giới hạn 100 KiB. Hãy rút gọn nội dung hoặc xóa bớt thông tin rồi lưu lại. Bản nháp vẫn được giữ." : "Kiểm tra tên, nội dung, ngày và giờ. Mỗi sự kiện cần 1–5 mốc nhắc khác nhau; ngày âm tối đa 30."); return; }
+    if (!parsed.success) { setError(parsed.error.issues.some(issue => issue.code === "custom" && issue.path.length === 0) ? "Không gian cá nhân vượt giới hạn 100 KiB. Hãy rút gọn nội dung hoặc xóa bớt thông tin rồi lưu lại. Bản nháp vẫn được giữ." : "Kiểm tra tên loại: không để trống hoặc trùng tên. Kiểm tra tên, nội dung, ngày và giờ. Mỗi sự kiện cần 1–5 mốc nhắc khác nhau; ngày âm tối đa 30."); return; }
     lock.current = true; setBusy(true); setError(null); setNotice(null);
     try {
       const envelope = PersonalAssistantEnvelopeSchema.parse(await apiRequest("/api/v1/personal-assistant", { method: "PUT", body: { expectedRevision: saved.revision, document: parsed.data }, authenticated: true, onUnauthorized: () => unauthorized.current() }));
@@ -77,10 +78,11 @@ export function PersonalAssistantPanel({ onUnauthorized }: { onUnauthorized: () 
       <form onSubmit={event => { event.preventDefault(); void save(); }}>
         <fieldset disabled={busy} className={styles.formBody}>
           <section className={styles.card}><div className={styles.sectionHead}><div><h2>Ngày đáng nhớ</h2><p>Sự kiện mới mặc định tắt. Lịch và giờ Việt Nam. Sự kiện đã lưu và bật sẽ tạo lời nhắc theo các mốc bạn chọn, gửi đến bot chính đã kết nối. Chọn trước cách xử lý tháng nhuận và ngày không có trong tháng.</p></div><button type="button" disabled={draft.events.length >= 100} onClick={() => setDraft({ ...draft, events: [...draft.events, { id: crypto.randomUUID(), title: "", kind: "BIRTHDAY", calendar: "SOLAR", month: 1, day: 1, time: "08:00", leapPolicy: "REGULAR", missingDayPolicy: "SKIP", leadDays: [0, 1, 7], enabled: false }] })}>Thêm ngày</button></div>
+          <CategoryManager document={draft} onChange={setDraft} />
           {draft.events.length === 0 && <p className={styles.empty}>Sinh nhật người thân, ngày giỗ hay kỳ gia hạn đầu tiên của bạn.</p>}
           {draft.events.map((item, index) => <fieldset className={styles.entry} key={item.id}><legend>Sự kiện {index + 1}</legend><div className={styles.grid}>
             <label>Tên sự kiện<input required maxLength={200} value={item.title} onChange={e => eventPatch(item.id, { title: e.target.value })} /></label>
-            <label>Loại<select value={item.kind} onChange={e => eventPatch(item.id, { kind: e.target.value as PersonalLifeEvent["kind"] })}>{Object.entries(kinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <EventCategoryField event={item} document={draft} onChange={patch => eventPatch(item.id, patch)} onCreate={name => { const next = addEventCategory(draft, item.id, name); if (next === draft) setError("Mỗi tài khoản có tối đa 30 loại riêng, tên dài tối đa 50 ký tự."); else setDraft(next); }} />
             <label>Lịch<select value={item.calendar} onChange={e => eventPatch(item.id, { calendar: e.target.value as PersonalLifeEvent["calendar"] })}><option value="SOLAR">Dương lịch</option><option value="LUNAR">Âm lịch Việt Nam</option></select></label>
             <div className={styles.grid}><label>Ngày<input required type="number" min={1} max={item.calendar === "LUNAR" ? 30 : 31} value={item.day} onChange={e => eventPatch(item.id, { day: Number(e.target.value) })} /></label><label>Tháng<input required type="number" min={1} max={12} value={item.month} onChange={e => eventPatch(item.id, { month: Number(e.target.value) })} /></label></div>
             <label>Lặp lại<select value={item.year === undefined ? "ANNUAL" : "ONCE"} onChange={e => eventPatch(item.id, { year: e.target.value === "ANNUAL" ? undefined : new Date(now + 7 * 3600000).getUTCFullYear() })}><option value="ANNUAL">Hằng năm</option><option value="ONCE">Một lần</option></select></label>

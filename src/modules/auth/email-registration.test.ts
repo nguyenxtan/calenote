@@ -15,6 +15,7 @@ afterEach(()=>databases.splice(0).forEach(db=>db.close()));
 async function setup() {
  const db=new SqliteD1Database(); databases.push(db);
  db.sqlite.exec(readFileSync("migrations/0017_email_registration.sql","utf8"));
+ db.sqlite.exec(readFileSync("migrations/0018_email_welcome_delivery.sql","utf8"));
  let now=1800000000000; const sent:{to:string;code:string;expiresAt:number}[]=[];
  const deps:EmailRegistrationDependencies={database:db as unknown as D1Database,keyring:await createKeyring("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),rateLimitStore:new D1RateLimitStore(db as unknown as D1Database),now:()=>now,sender:{send:async m=>{sent.push(m);}}};
  const input={email:" NEW@example.com ",displayName:"New Owner",clientIp:"192.0.2.1",browserBinding:"a".repeat(43)};
@@ -114,4 +115,25 @@ it("authenticates the email-created account with its cookie and adds its first b
  expect(s.db.sqlite.prepare("SELECT user_id FROM bot_connections").get()).toMatchObject({user_id:principal.userId});
  for(const table of ["users","workspaces","memberships","sessions","email_verified_accounts"])expect(s.count(table)).toBe(1);
  expect((await requireSession(credentials!,{store:new D1SessionStore(s.deps.database),keyring:s.deps.keyring,now:s.deps.now})).userId).toBe(principal.userId);
+});
+
+it("attempts welcome once only after successful new proof, never on repeat login",async()=>{
+ const s=await setup(),welcome=vi.fn().mockResolvedValue(undefined);s.deps.sender!.sendWelcome=welcome;
+ const first=await s.request();expect(welcome).not.toHaveBeenCalled();
+ await s.verify(first.challengeId);expect(welcome).toHaveBeenCalledExactlyOnceWith({to:'new@example.com',displayName:'New Owner'});
+ expect(s.db.sqlite.prepare('SELECT status FROM email_welcome_deliveries').get()).toMatchObject({status:'SENT'});
+ await expect(s.verify(first.challengeId)).rejects.toMatchObject({code:'INVALID_CODE'});
+ s.advance(60_000);const next=await s.request();await s.verify(next.challengeId);
+ expect(welcome).toHaveBeenCalledOnce();expect(s.count('sessions')).toBe(2);
+});
+it("keeps verified session when welcome outcome is unknown, without retry",async()=>{
+ const s=await setup(),welcome=vi.fn().mockRejectedValue(Error('unknown'));s.deps.sender!.sendWelcome=welcome;
+ const issued=await s.request();await s.verify(issued.challengeId);
+ expect(s.count('sessions')).toBe(1);expect(s.db.sqlite.prepare('SELECT status FROM email_welcome_deliveries').get()).toMatchObject({status:'ATTEMPTED'});
+ s.advance(60_000);const next=await s.request();await s.verify(next.challengeId);expect(welcome).toHaveBeenCalledOnce();
+});
+it("concurrent proof cannot duplicate welcome",async()=>{
+ const s=await setup(),welcome=vi.fn().mockResolvedValue(undefined);s.deps.sender!.sendWelcome=welcome;
+ const issued=await s.request();await Promise.allSettled([s.verify(issued.challengeId),s.verify(issued.challengeId)]);
+ expect(welcome).toHaveBeenCalledOnce();expect(s.count('email_welcome_deliveries')).toBe(1);
 });

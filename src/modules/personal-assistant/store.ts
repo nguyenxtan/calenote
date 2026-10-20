@@ -39,7 +39,23 @@ export class D1PersonalAssistantStore {
     try {
       await this.requireOwner(ownerId);
       const encrypted = await this.keyring.encryptSensitive('semantic-context', this.entity(ownerId), 1, JSON.stringify(document));
-      const scheduleFingerprint = await this.keyring.digestCode(JSON.stringify(['personal-assistant-schedule', ownerId, document.events, document.daily]));
+      let scheduleFingerprint = await this.keyring.digestCode(JSON.stringify(['personal-assistant-schedule', ownerId, document.events.map(event => { const schedule = { ...event }; delete schedule.categoryId; return schedule; }), document.daily]));
+      if (expectedRevision > 0) {
+        const before = await this.get(ownerId);
+        if (before.revision !== expectedRevision) throw new PersonalAssistantError('CONFLICT');
+        const scheduling = (value: Document) => JSON.stringify([value.events.map(event => {
+          const fields: Partial<typeof event> = { ...event };
+          delete fields.categoryId; delete fields.kind;
+          return fields;
+        }), value.daily]);
+        // Legacy fingerprints included kind even though kind only labels/presets
+        // the editor. Retain the existing fingerprint for classification-only edits.
+        if (scheduling(before.document) === scheduling(document)) {
+          const previous = await this.database.prepare('SELECT schedule_fingerprint FROM personal_assistant_documents WHERE owner_user_id=? AND revision=?').bind(ownerId,expectedRevision).first<{schedule_fingerprint:string}>();
+          if (!previous) throw new PersonalAssistantError('CONFLICT');
+          scheduleFingerprint = previous.schedule_fingerprint;
+        }
+      }
       const result = expectedRevision === 0
         ? await this.database.prepare(`INSERT INTO personal_assistant_documents (owner_user_id, document_ciphertext, document_iv, document_key_version, schedule_fingerprint, revision, updated_at) VALUES (?, ?, ?, 1, ?, 1, ?) ON CONFLICT(owner_user_id) DO NOTHING RETURNING revision`).bind(ownerId, encrypted.ciphertext, encrypted.iv, scheduleFingerprint, now).first<{revision: number}>()
         : await this.database.prepare(`UPDATE personal_assistant_documents SET document_ciphertext = ?, document_iv = ?, document_key_version = 1, schedule_fingerprint = ?, revision = revision + 1, updated_at = ? WHERE owner_user_id = ? AND revision = ? RETURNING revision`).bind(encrypted.ciphertext, encrypted.iv, scheduleFingerprint, now, ownerId, expectedRevision).first<{revision: number}>();

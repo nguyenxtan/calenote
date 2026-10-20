@@ -559,6 +559,6 @@ export async function createPersonalAssistantOperations(env: Env): Promise<Perso
 
 export async function createEmailRegistrationOperations(env:Env):Promise<EmailRegistrationOperations> {
  const keyring=await createRouteKeyring(env),rateLimitStore=new D1RateLimitStore(env.DB);
- const deps={database:env.DB,keyring,rateLimitStore,sender:createRegistrationEmailSender(env.REGISTRATION_EMAIL,env.REGISTRATION_EMAIL_FROM)};
+ const deps={database:env.DB,keyring,rateLimitStore,sender:createRegistrationEmailSender(env.REGISTRATION_EMAIL,env.REGISTRATION_EMAIL_FROM,env.APP_ORIGIN)};
  return {requestEmailRegistration:input=>requestEmailRegistration(input,deps),verifyEmailRegistration:async input=>({cookie:(await verifyEmailRegistration(input,deps)).session.cookie})};
 }

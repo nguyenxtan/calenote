@@ -69,4 +69,18 @@ describe("personal workspace", () => {
   expect(mocks.request.mock.calls.every(([, options]) => options?.method !== "PUT")).toBe(true);
  });
 
+ it("creates a category from a hint, renames it and removes the category without losing the event", async () => {
+  render(<PersonalAssistantPanel onUnauthorized={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Thêm ngày" }));
+  fireEvent.change(screen.getByLabelText("Tên sự kiện"), {target:{value:"Thay nhớt xe"}});
+  fireEvent.click(screen.getByRole("button", {name:"Gợi ý: Chăm xe"}));
+  expect(screen.getByLabelText("Loại")).toHaveDisplayValue("Chăm xe");
+  fireEvent.click(screen.getByText("Quản lý loại riêng (1/30)"));
+  fireEvent.change(screen.getByLabelText("Tên loại Chăm xe"), {target:{value:"Xe gia đình"}});
+  expect(screen.getByLabelText("Loại")).toHaveDisplayValue("Xe gia đình");
+  fireEvent.click(screen.getByRole("button", {name:"Xóa loại Xe gia đình"}));
+  expect(screen.getByLabelText("Loại")).toHaveDisplayValue("Ngày khác");
+  expect(screen.getByLabelText("Tên sự kiện")).toHaveValue("Thay nhớt xe");
+ });
+
 });
