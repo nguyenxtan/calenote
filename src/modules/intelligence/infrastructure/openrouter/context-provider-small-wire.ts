@@ -40,7 +40,9 @@ export function smallContextSchemaV3(input:ContextInput){
  const dateCell={...arr(date),maxItems:1};
  const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
  const periodCell={...arr(period),maxItems:1};
- const schema=obj({operationCode:{type:'string',enum:Array.from({length:12},(_,i)=>String(i))},targetEvidence:evidence,
+ // Exactly one shallow union: code and target presence are correlated here.
+ const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence:{...evidence,minItems:1,maxItems:3}}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...evidence,maxItems:0}})]};
+ const schema=obj({operation,
   changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
   query:arr(obj({period:periodCell,date:dateCell,outputCalendar:nullableString,topic:nullableString,evidence})),
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
@@ -49,7 +51,7 @@ export function smallContextSchemaV3(input:ContextInput){
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:schema as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {
- operationCode:string;targetEvidence:string[];
+ operation:{code:string;targetEvidence:string[]};
  changes:Array<{field:string;rank:number;operation:string;value:number|null;text:string|null;date:Row[];evidence:string[]}>;
  query:Array<{period:Row[];date:Row[];outputCalendar:string|null;topic:string|null;evidence:string[]}>;
  uncertainties:Array<{fieldCode:number;reason:string;alternatives:Array<{value:number|null;text:string|null;date:Row[];period:Row[];evidence:string[]}>}>;
@@ -65,13 +67,13 @@ function requireValue(valid:unknown,reason:SmallTableDiagnostic['reason']='INVAL
 /** Offline authoring only. No repair/coercion helper is used for model data. */
 export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):SmallContextWire {
  const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
- const out:SmallContextWire={operationCode:raw.operationCode as string,targetEvidence:[],changes:[],query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
+ const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:[],query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
  const store=(name:Family,value:unknown):number=>{const rows=out[name] as unknown[];const old=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(value));if(old>=0)return old;rows.push(value);return rows.length-1;};
  const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...Object.fromEntries(dateKeys.map(key=>[key,null])),...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');return store(type,value);};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
- if(record(raw.requestTarget))out.targetEvidence=evidence(raw.requestTarget.evidence);
+ if(record(raw.requestTarget))out.operation.targetEvidence=evidence(raw.requestTarget.evidence);
  const add=(carrier:unknown)=>{requireValue(record(carrier)&&record(carrier.change));const c=carrier.change;out.changes.push({field:c.field as string,rank:carrier.rank as number,operation:c.operation as string,value:c.value===null||['texts','dates'].includes(family(c.field as string))?null:save(c.field as string,c.value),text:c.value!==null&&family(c.field as string)==='texts'?c.value as string:null,date:c.value!==null&&family(c.field as string)==='dates'?date(c.value):[],evidence:evidence(c.evidence)});};
  for(const {root} of singleton)if(raw[root]!==null)add(raw[root]);
  (raw.changes as unknown[]).forEach(add);out.changes.sort((a,b)=>a.rank-b.rank);
@@ -102,14 +104,14 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
   requireValue(row.text===null&&row.value!==null,'CHANGE_VALUE_INVALID');return value(field,row.value);
  };
  const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
- const result:Row={operationCode:parsed.operationCode,requestTarget:parsed.targetEvidence.length?{evidence:evidence(parsed.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
+ const result:Row={operationCode:parsed.operation.code,requestTarget:parsed.operation.targetEvidence.length?{evidence:evidence(parsed.operation.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
  const fields=new Set<string>(),ranks=new Set<number>();let previous=-1;
  for(const row of parsed.changes){requireValue(!fields.has(row.field)&&Number.isSafeInteger(row.rank)&&row.rank>previous&&!ranks.has(row.rank),'CHANGE_ORDER_INVALID');fields.add(row.field);ranks.add(row.rank);previous=row.rank;
   requireValue(row.operation==='CLEAR'?row.value===null&&row.text===null&&row.date.length===0:true,'CHANGE_VALUE_INVALID');
   const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.operation==='CLEAR'?null:authoredValue(row.field,row),evidence:evidence(row.evidence)}};
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);
  }
- if(parsed.query[0]){const q=parsed.query[0];requireValue(parsed.operationCode==='4'||q.date.length===0,'INACTIVE_VALUE_NON_NULL');requireValue(parsed.operationCode==='3'||q.period.length===0,'INACTIVE_VALUE_NON_NULL');result.query={period:period(q.period,true),date:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
+ if(parsed.query[0]){const q=parsed.query[0];requireValue(parsed.operation.code==='4'||q.date.length===0,'INACTIVE_VALUE_NON_NULL');requireValue(parsed.operation.code==='3'||q.period.length===0,'INACTIVE_VALUE_NON_NULL');result.query={period:period(q.period,true),date:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
  result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:authoredValue(field,a),evidence:evidence(a.evidence)}))};});
  for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length,'UNUSED_TABLE_ROWS',name);
  result.conversationDirective=Array.isArray(raw.directive)&&raw.directive.length<=1?(raw.directive[0]??null):{kind:'INVALID_PROVIDER_WIRE'};

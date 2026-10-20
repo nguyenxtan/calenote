@@ -14,7 +14,10 @@ const decode=(wire:unknown)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3
 it('preserves canonical interpretation through typed tables without heterogeneous unions',()=>{
  const wire=encodeSmallContextV3(proposal,input),selected=smallContextSchemaV3(input);
  expect(z.fromJSONSchema(selected.schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
- expect(JSON.stringify(selected.schema)).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
+ const operation=(selected.schema as unknown as {properties:{operation:unknown}}).properties.operation;
+ expect((operation as {anyOf:unknown[]}).anyOf).toHaveLength(2);
+ expect(JSON.stringify({...selected.schema,properties:{...selected.schema.properties,operation:undefined}})).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
+ expect(JSON.stringify(operation).match(/"anyOf"/gu)).toHaveLength(1);
  expect(JSON.stringify(selected.schema).length).toBeLessThan(16000);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(proposal,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
 });
@@ -183,7 +186,7 @@ it('preserves every owned period kind and rejects numeric, duplicate, inactive o
   expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
   for(const payload of [-1,0,.5,999,'0',null,[...wire.query[0].period,...wire.query[0].period]]){const invalid=structuredClone(wire);Object.assign(invalid.query[0],{period:payload});expect(decode(invalid).status).toBe('REFUSED');}
   const orphan=structuredClone(wire);orphan.periods=structuredClone(wire.query[0].period);expect(decode(orphan).status).toBe('REFUSED');
-  const inactive=structuredClone(wire);inactive.operationCode='5';expect(decode(inactive).status).toBe('REFUSED');
+  const inactive=structuredClone(wire);inactive.operation.code='5';expect(decode(inactive).status).toBe('REFUSED');
  }
 });
 
@@ -242,5 +245,44 @@ it('preserves explicit unsupported periods without permitting recognized-kind nu
  const wire=encodeSmallContextV3(canonical,input);
  for(const unsupportedKind of [null,'MONTH','WEEK','WEEKEND','DAY','UNSUPPORTED',...['WEEK','MONTH','WEEKEND'].flatMap(kind=>['PREVIOUS','CURRENT','NEXT'].map(label=>`${kind}_${label}`))]){const bad=structuredClone(wire);Object.assign(bad.query[0].period[0],{kind:'UNSUPPORTED',unsupportedKind});expect(decode(bad).status).toBe('REFUSED');}
  const unknown=structuredClone(wire);Object.assign(unknown.query[0].period[0],{kind:'UNSUPPORTED',unsupportedKind:'UNSUPPORTED_PERIOD'});expect(decode(unknown).status).toBe('PARSED');
- const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:CONTEXT_SMALL_PROTOCOL_V3.promptVersion.replace('values-5','values-4'),wireVersion:CONTEXT_SMALL_PROTOCOL_V3.wireVersion.replace('values-5','values-4')};expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
+ const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-inline-values-5',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-inline-values-5'};expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
+});
+
+it('correlates every operation with target ownership in one shallow two-branch schema',()=>{
+ const wire=encodeSmallContextV3(proposal,input);
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:Record<string,unknown>};
+ const operation=schema.properties.operation as {anyOf:unknown[]};
+ expect(operation?.anyOf).toHaveLength(2);
+ expect(schema.properties).not.toHaveProperty('operationCode');
+ expect(schema.properties).not.toHaveProperty('targetEvidence');
+ const validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+ for(const code of ['3','4','5','6','7','8']){
+  expect(validator.safeParse({...wire,operation:{code,targetEvidence:[]}}).success).toBe(true);
+  for(const targetEvidence of [['U0'],['U0','U0'],['U0','U0','U0']])expect(validator.safeParse({...wire,operation:{code,targetEvidence}}).success).toBe(false);
+ }
+ for(const code of ['0','1','2','9','10','11']){
+  expect(validator.safeParse({...wire,operation:{code,targetEvidence:[]}}).success).toBe(false);
+  for(const targetEvidence of [['U0'],['U0','U0'],['U0','U0','U0']])expect(validator.safeParse({...wire,operation:{code,targetEvidence}}).success).toBe(true);
+  for(const targetEvidence of [['U99'],['U0','U0','U0','U0']])expect(validator.safeParse({...wire,operation:{code,targetEvidence}}).success).toBe(false);
+ }
+ const contradiction={...wire,operation:{code:'3',targetEvidence:['U0']}};
+ const before=JSON.stringify(contradiction),diagnostics:unknown[]=[];
+ expect(decodeSmallContextV3(contradiction,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'GENERATION_SHAPE_INVALID'}}]});
+ expect(JSON.stringify(contradiction)).toBe(before);
+});
+
+it('round trips all twelve operation ownership tuples without rewriting targets',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const tuples=[['CREATE_REMINDER','CURRENT',null],['CREATE_REMINDER','NEW',null],['CREATE_REMINDER','UNRESOLVED',null],['LIST_REMINDERS',null,'LIST'],['CALENDAR_QUERY',null,'CALENDAR_DATE'],['CAPABILITY_QUERY',null,'CAPABILITY'],['HELP',null,null],['UNSUPPORTED',null,null],['AMBIGUOUS',null,null],['AMBIGUOUS','CURRENT',null],['AMBIGUOUS','NEW',null],['AMBIGUOUS','UNRESOLVED',null]];
+ for(const [code,[intent,target,queryKind]] of tuples.entries()){
+  const query=queryKind==='LIST'?{kind:'LIST',period:{kind:'MONTH',offset:0},statusScope:'DEFAULT',evidence}:queryKind==='CALENDAR_DATE'?{kind:queryKind,date:{kind:'RELATIVE_DAY',offsetDays:0},outputCalendar:'LUNAR_VN',evidence}:queryKind==='CAPABILITY'?{kind:queryKind,topic:'LUNAR',evidence}:null;
+  const canonical=ConversationInterpretationV3Schema.parse({...proposal,intent,requestTarget:target?{kind:target,evidence}:null,changes:[],query,uncertainties:intent==='AMBIGUOUS'&&target?[{field:'operation',reason:'AMBIGUOUS',alternatives:[]}]:[],conversationDirective:null,replyProposal:null});
+  const wire=encodeSmallContextV3(canonical,input);
+  expect(wire.operation).toEqual({code:String(code),targetEvidence:target?['U0']:[]});
+  expect(decode(wire).status,String(code)).toBe('PARSED');
+  expect(z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
+  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
+  for(const extra of [{operation:{...wire.operation,extra:'private'}},{operationCode:String(code)},{targetEvidence:[]}])expect(decode({...wire,...extra}).status).toBe('REFUSED');
+ }
 });

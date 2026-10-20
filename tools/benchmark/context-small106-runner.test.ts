@@ -32,7 +32,9 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   const raw=JSON.parse(request.messages[1].content);for(const key of ['numericOwnership','fieldCapability','evidenceSources'])delete raw[key];
   const input=ContextInputSchema.parse(raw),item=healthy[calls++];
   const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,item.id,item.index)),input) as unknown as Record<string,unknown>;
-  expect(JSON.stringify(request.response_format.json_schema.schema)).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
+  const schema=request.response_format.json_schema.schema;
+  expect((schema.properties!.operation as unknown as {anyOf:unknown[]}).anyOf).toHaveLength(2);
+  expect(JSON.stringify({...schema,properties:{...schema.properties,operation:undefined}})).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
   const generation=z.fromJSONSchema(request.response_format.json_schema.schema as Parameters<typeof z.fromJSONSchema>[0]);
   expect(generation.safeParse(wire).success,JSON.stringify({fixture:item.id,turn:item.index})).toBe(true);
   const fieldCapability=JSON.parse(request.messages[1].content).fieldCapability;
