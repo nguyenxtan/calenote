@@ -5,16 +5,18 @@
       "id": "2026-10-20-chat-snooze-date",
       "commit": null,
       "releasedAt": null,
-      "title": "Hoãn công việc qua chat bằng ngày giờ cụ thể",
-      "summary": "Nhận ngày giờ đầy đủ khi hoãn việc qua chat, giữ bước xem trước và xác nhận.",
+      "title": "Xem việc chưa xong và hoãn theo ngày giờ qua chat",
+      "summary": "Xem công việc chưa xong ngay trong chat và hoãn bằng ngày giờ đầy đủ.",
       "kind": "Sửa lỗi",
       "changes": [
         "Sửa nhánh hoãn bằng YYYY-MM-DD HH:mm (UTC+7) đang bị từ chối dù trợ giúp có hướng dẫn.",
-        "Thêm kiểm thử chat Xong/Hoãn/Đổi lịch/Dừng đến SQLite thật và API web đọc lại cùng công việc, chống ghi trùng và sai bot."
+        "Thêm kiểm thử chat Xong/Hoãn/Đổi lịch/Dừng đến SQLite thật và API web đọc lại cùng công việc, chống ghi trùng và sai bot.",
+        "Các câu xem việc chưa xong đọc service công việc theo owner/chat/bot, không gọi AI hoặc tạo receipt/mutation."
       ],
       "memberChanges": [
         "Có thể dùng hoãn <mã việc> YYYY-MM-DD HH:mm để xem trước lịch mới, rồi xác nhận.",
-        "Thao tác trong chat và web dùng cùng công việc."
+        "Thao tác trong chat và web dùng cùng công việc.",
+        "Hỏi việc nào chưa xong? hoặc xem việc chưa xong để chọn mã công việc trong cuộc trò chuyện."
       ],
       "verification": "Kiểm thử offline với SQLite đã migrate và Worker router; không gửi bot hay gọi AI thật.",
       "caveat": "Pilot AI chưa đạt. Xong rồi không có mã vẫn cần cơ chế tham chiếu hội thoại; chưa tự chọn công việc."

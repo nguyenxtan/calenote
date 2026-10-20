@@ -81,3 +81,20 @@ describe("provider-neutral follow-through commands", () => {
     expect(h.scopes).toHaveLength(0);
   });
 });
+
+it.each(['xem việc chưa xong','việc nào chưa xong?','danh sách công việc','còn việc gì chưa xong'])('lists open scoped work locally for %s without mutation',async text=>{
+ const h=harness([item,{...item,publicId:'CLOSED-CODE',progress:'DONE'}]);
+ const result=await h.handle(message(text),context);
+ expect(result.handled).toBe(true);expect(result.text).toContain(item.publicId);expect(result.text).toContain(item.title);expect(result.text).not.toContain('CLOSED-CODE');
+ expect(h.scopes).toEqual([{userId:'owner',chatIdentityId:'private-identity',connectionId:'telegram-original-bot',progress:'OPEN'}]);expect(h.actions).toHaveLength(0);
+});
+it('keeps longer mixed requests on the semantic path instead of hiding their extra intent',async()=>{
+ const h=harness();expect((await h.handle(message('danh sách công việc và xoá hết'),context)).handled).toBe(false);expect(h.scopes).toEqual([]);expect(h.actions).toEqual([]);
+});
+it('states the local list limit and never mutates omitted work',async()=>{
+ const items=Array.from({length:6},(_,i)=>({...item,publicId:`task-code-${i}`,title:`Task ${i}`}));const h=harness(items);
+ const result=await h.handle(message('xem việc chưa xong'),context);expect(result.text).toContain('tối đa 5 việc');expect(result.text).toContain('task-code-4');expect(result.text).not.toContain('task-code-5');expect(h.actions).toEqual([]);
+});
+it('reports an empty scoped open list without creating or completing anything',async()=>{
+ const h=harness([]);const result=await h.handle(message('xem việc chưa xong'),context);expect(result.text).toContain('Không tìm thấy');expect(h.actions).toEqual([]);
+});

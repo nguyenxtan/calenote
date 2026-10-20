@@ -30,11 +30,16 @@ function selection(items: FollowThroughItem[]): FollowThroughChatResult {
 export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now): FollowThroughChatHandler {
   return async (message, context) => {
     const text = message.text.normalize("NFC").trim().replace(/\s+/gu, " ");
+    const scope = { userId: context.userId, chatIdentityId: context.chatIdentityId, connectionId: message.connectionId };
+    if (/^(?:xem việc chưa xong|việc nào chưa xong|danh sách công việc|còn việc gì chưa xong)[.!?]?$/iu.test(text)) {
+      const selected=selection((await service.list({...scope,progress:'OPEN'})).items);
+      if(selected.handled)selected.text+='\nHiển thị tối đa 5 việc. Xem Bàn việc trên web để có danh sách đầy đủ.';
+      return selected;
+    }
     const command = /^(?:(xác nhận) )?(dừng theo dõi|chưa xong|xong|hoãn|đổi lịch)(?: (.*))?$/iu.exec(text);
     if (!command) return { handled: false };
     const confirmed = Boolean(command[1]);
     const verb = command[2].toLocaleLowerCase("vi-VN");
-    const scope = { userId: context.userId, chatIdentityId: context.chatIdentityId, connectionId: message.connectionId };
     const idempotencyKey = `chat-${message.id}`;
     const prior = await service.receipt(scope, idempotencyKey);
     if (prior) return result(prior);
