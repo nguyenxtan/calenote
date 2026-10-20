@@ -47,7 +47,7 @@ describe("provider-neutral follow-through commands", () => {
     expect((await h.handle(message(`xong ${item.publicId}`), context)).text).toContain("trong cuộc trò chuyện này");
     expect(h.actions).toHaveLength(0);
   });
-  it.each(["hoãn ABCDEF01 15 phút", "hoãn ABCDEF01 1 giờ", "hoãn ABCDEF01 mai 09:00", "đổi lịch ABCDEF01 2026-10-20 09:00"])("previews absolute Vietnam time before %s", async text => {
+  it.each(["hoãn ABCDEF01 15 phút", "hoãn ABCDEF01 1 giờ", "hoãn ABCDEF01 mai 09:00", "đổi lịch ABCDEF01 2026-10-20 09:00", "hoãn ABCDEF01 2026-10-20 09:00"])("previews absolute Vietnam time before %s", async text => {
     const h = harness();
     const result = await h.handle(message(text), context);
     expect(result.text).toContain("UTC+7");
@@ -59,7 +59,7 @@ describe("provider-neutral follow-through commands", () => {
     await h.handle(message("xác nhận đổi lịch ABCDEF01 2026-10-20 09:00"), context);
     expect(h.actions[0].input).toEqual({ action: "RESCHEDULE", publicId: item.publicId, expectedRevision: 3, idempotencyKey: "chat-inbound-1", scheduledAt: Date.parse("2026-10-20T02:00:00Z") });
   });
-  it.each(["đổi lịch ABCDEF01 mai", "đổi lịch ABCDEF01 2026-02-30 09:00", "xác nhận đổi lịch ABCDEF01 2026-10-19 09:00", "hoãn ABCDEF01 2 phút"])("clarifies invalid or incomplete time %s", async text => {
+  it.each(["đổi lịch ABCDEF01 mai", "đổi lịch ABCDEF01 2026-02-30 09:00", "xác nhận đổi lịch ABCDEF01 2026-10-19 09:00", "hoãn ABCDEF01 2 phút", "hoãn ABCDEF01 2026-02-30 09:00", "hoãn ABCDEF01 2026-10-19 09:00"])("clarifies invalid or incomplete time %s", async text => {
     const h = harness();
     expect((await h.handle(message(text), context)).handled).toBe(true);
     expect(h.actions).toHaveLength(0);

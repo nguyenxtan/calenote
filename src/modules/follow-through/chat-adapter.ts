@@ -58,7 +58,7 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
         else if (["mai 09:00", "ngày mai 09:00"].includes(timeInput)) {
           const tomorrow = new Date(current + OFFSET + DAY).toISOString().slice(0, 10);
           scheduledAt = parseCivil(`${tomorrow} 09:00`, current) ?? undefined;
-        }
+        } else scheduledAt = parseCivil(timeInput, current) ?? undefined;
       } else scheduledAt = parseCivil(timeInput, current) ?? undefined;
       if (scheduledAt === undefined) return { handled: true, text: "Chọn 15 phút, 1 giờ, mai 09:00 hoặc ngày giờ cụ thể YYYY-MM-DD HH:mm (UTC+7), ở tương lai trong 366 ngày. Chưa đổi lịch." };
       if (!confirmed) return { handled: true, text: `Dự kiến ${civil(scheduledAt)} UTC+7, qua ${item.destinationLabel}.\nĐể xác nhận: xác nhận ${verb} ${item.publicId} ${civil(scheduledAt)}` };
