@@ -35,18 +35,18 @@ export function smallContextSchemaV3(input:ContextInput){
  const date=obj({kind:{type:'string',enum:Object.keys(dateFields)},calendar:nullableString,day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:nullableString});
  const period=obj({kind:str,date:nullableInteger,offset:{type:['number','null']},from:nullableInteger,through:nullableInteger});
  const schema=obj({operationCode:{type:'string',enum:Array.from({length:12},(_,i)=>String(i))},targetEvidence:evidence,
-  changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,evidence})),
+  changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,evidence})),
   query:arr(obj({period:nullableInteger,date:nullableInteger,outputCalendar:nullableString,topic:nullableString,evidence})),
-  uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:integer,evidence}))})),
+  uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
-  texts:arr(str),integers:arr(integer),dates:arr(date),clocks:arr(obj({hour:integer,minute:integer,qualifier:str})),periods:arr(period)});
+  texts:{...arr(str),maxItems:0},integers:arr(integer),dates:arr(date),clocks:arr(obj({hour:integer,minute:integer,qualifier:str})),periods:arr(period)});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:schema as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {
  operationCode:string;targetEvidence:string[];
- changes:Array<{field:string;rank:number;operation:string;value:number|null;evidence:string[]}>;
+ changes:Array<{field:string;rank:number;operation:string;value:number|null;text:string|null;evidence:string[]}>;
  query:Array<{period:number|null;date:number|null;outputCalendar:string|null;topic:string|null;evidence:string[]}>;
- uncertainties:Array<{fieldCode:number;reason:string;alternatives:Array<{value:number;evidence:string[]}>}>;
+ uncertainties:Array<{fieldCode:number;reason:string;alternatives:Array<{value:number|null;text:string|null;evidence:string[]}>}>;
  directive:Row[];reply:Array<{text:string}>;texts:string[];integers:number[];dates:Row[];clocks:Row[];periods:Row[];
 }
 const record=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -66,11 +66,11 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  const save=(field:string,value:unknown):number=>{const type=family(field);return type==='dates'?date(value):type==='periods'?period(value):store(type,value);};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
  if(record(raw.requestTarget))out.targetEvidence=evidence(raw.requestTarget.evidence);
- const add=(carrier:unknown)=>{requireValue(record(carrier)&&record(carrier.change));const c=carrier.change;out.changes.push({field:c.field as string,rank:carrier.rank as number,operation:c.operation as string,value:c.value===null?null:save(c.field as string,c.value),evidence:evidence(c.evidence)});};
+ const add=(carrier:unknown)=>{requireValue(record(carrier)&&record(carrier.change));const c=carrier.change;out.changes.push({field:c.field as string,rank:carrier.rank as number,operation:c.operation as string,value:c.value===null||family(c.field as string)==='texts'?null:save(c.field as string,c.value),text:c.value!==null&&family(c.field as string)==='texts'?c.value as string:null,evidence:evidence(c.evidence)});};
  for(const {root} of singleton)if(raw[root]!==null)add(raw[root]);
  (raw.changes as unknown[]).forEach(add);out.changes.sort((a,b)=>a.rank-b.rank);
  if(record(raw.query)){const q=raw.query;out.query=[{period:q.period===null?null:period(q.period),date:q.date===null?null:date(q.date),outputCalendar:q.outputCalendar as string|null,topic:q.topic as string|null,evidence:evidence(q.evidence)}];}
- out.uncertainties=(raw.uncertainties as Row[]).map(issue=>({fieldCode:issue.fieldCode as number,reason:issue.reason as string,alternatives:(issue.alternatives as Row[]).map(alternative=>({value:save(uncertaintyField(issue.fieldCode as number),alternative.value),evidence:evidence(alternative.evidence)}))}));
+ out.uncertainties=(raw.uncertainties as Row[]).map(issue=>({fieldCode:issue.fieldCode as number,reason:issue.reason as string,alternatives:(issue.alternatives as Row[]).map(alternative=>({value:family(uncertaintyField(issue.fieldCode as number))==='texts'?null:save(uncertaintyField(issue.fieldCode as number),alternative.value),text:family(uncertaintyField(issue.fieldCode as number))==='texts'?alternative.value as string:null,evidence:evidence(alternative.evidence)}))}));
  if(record(raw.conversationDirective))out.directive=[structuredClone(raw.conversationDirective)];
  if(record(raw.replyProposal))out.reply=[raw.replyProposal as {text:string}];
  return out;
@@ -87,16 +87,20 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  const date=(index:unknown):Row=>{const row=at('dates',index) as Row,keys=dateFields[String(row.kind)];requireValue(keys);return active(row,keys);};
  const period=(index:unknown,padded:boolean):Row=>{const row=at('periods',index) as Row;const value:Row={...row,date:row.date===null?null:date(row.date),from:row.from===null?null:date(row.from),through:row.through===null?null:date(row.through)};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
  const value=(field:string,index:unknown):unknown=>{const type=family(field);return type==='dates'?date(index):type==='periods'?period(index,false):at(type,index);};
+ const authoredValue=(field:string,row:{value:number|null;text:string|null}):unknown=>{
+  if(family(field)==='texts'){requireValue(row.value===null&&typeof row.text==='string','CHANGE_VALUE_INVALID');return row.text;}
+  requireValue(row.text===null&&row.value!==null,'CHANGE_VALUE_INVALID');return value(field,row.value);
+ };
  const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
  const result:Row={operationCode:parsed.operationCode,requestTarget:parsed.targetEvidence.length?{evidence:evidence(parsed.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
  const fields=new Set<string>(),ranks=new Set<number>();let previous=-1;
  for(const row of parsed.changes){requireValue(!fields.has(row.field)&&Number.isSafeInteger(row.rank)&&row.rank>previous&&!ranks.has(row.rank),'CHANGE_ORDER_INVALID');fields.add(row.field);ranks.add(row.rank);previous=row.rank;
-  requireValue(row.operation==='CLEAR'?row.value===null:row.value!==null,'CHANGE_VALUE_INVALID');
-  const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.value===null?null:value(row.field,row.value),evidence:evidence(row.evidence)}};
+  requireValue(row.operation==='CLEAR'?row.value===null&&row.text===null:true,'CHANGE_VALUE_INVALID');
+  const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.operation==='CLEAR'?null:authoredValue(row.field,row),evidence:evidence(row.evidence)}};
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);
  }
  if(parsed.query[0]){const q=parsed.query[0];result.query={period:q.period===null?null:period(q.period,true),date:q.date===null?null:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
- result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:value(field,a.value),evidence:evidence(a.evidence)}))};});
+ result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:authoredValue(field,a),evidence:evidence(a.evidence)}))};});
  for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length,'UNUSED_TABLE_ROWS',name);
  result.conversationDirective=Array.isArray(raw.directive)&&raw.directive.length<=1?(raw.directive[0]??null):{kind:'INVALID_PROVIDER_WIRE'};
  result.replyProposal=Array.isArray(raw.reply)&&raw.reply.length<=1?(raw.reply[0]??null):{invalid:true};

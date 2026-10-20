@@ -24,3 +24,13 @@ Regression tests cover refusal classifications, private sentinel exclusion, obse
 ## Next execution gate
 
 The completed Formal attempt and its direct-owner grant are consumed. Do not replay it, alter its terminal/ledger or manufacture a new owner digest. The launcher binds each paid grant to reviewed source/proposal and refuses a consumed direct message across namespaces. Any next paid execution requires the applicable fresh owner authority and a reviewed clean source/proposal, successful CI and key metadata gate. Preserve cumulative10USD,UNKNOWN,model/provider/canonical/oracle, no retries/fallback, no Full/deploy. Diagnostic evidence must determine the actual refusal before changing semantics or weakening validation.
+
+## Follow-up d8bbb45 and inline-text-2 preparation
+
+The separately approved d8bbb45f706ffcb5ec2f9cc4757dde706b8ba09a Formal Pilot also STOPPED after exactly two HTTP200 responses. Its new diagnostics identify R01/1 as UNUSED_TABLE_ROWS in texts, with the same payload digest956639fb75cf7fbfc94cf7012fdec37b855b37adb6074601538dfb0e4f25870c. This establishes the rejected invariant, not the contents of those orphan rows. Actual reported run cost0.0013793USD; UNKNOWN48 unchanged, retained5995927 and remaining4004073 ledger microunits. Paid HOLD, no retry/Full/deploy.
+
+The prepared transport profile106-inline-text-2 eliminates free-standing text ownership. Every change and uncertainty alternative carries both value:number|null and text:string|null: text/enum fields use inline text and value=null; typed date/clock/number/period fields use their existing table index and text=null. CLEAR requires both null. The texts root is explicitly constrained to an empty array in the provider generation schema and strict decoder. It is never silently discarded or repaired. Other table usage checks remain strict. Optional guidance keeps its existing quarantine boundary.
+
+Prompt and wire identities explicitly carry the inline-text-2 suffix; the runner pins the new prompt SHA256a568de0785070bd1fdcb0f2a6e1a1932a6d7f4757fcac66d01b1acc5532cd501. Source/proposal pins prevent historical authorities from selecting this changed grammar. Canonical contracts, typed105 expansion/decoder, oracle and frozen corpus remain unchanged.
+
+Offline qualification:57 tests across codec, gateway, entire corpus and Formal launcher;95 additional compiler-launcher/diagnostic tests. The complete frozen corpus remains80scripts/158turns,144healthy responses,3941detail assertions,5actions,32heldout with zero safety failures. All three synthetic Formal76 paths remain covered. Independent review found no must-fix. Paid compiler admission and real Pilot success of this new profile remain UNVERIFIED; preparation is HOLD only.

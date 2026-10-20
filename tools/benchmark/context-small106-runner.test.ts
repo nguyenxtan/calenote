@@ -45,7 +45,7 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   return {status:200,body:JSON.stringify({model:request.model,provider:'Google',id:`gen-typed-${calls}`,choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}],usage:{cost:.001,prompt_tokens:100,completion_tokens:100}})};
  }});
  if(malformed){expect(result.status).toBe('STOP');expect(calls).toBe(1);expect(result.applicationEvidence[0].mutations).toBe(0);}
- else {expect(result.status,JSON.stringify(result.applicationEvidence.at(-1))).toBe('PASS');expect(result.score).toMatchObject({passedScripts:32,passedTurns:84,safetyFailures:0});expect(calls).toBe(76);expect(result.providerHttpRequests).toBe(76);expect(result.responses.every(row=>row.providerWireSchemaVersion.endsWith('106')&&row.providerWireSchemaDigest===row.requestWireSchemaDigest)).toBe(true);expect(new Set(result.responses.map(row=>row.providerWireSchemaDigest)).size).toBeGreaterThan(1);}
+ else {expect(result.status,JSON.stringify(result.applicationEvidence.at(-1))).toBe('PASS');expect(result.score).toMatchObject({passedScripts:32,passedTurns:84,safetyFailures:0});expect(calls).toBe(76);expect(result.providerHttpRequests).toBe(76);expect(result.responses.every(row=>row.providerWireSchemaVersion===CONTEXT_SMALL_PROTOCOL_V3.wireVersion&&row.providerWireSchemaDigest===row.requestWireSchemaDigest)).toBe(true);expect(new Set(result.responses.map(row=>row.providerWireSchemaDigest)).size).toBeGreaterThan(1);}
  expect(result.responses[0].canonicalSchemaDigest).toBe('43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b');
  }finally{rmSync(directory,{recursive:true,force:true});}
 },30000);

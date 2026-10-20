@@ -67,7 +67,7 @@ it('reports exact finite small-table refusal controls without retaining authored
  const diagnostics:unknown[]=[];
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
  expect(diagnostics).toHaveLength(1);
- expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'UNUSED_TABLE_ROWS',table:'texts'}}]});
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'GENERATION_SHAPE_INVALID',table:'texts'}}]});
  expect(JSON.stringify(diagnostics)).not.toContain(privateText);
 });
 it('distinguishes malformed generation shape from invalid table references',()=>{
@@ -87,4 +87,39 @@ it('a throwing diagnostics observer cannot alter refusal or cause output repair'
  const before=JSON.stringify(wire);
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,()=>{throw Error('observer');},input).status).toBe('REFUSED');
  expect(JSON.stringify(wire)).toBe(before);
+});
+
+it('inlines owned text values and forbids every free-standing text table row in the generation schema',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
+ const creation=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:'synthetic inline title',evidence}],query:null,uncertainties:[]});
+ const wire=encodeSmallContextV3(creation,input);
+ expect(wire.texts).toEqual([]);
+ expect(wire.changes[0]).toMatchObject({value:null,text:'synthetic inline title'});
+ expect(decode(wire).status).toBe('PARSED');
+ const generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(generation.safeParse({...wire,texts:['unused text']}).success).toBe(false);
+ expect(decode({...wire,texts:['unused text']}).status).toBe('REFUSED');
+ expect(decode({...wire,changes:[{...wire.changes[0],value:0}]}).status).toBe('REFUSED');
+});
+
+it('R01 month-list response needs no text rows and cannot generate the observed orphan texts',()=>{
+ const bound=ContextInputSchema.parse({...input,turns:[...input.turns,{role:'USER',text:'Tháng này có lịch gì ko?'}],currentTurn:1});
+ const evidence=[{kind:'USER_QUOTE',turn:1,quote:bound.turns[1].text,occurrence:1}];
+ const list=ConversationInterpretationV3Schema.parse({...proposal,intent:'LIST_REMINDERS',requestTarget:null,changes:[],query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
+ const wire=encodeSmallContextV3(list,bound),generation=z.fromJSONSchema(smallContextSchemaV3(bound).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(wire.texts).toEqual([]);expect(generation.safeParse(wire).success).toBe(true);
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,bound)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(list,bound),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,bound));
+ for(const text of ['MONTH','DEFAULT','LUNAR_VN','orphan']){
+  const invalid={...wire,texts:[text]};expect(generation.safeParse(invalid).success).toBe(false);
+  expect(decodeSmallContextV3(invalid,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,bound).status).toBe('REFUSED');
+ }
+});
+
+it('keeps inline uncertainty text canonical and rejects mixed or missing value ownership',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,uncertainties:[...proposal.uncertainties,{field:'intent',reason:'AMBIGUOUS',alternatives:[{value:'LIST_REMINDERS',evidence},{value:'CREATE_REMINDER',evidence}]}]});
+ const wire=encodeSmallContextV3(canonical,input);
+ expect(wire.texts).toEqual([]);expect(wire.uncertainties.at(-1)!.alternatives[0]).toMatchObject({value:null,text:'LIST_REMINDERS'});
+ expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
+ for(const patch of [{value:0},{text:null}]){const invalid=structuredClone(wire);Object.assign(invalid.uncertainties.at(-1)!.alternatives[0],patch);expect(decode(invalid).status).toBe('REFUSED');}
 });
