@@ -218,9 +218,9 @@ describe("LoginPanel", () => {
     await revealLogin(fetcher);
     await userEvent.setup().type(screen.getByLabelText("Email"), "new@example.com");
     await userEvent.setup().click(screen.getByRole("button", {name:"Tiếp tục"}));
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/onboarding"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/register"));
     expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(sessionStorage.getItem("calenote:onboarding-email")).toBe("new@example.com");
+    expect(sessionStorage.getItem("calenote:registration-email")).toBe("new@example.com");
   });
   it("explains exact bot proof recovery without issuing a code or granting access", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(unauthenticated()).mockResolvedValueOnce(json({data:{next:"RECOVERY"}}));

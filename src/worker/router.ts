@@ -1,3 +1,6 @@
+import { createEmailRegistrationOperations } from "./composition-root";
+import { EmailRegistrationError } from "@/modules/auth/email-registration";
+import { handleRequestEmailRegistration,handleVerifyEmailRegistration,type EmailRegistrationOperations } from "./routes/email-registration";
 import { createPersonalAssistantOperations } from "./composition-root";
 import { handleGetPersonalAssistantBrief, handleGetPersonalAssistant, handlePutPersonalAssistant, type PersonalAssistantOperations } from "./routes/personal-assistant";
 import { createFollowThroughOperations } from './composition-root';
@@ -16,7 +19,7 @@ import { SessionAuthError } from "@/modules/auth/session";
 import { InvalidUserPreferencesError } from "@/modules/preferences/service";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { RequestBodyError } from "@/modules/http/body";
-import { jsonResponse, SameOriginError } from "@/modules/http/security";
+import { jsonResponse, requireSameOrigin, SameOriginError } from "@/modules/http/security";
 import {
   ConnectionNotFoundError,
   ConnectionStateError,
@@ -40,7 +43,6 @@ import {
   createActionsOperations,
   createActivityOperations,
   createConnectionsOperations,
-  createOnboardingOperations,
   createPreferencesOperations,
   createRemindersOperations,
   createContextApiOperations,
@@ -66,7 +68,6 @@ import {
   handleWebhookRetry,
   InvalidRequestError,
 } from "./routes/connections";
-import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
 import { handleResolveReminderIntent, handleCancelReminder, handleCreateReminder, handleListReminders, ClientUpgradeRequiredError } from "./routes/reminders";
@@ -91,6 +92,7 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+ emailRegistrationOperations?:(env:Env)=>Promise<EmailRegistrationOperations>;
  personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
   followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
   emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
@@ -115,6 +117,7 @@ function requestBodyMessage(code: RequestBodyError["code"]): string {
 }
 
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
+  if (error instanceof EmailRegistrationError) return {code:error.code,message:error.code === "DELIVERY_UNAVAILABLE" ? "Chưa thể gửi email xác minh. Hãy thử lại sau." : "Mã xác minh chưa hợp lệ hoặc đã hết hạn.",status:error.status};
   if (error instanceof FollowThroughError) return {code:error.code,message: error.code === "CONFLICT" ? "Việc đã thay đổi. Hãy tải lại trước khi thao tác." : error.code === "NOT_FOUND" ? "Không tìm thấy việc này." : error.code === "BLOCKED" ? "Kênh nhận nhắc hiện không sẵn sàng." : "Thao tác chưa hợp lệ.",status:error.code === "NOT_FOUND" ? 404 : error.code === "CONFLICT" ? 409 : error.code === "BLOCKED" ? 409 : 400};
   if (error instanceof ServiceUnavailableError) {
     return { code: "SERVICE_UNAVAILABLE", message: error.message, status: 503 };
@@ -207,6 +210,7 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
+  const emailRegistrationOperationsFactory=options.emailRegistrationOperations??createEmailRegistrationOperations;
   const personalAssistantOperationsFactory = options.personalAssistantOperations ?? createPersonalAssistantOperations;
   const seriesOperationsFactory = options.seriesOperations
     ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
@@ -218,7 +222,6 @@ export function createRouter(options: RouterOptions = {}) {
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const contextApiOperationsFactory = options.contextApiOperations ?? createContextApiOperations;
-  const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
@@ -260,6 +263,8 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
+      if (pathname === "/api/auth/register/request" && request.method === "POST") return await handleRequestEmailRegistration(request,appOrigin!,()=>emailRegistrationOperationsFactory(env));
+      if (pathname === "/api/auth/register/verify" && request.method === "POST") return await handleVerifyEmailRegistration(request,appOrigin!,()=>emailRegistrationOperationsFactory(env));
       if (pathname === "/api/v1/personal-assistant/brief" && request.method === "GET") return await handleGetPersonalAssistantBrief(request,()=>personalAssistantOperationsFactory(env));
       if (pathname === "/api/v1/personal-assistant" && request.method === "GET") return await handleGetPersonalAssistant(request,()=>personalAssistantOperationsFactory(env));
       if (pathname === "/api/v1/personal-assistant" && request.method === "PUT") return await handlePutPersonalAssistant(request,appOrigin!,()=>personalAssistantOperationsFactory(env));
@@ -282,7 +287,8 @@ export function createRouter(options: RouterOptions = {}) {
         return await handleLogout(request, appOrigin!, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/onboarding") {
-        return await handleOnboarding(request, appOrigin!, () => onboardingOperationsFactory(env));
+        requireSameOrigin(request,appOrigin!);
+        return jsonResponse({error:{code:"EMAIL_VERIFICATION_REQUIRED",message:"Xác minh email tại trang đăng ký trước khi kết nối bot."}},{status:410});
       }
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
@@ -365,7 +371,7 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
+      const authenticated = pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
         || pathname === "/api/session"
         || pathname === "/api/connections"

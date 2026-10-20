@@ -1,0 +1,9 @@
+# Email-first registration
+
+User request: allow any valid email (Gmail or other provider) to register before bot connection, require email OTP verification to prevent unverified account spam, test and verify then release. Small decisions autonomous.
+
+Flow: display name + email -> sender-qualified OTP -> six-digit proof in same browser -> atomic user/personal workspace/membership/session -> existing authenticated connections screen. No bot or account graph exists before proof. Email-verified accounts can use this flow to sign in without a bot; legacy unverified-email accounts retain bot login and cannot be claimed through new registration. Retire unsigned bot-first onboarding endpoint.
+
+Security: keyed code/browser digests, unpredictable challenge ID, ten-minute expiry, five atomic attempts, one-use transaction marker, resend invalidation/cooldown60s, email3/IP10/global100 requests per hour, verificationIP30/hour. Unknown sending outcomes invalidate challenge; no retry. Register cookie is HttpOnly Secure SameSiteStrict with no OTP in URLs/storage/logging and no email in URLs/logging. A one-shot sessionStorage email handoff is cleared when registration consumes it. Expired challenge metadata purged after24h, bounded100/cron. No password or paid-AI change.
+
+Qualification: actual disposable database tests including rollback, concurrency, invalid/expired/replayed proof, existing-account refusal, email-account login and authenticated first-bot creation with provider fakes. Router retirement, request privacy, UI errors/cooldown and independent security review. Real email sending requires a verified sender/domain binding and human-designated recipient; local fake delivery is not live qualification. No production promotion while sender/live recipient prerequisites or exact-candidate release gate are unresolved.

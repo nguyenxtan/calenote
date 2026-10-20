@@ -29,6 +29,7 @@ export interface QueueOperations {
 }
 
 export interface ScheduledOperations {
+  purgeEmailRegistrationChallenges?(now:number,limit:number):Promise<unknown>;
   processPersonalAssistant?(now:number,limit:number):Promise<unknown>;
   processFollowThrough?(now: number, limit: number): Promise<unknown>;
   purgeConversationContexts?(now: number, limit: number): Promise<unknown>;
@@ -150,6 +151,7 @@ export async function runScheduledWork(
     })(),
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
+    ...(operations.purgeEmailRegistrationChallenges ? [operations.purgeEmailRegistrationChallenges(controller.scheduledTime,100)] : []),
     ...(operations.purgeConversationContexts ? [operations.purgeConversationContexts(controller.scheduledTime, 100)] : []),
   ]);
 }

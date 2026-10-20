@@ -1,0 +1,39 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  flex: 1 1 140px;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--cn-border, #e8d7cb);
+  border-radius: 10px;
+  background: #fffaf7;
+  color: var(--cn-brand-600, #9a3412);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.secondaryButton:not(:disabled):hover {
+  border-color: var(--cn-brand-500, #c2410c);
+  background: #fff0e6;
+}
+
+.secondaryButton:focus-visible {
+  outline: 2px solid var(--cn-brand-500, #c2410c);
+  outline-offset: 3px;
+}
+
+.secondaryButton:disabled {
+  color: var(--ink-soft, #746b65);
+  background: #f7f5f3;
+  cursor: not-allowed;
+}

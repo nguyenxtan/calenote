@@ -4,6 +4,8 @@ import { SessionAuthError } from "@/modules/auth/session";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { createKeyring } from "@/modules/security/keyring";
 import { onboard } from "@/modules/onboarding/service";
+import { handleOnboarding } from "./routes/onboarding";
+import { safeErrorResponse } from "./router";
 import { createRouter as createProductionRouter, routeRequest, type RouterOptions } from "./router";
 import type {
   AuthOperations,
@@ -73,6 +75,17 @@ function routerOptions(factory: (env: Env) => Promise<RouteOperations>) {
 function createRouter(options: RouterOptions | { operations: (env: Env) => Promise<RouteOperations> } = {}) {
   if ("operations" in options) return createProductionRouter(routerOptions(options.operations));
   return createProductionRouter(options);
+}
+
+
+// Retain legacy handler boundary coverage independently of the retired public route.
+// Production /api/onboarding is now covered by the email-registration router suite.
+function createLegacyOnboardingTestRouter(options:{operations:(env:Env)=>Promise<RouteOperations>}) {
+ return async (request:Request,env:Env,executionContext:unknown) => {
+  void executionContext;
+  try{return await handleOnboarding(request,env.APP_ORIGIN,()=>options.operations(env));}
+  catch(error){return safeErrorResponse(error);}
+ };
 }
 
 function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
@@ -217,7 +230,7 @@ describe("Worker router", () => {
     const localOrigin = "https://localhost:8787";
     const ops = operations();
     const { env } = environment({ APP_ORIGIN: localOrigin, CALENOTE_RUNTIME_ENVIRONMENT: "local" });
-    const accepted = await createRouter({ operations: async () => ops })(
+    const accepted = await createLegacyOnboardingTestRouter({ operations: async () => ops })(
       new Request(`${localOrigin}/api/onboarding`, {
         method: "POST",
         headers: { origin: localOrigin, "content-type": "application/json" },
@@ -229,7 +242,7 @@ describe("Worker router", () => {
     expect(accepted.status).toBe(201);
     expect(accepted.headers.get("set-cookie")).toBe(success.sessionCookie);
 
-    const rejected = await createRouter({ operations: async () => ops })(
+    const rejected = await createLegacyOnboardingTestRouter({ operations: async () => ops })(
       new Request(`${localOrigin}/api/onboarding`, {
         method: "POST",
         headers: { origin: "https://evil.example", "content-type": "application/json" },
@@ -277,7 +290,7 @@ describe("Worker router", () => {
   it("requires exact same-origin JSON and rate-limits a HMACed trusted IP/provider before onboarding", async () => {
     const ops = operations();
     const { env } = environment();
-    const response = await createRouter({ operations: async () => ops })(
+    const response = await createLegacyOnboardingTestRouter({ operations: async () => ops })(
       onboardingRequest(onboardingBody(), { "CF-Connecting-IP": "203.0.113.7" }),
       env,
       context(),
@@ -303,7 +316,7 @@ describe("Worker router", () => {
   it("uses one anonymous rate-limit subject and ignores spoofable forwarding headers", async () => {
     const ops = operations();
     const { env } = environment();
-    await createRouter({ operations: async () => ops })(
+    await createLegacyOnboardingTestRouter({ operations: async () => ops })(
       onboardingRequest(onboardingBody(), { "x-forwarded-for": "198.51.100.4" }), env, context(),
     );
 
@@ -320,7 +333,7 @@ describe("Worker router", () => {
     const { env } = environment();
     const request = onboardingRequest(onboardingBody(), headers as unknown as Record<string, string>);
     if (headers.origin === "") request.headers.delete("origin");
-    const response = await createRouter({ operations: operationsFactory })(request, env, context());
+    const response = await createLegacyOnboardingTestRouter({ operations: operationsFactory })(request, env, context());
 
     expect(response.status).toBe(expected);
     expect(operationsFactory).not.toHaveBeenCalled();
@@ -339,7 +352,7 @@ describe("Worker router", () => {
       });
       const ops = operations();
       const operationsFactory = vi.fn(async () => ops);
-      const responsePromise = createRouter({ operations: operationsFactory })(
+      const responsePromise = createLegacyOnboardingTestRouter({ operations: operationsFactory })(
         new Request("https://calenote.iconiclogs.com/api/onboarding", {
           method: "POST",
           headers: {
@@ -372,7 +385,7 @@ describe("Worker router", () => {
   it("strictly validates and normalizes onboarding fields before the operation", async () => {
     const ops = operations();
     const { env } = environment();
-    const response = await createRouter({ operations: async () => ops })(
+    const response = await createLegacyOnboardingTestRouter({ operations: async () => ops })(
       onboardingRequest({ ...onboardingBody(), displayName: "  Tuyền  ", email: "  OWNER@Example.COM " }), env, context(),
     );
 
@@ -385,13 +398,13 @@ describe("Worker router", () => {
     const limited = operations({
       consumeOnboardingRateLimit: vi.fn(async () => ({ allowed: false, resetAt: Date.now() + 9_500 })),
     });
-    const limitedResponse = await createRouter({ operations: async () => limited })(onboardingRequest(onboardingBody()), env, context());
+    const limitedResponse = await createLegacyOnboardingTestRouter({ operations: async () => limited })(onboardingRequest(onboardingBody()), env, context());
     expect(limitedResponse.status).toBe(429);
     expect(Number(limitedResponse.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
     expect((await limitedResponse.json() as { error: { code: string } }).error.code).toBe("RATE_LIMITED");
 
     const conflict = operations({ onboard: vi.fn(async () => { throw new OnboardingConflictError(); }) });
-    const conflictResponse = await createRouter({ operations: async () => conflict })(onboardingRequest(onboardingBody()), env, context());
+    const conflictResponse = await createLegacyOnboardingTestRouter({ operations: async () => conflict })(onboardingRequest(onboardingBody()), env, context());
     const raw = await conflictResponse.text();
     expect(conflictResponse.status).toBe(409);
     expect(JSON.parse(raw).error.code).toBe("ONBOARDING_CONFLICT");
@@ -428,7 +441,7 @@ describe("Worker router", () => {
       }),
     });
 
-    const response = await createRouter({ operations: async () => ops })(onboardingRequest(onboardingBody()), env, context());
+    const response = await createLegacyOnboardingTestRouter({ operations: async () => ops })(onboardingRequest(onboardingBody()), env, context());
     const raw = await response.text();
 
     expect(response.status).toBe(500);

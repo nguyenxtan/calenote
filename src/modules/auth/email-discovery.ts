@@ -10,6 +10,9 @@ export interface EmailDiscoveryStore { classify(email: string): Promise<AuthNext
 export class D1EmailDiscoveryStore implements EmailDiscoveryStore {
   constructor(private readonly database: D1Database) {}
   async classify(email: string): Promise<AuthNextStep> {
+    const verifiedTable=await this.database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_verified_accounts'").first();
+    if(verifiedTable && await this.database.prepare('SELECT 1 n FROM users u JOIN email_verified_accounts v ON v.user_id=u.id WHERE u.email=? COLLATE NOCASE').bind(email).first())return "SETUP";
+
     // Match D1LoginCodeStore.issue: an explicit primary is authoritative;
     // before a primary is selected, only a sole bound private channel is usable.
     const row = await this.database.prepare(`SELECT CASE WHEN EXISTS (

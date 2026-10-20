@@ -117,13 +117,13 @@ export function LoginPanel() {
       if (controller.signal.aborted) return;
       const { data: { next } } = ContinueEmailResponseSchema.parse({ data: value });
       if (next === "SETUP") {
-        try { sessionStorage.setItem("calenote:onboarding-email", submitted); } catch { /* The user can re-enter the email if browser storage is unavailable. */ }
-        replace("/onboarding");
+        try { sessionStorage.setItem("calenote:registration-email", submitted); } catch { /* The user can re-enter the email if browser storage is unavailable. */ }
+        replace("/register");
         return;
       }
       if (next === "RECOVERY") {
         setRecovery(true);
-        setErrorMessage("Email này đã có tài khoản nhưng kênh nhận mã chưa sẵn sàng. Chỉ có thể tiếp tục thiết lập với token của đúng bot đã sở hữu. Email hoặc token bot mới không cấp quyền truy cập. Nếu không còn token cũ, hiện chưa thể khôi phục tại đây.");
+        setErrorMessage("Email này đã có tài khoản nhưng kênh nhận mã chưa sẵn sàng. Token của đúng bot vẫn là bằng chứng sở hữu; hiện chưa thể khôi phục tại đây. Email hoặc token bot mới không cấp quyền truy cập.");
         return;
       }
       requestingCode = true;
@@ -253,7 +253,7 @@ export function LoginPanel() {
             <>
               <p className={styles.eyebrow}>Bước 1 · Email</p>
               <h2 id="login-title">Đăng nhập vào Calenote</h2>
-              <p className={styles.lead}>Nhập email để tiếp tục. Email mới sẽ bắt đầu kết nối bot; tài khoản đã có bot sẽ nhận mã đăng nhập.</p>
+              <p className={styles.lead}>Nhập email để tiếp tục. Email mới sẽ được xác minh trước khi tạo tài khoản. Tài khoản đã có bot tiếp tục nhận mã qua bot.</p>
               <form className={styles.form} onSubmit={requestCode}>
                 <label>
                   <span>Email</span>
@@ -268,7 +268,7 @@ export function LoginPanel() {
                   />
                 </label>
                 {errorMessage ? <div className={styles.error} role="alert" tabIndex={-1} ref={errorRef}>{errorMessage}</div> : null}
-                {recovery ? <Link href="/onboarding">Tiếp tục với đúng bot đã kết nối</Link> : null}
+                {recovery ? <p className={styles.fieldNote}>Khôi phục tài khoản cần quy trình xác minh riêng.</p> : null}
                 <button type="submit" className={styles.primaryButton} disabled={!emailValid || requesting}>
                   {requesting ? <span className={styles.spinner} aria-hidden="true" /> : <MessageCircle size={17} />}
                   {requesting ? "Đang yêu cầu…" : "Tiếp tục"}
@@ -308,7 +308,7 @@ export function LoginPanel() {
               </form>
             </>
           )}
-          <p className={styles.newAccount}>Chưa có tài khoản? <Link href="/onboarding">Kết nối bot của bạn</Link></p>
+          <p className={styles.newAccount}>Chưa có tài khoản? <Link href="/register">Đăng ký bằng email</Link></p>
         </section>
       </div>
     </main>

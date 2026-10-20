@@ -1,0 +1,17 @@
+# Email-first registration readiness
+
+Source implementation only; not a production deployment or real-mail acceptance record.
+
+`POST /api/auth/register/request` accepts normalized email and displayName. It responds with a generic challenge and private browser binding; only qualified delivery may mark a challenge usable. `POST /api/auth/register/verify` accepts email/challenge/code and requires the binding cookie. User, workspace, membership, email-verification marker and session commit atomically after proof. New users have zero bots and can add the first bot in existing authenticated Connections. Verified email users can return via email OTP. Legacy accounts without an email-verification marker keep bot login; registration cannot claim them.
+
+Unsigned `POST /api/onboarding` returns410 EMAIL_VERIFICATION_REQUIRED without provider egress. The former recovery workflow is not exposed through this endpoint; legacy login UI explains that unavailable bot recovery needs support. Handler unit coverage remains explicitly separated from public router coverage.
+
+Limits: six digits, ten-minute TTL, five durable attempts,60s resend cooldown,3 email/10 IP/100 global sends per hour,30 IP verifies/hour. Provider rejection or unknown result marks FAILED; no automatic retry. Challenge metadata contains normalized email/displayName and keyed digests, never plaintext OTP. Expired challenges are purged after24h in batches of100. User identities are created only after proof; ephemeral rate-limit/challenge records may exist before proof.
+
+Provider adapter uses Cloudflare Email Service's structured Workers binding. The candidate prepares a sender-restricted REGISTRATION_EMAIL binding and REGISTRATION_EMAIL_FROM=no-reply@iconiclogs.com in wrangler.jsonc, with regenerated Worker types. The sending domain has not been activated, so this source is not yet deployable as qualified registration. Do not deploy this candidate as ready registration while the binding is missing: registration deliberately returns503, preventing unverified account creation.
+
+Required before final release: verified sender address/domain; authorized mailbox for OTP receipt and verification; source-controlled binding configuration and regenerated Worker types; exact final SHA CI success and release authority; migration0015+0016+0017 from production baseline14; immutable Worker upload/promotion and live readback. Preserve PilotAI/paidHOLD, secrets/admin identities and UNKNOWN accounting. Do not confuse send acknowledgement with receipt in mailbox or mailbox receipt with successful account verification.
+
+Official provider references: https://developers.cloudflare.com/email-service/api/send-emails/workers-api/ and https://developers.cloudflare.com/email-service/configuration/send-bindings/ .
+
+Read-only readiness on2026-10-20: existing authenticated Cloudflare Email Sending page showed Enable Email Sending / No zones found; onboarding selector contains iconiclogs.com. No activation was submitted. Public DNS: root MX points to Viettel IDC; root SPF and DMARC already exist. Preserve these when adding sending-only cf-bounce records; never enable Email Routing or replace root mail records for this task. The human-designated test mailbox is recorded only in the private local release evidence, not in source.

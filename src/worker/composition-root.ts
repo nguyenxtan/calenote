@@ -1,3 +1,6 @@
+import { requestEmailRegistration, verifyEmailRegistration } from "@/modules/auth/email-registration";
+import { createRegistrationEmailSender } from "@/modules/auth/registration-email-sender";
+import type { EmailRegistrationOperations } from "./routes/email-registration";
 import { createPersonalMemoryChatHandler } from "@/modules/personal-assistant/chat";
 import { D1PersonalAssistantStore } from "@/modules/personal-assistant/store";
 import { personalBrief, D1PersonalAssistantRuntime } from "@/modules/personal-assistant/runtime";
@@ -489,6 +492,10 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
+    purgeEmailRegistrationChallenges: async (now,limit) => {
+      if(!await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_registration_challenges'").first())return;
+      return env.DB.prepare('DELETE FROM email_registration_challenges WHERE email IN (SELECT email FROM email_registration_challenges WHERE expires_at<? ORDER BY expires_at LIMIT ?)').bind(now-86_400_000,Math.min(100,Math.max(1,limit))).run();
+    },
     processPersonalAssistant: (now, limit) => new D1PersonalAssistantRuntime(env.DB,keyring).processDue(now,limit),
     processFollowThrough: (now, limit) => new D1FollowThroughService(env.DB,keyring).processDue(now,limit),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
@@ -548,4 +555,10 @@ export async function createPersonalAssistantOperations(env: Env): Promise<Perso
  const rate=await consumeRateLimit({subjectDigest,scope:'personal-assistant',limit:60,windowMs:60_000},{store:rateStore});
  if(!rate.allowed)throw new RateLimitExceededError(Math.max(1,Math.ceil((rate.resetAt-Date.now())/1000)));
  }};
+}
+
+export async function createEmailRegistrationOperations(env:Env):Promise<EmailRegistrationOperations> {
+ const keyring=await createRouteKeyring(env),rateLimitStore=new D1RateLimitStore(env.DB);
+ const deps={database:env.DB,keyring,rateLimitStore,sender:createRegistrationEmailSender(env.REGISTRATION_EMAIL,env.REGISTRATION_EMAIL_FROM)};
+ return {requestEmailRegistration:input=>requestEmailRegistration(input,deps),verifyEmailRegistration:async input=>({cookie:(await verifyEmailRegistration(input,deps)).session.cookie})};
 }
