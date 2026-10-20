@@ -1,10 +1,30 @@
 {
-  "latestId": "2026-10-20-email-categories",
+  "latestId": "2026-10-20-chat-snooze-date",
   "notes": [
     {
-      "id": "2026-10-20-email-categories",
+      "id": "2026-10-20-chat-snooze-date",
       "commit": null,
       "releasedAt": null,
+      "title": "Xem việc chưa xong và hoãn theo ngày giờ qua chat",
+      "summary": "Xem công việc chưa xong ngay trong chat và hoãn bằng ngày giờ đầy đủ.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Sửa nhánh hoãn bằng YYYY-MM-DD HH:mm (UTC+7) đang bị từ chối dù trợ giúp có hướng dẫn.",
+        "Thêm kiểm thử chat Xong/Hoãn/Đổi lịch/Dừng đến SQLite thật và API web đọc lại cùng công việc, chống ghi trùng và sai bot.",
+        "Các câu xem việc chưa xong đọc service công việc theo owner/chat/bot, không gọi AI hoặc tạo receipt/mutation."
+      ],
+      "memberChanges": [
+        "Có thể dùng hoãn <mã việc> YYYY-MM-DD HH:mm để xem trước lịch mới, rồi xác nhận.",
+        "Thao tác trong chat và web dùng cùng công việc.",
+        "Hỏi việc nào chưa xong? hoặc xem việc chưa xong để chọn mã công việc trong cuộc trò chuyện."
+      ],
+      "verification": "Kiểm thử offline với SQLite đã migrate và Worker router; không gửi bot hay gọi AI thật.",
+      "caveat": "Pilot AI chưa đạt. Xong rồi không có mã vẫn cần cơ chế tham chiếu hội thoại; chưa tự chọn công việc."
+    },
+    {
+      "id": "2026-10-20-email-categories",
+      "commit": "612f4c51067261abd7d2261e490c8a286806d5c7",
+      "releasedAt": "2026-10-20T06:18:42.569677+00:00",
       "title": "Email rõ ràng hơn, phân loại ngày đáng nhớ linh hoạt hơn",
       "summary": "Email OTP có giao diện HTML, thêm email chào mừng và loại sự kiện riêng.",
       "kind": "Tính năng",
@@ -21,7 +41,7 @@
         "Có gợi ý loại theo tên sự kiện; bạn chọn để áp dụng.",
         "Chuông Có gì mới cho biết những tính năng vừa cập nhật."
       ],
-      "verification": "Đã kiểm tra tự động và giao diện bằng dữ liệu mẫu. Email HTML/welcome và thông báo trên production cần kiểm tra riêng sau phát hành.",
+      "verification": "Bản 612f4c5 đã được phiên release xác minh Worker 100%, migration0018, asset và giao diện lịch sử/chuông thành viên trên live. Mốc thời gian là lần lưu bằng chứng authenticated read-back. Chưa thử email HTML/welcome thật hoặc thao tác loại sự kiện.",
       "caveat": "Gợi ý loại trong giao diện là quy tắc có giới hạn. Pilot AI và tự tạo loại qua chat chưa hoàn tất. Trạng thái đã đọc được lưu riêng theo tài khoản trên trình duyệt."
     },
     {

@@ -30,11 +30,16 @@ function selection(items: FollowThroughItem[]): FollowThroughChatResult {
 export function createFollowThroughChatHandler(service: FollowThroughChatService, now: () => number = Date.now): FollowThroughChatHandler {
   return async (message, context) => {
     const text = message.text.normalize("NFC").trim().replace(/\s+/gu, " ");
+    const scope = { userId: context.userId, chatIdentityId: context.chatIdentityId, connectionId: message.connectionId };
+    if (/^(?:xem việc chưa xong|việc nào chưa xong|danh sách công việc|còn việc gì chưa xong)[.!?]?$/iu.test(text)) {
+      const selected=selection((await service.list({...scope,progress:'OPEN'})).items);
+      if(selected.handled)selected.text+='\nHiển thị tối đa 5 việc. Xem Bàn việc trên web để có danh sách đầy đủ.';
+      return selected;
+    }
     const command = /^(?:(xác nhận) )?(dừng theo dõi|chưa xong|xong|hoãn|đổi lịch)(?: (.*))?$/iu.exec(text);
     if (!command) return { handled: false };
     const confirmed = Boolean(command[1]);
     const verb = command[2].toLocaleLowerCase("vi-VN");
-    const scope = { userId: context.userId, chatIdentityId: context.chatIdentityId, connectionId: message.connectionId };
     const idempotencyKey = `chat-${message.id}`;
     const prior = await service.receipt(scope, idempotencyKey);
     if (prior) return result(prior);
@@ -58,7 +63,7 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
         else if (["mai 09:00", "ngày mai 09:00"].includes(timeInput)) {
           const tomorrow = new Date(current + OFFSET + DAY).toISOString().slice(0, 10);
           scheduledAt = parseCivil(`${tomorrow} 09:00`, current) ?? undefined;
-        }
+        } else scheduledAt = parseCivil(timeInput, current) ?? undefined;
       } else scheduledAt = parseCivil(timeInput, current) ?? undefined;
       if (scheduledAt === undefined) return { handled: true, text: "Chọn 15 phút, 1 giờ, mai 09:00 hoặc ngày giờ cụ thể YYYY-MM-DD HH:mm (UTC+7), ở tương lai trong 366 ngày. Chưa đổi lịch." };
       if (!confirmed) return { handled: true, text: `Dự kiến ${civil(scheduledAt)} UTC+7, qua ${item.destinationLabel}.\nĐể xác nhận: xác nhận ${verb} ${item.publicId} ${civil(scheduledAt)}` };

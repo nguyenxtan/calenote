@@ -47,7 +47,7 @@ describe("provider-neutral follow-through commands", () => {
     expect((await h.handle(message(`xong ${item.publicId}`), context)).text).toContain("trong cuộc trò chuyện này");
     expect(h.actions).toHaveLength(0);
   });
-  it.each(["hoãn ABCDEF01 15 phút", "hoãn ABCDEF01 1 giờ", "hoãn ABCDEF01 mai 09:00", "đổi lịch ABCDEF01 2026-10-20 09:00"])("previews absolute Vietnam time before %s", async text => {
+  it.each(["hoãn ABCDEF01 15 phút", "hoãn ABCDEF01 1 giờ", "hoãn ABCDEF01 mai 09:00", "đổi lịch ABCDEF01 2026-10-20 09:00", "hoãn ABCDEF01 2026-10-20 09:00"])("previews absolute Vietnam time before %s", async text => {
     const h = harness();
     const result = await h.handle(message(text), context);
     expect(result.text).toContain("UTC+7");
@@ -59,7 +59,7 @@ describe("provider-neutral follow-through commands", () => {
     await h.handle(message("xác nhận đổi lịch ABCDEF01 2026-10-20 09:00"), context);
     expect(h.actions[0].input).toEqual({ action: "RESCHEDULE", publicId: item.publicId, expectedRevision: 3, idempotencyKey: "chat-inbound-1", scheduledAt: Date.parse("2026-10-20T02:00:00Z") });
   });
-  it.each(["đổi lịch ABCDEF01 mai", "đổi lịch ABCDEF01 2026-02-30 09:00", "xác nhận đổi lịch ABCDEF01 2026-10-19 09:00", "hoãn ABCDEF01 2 phút"])("clarifies invalid or incomplete time %s", async text => {
+  it.each(["đổi lịch ABCDEF01 mai", "đổi lịch ABCDEF01 2026-02-30 09:00", "xác nhận đổi lịch ABCDEF01 2026-10-19 09:00", "hoãn ABCDEF01 2 phút", "hoãn ABCDEF01 2026-02-30 09:00", "hoãn ABCDEF01 2026-10-19 09:00"])("clarifies invalid or incomplete time %s", async text => {
     const h = harness();
     expect((await h.handle(message(text), context)).handled).toBe(true);
     expect(h.actions).toHaveLength(0);
@@ -80,4 +80,21 @@ describe("provider-neutral follow-through commands", () => {
     expect(await h.handle(message("nhắc tôi gọi mẹ lúc 9h mai"), context)).toEqual({ handled: false });
     expect(h.scopes).toHaveLength(0);
   });
+});
+
+it.each(['xem việc chưa xong','việc nào chưa xong?','danh sách công việc','còn việc gì chưa xong'])('lists open scoped work locally for %s without mutation',async text=>{
+ const h=harness([item,{...item,publicId:'CLOSED-CODE',progress:'DONE'}]);
+ const result=await h.handle(message(text),context);
+ expect(result.handled).toBe(true);expect(result.text).toContain(item.publicId);expect(result.text).toContain(item.title);expect(result.text).not.toContain('CLOSED-CODE');
+ expect(h.scopes).toEqual([{userId:'owner',chatIdentityId:'private-identity',connectionId:'telegram-original-bot',progress:'OPEN'}]);expect(h.actions).toHaveLength(0);
+});
+it('keeps longer mixed requests on the semantic path instead of hiding their extra intent',async()=>{
+ const h=harness();expect((await h.handle(message('danh sách công việc và xoá hết'),context)).handled).toBe(false);expect(h.scopes).toEqual([]);expect(h.actions).toEqual([]);
+});
+it('states the local list limit and never mutates omitted work',async()=>{
+ const items=Array.from({length:6},(_,i)=>({...item,publicId:`task-code-${i}`,title:`Task ${i}`}));const h=harness(items);
+ const result=await h.handle(message('xem việc chưa xong'),context);expect(result.text).toContain('tối đa 5 việc');expect(result.text).toContain('task-code-4');expect(result.text).not.toContain('task-code-5');expect(h.actions).toEqual([]);
+});
+it('reports an empty scoped open list without creating or completing anything',async()=>{
+ const h=harness([]);const result=await h.handle(message('xem việc chưa xong'),context);expect(result.text).toContain('Không tìm thấy');expect(h.actions).toEqual([]);
 });
