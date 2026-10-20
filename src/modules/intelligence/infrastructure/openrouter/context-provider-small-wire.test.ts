@@ -198,3 +198,23 @@ it('owns queryRange alternative periods and refuses mixed or wrong-owner alterna
  const absent=ConversationInterpretationV3Schema.parse({...canonical,query:{kind:'LIST',statusScope:'DEFAULT',period:null,evidence}});expect(encodeSmallContextV3(absent,input).query[0].period).toEqual([]);expect(decode(encodeSmallContextV3(absent,input))).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(absent,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
  const wrong=structuredClone(wire);wrong.uncertainties[0].fieldCode=0;expect(decode(wrong).status).toBe('REFUSED');
 });
+
+it('projects nested typed query failures without retaining authored query content',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
+ for(const field of ['topic','outputCalendar'] as const){
+  const wire=encodeSmallContextV3(canonical,input);wire.query[0][field]='PRIVATE_QUERY_SENTINEL';
+  const diagnostics:Array<{issues:Array<{path:Array<string|number>}>}>=[];
+  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+  expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')===`query.${field}`))).toBe(true);
+  expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE_QUERY_SENTINEL');
+ }
+});
+it('reports nested period offset constraints instead of collapsing them to query',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence},uncertainties:[]});
+ const wire=encodeSmallContextV3(canonical,input);wire.query[0].period[0].offset=2;
+ const diagnostics:Array<{issues:Array<{path:Array<string|number>}>}>=[];
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')==='query.period.offset'))).toBe(true);
+});

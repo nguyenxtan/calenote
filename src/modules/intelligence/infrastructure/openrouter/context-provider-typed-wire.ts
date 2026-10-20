@@ -233,7 +233,7 @@ export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:u
    }
   }
   const checked=validator.safeParse(candidate);
-  if(!checked.success){observeWireInvalid?.(projectWireValidation(raw,checked.error.issues[0]?.path??[],"TYPED_PROVIDER_WIRE",undefined,"calenote-context-3"));return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};}
+  if(!checked.success){observeWireInvalid?.(projectCanonicalValidation(raw,checked.error.issues,"calenote-context-3"));return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};}
   const unfolded=core.indexedChanges(checked.data as Record<string,unknown>,"decode",deriveGenerationFieldCapability(input).titlePresenceRequired),book=primaryEvidenceSourceCodebook(input);
   const evidenced=mapEvidence(unfolded,raw=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,["evidence",index],input));}) as Record<string,unknown>;
   evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
