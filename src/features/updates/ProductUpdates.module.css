@@ -1,0 +1,20 @@
+.root { display:flex; justify-content:flex-end; padding:12px 24px 0; }
+.trigger { display:flex; align-items:center; gap:8px; position:relative; min-height:44px; padding:8px 14px; border:1px solid var(--cn-border); border-radius:999px; background:var(--cn-surface); color:var(--cn-text-1); cursor:pointer; font:inherit; font-size:14px; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--cn-brand-600); }
+.dialog { width:min(560px,calc(100vw - 32px)); max-height:calc(100dvh - 48px); padding:0; border:1px solid var(--cn-border); border-radius:20px; background:var(--cn-surface); color:var(--cn-text-1); box-shadow:0 24px 80px #0003; }
+.dialog::backdrop { background:rgb(25 20 15 / 40%); }
+.dialog header { display:flex; justify-content:space-between; gap:12px; padding:24px 24px 16px; }
+.dialog header p { color:var(--cn-brand-700); font-size:10px; letter-spacing:.08em; margin:0 0 8px; }
+.dialog h2 { margin:0; font-size:26px; }
+.dialog header button { align-self:flex-start; background:transparent; border:0; color:inherit; min-width:44px; min-height:44px; cursor:pointer; }
+.entries { padding:0 24px; }
+.entries article { border-top:1px solid var(--cn-border); padding:20px 0; }
+.entries time { color:var(--cn-text-2); font-size:12px; }
+.entries h3 { margin:8px 0 12px; font-size:18px; }
+.entries ul { margin:0; padding-left:20px; line-height:1.65; font-size:14px; }
+.entries li + li { margin-top:8px; }
+.dialog footer { display:flex; flex-wrap:wrap; align-items:center; gap:14px; justify-content:space-between; padding:16px 24px 24px; }
+.dialog small { color:var(--cn-text-2); font-size:12px; }
+.dialog footer button { min-height:44px; padding:10px 16px; border:0; border-radius:12px; background:var(--cn-brand-700); color:white; cursor:pointer; font:inherit; }
+.root button:focus-visible,.dialog button:focus-visible { outline:3px solid var(--cn-brand-600); outline-offset:3px; }
+@media(max-width:600px) { .root { padding:12px 16px 0; } .dialog header,.dialog footer { padding-left:20px; padding-right:20px; } .entries { padding:0 20px; } }
