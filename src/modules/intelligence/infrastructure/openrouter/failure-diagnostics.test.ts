@@ -75,3 +75,13 @@ it.each([
  expect(JSON.stringify(result.errorMetadataSanitized)).toContain(expected);
  expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET");
 });
+
+it.each([
+ ['No endpoints found for google/gemini-2.5-flash-lite. PRIVATE', 'No matching provider endpoint'],
+ ['No endpoints found that can handle the requested parameters PRIVATE','No provider endpoint supports requested parameters'],
+ ['No endpoints found matching your data policy PRIVATE','No provider endpoint matches data policy'],
+])('retains finite routing category from %s without provider prose',async(message,expected)=>{
+ const result=await project({code:404,message},['PRIVATE']);
+ expect(result.errorMessageSanitized).toBe(expected);
+ expect(JSON.stringify(result)).not.toContain('PRIVATE');
+});

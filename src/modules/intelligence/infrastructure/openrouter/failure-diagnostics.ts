@@ -103,7 +103,10 @@ export async function projectProviderFailure(input: {
     if (typeof value !== "string" || value.length > 4096) return "[REDACTED]";
     // Emit only locally authored categories, never slices of untrusted prose.
     let category: string | undefined;
-    if (/\bUnknown name\s+["']/u.test(value) && labels(value).keyword) category = `Unsupported schema construct: ${labels(value).keyword}`;
+    if (/\bNo endpoints found\b/iu.test(value)) {
+      category=/\bdata polic(?:y|ies)\b/iu.test(value)?"No provider endpoint matches data policy":/\brequested parameters\b/iu.test(value)?"No provider endpoint supports requested parameters":"No matching provider endpoint";
+    }
+    else if (/\bUnknown name\s+["']/u.test(value) && labels(value).keyword) category = `Unsupported schema construct: ${labels(value).keyword}`;
     else if (/\bunsupported (?:schema )?keywords?\b/iu.test(value)) category = "Unsupported schema keyword";
     else if (/\binvalid schema\b/iu.test(value)) category = "Invalid schema";
     else if (/\bunsupported parameters?\b/iu.test(value)) category = "Unsupported parameter";
