@@ -6,7 +6,7 @@ import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 // Arbitrary prose/identifiers never survive, even under a benign JSON key.
 const encoder = new TextEncoder();
 const codes = new Set(["invalid_argument", "invalid_request_error", "invalid_schema", "unsupported_parameters", "bad_request", "rate_limit_exceeded", "insufficient_quota", "context_length_exceeded", "permission_denied", "unauthenticated", "not_found", "resource_exhausted", "internal", "unavailable", "deadline_exceeded"]);
-const providers = new Set(["Google", "google-vertex", "google-vertex/eu"]);
+const providers = new Set(["Google", "google-vertex", "google-vertex/eu", "Google AI Studio", "google-ai-studio"]);
 const keywords = new Set(["$schema", "$defs", "$ref", "definitions", "type", "properties", "required", "additionalProperties", "items", "prefixItems", "anyOf", "oneOf", "allOf", "not", "enum", "const", "pattern", "format", "minLength", "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minItems", "maxItems", "uniqueItems", "minProperties", "maxProperties", "description", "title", "default", "nullable"]);
 const parameters = new Set(["generation_config", "response_schema", "generationConfig", "responseSchema", "response_format", "json_schema", "schema", "name", "strict", "messages", "max_tokens", "stream", "provider", "zdr", "require_parameters", "allow_fallbacks", "data_collection", "max_price", "prompt", "completion", "only", "order"]);
 export async function projectProviderFailure(input: {
@@ -103,8 +103,13 @@ export async function projectProviderFailure(input: {
     if (typeof value !== "string" || value.length > 4096) return "[REDACTED]";
     // Emit only locally authored categories, never slices of untrusted prose.
     let category: string | undefined;
-    if (/\bNo endpoints found\b/iu.test(value)) {
-      category=/\bdata polic(?:y|ies)\b/iu.test(value)?"No provider endpoint matches data policy":/\brequested parameters\b/iu.test(value)?"No provider endpoint supports requested parameters":"No matching provider endpoint";
+    if (/\bNo endpoints (?:found|available)\b|\bNo allowed providers\b/iu.test(value)) {
+      category = /\bguardrails?\b/iu.test(value) ? "No provider endpoint matches guardrail restrictions"
+        : /\bZDR\b|\bzero data retention\b/iu.test(value) ? "No provider endpoint matches ZDR policy"
+        : /\bdata polic(?:y|ies)\b/iu.test(value) ? "No provider endpoint matches data policy"
+        : /\brequested parameters\b/iu.test(value) ? "No provider endpoint supports requested parameters"
+        : /\bmax_price\b|\bprice (?:limits?|caps?)\b/iu.test(value) ? "No provider endpoint matches price limits"
+        : "No matching provider endpoint";
     }
     else if (/\bUnknown name\s+["']/u.test(value) && labels(value).keyword) category = `Unsupported schema construct: ${labels(value).keyword}`;
     else if (/\bunsupported (?:schema )?keywords?\b/iu.test(value)) category = "Unsupported schema keyword";
@@ -116,7 +121,7 @@ export async function projectProviderFailure(input: {
     else if (/\bschema\b/iu.test(value) && /\btoo large\b/iu.test(value)) category = "Schema size limit exceeded";
     else if (/\bschema\b/iu.test(value) && /\btoo complex\b/iu.test(value)) category = "Schema complexity limit exceeded";
     if (category && !echoes(category)) return category;
-    return "[REDACTED]";
+    return input.status === 404 && !echoes("Unclassified HTTP 404") ? "Unclassified HTTP 404" : "[REDACTED]";
   };
   const project = (value: unknown, depth: number): unknown => {
     if (++nodes > 128 || depth > 4 || value === null || typeof value !== "object") return undefined;

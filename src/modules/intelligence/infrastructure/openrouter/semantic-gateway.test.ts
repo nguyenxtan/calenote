@@ -768,3 +768,18 @@ describe("injected strict semantic gateway", () => {
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", usage: { costMicrounits: null } });
   });
 });
+
+it('preserves a finite Studio 404 cause through real HTTP transport projection without retry or prose',async()=>{
+ let calls=0;
+ const request=contextRequest();
+ request.provider.only=['google-ai-studio'];request.provider.zdr=false;
+ const transport=gateways.createContextHttpTransport('SYNTHETIC_KEY',async()=>{
+  calls++;
+  return new Response(JSON.stringify({error:{code:404,message:'No endpoints available matching your guardrail restrictions. PRIVATE_PROSE',metadata:{provider_name:'Google AI Studio'}}}),{status:404,headers:{'content-type':'application/json'}});
+ });
+ const result=await transport(request,{signal:new AbortController().signal});
+ expect(calls).toBe(1);
+ expect(result).toMatchObject({status:404,body:'',failureDiagnostics:{httpStatus:404,errorMessageSanitized:'No provider endpoint matches guardrail restrictions',upstreamProvider:'Google AI Studio',errorCode:404}});
+ expect(JSON.stringify(result)).not.toContain('PRIVATE_PROSE');
+ expect(JSON.stringify(result)).not.toContain('SYNTHETIC_KEY');
+});

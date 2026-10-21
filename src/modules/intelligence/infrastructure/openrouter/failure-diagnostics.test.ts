@@ -85,3 +85,25 @@ it.each([
  expect(result.errorMessageSanitized).toBe(expected);
  expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });
+
+it.each([
+ ['No endpoints available matching your guardrail restrictions. PRIVATE','No provider endpoint matches guardrail restrictions'],
+ ['No endpoints available matching your data policy. PRIVATE','No provider endpoint matches data policy'],
+ ['No endpoints available that support the requested parameters. PRIVATE','No provider endpoint supports requested parameters'],
+ ['No allowed providers are available for this model. PRIVATE','No matching provider endpoint'],
+ ['No endpoints available matching your ZDR policy. PRIVATE','No provider endpoint matches ZDR policy'],
+ ['No endpoints available under the configured max_price. PRIVATE','No provider endpoint matches price limits'],
+])('classifies routing variants at root and nested metadata without leaking prose: %s',async(message,expected)=>{
+ for(const error of [{code:404,message},{code:404,metadata:{raw:JSON.stringify({error:{code:404,message,metadata:{provider_name:'Google AI Studio'}}})}}]){
+  const result=await project(error,['PRIVATE']);
+  expect(JSON.stringify(result)).toContain(expected);
+  expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  if('metadata' in error)expect(JSON.stringify(result.errorMetadataSanitized)).toContain('Google AI Studio');
+ }
+});
+it('identifies unclassified 404 explicitly without inventing a routing cause',async()=>{
+ const bytes=new TextEncoder().encode(JSON.stringify({error:{code:404,message:'PRIVATE unknown failure'}}));
+ const result=await projectProviderFailure({status:404,length:bytes.length,media:'application/json',bytes,headers:new Headers(),sensitive:['PRIVATE']});
+ expect(result.errorMessageSanitized).toBe('Unclassified HTTP 404');
+ expect(JSON.stringify(result)).not.toContain('PRIVATE');
+});
