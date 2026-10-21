@@ -132,9 +132,9 @@ it('Studio policy is mandatory in v4 and cannot be smuggled into legacy grants',
   const debug=JSON.parse(readFileSync(s.record.debugRecordPath,'utf8'));debug.privacyPolicy='WRONG';writeFileSync(s.record.debugRecordPath,JSON.stringify(debug));expect(()=>s.load({debugRecordSha256:hash(JSON.stringify(debug))})).toThrow();
  }finally{s.cleanup();}
 });
-it('Studio one fake provider error stops without retry and consumes grant',async()=>{
- const s=setup('AI_STUDIO_55D'),network=vi.fn(async()=>new Response(JSON.stringify({error:{code:404,message:'synthetic'}}),{status:404}));
- try{vi.stubGlobal('fetch',network);const a=s.load(),key=vi.fn(async()=> 'SYNTHETIC_ONLY');const r=await runFormalPilotLaunch(a,key);expect(r).toMatchObject({terminal:true,pilotCredit:false,physicalProviderHttpAttempts:1});await expect(runFormalPilotLaunch(a,key)).rejects.toThrow();expect(network).toHaveBeenCalledTimes(1);expect(key).toHaveBeenCalledTimes(1);}finally{vi.unstubAllGlobals();s.cleanup();}
+it.each([8192,16000])('Studio fake provider error %i bytes preserves evidence boundary and consumed one-shot grant',async size=>{
+ const s=setup('AI_STUDIO_55D'),network=vi.fn(async()=>new Response(JSON.stringify({error:{code:404,message:'synthetic'}}).padEnd(size,' '),{status:404}));
+ try{vi.stubGlobal('fetch',network);const a=s.load(),key=vi.fn(async()=> 'SYNTHETIC_ONLY');const r=await runFormalPilotLaunch(a,key);expect(r).toMatchObject({terminal:true,pilotCredit:false,physicalProviderHttpAttempts:1});await expect(runFormalPilotLaunch(a,key)).rejects.toThrow();expect(network).toHaveBeenCalledTimes(1);expect(key).toHaveBeenCalledTimes(1);const sealed=JSON.parse(readFileSync(join(r.directory,'provider-failure-1.sealed.json'),'utf8'));expect(sealed).toMatchObject(size===8192?{state:'SEALED',httpStatus:404,bodyBytes:8192,version:'provider-failure-sealed-1'}:{state:'CAPTURE_UNAVAILABLE',reason:'BODY_LIMIT'});const report=JSON.parse(readFileSync(join(r.directory,'report.json'),'utf8'));expect(report.responses[0]).toMatchObject({httpStatus:404,category:'PROVIDER_FAILURE'});expect(JSON.stringify(sealed)).not.toContain('synthetic');}finally{vi.unstubAllGlobals();s.cleanup();}
 },30000);
 
 it('v4 cannot load under trust lacking the separate Pilot policy pin',()=>{

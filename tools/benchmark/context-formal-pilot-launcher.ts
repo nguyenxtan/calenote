@@ -1,3 +1,4 @@
+import {sealProviderFailure,PILOT_FAILURE_PUBLIC_KEY} from './context-failure-forensics';
 /** Trusted orchestration boundary only. Import/preflight never reads a key or
  * calls a provider. A fresh directly approved, independently reviewed record is
  * required; policy approval or a proposal file is not paid authority. */
@@ -92,7 +93,7 @@ export async function runFormalPilotLaunch(a:FormalPilotLaunch|undefined,acquire
   const execution:Readonly<FormalExecution>=Object.freeze({debug:g.debug,candidate:initial.record.evaluationCandidateSha,transport:async(request,options)=>{
    if(!key||!executionDirectory)throw Error('FORMAL_CREDENTIAL_FENCE');
    verify(g,{underLock:true,owned:true,excluded:executionDirectory});loaded();
-   let fetched=false;return createContextHttpTransport(key,async(url,init)=>{if(fetched)throw Error('FORMAL_PHYSICAL_HTTP_FENCE');fetched=true;physicalProviderHttpAttempts++;return fetch(url,{...init,redirect:'error'});})(request,options);
+   let fetched=false;return createContextHttpTransport(key,async(url,init)=>{if(fetched)throw Error('FORMAL_PHYSICAL_HTTP_FENCE');fetched=true;physicalProviderHttpAttempts++;const response=await fetch(url,{...init,redirect:'error'});if(initial.record.version==='formal-pilot-launch-authority-4'&&response.status!==200){const evidence=await sealProviderFailure(response,PILOT_FAILURE_PUBLIC_KEY);appendCandidateValidationRecord(initial.record.accountRoot,join(executionDirectory!,`provider-failure-${physicalProviderHttpAttempts}.sealed.json`),evidence);}return response;})(request,options);
   },beforeExecution:async directory=>{
    const v=verify(g,{underLock:true});loaded();if(directory!==v.executionDirectory)throw Error('FORMAL_EXECUTION_BINDING');
    appendCandidateValidationRecord(v.record.accountRoot,v.proposalMarker,{ownerMessageSha256:v.record.ownerMessageSha256,proposalSha256:v.record.proposalSha256,recordSha256:g.trust.reviewedRecordSha256});
