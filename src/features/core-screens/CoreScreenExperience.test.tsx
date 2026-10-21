@@ -96,19 +96,28 @@ describe("CoreScreenExperience", () => {
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
-      if (init?.method === "POST") return new Promise<Response>(resolve => { resolveDecision = resolve; });
+      if (init?.method === "POST") {
+        expect(path).toBe(`/api/actions/${action.id}/approve`);
+        return new Promise<Response>(resolve => { resolveDecision = resolve; });
+      }
+      expect(path).toBe("/api/actions");
       actionReads += 1;
       if (actionReads === 2) return new Promise<Response>(resolve => { resolveStale = resolve; });
       return json({ data: { actions: [action] } });
     }));
-    render(<CoreScreenExperience screen="inbox" />);
-    const approve = await screen.findByRole("button", { name: "Đồng ý Họp với team vận hành" });
+    // The action DOM may commit before the passive focus listener. Finish mount
+    // effects before simulating a tab return, as in the reminder refresh test.
+    await act(async () => { render(<CoreScreenExperience screen="inbox" />); });
+    expect(actionReads).toBe(1);
+    const approve = screen.getByRole("button", { name: "Đồng ý Họp với team vận hành" });
     await act(async () => { fireEvent.focus(window); });
     expect(actionReads).toBe(2);
     fireEvent.click(approve);
     await act(async () => { fireEvent.focus(window); });
     expect(actionReads).toBe(2);
     await act(async () => { resolveDecision(json({ data: { decision: "APPROVED", reminderPublicId: reminder.publicId } })); });
+    expect(screen.getByRole("status")).toHaveTextContent("Đề xuất đã được duyệt.");
+    expect(screen.queryByRole("button", { name: "Đồng ý Họp với team vận hành" })).not.toBeInTheDocument();
     await act(async () => { resolveStale(json({ data: { actions: [action] } })); });
     expect(screen.queryByRole("button", { name: "Đồng ý Họp với team vận hành" })).not.toBeInTheDocument();
   });
