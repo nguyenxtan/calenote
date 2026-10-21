@@ -51,3 +51,24 @@ it('does not invent release details if the server is unavailable',async()=>{
  expect(screen.getByRole('button',{name:'Có gì mới'})).toBeDisabled();
  expect(screen.queryByRole('heading',{name:catalog.notes[0].title})).not.toBeInTheDocument();
 });
+
+it.each([401,403])('discards cached notes when refresh loses authorization (%s)',async(status)=>{
+ const view=render(<ProductUpdates/>);fireEvent.click(await screen.findByRole('button',{name:/chưa đọc/}));
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:{code:'UNAUTHENTICATED',message:'Denied'}}),{status,headers:{'content-type':'application/json'}})));
+ act(()=>window.dispatchEvent(new Event('focus')));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Có gì mới'})).toBeDisabled());
+ expect(screen.queryByRole('heading',{name:catalog.notes[0].title})).not.toBeInTheDocument();
+ expect(view.container.querySelector('dialog')).not.toHaveAttribute('open');
+});
+it('clears old-account notes immediately and ignores their late response after a session change',async()=>{
+ let finish!:(value:Response)=>void;
+ vi.stubGlobal('fetch',vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;})));
+ render(<ProductUpdates/>);
+ act(()=>window.dispatchEvent(new Event('calenote-session-changed')));
+ await act(async()=>finish(new Response(JSON.stringify({data:{readerId:'old-owner',catalog}}),{headers:{'content-type':'application/json'}})));
+ expect(screen.getByRole('button',{name:'Có gì mới'})).toBeDisabled();
+ expect(screen.queryByRole('heading',{name:catalog.notes[0].title})).not.toBeInTheDocument();
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({data:{readerId:'new-owner',catalog}}),{headers:{'content-type':'application/json'}})));
+ act(()=>window.dispatchEvent(new Event('focus')));
+ expect(await screen.findByRole('button',{name:/chưa đọc/})).toBeEnabled();
+});

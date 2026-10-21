@@ -1,10 +1,30 @@
 {
-  "latestId": "2026-10-20-release-runtime-status",
+  "latestId": "2026-10-21-admin-updates-auth-refresh",
   "notes": [
     {
-      "id": "2026-10-20-release-runtime-status",
+      "id": "2026-10-21-admin-updates-auth-refresh",
       "commit": null,
       "releasedAt": null,
+      "title": "Làm mới quản trị và chuông cập nhật theo phiên đăng nhập",
+      "summary": "Kiểm tra lại quyền khi quay lại trang và ẩn dữ liệu cũ khi phiên đăng nhập thay đổi.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Dashboard làm mới số liệu và quyền truy cập khi quay lại tab, mỗi phút khi tab hiển thị.",
+        "Quản trị và chuông cập nhật xóa dữ liệu đang giữ khi đổi phiên hoặc không còn quyền; phản hồi trễ từ phiên trước không được khôi phục dữ liệu.",
+        "Đóng hộp cập nhật khi dữ liệu bị xóa; giữ nguyên cách đánh dấu đã đọc riêng cho từng tài khoản.",
+        "Đồng bộ header chống dùng nhầm cache cho lỗi xác thực của API trạng thái phiên bản."
+      ],
+      "memberChanges": [
+        "Chuông cập nhật không giữ nội dung của phiên đăng nhập trước khi đổi tài khoản hoặc hết phiên.",
+        "Thông tin quản trị được làm mới khi quay lại tab, giúp xem số liệu và quyền truy cập hiện tại."
+      ],
+      "verification": "Phạm vi kiểm thử: hết phiên, mất quyền, đổi tài khoản, phản hồi trễ, làm mới định kỳ, lỗi mạng và trạng thái đã đọc. Kết quả triển khai được ghi riêng theo từng lần phát hành.",
+      "caveat": "Khi mất mạng, chuông có thể giữ ghi chú gần nhất kèm cảnh báo; xác thực vẫn do máy chủ quyết định ở mỗi yêu cầu."
+    },
+    {
+      "id": "2026-10-20-release-runtime-status",
+      "commit": "b802a9223958fc4ab402343412ecee3cef983fc5",
+      "releasedAt": "2026-10-21T08:04:53+07:00",
       "title": "Trạng thái cập nhật theo phiên bản đang chạy",
       "summary": "Quản trị đọc mã phiên bản từ máy chủ đang trả lời, tách biệt với ghi chú kiểm thử.",
       "kind": "Sửa lỗi",

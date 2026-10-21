@@ -376,6 +376,7 @@ export function createRouter(options: RouterOptions = {}) {
       const authenticated = pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
         || pathname === "/api/product-updates"
+        || pathname === "/api/product-updates/runtime"
         || pathname === "/api/session"
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")

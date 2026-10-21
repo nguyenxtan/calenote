@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Bell, X } from "lucide-react";
 import { useProductUpdates } from './useProductUpdates';
 import styles from "./ProductUpdates.module.css";
@@ -15,6 +15,7 @@ export function ProductUpdates() {
   const unread=Boolean(data&&read!==data.catalog.latestId);
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(()=>{if(!data&&dialog.current?.open)dialog.current.close();},[data]);
   function close() { dialog.current?.close(); trigger.current?.focus(); }
   function markRead() { if(!data||!scopedKey)return;try { localStorage.setItem(scopedKey,data.catalog.latestId); window.dispatchEvent(new Event(changed)); } catch { /* Browser storage may be blocked; keep the update available. */ } }
   return <div className={styles.root}>

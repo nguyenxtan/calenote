@@ -12,6 +12,10 @@ The status identifies the production Worker answering this request, not fleet-wi
 
 The member bell and admin history refresh on mount, focus, visibility return and every 60 seconds while visible. A tab opened before a release can therefore discover new notes without reloading. Newly deployed notification code must first be loaded once; a page running older code without polling cannot be upgraded retroactively. New notes produce an unread badge and an accessible status announcement; the dialog is not forced open. Acknowledgement is scoped by the authenticated reader ID on that browser, with cross-tab synchronization; it is not a cross-device acknowledgement service. No email/bot broadcast is added.
 
+Ordinary network failures may retain last-loaded catalogue text with a stale warning. Authorization failures401/403 discard it instead. A session-change event clears the reader/catalogue immediately, closes an open update dialog, aborts old requests and prevents their late responses from restoring prior-account state. Refetch waits for normal focus/visibility/polling, rather than recursively refetching on the same event that the API client emits for401. Existing per-reader acknowledgements are not deleted or transferred.
+
+Admin metrics also recheck on focus, visibility return and the visible60-second timer. A session change clears cached metrics immediately; late responses from an earlier session cannot repopulate them. Expired401 redirects to login,403 hides the dashboard. Existing backend authorization remains authoritative on every request. Both update endpoint error responses vary by Cookie and use no-store.
+
 ## Release gate
 
 `pnpm check` starts with `pnpm check:release-notes`. For product changes against `origin/master` (or the explicit RELEASE_BASE_REF), the gate requires a changed catalogue, a new latest release ID, nonempty admin/member wording, and retention of previous release IDs. Tests/docs alone do not require a release bump. CI uses its complete Git history and checks the exact candidate. The gate also runs on master pushes using the previous production ref. Do not bypass this gate or deploy a failed CI candidate.

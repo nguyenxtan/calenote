@@ -160,9 +160,12 @@ export async function apiRequest<T>(
     throw new ApiNetworkError();
   }
 
+  // A transport/mock may resolve despite cancellation. It must not invalidate a newer session.
+  if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
   if (response.status === 401 && options.authenticated) {
-    if (typeof window !== "undefined") window.dispatchEvent(new Event("calenote-session-changed"));
-    options.onUnauthorized?.();
+    // Notify the current request before the global event advances subscribers' session epochs.
+    try { options.onUnauthorized?.(); }
+    finally { if (typeof window !== "undefined") window.dispatchEvent(new Event("calenote-session-changed")); }
   }
   if (response.ok && method !== "GET" && ["/api/auth/logout", "/api/account/profile"].includes(path) && typeof window !== "undefined") {
     window.dispatchEvent(new Event("calenote-session-changed"));

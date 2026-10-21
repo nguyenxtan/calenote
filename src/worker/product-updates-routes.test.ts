@@ -33,3 +33,12 @@ it('exposes opt-in runtime identity from the responding Worker, keeping legacy/m
  expect((await legacy.json() as {data:object}).data).not.toHaveProperty('runtime');
  const anonymous=await s.route(new Request(url),current,context);expect(anonymous.status).toBe(401);expect(await anonymous.text()).not.toContain(versionId);
 });
+
+it('varies anonymous and expired runtime errors by Cookie without leaking runtime identity',async()=>{
+ const s=fixture();const url=origin+'/api/product-updates/runtime';
+ for(const cookie of [undefined,'__Host-calenote_session='+'A'.repeat(43)]){
+  s.requireUser.mockRejectedValue(new SessionAuthError());
+  const response=await s.route(new Request(url,{headers:cookie?{cookie}:{}}),env,context);
+  expect(response.status).toBe(401);expect(response.headers.get('cache-control')).toBe('no-store');expect(response.headers.get('vary')).toBe('Cookie');
+ }
+});

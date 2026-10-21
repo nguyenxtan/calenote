@@ -1,6 +1,6 @@
 "use client";
 import Link from 'next/link';
-import { useEffect,useState } from 'react';
+import { useEffect,useRef,useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminOverviewSchema,type AdminOverview as Snapshot } from '@/contracts/api/admin-overview';
 import { ApiResponseError,apiRequest } from '@/lib/client-api';
@@ -10,10 +10,20 @@ const unknown='Chưa có dữ liệu';
 const money=(value:number)=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:6}).format(value/1_000_000);
 export function AdminOverview(){
  const {replace}=useRouter();const [data,setData]=useState<Snapshot|null>(null);const [error,setError]=useState<string|null>(null);const [attempt,setAttempt]=useState(0);
+ const generation=useRef(0);
+ const pendingRequest=useRef<AbortController|null>(null);
  useEffect(()=>{
-  let active=true;const controller=new AbortController();
-  void apiRequest<unknown>('/api/admin/overview',{authenticated:true,signal:controller.signal,onUnauthorized:()=>{if(active){setData(null);replace('/login');}}}).then(value=>{const next=AdminOverviewSchema.parse(value);if(active)setData(next);}).catch(reason=>{if(active){setData(null);setError(reason instanceof ApiResponseError&&reason.status===403?'Bạn không có quyền xem dashboard này.':'Chưa thể tải dashboard.');}});
-  return()=>{active=false;controller.abort();};
+  const refresh=()=>{if(document.visibilityState!=='hidden')setAttempt(value=>value+1);};
+  const invalidate=()=>{generation.current++;pendingRequest.current?.abort();pendingRequest.current=null;setData(null);setError('Phiên đăng nhập đã thay đổi. Kiểm tra lại quyền truy cập để tiếp tục.');};
+  const timer=setInterval(refresh,60_000);
+  window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);window.addEventListener('calenote-session-changed',invalidate);
+  return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);window.removeEventListener('calenote-session-changed',invalidate);};
+ },[]);
+ useEffect(()=>{
+  let active=true;const controller=new AbortController(),epoch=generation.current;
+  pendingRequest.current=controller;
+  void apiRequest<unknown>('/api/admin/overview',{authenticated:true,signal:controller.signal,onUnauthorized:()=>{if(active&&epoch===generation.current){setData(null);replace('/login');}}}).then(value=>{const next=AdminOverviewSchema.parse(value);if(active&&epoch===generation.current){setData(next);setError(null);}}).catch(reason=>{if(active&&epoch===generation.current){setData(null);setError(reason instanceof ApiResponseError&&reason.status===403?'Bạn không có quyền xem dashboard này.':'Chưa thể tải dashboard.');}}).finally(()=>{if(pendingRequest.current===controller)pendingRequest.current=null;});
+  return()=>{active=false;controller.abort();if(pendingRequest.current===controller)pendingRequest.current=null;};
  },[replace,attempt]);
  return <main className={styles.page}><header><Link href="/app/today">← Về Calenote</Link><h1>Dashboard quản trị</h1><p>Tổng quan vận hành và lịch sử cập nhật</p></header>
   {error?<div role="alert"><p>{error}</p><button type="button" onClick={()=>{setError(null);setData(null);setAttempt(value=>value+1);}}>Thử lại</button></div>:!data?<p role="status">Đang kiểm tra quyền truy cập…</p>:<>
