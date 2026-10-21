@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { DownstreamTraceSchema } from "../../src/modules/conversation/context-contract/downstream";
 import { execFileSync } from "node:child_process";
-import { createSmallContextContractGateway, createTypedContextContractGateway, createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import { createAiStudioPilotContextGateway,AI_STUDIO_PILOT_RETENTION_POLICY, createSmallContextContractGateway, createTypedContextContractGateway, createContextContractGateway, createContextHttpTransport, CONTEXT_FINANCIAL_RESERVATION_MICROUNITS, type SemanticTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { numericOwnershipCatalogue } from "../../src/modules/conversation/context-contract/wire";
 import { deriveGenerationFieldCapability } from "../../src/modules/conversation/context-contract/field-capability";
@@ -70,6 +70,7 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
   listStoreReads: number | null; mutations: number; queryRange: { start: number; end: number } | null; oracle: "PASS" | "FAIL"; oracleDiagnostics:OracleDiagnostics; }
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   wireProtocol?: "TYPED_105" | "SMALL_106";
+  pilotRoute?:typeof AI_STUDIO_PILOT_RETENTION_POLICY;
   debugBudgetAuthoritySha256?: string;
   singleTarget?: {fixture:string;turn:number;manifestSha256:string;contextSeedDigest?:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
@@ -239,11 +240,14 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     : { canonicalSchemaDigest, providerWireSchemaDigest, providerWireSchemaVersion: providerWire.version };
   let schemaProof = initialSchemaProof();
   let requestSchemaProof: Partial<RequestSchemaProof> = {};
-  const gatewayFactory = input.wireProtocol === "SMALL_106" ? (transport:SemanticTransport)=>createSmallContextContractGateway({...config,protocol:CONTEXT_SMALL_PROTOCOL_V3},transport,{status:"OBSERVABLE_CANARY",advertisedContextTokens:contextCampaignAdvertisedContextTokens}) : input.wireProtocol === "TYPED_105"
+  if(input.pilotRoute!==undefined&&(input.pilotRoute!==AI_STUDIO_PILOT_RETENTION_POLICY||input.wireProtocol!=="SMALL_106"||input.profile!=="PILOT"||!input.boundedPilot||input.singleTarget||input.pilotPrefix))throw Error("AI_STUDIO_PILOT_SCOPE");
+  const studioConfig={...config,primary:{...config.primary,provider:"google-ai-studio",requireZdr:false}};
+  const gatewayFactory = input.pilotRoute===AI_STUDIO_PILOT_RETENTION_POLICY ? (transport:SemanticTransport)=>createAiStudioPilotContextGateway({...studioConfig,protocol:CONTEXT_SMALL_PROTOCOL_V3},transport,AI_STUDIO_PILOT_RETENTION_POLICY,{status:"OBSERVABLE_CANARY",advertisedContextTokens:contextCampaignAdvertisedContextTokens}) : input.wireProtocol === "SMALL_106" ? (transport:SemanticTransport)=>createSmallContextContractGateway({...config,protocol:CONTEXT_SMALL_PROTOCOL_V3},transport,{status:"OBSERVABLE_CANARY",advertisedContextTokens:contextCampaignAdvertisedContextTokens}) : input.wireProtocol === "TYPED_105"
     ? (transport: SemanticTransport) => createTypedContextContractGateway({ ...config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, transport, { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens })
     : (transport: SemanticTransport) => createContextContractGateway(config, transport, { status: "OBSERVABLE_CANARY", advertisedContextTokens: contextCampaignAdvertisedContextTokens });
   const actual = gatewayFactory(async (request, options) => {
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
+    if(input.pilotRoute===AI_STUDIO_PILOT_RETENTION_POLICY&&(request.provider.only.join("|")!=="google-ai-studio"||request.provider.zdr!==false))throw Error("AI_STUDIO_ROUTE_BINDING");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== (input.wireProtocol === "SMALL_106" ? "db6a190892ebce596fb4178001ee18799f13609d64d27303e8caa58491a2ec73" : input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
@@ -386,7 +390,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   const status = stopped() ? "STOP" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   if(compilerDiagnostic&&(compilerLedgerUncertain||finalLedger.some(row=>row.event==="RESERVE"&&!finalLedger.some(finish=>finish.event==="FINISH"&&finish.reservationId===row.reservationId))))throw Error("COMPILER_LEDGER_PERSISTENCE_UNCERTAIN");
-  const result = { status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
+  const result = { ...(input.pilotRoute?{pilotRoute:input.pilotRoute,configuredProvider:"google-ai-studio",privacyPolicy:input.pilotRoute,zdr:false}:{}),status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),
     ...(selected ? {contextSeedProof:{version:selected.contextSeed.version,digest:selected.contextSeedDigest,semanticBaselineSha:selected.contextSeed.semanticBaselineSha,fixture:selected.fixture,turn:selected.turn,prerequisiteProviderRequests:0,prerequisiteApplicationLlmDispatches:0}} : {}),
     ...(turnZeroOnly ? { executionKind: selected?"SINGLE_TARGET_VALIDATION":"SINGLE_T11_R01_DIAGNOSTIC_REPLAY", replayTarget: selected?`${selected.fixture}_TURN_${selected.turn}`:"R01_TURN_0", terminal: true, fullPilotGate: "NOT_RUN" } : {}),
     ...(pilotPrefix ? { pilotPrefix, measuredScope: "R02_ONWARD", compositePilotScripts: score ? score.passedScripts + pilotPrefix.scripts : null } : {}),

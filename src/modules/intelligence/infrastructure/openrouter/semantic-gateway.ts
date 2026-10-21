@@ -105,7 +105,7 @@ export interface SemanticJsonRequest {
   temperature?: number;
   response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema | ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"] } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
-    zdr?: true; max_price: { prompt: number; completion: number } };
+    zdr?: boolean; max_price: { prompt: number; completion: number } };
 }
 /** Supplied by composition. Credentials belong to the HTTP factory's header only. */
 export type SemanticTransport = (request: SemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{
@@ -387,8 +387,9 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   const fail = (category: import("../../semantic-gateway").SemanticFailureCategory): SemanticAttemptResult<ContextGatewayInterpretation> => ({ status: "FAILURE", category, usage });
   if (response.status !== 200) return fail(response.status === 408 ? "TIMEOUT" : response.status === 429 ? "RATE_LIMITED" : "PROVIDER_FAILURE");
   if (!tokens.success || costMicrounits === null || costMicrounits > maximum || tokens.data.prompt_tokens > 12000 || tokens.data.completion_tokens > 1536) return fail("SCHEMA_INVALID");
-  const observed = z.object({ model: z.literal("google/gemini-2.5-flash-lite"), provider: z.enum(["Google", "google-vertex", "google-vertex/eu"]),
-    id: z.string().max(160).regex(/^gen-[A-Za-z0-9_-]+$/u).optional(), location: z.literal("eu").optional() }).safeParse(raw);
+  const studio=config.primary?.provider==="google-ai-studio";
+  const observed = z.object({ model: z.literal("google/gemini-2.5-flash-lite"), provider: studio?z.enum(["Google AI Studio","google-ai-studio"]):z.enum(["Google", "google-vertex", "google-vertex/eu"]),
+    id: z.string().max(160).regex(/^gen-[A-Za-z0-9_-]+$/u).optional(), location: (studio?z.never():z.literal("eu")).optional() }).safeParse(raw);
   if (!observed.success) return fail("SCHEMA_INVALID");
   const evidence = { model: observed.data.model, provider: observed.data.provider,
     location: observed.data.location ?? "UNEXPOSED" as const, generationId: observed.data.id ?? null };
@@ -436,13 +437,19 @@ export function createSmallContextContractGateway(rawConfig: SemanticGatewayConf
   if (!isContextSmallProtocolV3(rawConfig.protocol)) throw new TypeError("Selected small context protocol required");
   return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "SMALL_106"), contextWire: "SMALL_TABLES_106" as const});
 }
+export const AI_STUDIO_PILOT_RETENTION_POLICY="AI_STUDIO_PILOT_RETENTION_55D" as const;
+/** Separate opt-in Pilot route; never selected by production config parsing. */
+export function createAiStudioPilotContextGateway(rawConfig:SemanticGatewayConfig & {protocol:ContextSmallProtocolV3},transport:SemanticTransport|ContextOfflineTransport,policy:typeof AI_STUDIO_PILOT_RETENTION_POLICY,admission:ContextRouteAdmission={status:"UNVERIFIED"}) {
+ if(policy!==AI_STUDIO_PILOT_RETENTION_POLICY||!isContextSmallProtocolV3(rawConfig.protocol))throw new TypeError("AI_STUDIO_PILOT_POLICY_REQUIRED");
+ return Object.freeze({...createSelectedContextContractGateway(rawConfig,transport,admission,"SMALL_106",policy),contextWire:"SMALL_TABLES_106" as const});
+}
 function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextProtocolV3 | ContextTypedProtocolV3 | ContextSmallProtocolV3},
-  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission, selection: ContextWireSelection): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission, selection: ContextWireSelection, pilotPolicy?:typeof AI_STUDIO_PILOT_RETENTION_POLICY): SemanticGateway<ContextGatewayInterpretation, ContextInput> {
   const { protocol: _protocol, ...configuration } = rawConfig;
   void _protocol;
   const config = configSchema.parse(configuration);
-  const route = config.primary;
-  if (!route || route.model !== "google/gemini-2.5-flash-lite" || route.provider !== "google-vertex/eu" || !route.requireZdr
+  const route = config.primary,studio=pilotPolicy===AI_STUDIO_PILOT_RETENTION_POLICY;
+  if (!route || route.model !== "google/gemini-2.5-flash-lite" || route.provider !== (studio?"google-ai-studio":"google-vertex/eu") || route.requireZdr!==!studio
     || route.promptPriceMicrounitsPerMillionTokens !== 100000 || route.completionPriceMicrounitsPerMillionTokens !== 400000
     || config.freePrimary || config.paidFallback || config.maxInputTokens !== 12000 || config.maxOutputTokens !== 1536
     || config.maxResponseBytes !== 32768 || config.timeoutMs !== 30000) throw new TypeError("Invalid context gateway configuration");
@@ -461,7 +468,7 @@ function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig &
     const wire = selection === "SMALL_106" ? serializeSmallContextRequest(input.data) : selection === "TYPED_105" ? serializeTypedContextRequest(input.data) : serializeContextRequest(input.data);
     const request: SemanticJsonRequest = { model: route.model, ...wire,
       response_format: { ...wire.response_format, json_schema: { ...wire.response_format.json_schema, strict: true } }, provider: {
-      only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: true,
+      only: [route.provider], allow_fallbacks: false, require_parameters: true, data_collection: "deny", zdr: !studio,
       max_price: { prompt: 0.1, completion: 0.4 },
     } };
     if (observable && typeof transport === "function") {

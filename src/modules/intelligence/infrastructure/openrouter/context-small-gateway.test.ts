@@ -39,3 +39,28 @@ it('rejects contradictory LIST target at the schema boundary without retry or le
  expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'UNAVAILABLE'});
  expect(transport).toHaveBeenCalledTimes(1);
 });
+
+it('AI Studio non-ZDR is an explicit isolated Pilot entry and leaves legacy factories strict',async()=>{
+ const {createAiStudioPilotContextGateway}=await import('./semantic-gateway');
+ const studio={...config,primary:{...config.primary,provider:'google-ai-studio',requireZdr:false}};
+ const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);
+ const transport=vi.fn(async(request)=>{expect(request.provider).toEqual({only:['google-ai-studio'],allow_fallbacks:false,require_parameters:true,data_collection:'deny',zdr:false,max_price:{prompt:.1,completion:.4}});return {status:200,body:JSON.stringify({model:config.primary.model,provider:'Google AI Studio',id:'gen-studio-fake',usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}]})};});
+ expect(()=>createSmallContextContractGateway(studio,transport)).toThrow();
+ expect(()=>createAiStudioPilotContextGateway(studio,transport,'WRONG' as never)).toThrow();
+ const gateway=createAiStudioPilotContextGateway(studio,transport,'AI_STUDIO_PILOT_RETENTION_55D',{status:'OBSERVABLE_CANARY',advertisedContextTokens:1048576});
+ const attempt=gateway.prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
+ expect(await attempt.dispatch()).toMatchObject({status:'SUCCESS',providerEvidence:{provider:'Google AI Studio',location:'UNEXPOSED'}});
+ expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'UNAVAILABLE'});expect(transport).toHaveBeenCalledTimes(1);
+ expect(()=>createAiStudioPilotContextGateway(config,transport,'AI_STUDIO_PILOT_RETENTION_55D')).toThrow();
+});
+
+it('Studio Pilot refuses Vertex/ambiguous provider evidence and EU location claims',async()=>{
+ const {createAiStudioPilotContextGateway}=await import('./semantic-gateway');
+ const studio={...config,primary:{...config.primary,provider:'google-ai-studio',requireZdr:false}};
+ const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);
+ for(const evidence of [{provider:'Google'},{provider:'google-vertex/eu'},{provider:'Google AI Studio',location:'eu'}]){
+  const gateway=createAiStudioPilotContextGateway(studio,async()=>({status:200,body:JSON.stringify({model:config.primary.model,...evidence,usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}]})}),'AI_STUDIO_PILOT_RETENTION_55D',{status:'OBSERVABLE_CANARY',advertisedContextTokens:1048576});
+  const attempt=gateway.prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
+  expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'SCHEMA_INVALID'});
+ }
+});

@@ -14,3 +14,8 @@ it('even a matching ZDR advertisement grants no key, paid, compiler or runtime a
  expect(prepareAiStudioCandidate(metadata(),{data:[ep()]})).toMatchObject({state:'PREPARED_HOLD',zdr:'ADVERTISED',dispatchAllowed:false,compilerAdmission:'UNVERIFIED',paid:'HOLD',runtimeChanged:false,credentialReads:0,inferenceRequests:0});
  for(const other of [{...ep(),model_id:'other/model'},{...ep(),tag:'google-ai-studio/priority'},{...ep(),tag:'google-vertex/eu'}])expect(prepareAiStudioCandidate(metadata(),{data:[other]}).zdr).toBe('NOT_LISTED');
 });
+
+it('accepts retention only for explicit Pilot preparation, never enabling dispatch',()=>{
+ expect(prepareAiStudioCandidate(metadata(),{data:[]},'AI_STUDIO_PILOT_RETENTION_55D')).toMatchObject({state:'PREPARED_HOLD',privacyPolicy:'AI_STUDIO_PILOT_RETENTION_55D',retentionDaysAccepted:55,zdr:'NOT_LISTED',dispatchAllowed:false,paid:'HOLD',candidatePreferences:{zdr:false,data_collection:'deny',allow_fallbacks:false}});
+ expect(()=>prepareAiStudioCandidate(metadata(),{data:[]},'UNKNOWN' as never)).toThrow();
+});

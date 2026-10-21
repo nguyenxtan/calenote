@@ -54,7 +54,7 @@ export interface SemanticUsage {
 }
 export interface SemanticProviderEvidence {
   model: "google/gemini-2.5-flash-lite";
-  provider: "Google" | "google-vertex" | "google-vertex/eu";
+  provider: "Google" | "google-vertex" | "google-vertex/eu" | "Google AI Studio" | "google-ai-studio";
   location: "eu" | "UNEXPOSED";
   generationId: string | null;
 }

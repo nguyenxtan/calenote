@@ -179,7 +179,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           try { void Promise.resolve(deps.processingFeedback?.()).catch(() => {}); } catch { /* best effort */ }
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
-          emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: "google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
+          emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: attempt.provider==="google-ai-studio"?"google-ai-studio":"google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
           const inputDigest = await digest(built.input), promptDigest = await digest(deps.gateway.contextWire === "SMALL_TABLES_106" ? CONTEXT_SMALL_PROMPT : deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROMPT : CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
           const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: deps.gateway.contextWire === "SMALL_TABLES_106" ? CONTEXT_SMALL_PROTOCOL_V3 : deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROTOCOL_V3 : CONTEXT_PROTOCOL_V3 });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }

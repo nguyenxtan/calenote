@@ -9,7 +9,7 @@ import {inspectConservativeDebugCost} from "./context-confirmed-cost";
 import {deriveBoundedPilotManifest} from "./context-bounded-pilot";
 import type {ContextManifest} from "./context-contract";
 import {executeObservableCampaign,executeObservableR01Turn0Replay,executeObservableSingleTargetValidation,resolveSingleValidationTarget,contextCampaignMaximumReservation,verifyContextRequestSchema} from "./context-contract-runner";
-import {createContextHttpTransport,type SemanticTransport} from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
+import {AI_STUDIO_PILOT_RETENTION_POLICY,createContextHttpTransport,type SemanticTransport} from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -22,9 +22,10 @@ const schema=z.discriminatedUnion("version",[
  historicalSchema,
  historicalSchema.extend({version:z.literal("t11-debug-loop-authority-2"),wireProtocol:z.literal("TYPED_105")}),
  historicalSchema.extend({version:z.literal("t11-debug-loop-authority-3"),wireProtocol:z.literal("SMALL_106")}),
+ historicalSchema.extend({version:z.literal("t11-debug-loop-authority-4"),wireProtocol:z.literal("SMALL_106"),provider:z.literal("google-ai-studio"),privacyPolicy:z.literal(AI_STUDIO_PILOT_RETENTION_POLICY)}),
 ]);
 export interface DebugFreshRunTrust {recordPath:string;reviewedRecordSha256:string;reviewedOwnerMessageSha256:string;reviewedEvidenceSha256:string;expectedCandidateSha:string;parentDirectory:string}
-export interface DebugLoopTrust {wireProtocol?:"TYPED_105"|"SMALL_106";accountRoot:string;campaignRoot:string;reviewedRecordSha256:string;reviewedOwnerMessageSha256:string;freshRun?:DebugFreshRunTrust}
+export interface DebugLoopTrust {pilotRoute?:typeof AI_STUDIO_PILOT_RETENTION_POLICY;wireProtocol?:"TYPED_105"|"SMALL_106";accountRoot:string;campaignRoot:string;reviewedRecordSha256:string;reviewedOwnerMessageSha256:string;freshRun?:DebugFreshRunTrust}
 const brand:unique symbol=Symbol("DebugLoopAuthority");
 export interface DebugLoopAuthority {readonly [brand]:true}
 const grants=new WeakMap<object,{root:string;path:string;trust:DebugLoopTrust}>();
@@ -34,6 +35,7 @@ function verify(g:{root:string;path:string;trust:DebugLoopTrust}){
  const {trust:t}=g,text=read(t.accountRoot,g.path);if(hash(text)!==t.reviewedRecordSha256)throw Error("DEBUG_RECORD_BINDING");
  const r=schema.parse(JSON.parse(text));
  const wireProtocol=r.version!=="t11-debug-loop-authority-1"?r.wireProtocol:undefined;
+ if(t.pilotRoute!==(r.version==="t11-debug-loop-authority-4"?AI_STUDIO_PILOT_RETENTION_POLICY:undefined))throw Error("DEBUG_PILOT_POLICY_BINDING");
  if(wireProtocol!==t.wireProtocol||wireProtocol&&t.freshRun)throw Error("DEBUG_PROTOCOL_BINDING");
  if(r.accountRoot!==t.accountRoot||r.campaignRoot!==t.campaignRoot||realpathSync(t.accountRoot)!==t.accountRoot||!relative(t.accountRoot,t.campaignRoot)||relative(t.accountRoot,t.campaignRoot).startsWith("..")||realpathSync(t.campaignRoot)!==t.campaignRoot)throw Error("DEBUG_CAMPAIGN_BINDING");
  if(r.ownerMessageSha256!==t.reviewedOwnerMessageSha256||hash(read(t.accountRoot,r.ownerMessagePath))!==t.reviewedOwnerMessageSha256)throw Error("DEBUG_OWNER_BINDING");
@@ -355,7 +357,7 @@ async function executeDebugLoop(a:DebugLoopAuthority|undefined,candidate:string,
  await options.beforeExecution?.(leaf);
  if(fresh)appendCandidateValidationRecord(r.accountRoot,fresh.marker,{parentDirectory:fresh.record.parentDirectory,childDirectory:leaf,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256});
  mkdirSync(leaf,{recursive:true,mode:0o700});
- appendCandidateValidationRecord(r.accountRoot,join(leaf,"execution.json"),{authoritySha256:g.trust.reviewedRecordSha256,...proof,mode,...(r.version!=="t11-debug-loop-authority-1"?{wireProtocol:r.wireProtocol}:{}),manifestSha256:r.manifestSha256,accounting:before,...(fresh?{freshRun:{parentDirectory:fresh.record.parentDirectory,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256}}:{})});
+ appendCandidateValidationRecord(r.accountRoot,join(leaf,"execution.json"),{...(r.version==="t11-debug-loop-authority-4"?{pilotRoute:AI_STUDIO_PILOT_RETENTION_POLICY,provider:r.provider,privacyPolicy:r.privacyPolicy}:{}),authoritySha256:g.trust.reviewedRecordSha256,...proof,mode,...(r.version!=="t11-debug-loop-authority-1"?{wireProtocol:r.wireProtocol}:{}),manifestSha256:r.manifestSha256,accounting:before,...(fresh?{freshRun:{parentDirectory:fresh.record.parentDirectory,recordSha256:g.trust.freshRun!.reviewedRecordSha256,evidenceSha256:fresh.record.evidenceSha256}}:{})});
  let attempts=0,next=0;const targets=(mode==="FORMAL_PILOT"||isR03ProbeMode(mode))?(isR03ProbeMode(mode)?manifest.targets.slice(0,7):manifest.targets):[{fixtureId:mode===numericRankProbeMode||mode==="R02_TURN1"||mode==="R02_TURN0"||mode===promptProbeMode||mode===integerProbeMode||mode===positionProbeMode||isR02Turn1ProbeMode(mode)?"R02":"R01",turnIndex:mode==="R02_TURN1"||isSourceProbeMode(mode)||isR02Turn1ProbeMode(mode)||mode===integerOrderProbeMode?1:0}];
  const singleTarget=mode===numericRankProbeMode||mode==="R02_TURN0"||mode===promptProbeMode||mode===integerProbeMode||mode===positionProbeMode?resolveSingleValidationTarget(g.root,{fixture:"R02",turn:0}):mode==="R02_TURN1"||isR02Turn1ProbeMode(mode)?resolveSingleValidationTarget(g.root,{fixture:"R02",turn:1}):isSourceProbeMode(mode)||mode===integerOrderProbeMode?resolveSingleValidationTarget(g.root,{fixture:"R01",turn:1}):undefined;
  if(mode===integerOrderProbeMode&&(singleTarget?.contextSeedDigest!=="9db3317cac2e32828ffa743a21ab344cf3e3d761d7c72465a792d174e484302b"||singleTarget.manifestSha256!=="7d9a0e1ea2a8d48c559989770905e21256b81ba81a0d0706b48c0148eaa2ba59"))throw Error("DEBUG_INTEGER_ORDER_SEED");
@@ -363,9 +365,9 @@ async function executeDebugLoop(a:DebugLoopAuthority|undefined,candidate:string,
  if(isSourceProbeMode(mode)&&(singleTarget?.contextSeedDigest!=="9db3317cac2e32828ffa743a21ab344cf3e3d761d7c72465a792d174e484302b"||singleTarget.manifestSha256!=="7d9a0e1ea2a8d48c559989770905e21256b81ba81a0d0706b48c0148eaa2ba59"))throw Error("DEBUG_SOURCE_SEED_BINDING");
  const check=()=>{const checked=grant(a);if(fresh)verifyFreshRun(checked,candidate,false);const p=candidateValidationProof(g.root,candidate);if(JSON.stringify(p)!==JSON.stringify(proof))throw Error("DEBUG_SOURCE_BINDING");loadedChecks.get(a!)?.(candidate,proof.harnessRevisionSha)};
 const hooks={manifestSha256:r.manifestSha256,maxRequests:targets.length,beforeDispatch(t:{fixtureId:string;turnIndex:number},reservationId:string){check();if(JSON.stringify(t)!==JSON.stringify(targets[next])||attempts!==next)throw Error("DEBUG_TARGET_FENCE");inspectDebugLoop(a);appendCandidateValidationRecord(r.accountRoot,join(leaf,`target-${next}.claim.json`),{target:t,reservationId});next++},settled(){},outcome(){},afterEvidence(t:{fixtureId:string;turnIndex:number}){if(isR03ProbeMode(mode)&&t.fixtureId==="R03"&&t.turnIndex===1)throw Error("DEBUG_R03_TARGET_TERMINAL");}};
- const input={...(r.version!=="t11-debug-loop-authority-1"?{wireProtocol:r.wireProtocol}:{}),root:g.root,directory:leaf,profile:"PILOT" as const,sourceSha:candidate,provenanceDigest:proof.candidateProofSha256,runId:id,accountingPolicy:"CONFIRMED_COST_V1" as const,debugBudgetAuthoritySha256:g.trust.reviewedRecordSha256,cumulativeAuthorizedMicrounits:r.hardCapMicrounits,cumulativeRetainedMicrounits:before.confirmedMicrounits,now:options.now,
+ const input={...(r.version!=="t11-debug-loop-authority-1"?{wireProtocol:r.wireProtocol}:{}),...(r.version==="t11-debug-loop-authority-4"?{pilotRoute:AI_STUDIO_PILOT_RETENTION_POLICY}:{}),root:g.root,directory:leaf,profile:"PILOT" as const,sourceSha:candidate,provenanceDigest:proof.candidateProofSha256,runId:id,accountingPolicy:"CONFIRMED_COST_V1" as const,debugBudgetAuthoritySha256:g.trust.reviewedRecordSha256,cumulativeAuthorizedMicrounits:r.hardCapMicrounits,cumulativeRetainedMicrounits:before.confirmedMicrounits,now:options.now,
  transport:async(request:Parameters<SemanticTransport>[0],requestOptions:Parameters<SemanticTransport>[1])=>{
- check();if(attempts>=targets.length||request.model!==r.model||request.provider.only.join("|")!==r.provider||request.stream!==false||request.provider.allow_fallbacks!==false||request.provider.require_parameters!==true||request.provider.zdr!==true||request.provider.data_collection!=="deny"||request.max_tokens!==1536||request.response_format.json_schema.strict!==true)throw Error("DEBUG_HTTP_ROUTE_FENCE");
+ check();if(attempts>=targets.length||request.model!==r.model||request.provider.only.join("|")!==r.provider||request.stream!==false||request.provider.allow_fallbacks!==false||request.provider.require_parameters!==true||request.provider.zdr!==(r.version!=="t11-debug-loop-authority-4")||request.provider.data_collection!=="deny"||request.max_tokens!==1536||request.response_format.json_schema.strict!==true)throw Error("DEBUG_HTTP_ROUTE_FENCE");
  // For probes the runner has already durably marked DISPATCH. It contains
  // exactly one selected frozen turn; check budget without counting its pending
  // claim twice (the before-execution inspection reserved full headroom).
