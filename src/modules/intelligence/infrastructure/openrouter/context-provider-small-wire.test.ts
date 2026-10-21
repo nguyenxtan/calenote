@@ -286,3 +286,18 @@ it('round trips all twelve operation ownership tuples without rewriting targets'
   for(const extra of [{operation:{...wire.operation,extra:'private'}},{operationCode:String(code)},{targetEvidence:[]}])expect(decode({...wire,...extra}).status).toBe('REFUSED');
  }
 });
+
+it('owns integer values inline in changes and alternatives with no integer-table references',()=>{
+ const numericInput=ContextInputSchema.parse({...input,turns:input.turns.map((turn,index)=>index===input.currentTurn?{...turn,text:'nhắc mình họp 2 lần, trước sự kiện 3 ngày'}:turn)});
+ const numericDecode=(wire:unknown)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,numericInput);
+ const evidence=[{kind:'USER_QUOTE',turn:numericInput.currentTurn,quote:numericInput.turns[numericInput.currentTurn].text,occurrence:1}];
+ const numeric=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'occurrenceCount',operation:'SET',value:2,evidence},{field:'leadOffsetDays',operation:'SET',value:3,evidence}],query:null,uncertainties:[]});
+ const wire=encodeSmallContextV3(numeric,numericInput);
+ expect(wire.integers).toEqual([]);expect(wire.changes.map(c=>c.value)).toEqual([2,3]);expect(numericDecode(wire).status).toBe('PARSED');
+ for(const invalid of [0,-1,.5,Number.MAX_SAFE_INTEGER+1,'2',null]){const bad=structuredClone(wire);bad.changes[0].value=invalid as number;expect(numericDecode(bad).status).toBe('REFUSED');}
+ const ambiguous=ConversationInterpretationV3Schema.parse({...numeric,changes:[],uncertainties:[{field:'occurrenceCount',reason:'AMBIGUOUS',alternatives:[{value:2,evidence},{value:3,evidence}]}]});const uncertain=encodeSmallContextV3(ambiguous,numericInput);expect(uncertain.integers).toEqual([]);expect(uncertain.uncertainties[0].alternatives.map(a=>a.value)).toEqual([2,3]);expect(numericDecode(uncertain).status).toBe('PARSED');
+ expect(numericDecode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(numeric,numericInput),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,numericInput));
+ const schema=smallContextSchemaV3(numericInput).schema as unknown as {properties:{integers:{maxItems:number}}};expect(schema.properties.integers.maxItems).toBe(0);
+ const legacy=structuredClone(wire);legacy.integers=[2,3];legacy.changes[0].value=0;legacy.changes[1].value=1;expect(numericDecode(legacy).status).toBe('REFUSED');
+ const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-operation-header-6',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-operation-header-6'};expect(decodeSmallContextV3(wire,old,undefined,undefined,numericInput).status).toBe('REFUSED');
+});

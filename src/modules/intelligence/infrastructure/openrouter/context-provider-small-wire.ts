@@ -47,7 +47,7 @@ export function smallContextSchemaV3(input:ContextInput){
   query:arr(obj({period:periodCell,date:dateCell,outputCalendar:nullableString,topic:nullableString,evidence})),
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
-  texts:{...arr(str),maxItems:0},integers:arr(integer),dates:{...arr(date),maxItems:0},clocks:arr(obj({hour:integer,minute:integer,qualifier:str})),periods:{...arr(period),maxItems:0}});
+  texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:{...arr(date),maxItems:0},clocks:arr(obj({hour:integer,minute:integer,qualifier:str})),periods:{...arr(period),maxItems:0}});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:schema as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {
@@ -71,7 +71,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  const store=(name:Family,value:unknown):number=>{const rows=out[name] as unknown[];const old=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(value));if(old>=0)return old;rows.push(value);return rows.length-1;};
  const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...Object.fromEntries(dateKeys.map(key=>[key,null])),...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
- const save=(field:string,value:unknown):number=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');return store(type,value);};
+ const save=(field:string,value:unknown):number=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');if(type==='integers'){requireValue(typeof value==='number'&&Number.isSafeInteger(value),'INVALID_TABLE_VALUE','integers');return value;}return store(type,value);};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
  if(record(raw.requestTarget))out.operation.targetEvidence=evidence(raw.requestTarget.evidence);
  const add=(carrier:unknown)=>{requireValue(record(carrier)&&record(carrier.change));const c=carrier.change;out.changes.push({field:c.field as string,rank:carrier.rank as number,operation:c.operation as string,value:c.value===null||['texts','dates'].includes(family(c.field as string))?null:save(c.field as string,c.value),text:c.value!==null&&family(c.field as string)==='texts'?c.value as string:null,date:c.value!==null&&family(c.field as string)==='dates'?date(c.value):[],evidence:evidence(c.evidence)});};
@@ -101,7 +101,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
   if(family(field)==='dates'){requireValue(row.value===null&&row.text===null&&row.date.length===1,'CHANGE_VALUE_INVALID');return date(row.date);}
   requireValue(row.date.length===0,'INACTIVE_VALUE_NON_NULL');
   if(family(field)==='texts'){requireValue(row.value===null&&typeof row.text==='string','CHANGE_VALUE_INVALID');return row.text;}
-  requireValue(row.text===null&&row.value!==null,'CHANGE_VALUE_INVALID');return value(field,row.value);
+  requireValue(row.text===null&&row.value!==null,'CHANGE_VALUE_INVALID');if(family(field)==='integers'){requireValue(Number.isSafeInteger(row.value),'INVALID_TABLE_VALUE','integers');return row.value;}return value(field,row.value);
  };
  const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
  const result:Row={operationCode:parsed.operation.code,requestTarget:parsed.operation.targetEvidence.length?{evidence:evidence(parsed.operation.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
