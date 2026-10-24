@@ -1,10 +1,30 @@
 {
-  "latestId": "2026-10-21-admin-updates-auth-refresh",
+  "latestId": "2026-10-24-feedback-intake",
   "notes": [
     {
-      "id": "2026-10-21-admin-updates-auth-refresh",
+      "id": "2026-10-24-feedback-intake",
       "commit": null,
       "releasedAt": null,
+      "title": "Góp ý và báo lỗi ngay trong Calenote",
+      "summary": "Gửi lỗi hoặc nhu cầu, nhận mã yêu cầu và theo dõi phản hồi trong tài khoản của bạn.",
+      "kind": "Tính năng",
+      "changes": [
+        "Thêm Góp ý & báo lỗi trong Trợ giúp; chỉ tài khoản đã đăng nhập gửi và xem yêu cầu của mình.",
+        "Quản trị có hàng đợi, bộ lọc, trạng thái xử lý và phản hồi; đóng yêu cầu cần nêu kết quả.",
+        "Nội dung được mã hóa, gửi lại cùng mã không tạo trùng; giới hạn chống spam và cách ly dữ liệu khi đổi phiên."
+      ],
+      "memberChanges": [
+        "Bạn có thể báo lỗi hoặc đề xuất điều cần cải thiện từ mục Trợ giúp.",
+        "Mỗi yêu cầu có mã riêng, trạng thái và phản hồi từ quản trị trong Yêu cầu của tôi.",
+        "Bấm Làm mới để xem thay đổi; không cần gửi mật khẩu, OTP hay token bot."
+      ],
+      "verification": "Phạm vi kiểm thử: cách ly tài khoản và quyền quản trị, mã hóa, gửi lại không trùng, giới hạn chống spam, đổi phiên và phản hồi trễ. Bằng chứng kiểm thử và triển khai được ghi riêng theo candidate.",
+      "caveat": "Chưa có đính kèm, thảo luận nhiều lượt, email/bot thông báo hay cập nhật tức thời. Đã nhận yêu cầu không phải cam kết triển khai; đóng yêu cầu không xóa dữ liệu."
+    },
+    {
+      "id": "2026-10-21-admin-updates-auth-refresh",
+      "commit": "f11b19d223ddb01abfe9bc1c096d07fc331b8c51",
+      "releasedAt": "2026-10-21T11:30:31+07:00",
       "title": "Làm mới quản trị và chuông cập nhật theo phiên đăng nhập",
       "summary": "Kiểm tra lại quyền khi quay lại trang, ẩn dữ liệu phiên cũ và đồng bộ màu Bàn việc cá nhân.",
       "kind": "Sửa lỗi",

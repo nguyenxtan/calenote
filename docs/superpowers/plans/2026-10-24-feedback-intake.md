@@ -26,31 +26,34 @@
 ### Task1: Contracts and transactional encrypted store
 Files: src/contracts/api/feedback.ts; src/modules/feedback/{store.ts,store.test.ts}; migrations/0019_feedback_intake.sql; keyring purpose union.
 Interfaces: FeedbackCreateSchema/FeedbackPatchSchema/TicketSchema/ListSchema; D1FeedbackStore.create(owner,input,now),list(owner|null,filters),get(owner|null,id),update(actor,id,patch,now).
-- [ ] Write failing contract/store integration tests for ownership, encryption/audit, concurrent idempotency, changed payload409, rolling limits, pagination and CAS atomicity.
-- [ ] Run pnpm exec vitest run src/modules/feedback/store.test.ts, verify RED.
-- [ ] Implement strict contracts and migration with encrypted content, owner/request uniqueness, minimal audit triggers; create limits in single atomic insert; update CAS.
-- [ ] Run tests GREEN; commit only task files.
+- [x] Write failing contract/store integration tests for ownership, encryption/audit, concurrent idempotency, changed payload409, rolling limits, pagination and CAS atomicity.
+- [x] Run pnpm exec vitest run src/modules/feedback/store.test.ts, verify RED.
+- [x] Implement strict contracts and migration with encrypted content, owner/request uniqueness, minimal audit triggers; create limits in single atomic insert; update CAS.
+- [x] Run tests GREEN; commit only task files.
 
 ### Task2: HTTP and composition
 Files: src/worker/routes/{feedback.ts,feedback.test.ts}; src/modules/feedback/composition.ts; src/worker/router.ts.
 Interfaces: createFeedbackOperations(env),handleFeedback(request,origin,factory); GET /api/feedback and /:id; POST /api/feedback; GET /api/admin/feedback; PATCH /api/admin/feedback/:id.
-- [ ] Write RED tests for missing/expired auth, admin denial, foreign404, method/query/origin/body/size,429, receipt and fail-closed errors with privacy headers.
-- [ ] Implement lazy authenticated composition with existing session/keyring/admin allowlist; wire route before fallthrough.
-- [ ] Run focused HTTP/store and existing router regressions GREEN; commit.
+- [x] Write RED tests for missing/expired auth, admin denial, foreign404, method/query/origin/body/size,429, receipt and fail-closed errors with privacy headers.
+- [x] Implement lazy authenticated composition with existing session/keyring/admin allowlist; wire route before fallthrough.
+- [x] Run focused HTTP/store and existing router regressions GREEN; commit.
 
 ### Task3: Member/admin UI and entry links
 Files: src/features/feedback/{FeedbackWorkspace.tsx,FeedbackPanel.tsx,FeedbackPanel.test.tsx,feedback-client.ts,Feedback.module.css}; src/app/app/{feedback,admin/feedback}/page.tsx; AppShell.tsx; AdminOverview.tsx; PublicEntryExperience.tsx.
 Interfaces: FeedbackWorkspace({admin?}), FeedbackPanel({scope,onAuthLost}); feedback client validates receipts/envelopes and exposes identity reader ID from server, guards requests by AbortSignal/generation.
-- [ ] Write RED tests for submit/receipt/retry, owned list/detail, triage/CAS, account switch, deferred success/error/401/403, draft reset and network preservation.
-- [ ] Implement RAM state and guarded lifecycle, bounded client, Vietnamese accessible forms/status, manual refresh/filter/pagination, admin close disposition/reply.
-- [ ] Add existing Help/admin/docs links, responsive shared brand tokens.
-- [ ] Run UI/router/store regressions, typecheck/lint/build; review desktop/mobile/keyboard. Commit.
+- [x] Write RED tests for submit/receipt/retry, owned list/detail, triage/CAS, account switch, deferred success/error/401/403, draft reset and network preservation.
+- [x] Implement RAM state and guarded lifecycle, bounded client, Vietnamese accessible forms/status, manual refresh/filter/pagination, admin close disposition/reply.
+- [x] Add existing Help/admin/docs links, responsive shared brand tokens.
+- [x] Run UI/router/store regressions, typecheck/lint/build; review desktop/mobile/keyboard. Commit.
 
 ### Task4: Qualification and handoff
 Files: docs/runbooks/feedback-intake.md, release catalog only if current release gate permits appropriate candidate note; evidence outside repo.
 - [ ] Run complete pnpm test and required docs/type/lint/build checks. Do not run Wrangler until guidance read; no runtime binding changes intended.
-- [ ] Independent whole-branch review; reproduce/fix important findings with RED→GREEN then regressions.
+- [x] Independent whole-branch review; reproduce/fix important findings with RED→GREEN then regressions.
 - [ ] Report exact candidate/base, code/local/CI/live separately, migration compatibility and combined-release blocker. No push/deploy/migration remote without applicable authority.
 
 ## Ledger
 24/10: Clean source baseline verified; existing unrelated cbe5 UI changes untouched. Native execution selected by instruction to build in existing session; no repeat approval. Proposed rate-limit implementation counts committed requests atomically rather than consuming generic counters before create, so retry never spends a new-ticket slot.
+
+24/10 review: P1 cross-tab cookie identity race reproduced RED in workspace, route and unknown-POST retry tests. Fixed focus/visibility obscuring/revalidation plus mandatory expected-reader precondition on mutations. All three regressions GREEN. Final review found no other definite persistence/security findings; no deferred minor findings.
+Ruling: admin detail GET added under the same existing server allowlist because queue summaries intentionally exclude full descriptions; without it triage cannot open a ticket. No expansion of identity grants.

@@ -40,7 +40,7 @@ function invalidResponse(status = 502): ApiResponseError {
   return new ApiResponseError(status, "INVALID_RESPONSE", SAFE_FALLBACK);
 }
 
-async function readBoundedJson(response: Response): Promise<Record<string, unknown>> {
+export async function readBoundedJson(response: Response): Promise<Record<string, unknown>> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.includes("application/json")) throw invalidResponse(response.status || 502);
 

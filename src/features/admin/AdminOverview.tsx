@@ -27,7 +27,7 @@ export function AdminOverview(){
  },[replace,attempt]);
  return <main className={styles.page}><header><Link href="/app/today">← Về Calenote</Link><h1>Dashboard quản trị</h1><p>Tổng quan vận hành và lịch sử cập nhật</p></header>
   {error?<div role="alert"><p>{error}</p><button type="button" onClick={()=>{setError(null);setData(null);setAttempt(value=>value+1);}}>Thử lại</button></div>:!data?<p role="status">Đang kiểm tra quyền truy cập…</p>:<>
-   <nav className={styles.navigation} aria-label="Mục quản trị"><a href="#activity-title">Tổng quan</a><a href="#release-history-title">Lịch sử cập nhật</a></nav>
+   <nav className={styles.navigation} aria-label="Mục quản trị"><a href="#activity-title">Tổng quan</a><a href="#release-history-title">Lịch sử cập nhật</a><Link href="/app/admin/feedback">Góp ý & báo lỗi</Link></nav>
    <p>Ngày {data.period.day} · Tháng {data.period.month} · Giờ Việt Nam</p>
    <section aria-labelledby="activity-title"><h2 id="activity-title">Tài khoản & hoạt động ghi nhận</h2><table><tbody>
     <tr><th scope="row">Tổng tài khoản</th><td>{data.accounts.status==='KNOWN'?data.accounts.value:unknown}</td></tr>

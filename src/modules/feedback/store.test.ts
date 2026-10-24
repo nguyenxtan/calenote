@@ -68,3 +68,16 @@ it('paginates and filters within owner scope; rejects tampered ciphertext',async
  await db.prepare('UPDATE feedback_tickets SET content_iv=zeroblob(12),revision=revision+1 WHERE id=?').bind(a.id).run();
  await expect(store.get('one',a.id)).rejects.toThrow();
 });
+it('rolls back ticket and CAS update when audit persistence fails',async()=>{
+ await db.exec("CREATE TRIGGER deny_create BEFORE INSERT ON feedback_audit BEGIN SELECT RAISE(ABORT,'audit unavailable'); END;");
+ await expect(store.create('one',input(),1000)).rejects.toThrow();expect(await db.prepare('SELECT count(*) AS n FROM feedback_tickets').first('n')).toBe(0);
+ await db.exec('DROP TRIGGER deny_create');const ticket=await store.create('one',input(),1001);
+ await db.exec("CREATE TRIGGER deny_update BEFORE INSERT ON feedback_audit WHEN NEW.action='TRIAGE' BEGIN SELECT RAISE(ABORT,'audit unavailable'); END;");
+ await expect(store.update('admin',ticket.id,{expectedRevision:1,status:'REVIEWING',reply:'Đang xem xét.',disposition:null},1002)).rejects.toThrow();expect((await store.get('one',ticket.id)).revision).toBe(1);expect(await db.prepare('SELECT count(*) AS n FROM feedback_audit').first('n')).toBe(1);
+});
+it('paginates all21 matching tickets without duplicate or foreign-owner entries',async()=>{
+ for(let i=0;i<21;i++)await store.create('one',input(i+1),1000+i*86400001);
+ await store.create('two',input(),22*86400001);
+ const first=await store.list('one',{});expect(first.items).toHaveLength(20);expect(first.next).toBe(first.items[19].id);
+ const second=await store.list('one',{after:first.next!});expect(second.items).toHaveLength(1);expect(second.next).toBeNull();expect(new Set([...first.items,...second.items].map(t=>t.id)).size).toBe(21);
+});

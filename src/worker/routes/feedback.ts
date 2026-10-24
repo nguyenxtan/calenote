@@ -23,10 +23,13 @@ export async function handleFeedback(request:Request,origin:string,create:()=>Pr
   const body=method==='POST'?FeedbackCreateSchema.parse(await readBoundedJson(request,16384,{timeoutMs:5000})):method==='PATCH'?FeedbackPatchSchema.parse(await readBoundedJson(request,16384,{timeoutMs:5000})):null;
   const ops=await create(),principal=await ops.requireUser(credentials);
   if(admin&&!adminAllowed(principal.userId,ops.allowlist))return fail(403,'FORBIDDEN');
+  const readerId=await ops.readerId(principal.userId),expectedReader=request.headers.get('x-calenote-feedback-reader');
+  if(method!=='GET'&&!expectedReader)return fail(400,'EXPECTED_IDENTITY_REQUIRED');
+  if(expectedReader&&expectedReader!==readerId)return fail(409,'IDENTITY_CHANGED');
   if(method==='POST')return jsonResponse({data:FeedbackTicketSchema.parse(await ops.store.create(principal.userId,FeedbackCreateSchema.parse(body),Date.now()))},{status:201,headers});
   if(method==='PATCH')return jsonResponse({data:FeedbackTicketSchema.parse(await ops.store.update(principal.userId,id!,FeedbackPatchSchema.parse(body),Date.now()))},{headers});
   if(id)return jsonResponse({data:FeedbackTicketSchema.parse(await ops.store.get(admin?null:principal.userId,id))},{headers});
-  return jsonResponse({data:FeedbackListSchema.parse({...await ops.store.list(admin?null:principal.userId,filters.data),readerId:await ops.readerId(principal.userId)})},{headers});
+  return jsonResponse({data:FeedbackListSchema.parse({...await ops.store.list(admin?null:principal.userId,filters.data),readerId})},{headers});
  }catch(error){
   if(error instanceof SessionAuthError)return fail(401,'UNAUTHENTICATED');
   if(error instanceof SameOriginError||error instanceof RequestBodyError)return fail(error.status,error.code);

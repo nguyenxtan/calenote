@@ -5,7 +5,7 @@ import Link from "next/link";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, BookOpen, MoreHorizontal, Settings2, Sun, ShieldCheck } from "lucide-react";
+import { Activity, Bell, CalendarDays, Inbox, Link2, LogOut, BookOpen, MoreHorizontal, Settings2, Sun, ShieldCheck, MessageSquare } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
 import type { SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest } from "@/lib/client-api";
@@ -30,7 +30,7 @@ const secondary: readonly NavigationItem[] = [
 const groups = [
   { label: "Ngày của bạn", items: primary },
   { label: "Không gian", items: secondary },
-  { label: "Trợ giúp", items: [{ href: "/docs", label: "Hướng dẫn", icon: BookOpen }] },
+  { label: "Trợ giúp", items: [{ href: "/docs", label: "Hướng dẫn", icon: BookOpen }, {href:"/app/feedback",label:"Góp ý & báo lỗi",icon:MessageSquare}] },
 ] as const;
 
 function NavLink({ item, active, onNavigate, linkRef }: { item: NavigationItem; active: boolean; onNavigate?: () => void; linkRef?: React.Ref<HTMLAnchorElement> }) {
