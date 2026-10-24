@@ -1,0 +1,16 @@
+import {z} from 'zod';
+export const FeedbackKindSchema=z.enum(['BUG','FEATURE']);
+export const FeedbackStatusSchema=z.enum(['NEW','REVIEWING','IN_PROGRESS','CLOSED']);
+export const FeedbackDispositionSchema=z.enum(['RESOLVED','DUPLICATE','DECLINED','NEEDS_INFO']);
+export const feedbackPages=['/app/today','/app/calendar','/app/inbox','/app/reminders','/app/connections','/app/activity','/app/settings','/app/personal'] as const;
+export const FeedbackIdSchema=z.string().regex(/^fb_[0-9a-f]{12}_[0-9a-f-]{36}$/);
+export const FeedbackCreateSchema=z.object({requestId:z.uuid(),kind:FeedbackKindSchema,title:z.string().trim().min(5).max(120),description:z.string().trim().min(20).max(4000),page:z.enum(feedbackPages).nullable().default(null)}).strict();
+export const FeedbackPatchSchema=z.object({expectedRevision:z.number().int().min(1).max(Number.MAX_SAFE_INTEGER-1),status:FeedbackStatusSchema,reply:z.string().trim().max(4000),disposition:FeedbackDispositionSchema.nullable()}).strict().refine(v=>v.status==='CLOSED'?v.reply.length>=5&&v.disposition!==null:v.disposition===null,{message:'Đóng yêu cầu cần kết quả và phản hồi; trạng thái khác không có kết quả đóng.'});
+export const FeedbackTicketSchema=z.object({id:FeedbackIdSchema,kind:FeedbackKindSchema,title:z.string().min(5).max(120),description:z.string().min(20).max(4000),page:z.enum(feedbackPages).nullable(),status:FeedbackStatusSchema,reply:z.string().max(4000),disposition:FeedbackDispositionSchema.nullable(),revision:z.number().int().positive(),createdAt:z.number().int().nonnegative(),updatedAt:z.number().int().nonnegative()}).strict().refine(v=>v.status==='CLOSED'?v.disposition!==null&&v.reply.length>=5:v.disposition===null);
+export const FeedbackSummarySchema=z.object({id:FeedbackIdSchema,kind:FeedbackKindSchema,title:z.string().min(5).max(120),status:FeedbackStatusSchema,revision:z.number().int().positive(),createdAt:z.number().int().nonnegative(),updatedAt:z.number().int().nonnegative()}).strict();
+export const FeedbackFiltersSchema=z.object({after:FeedbackIdSchema.optional(),kind:FeedbackKindSchema.optional(),status:FeedbackStatusSchema.optional()}).strict();
+export const FeedbackListSchema=z.object({readerId:z.string().regex(/^[A-Za-z0-9_-]{43}$/),items:z.array(FeedbackSummarySchema).max(20),next:FeedbackIdSchema.nullable()}).strict();
+export type FeedbackCreate=z.input<typeof FeedbackCreateSchema>;
+export type FeedbackPatch=z.infer<typeof FeedbackPatchSchema>;
+export type FeedbackTicket=z.infer<typeof FeedbackTicketSchema>;
+export type FeedbackFilters=z.infer<typeof FeedbackFiltersSchema>;

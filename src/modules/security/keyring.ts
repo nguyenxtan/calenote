@@ -26,7 +26,8 @@ export type SensitiveContentPurpose =
   | "draft-title"
   | "action-candidate-title"
   | "reminder-title"
-  | "login-code";
+  | "login-code"
+  | "feedback-content";
 
 export interface EncryptedValue {
   ciphertext: ArrayBuffer;
