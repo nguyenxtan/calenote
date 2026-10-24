@@ -1,3 +1,4 @@
+import { parseJsonWithoutDuplicateMembers } from "./strict-json";
 import type {ContextGatewayInterpretation} from "../../../conversation/context-contract/list-period-transport";
 import { z } from "zod";
 import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../../conversation/context-contract/contracts";
@@ -48,7 +49,7 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   const result = decodeResponse(response, config, maximum, output, true);
   if (!validation && !wireValidation) {
     if (response.status === 200 && result.status === "FAILURE" && result.category === "SCHEMA_INVALID") {
-      const raw: unknown = JSON.parse(response.body);
+      const raw: unknown = parseJsonWithoutDuplicateMembers(response.body);
       const envelope = envelopeSchema.safeParse(raw);
       if (!envelope.success) {
         const bytes = new TextEncoder().encode(response.body);
@@ -69,7 +70,7 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
   }
   // Outer HTTP bytes are bounded before parsing; hash the original bounded
   // model content, never a recursively serialized model-controlled object.
-  const content: string = JSON.parse(response.body).choices[0].message.content;
+  const content: string = (parseJsonWithoutDuplicateMembers(response.body) as { choices: Array<{ message: { content: string } }> }).choices[0].message.content;
   const bytes = new TextEncoder().encode(content);
   const hashed = await crypto.subtle.digest("SHA-256", bytes);
   const payloadSha256 = Array.from(new Uint8Array(hashed), byte => byte.toString(16).padStart(2, "0")).join("");
@@ -155,7 +156,7 @@ function decodeResponse<T>(response: { status: number; body: string; oversized?:
     return { status: "FAILURE", category: "SCHEMA_INVALID" };
   }
   let body: unknown;
-  try { body = JSON.parse(response.body); } catch {
+  try { body = parseJsonWithoutDuplicateMembers(response.body); } catch {
     return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" };
   }
   if (response.status !== 200) {
@@ -173,7 +174,7 @@ function decodeResponse<T>(response: { status: number; body: string; oversized?:
   }
   const usage = safeUsage(envelope.data.usage, config, maximum);
   let payload: unknown;
-  try { payload = JSON.parse(envelope.data.choices[0].message.content); } catch {
+  try { payload = parseJsonWithoutDuplicateMembers(envelope.data.choices[0].message.content); } catch {
     return { status: "FAILURE", category: "INVALID_JSON", usage };
   }
   const semantic = output.safeParse(payload);
@@ -308,8 +309,8 @@ export function createContextHttpTransport(apiKey: string,
       let body = "";
       if (bytes && failureDiagnostics.bodyState === "JSON") {
         try {
-          const raw = JSON.parse(new TextDecoder().decode(bytes));
-          const usage = z.object({ cost: z.unknown().optional(), prompt_tokens: z.unknown().optional(), completion_tokens: z.unknown().optional() }).safeParse(raw?.usage);
+          const raw = parseJsonWithoutDuplicateMembers(new TextDecoder().decode(bytes));
+          const usage = z.object({ cost: z.unknown().optional(), prompt_tokens: z.unknown().optional(), completion_tokens: z.unknown().optional() }).safeParse(raw && typeof raw === "object" ? (raw as {usage?:unknown}).usage : undefined);
           if (usage.success) {
             const numeric: Record<string, number> = {};
             for (const key of ["cost", "prompt_tokens", "completion_tokens"] as const) {
@@ -363,7 +364,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   const maximum = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
   if (response.status !== 200 && response.failureDiagnostics) {
     let rawUsage: unknown;
-    try { rawUsage = JSON.parse(response.body).usage; } catch { /* Unknown accounting. */ }
+    try { rawUsage = (parseJsonWithoutDuplicateMembers(response.body) as { usage?: unknown }).usage; } catch { /* Unknown accounting. */ }
     const cost = z.object({ cost: z.number().finite().nonnegative() }).safeParse(rawUsage);
     const amount = cost.success ? Math.ceil(cost.data.cost * 1000000) : null;
     const tokens = z.object({ prompt_tokens: z.number().int().nonnegative(), completion_tokens: z.number().int().nonnegative() }).safeParse(rawUsage);
@@ -374,7 +375,7 @@ async function decodeObservableResponse(response: Awaited<ReturnType<SemanticTra
   if (response.oversized || new TextEncoder().encode(response.body).byteLength > config.maxResponseBytes)
     return decodeContextResponse(response, config, maximum,input,selection);
   let raw: unknown;
-  try { raw = JSON.parse(response.body); } catch { return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" }; }
+  try { raw = parseJsonWithoutDuplicateMembers(response.body); } catch { return { status: "FAILURE", category: response.status === 200 ? "INVALID_JSON" : "PROVIDER_FAILURE" }; }
   const accounting = z.object({ usage: z.unknown().optional() }).safeParse(raw);
   // Cost is independent of token validity: a known overflow must not erase an
   // otherwise known charge, even if it exceeds the financial reservation.

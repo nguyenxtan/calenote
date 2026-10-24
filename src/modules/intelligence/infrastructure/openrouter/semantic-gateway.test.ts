@@ -783,3 +783,33 @@ it('preserves a finite Studio 404 cause through real HTTP transport projection w
  expect(JSON.stringify(result)).not.toContain('PRIVATE_PROSE');
  expect(JSON.stringify(result)).not.toContain('SYNTHETIC_KEY');
 });
+
+
+describe("duplicate provider JSON members", () => {
+  it.each(["outer", "inner", "escaped"])("refuses %s duplicates before last-wins decoding", async layer => {
+    const content = layer === "inner" ? '{"intent":"UNSUPPORTED","intent":"HELP","title":null,"titleState":"NOT_APPLICABLE","targetIntent":null}' : JSON.stringify(modelHelp);
+    const choice = JSON.stringify({ message: { content }, finish_reason: "stop" });
+    const body = layer === "outer" ? `{"choices":[],"choices":[${choice}]}` : layer === "escaped" ? `{"choices":[],"cho\\u0069ces":[${choice}]}` : `{"choices":[${choice}]}`;
+    let calls = 0;
+    const attempt = createSemanticGateway(config, async () => { calls++; return { status: 200, body }; }).prepare("FREE_PRIMARY", input);
+    if (attempt.status !== "READY") throw Error("not ready");
+    expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE", category: "INVALID_JSON" });
+    await attempt.dispatch(); expect(calls).toBe(1);
+  });
+});
+
+it.each(["outer", "usage", "inner"])("retains only unambiguous accounting after %s duplicate members", async layer => {
+ const content = layer === "inner" ? '{"changes":[],"changes":[]}' : JSON.stringify(encodeFixtureV3(contextOutput,contextInput));
+ const response = JSON.stringify({model:"google/gemini-2.5-flash-lite",provider:"Google",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content}}]});
+ const body = layer === "outer" ? response.slice(0,-1) + ',"choices":[]}'
+   : layer === "usage" ? response.replace('"cost":0', '"cost":1,"cost":0') : response;
+ let calls = 0;
+ const attempt = gateways.createContextContractGateway(contextConfig, async () => { calls++; return { status:200, body }; },
+   { status:"OBSERVABLE_CANARY", advertisedContextTokens:1048576 }).prepare("PRIMARY",contextInput);
+ if(attempt.status!=="READY")throw Error("not ready");
+ const result=await attempt.dispatch();
+ expect(result).toMatchObject({status:"FAILURE",category:"INVALID_JSON"});
+ if(layer==="inner")expect(result.usage?.costMicrounits).toBe(0);
+ else expect(result.usage?.costMicrounits ?? null).toBeNull();
+ await attempt.dispatch();expect(calls).toBe(1);
+});

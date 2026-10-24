@@ -1,3 +1,4 @@
+import {changeAt,changeEntries} from '../../../../../tools/benchmark/context-small-test-helpers';
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
@@ -18,15 +19,18 @@ it('preserves canonical interpretation with disjoint operation and date branches
  expect((operation as {anyOf:unknown[]}).anyOf).toHaveLength(2);
  const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const value=node as Record<string,unknown>;
   expect(value).not.toHaveProperty('oneOf');expect(value).not.toHaveProperty('$ref');expect(value).not.toHaveProperty('$defs');
-  if(value.anyOf&&node!==operation){const branches=value.anyOf as {properties:{kind?:{enum:string[]};field?:{enum:string[]};operation?:{enum:string[]}},additionalProperties:boolean}[];
-   if(branches.every(branch=>branch.properties.kind))expect(branches.map(b=>b.properties.kind!.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);
-   else {expect(branches.length).toBeLessThanOrEqual(10);const pairs=branches.flatMap(branch=>branch.properties.field!.enum.flatMap(field=>branch.properties.operation!.enum.map(op=>`${field}/${op}`)));expect(new Set(pairs).size).toBe(pairs.length);}
+  if(value.anyOf&&node!==operation){
+   const branches=(value.anyOf as Array<{type:string;properties?:Record<string,{enum?:string[]}>;additionalProperties?:boolean}>).filter(branch=>branch.type!=='null');
+   if(branches.every(branch=>branch.properties?.kind))expect(branches.map(b=>b.properties!.kind.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);
+   else {expect(branches.length).toBeLessThanOrEqual(3);const operations=branches.flatMap(branch=>branch.properties!.operation.enum!);expect(new Set(operations).size).toBe(operations.length);}
    for(const branch of branches)expect(branch.additionalProperties).toBe(false);
   }
   for(const child of Object.values(value))if(Array.isArray(child))child.forEach(visit);else visit(child);
  };visit(selected.schema);
  expect(JSON.stringify(operation).match(/"anyOf"/gu)).toHaveLength(1);
- expect(JSON.stringify(selected.schema).length).toBeLessThan(16000);
+ // Reviewed test-only structure ceiling: initial measured18555, healthy max25267.
+ // Runtime32768-byte response guard and1536-token output limit are unchanged.
+ expect(JSON.stringify(selected.schema).length).toBeLessThan(19000);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(proposal,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
 });
 it('rejects unknown, fractional, negative or unused value references without coercion',()=>{
@@ -34,10 +38,10 @@ it('rejects unknown, fractional, negative or unused value references without coe
  const creation=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:'synthetic',evidence}],query:null,uncertainties:[]});
  const original=encodeSmallContextV3(creation,input);
  expect(decode(original).status).toBe('PARSED');
- for(const value of [-1,.5,999,'0']){const wire=structuredClone(original);wire.changes[0].value=value as number;expect(decode(wire).status).toBe('REFUSED');}
+ for(const value of [-1,.5,999,'0']){const wire=structuredClone(original);changeAt(wire,0).value=value as number;expect(decode(wire).status).toBe('REFUSED');}
  const unused=structuredClone(original);unused.texts.push('unreferenced payload');expect(decode(unused).status).toBe('REFUSED');
- const duplicate=structuredClone(original);duplicate.changes.push(structuredClone(duplicate.changes[0]));expect(decode(duplicate).status).toBe('REFUSED');
- const source=structuredClone(original);source.changes[0].evidence=['U99'];expect(decode(source).status).toBe('REFUSED');
+ const duplicate=structuredClone(original);Object.assign(duplicate,{changes:[{field:'title',...changeAt(duplicate,0)},{field:'title',...changeAt(duplicate,0)}]});expect(decode(duplicate).status).toBe('REFUSED');
+ const source=structuredClone(original);changeAt(source,0).evidence=['U99'];expect(decode(source).status).toBe('REFUSED');
  expect(decodeSmallContextV3(original,CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');
 });
 
@@ -48,7 +52,7 @@ it('keeps small prompt unambiguous and publishes the complete immutable field co
  for(const phrase of ['Core roots:','Ten singleton roots required','extras use {','entries {field,operation,value,evidence}','Absent carriers:null'])expect(CONTEXT_SMALL_PROMPT).not.toContain(phrase);
  expect(CONTEXT_SMALL_PROMPT).not.toContain('WEEK,MONTH,WEEKEND(offset');expect(CONTEXT_SMALL_PROMPT).not.toContain('period=null');
  for(const phrase of ['MONTH_CURRENT','MONTH_PREVIOUS','MONTH_NEXT','There is NO offset field'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
- for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','Omission=KEEP'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
+ for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','key=null means KEEP'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
 });
 
 it('rejects malformed dates/period references and ranks but quarantines optional guidance',()=>{
@@ -56,14 +60,14 @@ it('rejects malformed dates/period references and ranks but quarantines optional
  const base=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:'synthetic',evidence},{field:'eventDate',operation:'SET',value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null},evidence}],query:null,uncertainties:[]});
  const wire=encodeSmallContextV3(base,input);expect(decode(wire).status).toBe('PARSED');
  for(const change of [
-  (w:typeof wire)=>{w.changes[1].date[0].offsetDays=1;},
-  (w:typeof wire)=>{w.changes[1].date[0].year=10000;},
-  (w:typeof wire)=>{w.changes[1].rank=w.changes[0].rank;},
-  (w:typeof wire)=>{w.changes.reverse();},
-  (w:typeof wire)=>{w.changes[0].rank=13;},
-  (w:typeof wire)=>{w.changes[0].evidence=[];},
-  (w:typeof wire)=>{w.changes[0].operation='CLEAR';},
-  (w:typeof wire)=>{w.dates=Array.from({length:129},()=>structuredClone(w.changes[1].date[0]));},
+  (w:typeof wire)=>{changeAt(w,1).date[0].offsetDays=1;},
+  (w:typeof wire)=>{changeAt(w,1).date[0].year=10000;},
+  (w:typeof wire)=>{changeAt(w,1).rank=changeAt(w,0).rank;},
+  (w:typeof wire)=>{Object.assign(w,{changes:changeEntries(w).reverse()});},
+  (w:typeof wire)=>{changeAt(w,0).rank=13;},
+  (w:typeof wire)=>{changeAt(w,0).evidence=[];},
+  (w:typeof wire)=>{changeAt(w,0).operation='CLEAR';},
+  (w:typeof wire)=>{w.dates=Array.from({length:129},()=>structuredClone(changeAt(w,1).date[0]));},
  ]){const altered=structuredClone(wire);change(altered);expect(decode(altered).status,change.toString()).toBe('REFUSED');}
  const malformedAdvice={...wire,directive:[{kind:'APPROVE'}],reply:[{text:123}]};
  const parsed=decode(malformedAdvice);expect(parsed.status).toBe('PARSED');
@@ -108,12 +112,12 @@ it('inlines owned text values and forbids every free-standing text table row in 
  const creation=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:'synthetic inline title',evidence}],query:null,uncertainties:[]});
  const wire=encodeSmallContextV3(creation,input);
  expect(wire.texts).toEqual([]);
- expect(wire.changes[0]).toMatchObject({value:null,text:'synthetic inline title'});
+ expect(changeAt(wire,0)).toMatchObject({value:null,text:'synthetic inline title'});
  expect(decode(wire).status).toBe('PARSED');
  const generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
  expect(generation.safeParse({...wire,texts:['unused text']}).success).toBe(false);
  expect(decode({...wire,texts:['unused text']}).status).toBe('REFUSED');
- expect(decode({...wire,changes:[{...wire.changes[0],value:0}]}).status).toBe('REFUSED');
+ expect(decode({...wire,changes:[{...changeAt(wire,0),value:0}]}).status).toBe('REFUSED');
 });
 
 it('R01 month-list response needs no text rows and cannot generate the observed orphan texts',()=>{
@@ -144,7 +148,7 @@ it('owns typed dates at their consumer and forbids root orphan dates in generati
  const canonical=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'eventDate',operation:'SET',value:civil,evidence}],query:null,uncertainties:[]});
  const wire=encodeSmallContextV3(canonical,input);
  expect(wire.dates).toEqual([]);
- expect(wire.changes[0]).toMatchObject({value:null,text:null,date:[civil]});
+ expect(changeAt(wire,0)).toMatchObject({value:null,text:null,date:[civil]});
  const generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
  expect(generation.safeParse({...wire,dates:[civil]}).success).toBe(false);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
@@ -158,9 +162,9 @@ it('rejects dates in inactive owner cells and preserves inline date alternatives
  expect(wire.dates).toEqual([]);expect(wire.uncertainties[0].alternatives[0]).toMatchObject({value:null,text:null,date:[civil]});
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(canonical,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
  const cell=wire.uncertainties[0].alternatives[0].date;
- const wrongOwner=structuredClone(wire);wrongOwner.changes[0].date=structuredClone(cell);expect(decode(wrongOwner).status).toBe('REFUSED');
+ const wrongOwner=structuredClone(wire);changeAt(wrongOwner,0).date=structuredClone(cell);expect(decode(wrongOwner).status).toBe('REFUSED');
  for(const patch of [{date:[]},{date:[...cell,...cell]},{value:0},{text:'not a date'}]){const invalid=structuredClone(wire);Object.assign(invalid.uncertainties[0].alternatives[0],patch);expect(decode(invalid).status).toBe('REFUSED');}
- const cleared=structuredClone(wire);cleared.changes[0].operation='CLEAR';cleared.changes[0].text=null;cleared.changes[0].date=structuredClone(cell);expect(decode(cleared).status).toBe('REFUSED');
+ const cleared=structuredClone(wire);changeAt(cleared,0).operation='CLEAR';changeAt(cleared,0).text=null;changeAt(cleared,0).date=structuredClone(cell);expect(decode(cleared).status).toBe('REFUSED');
 });
 it('R01 month query forbids root dates and inactive month boundary dates',()=>{
  const evidence=[{kind:'USER_QUOTE',turn:0,quote:input.turns[0].text,occurrence:1}];
@@ -301,12 +305,12 @@ it('owns integer values inline in changes and alternatives with no integer-table
  const evidence=[{kind:'USER_QUOTE',turn:numericInput.currentTurn,quote:numericInput.turns[numericInput.currentTurn].text,occurrence:1}];
  const numeric=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'occurrenceCount',operation:'SET',value:2,evidence},{field:'leadOffsetDays',operation:'SET',value:3,evidence}],query:null,uncertainties:[]});
  const wire=encodeSmallContextV3(numeric,numericInput);
- expect(wire.integers).toEqual([]);expect(wire.changes.map(c=>c.value)).toEqual([2,3]);expect(numericDecode(wire).status).toBe('PARSED');
- for(const invalid of [0,-1,.5,Number.MAX_SAFE_INTEGER+1,'2',null]){const bad=structuredClone(wire);bad.changes[0].value=invalid as number;expect(numericDecode(bad).status).toBe('REFUSED');}
+ expect(wire.integers).toEqual([]);expect(changeEntries(wire).map(c=>c.value)).toEqual([2,3]);expect(numericDecode(wire).status).toBe('PARSED');
+ for(const invalid of [0,-1,.5,Number.MAX_SAFE_INTEGER+1,'2',null]){const bad=structuredClone(wire);changeAt(bad,0).value=invalid as number;expect(numericDecode(bad).status).toBe('REFUSED');}
  const ambiguous=ConversationInterpretationV3Schema.parse({...numeric,changes:[],uncertainties:[{field:'occurrenceCount',reason:'AMBIGUOUS',alternatives:[{value:2,evidence},{value:3,evidence}]}]});const uncertain=encodeSmallContextV3(ambiguous,numericInput);expect(uncertain.integers).toEqual([]);expect(uncertain.uncertainties[0].alternatives.map(a=>a.value)).toEqual([2,3]);expect(numericDecode(uncertain).status).toBe('PARSED');
  expect(numericDecode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(numeric,numericInput),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,numericInput));
  const schema=smallContextSchemaV3(numericInput).schema as unknown as {properties:{integers:{maxItems:number}}};expect(schema.properties.integers.maxItems).toBe(0);
- const legacy=structuredClone(wire);legacy.integers=[2,3];legacy.changes[0].value=0;legacy.changes[1].value=1;expect(numericDecode(legacy).status).toBe('REFUSED');
+ const legacy=structuredClone(wire);legacy.integers=[2,3];changeAt(legacy,0).value=0;changeAt(legacy,1).value=1;expect(numericDecode(legacy).status).toBe('REFUSED');
  const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-operation-header-6',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-operation-header-6'};expect(decodeSmallContextV3(wire,old,undefined,undefined,numericInput).status).toBe('REFUSED');
 });
 it('identifies the inactive operand boundary without persisting authored values',()=>{
@@ -327,4 +331,18 @@ it('selects strict active-only DateOperand shapes and rejects the observed relat
  expect(selected.safeParse({kind:'WEEKDAY',weekday:2,qualifier:'NEXT_WEEK'}).success).toBe(true);
  const wire=encodeSmallContextV3(proposal,input),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-inline-integers-7',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-inline-integers-7'};
  expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
+});
+
+it('owns each eligible field once in a required nullable dictionary',()=>{
+ const wire=encodeSmallContextV3(proposal,input);
+ expect(Array.isArray(wire.changes)).toBe(false);
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{properties:Record<string,unknown>;required:string[];additionalProperties:boolean}}};
+ expect(schema.properties.changes.additionalProperties).toBe(false);
+ expect(Object.keys(wire.changes).sort()).toEqual([...schema.properties.changes.required].sort());
+ for(const carrier of Object.values(wire.changes))if(carrier!==null)expect(carrier).not.toHaveProperty('field');
+ const reversed={...wire,changes:Object.fromEntries(Object.entries(wire.changes).reverse())};
+ expect(decode(reversed)).toEqual(decode(wire));
+ const omitted=structuredClone(wire);delete (omitted.changes as Record<string,unknown>)[Object.keys(wire.changes)[0]];
+ expect(decode(omitted).status).toBe('REFUSED');
+ expect(decode({...wire,changes:[]}).status).toBe('REFUSED');
 });

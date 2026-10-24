@@ -84,25 +84,32 @@ export function smallContextSchemaV3(input:ContextInput){
  add(['occurrenceCount','leadOffsetDays'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
  for(const field of ['frequency','calendar','eventRelation'] as const)add([field],relationOnly?['SET']:ordinaryOperations,nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty);
  if(!rows.length)throw Error('SMALL_CHANGE_DOMAIN_EMPTY');
- const changeItem=rows.length===1?rows[0]:{anyOf:rows};
+ // A field identity is a required dictionary key, never model-authored twice.
+ const changeProperties=Object.fromEntries(changeFields.map(field=>{
+  const carriers=rows.filter(row=>(row.properties.field as {enum:string[]}).enum.includes(field)).map(row=>{
+   const {field:ignored,...properties}=row.properties;void ignored;return obj(properties);
+  });
+  return [field,{anyOf:[nil,...carriers]}];
+ }));
  const targetEvidence={...arr({type:'string',enum:[...book.currentCodes]}),minItems:1,maxItems:3};
  // Do not infer CURRENT versus NEW from the relation certificate.
  const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
  const {$schema:ignoredClockSchema,...clockSchema}=z.toJSONSchema(ClockOperandSchema,{unrepresentable:'any',io:'input'});void ignoredClockSchema;
  // Ordinary collection maxima stay strict downstream: provider compilers may
- // unroll bounded object arrays. Reuse the previously admitted flat grammar; clock values are a strict ordered stream,
+ // unroll bounded object arrays. Field-keyed carriers are a new producer grammar; clock values remain a strict ordered stream,
  // while typed/canonical/stream-count checks and guidance quarantine retain authority.
  const schema=obj({operation,
-  changes:relationOnly?{...arr(changeItem),maxItems:1}:arr(changeItem),
+  changes:obj(changeProperties),
   query:{...arr(obj({period:periodCell,date:dateCell,outputCalendar:{type:['string','null'],enum:[...SlotValueSchemas.calendar.options,null]},topic:nullableString,evidence})),maxItems:1},
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
   texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:arr(clockSchema),periods:empty});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:compilerNumericPrimitives(schema) as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
+export interface SmallChangeCarrier {rank:number;operation:string;value:number|null;text:string|null;date:Row[];evidence:string[]}
 export interface SmallContextWire {
  operation:{code:string;targetEvidence:string[]};
- changes:Array<{field:string;rank:number;operation:string;value:number|null;text:string|null;date:Row[];evidence:string[]}>;
+ changes:Record<string,SmallChangeCarrier|null>;
  query:Array<{period:Row[];date:Row[];outputCalendar:string|null;topic:string|null;evidence:string[]}>;
  uncertainties:Array<{fieldCode:number;reason:string;alternatives:Array<{value:number|null;text:string|null;date:Row[];period:Row[];evidence:string[]}>}>;
  directive:Row[];reply:Array<{text:string}>;texts:string[];integers:number[];dates:Row[];clocks:Row[];periods:Row[];
@@ -117,7 +124,8 @@ function requireValue(valid:unknown,reason:SmallTableDiagnostic['reason']='INVAL
 /** Offline authoring only. No repair/coercion helper is used for model data. */
 export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):SmallContextWire {
  const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
- const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:[],query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
+ const selected=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{required:string[]}}};
+ const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:Object.fromEntries(selected.properties.changes.required.map(field=>[field,null])),query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
  const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{requireValue(family(field)==='integers');requireValue(typeof value==='number'&&Number.isSafeInteger(value),'INVALID_TABLE_VALUE','integers');return value;};
@@ -126,7 +134,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  // Offline canonical authoring sorts carriers first. The stream is then
  // authored in exactly that order; equal clock objects remain separate rows.
  const carriers:Row[]=[];for(const {root}of singleton)if(raw[root]!==null){requireValue(record(raw[root]));carriers.push(raw[root] as Row);}carriers.push(...raw.changes as Row[]);carriers.sort((a,b)=>(a.rank as number)-(b.rank as number));
- for(const carrier of carriers){requireValue(record(carrier.change));const c=carrier.change,type=family(c.field as string);out.changes.push({field:c.field as string,rank:carrier.rank as number,operation:c.operation as string,value:c.value===null||type!=='integers'?null:save(c.field as string,c.value),text:c.value!==null&&type==='texts'?c.value as string:null,date:c.value!==null&&type==='dates'?date(c.value):[],evidence:evidence(c.evidence)});if(c.value!==null&&type==='clocks'){requireValue(record(c.value));out.clocks.push(structuredClone(c.value));}}
+ for(const carrier of carriers){requireValue(record(carrier.change));const c=carrier.change,type=family(c.field as string);requireValue(Object.hasOwn(out.changes,String(c.field))&&out.changes[String(c.field)]===null);out.changes[String(c.field)]={rank:carrier.rank as number,operation:c.operation as string,value:c.value===null||type!=='integers'?null:save(c.field as string,c.value),text:c.value!==null&&type==='texts'?c.value as string:null,date:c.value!==null&&type==='dates'?date(c.value):[],evidence:evidence(c.evidence)};if(c.value!==null&&type==='clocks'){requireValue(record(c.value));out.clocks.push(structuredClone(c.value));}}
  if(record(raw.query)){const q=raw.query;out.query=[{period:period(q.period),date:date(q.date),outputCalendar:q.outputCalendar as string|null,topic:q.topic as string|null,evidence:evidence(q.evidence)}];}
  out.uncertainties=(raw.uncertainties as Row[]).map(issue=>({fieldCode:issue.fieldCode as number,reason:issue.reason as string,alternatives:(issue.alternatives as Row[]).map(alternative=>({value:family(uncertaintyField(issue.fieldCode as number))==='integers'?save(uncertaintyField(issue.fieldCode as number),alternative.value):null,text:family(uncertaintyField(issue.fieldCode as number))==='texts'?alternative.value as string:null,date:family(uncertaintyField(issue.fieldCode as number))==='dates'?date(alternative.value):[],period:family(uncertaintyField(issue.fieldCode as number))==='periods'?period(alternative.value):[],evidence:evidence(alternative.evidence)}))}));
  for(const issue of raw.uncertainties as Row[])if(family(uncertaintyField(issue.fieldCode as number))==='clocks')for(const alternative of issue.alternatives as Row[]){requireValue(record(alternative.value));out.clocks.push(structuredClone(alternative.value));}
@@ -140,8 +148,17 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  const parsed=z.fromJSONSchema(smallContextSchemaV3(input).schema as JsonSchema).parse({...raw,directive:[],reply:[]}) as unknown as SmallContextWire;
  const book=primaryEvidenceSourceCodebook(input),used:Record<Family,Set<number>>={texts:new Set(),integers:new Set(),dates:new Set(),clocks:new Set(),periods:new Set()};
  for(const name of Object.keys(used) as Family[])requireValue(parsed[name].length<=128,'TABLE_CAPACITY_EXCEEDED',name);
- requireValue(parsed.changes.length<=13&&parsed.query.length<=1&&parsed.uncertainties.length<=4,'COLLECTION_CARDINALITY_INVALID');
- // Model data is never sorted or indexed by an authored number. Each
+ requireValue(parsed.query.length<=1&&parsed.uncertainties.length<=4,'COLLECTION_CARDINALITY_INVALID');
+ // Dictionary member order is meaningless. Validate every occupied rank before
+ // consuming any clock, then interpret the declared bounded rank addresses.
+ const ranked=new Map<number,SmallChangeCarrier&{field:string}>();
+ for(const [field,carrier]of Object.entries(parsed.changes))if(carrier!==null){
+  requireValue(Number.isSafeInteger(carrier.rank)&&carrier.rank>=0&&carrier.rank<=12&&!ranked.has(carrier.rank),'CHANGE_ORDER_INVALID');
+  ranked.set(carrier.rank,{...carrier,field});
+ }
+ const changes:Array<SmallChangeCarrier&{field:string}>=[];
+ for(let rank=0;rank<=12;rank++){const carrier=ranked.get(rank);if(carrier)changes.push(carrier);}
+ // Validated dictionary ranks define traversal; dictionary member order is ignored. Each
  // clock consumer takes the next declared stream row exactly once.
  let clockCursor=0;
  const nextClock=():Row=>{requireValue(clockCursor<parsed.clocks.length,'COLLECTION_CARDINALITY_INVALID','clocks');const index=clockCursor++;used.clocks.add(index);return parsed.clocks[index];};
@@ -160,8 +177,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  };
  const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
  const result:Row={operationCode:parsed.operation.code,requestTarget:parsed.operation.targetEvidence.length?{evidence:evidence(parsed.operation.targetEvidence)}:null,changes:[],query:null,uncertainties:[],conversationDirective:null,replyProposal:null,...Object.fromEntries(singleton.map(({root})=>[root,null]))};
- const fields=new Set<string>(),ranks=new Set<number>();let previous=-1;
- for(const row of parsed.changes){requireValue(!fields.has(row.field)&&Number.isSafeInteger(row.rank)&&row.rank>previous&&!ranks.has(row.rank),'CHANGE_ORDER_INVALID');fields.add(row.field);ranks.add(row.rank);previous=row.rank;
+ for(const row of changes){
   requireValue(row.operation==='CLEAR'?row.value===null&&row.text===null&&row.date.length===0:true,'CHANGE_VALUE_INVALID');
   const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.operation==='CLEAR'?null:authoredValue(row.field,row),evidence:evidence(row.evidence)}};
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);

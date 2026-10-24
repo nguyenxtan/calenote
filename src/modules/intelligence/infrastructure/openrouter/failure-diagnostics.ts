@@ -1,3 +1,4 @@
+import { parseJsonWithoutDuplicateMembers } from "./strict-json";
 import { InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 
@@ -138,7 +139,7 @@ export async function projectProviderFailure(input: {
       if (Object.hasOwn(object, key)) { const nested = project(object[key], depth + 1); if (nested !== undefined) out[key] = nested; }
     }
     if (typeof object.raw === "string" && encoder.encode(object.raw).byteLength <= 4096 && ++parses <= 3) {
-      try { const nested = project(JSON.parse(object.raw), depth + 1); if (nested !== undefined) out.raw = nested; } catch { /* Never copy raw. */ }
+      try { const nested = project(parseJsonWithoutDuplicateMembers(object.raw), depth + 1); if (nested !== undefined) out.raw = nested; } catch { /* Never copy raw. */ }
     }
     return Object.keys(out).length ? out : undefined;
   };
@@ -146,7 +147,7 @@ export async function projectProviderFailure(input: {
     let text: string;
     try { text = new TextDecoder("utf-8", { fatal: true }).decode(input.bytes); } catch { result.bodyState = "INVALID_UTF8"; return result; }
     try {
-      const raw: unknown = JSON.parse(text);
+      const raw: unknown = parseJsonWithoutDuplicateMembers(text);
       if (raw && typeof raw === "object" && !Array.isArray(raw)) {
         const error = (raw as Record<string, unknown>).error;
         if (error && typeof error === "object" && !Array.isArray(error)) {

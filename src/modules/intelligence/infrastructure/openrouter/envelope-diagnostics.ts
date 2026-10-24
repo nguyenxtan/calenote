@@ -1,3 +1,4 @@
+import { parseJsonWithoutDuplicateMembers } from "./strict-json";
 import { createHash } from "node:crypto";
 
 const finishTokens = new Set(["stop", "length", "error", "content_filter", "tool_calls", "function_call", "STOP", "MAX_TOKENS", "SAFETY", "RECITATION", "OTHER", "BLOCKLIST", "PROHIBITED_CONTENT", "MALFORMED_FUNCTION_CALL"]);
@@ -23,7 +24,7 @@ function errorContent(content: unknown, finish: unknown): ErrorContent {
   if (finish !== "error" || typeof content !== "string") return { state: "NOT_INSPECTED" };
   if (content.length > 32768 || new TextEncoder().encode(content).byteLength > 32768) return { state: "OVERSIZED" };
   let raw: unknown;
-  try { raw = JSON.parse(content); } catch { return { state: "MALFORMED" }; }
+  try { raw = parseJsonWithoutDuplicateMembers(content); } catch { return { state: "MALFORMED" }; }
   const root = object(raw), error = object(root.error), nestedCode = errorCode(error.code), code = errorCode(root.code);
   return { state: "JSON", jsonType: type(raw), errorPresent: Object.hasOwn(root, "error"), errorType: type(root.error),
     ...(nestedCode === undefined ? {} : { errorCode: nestedCode }), ...(code === undefined ? {} : { code }) };
