@@ -1,7 +1,7 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
 import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../../conversation/context-contract/field-capability';
-import {ContextInputSchema,SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
+import {ContextInputSchema,SLOT_NAMES,SlotValueSchemas,IntentSchema,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
@@ -21,6 +21,7 @@ const periodFields:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['
 const relativePeriods:Record<string,{kind:string;offset:number}>=Object.fromEntries(['WEEK','MONTH','WEEKEND'].flatMap(kind=>[[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']].map(([offset,label])=>[`${kind}_${label}`,{kind,offset:Number(offset)}])));
 const periodCodes=['DAY',...Object.keys(relativePeriods),'REST_OF_MONTH','NEXT_7_DAYS','UPCOMING','DATE_BOUNDS','UNSUPPORTED'];
 const fieldNames=Object.keys(UNCERTAINTY_FIELD_WIRE_CODE_V1);
+const uncertaintyControls=Object.fromEntries(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field,code])=>[String(code),{field,code}]));
 function uncertaintyField(code:number):string {const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,value])=>value===code);if(!entry)throw Error('SMALL_FIELD_CODE_INVALID');return entry[0];}
 type Family='texts'|'integers'|'dates'|'clocks'|'periods';
 function family(field:string):Family {
@@ -61,12 +62,13 @@ export function smallContextSchemaV3(input:ContextInput){
  const evidence={...arr({type:'string',enum:[...codes]}),minItems:1,maxItems:3};
  const nil={type:'null'},empty={...arr(nil),maxItems:0};
  const {$schema:ignoredClockSchema,...clockSchema}=z.toJSONSchema(ClockOperandSchema,{unrepresentable:'any',io:'input'});void ignoredClockSchema;
- const clockCell={...clockSchema,type:['object','null']};
+
  const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
  const eventDate=capability.eventDateYearNullRequired?obj({...date.anyOf[0].properties,year:nil}):date;
  const eventDateCell={...arr(eventDate),minItems:1,maxItems:1};
- const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
+ const periodBranch=(kinds:string[],dateValue:unknown,fromValue:unknown,throughValue:unknown,unsupportedKind:unknown)=>obj({kind:{type:'string',enum:kinds},date:dateValue,from:fromValue,through:throughValue,unsupportedKind});
+ const period={anyOf:[periodBranch(['DAY'],dateCell,empty,empty,nil),periodBranch(['DATE_BOUNDS'],empty,dateCell,dateCell,nil),periodBranch(periodCodes.filter(kind=>!['DAY','DATE_BOUNDS','UNSUPPORTED'].includes(kind)),empty,empty,empty,nil),periodBranch(['UNSUPPORTED'],empty,empty,empty,str)]};
  const periodCell={...arr(period),maxItems:1};
  // Shallow rows correlate field/type/empty cells without multiplying every
  // field by every operation, evidence pointer and intent combination.
@@ -90,13 +92,26 @@ export function smallContextSchemaV3(input:ContextInput){
  const targetEvidence={...arr({type:'string',enum:[...book.currentCodes]}),minItems:1,maxItems:3};
  // Do not infer CURRENT versus NEW from the relation certificate.
  const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
+ // Correlate codebook ownership before generation. Empty alternatives remain
+ // allowed; no mutation capability is repurposed as an uncertainty exclusion.
+ const uncertaintyRows:ReturnType<typeof obj>[]=[];
+ const uncertainty=(fields:string[],value:unknown,text:unknown,dateValue:unknown,periodValue:unknown,clockValue:unknown)=>uncertaintyRows.push(obj({fieldCode:{type:'string',enum:fields.map(field=>String(UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]))},reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value,text,date:dateValue,period:periodValue,clock:clockValue,evidence}))}));
+ uncertainty(['title','location','notes'],nil,str,empty,empty,nil);
+ uncertainty(['eventDate','reminderDate','endDate'],nil,nil,{...dateCell,minItems:1},empty,nil);
+ uncertainty(['eventTime','reminderTime'],nil,nil,empty,empty,clockSchema);
+ uncertainty(['occurrenceCount','leadOffsetDays'],integer,nil,empty,empty,nil);
+ uncertainty(['queryRange'],nil,nil,empty,{...periodCell,minItems:1},nil);
+ for(const field of ['calendar','frequency','eventRelation'] as const)uncertainty([field],nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty,empty,nil);
+ uncertainty(['intent'],nil,{type:'string',enum:[...IntentSchema.options]},empty,empty,nil);
+ uncertainty(['operation'],nil,{type:'string',enum:['CURRENT','NEW']},empty,empty,nil);
+ const queryRows=[obj({period:periodCell,date:empty,outputCalendar:nil,topic:nil,evidence}),obj({period:empty,date:dateCell,outputCalendar:{type:['string','null'],enum:[...SlotValueSchemas.calendar.options,null]},topic:nil,evidence}),obj({period:empty,date:empty,outputCalendar:nil,topic:{type:['string','null'],enum:['LUNAR','FINITE_SERIES','ANNUAL',null]},evidence})];
  // Ordinary collection maxima stay strict downstream: provider compilers may
  // unroll bounded object arrays. Typed/canonical collection checks and
  // guidance quarantine retain authority; direct-clock admission is unverified.
  const schema=obj({operation,
   changes:relationOnly?{...arr(changeItem),maxItems:1}:arr(changeItem),
-  query:{...arr(obj({period:periodCell,date:dateCell,outputCalendar:{type:['string','null'],enum:[...SlotValueSchemas.calendar.options,null]},topic:nullableString,evidence})),maxItems:1},
-  uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,clock:clockCell,evidence}))})),
+  query:{...arr({anyOf:queryRows}),maxItems:1},
+  uncertainties:arr({anyOf:uncertaintyRows}),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
   texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:empty,periods:empty});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:compilerNumericPrimitives(schema) as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
@@ -105,7 +120,7 @@ export interface SmallContextWire {
  operation:{code:string;targetEvidence:string[]};
  changes:Array<{field:string;rank:number;operation:string;value:number|null;text:string|null;date:Row[];clock:Row|null;evidence:string[]}>;
  query:Array<{period:Row[];date:Row[];outputCalendar:string|null;topic:string|null;evidence:string[]}>;
- uncertainties:Array<{fieldCode:number;reason:string;alternatives:Array<{value:number|null;text:string|null;date:Row[];period:Row[];clock:Row|null;evidence:string[]}>}>;
+ uncertainties:Array<{fieldCode:string;reason:string;alternatives:Array<{value:number|null;text:string|null;date:Row[];period:Row[];clock:Row|null;evidence:string[]}>}>;
  directive:Row[];reply:Array<{text:string}>;texts:string[];integers:number[];dates:Row[];clocks:Row[];periods:Row[];
 }
 const record=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -128,7 +143,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  for(const {root} of singleton)if(raw[root]!==null)add(raw[root]);
  (raw.changes as unknown[]).forEach(add);out.changes.sort((a,b)=>a.rank-b.rank);
  if(record(raw.query)){const q=raw.query;out.query=[{period:period(q.period),date:date(q.date),outputCalendar:q.outputCalendar as string|null,topic:q.topic as string|null,evidence:evidence(q.evidence)}];}
- out.uncertainties=(raw.uncertainties as Row[]).map(issue=>({fieldCode:issue.fieldCode as number,reason:issue.reason as string,alternatives:(issue.alternatives as Row[]).map(alternative=>({value:['texts','dates','periods','clocks'].includes(family(uncertaintyField(issue.fieldCode as number)))?null:save(uncertaintyField(issue.fieldCode as number),alternative.value),text:family(uncertaintyField(issue.fieldCode as number))==='texts'?alternative.value as string:null,date:family(uncertaintyField(issue.fieldCode as number))==='dates'?date(alternative.value):[],period:family(uncertaintyField(issue.fieldCode as number))==='periods'?period(alternative.value):[],clock:family(uncertaintyField(issue.fieldCode as number))==='clocks'?structuredClone(alternative.value) as Row:null,evidence:evidence(alternative.evidence)}))}));
+ out.uncertainties=(raw.uncertainties as Row[]).map(issue=>({fieldCode:String(issue.fieldCode),reason:issue.reason as string,alternatives:(issue.alternatives as Row[]).map(alternative=>({value:['texts','dates','periods','clocks'].includes(family(uncertaintyField(issue.fieldCode as number)))?null:save(uncertaintyField(issue.fieldCode as number),alternative.value),text:family(uncertaintyField(issue.fieldCode as number))==='texts'?alternative.value as string:null,date:family(uncertaintyField(issue.fieldCode as number))==='dates'?date(alternative.value):[],period:family(uncertaintyField(issue.fieldCode as number))==='periods'?period(alternative.value):[],clock:family(uncertaintyField(issue.fieldCode as number))==='clocks'?structuredClone(alternative.value) as Row:null,evidence:evidence(alternative.evidence)}))}));
  if(record(raw.conversationDirective))out.directive=[structuredClone(raw.conversationDirective)];
  if(record(raw.replyProposal))out.reply=[raw.replyProposal as {text:string}];
  return out;
@@ -163,7 +178,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);
  }
  if(parsed.query[0]){const q=parsed.query[0];inactive(parsed.operation.code==='4'||q.date.length===0,'QUERY_DATE');inactive(parsed.operation.code==='3'||q.period.length===0,'QUERY_PERIOD');result.query={period:period(q.period,true),date:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
- result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:authoredValue(field,a),evidence:evidence(a.evidence)}))};});
+ result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(typeof issue.fieldCode==='string'&&Object.hasOwn(uncertaintyControls,issue.fieldCode)&&issue.alternatives.length<=2);const control=uncertaintyControls[issue.fieldCode],field=control.field;return {fieldCode:control.code,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:authoredValue(field,a),evidence:evidence(a.evidence)}))};});
  for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length,'UNUSED_TABLE_ROWS',name);
  result.conversationDirective=Array.isArray(raw.directive)&&raw.directive.length<=1?(raw.directive[0]??null):{kind:'INVALID_PROVIDER_WIRE'};
  result.replyProposal=Array.isArray(raw.reply)&&raw.reply.length<=1?(raw.reply[0]??null):{invalid:true};

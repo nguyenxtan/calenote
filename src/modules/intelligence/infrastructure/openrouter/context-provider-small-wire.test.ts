@@ -18,15 +18,20 @@ it('preserves canonical interpretation with disjoint operation and date branches
  expect((operation as {anyOf:unknown[]}).anyOf).toHaveLength(2);
  const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const value=node as Record<string,unknown>;
   expect(value).not.toHaveProperty('oneOf');expect(value).not.toHaveProperty('$ref');expect(value).not.toHaveProperty('$defs');
-  if(value.anyOf&&node!==operation){const branches=value.anyOf as {properties:{kind?:{enum:string[]};field?:{enum:string[]};operation?:{enum:string[]}},additionalProperties:boolean}[];
-   if(branches.every(branch=>branch.properties.kind))expect(branches.map(b=>b.properties.kind!.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);
-   else {expect(branches.length).toBeLessThanOrEqual(10);const pairs=branches.flatMap(branch=>branch.properties.field!.enum.flatMap(field=>branch.properties.operation!.enum.map(op=>`${field}/${op}`)));expect(new Set(pairs).size).toBe(pairs.length);}
+  if(value.anyOf&&node!==operation){const branches=value.anyOf as Array<{properties:Record<string,{enum?:string[];type?:string}>;additionalProperties:boolean}>;
+   expect(branches.length).toBeLessThanOrEqual(10);
+   if(branches.every(branch=>branch.properties.kind)){const kinds=branches.flatMap(branch=>branch.properties.kind.enum!);expect(new Set(kinds).size).toBe(kinds.length);}
+   else if(branches.every(branch=>branch.properties.field)){const pairs=branches.flatMap(branch=>branch.properties.field.enum!.flatMap(field=>branch.properties.operation.enum!.map(op=>`${field}/${op}`)));expect(new Set(pairs).size).toBe(pairs.length);}
+   else if(branches.every(branch=>branch.properties.fieldCode)){const codes=branches.flatMap(branch=>branch.properties.fieldCode.enum!);expect(new Set(codes).size).toBe(16);for(const branch of branches)expect(branch.properties.fieldCode.type).toBe('string');}
+   else {expect(branches).toHaveLength(3);for(const branch of branches)expect(Object.keys(branch.properties)).toEqual(['period','date','outputCalendar','topic','evidence']);}
    for(const branch of branches)expect(branch.additionalProperties).toBe(false);
   }
   for(const child of Object.values(value))if(Array.isArray(child))child.forEach(visit);else visit(child);
  };visit(selected.schema);
  expect(JSON.stringify(operation).match(/"anyOf"/gu)).toHaveLength(1);
- expect(JSON.stringify(selected.schema).length).toBeLessThan(16000);
+ // Structural regression ceiling for the factored grammar, not provider admission.
+ // Runtime input/output/response/time ceilings are unchanged and tested separately.
+ expect(Buffer.byteLength(JSON.stringify(selected.schema))).toBeLessThan(26000);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(proposal,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
 });
 it('rejects unknown, fractional, negative or unused value references without coercion',()=>{
@@ -71,7 +76,7 @@ it('rejects malformed dates/period references and ranks but quarantines optional
  expect(decode(list).status).toBe('PARSED');
  for(const index of [-1,.5,999]){const altered=structuredClone(list);altered.query[0].period[0].date=index;expect(decode(altered).status).toBe('REFUSED');}
  const inactive=structuredClone(list);inactive.query[0].period[0].offset=1;expect(decode(inactive).status).toBe('REFUSED');
- const unsupported=structuredClone(list);unsupported.query[0].period[0].kind='UNSUPPORTED';unsupported.query[0].period[0].unsupportedKind='UNSUPPORTED_PERIOD';expect(decode(unsupported).status).toBe('PARSED');
+ const unsupported=structuredClone(list);unsupported.query[0].period[0].kind='UNSUPPORTED';unsupported.query[0].period[0].unsupportedKind='UNSUPPORTED_PERIOD';expect(decode(unsupported).status).toBe('REFUSED');unsupported.query[0].period[0].date=[];expect(decode(unsupported).status).toBe('PARSED');
 });
 
 it('reports exact finite small-table refusal controls without retaining authored content',()=>{
@@ -209,7 +214,7 @@ it('owns queryRange alternative periods and refuses mixed or wrong-owner alterna
  const mixedDate=structuredClone(wire);mixedDate.uncertainties[0].alternatives[0].date=[{kind:'RELATIVE_DAY',calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:0,weekday:null,qualifier:null}];expect(decode(mixedDate).status).toBe('REFUSED');
  for(const period of [{kind:'DAY',date:{kind:'RELATIVE_DAY',offsetDays:0}},{kind:'DATE_BOUNDS',from:{kind:'RELATIVE_DAY',offsetDays:0},through:{kind:'RELATIVE_DAY',offsetDays:1}}]){const c=ConversationInterpretationV3Schema.parse({...canonical,uncertainties:[{field:'queryRange',reason:'AMBIGUOUS',alternatives:[{value:period,evidence}]}]});expect(decode(encodeSmallContextV3(c,input))).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(c,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));}
  const absent=ConversationInterpretationV3Schema.parse({...canonical,query:{kind:'LIST',statusScope:'DEFAULT',period:null,evidence}});expect(encodeSmallContextV3(absent,input).query[0].period).toEqual([]);expect(decode(encodeSmallContextV3(absent,input))).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(absent,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
- const wrong=structuredClone(wire);wrong.uncertainties[0].fieldCode=0;expect(decode(wrong).status).toBe('REFUSED');
+ const wrong=structuredClone(wire);Object.assign(wrong.uncertainties[0],{fieldCode:0});expect(decode(wrong).status).toBe('REFUSED');
 });
 
 it('projects nested typed query failures without retaining authored query content',()=>{
@@ -219,7 +224,7 @@ it('projects nested typed query failures without retaining authored query conten
   const wire=encodeSmallContextV3(canonical,input);wire.query[0][field]='PRIVATE_QUERY_SENTINEL';
   const diagnostics:Array<{issues:Array<{path:Array<string|number>}>}>=[];
   expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
-  expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')===(field==='outputCalendar'?`query.0.${field}`:`query.${field}`)))).toBe(true);
+  expect(diagnostics.some(d=>d.issues.some(i=>i.path[0]==='query'&&i.path[1]===0))).toBe(true);expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'GENERATION_SHAPE_INVALID'}}]});
   expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE_QUERY_SENTINEL');
  }
 });
@@ -318,8 +323,9 @@ it('identifies the inactive operand boundary without persisting authored values'
  expect(JSON.stringify(diagnostics)).not.toContain(input.turns[input.currentTurn].text);
 });
 it('selects strict active-only DateOperand shapes and rejects the observed relative-calendar mixture at generation',()=>{
- const schema=smallContextSchemaV3(input).schema as unknown as {properties:{query:{items:{properties:{date:{items:unknown}}}}}};
- const selected=z.fromJSONSchema(schema.properties.query.items.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:{query:{items:{anyOf:Array<{properties:{date:{items:{type?:string}}}}>}}}};
+ const dateRow=schema.properties.query.items.anyOf.find(row=>row.properties.date.items.type!=='null')!;
+ const selected=z.fromJSONSchema(dateRow.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
  expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2}).success).toBe(true);
  expect(selected.safeParse({kind:'RELATIVE_DAY',calendar:'GREGORIAN',day:null,month:null,year:null,leapMonth:null,offsetDays:-2,weekday:null,qualifier:null}).success).toBe(false);
  expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2,calendar:null}).success).toBe(false);

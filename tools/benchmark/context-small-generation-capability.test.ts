@@ -5,9 +5,10 @@ import {z} from 'zod';
 import {runContextFixtureCampaign,createContextContractProbe} from './context-contract-probe';
 import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
 import {frozenContextProposal} from './context-contract-fixtures';
-import {SLOT_NAMES,ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
+import {SLOT_NAMES,SlotValueSchemas,IntentSchema,ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
 import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../src/modules/conversation/context-contract/field-capability';
 import {encodeSmallContextV3,smallContextSchemaV3,decodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
 const captured:Array<{input:ContextInput;id:string;index:number}>=[];
 beforeAll(async()=>{
@@ -101,7 +102,7 @@ it('measures schema structure across all healthy inputs without claiming compile
   const item=(schema as {properties:{changes:{items:{anyOf?:unknown[]}}}}).properties.changes.items;
   return {id:row.id,index:row.index,certified:isBoundRelationUncertaintyAbsent(row.input),bytes:Buffer.byteLength(JSON.stringify(schema)),unions,maxWidth,maxDepth,maxNumericBound,rowAlternatives:item.anyOf?.length??1};
  });
- expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.maxNumericBound===0)).toBe(true);
+ expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.bytes<30000)).toBe(true);expect(metrics.every(row=>row.maxNumericBound===0)).toBe(true);
  if(process.env.CALENOTE_CONTRACT_AUDIT_OUT)writeFileSync(process.env.CALENOTE_CONTRACT_AUDIT_OUT,JSON.stringify({version:'small-producer-contract-audit-1',protocol:CONTEXT_SMALL_PROTOCOL_V3,inputs:captured.length,slots:SLOT_NAMES,operations:['SET','REPLACE','CLEAR'],certifiedContexts:metrics.filter(row=>row.certified).length,certifiedMutationCases:metrics.filter(row=>row.certified).length*SLOT_NAMES.length*3,initialCertifiedContexts:captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input)).length,initialMutationCases:captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input)).length*SLOT_NAMES.length*3,maxBytes:Math.max(...metrics.map(row=>row.bytes)),maxRowAlternatives:Math.max(...metrics.map(row=>row.rowAlternatives)),maxUnionWidth:Math.max(...metrics.map(row=>row.maxWidth)),compilerAdmission:'UNVERIFIED',metricsOnly:true,testResultsRecordedSeparately:true,metrics},null,2)+'\n');
 });
 
@@ -135,10 +136,10 @@ it('does not apply initial-only restrictions to independent relation, date, cade
 it('keeps ordinary collection cardinality as strict downstream refusal or advice quarantine without provider unrolling',()=>{
  const row=captured.find(row=>!isBoundRelationUncertaintyAbsent(row.input)&&original(row).changes.length>0)!,wire=original(row),schema=smallContextSchemaV3(row.input).schema as unknown as {properties:Record<string,{maxItems?:number;items:unknown}>};
  for(const field of ['changes','uncertainties','directive','reply'])expect(schema.properties[field]).not.toHaveProperty('maxItems');
- const item=schema.properties.uncertainties.items as {properties:Record<string,unknown>};expect(item.properties.alternatives).not.toHaveProperty('maxItems');
+ const item=schema.properties.uncertainties.items as {anyOf:Array<{properties:Record<string,unknown>}>};for(const row of item.anyOf)expect(row.properties.alternatives).not.toHaveProperty('maxItems');
  const altered=()=>structuredClone(wire),accept=validator(row.input);
  const changes=altered();changes.changes=Array.from({length:14},()=>structuredClone(wire.changes[0]));expect(accept.safeParse(changes).success).toBe(true);expect(decodeSmallContextV3(changes,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
- const issue={fieldCode:0,reason:'MISSING',alternatives:[]};const uncertainties=altered();uncertainties.uncertainties=Array.from({length:5},()=>structuredClone(issue));expect(accept.safeParse(uncertainties).success).toBe(true);expect(decodeSmallContextV3(uncertainties,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const issue={fieldCode:'0',reason:'MISSING',alternatives:[]};const uncertainties=altered();uncertainties.uncertainties=Array.from({length:5},()=>structuredClone(issue));expect(accept.safeParse(uncertainties).success).toBe(true);expect(decodeSmallContextV3(uncertainties,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const alt={value:null,text:'synthetic',date:[],period:[],clock:null,evidence:[`U${row.input.currentTurn}`]};const alternatives=altered();alternatives.uncertainties=[{...issue,alternatives:[alt,alt,alt]}];expect(accept.safeParse(alternatives).success).toBe(true);expect(decodeSmallContextV3(alternatives,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const clocks=altered();clocks.clocks=Array.from({length:11},()=>({hour:8,minute:0,qualifier:'H24'}));expect(accept.safeParse(clocks).success).toBe(false);expect(decodeSmallContextV3(clocks,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const tooMuchAdvice={...wire,directive:Array.from({length:2},()=>({kind:'HELP',field:null,reason:null,issue:null,topic:null})),reply:[{text:'a'},{text:'b'}]};expect(decodeSmallContextV3(tooMuchAdvice,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('PARSED');
@@ -180,4 +181,30 @@ it('uses equivalent nullable clock-object semantics with less grammar than objec
  const object={type:'object',properties:{hour:{type:'integer'},minute:{type:'integer'},qualifier:{type:'string',enum:['H24','AM','PM','UNKNOWN']}},required:['hour','minute','qualifier'],additionalProperties:false};const nullable={...object,type:['object','null']},branched={anyOf:[object,{type:'null'}]},a=z.fromJSONSchema(nullable as Parameters<typeof z.fromJSONSchema>[0]),b=z.fromJSONSchema(branched as Parameters<typeof z.fromJSONSchema>[0]);
  for(const value of [null,{hour:8,minute:0,qualifier:'H24'},{hour:25,minute:0,qualifier:'H24'},[],[{}],0,'clock',{hour:8,qualifier:'H24'},{hour:'8',minute:0,qualifier:'H24'},{hour:8,minute:0,qualifier:'BAD'},{hour:8,minute:0,qualifier:'H24',extra:1}])expect(a.safeParse(value).success).toBe(b.safeParse(value).success);
  expect(a.safeParse(null).success).toBe(true);expect(a.safeParse({hour:8,minute:0,qualifier:'H24'}).success).toBe(true);expect(a.safeParse([]).success).toBe(false);expect(JSON.stringify(nullable).length).toBeLessThan(JSON.stringify(branched).length);
+});
+
+it('correlates every finite uncertainty code with its owned alternative family without forcing alternatives',()=>{
+ const row=captured[0],accept=validator(row.input),base=original(row),evidence=[`U${row.input.currentTurn}`],empty={value:null,text:null,date:[],period:[],clock:null,evidence};
+ const cells={text:{...empty,text:'synthetic'},integer:{...empty,value:2},date:{...empty,date:[{kind:'RELATIVE_DAY',offsetDays:0}]},clock:{...empty,clock:{hour:8,minute:0,qualifier:'H24'}},period:{...empty,period:[{kind:'MONTH_CURRENT',date:[],from:[],through:[],unsupportedKind:null}]}};
+ for(const [field,code]of Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1)){
+  const family=['eventDate','reminderDate','endDate'].includes(field)?'date':['eventTime','reminderTime'].includes(field)?'clock':['occurrenceCount','leadOffsetDays'].includes(field)?'integer':field==='queryRange'?'period':'text';
+  const alt=structuredClone(cells[family]);if(field==='intent')alt.text=IntentSchema.options[0];if(field==='operation')alt.text='CURRENT';if(['calendar','frequency','eventRelation'].includes(field))alt.text=SlotValueSchemas[field as 'calendar'|'frequency'|'eventRelation'].options[0];
+  const payload=(alternatives:unknown[])=>({...base,uncertainties:[{fieldCode:String(code),reason:'AMBIGUOUS',alternatives}]});expect(accept.safeParse(payload([])).success,field+'/empty').toBe(true);expect(accept.safeParse(payload([alt])).success,field+'/owned').toBe(true);
+  for(const [wrong,cell]of Object.entries(cells))if(wrong!==family)expect(accept.safeParse(payload([cell])).success,field+'/'+wrong).toBe(false);
+  if(['intent','operation','calendar','frequency','eventRelation'].includes(field))expect(accept.safeParse(payload([{...empty,text:'NOT_CANONICAL'}])).success,field+'/enum').toBe(false);
+  expect(accept.safeParse({...payload([]),uncertainties:[{fieldCode:code,reason:'MISSING',alternatives:[]}]}).success,field+'/legacyInteger').toBe(false);
+ }
+ for(const code of ['16','-1','0.0','00','PRIVATE'])expect(accept.safeParse({...base,uncertainties:[{fieldCode:code,reason:'MISSING',alternatives:[]}]}).success).toBe(false);
+});
+it('factors period and query ownership without multiplying inactive sibling cells or forcing missing operands',()=>{
+ const row=captured[0],wire=original(row),accept=validator(row.input),evidence=[`U${row.input.currentTurn}`],date={kind:'RELATIVE_DAY',offsetDays:0},base={period:[],date:[],outputCalendar:null,topic:null,evidence};
+ const query=(cell:unknown)=>({...wire,query:[cell]});expect(accept.safeParse(query(base)).success).toBe(true);
+ const period=(kind:string):Record<string,unknown>=>({kind,date:[],from:[],through:[],unsupportedKind:null});
+ for(const kind of ['DAY','DATE_BOUNDS','MONTH_CURRENT','UNSUPPORTED']){
+  const p=period(kind);if(kind==='UNSUPPORTED')p.unsupportedKind='UNKNOWN_PERIOD';expect(accept.safeParse(query({...base,period:[p]})).success,kind+'/missing').toBe(true);
+  const wrong=structuredClone(p);if(kind==='DAY')wrong.from=[date];else wrong.date=[date];expect(accept.safeParse(query({...base,period:[wrong]})).success,kind+'/inactive').toBe(false);
+ }
+ expect(accept.safeParse(query({...base,period:[period('MONTH_CURRENT')],date:[date]})).success).toBe(false);
+ expect(accept.safeParse(query({...base,date:[date],topic:'LUNAR'})).success).toBe(false);
+ expect(accept.safeParse(query({...base,period:[period('MONTH_CURRENT')],outputCalendar:'GREGORIAN'})).success).toBe(false);
 });
