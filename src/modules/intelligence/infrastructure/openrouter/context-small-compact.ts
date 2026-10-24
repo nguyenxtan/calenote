@@ -15,7 +15,7 @@ export const COMPACT_KEYS={
  directive:{kind:'k',field:'f',reason:'r',issue:'i',topic:'t'},reply:{text:'t'},
 } as const;
 export const COMPACT_ENUMS={
- mutation:{KEEP:'k',SET:'s',REPLACE:'r',CLEAR:'c'},date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
+ mutation:{SET:'s',REPLACE:'r',CLEAR:'c'},date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
  calendar:{GREGORIAN:'g',LUNAR_VN:'l'},weekday:{THIS_WEEK:'t',NEXT_WEEK:'n',UNRESOLVED:'u'},
  clock:{H24:'h',AM:'a',PM:'p',UNKNOWN:'u'},frequency:{ONCE:'o',DAILY:'d',WEEKLY:'w',MONTHLY:'m',YEARLY:'y',UNKNOWN:'u'},
  relation:{BEFORE_EVENT:'b',INCLUDING_EVENT:'i',STARTING_ON:'s'},

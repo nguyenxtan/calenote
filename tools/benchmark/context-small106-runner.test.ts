@@ -42,7 +42,7 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   const fieldCapability=JSON.parse(request.messages[1].content).fieldCapability;
   if(fieldCapability.eventDateYearNullRequired){
    const bad=structuredClone(wire) as unknown as ReturnType<typeof encodeSmallContextV3>;
-   const row=(bad.c as Record<string,{d:Array<Record<string,unknown>>}>).d;
+   const row=(bad.c as Record<string,Array<{d:Array<Record<string,unknown>>}>>).d[0];
    if(row?.d[0]){row.d[0].y=[2026];expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
   }
   if(malformed)wire.q=JSON.stringify(wire.q);
@@ -86,7 +86,7 @@ it('excludes an ungrounded series-count offset at the small generation boundary 
  const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1));
  const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
  expect(generation.safeParse(wire).success).toBe(true);
- const bad=structuredClone(wire);(bad.c as Record<string,unknown>).l={r:[0],o:'s',v:[2],t:[],d:[],e:['U2'],k:[]};
+ const bad=structuredClone(wire);(bad.c as Record<string,unknown>).l=[{r:0,o:'s',v:[2],t:[],d:[],e:['U2'],k:[]}];
  expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');
  expect(generation.safeParse(bad).success).toBe(false);
 },30000);
@@ -98,9 +98,9 @@ it('does not admit date or cadence rewrites for a certified retained-series rela
  const input=ContextInputSchema.parse(captured),proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1));
  const {isBoundRelationUncertaintyAbsent}=await import('../../src/modules/conversation/context-contract/field-capability');expect(isBoundRelationUncertaintyAbsent(input)).toBe(true);
  const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);expect(generation.safeParse(wire).success).toBe(true);
- const bad=structuredClone(wire);(bad.c as Record<string,unknown>).f={r:[0],o:'s',v:[],t:[],d:[{k:'r',c:[],d:[],m:[],y:[],l:[],o:[-2],w:[],q:[]}],e:['U2'],k:[]};
+ const bad=structuredClone(wire);(bad.c as Record<string,unknown>).f=[{r:0,o:'s',v:[],t:[],d:[{k:'r',c:[],d:[],m:[],y:[],l:[],o:[-2],w:[],q:[]}],e:['U2'],k:[]}];
  expect(generation.safeParse(bad).success).toBe(false);
- for(const field of ['frequency','occurrenceCount']){const cadence=structuredClone(wire);(cadence.c as Record<string,unknown>)[COMPACT_KEYS.fields[field as 'frequency'|'occurrenceCount']]={r:[1],o:'r',v:field==='occurrenceCount'?[2]:[],t:field==='frequency'?['d']:[],d:[],e:['U2'],k:[]};expect(generation.safeParse(cadence).success).toBe(false);expect(decodeSmallContextV3(cadence,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
+ for(const field of ['frequency','occurrenceCount']){const cadence=structuredClone(wire);(cadence.c as Record<string,unknown>)[COMPACT_KEYS.fields[field as 'frequency'|'occurrenceCount']]=[{r:1,o:'r',v:field==='occurrenceCount'?[2]:[],t:field==='frequency'?['d']:[],d:[],e:['U2'],k:[]}];expect(generation.safeParse(cadence).success).toBe(false);expect(decodeSmallContextV3(cadence,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
  for(const text of ['Ngày mai nhắc tôi.','Nhắc trước 3 ngày.','Không nhắc trước 2 ngày.','Tôi chỉ trích câu “Nhắc trước 2 ngày”.','Nếu nhắc trước 2 ngày thì sao?']){
   const independent=structuredClone(input);independent.turns[independent.currentTurn].text=text;expect(isBoundRelationUncertaintyAbsent(independent)).toBe(false);
   const independentSchema=smallContextSchemaV3(independent).schema as unknown as {properties:{c:{properties:Record<string,unknown>}}};const fields=Object.keys(independentSchema.properties.c.properties);for(const field of ['reminderDate','frequency','occurrenceCount'])expect(fields).toContain(COMPACT_KEYS.fields[field as 'reminderDate'|'frequency'|'occurrenceCount']);
