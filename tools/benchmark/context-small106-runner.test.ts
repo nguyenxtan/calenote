@@ -10,7 +10,7 @@ import {admitCanonicalCampaign,scoreContextCampaign,type ContextManifest} from '
 import {frozenContextProposal} from './context-contract-fixtures';
 import {ContextInputSchema,ConversationInterpretationV3Schema} from '../../src/modules/conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
-import {encodeSmallContextV3,decodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import {encodeSmallContextV3,decodeSmallContextV3,smallContextSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
 it.each([false,true])('small106 frozen formal pilot uses typed application path (malformed=%s)',async malformed=>{
  const directory=mkdtempSync(join(tmpdir(),'small106-qualification-'));let calls=0;
  const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};
@@ -71,4 +71,21 @@ it('preserves all frozen original/development/heldout oracles through offline sm
  // Pure declarative fixture transport. No observable gateway or paid authority.
  const observed=await runContextFixtureCampaign(planned,{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},frozenContextProposal);
  expect(scoreContextCampaign(planned,observed)).toMatchObject({gate:'PASS',plannedScripts:80,passedScripts:80,plannedTurns:158,passedTurns:158,healthyPlanned:144,healthyFullSchemaValid:144,detailPlanned:3941,detailPassed:3941,safetyFailures:0,heldoutPassed:32,plannedActions:5,passedActions:5,failedScripts:[],failedMandatory:[]});
+},30000);
+
+
+it('excludes an ungrounded series-count offset at the small generation boundary before typed decoding',async()=>{
+ const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};
+ const planned=admitCanonicalCampaign(manifest,'FULL').filter(script=>script.executionId==='R02');expect(planned).toHaveLength(1);
+ let captured:ReturnType<typeof ContextInputSchema.parse>|undefined;
+ await runContextFixtureCampaign(planned,{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},(input,id,index)=>{
+  if(index===1)captured=structuredClone(input);
+  return frozenContextProposal(input,id,index);
+ });expect(captured).toBeDefined();const input=ContextInputSchema.parse(captured);
+ const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1));
+ const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(generation.safeParse(wire).success).toBe(true);
+ const bad=structuredClone(wire);bad.changes=[{field:'leadOffsetDays',rank:0,operation:'SET',value:2,text:null,date:[],evidence:['U2']}];
+ expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');
+ expect(generation.safeParse(bad).success).toBe(false);
 },30000);

@@ -1,5 +1,6 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
+import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS} from '../../../conversation/context-contract/field-capability';
 import {ContextInputSchema,SLOT_NAMES,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
@@ -33,7 +34,9 @@ function family(field:string):Family {
 /** A fixed typed grammar. Input selects evidence codes before transport exists.
  * Table references replace polymorphic value schemas; no JSON-in-string. */
 export function smallContextSchemaV3(input:ContextInput){
- const codes=primaryEvidenceSourceCodebook(ContextInputSchema.parse(input)).codes;
+ const parsed=ContextInputSchema.parse(input),codes=primaryEvidenceSourceCodebook(parsed).codes;
+ const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
+ const changeFields=SLOT_NAMES.filter(field=>!numericFields.has(field)||allowedNumeric.has(field));
  const evidence=arr({type:'string',enum:[...codes]});
  const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
@@ -42,7 +45,7 @@ export function smallContextSchemaV3(input:ContextInput){
  // The operation header correlates code and target presence in two branches.
  const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence:{...evidence,minItems:1,maxItems:3}}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...evidence,maxItems:0}})]};
  const schema=obj({operation,
-  changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
+  changes:arr(obj({field:{type:'string',enum:changeFields},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
   query:arr(obj({period:periodCell,date:dateCell,outputCalendar:nullableString,topic:nullableString,evidence})),
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
