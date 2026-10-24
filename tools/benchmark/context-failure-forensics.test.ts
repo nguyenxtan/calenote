@@ -21,3 +21,13 @@ it('skips successful model content and stops oversized evidence without returnin
  const result=await sealProviderFailure(new Response('x'.repeat(32769),{status:404}),keys.publicKey.export({type:'spki',format:'pem'}).toString());
  expect(result).toEqual({state:'CAPTURE_UNAVAILABLE',reason:'BODY_LIMIT'});
 });
+it('explicit Pilot opt-in retains encrypted HTTP200 evidence for offline decoder diagnosis',async()=>{
+ const keys=generateKeyPairSync('rsa',{modulusLength:2048});
+ const body=JSON.stringify({choices:[{message:{content:'SYNTHETIC_PRIVATE_TYPED_PAYLOAD'}}]});
+ const r=await sealProviderFailure(new Response(body,{status:200}),keys.publicKey.export({type:'spki',format:'pem'}).toString(),true);
+ expect(r.state).toBe('SEALED');expect(JSON.stringify(r)).not.toContain('SYNTHETIC_PRIVATE_TYPED_PAYLOAD');
+ if(r.state!=='SEALED')throw Error('not sealed');
+ const key=privateDecrypt({key:keys.privateKey,oaepHash:'sha256',padding:constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(r.wrappedKey,'base64'));
+ const decipher=createDecipheriv('aes-256-gcm',key,Buffer.from(r.iv,'base64'));decipher.setAuthTag(Buffer.from(r.authTag,'base64'));
+ expect(Buffer.concat([decipher.update(Buffer.from(r.ciphertext,'base64')),decipher.final()]).toString()).toBe(body);
+});

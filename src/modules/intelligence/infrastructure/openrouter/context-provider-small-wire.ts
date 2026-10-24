@@ -91,15 +91,16 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  for(const name of Object.keys(used) as Family[])requireValue(parsed[name].length<=128,'TABLE_CAPACITY_EXCEEDED',name);
  requireValue(parsed.changes.length<=13&&parsed.query.length<=1&&parsed.uncertainties.length<=4,'COLLECTION_CARDINALITY_INVALID');
  const at=(name:Family,index:unknown):unknown=>{requireValue(typeof index==='number'&&Number.isSafeInteger(index)&&index>=0&&index<parsed[name].length,'TABLE_REFERENCE_INVALID',name);used[name].add(index);return parsed[name][index];};
- const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))requireValue(item===null,'INACTIVE_VALUE_NON_NULL');return Object.fromEntries(keys.map(key=>[key,value[key]]));};
+ const inactive=(valid:unknown,location:SmallTableDiagnostic['location'])=>{if(!valid)throw new SmallTableError({reason:'INACTIVE_VALUE_NON_NULL',location});};
+ const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))inactive(item===null,'PADDED_OPERAND');return Object.fromEntries(keys.map(key=>[key,value[key]]));};
  const date=(rows:Row[]):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','dates');if(!rows.length)return null;const row=rows[0],keys=dateFields[String(row.kind)];requireValue(keys);return active(row,keys);};
- const period=(rows:Row[],padded:boolean):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','periods');if(!rows.length)return null;const row=rows[0],relative=Object.hasOwn(relativePeriods,String(row.kind))?relativePeriods[String(row.kind)]:undefined;const unsupported=row.kind==='UNSUPPORTED';requireValue(unsupported?typeof row.unsupportedKind==='string'&&!Object.hasOwn(periodFields,row.unsupportedKind)&&!periodCodes.includes(row.unsupportedKind):row.unsupportedKind===null,'INACTIVE_VALUE_NON_NULL');const value:Row={kind:unsupported?row.unsupportedKind:relative?.kind??row.kind,date:date(row.date as Row[]),offset:relative?.offset??null,from:date(row.from as Row[]),through:date(row.through as Row[])};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
+ const period=(rows:Row[],padded:boolean):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','periods');if(!rows.length)return null;const row=rows[0],relative=Object.hasOwn(relativePeriods,String(row.kind))?relativePeriods[String(row.kind)]:undefined;const unsupported=row.kind==='UNSUPPORTED';inactive(unsupported?typeof row.unsupportedKind==='string'&&!Object.hasOwn(periodFields,row.unsupportedKind)&&!periodCodes.includes(row.unsupportedKind):row.unsupportedKind===null,'PERIOD_UNSUPPORTED_KIND');const value:Row={kind:unsupported?row.unsupportedKind:relative?.kind??row.kind,date:date(row.date as Row[]),offset:relative?.offset??null,from:date(row.from as Row[]),through:date(row.through as Row[])};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
  const value=(field:string,index:unknown):unknown=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');return at(type,index);};
  const authoredValue=(field:string,row:{value:number|null;text:string|null;date:Row[];period?:Row[]}):unknown=>{
   if(family(field)==='periods'){requireValue(row.value===null&&row.text===null&&row.date.length===0&&row.period?.length===1,'CHANGE_VALUE_INVALID');return period(row.period,false);}
-  requireValue(!row.period?.length,'INACTIVE_VALUE_NON_NULL');
+  inactive(!row.period?.length,'NON_PERIOD_ALTERNATIVE');
   if(family(field)==='dates'){requireValue(row.value===null&&row.text===null&&row.date.length===1,'CHANGE_VALUE_INVALID');return date(row.date);}
-  requireValue(row.date.length===0,'INACTIVE_VALUE_NON_NULL');
+  inactive(row.date.length===0,'NON_DATE_VALUE');
   if(family(field)==='texts'){requireValue(row.value===null&&typeof row.text==='string','CHANGE_VALUE_INVALID');return row.text;}
   requireValue(row.text===null&&row.value!==null,'CHANGE_VALUE_INVALID');if(family(field)==='integers'){requireValue(Number.isSafeInteger(row.value),'INVALID_TABLE_VALUE','integers');return row.value;}return value(field,row.value);
  };
@@ -111,7 +112,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
   const carrier={rank:row.rank,change:{field:row.field,operation:row.operation,value:row.operation==='CLEAR'?null:authoredValue(row.field,row),evidence:evidence(row.evidence)}};
   const definition=singleton.find(({field})=>field===row.field);if(definition)result[definition.root]=carrier;else (result.changes as unknown[]).push(carrier);
  }
- if(parsed.query[0]){const q=parsed.query[0];requireValue(parsed.operation.code==='4'||q.date.length===0,'INACTIVE_VALUE_NON_NULL');requireValue(parsed.operation.code==='3'||q.period.length===0,'INACTIVE_VALUE_NON_NULL');result.query={period:period(q.period,true),date:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
+ if(parsed.query[0]){const q=parsed.query[0];inactive(parsed.operation.code==='4'||q.date.length===0,'QUERY_DATE');inactive(parsed.operation.code==='3'||q.period.length===0,'QUERY_PERIOD');result.query={period:period(q.period,true),date:date(q.date),outputCalendar:q.outputCalendar,topic:q.topic,evidence:evidence(q.evidence)};}
  result.uncertainties=parsed.uncertainties.map(issue=>{requireValue(Number.isSafeInteger(issue.fieldCode)&&issue.alternatives.length<=2);const field=uncertaintyField(issue.fieldCode);return {fieldCode:issue.fieldCode,reason:issue.reason,alternatives:issue.alternatives.map(a=>({value:authoredValue(field,a),evidence:evidence(a.evidence)}))};});
  for(const name of Object.keys(used) as Family[])requireValue(used[name].size===parsed[name].length,'UNUSED_TABLE_ROWS',name);
  result.conversationDirective=Array.isArray(raw.directive)&&raw.directive.length<=1?(raw.directive[0]??null):{kind:'INVALID_PROVIDER_WIRE'};

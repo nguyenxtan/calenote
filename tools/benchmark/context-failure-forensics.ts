@@ -1,7 +1,7 @@
 /** Pilot-only encrypted evidence. No credentials, network or plaintext persistence. */
 import {createCipheriv,createHash,publicEncrypt,randomBytes,constants} from 'node:crypto';
-export async function sealProviderFailure(response:Response,publicKey:string){
- if(response.status===200)return {state:'NOT_FAILURE'} as const;
+export async function sealProviderFailure(response:Response,publicKey:string,includeSuccess=false){
+ if(response.status===200&&!includeSuccess)return {state:'NOT_FAILURE'} as const;
  let reader:ReadableStreamDefaultReader<Uint8Array>|undefined,timer:ReturnType<typeof setTimeout>|undefined;
  try{
   reader=response.clone().body?.getReader();if(!reader)return {state:'CAPTURE_UNAVAILABLE',reason:'BODY_MISSING'} as const;

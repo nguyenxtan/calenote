@@ -301,3 +301,11 @@ it('owns integer values inline in changes and alternatives with no integer-table
  const legacy=structuredClone(wire);legacy.integers=[2,3];legacy.changes[0].value=0;legacy.changes[1].value=1;expect(numericDecode(legacy).status).toBe('REFUSED');
  const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-operation-header-6',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-operation-header-6'};expect(decodeSmallContextV3(wire,old,undefined,undefined,numericInput).status).toBe('REFUSED');
 });
+it('identifies the inactive operand boundary without persisting authored values',()=>{
+ const wire=encodeSmallContextV3(proposal,input);expect(wire.query).toHaveLength(1);
+ wire.query[0].date=[{kind:'RELATIVE_DAY',calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:0,weekday:null,qualifier:null}];
+ const diagnostics:unknown[]=[];
+ expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
+ expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'INACTIVE_VALUE_NON_NULL',location:'QUERY_DATE'}}]});
+ expect(JSON.stringify(diagnostics)).not.toContain(input.turns[input.currentTurn].text);
+});
