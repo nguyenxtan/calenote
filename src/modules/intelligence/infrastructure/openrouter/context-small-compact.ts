@@ -6,6 +6,7 @@ export const COMPACT_KEYS={
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
  change:{rank:'r',operation:'o',value:'v',text:'t',date:'d',evidence:'e',clock:'k'},
+ queryCarriers:{list:'l',calendar:'c',capability:'b'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
  uncertainty:{fieldCode:'f',reason:'r',alternatives:'a'},
  alternative:{value:'v',text:'t',date:'d',period:'p',evidence:'e',clock:'k'},
@@ -27,8 +28,9 @@ function check(valid:unknown):asserts valid {if(!valid)throw Error('COMPACT_SHAP
 function invert(map:Readonly<Record<string,string>>){check(new Set(Object.values(map)).size===Object.keys(map).length);return Object.fromEntries(Object.entries(map).map(([key,value])=>[value,key]));}
 for(const map of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)])invert(map);
 function child(scope:Scope,key:string):Scope {
- if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'query',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
+ if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'queryCarriers',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
  if(scope==='fields')return 'change';
+ if(scope==='queryCarriers')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
  if(key==='period')return 'period';
  if(key==='clock')return 'clock';
