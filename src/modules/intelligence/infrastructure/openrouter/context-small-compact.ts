@@ -5,10 +5,10 @@ export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
- change:{rank:'r',operation:'o',value:'v',text:'t',date:'d',evidence:'e'},
+ change:{rank:'r',operation:'o',value:'v',text:'t',date:'d',evidence:'e',clock:'k'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
  uncertainty:{fieldCode:'f',reason:'r',alternatives:'a'},
- alternative:{value:'v',text:'t',date:'d',period:'p',evidence:'e'},
+ alternative:{value:'v',text:'t',date:'d',period:'p',evidence:'e',clock:'k'},
  date:{kind:'k',calendar:'c',day:'d',month:'m',year:'y',leapMonth:'l',offsetDays:'o',weekday:'w',qualifier:'q'},
  period:{kind:'k',date:'d',from:'f',through:'t',unsupportedKind:'u'},
  clock:{hour:'h',minute:'m',qualifier:'q'},
@@ -31,6 +31,7 @@ function child(scope:Scope,key:string):Scope {
  if(scope==='fields')return 'change';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
  if(key==='period')return 'period';
+ if(key==='clock')return 'clock';
  if(scope==='uncertainty'&&key==='alternatives')return 'alternative';
  return scope;
 }
