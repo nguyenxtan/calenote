@@ -35,16 +35,24 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 describe("CoreScreenExperience", () => {
   it.each([false, true])("refreshes delivered reminders on focus (context %s)", async (contextContractEnabled) => {
     let delivered = false;
-    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+    const listeners = vi.spyOn(window, "addEventListener");
+    const fetcher = vi.fn(async (path: string | URL | Request) => {
       if (path === "/api/session") return json({ data: { user } });
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       const rows = [{ ...reminder, status: delivered ? "SENT" : "PENDING", ...(contextContractEnabled ? { details: null } : {}) }];
       return json({ data: contextContractEnabled ? { schemaVersion: "reminders-2", reminders: rows, hasMore: false, scope: "OWNER" } : { reminders: rows } });
-    }));
+    });
+    vi.stubGlobal("fetch", fetcher);
     render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />);
     await screen.findByRole("button", { name: "Huỷ Gửi báo giá" });
+    // Visible rows do not establish that the user-dependent passive effect has
+    // installed its refresh listener. Wait for the event precondition first.
+    await waitFor(() => expect(listeners.mock.calls.some(([type]) => String(type) === "focus")).toBe(true));
+    const reads = () => fetcher.mock.calls.filter(([path]) => path === "/api/reminders" || path === "/api/v2/reminders").length;
+    const before = reads();
     delivered = true;
     await act(async () => { fireEvent.focus(window); });
+    await waitFor(() => expect(reads()).toBe(before + 1));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument());
   });
 
