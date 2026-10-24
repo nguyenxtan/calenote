@@ -5,7 +5,7 @@ import {FeedbackError,type D1FeedbackStore} from '@/modules/feedback/store';
 import {readBoundedJson,RequestBodyError} from '@/modules/http/body';
 import {jsonResponse,requireSameOrigin,SameOriginError} from '@/modules/http/security';
 import {adminAllowed} from './admin-overview';
-export interface FeedbackOperations {requireUser(credentials:SessionCredentials):Promise<{userId:string}>;allowlist?:string;readerId(owner:string):Promise<string>;store:Pick<D1FeedbackStore,'get'|'list'|'create'|'update'>;}
+export interface FeedbackOperations {requireUser(credentials:SessionCredentials):Promise<{userId:string;sessionId:string}>;allowlist?:string;readerId(owner:string,sessionId:string):Promise<string>;store:Pick<D1FeedbackStore,'get'|'list'|'create'|'update'>;}
 const headers={vary:'Cookie'};
 function fail(status:number,code:string,retryAfter?:number){return jsonResponse({error:{code,message:status===401?'Bạn cần đăng nhập để tiếp tục.':status===403?'Bạn không có quyền thực hiện yêu cầu này.':status===429?'Bạn đã gửi nhiều yêu cầu. Hãy thử lại sau.':status===409?'Yêu cầu đã thay đổi. Hãy tải lại trước khi xử lý.':'Chưa thể hoàn tất yêu cầu. Hãy kiểm tra và thử lại.'}},{status,headers:{...headers,...(retryAfter?{'retry-after':String(retryAfter)}:{})}});}
 export async function handleFeedback(request:Request,origin:string,create:()=>Promise<FeedbackOperations>):Promise<Response>{
@@ -23,7 +23,7 @@ export async function handleFeedback(request:Request,origin:string,create:()=>Pr
   const body=method==='POST'?FeedbackCreateSchema.parse(await readBoundedJson(request,16384,{timeoutMs:5000})):method==='PATCH'?FeedbackPatchSchema.parse(await readBoundedJson(request,16384,{timeoutMs:5000})):null;
   const ops=await create(),principal=await ops.requireUser(credentials);
   if(admin&&!adminAllowed(principal.userId,ops.allowlist))return fail(403,'FORBIDDEN');
-  const readerId=await ops.readerId(principal.userId),expectedReader=request.headers.get('x-calenote-feedback-reader');
+  const readerId=await ops.readerId(principal.userId,principal.sessionId),expectedReader=request.headers.get('x-calenote-feedback-reader');
   if(method!=='GET'&&!expectedReader)return fail(400,'EXPECTED_IDENTITY_REQUIRED');
   if(expectedReader&&expectedReader!==readerId)return fail(409,'IDENTITY_CHANGED');
   if(method==='POST')return jsonResponse({data:FeedbackTicketSchema.parse(await ops.store.create(principal.userId,FeedbackCreateSchema.parse(body),Date.now()))},{status:201,headers});

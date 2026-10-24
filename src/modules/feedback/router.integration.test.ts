@@ -28,5 +28,11 @@ it('runs member→receipt→owner isolation→admin reply→member status throug
   expect((await call('/api/admin/feedback/'+ticket.id,'admin','PATCH',patch,adminList.data.readerId)).status).toBe(200);
   const viewed=await call('/api/feedback/'+ticket.id,'one');expect(viewed.headers.get('cache-control')).toBe('no-store');expect(await viewed.json()).toMatchObject({data:{id:ticket.id,kind:'FEATURE',title:body.title,description:body.description,status:'CLOSED',revision:2,reply:patch.reply,disposition:'RESOLVED',updatedAt:expect.any(Number)}});
   expect(db.sqlite.prepare('SELECT count(*) AS n FROM feedback_audit').get()).toMatchObject({n:2});
+  const nextSession=await prepareSession('one',{keyring});db.sqlite.prepare('INSERT INTO sessions VALUES(?,?,?,?,NULL,?)').run(nextSession.record.id,'one',nextSession.record.digest,nextSession.record.expiresAt,1);cookies.one=nextSession.cookie.split(';')[0];
+  const nextReader=(await (await call('/api/feedback','one')).json() as {data:{readerId:string}}).data.readerId;
+  expect(nextReader).not.toBe(reader);
+  expect((await call('/api/feedback','one','POST',{...body,requestId:'00000000-0000-4000-8000-000000000002'},reader)).status).toBe(409);
+  expect((await call('/api/feedback/'+ticket.id,'one')).status).toBe(200);
+
  }finally{db.close();}
 });
