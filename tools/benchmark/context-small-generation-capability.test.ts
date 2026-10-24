@@ -2,7 +2,6 @@
 import {beforeAll,expect,it} from 'vitest';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {z} from 'zod';
-import {createHash} from 'node:crypto';
 import {runContextFixtureCampaign,createContextContractProbe} from './context-contract-probe';
 import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
 import {frozenContextProposal} from './context-contract-fixtures';
@@ -20,7 +19,7 @@ const original=(row:typeof captured[number])=>encodeSmallContextV3(ConversationI
 function mutation(input:ContextInput,field:typeof SLOT_NAMES[number],operation='SET'){
  const date=['eventDate','reminderDate','endDate'].includes(field),clock=['eventTime','reminderTime'].includes(field),numeric=['occurrenceCount','leadOffsetDays'].includes(field);
  const text=field==='frequency'?'DAILY':field==='calendar'?'GREGORIAN':field==='eventRelation'?'BEFORE_EVENT':'synthetic';
- return {field,rank:0,operation,value:operation==='CLEAR'||date||!numeric&&!clock?null:clock?0:2,text:operation==='CLEAR'||date||numeric||clock?null:text,date:operation==='CLEAR'||!date?[]:[{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null}],evidence:[`U${input.currentTurn}`]};
+ return {field,rank:0,operation,value:operation==='CLEAR'||date||clock||!numeric?null:2,text:operation==='CLEAR'||date||numeric||clock?null:text,date:operation==='CLEAR'||!date?[]:[{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null}],clock:clock&&operation!=='CLEAR'?[{hour:8,minute:0,qualifier:'H24'}]:[],evidence:[`U${input.currentTurn}`]};
 }
 it('keeps every frozen healthy output admitted by the producer schema',()=>{
  expect(captured).toHaveLength(144);
@@ -30,7 +29,7 @@ it('covers all thirteen fields and three operations in certified relation answer
  const bound=captured.filter(row=>isBoundRelationUncertaintyAbsent(row.input));expect(bound.length).toBeGreaterThan(0);
  for(const row of bound){const accept=validator(row.input),wire=original(row);
   for(const field of SLOT_NAMES)for(const operation of ['SET','REPLACE','CLEAR']){
-   const changed=structuredClone(wire);changed.changes=[mutation(row.input,field,operation)];changed.clocks=['eventTime','reminderTime'].includes(field)&&operation!=='CLEAR'?[{hour:8,minute:0,qualifier:'H24'}]:[];
+   const changed=structuredClone(wire);changed.changes=[mutation(row.input,field,operation)];changed.clocks=[];
    const permitted=field==='eventRelation'&&operation==='SET';expect(accept.safeParse(changed).success,`${field}/${operation}`).toBe(permitted);
    if(!permitted)expect(decodeSmallContextV3(changed,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
   }
@@ -40,7 +39,7 @@ it('projects every existing deterministic field exclusion, title operation and y
  const checked=new Set<string>();
  for(const row of captured){const input=row.input,cap=deriveGenerationFieldCapability(input),accept=validator(input),wire=original(row);
   const forbidden=[...(!cap.notesProposalAllowed?['notes']:[]),...(!cap.calendarProposalAllowed?['calendar']:[]),...(!cap.reminderDateProposalAllowed?['reminderDate']:[]),...(['eventTime','reminderTime'] as const).filter(field=>!cap.allowedClockFields.includes(field))] as (typeof SLOT_NAMES[number])[];
-  for(const field of forbidden){const changed=structuredClone(wire);changed.changes=[mutation(input,field)];changed.clocks=['eventTime','reminderTime'].includes(field)?[{hour:8,minute:0,qualifier:'H24'}]:[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}`).toBe(false);checked.add(field);}
+  for(const field of forbidden){const changed=structuredClone(wire);changed.changes=[mutation(input,field)];changed.clocks=[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}`).toBe(false);checked.add(field);}
   if(cap.titlePresenceRequired||!cap.titleCorrectionAllowed)for(const operation of ['REPLACE','CLEAR']){const changed=structuredClone(wire);changed.changes=[mutation(input,'title',operation)];expect(accept.safeParse(changed).success,`title/${operation}`).toBe(false);checked.add('title');}
   if(cap.eventDateYearNullRequired){const changed=structuredClone(wire);changed.changes=[mutation(input,'eventDate')];changed.changes[0].date[0].year=2026;expect(accept.safeParse(changed).success,'eventDate/year').toBe(false);for(const date of [{kind:'RELATIVE_DAY',offsetDays:1},{kind:'WEEKDAY',weekday:1,qualifier:'NEXT_WEEK'}]){const wrongKind=structuredClone(wire);wrongKind.changes=[{...mutation(input,'eventDate'),date:[date]}];expect(accept.safeParse(wrongKind).success,'eventDate/kind').toBe(false);}checked.add('eventDate');}
  }
@@ -119,14 +118,14 @@ it('keeps numeric comparisons out of provider grammar while retaining integer an
 it('retains strict downstream positivity, safe-integer, clock and reference rejection without repairing numeric ranges',()=>{
  const numeric=captured.find(row=>original(row).changes.some(change=>change.field==='occurrenceCount'))!;
  for(const value of [0,-1,Number.MAX_SAFE_INTEGER+1]){const wire=original(numeric);wire.changes.find(change=>change.field==='occurrenceCount')!.value=value;expect(validator(numeric.input).safeParse(wire).success).toBe(Number.isSafeInteger(value));expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,numeric.input).status).toBe('REFUSED');}
- const clock=captured.find(row=>original(row).clocks.length>0)!;
- for(const change of [(wire:ReturnType<typeof original>)=>{wire.clocks[0].hour=25;},(wire:ReturnType<typeof original>)=>{wire.clocks[0].minute=60;},(wire:ReturnType<typeof original>)=>{wire.changes.find(change=>change.field==='reminderTime'||change.field==='eventTime')!.value=-1;}]){const wire=original(clock);change(wire);expect(validator(clock.input).safeParse(wire).success).toBe(true);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,clock.input).status).toBe('REFUSED');}
+ const clock=captured.find(row=>original(row).changes.some(c=>c.clock.length>0))!;
+ for(const change of [(wire:ReturnType<typeof original>)=>{wire.changes.find(c=>c.clock.length)!.clock[0].hour=25;},(wire:ReturnType<typeof original>)=>{wire.changes.find(c=>c.clock.length)!.clock[0].minute=60;}]){const wire=original(clock);change(wire);expect(validator(clock.input).safeParse(wire).success).toBe(true);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,clock.input).status).toBe('REFUSED');}
 });
 it('covers all initial fields and operations under the existing complete finite source certificate',()=>{
  const contexts=captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input));expect(contexts.length).toBeGreaterThan(0);
  for(const row of contexts){const input=row.input,cap=deriveGenerationFieldCapability(input),wire=original(row),accept=validator(input);
   const allowed=new Set(['title','location','eventDate',...cap.allowedClockFields,...(cap.calendarProposalAllowed?['calendar']:[]),...cap.allowedNumericFields]);
-  for(const field of SLOT_NAMES)for(const operation of ['SET','REPLACE','CLEAR']){const changed=structuredClone(wire);changed.changes=[mutation(input,field,operation)];changed.clocks=['eventTime','reminderTime'].includes(field)&&operation!=='CLEAR'?[{hour:8,minute:0,qualifier:'H24'}]:[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}/${operation}`).toBe(operation==='SET'&&allowed.has(field));}
+  for(const field of SLOT_NAMES)for(const operation of ['SET','REPLACE','CLEAR']){const changed=structuredClone(wire);changed.changes=[mutation(input,field,operation)];changed.clocks=[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}/${operation}`).toBe(operation==='SET'&&allowed.has(field));}
  }
 });
 it('does not apply initial-only restrictions to independent relation, date, cadence/count or end-date instructions',()=>{
@@ -135,16 +134,40 @@ it('does not apply initial-only restrictions to independent relation, date, cade
 });
 it('keeps ordinary collection cardinality as strict downstream refusal or advice quarantine without provider unrolling',()=>{
  const row=captured.find(row=>!isBoundRelationUncertaintyAbsent(row.input)&&original(row).changes.length>0)!,wire=original(row),schema=smallContextSchemaV3(row.input).schema as unknown as {properties:Record<string,{maxItems?:number;items:unknown}>};
- for(const field of ['changes','uncertainties','clocks','directive','reply'])expect(schema.properties[field]).not.toHaveProperty('maxItems');
+ for(const field of ['changes','uncertainties','directive','reply'])expect(schema.properties[field]).not.toHaveProperty('maxItems');
  const item=schema.properties.uncertainties.items as {properties:Record<string,unknown>};expect(item.properties.alternatives).not.toHaveProperty('maxItems');
  const altered=()=>structuredClone(wire),accept=validator(row.input);
  const changes=altered();changes.changes=Array.from({length:14},()=>structuredClone(wire.changes[0]));expect(accept.safeParse(changes).success).toBe(true);expect(decodeSmallContextV3(changes,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const issue={fieldCode:0,reason:'MISSING',alternatives:[]};const uncertainties=altered();uncertainties.uncertainties=Array.from({length:5},()=>structuredClone(issue));expect(accept.safeParse(uncertainties).success).toBe(true);expect(decodeSmallContextV3(uncertainties,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
- const alt={value:null,text:'synthetic',date:[],period:[],evidence:[`U${row.input.currentTurn}`]};const alternatives=altered();alternatives.uncertainties=[{...issue,alternatives:[alt,alt,alt]}];expect(accept.safeParse(alternatives).success).toBe(true);expect(decodeSmallContextV3(alternatives,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
- const clocks=altered();clocks.clocks=Array.from({length:11},()=>({hour:8,minute:0,qualifier:'H24'}));expect(accept.safeParse(clocks).success).toBe(true);expect(decodeSmallContextV3(clocks,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const alt={value:null,text:'synthetic',date:[],period:[],clock:[],evidence:[`U${row.input.currentTurn}`]};const alternatives=altered();alternatives.uncertainties=[{...issue,alternatives:[alt,alt,alt]}];expect(accept.safeParse(alternatives).success).toBe(true);expect(decodeSmallContextV3(alternatives,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const clocks=altered();clocks.clocks=Array.from({length:11},()=>({hour:8,minute:0,qualifier:'H24'}));expect(accept.safeParse(clocks).success).toBe(false);expect(decodeSmallContextV3(clocks,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const tooMuchAdvice={...wire,directive:Array.from({length:2},()=>({kind:'HELP',field:null,reason:null,issue:null,topic:null})),reply:[{text:'a'},{text:'b'}]};expect(decodeSmallContextV3(tooMuchAdvice,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('PARSED');
 });
-it('reproduces the previously admitted08 R01 schema without any of the six collection additions',()=>{
- const row=captured.find(row=>row.id==='R01'&&row.index===0)!;const schema=smallContextSchemaV3(row.input).schema;
- expect(createHash('sha256').update(JSON.stringify(schema)).digest('hex')).toBe('1bc22c766e3157729eeb987b0492c21891fdd2782d42aa19087b72c7cf14c844');
+it('owns every authored clock directly in a typed consumer cell and never in a referenced root table',()=>{
+ let checked=0;
+ for(const row of captured){const wire=original(row) as unknown as {changes:Array<{field:string;value:unknown;clock:unknown[]}>;clocks:unknown[]};
+  expect(wire.clocks).toEqual([]);
+  for(const change of wire.changes){expect(Array.isArray(change.clock)).toBe(true);if(['eventTime','reminderTime'].includes(change.field)){expect(change.value).toBeNull();expect(change.clock).toHaveLength(1);checked++;}else expect(change.clock).toEqual([]);}
+ }
+ expect(checked).toBeGreaterThan(0);
+});
+it('refuses legacy clock index123 and even valid index0 without repair or table lookup',()=>{
+ const row=captured.find(row=>original(row).changes.some(c=>c.field==='reminderTime'))!,wire=original(row) as unknown as {changes:Array<Record<string,unknown>>;clocks:unknown[]};const index=wire.changes.findIndex(c=>c.field==='reminderTime'),cell=wire.changes[index].clock as unknown[];expect(cell).toHaveLength(1);
+ for(const value of [0,123]){const bad=structuredClone(wire);bad.clocks=structuredClone(cell);bad.changes[index].value=value;bad.changes[index].clock=[];expect(validator(row.input).safeParse(bad).success).toBe(false);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');}
+ const bad=structuredClone(wire);bad.changes[index].clock=[];expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const legacy={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-compiler-compatible-15',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-compiler-compatible-15'};expect(decodeSmallContextV3(wire,legacy,undefined,undefined,row.input).status).toBe('REFUSED');
+});
+it('keeps canonical clock range and qualifier rejection after provider numeric comparisons are omitted',()=>{
+ const row=captured.find(row=>original(row).changes.some(c=>c.clock.length))!;
+ for(const clock of [{hour:24,minute:0,qualifier:'H24'},{hour:8,minute:60,qualifier:'H24'},{hour:0,minute:0,qualifier:'AM'},{hour:13,minute:0,qualifier:'PM'}]){const wire=original(row);wire.changes.find(c=>c.clock.length)!.clock=[clock];expect(validator(row.input).safeParse(wire).success).toBe(true);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');}
+ const wrong=original(row);wrong.changes.find(c=>c.clock.length)!.clock=[{hour:8,minute:0,qualifier:'NOT_CANONICAL'}];expect(validator(row.input).safeParse(wrong).success).toBe(false);expect(decodeSmallContextV3(wrong,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+});
+it('preserves typed clock SET REPLACE CLEAR and owned alternatives without a reference fallback',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];
+ for(const operation of ['SET','REPLACE','CLEAR']){const canonical=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'reminderTime',operation,value:operation==='CLEAR'?null:{hour:8,minute:0,qualifier:'H24'},evidence}]});const wire=encodeSmallContextV3(canonical,row.input);expect(wire.clocks).toEqual([]);expect(wire.changes[0].clock).toHaveLength(operation==='CLEAR'?0:1);expect(validator(row.input).safeParse(wire).success).toBe(true);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('PARSED');}
+ const canonical=ConversationInterpretationV3Schema.parse({...base,changes:[],uncertainties:[{field:'reminderTime',reason:'AMBIGUOUS',alternatives:[{value:{hour:8,minute:0,qualifier:'H24'},evidence},{value:{hour:9,minute:0,qualifier:'H24'},evidence}]}]});const wire=encodeSmallContextV3(canonical,row.input);expect(wire.clocks).toEqual([]);expect(wire.uncertainties[0].alternatives.map(a=>a.clock)).toEqual([[{hour:8,minute:0,qualifier:'H24'}],[{hour:9,minute:0,qualifier:'H24'}]]);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('PARSED');
+ const nonClock=encodeSmallContextV3(ConversationInterpretationV3Schema.parse({...base,changes:[],uncertainties:[{field:'title',reason:'AMBIGUOUS',alternatives:[{value:'synthetic',evidence}]}]}),row.input);nonClock.uncertainties[0].alternatives[0].clock=[{hour:8,minute:0,qualifier:'H24'}];expect(decodeSmallContextV3(nonClock,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+});
+it('refuses a mixed valid and invalid inline-clock patch as a whole without mutating authored cells',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===0)!,wire=original(row);expect(wire.changes.length).toBeGreaterThan(1);wire.changes.find(c=>c.clock.length)!.clock[0].minute=60;const before=JSON.stringify(wire);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');expect(JSON.stringify(wire)).toBe(before);
 });
