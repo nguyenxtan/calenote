@@ -1,6 +1,6 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
-import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS} from '../../../conversation/context-contract/field-capability';
+import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
 import {ContextInputSchema,SLOT_NAMES,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
@@ -36,7 +36,10 @@ function family(field:string):Family {
 export function smallContextSchemaV3(input:ContextInput){
  const parsed=ContextInputSchema.parse(input),codes=primaryEvidenceSourceCodebook(parsed).codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
- const changeFields=SLOT_NAMES.filter(field=>!numericFields.has(field)||allowedNumeric.has(field));
+ // The existing whole-source/fact certificate establishes only an event relation,
+ // never a new receipt-relative date. No operand is inferred or inserted.
+ const relationOnly=isBoundRelationUncertaintyAbsent(parsed);
+ const changeFields=SLOT_NAMES.filter(field=>(!numericFields.has(field)||allowedNumeric.has(field))&&(!relationOnly||field!=='reminderDate'));
  const evidence=arr({type:'string',enum:[...codes]});
  const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
