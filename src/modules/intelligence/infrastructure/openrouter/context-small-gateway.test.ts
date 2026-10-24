@@ -64,3 +64,13 @@ it('Studio Pilot refuses Vertex/ambiguous provider evidence and EU location clai
   expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'SCHEMA_INVALID'});
  }
 });
+
+it.each(['WHITESPACE_TRUNCATED','COMPLETE_VALID_JSON'] as const)('refuses %s content with a length finish without salvage or loss of independent usage',async(kind)=>{
+ const {createAiStudioPilotContextGateway}=await import('./semantic-gateway');
+ const studio={...config,primary:{...config.primary,provider:'google-ai-studio',requireZdr:false}};
+ const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);
+ const content=kind==='WHITESPACE_TRUNCATED'?'{"o":{"c":"3","e":[]},"c":{"a":['+' '.repeat(7662):JSON.stringify(wire);
+ const transport=vi.fn(async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:'Google AI Studio',usage:{cost:.00032818,prompt_tokens:8568,completion_tokens:64},choices:[{finish_reason:'length',native_finish_reason:'MAX_TOKENS',message:{content}}]})}));
+ const attempt=createAiStudioPilotContextGateway(studio,transport,'AI_STUDIO_PILOT_RETENTION_55D',{status:'OBSERVABLE_CANARY',advertisedContextTokens:1048576}).prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
+ const result=await attempt.dispatch();expect(result).toMatchObject({status:'FAILURE',category:'SCHEMA_INVALID',usage:{costMicrounits:329,reportedCostUsd:.00032818,completionTokens:64},canonicalValidationDiagnostics:{state:'PROVIDER_ENVELOPE_FAILED',providerEnvelope:{firstChoice:{finishReason:{token:'length'},nativeFinishReason:{token:'MAX_TOKENS'}}}}});expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'UNAVAILABLE'});expect(transport).toHaveBeenCalledTimes(1);
+});
