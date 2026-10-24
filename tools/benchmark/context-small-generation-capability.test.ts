@@ -1,3 +1,5 @@
+import {smallContextSchemaV3 as publicCompactSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+// Internal flat semantic controls plus actual public service flows; public schema/inverse proofs live in context-small-compact-public.test.ts.
 import {changeAt,changeEntries,replaceChanges,paddedDate} from './context-small-test-helpers';
 // @vitest-environment node
 import {beforeAll,expect,it} from 'vitest';
@@ -9,7 +11,7 @@ import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
 import {frozenContextProposal} from './context-contract-fixtures';
 import {SLOT_NAMES,ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
 import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../src/modules/conversation/context-contract/field-capability';
-import {encodeSmallContextV3,smallContextSchemaV3,decodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import {encodeInternalFlatV3 as encodeSmallContextV3,internalFlatSchemaV3 as smallContextSchemaV3,decodeInternalFlatV3 as decodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-intermediate';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
 const captured:Array<{input:ContextInput;id:string;index:number}>=[];
 beforeAll(async()=>{
@@ -66,24 +68,6 @@ it('rejects wrong value cells and enum strings before canonical materialization'
  }
  expect(cells).toBeGreaterThan(100);expect(enums).toBeGreaterThan(10);
 });
-it.each([
- ['Đổi ngày thi sang ngày 12/10.','eventDate','REPLACE',{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:12,month:10,year:null,leapMonth:null}],
- ['Nhắc cả ngày thi.','eventRelation','SET','INCLUDING_EVENT'],
- ['Đổi số lần nhắc thành 3 lần.','occurrenceCount','REPLACE',3],
- ['Đổi thành nhắc 3 ngày liên tiếp.','frequency','REPLACE','DAILY'],
-] as const)('keeps legitimate %s edits through gateway, evidence, draft persistence and API observation',async(text,field,operation,value)=>{
- let calls=0;const first=captured.find(row=>row.id==='R02'&&row.index===0)!;
- const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
-  if(calls++===0){const initial=frozenContextProposal(input,'R02',0) as {changes:Array<{field:string;value:unknown}>};return field==='frequency'?{...initial,changes:initial.changes.filter(change=>change.field!=='occurrenceCount').map(change=>change.field==='frequency'?{...change,value:'ONCE'}:change)}:initial;}
-  const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
-  return ConversationInterpretationV3Schema.parse({...ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1)),changes:[{field,operation,value,evidence},...(field==='frequency'?[{field:'occurrenceCount',operation:'SET',value:3,evidence}]:[])],conversationDirective:null,replyProposal:null});
- });
- try{
-  await probe.turn(field==='frequency'?'Ngày 11/10 đi thi ở Quang Trung, nhắc một lần giúp tôi.':first.input.turns[0].text,'2026-09-28T03:00:00Z');const result=await probe.turn(text,'2026-09-28T03:01:00Z');
-  expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.fullSchemaValid).toBe(true);expect(result.mutations).toBe(0);expect(result.draftRevision).toBe(2);
-  expect(result.fields).toMatchObject({frequency:'DAILY',occurrenceCount:field==='occurrenceCount'||field==='frequency'?3:2,reminderDate:null,eventRelation:field==='eventRelation'?'INCLUDING_EVENT':null,eventDate:{kind:'CIVIL_DATE',day:field==='eventDate'?12:11,month:10,year:null}});
- }finally{probe.dispose();}
-});
 it('refuses the recorded mixed relation/cadence patch as a whole and preserves the previous draft',async()=>{
  let calls=0;const first=captured.find(row=>row.id==='R02'&&row.index===0)!;
  const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
@@ -98,9 +82,9 @@ it('refuses the recorded mixed relation/cadence patch as a whole and preserves t
 });
 it('measures schema structure across all healthy inputs without claiming compiler admission',()=>{
  const metrics=captured.map(row=>{
-  const schema=smallContextSchemaV3(row.input).schema as unknown as Record<string,unknown>;let unions=0,maxWidth=0,maxDepth=0,maxNumericBound=0;
+  const schema=publicCompactSchemaV3(row.input).schema as unknown as Record<string,unknown>;let unions=0,maxWidth=0,maxDepth=0,maxNumericBound=0;
   const visit=(node:unknown,depth=0):void=>{if(!node||typeof node!=='object')return;maxDepth=Math.max(maxDepth,depth);const value=node as Record<string,unknown>;if(Array.isArray(value.anyOf)){unions++;maxWidth=Math.max(maxWidth,value.anyOf.length);}if(typeof value.maximum==='number')maxNumericBound=Math.max(maxNumericBound,value.maximum);for(const child of Object.values(value))if(Array.isArray(child))child.forEach(item=>visit(item,depth+1));else visit(child,depth+1);};visit(schema);
-  const fields=(schema as {properties:{changes:{properties:Record<string,{anyOf?:unknown[]}>}}}).properties.changes.properties;const rowAlternatives=Math.max(...Object.values(fields).map(field=>field.anyOf?field.anyOf.length-1:1));
+  const fields=(schema as {properties:{c:{properties:Record<string,{anyOf?:unknown[]}>}}}).properties.c.properties;const rowAlternatives=Math.max(...Object.values(fields).map(field=>field.anyOf?field.anyOf.length-1:1));
   return {id:row.id,index:row.index,certified:isBoundRelationUncertaintyAbsent(row.input),bytes:Buffer.byteLength(JSON.stringify(schema)),unions,maxWidth,maxDepth,maxNumericBound,rowAlternatives};
  });
  expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.maxNumericBound===0)).toBe(true);expect(metrics.every(row=>row.unions===1&&row.maxWidth===2)).toBe(true); // Only the unchanged operation/target header union remains.

@@ -1,3 +1,4 @@
+// Internal semantic-pipeline regression tests. Public compact boundary has separate all144 inverse and HTTP campaign coverage.
 import {changeAt,changeEntries,paddedDate} from '../../../../../tools/benchmark/context-small-test-helpers';
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
@@ -5,7 +6,7 @@ import {expect,it} from 'vitest';
 import {z} from 'zod';
 import {ContextInputSchema,ConversationInterpretationV3Schema} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../../conversation/context-contract/small-protocol';
-import {encodeSmallContextV3,decodeSmallContextV3,smallContextSchemaV3} from './context-provider-small-wire';
+import {encodeInternalFlatV3 as encodeSmallContextV3,decodeInternalFlatV3 as decodeSmallContextV3,internalFlatSchemaV3 as smallContextSchemaV3} from './context-small-intermediate';
 import {frozenContextProposal} from '../../../../../tools/benchmark/context-contract-fixtures';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';

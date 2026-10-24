@@ -1,4 +1,4 @@
-import type { SmallContextWire, SmallChangeCarrier } from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import type { SmallContextWire, SmallChangeCarrier } from '../../src/modules/intelligence/infrastructure/openrouter/context-small-intermediate';
 /** Test authoring only: never used to decode or repair provider data. */
 export function changeEntries(wire: SmallContextWire) {
  return Object.entries(wire.changes).flatMap(([field,carrier])=>carrier.operation==='KEEP'?[]:[{field,...carrier,rank:carrier.rank as number}]).sort((a,b)=>a.rank-b.rank);

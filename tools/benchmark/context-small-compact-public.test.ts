@@ -1,0 +1,126 @@
+// @vitest-environment node
+import {beforeAll,expect,it} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {z} from 'zod';
+import {createContextContractProbe,runContextFixtureCampaign} from './context-contract-probe';
+import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
+import {frozenContextProposal} from './context-contract-fixtures';
+import {SLOT_NAMES,ConversationInterpretationV3Schema,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
+import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isInitialFiniteSeriesWithoutRelationSource} from '../../src/modules/conversation/context-contract/field-capability';
+import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
+import {encodeSmallContextV3,decodeSmallContextV3,smallContextSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import {encodeInternalFlatV3,decodeInternalFlatV3,internalFlatSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-intermediate';
+import {compileCompactContext,COMPACT_KEYS,COMPACT_ENUMS} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-compact';
+type Row=Record<string,unknown>;
+const captured:Array<{input:ContextInput;id:string;index:number}>=[];
+beforeAll(async()=>{const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};await runContextFixtureCampaign(admitCanonicalCampaign(manifest,'FULL'),{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'TYPED_105'},(input,id,index)=>{captured.push({input:structuredClone(input),id,index});return frozenContextProposal(input,id,index);});},30000);
+const original=(row:typeof captured[number])=>encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),row.input);
+const decode=(wire:unknown,input:ContextInput)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
+const fields=(wire:Row)=>wire.c as Record<string,Row>;
+function mutation(input:ContextInput,field:typeof SLOT_NAMES[number],operation:string){
+ const date=['eventDate','reminderDate','endDate'].includes(field),clock=['eventTime','reminderTime'].includes(field),numeric=['occurrenceCount','leadOffsetDays'].includes(field),clear=operation==='CLEAR';
+ const text=field==='frequency'?'d':field==='calendar'?'g':field==='eventRelation'?'b':'synthetic';
+ return {r:[0],o:COMPACT_ENUMS.mutation[operation as 'SET'|'REPLACE'|'CLEAR'],v:clear||!numeric?[]:[2],t:clear||date||clock||numeric?[]:[text],d:clear||!date?[]:[{k:'c',c:['g'],d:[11],m:[10],y:[],l:[],o:[],w:[],q:[]}],e:[`U${input.currentTurn}`]};
+}
+it('proves all144 public compact schemas and exact bidirectional valid-domain inverses before canonical decoding',()=>{
+ expect(captured).toHaveLength(144);let nullable=0,unions=0,maxBytes=0;
+ for(const row of captured){
+  const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),flat=encodeInternalFlatV3(value,row.input),wire=original(row),codec=compileCompactContext(internalFlatSchemaV3(row.input).schema),schema=smallContextSchemaV3(row.input).schema;
+  expect(codec.unpack(wire),`${row.id}/${row.index}`).toEqual(flat);expect(codec.pack(codec.unpack(wire))).toEqual(wire);
+  expect(z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
+  expect(decode(wire,row.input)).toEqual(decodeInternalFlatV3(flat,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input));expect(decode(wire,row.input).status).toBe('PARSED');
+  expect(decode(flat,row.input).status).toBe('REFUSED');
+  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;expect(Array.isArray(n.type)).toBe(false);expect(n.type).not.toBe('null');if(Array.isArray(n.enum))expect(n.enum).not.toContain(null);if(n.anyOf){unions++;expect(n.anyOf).toHaveLength(2);expect(node).toBe((schema.properties as Row).o);}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
+  const inventory=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;if(Array.isArray(n.type)&&n.type.includes('null'))nullable++;for(const v of Object.values(n))if(Array.isArray(v))v.forEach(inventory);else inventory(v);};inventory(internalFlatSchemaV3(row.input).schema);
+  maxBytes=Math.max(maxBytes,Buffer.byteLength(JSON.stringify(schema)));
+ }
+ expect(unions).toBe(144);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
+},30000);
+it('retains117 relation and234 initial negative controls through the actual public compact boundary',()=>{
+ let relation=0,initial=0;
+ for(const row of captured){const bound=isBoundRelationUncertaintyAbsent(row.input),first=isInitialFiniteSeriesWithoutRelationSource(row.input);if(!bound&&!first)continue;const wire=original(row),schema=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);
+  for(const field of SLOT_NAMES)for(const operation of ['SET','REPLACE','CLEAR']){
+   const bad=structuredClone(wire);for(const key of Object.keys(fields(bad)))fields(bad)[key]={r:[],o:'k',v:[],t:[],d:[],e:[]};fields(bad)[COMPACT_KEYS.fields[field]]=mutation(row.input,field,operation);bad.k=['eventTime','reminderTime'].includes(field)&&operation!=='CLEAR'?[{h:8,m:0,q:'h'}]:[];
+   if(bound){relation++;const permitted=field==='eventRelation'&&operation==='SET';expect(schema.safeParse(bad).success,`${row.id}/${field}/${operation}`).toBe(permitted);if(!permitted)expect(decode(bad,row.input).status).toBe('REFUSED');}
+   if(first){initial++;const cap=deriveGenerationFieldCapability(row.input),allowedFields=new Set(['title','location','eventDate',...cap.allowedClockFields,...(cap.calendarProposalAllowed?['calendar']:[]),...cap.allowedNumericFields]);const allowed=allowedFields.has(field)&&operation==='SET';expect(schema.safeParse(bad).success,`${row.id}/${field}/${operation}`).toBe(allowed);if(!allowed)expect(decode(bad,row.input).status).toBe('REFUSED');}
+  }
+ }
+ expect(relation).toBe(117);expect(initial).toBe(234);
+});
+it('refuses raw-null, multi, wrong-type cells, unknown aliases, obsolete protocols and contradictory KEEP without mutation',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),slot=fields(wire).g;expect(slot).toBeDefined();
+ for(const value of [null,0,[0],[123],[false],['0'],[[],[]]]){const bad=structuredClone(wire);fields(bad).g.v=value;const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
+ for(const value of [null,0,[0,1],['0'],[[0]]]){const bad=structuredClone(wire);fields(bad).g.r=value;expect(decode(bad,row.input).status).toBe('REFUSED');}
+ for(const mutate of [(w:Row)=>{w.k=[];},(w:Row)=>{(w.k as unknown[]).push(structuredClone((w.k as unknown[])[0]));},(w:Row)=>{w.changes=w.c;delete w.c;},(w:Row)=>{fields(w).unknown={};},(w:Row)=>{fields(w).a={r:[0],o:'k',v:[],t:['hidden'],d:[],e:[]};},(w:Row)=>{Object.assign(fields(w).g,{field:'eventTime'});},(w:Row)=>{fields(w).g.o='SET';}]){const bad=structuredClone(wire);mutate(bad);expect(decode(bad,row.input).status).toBe('REFUSED');}
+ for(const id of ['flat-dates-22','field-controls-21','clock-stream-19'])expect(decodeSmallContextV3(wire,{...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-'+id,wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-'+id},undefined,undefined,row.input).status).toBe('REFUSED');
+});
+it('keeps valid core when optional compact advice is malformed, but refuses unknown roots',()=>{const row=captured[0],wire=original(row);for(const advice of [{g:'bad',r:null},{g:[{k:'HELP',t:[1]}],r:[{t:42}]},{g:[{k:'HELP',f:[],r:[],i:[],t:['GENERAL','LUNAR']}],r:[]}])expect(decode({...wire,...advice},row.input).status).toBe('PARSED');expect(decode({...wire,unknownAdvice:[]},row.input).status).toBe('REFUSED');});
+it('preserves alias-looking free text and exact U/S/F evidence without global enum replacement',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];
+ for(const text of ['k','s','d','g','u','U0','S0.0','Ff1','constructor','__proto__']){const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'title',operation:'SET',value:text,evidence}],uncertainties:[],conversationDirective:null,replyProposal:null}),flat=encodeInternalFlatV3(value,row.input),wire=encodeSmallContextV3(value,row.input),codec=compileCompactContext(internalFlatSchemaV3(row.input).schema);expect(fields(wire).a.t).toEqual([text]);expect(codec.unpack(wire)).toEqual(flat);}
+ const wire=original(captured[0]);wire.g=[{k:'HELP',f:[],r:[],i:[],t:['g']}];wire.r=[{t:'s'}];const codec=compileCompactContext(internalFlatSchemaV3(captured[0].input).schema);expect((codec.unpack(wire) as Row).reply).toEqual([{text:'s'}]);expect((codec.unpack(wire) as Row).directive).toEqual([{kind:'HELP',field:null,reason:null,issue:null,topic:'g'}]);
+});
+it('retains authored rank addresses, gaps, clock order and meaningful date nulls',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'reminderTime',operation:'SET',value:{hour:8,minute:0,qualifier:'H24'},evidence},{field:'eventTime',operation:'SET',value:{hour:9,minute:30,qualifier:'H24'},evidence}],uncertainties:[]}),wire=encodeSmallContextV3(value,row.input),expected=decode(wire,row.input);expect(expected.status).toBe('PARSED');fields(wire).g.r=[2];fields(wire).e.r=[8];wire.c=Object.fromEntries(Object.entries(fields(wire)).reverse());expect(decode(wire,row.input)).toEqual(expected);const collision=structuredClone(wire);fields(collision).e.r=[2];expect(decode(collision,row.input).status).toBe('REFUSED');
+});
+
+/** Pure schema specimens test the syntax bijection; never fed to the application or a provider. */
+function specimen(schema:unknown):unknown {
+ const n=schema as Row;if(Array.isArray(n.anyOf))return specimen(n.anyOf[0]);
+ if(n.type==='object')return Object.fromEntries(Object.entries(n.properties as Row).map(([key,value])=>[key,specimen(value)]));
+ if(n.type==='array')return n.maxItems===0?[]:Array.from({length:Math.max(1,typeof n.minItems==='number'?n.minItems:0)},()=>specimen(n.items));
+ if(Array.isArray(n.type)&&n.type.includes('null')||n.type==='null')return null;
+ if(Array.isArray(n.enum))return n.enum[0];
+ return n.type==='string'?'synthetic':n.type==='boolean'?false:0;
+}
+function replacePath(value:unknown,path:Array<string|number>,replacement:unknown){let cursor=value as Record<string|number,unknown>;for(const key of path.slice(0,-1))cursor=cursor[key] as Record<string|number,unknown>;cursor[path.at(-1)!]=replacement;}
+it('exhausts every nullable scalar scope and constrained enum member with exact forward/inverse syntax',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,schema=internalFlatSchemaV3(row.input).schema,codec=compileCompactContext(schema),base=specimen(schema);let nullablePaths=0,enumValues=0,freePaths=0;
+ const visit=(schema:unknown,path:Array<string|number>=[])=>{
+  const n=schema as Row;if(Array.isArray(n.anyOf)){visit(n.anyOf[0],path);return;}
+  if(n.type==='object'){for(const [key,value]of Object.entries(n.properties as Row))visit(value,[...path,key]);return;}
+  if(n.type==='array'){if(n.maxItems!==0)visit(n.items,[...path,0]);return;}
+  const types=Array.isArray(n.type)?n.type:[n.type],isNull=types.includes('null'),values:unknown[]=[];
+  if(isNull){nullablePaths++;values.push(null);}
+  if(Array.isArray(n.enum)){enumValues+=n.enum.filter(v=>v!==null).length;values.push(...n.enum.filter(v=>v!==null));}
+  else if(types.includes('string')){freePaths++;values.push('g','k','d','u','s','DAY','DAILY','U0','S0.0','Ff1','constructor','__proto__','');}
+  else if(types.includes('integer'))values.push(0,1,-1,Number.MAX_SAFE_INTEGER);
+  else if(types.includes('boolean'))values.push(false,true);
+  for(const replacement of values){const flat=structuredClone(base);replacePath(flat,path,replacement);const compact=codec.pack(flat);expect(codec.unpack(compact),path.join('.')).toEqual(flat);expect(codec.pack(codec.unpack(compact))).toEqual(compact);}
+ };
+ visit(schema);expect(nullablePaths).toBeGreaterThan(100);expect(enumValues).toBeGreaterThan(100);expect(freePaths).toBeGreaterThan(10);
+},30000);
+it('refuses malformed cell shape at every populated nullable scope before any semantic interpretation',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,source=internalFlatSchemaV3(row.input).schema,codec=compileCompactContext(source),flat=specimen(source),compact=codec.pack(flat);let covered=0;
+ const visit=(logical:unknown,packed:unknown,path:Array<string|number>=[])=>{
+  if(logical===null){covered++;for(const bad of [null,0,[null],[[]],[{}],[[],[]],[{},{}]]){const wire=structuredClone(compact);replacePath(wire,path,bad);expect(()=>codec.unpack(wire),path.join('.')).toThrow('COMPACT_SHAPE_INVALID');}return;}
+  if(Array.isArray(logical)){logical.forEach((v,i)=>visit(v,(packed as unknown[])[i],[...path,i]));return;}
+  if(logical&&typeof logical==='object'){const a=Object.values(logical),b=Object.entries(packed as Row);a.forEach((v,i)=>visit(v,b[i][1],[...path,b[i][0]]));}
+ };
+ visit(flat,compact);expect(covered).toBeGreaterThan(100);
+});
+it('keeps all constrained codebooks bijective and rejects undeclared alias values',()=>{
+ for(const book of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)])expect(new Set(Object.values(book)).size).toBe(Object.keys(book).length);
+ const row=captured[0],wire=original(row);for(const code of ['LIST_REMINDERS','12','__proto__']){const bad=structuredClone(wire);(bad.o as Row).c=code;expect(decode(bad,row.input).status).toBe('REFUSED');}
+ const source=internalFlatSchemaV3(row.input).schema,codec=compileCompactContext(source),sample=specimen(source) as Row;((sample.query as Row[])[0]).topic='g';((sample.query as Row[])[0].period as Row[])[0].unsupportedKind='d';((sample.uncertainties as Row[])[0].alternatives as Row[])[0].text='s';expect(codec.unpack(codec.pack(sample))).toEqual(sample);
+});
+
+// Public compact gateway, evidence, draft persistence and API positive controls.
+it.each([
+ ['Đổi ngày thi sang ngày 12/10.','eventDate','REPLACE',{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:12,month:10,year:null,leapMonth:null}],
+ ['Nhắc cả ngày thi.','eventRelation','SET','INCLUDING_EVENT'],
+ ['Đổi số lần nhắc thành 3 lần.','occurrenceCount','REPLACE',3],
+ ['Đổi thành nhắc 3 ngày liên tiếp.','frequency','REPLACE','DAILY'],
+] as const)('keeps legitimate %s edits through gateway, evidence, draft persistence and API observation',async(text,field,operation,value)=>{
+ let calls=0;const first=captured.find(row=>row.id==='R02'&&row.index===0)!;
+ const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
+  if(calls++===0){const initial=frozenContextProposal(input,'R02',0) as {changes:Array<{field:string;value:unknown}>};return field==='frequency'?{...initial,changes:initial.changes.filter(change=>change.field!=='occurrenceCount').map(change=>change.field==='frequency'?{...change,value:'ONCE'}:change)}:initial;}
+  const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
+  return ConversationInterpretationV3Schema.parse({...ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1)),changes:[{field,operation,value,evidence},...(field==='frequency'?[{field:'occurrenceCount',operation:'SET',value:3,evidence}]:[])],conversationDirective:null,replyProposal:null});
+ });
+ try{
+  await probe.turn(field==='frequency'?'Ngày 11/10 đi thi ở Quang Trung, nhắc một lần giúp tôi.':first.input.turns[0].text,'2026-09-28T03:00:00Z');const result=await probe.turn(text,'2026-09-28T03:01:00Z');
+  expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.fullSchemaValid).toBe(true);expect(result.mutations).toBe(0);expect(result.draftRevision).toBe(2);
+  expect(result.fields).toMatchObject({frequency:'DAILY',occurrenceCount:field==='occurrenceCount'||field==='frequency'?3:2,reminderDate:null,eventRelation:field==='eventRelation'?'INCLUDING_EVENT':null,eventDate:{kind:'CIVIL_DATE',day:field==='eventDate'?12:11,month:10,year:null}});
+ }finally{probe.dispose();}
+});

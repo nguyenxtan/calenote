@@ -21,7 +21,7 @@ it('pairs small106 grammar and strict decoder with unchanged route and one dispa
 });
 
 it('labels small106 table refusal without leaking raw content',async()=>{
- const payload=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);payload.texts.push('unused private payload');
+ const payload=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);(payload.x as string[]).push('unused private payload');
  const gateway=createSmallContextContractGateway(config,async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:'Google',id:'gen-synthetic-106-invalid',usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(payload)}}]})}),{status:'OBSERVABLE_CANARY',advertisedContextTokens:1048576});
  const attempt=gateway.prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
  const result=await attempt.dispatch();expect(result).toMatchObject({status:'FAILURE',category:'SCHEMA_INVALID',canonicalValidationDiagnostics:{state:'WIRE_DECODE_FAILED',providerWireSchemaVersion:CONTEXT_SMALL_PROTOCOL_V3.wireVersion}});expect(JSON.stringify(result)).not.toContain('unused private payload');
@@ -29,7 +29,7 @@ it('labels small106 table refusal without leaking raw content',async()=>{
 
 it('rejects contradictory LIST target at the schema boundary without retry or leaked payload',async()=>{
  const payload=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0)),input);
- payload.operation.targetEvidence=['U0'];
+ (payload.o as Record<string,unknown>).e=['U0'];
  const transport=vi.fn(async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:'Google',id:'gen-synthetic-106-target',usage:{cost:.001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:'stop',message:{content:JSON.stringify(payload)}}]})}));
  const gateway=createSmallContextContractGateway(config,transport,{status:'OBSERVABLE_CANARY',advertisedContextTokens:1048576});
  const attempt=gateway.prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
