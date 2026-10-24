@@ -151,3 +151,21 @@ it('keeps authored primitive active ranks and refuses null/wrapped ranks or empt
  for(const rank of [null,[],[0],[[0]],'0']){const bad=structuredClone(wire);control(bad,'g').r=rank;expect(accept.safeParse(bad).success).toBe(false);expect(decode(bad,row.input).status).toBe('REFUSED');}
  const empty=structuredClone(wire);control(empty,'g').e=[];expect(accept.safeParse(empty).success).toBe(false);expect(decode(empty,row.input).status).toBe('REFUSED');
 });
+
+// Semantic-boundary counterfactuals use authored fixtures, never replay a paid payload.
+it.each([[11,2,8],[12,3,9]] as const)('leaves finite-series arithmetic to the backend for event day %s, count %s and clock %s',async(day,count,hour)=>{
+ for(const inventedCandidate of [false,true]){
+  let calls=0;
+  const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
+   const first=calls++===0,evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
+   const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R03',first?0:1));
+   return ConversationInterpretationV3Schema.parse({...baseline,changes:first?baseline.changes.map(change=>change.field==='eventDate'?{...change,value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day,month:10,year:null,leapMonth:null}}:change.field==='occurrenceCount'?{...change,value:count}:change.field==='reminderTime'?{...change,value:{hour,minute:0,qualifier:'H24'}}:change):[{field:'eventRelation',operation:'SET',value:'BEFORE_EVENT',evidence}],uncertainties:!first&&inventedCandidate?[{field:'reminderDate',reason:'MISSING',alternatives:[{value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:day-count,month:10,year:null,leapMonth:null},evidence}]}]:[],conversationDirective:null,replyProposal:null});
+  });
+  try{
+   const first=await probe.turn(`Ngày ${day}/10 đi thi, nhắc ${count} ngày liên tiếp lúc ${hour}h.`,'2026-09-28T03:00:00Z');expect(first.pendingField).toBe('reminderDate');
+   const result=await probe.turn('Nhắc trước sự kiện.','2026-09-28T03:01:00Z');expect(result.fullSchemaValid).toBe(true);expect(result.mutations).toBe(0);
+   if(inventedCandidate){expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.pendingField).toBe('reminderDate');expect(result.occurrences).toHaveLength(0);}
+   else{expect(result.status).toBe('DRAFT_CREATED');expect(result.pendingField).toBe(null);expect(result.occurrences).toHaveLength(count);expect(result.fields).toMatchObject({eventRelation:'BEFORE_EVENT',frequency:'DAILY',occurrenceCount:count,reminderDate:null});}
+  }finally{probe.dispose();}
+ }
+});
