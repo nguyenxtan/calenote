@@ -1,3 +1,5 @@
+import {handleFeedback,type FeedbackOperations} from './routes/feedback';
+import {createFeedbackOperations} from '@/modules/feedback/composition';
 import { handleProductUpdates } from './routes/product-updates';
 import { createEmailRegistrationOperations } from "./composition-root";
 import { EmailRegistrationError } from "@/modules/auth/email-registration";
@@ -94,6 +96,7 @@ import {
 
 export interface RouterOptions {
  emailRegistrationOperations?:(env:Env)=>Promise<EmailRegistrationOperations>;
+ feedbackOperations?: (env:Env)=>Promise<FeedbackOperations>;
  personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
   followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
   emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
@@ -269,6 +272,7 @@ export function createRouter(options: RouterOptions = {}) {
       if (pathname === "/api/v1/personal-assistant/brief" && request.method === "GET") return await handleGetPersonalAssistantBrief(request,()=>personalAssistantOperationsFactory(env));
       if (pathname === "/api/v1/personal-assistant" && request.method === "GET") return await handleGetPersonalAssistant(request,()=>personalAssistantOperationsFactory(env));
       if (pathname === "/api/v1/personal-assistant" && request.method === "PUT") return await handlePutPersonalAssistant(request,appOrigin!,()=>personalAssistantOperationsFactory(env));
+      if (pathname === '/api/feedback' || pathname.startsWith('/api/feedback/') || pathname === '/api/admin/feedback' || pathname.startsWith('/api/admin/feedback/')) return await handleFeedback(request,appOrigin!,()=>options.feedbackOperations?options.feedbackOperations(env):createFeedbackOperations(env));
       if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
       if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
       if (pathname === "/api/v1/follow-through/history" && request.method === "GET") return await handleFollowThroughHistory(request, () => followThroughOperationsFactory(env));
@@ -373,7 +377,7 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
+      const authenticated = pathname.startsWith("/api/feedback") || pathname.startsWith("/api/admin/feedback") || pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
         || pathname === "/api/auth/logout"
         || pathname === "/api/product-updates"
         || pathname === "/api/product-updates/runtime"
