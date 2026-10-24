@@ -1,6 +1,6 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
-import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer} from '../../../conversation/context-contract/field-capability';
+import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../../conversation/context-contract/field-capability';
 import {ContextInputSchema,SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
@@ -33,14 +33,24 @@ function family(field:string):Family {
 }
 /** A fixed typed grammar. Input selects evidence codes before transport exists.
  * Table references replace polymorphic value schemas; no JSON-in-string. */
+// Keep primitive integer types, enum/cell ownership and array cardinalities.
+// Numeric comparisons remain authoritative in the unchanged typed/canonical
+// validators; omitting them here avoids provider numeric-range grammar growth.
+function compilerNumericPrimitives(node:unknown):unknown {
+ if(Array.isArray(node))return node.map(compilerNumericPrimitives);
+ if(node&&typeof node==='object')return Object.fromEntries(Object.entries(node).filter(([key])=>!['minimum','maximum','exclusiveMinimum','exclusiveMaximum'].includes(key)).map(([key,value])=>[key,compilerNumericPrimitives(value)]));
+ return node;
+}
 export function smallContextSchemaV3(input:ContextInput){
  const parsed=ContextInputSchema.parse(input),book=primaryEvidenceSourceCodebook(parsed),codes=book.codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
- const relationOnly=isBoundRelationUncertaintyAbsent(parsed),clockOnlyMutations=isBoundReminderClockAnswer(parsed);
+ const relationOnly=isBoundRelationUncertaintyAbsent(parsed),clockOnlyMutations=isBoundReminderClockAnswer(parsed),initialOnly=isInitialFiniteSeriesWithoutRelationSource(parsed);
+ const initialFields=new Set<string>(['title','location','eventDate','eventTime','reminderTime','calendar','frequency','occurrenceCount','leadOffsetDays']);
  // Project existing deterministic capabilities before generation. This is a
  // producer language, not permission to bypass canonical or evidence checks.
  const changeFields=SLOT_NAMES.filter(field=>{
   if(relationOnly)return field==='eventRelation';
+  if(initialOnly&&!initialFields.has(field))return false;
   if(numericFields.has(field))return allowedNumeric.has(field);
   if(field==='eventTime'||field==='reminderTime')return capability.allowedClockFields.includes(field);
   if(field==='notes')return capability.notesProposalAllowed;
@@ -64,13 +74,13 @@ export function smallContextSchemaV3(input:ContextInput){
   rows.push(obj({field:{type:'string',enum:selected},rank:integer,operation:{type:'string',enum:operations},value,text,date:dateValue,evidence}));
  };
  const titleSetOnly=capability.titlePresenceRequired||!capability.titleCorrectionAllowed;
- if(!relationOnly)add(changeFields.filter(field=>(field!=='title'||!titleSetOnly)&&(!clockOnlyMutations||field==='eventTime'||field==='reminderTime')),['CLEAR'],nil,nil,empty);
- const ordinaryOperations=clockOnlyMutations?['SET']:['SET','REPLACE'];
+ if(!relationOnly&&!initialOnly)add(changeFields.filter(field=>(field!=='title'||!titleSetOnly)&&(!clockOnlyMutations||field==='eventTime'||field==='reminderTime')),['CLEAR'],nil,nil,empty);
+ const ordinaryOperations=clockOnlyMutations||initialOnly?['SET']:['SET','REPLACE'];
  add(['title','location','notes'].filter(field=>field!=='title'||!titleSetOnly),ordinaryOperations,nil,str,empty);
  if(titleSetOnly)add(['title'],['SET'],nil,str,empty);
  add(['eventDate'],ordinaryOperations,nil,nil,eventDateCell);
  add(['reminderDate','endDate'],ordinaryOperations,nil,nil,{...dateCell,minItems:1});
- add(['eventTime','reminderTime'],['SET','REPLACE'],{type:'integer',minimum:0},nil,empty);
+ add(['eventTime','reminderTime'],initialOnly?['SET']:['SET','REPLACE'],{type:'integer',minimum:0},nil,empty);
  add(['occurrenceCount','leadOffsetDays'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
  for(const field of ['frequency','calendar','eventRelation'] as const)add([field],relationOnly?['SET']:ordinaryOperations,nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty);
  if(!rows.length)throw Error('SMALL_CHANGE_DOMAIN_EMPTY');
@@ -85,7 +95,7 @@ export function smallContextSchemaV3(input:ContextInput){
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
   texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:arr(clockSchema),periods:empty});
- return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:schema as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
+ return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:compilerNumericPrimitives(schema) as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {
  operation:{code:string;targetEvidence:string[]};

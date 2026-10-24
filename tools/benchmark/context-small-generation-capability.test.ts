@@ -6,7 +6,7 @@ import {runContextFixtureCampaign,createContextContractProbe} from './context-co
 import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
 import {frozenContextProposal} from './context-contract-fixtures';
 import {SLOT_NAMES,ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
-import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer} from '../../src/modules/conversation/context-contract/field-capability';
+import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../src/modules/conversation/context-contract/field-capability';
 import {encodeSmallContextV3,smallContextSchemaV3,decodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
 const captured:Array<{input:ContextInput;id:string;index:number}>=[];
@@ -101,11 +101,34 @@ it('measures schema structure across all healthy inputs without claiming compile
   const item=(schema as {properties:{changes:{items:{anyOf?:unknown[]}}}}).properties.changes.items;
   return {id:row.id,index:row.index,certified:isBoundRelationUncertaintyAbsent(row.input),bytes:Buffer.byteLength(JSON.stringify(schema)),unions,maxWidth,maxDepth,maxNumericBound,rowAlternatives:item.anyOf?.length??1};
  });
- expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.maxNumericBound<=59)).toBe(true);
- if(process.env.CALENOTE_CONTRACT_AUDIT_OUT)writeFileSync(process.env.CALENOTE_CONTRACT_AUDIT_OUT,JSON.stringify({version:'small-producer-contract-audit-1',protocol:CONTEXT_SMALL_PROTOCOL_V3,inputs:captured.length,slots:SLOT_NAMES,operations:['SET','REPLACE','CLEAR'],certifiedContexts:metrics.filter(row=>row.certified).length,certifiedMutationCases:metrics.filter(row=>row.certified).length*SLOT_NAMES.length*3,maxBytes:Math.max(...metrics.map(row=>row.bytes)),maxRowAlternatives:Math.max(...metrics.map(row=>row.rowAlternatives)),maxUnionWidth:Math.max(...metrics.map(row=>row.maxWidth)),compilerAdmission:'UNVERIFIED',metricsOnly:true,testResultsRecordedSeparately:true,metrics},null,2)+'\n');
+ expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.maxNumericBound===0)).toBe(true);
+ if(process.env.CALENOTE_CONTRACT_AUDIT_OUT)writeFileSync(process.env.CALENOTE_CONTRACT_AUDIT_OUT,JSON.stringify({version:'small-producer-contract-audit-1',protocol:CONTEXT_SMALL_PROTOCOL_V3,inputs:captured.length,slots:SLOT_NAMES,operations:['SET','REPLACE','CLEAR'],certifiedContexts:metrics.filter(row=>row.certified).length,certifiedMutationCases:metrics.filter(row=>row.certified).length*SLOT_NAMES.length*3,initialCertifiedContexts:captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input)).length,initialMutationCases:captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input)).length*SLOT_NAMES.length*3,maxBytes:Math.max(...metrics.map(row=>row.bytes)),maxRowAlternatives:Math.max(...metrics.map(row=>row.rowAlternatives)),maxUnionWidth:Math.max(...metrics.map(row=>row.maxWidth)),compilerAdmission:'UNVERIFIED',metricsOnly:true,testResultsRecordedSeparately:true,metrics},null,2)+'\n');
 });
 
 it('mirrors the existing non-clock mutation restriction for bound clock answers',()=>{
  const rows=captured.filter(row=>isBoundReminderClockAnswer(row.input));expect(rows.length).toBeGreaterThan(0);
  for(const row of rows){const accept=validator(row.input),wire=original(row);for(const field of SLOT_NAMES.filter(field=>field!=='eventTime'&&field!=='reminderTime'))for(const operation of ['REPLACE','CLEAR']){const changed=structuredClone(wire);changed.changes=[mutation(row.input,field,operation)];changed.clocks=[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}/${operation}`).toBe(false);}}
+});
+
+it('keeps numeric comparisons out of provider grammar while retaining integer and structural constraints',()=>{
+ const forbidden=new Set(['minimum','maximum','exclusiveMinimum','exclusiveMaximum']);let integers=0;
+ for(const row of captured){const schema=smallContextSchemaV3(row.input).schema;const walk=(node:unknown):void=>{if(!node||typeof node!=='object')return;for(const [key,value]of Object.entries(node)){expect(forbidden.has(key),key).toBe(false);if(key==='type'&&(value==='integer'||Array.isArray(value)&&value.includes('integer')))integers++;if(Array.isArray(value))value.forEach(walk);else walk(value);}};walk(schema);}
+ expect(integers).toBeGreaterThan(100);
+});
+it('retains strict downstream positivity, safe-integer, clock and reference rejection without repairing numeric ranges',()=>{
+ const numeric=captured.find(row=>original(row).changes.some(change=>change.field==='occurrenceCount'))!;
+ for(const value of [0,-1,Number.MAX_SAFE_INTEGER+1]){const wire=original(numeric);wire.changes.find(change=>change.field==='occurrenceCount')!.value=value;expect(validator(numeric.input).safeParse(wire).success).toBe(Number.isSafeInteger(value));expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,numeric.input).status).toBe('REFUSED');}
+ const clock=captured.find(row=>original(row).clocks.length>0)!;
+ for(const change of [(wire:ReturnType<typeof original>)=>{wire.clocks[0].hour=25;},(wire:ReturnType<typeof original>)=>{wire.clocks[0].minute=60;},(wire:ReturnType<typeof original>)=>{wire.changes.find(change=>change.field==='reminderTime'||change.field==='eventTime')!.value=-1;}]){const wire=original(clock);change(wire);expect(validator(clock.input).safeParse(wire).success).toBe(true);expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,clock.input).status).toBe('REFUSED');}
+});
+it('covers all initial fields and operations under the existing complete finite source certificate',()=>{
+ const contexts=captured.filter(row=>isInitialFiniteSeriesWithoutRelationSource(row.input));expect(contexts.length).toBeGreaterThan(0);
+ for(const row of contexts){const input=row.input,cap=deriveGenerationFieldCapability(input),wire=original(row),accept=validator(input);
+  const allowed=new Set(['title','location','eventDate',...cap.allowedClockFields,...(cap.calendarProposalAllowed?['calendar']:[]),...cap.allowedNumericFields]);
+  for(const field of SLOT_NAMES)for(const operation of ['SET','REPLACE','CLEAR']){const changed=structuredClone(wire);changed.changes=[mutation(input,field,operation)];changed.clocks=['eventTime','reminderTime'].includes(field)&&operation!=='CLEAR'?[{hour:8,minute:0,qualifier:'H24'}]:[];expect(accept.safeParse(changed).success,`${row.id}/${row.index}/${field}/${operation}`).toBe(operation==='SET'&&allowed.has(field));}
+ }
+});
+it('does not apply initial-only restrictions to independent relation, date, cadence/count or end-date instructions',()=>{
+ const base=captured.find(row=>isInitialFiniteSeriesWithoutRelationSource(row.input))!;
+ for(const text of ['Nhắc trước ngày thi.','Đổi ngày thi sang 12/10.','Đổi số lần nhắc thành 3 lần.','Đổi thành nhắc 3 ngày liên tiếp.','Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp đến ngày 15/10.']){const input=structuredClone(base.input);input.turns[input.currentTurn].text=text;expect(isInitialFiniteSeriesWithoutRelationSource(input),text).toBe(false);}
 });
