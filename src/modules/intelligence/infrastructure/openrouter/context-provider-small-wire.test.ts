@@ -1,4 +1,4 @@
-import {changeAt,changeEntries} from '../../../../../tools/benchmark/context-small-test-helpers';
+import {changeAt,changeEntries,paddedDate} from '../../../../../tools/benchmark/context-small-test-helpers';
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
@@ -12,7 +12,7 @@ import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/
 const input=ContextInputSchema.parse(JSON.parse(readFileSync(new URL('./__fixtures__/typed105-r01-before.json',import.meta.url),'utf8')).input);
 const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0));
 const decode=(wire:unknown)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
-it('preserves canonical interpretation with disjoint operation and date branches',()=>{
+it('preserves canonical interpretation with disjoint operation and flat date controls',()=>{
  const wire=encodeSmallContextV3(proposal,input),selected=smallContextSchemaV3(input);
  expect(z.fromJSONSchema(selected.schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
  const operation=(selected.schema as unknown as {properties:{operation:unknown}}).properties.operation;
@@ -315,25 +315,24 @@ it('owns integer values inline in changes and alternatives with no integer-table
 });
 it('identifies the inactive operand boundary without persisting authored values',()=>{
  const wire=encodeSmallContextV3(proposal,input);expect(wire.query).toHaveLength(1);
- wire.query[0].date=[{kind:'RELATIVE_DAY',offsetDays:0}];
+ wire.query[0].date=[paddedDate({kind:'RELATIVE_DAY',offsetDays:0})];
  const diagnostics:unknown[]=[];
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
  expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'INACTIVE_VALUE_NON_NULL',location:'QUERY_DATE'}}]});
  expect(JSON.stringify(diagnostics)).not.toContain(input.turns[input.currentTurn].text);
 });
-it('selects strict active-only DateOperand shapes and rejects the observed relative-calendar mixture at generation',()=>{
+it('keeps flat DateOperand kind correlations as strict downstream ownership checks',()=>{
  const schema=smallContextSchemaV3(input).schema as unknown as {properties:{query:{items:{properties:{date:{items:unknown}}}}}};
  const selected=z.fromJSONSchema(schema.properties.query.items.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
- expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2}).success).toBe(true);
- expect(selected.safeParse({kind:'RELATIVE_DAY',calendar:'GREGORIAN',day:null,month:null,year:null,leapMonth:null,offsetDays:-2,weekday:null,qualifier:null}).success).toBe(false);
- expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2,calendar:null}).success).toBe(false);
- expect(selected.safeParse({kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null}).success).toBe(true);
- expect(selected.safeParse({kind:'WEEKDAY',weekday:2,qualifier:'NEXT_WEEK'}).success).toBe(true);
- const wire=encodeSmallContextV3(proposal,input),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-inline-integers-7',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-inline-integers-7'};
- expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
+ for(const value of [{kind:'RELATIVE_DAY',offsetDays:-2},{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null},{kind:'WEEKDAY',weekday:2,qualifier:'NEXT_WEEK'}]){
+  expect(selected.safeParse(paddedDate(value)).success).toBe(true);expect(selected.safeParse(value).success).toBe(false);
+ }
+ const mixture=paddedDate({kind:'RELATIVE_DAY',calendar:'GREGORIAN',offsetDays:-2});expect(selected.safeParse(mixture).success).toBe(true);
+ const wire=encodeSmallContextV3(proposal,input);wire.query[0].date=[mixture];expect(decode(wire).status).toBe('REFUSED');
+ const old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-field-controls-21',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-field-controls-21'};expect(decodeSmallContextV3(encodeSmallContextV3(proposal,input),old,undefined,undefined,input).status).toBe('REFUSED');
 });
 
-it('owns each eligible field once in a required nullable dictionary',()=>{
+it('owns each eligible field once in the required control dictionary',()=>{
  const wire=encodeSmallContextV3(proposal,input);
  expect(Array.isArray(wire.changes)).toBe(false);
  const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{properties:Record<string,unknown>;required:string[];additionalProperties:boolean}}};
@@ -355,4 +354,39 @@ it('uses a required flat control object for every eligible field with explicit i
  }
  const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{properties:Record<string,{type:string;anyOf?:unknown}>}}};
  for(const field of Object.values(schema.properties.changes.properties)){expect(field.type).toBe('object');expect(field).not.toHaveProperty('anyOf');}
+});
+
+it('authors the entire date family as required flat columns with exact inactive nulls',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
+ const civil={kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null};
+ const canonical=ConversationInterpretationV3Schema.parse({...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'eventDate',operation:'SET',value:civil,evidence}],query:null,uncertainties:[]});
+ const wire=encodeSmallContextV3(canonical,input),date=wire.changes.eventDate!.date[0];
+ expect(Object.keys(date).sort()).toEqual(['kind','calendar','day','month','year','leapMonth','offsetDays','weekday','qualifier'].sort());
+ expect(date).toEqual({...civil,offsetDays:null,weekday:null,qualifier:null});
+ expect(decode(wire).status).toBe('PARSED');
+ const legacy=structuredClone(wire);legacy.changes.eventDate!.date=[civil];expect(decode(legacy).status).toBe('REFUSED');
+});
+
+it('refuses nonnull inactive and missing active date operands at every consumer without changing authored data',()=>{
+ const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
+ const variants=[{kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null},{kind:'RELATIVE_DAY',offsetDays:0},{kind:'WEEKDAY',weekday:2,qualifier:'NEXT_WEEK'}];
+ const active:Record<string,string[]>={CIVIL_DATE:['calendar','day','month','year','leapMonth'],RELATIVE_DAY:['offsetDays'],WEEKDAY:['weekday','qualifier']};
+ const required:Record<string,string[]>={CIVIL_DATE:['calendar','day','month'],RELATIVE_DAY:['offsetDays'],WEEKDAY:['weekday','qualifier']};
+ const poison:Record<string,unknown>={calendar:'GREGORIAN',day:11,month:10,year:2026,leapMonth:false,offsetDays:1,weekday:2,qualifier:'NEXT_WEEK'};
+ let checked=0;const consumers=new Set<string>();
+ for(const date of variants){
+  const creation={...proposal,intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'eventDate',operation:'SET',value:date,evidence}],query:null,uncertainties:[]};
+  const list={...proposal,intent:'LIST_REMINDERS',requestTarget:null,changes:[],uncertainties:[],query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'MONTH',offset:0},evidence}};
+  const fixtures=[creation,{...list,intent:'CALENDAR_QUERY',query:{kind:'CALENDAR_DATE',date,outputCalendar:'LUNAR_VN',evidence}},{...list,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'DAY',date},evidence}},{...list,query:{kind:'LIST',statusScope:'DEFAULT',period:{kind:'DATE_BOUNDS',from:date,through:date},evidence}},{...list,uncertainties:[{field:'eventDate',reason:'AMBIGUOUS',alternatives:[{value:date,evidence}]}]},{...list,uncertainties:[{field:'queryRange',reason:'AMBIGUOUS',alternatives:[{value:{kind:'DAY',date},evidence}]}]},{...list,uncertainties:[{field:'queryRange',reason:'AMBIGUOUS',alternatives:[{value:{kind:'DATE_BOUNDS',from:date,through:date},evidence}]}]}];
+  for(const fixture of fixtures){
+   const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(fixture),input);expect(decode(wire).status).toBe('PARSED');
+   const paths:string[][]=[];const walk=(node:unknown,path:string[])=>{if(!node||typeof node!=='object')return;const row=node as Record<string,unknown>;if(typeof row.kind==='string'&&Object.hasOwn(active,row.kind)){paths.push(path);return;}for(const [key,value]of Object.entries(node))walk(value,[...path,key]);};walk(wire,[]);
+   for(const path of paths){consumers.add(path.filter(key=>!/^\d+$/u.test(key)).join('.'));
+    const target=(value:typeof wire)=>path.reduce((node,key)=>(node as Record<string,unknown>)[key],value as unknown) as Record<string,unknown>;
+    for(const key of Object.keys(poison).filter(key=>!active[date.kind].includes(key))){const bad=structuredClone(wire);target(bad)[key]=poison[key];const before=JSON.stringify(bad);expect(decode(bad).status,`${path.join('.')}/${key}`).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);checked++;}
+    for(const key of required[date.kind]){const bad=structuredClone(wire);target(bad)[key]=null;expect(decode(bad).status,`${path.join('.')}/${key}`).toBe('REFUSED');}
+   }
+  }
+ }
+ expect(checked).toBeGreaterThan(100);expect([...consumers].sort()).toEqual(['changes.eventDate.date','query.date','query.period.date','query.period.from','query.period.through','uncertainties.alternatives.date','uncertainties.alternatives.period.date','uncertainties.alternatives.period.from','uncertainties.alternatives.period.through'].sort());
 });

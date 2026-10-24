@@ -31,8 +31,8 @@ function family(field:string):Family {
  if(fieldNames.includes(field))return 'texts';
  throw Error('SMALL_FIELD_INVALID');
 }
-/** A fixed typed grammar. Input selects evidence codes before transport exists.
- * Table references replace polymorphic value schemas; no JSON-in-string. */
+/** Input selects evidence codes before dispatch. Semantic operands remain
+ * model-authored; unchanged typed/canonical validation owns acceptance. */
 // Keep primitive integer types, enum/cell ownership and array cardinalities.
 // Numeric comparisons remain authoritative in the unchanged typed/canonical
 // validators; omitting them here avoids provider numeric-range grammar growth.
@@ -60,14 +60,14 @@ export function smallContextSchemaV3(input:ContextInput){
  });
  const evidence={...arr({type:'string',enum:[...codes]}),minItems:1,maxItems:3};
  const nil={type:'null'},empty={...arr(nil),maxItems:0};
- const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
+ const date=obj({kind:{type:'string',enum:Object.keys(dateFields)},calendar:{type:['string','null'],enum:['GREGORIAN','LUNAR_VN',null]},day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:{type:['string','null'],enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED',null]}});
  const dateCell={...arr(date),maxItems:1};
- const eventDate=capability.eventDateYearNullRequired?obj({...date.anyOf[0].properties,year:nil}):date;
+ const eventDate=capability.eventDateYearNullRequired?obj({...date.properties,kind:{type:'string',enum:['CIVIL_DATE']},year:nil}):date;
  const eventDateCell={...arr(eventDate),minItems:1,maxItems:1};
  const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
  const periodCell={...arr(period),maxItems:1};
- // Shallow rows correlate field/type/empty cells without multiplying every
- // field by every operation, evidence pointer and intent combination.
+ // Derive existing field/operation policy before emitting flat controls.
+ // Cross-column ownership remains explicit strict downstream validation.
  const rows:ReturnType<typeof obj>[]=[];
  const add=(fields:readonly string[],operations:string[],value:unknown,text:unknown,dateValue:unknown)=>{
   const selected=fields.filter(field=>changeFields.some(allowed=>allowed===field));if(!selected.length)return;
@@ -130,7 +130,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
  const selected=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{required:string[]}}};
  const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:Object.fromEntries(selected.properties.changes.required.map(field=>[field,keepControl()])),query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
- const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...value}];};
+ const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:null,weekday:null,qualifier:null,...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{requireValue(family(field)==='integers');requireValue(typeof value==='number'&&Number.isSafeInteger(value),'INVALID_TABLE_VALUE','integers');return value;};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
@@ -169,7 +169,7 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
  const nextClock=():Row=>{requireValue(clockCursor<parsed.clocks.length,'COLLECTION_CARDINALITY_INVALID','clocks');const index=clockCursor++;used.clocks.add(index);return parsed.clocks[index];};
  const inactive=(valid:unknown,location:SmallTableDiagnostic['location'])=>{if(!valid)throw new SmallTableError({reason:'INACTIVE_VALUE_NON_NULL',location});};
  const active=(value:Row,keys:readonly string[])=>{for(const [key,item]of Object.entries(value))if(!keys.includes(key))inactive(item===null,'PADDED_OPERAND');return Object.fromEntries(keys.map(key=>[key,value[key]]));};
- const date=(rows:Row[]):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','dates');if(!rows.length)return null;const row=rows[0],keys=dateFields[String(row.kind)];requireValue(keys);return active(row,keys);};
+ const date=(rows:Row[]):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','dates');if(!rows.length)return null;const row=rows[0],keys=dateFields[String(row.kind)];requireValue(keys);const value=active(row,keys);requireValue(SlotValueSchemas.eventDate.safeParse(value).success,'CHANGE_VALUE_INVALID');return value;};
  const period=(rows:Row[],padded:boolean):Row|null=>{requireValue(rows.length<=1,'COLLECTION_CARDINALITY_INVALID','periods');if(!rows.length)return null;const row=rows[0];const emptyCells=(names:string[])=>names.every(name=>Array.isArray(row[name])&&(row[name] as unknown[]).length===0);inactive(row.kind==='DAY'?emptyCells(['from','through']):row.kind==='DATE_BOUNDS'?emptyCells(['date']):emptyCells(['date','from','through']),'PADDED_OPERAND');const relative=Object.hasOwn(relativePeriods,String(row.kind))?relativePeriods[String(row.kind)]:undefined;const unsupported=row.kind==='UNSUPPORTED';inactive(unsupported?typeof row.unsupportedKind==='string'&&!Object.hasOwn(periodFields,row.unsupportedKind)&&!periodCodes.includes(row.unsupportedKind):row.unsupportedKind===null,'PERIOD_UNSUPPORTED_KIND');const value:Row={kind:unsupported?row.unsupportedKind:relative?.kind??row.kind,date:date(row.date as Row[]),offset:relative?.offset??null,from:date(row.from as Row[]),through:date(row.through as Row[])};return padded?value:active(value,periodFields[String(value.kind)]??Object.keys(value));};
  const authoredValue=(field:string,row:{value:number|null;text:string|null;date:Row[];period?:Row[]}):unknown=>{
   if(family(field)==='clocks'){requireValue(row.value===null&&row.text===null&&row.date.length===0&&!row.period?.length,'CHANGE_VALUE_INVALID');return nextClock();}
@@ -181,6 +181,12 @@ function expandSmall(raw:unknown,input:ContextInput):Row {
   requireValue(row.text===null&&row.value!==null&&family(field)==='integers','CHANGE_VALUE_INVALID');requireValue(Number.isSafeInteger(row.value),'INVALID_TABLE_VALUE','integers');return row.value;
  };
  const evidence=(codes:string[])=>{requireValue(codes.length>=1&&codes.length<=3,'EVIDENCE_CARDINALITY_INVALID');const pointers=codes.map(code=>{const json=book.decode(code);requireValue(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
+ // Check every date consumer, including query/period/uncertainty cells,
+ // before clock consumption. Only verified inert null padding is projected out.
+ const periodDates=(rows:Row[])=>{for(const row of rows)for(const key of ['date','from','through'])date(row[key] as Row[]);};
+ for(const control of Object.values(parsed.changes))date(control.date);
+ for(const query of parsed.query){date(query.date);periodDates(query.period);}
+ for(const issue of parsed.uncertainties)for(const alternative of issue.alternatives){date(alternative.date);periodDates(alternative.period);}
  // Validate every active value/evidence and the entire authored clock domain
  // before consuming any stream row. No contradictory KEEP is discarded.
  for(const row of changes){

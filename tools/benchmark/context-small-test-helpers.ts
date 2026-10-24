@@ -10,3 +10,7 @@ export function replaceChanges(wire: SmallContextWire,rows: Array<SmallChangeCar
  wire.changes=Object.fromEntries(Object.keys(wire.changes).map(field=>[field,{rank:null,operation:'KEEP',value:null,text:null,date:[],evidence:[]}]));
  for(const {field,...carrier}of rows){if(wire.changes[field]&&wire.changes[field].operation!=='KEEP')throw Error('DUPLICATE_TEST_FIELD');wire.changes[field]=carrier;}
 }
+/** Explicit authoring of inert date syntax padding, never a model repair. */
+export function paddedDate(value: Record<string,unknown>) {
+ return {calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:null,weekday:null,qualifier:null,...value};
+}
