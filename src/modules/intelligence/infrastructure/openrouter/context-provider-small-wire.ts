@@ -1,7 +1,7 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
-import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
-import {ContextInputSchema,SLOT_NAMES,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
+import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer} from '../../../conversation/context-contract/field-capability';
+import {ContextInputSchema,SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
@@ -34,26 +34,57 @@ function family(field:string):Family {
 /** A fixed typed grammar. Input selects evidence codes before transport exists.
  * Table references replace polymorphic value schemas; no JSON-in-string. */
 export function smallContextSchemaV3(input:ContextInput){
- const parsed=ContextInputSchema.parse(input),codes=primaryEvidenceSourceCodebook(parsed).codes;
+ const parsed=ContextInputSchema.parse(input),book=primaryEvidenceSourceCodebook(parsed),codes=book.codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
- // The existing whole-source/fact certificate establishes only an event relation,
- // never a new receipt-relative date or cadence edit. Retained slots stay intact.
- // No operand is inferred or inserted.
- const relationOnly=isBoundRelationUncertaintyAbsent(parsed);
- const changeFields=SLOT_NAMES.filter(field=>(!numericFields.has(field)||allowedNumeric.has(field))&&(!relationOnly||!['reminderDate','frequency','occurrenceCount'].includes(field)));
- const evidence=arr({type:'string',enum:[...codes]});
+ const relationOnly=isBoundRelationUncertaintyAbsent(parsed),clockOnlyMutations=isBoundReminderClockAnswer(parsed);
+ // Project existing deterministic capabilities before generation. This is a
+ // producer language, not permission to bypass canonical or evidence checks.
+ const changeFields=SLOT_NAMES.filter(field=>{
+  if(relationOnly)return field==='eventRelation';
+  if(numericFields.has(field))return allowedNumeric.has(field);
+  if(field==='eventTime'||field==='reminderTime')return capability.allowedClockFields.includes(field);
+  if(field==='notes')return capability.notesProposalAllowed;
+  if(field==='calendar')return capability.calendarProposalAllowed;
+  if(field==='reminderDate')return capability.reminderDateProposalAllowed;
+  return true;
+ });
+ const evidence={...arr({type:'string',enum:[...codes]}),minItems:1,maxItems:3};
+ const nil={type:'null'},empty={...arr(nil),maxItems:0};
  const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
+ const eventDate=capability.eventDateYearNullRequired?obj({...date.anyOf[0].properties,year:nil}):date;
+ const eventDateCell={...arr(eventDate),minItems:1,maxItems:1};
  const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
  const periodCell={...arr(period),maxItems:1};
- // The operation header correlates code and target presence in two branches.
- const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence:{...evidence,minItems:1,maxItems:3}}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...evidence,maxItems:0}})]};
+ // Shallow rows correlate field/type/empty cells without multiplying every
+ // field by every operation, evidence pointer and intent combination.
+ const rows:ReturnType<typeof obj>[]=[];
+ const add=(fields:readonly string[],operations:string[],value:unknown,text:unknown,dateValue:unknown)=>{
+  const selected=fields.filter(field=>changeFields.some(allowed=>allowed===field));if(!selected.length)return;
+  rows.push(obj({field:{type:'string',enum:selected},rank:integer,operation:{type:'string',enum:operations},value,text,date:dateValue,evidence}));
+ };
+ const titleSetOnly=capability.titlePresenceRequired||!capability.titleCorrectionAllowed;
+ if(!relationOnly)add(changeFields.filter(field=>(field!=='title'||!titleSetOnly)&&(!clockOnlyMutations||field==='eventTime'||field==='reminderTime')),['CLEAR'],nil,nil,empty);
+ const ordinaryOperations=clockOnlyMutations?['SET']:['SET','REPLACE'];
+ add(['title','location','notes'].filter(field=>field!=='title'||!titleSetOnly),ordinaryOperations,nil,str,empty);
+ if(titleSetOnly)add(['title'],['SET'],nil,str,empty);
+ add(['eventDate'],ordinaryOperations,nil,nil,eventDateCell);
+ add(['reminderDate','endDate'],ordinaryOperations,nil,nil,{...dateCell,minItems:1});
+ add(['eventTime','reminderTime'],['SET','REPLACE'],{type:'integer',minimum:0},nil,empty);
+ add(['occurrenceCount','leadOffsetDays'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
+ for(const field of ['frequency','calendar','eventRelation'] as const)add([field],relationOnly?['SET']:ordinaryOperations,nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty);
+ if(!rows.length)throw Error('SMALL_CHANGE_DOMAIN_EMPTY');
+ const changeItem=rows.length===1?rows[0]:{anyOf:rows};
+ const targetEvidence={...arr({type:'string',enum:[...book.currentCodes]}),minItems:1,maxItems:3};
+ // Do not infer CURRENT versus NEW from the relation certificate.
+ const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
+ const {$schema:ignoredClockSchema,...clockSchema}=z.toJSONSchema(ClockOperandSchema,{unrepresentable:'any',io:'input'});void ignoredClockSchema;
  const schema=obj({operation,
-  changes:arr(obj({field:{type:'string',enum:changeFields},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
-  query:arr(obj({period:periodCell,date:dateCell,outputCalendar:nullableString,topic:nullableString,evidence})),
+  changes:relationOnly?{...arr(changeItem),maxItems:1}:arr(changeItem),
+  query:{...arr(obj({period:periodCell,date:dateCell,outputCalendar:{type:['string','null'],enum:[...SlotValueSchemas.calendar.options,null]},topic:nullableString,evidence})),maxItems:1},
   uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
   directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
-  texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:{...arr(date),maxItems:0},clocks:arr(obj({hour:integer,minute:integer,qualifier:str})),periods:{...arr(period),maxItems:0}});
+  texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:arr(clockSchema),periods:empty});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:schema as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {

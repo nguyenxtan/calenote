@@ -18,7 +18,11 @@ it('preserves canonical interpretation with disjoint operation and date branches
  expect((operation as {anyOf:unknown[]}).anyOf).toHaveLength(2);
  const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const value=node as Record<string,unknown>;
   expect(value).not.toHaveProperty('oneOf');expect(value).not.toHaveProperty('$ref');expect(value).not.toHaveProperty('$defs');
-  if(value.anyOf&&node!==operation){const branches=value.anyOf as {properties:{kind:{enum:string[]}},additionalProperties:boolean}[];expect(branches.map(b=>b.properties.kind.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);for(const branch of branches)expect(branch.additionalProperties).toBe(false);}
+  if(value.anyOf&&node!==operation){const branches=value.anyOf as {properties:{kind?:{enum:string[]};field?:{enum:string[]};operation?:{enum:string[]}},additionalProperties:boolean}[];
+   if(branches.every(branch=>branch.properties.kind))expect(branches.map(b=>b.properties.kind!.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);
+   else {expect(branches.length).toBeLessThanOrEqual(10);const pairs=branches.flatMap(branch=>branch.properties.field!.enum.flatMap(field=>branch.properties.operation!.enum.map(op=>`${field}/${op}`)));expect(new Set(pairs).size).toBe(pairs.length);}
+   for(const branch of branches)expect(branch.additionalProperties).toBe(false);
+  }
   for(const child of Object.values(value))if(Array.isArray(child))child.forEach(visit);else visit(child);
  };visit(selected.schema);
  expect(JSON.stringify(operation).match(/"anyOf"/gu)).toHaveLength(1);
@@ -215,7 +219,7 @@ it('projects nested typed query failures without retaining authored query conten
   const wire=encodeSmallContextV3(canonical,input);wire.query[0][field]='PRIVATE_QUERY_SENTINEL';
   const diagnostics:Array<{issues:Array<{path:Array<string|number>}>}>=[];
   expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
-  expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')===`query.${field}`))).toBe(true);
+  expect(diagnostics.some(d=>d.issues.some(i=>i.path.join('.')===(field==='outputCalendar'?`query.0.${field}`:`query.${field}`)))).toBe(true);
   expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE_QUERY_SENTINEL');
  }
 });
@@ -314,8 +318,8 @@ it('identifies the inactive operand boundary without persisting authored values'
  expect(JSON.stringify(diagnostics)).not.toContain(input.turns[input.currentTurn].text);
 });
 it('selects strict active-only DateOperand shapes and rejects the observed relative-calendar mixture at generation',()=>{
- const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{items:{properties:{date:{items:unknown}}}}}};
- const selected=z.fromJSONSchema(schema.properties.changes.items.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:{query:{items:{properties:{date:{items:unknown}}}}}};
+ const selected=z.fromJSONSchema(schema.properties.query.items.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
  expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2}).success).toBe(true);
  expect(selected.safeParse({kind:'RELATIVE_DAY',calendar:'GREGORIAN',day:null,month:null,year:null,leapMonth:null,offsetDays:-2,weekday:null,qualifier:null}).success).toBe(false);
  expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2,calendar:null}).success).toBe(false);
