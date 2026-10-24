@@ -11,12 +11,16 @@ import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/
 const input=ContextInputSchema.parse(JSON.parse(readFileSync(new URL('./__fixtures__/typed105-r01-before.json',import.meta.url),'utf8')).input);
 const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R01',0));
 const decode=(wire:unknown)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
-it('preserves canonical interpretation through typed tables without heterogeneous unions',()=>{
+it('preserves canonical interpretation with disjoint operation and date branches',()=>{
  const wire=encodeSmallContextV3(proposal,input),selected=smallContextSchemaV3(input);
  expect(z.fromJSONSchema(selected.schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
  const operation=(selected.schema as unknown as {properties:{operation:unknown}}).properties.operation;
  expect((operation as {anyOf:unknown[]}).anyOf).toHaveLength(2);
- expect(JSON.stringify({...selected.schema,properties:{...selected.schema.properties,operation:undefined}})).not.toMatch(/"(?:anyOf|oneOf|\$ref|\$defs)"/u);
+ const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const value=node as Record<string,unknown>;
+  expect(value).not.toHaveProperty('oneOf');expect(value).not.toHaveProperty('$ref');expect(value).not.toHaveProperty('$defs');
+  if(value.anyOf&&node!==operation){const branches=value.anyOf as {properties:{kind:{enum:string[]}},additionalProperties:boolean}[];expect(branches.map(b=>b.properties.kind.enum)).toEqual([['CIVIL_DATE'],['RELATIVE_DAY'],['WEEKDAY']]);for(const branch of branches)expect(branch.additionalProperties).toBe(false);}
+  for(const child of Object.values(value))if(Array.isArray(child))child.forEach(visit);else visit(child);
+ };visit(selected.schema);
  expect(JSON.stringify(operation).match(/"anyOf"/gu)).toHaveLength(1);
  expect(JSON.stringify(selected.schema).length).toBeLessThan(16000);
  expect(decode(wire)).toEqual(decodeGoogleLiteEuTypedContextTransportV3(encodeGoogleLiteEuTypedContextV3(proposal,input),CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input));
@@ -303,9 +307,20 @@ it('owns integer values inline in changes and alternatives with no integer-table
 });
 it('identifies the inactive operand boundary without persisting authored values',()=>{
  const wire=encodeSmallContextV3(proposal,input);expect(wire.query).toHaveLength(1);
- wire.query[0].date=[{kind:'RELATIVE_DAY',calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:0,weekday:null,qualifier:null}];
+ wire.query[0].date=[{kind:'RELATIVE_DAY',offsetDays:0}];
  const diagnostics:unknown[]=[];
  expect(decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,d=>diagnostics.push(d),input).status).toBe('REFUSED');
  expect(diagnostics[0]).toMatchObject({issues:[{smallTables:{reason:'INACTIVE_VALUE_NON_NULL',location:'QUERY_DATE'}}]});
  expect(JSON.stringify(diagnostics)).not.toContain(input.turns[input.currentTurn].text);
+});
+it('selects strict active-only DateOperand shapes and rejects the observed relative-calendar mixture at generation',()=>{
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{items:{properties:{date:{items:unknown}}}}}};
+ const selected=z.fromJSONSchema(schema.properties.changes.items.properties.date.items as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2}).success).toBe(true);
+ expect(selected.safeParse({kind:'RELATIVE_DAY',calendar:'GREGORIAN',day:null,month:null,year:null,leapMonth:null,offsetDays:-2,weekday:null,qualifier:null}).success).toBe(false);
+ expect(selected.safeParse({kind:'RELATIVE_DAY',offsetDays:-2,calendar:null}).success).toBe(false);
+ expect(selected.safeParse({kind:'CIVIL_DATE',calendar:'GREGORIAN',day:11,month:10,year:null,leapMonth:null}).success).toBe(true);
+ expect(selected.safeParse({kind:'WEEKDAY',weekday:2,qualifier:'NEXT_WEEK'}).success).toBe(true);
+ const wire=encodeSmallContextV3(proposal,input),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-inline-integers-7',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-inline-integers-7'};
+ expect(decodeSmallContextV3(wire,old,undefined,undefined,input).status).toBe('REFUSED');
 });

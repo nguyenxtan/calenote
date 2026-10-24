@@ -13,7 +13,6 @@ const singleton=contextTypedWirePrimitives.singletonChangeDefinitions;
 const str={type:'string'},integer={type:'integer'},nullableInteger={type:['integer','null']},nullableString={type:['string','null']};
 const obj=(properties:Record<string,unknown>)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const arr=(items:unknown)=>({type:'array',items});
-const dateKeys=['kind','calendar','day','month','year','leapMonth','offsetDays','weekday','qualifier'] as const;
 const dateFields:Record<string,readonly string[]>={CIVIL_DATE:['kind','calendar','day','month','year','leapMonth'],RELATIVE_DAY:['kind','offsetDays'],WEEKDAY:['kind','weekday','qualifier']};
 const periodFields:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['kind','offset'],MONTH:['kind','offset'],WEEKEND:['kind','offset'],REST_OF_MONTH:['kind'],NEXT_7_DAYS:['kind'],UPCOMING:['kind'],DATE_BOUNDS:['kind','from','through']};
 // A finite transport control carries both relative kind and offset. No default
@@ -36,11 +35,11 @@ function family(field:string):Family {
 export function smallContextSchemaV3(input:ContextInput){
  const codes=primaryEvidenceSourceCodebook(ContextInputSchema.parse(input)).codes;
  const evidence=arr({type:'string',enum:[...codes]});
- const date=obj({kind:{type:'string',enum:Object.keys(dateFields)},calendar:nullableString,day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:nullableString});
+ const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
  const period=obj({kind:{type:'string',enum:periodCodes},date:dateCell,from:dateCell,through:dateCell,unsupportedKind:nullableString});
  const periodCell={...arr(period),maxItems:1};
- // Exactly one shallow union: code and target presence are correlated here.
+ // The operation header correlates code and target presence in two branches.
  const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence:{...evidence,minItems:1,maxItems:3}}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...evidence,maxItems:0}})]};
  const schema=obj({operation,
   changes:arr(obj({field:{type:'string',enum:[...SLOT_NAMES]},rank:integer,operation:{type:'string',enum:['SET','REPLACE','CLEAR']},value:nullableInteger,text:nullableString,date:dateCell,evidence})),
@@ -69,7 +68,7 @@ export function encodeSmallContextV3(value:ConversationInterpretationV3,input:Co
  const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
  const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:[],query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
  const store=(name:Family,value:unknown):number=>{const rows=out[name] as unknown[];const old=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(value));if(old>=0)return old;rows.push(value);return rows.length-1;};
- const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...Object.fromEntries(dateKeys.map(key=>[key,null])),...value}];};
+ const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{const type=family(field);requireValue(type!=='dates'&&type!=='periods');if(type==='integers'){requireValue(typeof value==='number'&&Number.isSafeInteger(value),'INVALID_TABLE_VALUE','integers');return value;}return store(type,value);};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};
