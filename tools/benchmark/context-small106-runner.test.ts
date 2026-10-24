@@ -90,7 +90,7 @@ it('excludes an ungrounded series-count offset at the small generation boundary 
  expect(generation.safeParse(bad).success).toBe(false);
 },30000);
 
-it('does not admit a receipt-relative reminder date for a certified retained-series relation answer',async()=>{
+it('does not admit date or cadence rewrites for a certified retained-series relation answer',async()=>{
  const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};
  const planned=admitCanonicalCampaign(manifest,'FULL').filter(script=>script.executionId==='R02');let captured:ReturnType<typeof ContextInputSchema.parse>|undefined;
  await runContextFixtureCampaign(planned,{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},(input,id,index)=>{if(index===1)captured=structuredClone(input);return frozenContextProposal(input,id,index);});
@@ -99,8 +99,9 @@ it('does not admit a receipt-relative reminder date for a certified retained-ser
  const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);expect(generation.safeParse(wire).success).toBe(true);
  const bad=structuredClone(wire);bad.changes=[{field:'reminderDate',rank:0,operation:'SET',value:null,text:null,date:[{kind:'RELATIVE_DAY',offsetDays:-2}],evidence:['U2']}];
  expect(generation.safeParse(bad).success).toBe(false);
+ for(const field of ['frequency','occurrenceCount']){const cadence=structuredClone(wire);cadence.changes=[{field,rank:0,operation:'REPLACE',value:field==='occurrenceCount'?2:null,text:field==='frequency'?'DAILY':null,date:[],evidence:['U2']},...wire.changes.map(change=>({...change,rank:change.rank+1}))];expect(generation.safeParse(cadence).success).toBe(false);expect(decodeSmallContextV3(cadence,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
  for(const text of ['Ngày mai nhắc tôi.','Nhắc trước 3 ngày.','Không nhắc trước 2 ngày.','Tôi chỉ trích câu “Nhắc trước 2 ngày”.','Nếu nhắc trước 2 ngày thì sao?']){
   const independent=structuredClone(input);independent.turns[independent.currentTurn].text=text;expect(isBoundRelationUncertaintyAbsent(independent)).toBe(false);
-  const independentSchema=smallContextSchemaV3(independent).schema as unknown as {properties:{changes:{items:{properties:{field:{enum:string[]}}}}}};expect(independentSchema.properties.changes.items.properties.field.enum).toContain('reminderDate');
+  const independentSchema=smallContextSchemaV3(independent).schema as unknown as {properties:{changes:{items:{properties:{field:{enum:string[]}}}}}};for(const field of ['reminderDate','frequency','occurrenceCount'])expect(independentSchema.properties.changes.items.properties.field.enum).toContain(field);
  }
 },30000);

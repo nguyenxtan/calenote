@@ -37,9 +37,10 @@ export function smallContextSchemaV3(input:ContextInput){
  const parsed=ContextInputSchema.parse(input),codes=primaryEvidenceSourceCodebook(parsed).codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
  // The existing whole-source/fact certificate establishes only an event relation,
- // never a new receipt-relative date. No operand is inferred or inserted.
+ // never a new receipt-relative date or cadence edit. Retained slots stay intact.
+ // No operand is inferred or inserted.
  const relationOnly=isBoundRelationUncertaintyAbsent(parsed);
- const changeFields=SLOT_NAMES.filter(field=>(!numericFields.has(field)||allowedNumeric.has(field))&&(!relationOnly||field!=='reminderDate'));
+ const changeFields=SLOT_NAMES.filter(field=>(!numericFields.has(field)||allowedNumeric.has(field))&&(!relationOnly||!['reminderDate','frequency','occurrenceCount'].includes(field)));
  const evidence=arr({type:'string',enum:[...codes]});
  const date={anyOf:[obj({kind:{type:'string',enum:['CIVIL_DATE']},calendar:{type:'string',enum:['GREGORIAN','LUNAR_VN']},day:integer,month:integer,year:nullableInteger,leapMonth:{type:['boolean','null']}}),obj({kind:{type:'string',enum:['RELATIVE_DAY']},offsetDays:integer}),obj({kind:{type:'string',enum:['WEEKDAY']},weekday:integer,qualifier:{type:'string',enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED']}})]};
  const dateCell={...arr(date),maxItems:1};
