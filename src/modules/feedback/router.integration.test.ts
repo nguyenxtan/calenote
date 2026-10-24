@@ -26,7 +26,7 @@ it('runs member→receipt→owner isolation→admin reply→member status throug
   const adminList=await (await call('/api/admin/feedback','admin')).json() as {data:{readerId:string;items:{id:string}[]}};expect(adminList.data.items[0].id).toBe(ticket.id);
   const patch={expectedRevision:1,status:'CLOSED',reply:'Đã bổ sung bộ lọc và kiểm tra lại.',disposition:'RESOLVED'};
   expect((await call('/api/admin/feedback/'+ticket.id,'admin','PATCH',patch,adminList.data.readerId)).status).toBe(200);
-  const viewed=await call('/api/feedback/'+ticket.id,'one');expect(viewed.headers.get('cache-control')).toBe('no-store');expect(await viewed.json()).toMatchObject({data:{...ticket,status:'CLOSED',revision:2,reply:patch.reply}});
+  const viewed=await call('/api/feedback/'+ticket.id,'one');expect(viewed.headers.get('cache-control')).toBe('no-store');expect(await viewed.json()).toMatchObject({data:{id:ticket.id,kind:'FEATURE',title:body.title,description:body.description,status:'CLOSED',revision:2,reply:patch.reply,disposition:'RESOLVED',updatedAt:expect.any(Number)}});
   expect(db.sqlite.prepare('SELECT count(*) AS n FROM feedback_audit').get()).toMatchObject({n:2});
  }finally{db.close();}
 });
