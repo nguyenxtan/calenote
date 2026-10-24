@@ -512,7 +512,10 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases and synthetic R15 without faking HTTP", async profile => {
+// The FULL fixture campaign dispatches 144 responses (PILOT: 76). CI showed
+// the exhaustive FULL case crossing the shared 20s harness deadline, with no
+// assertion failure. Keep all oracle/ledger assertions and size only its wall budget.
+for(const [profile,timeout] of [["PILOT",20000],["FULL",60000]] as const)it(`entire ${profile} runner preserves all frozen cases and synthetic R15 without faking HTTP`, async()=>{
   const directory = mkdtempSync(join(tmpdir(), "context-runner-")); let calls = 0;
   try {
     const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
@@ -533,7 +536,7 @@ it.each(["PILOT", "FULL"] as const)("entire %s runner preserves all frozen cases
     expect(result.syntheticFaultControlsPlanned).toBe(1);
     expect(readCampaignLedger(directory).at(-1)).toMatchObject({ event: "COMPLETE", retainedMicrounits: calls * 1000 });
   } finally { rmSync(directory, { recursive: true, force: true }); }
-}, 20000);
+}, timeout);
 
 it.each(["next-fails", "deadline", "application-fails", "counter-fails", "guidance-fails"])("first canary is the actual first case, durably fenced: %s", async mode => {
   const directory = mkdtempSync(join(tmpdir(), "context-runner-")); let calls = 0, clock = 100;
