@@ -52,7 +52,7 @@ it('keeps small prompt unambiguous and publishes the complete immutable field co
  for(const phrase of ['Core roots:','Ten singleton roots required','extras use {','entries {field,operation,value,evidence}','Absent carriers:null'])expect(CONTEXT_SMALL_PROMPT).not.toContain(phrase);
  expect(CONTEXT_SMALL_PROMPT).not.toContain('WEEK,MONTH,WEEKEND(offset');expect(CONTEXT_SMALL_PROMPT).not.toContain('period=null');
  for(const phrase of ['MONTH_CURRENT','MONTH_PREVIOUS','MONTH_NEXT','There is NO offset field'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
- for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','key=null means KEEP'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
+ for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','operation=KEEP means unchanged'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
 });
 
 it('rejects malformed dates/period references and ranks but quarantines optional guidance',()=>{
@@ -345,4 +345,14 @@ it('owns each eligible field once in a required nullable dictionary',()=>{
  const omitted=structuredClone(wire);delete (omitted.changes as Record<string,unknown>)[Object.keys(wire.changes)[0]];
  expect(decode(omitted).status).toBe('REFUSED');
  expect(decode({...wire,changes:[]}).status).toBe('REFUSED');
+});
+
+it('uses a required flat control object for every eligible field with explicit inert KEEP',()=>{
+ const wire=encodeSmallContextV3(proposal,input);
+ for(const carrier of Object.values(wire.changes)){
+  expect(carrier).not.toBeNull();
+  expect(carrier).toEqual({rank:null,operation:'KEEP',value:null,text:null,date:[],evidence:[]});
+ }
+ const schema=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{properties:Record<string,{type:string;anyOf?:unknown}>}}};
+ for(const field of Object.values(schema.properties.changes.properties)){expect(field.type).toBe('object');expect(field).not.toHaveProperty('anyOf');}
 });

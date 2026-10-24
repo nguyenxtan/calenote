@@ -51,7 +51,7 @@ it('preserves independently grounded date, relation, cadence and count edits out
  const base=captured.find(row=>isBoundRelationUncertaintyAbsent(row.input));expect(base).toBeDefined();
  for(const [text,field] of [['Đổi ngày thi sang 12/10.','eventDate'],['Nhắc cả ngày thi.','eventRelation'],['Đổi số lần thành 3.','occurrenceCount'],['Đổi tần suất thành hằng ngày.','frequency']] as const){
   const input=ContextInputSchema.parse(structuredClone(base!.input));input.turns[input.currentTurn].text=text;expect(isBoundRelationUncertaintyAbsent(input)).toBe(false);
-  const changed=original(base!);const selected=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{required:string[]}}};changed.changes=Object.fromEntries(selected.properties.changes.required.map(key=>[key,null]));replaceChanges(changed,[mutation(input,field,field==='eventRelation'?'SET':'REPLACE')]);if(field==='eventDate')changeAt(changed,0).date[0].day=12;if(field==='eventRelation')changeAt(changed,0).text='INCLUDING_EVENT';if(field==='occurrenceCount')changeAt(changed,0).value=3;if(field==='frequency')changeAt(changed,0).text='DAILY';
+  const changed=original(base!);const selected=smallContextSchemaV3(input).schema as unknown as {properties:{changes:{required:string[]}}};changed.changes=Object.fromEntries(selected.properties.changes.required.map(key=>[key,{rank:null,operation:'KEEP',value:null,text:null,date:[],evidence:[]}]));replaceChanges(changed,[mutation(input,field,field==='eventRelation'?'SET':'REPLACE')]);if(field==='eventDate')changeAt(changed,0).date[0].day=12;if(field==='eventRelation')changeAt(changed,0).text='INCLUDING_EVENT';if(field==='occurrenceCount')changeAt(changed,0).value=3;if(field==='frequency')changeAt(changed,0).text='DAILY';
   expect(validator(input).safeParse(changed).success,field).toBe(true);
  }
 });
@@ -100,7 +100,7 @@ it('measures schema structure across all healthy inputs without claiming compile
  const metrics=captured.map(row=>{
   const schema=smallContextSchemaV3(row.input).schema as unknown as Record<string,unknown>;let unions=0,maxWidth=0,maxDepth=0,maxNumericBound=0;
   const visit=(node:unknown,depth=0):void=>{if(!node||typeof node!=='object')return;maxDepth=Math.max(maxDepth,depth);const value=node as Record<string,unknown>;if(Array.isArray(value.anyOf)){unions++;maxWidth=Math.max(maxWidth,value.anyOf.length);}if(typeof value.maximum==='number')maxNumericBound=Math.max(maxNumericBound,value.maximum);for(const child of Object.values(value))if(Array.isArray(child))child.forEach(item=>visit(item,depth+1));else visit(child,depth+1);};visit(schema);
-  const fields=(schema as {properties:{changes:{properties:Record<string,{anyOf:unknown[]}>}}}).properties.changes.properties;const rowAlternatives=Math.max(...Object.values(fields).map(field=>field.anyOf.length-1));
+  const fields=(schema as {properties:{changes:{properties:Record<string,{anyOf?:unknown[]}>}}}).properties.changes.properties;const rowAlternatives=Math.max(...Object.values(fields).map(field=>field.anyOf?field.anyOf.length-1:1));
   return {id:row.id,index:row.index,certified:isBoundRelationUncertaintyAbsent(row.input),bytes:Buffer.byteLength(JSON.stringify(schema)),unions,maxWidth,maxDepth,maxNumericBound,rowAlternatives};
  });
  expect(metrics.every(row=>row.rowAlternatives<=10&&row.maxWidth<=10)).toBe(true);expect(metrics.every(row=>row.maxNumericBound===0)).toBe(true);
@@ -167,7 +167,7 @@ it('binds every authored clock row once to the declared consumer traversal acros
 });
 it('refuses clock reference selections and obsolete wire identities instead of repairing them',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,w=original(row),index=changeEntries(w).findIndex(c=>c.field==='reminderTime');expect(index).toBeGreaterThanOrEqual(0);for(const value of [0,123]){const bad=structuredClone(w);changeAt(bad,index).value=value;expect(validator(row.input).safeParse(bad).success).toBe(false);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');}
- const cell=structuredClone(w);Object.assign(changeAt(cell,index),{clock:w.clocks[0]});expect(decodeSmallContextV3(cell,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');for(const id of ['compiler-compatible-15','inline-clocks-16','direct-clocks-17','correlated-families-18','clock-stream-19']){const legacy={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-'+id,wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-'+id};expect(decodeSmallContextV3(w,legacy,undefined,undefined,row.input).status).toBe('REFUSED');}
+ const cell=structuredClone(w);Object.assign(changeAt(cell,index),{clock:w.clocks[0]});expect(decodeSmallContextV3(cell,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');for(const id of ['compiler-compatible-15','inline-clocks-16','direct-clocks-17','correlated-families-18','clock-stream-19','field-dictionary-20']){const legacy={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-'+id,wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-'+id};expect(decodeSmallContextV3(w,legacy,undefined,undefined,row.input).status).toBe('REFUSED');}
 });
 it('retains canonical clock ranges and qualifiers for stream operands without numeric repair',()=>{
  const row=captured.find(row=>original(row).clocks.length>0)!;for(const c of [{hour:24,minute:0,qualifier:'H24'},{hour:8,minute:60,qualifier:'H24'},{hour:0,minute:0,qualifier:'AM'},{hour:13,minute:0,qualifier:'PM'}]){const w=original(row);w.clocks[0]=c;expect(validator(row.input).safeParse(w).success).toBe(true);expect(decodeSmallContextV3(w,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');}const bad=original(row);bad.clocks[0].qualifier='NOT_CANONICAL';expect(validator(row.input).safeParse(bad).success).toBe(false);
@@ -207,5 +207,29 @@ it('interprets only validated rank addresses independently of dictionary member 
  const innerField=structuredClone(wire);Object.assign(innerField.changes.eventTime!,{field:'reminderTime'});expect(decode(innerField).status).toBe('REFUSED');
  const unknown=structuredClone(wire);unknown.changes.unknownField=structuredClone(unknown.changes.eventTime);expect(decode(unknown).status).toBe('REFUSED');
  const missing=structuredClone(wire);delete missing.changes.reminderTime;expect(decode(missing).status).toBe('REFUSED');
- const keep=structuredClone(wire);keep.changes.reminderTime=null;expect(decode(keep).status).toBe('REFUSED'); // Its stream operand remains unconsumed.
+ const keep=structuredClone(wire);keep.changes.reminderTime={rank:null,operation:'KEEP',value:null,text:null,date:[],evidence:[]};expect(decode(keep).status).toBe('REFUSED'); // Its stream operand remains unconsumed.
+});
+
+it('refuses every contradictory KEEP control before omission and never rewrites the authored object',()=>{
+ const covered=new Set<string>();
+ for(const row of captured){const wire=original(row),accept=validator(row.input);
+  for(const [field,control]of Object.entries(wire.changes)){
+   if(control.operation!=='KEEP'||covered.has(field))continue;covered.add(field);
+   for(const patch of [{rank:0},{evidence:[`U${row.input.currentTurn}`]}]){
+    const bad=structuredClone(wire);Object.assign(bad.changes[field],patch);expect(accept.safeParse(bad).success).toBe(true);
+    const before=JSON.stringify(bad);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
+   }
+   const legacy=structuredClone(wire);Object.assign(legacy.changes,{[field]:null});expect(accept.safeParse(legacy).success).toBe(false);expect(decodeSmallContextV3(legacy,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+  }
+ }
+ expect([...covered].sort()).toEqual([...SLOT_NAMES].sort());
+});
+it('keeps flat control value/evidence correlations as explicit strict downstream residuals',()=>{
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,w=original(row),accept=validator(row.input);
+ const keep={rank:null,operation:'KEEP',value:null,text:null,date:[],evidence:[]};
+ for(const patch of [{text:'SYNTHETIC_HIDDEN_KEEP'},{rank:0,operation:'SET'},{rank:0,operation:'CLEAR',text:'SYNTHETIC_BAD_CLEAR',evidence:[`U${row.input.currentTurn}`]}]){
+  const bad=structuredClone(w);bad.changes.title={...keep,...patch};const before=JSON.stringify(bad);
+  expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
+ }
+ const bad=structuredClone(w);bad.changes.reminderTime={...keep,rank:0,operation:'SET'};expect(accept.safeParse(bad).success).toBe(true);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
 });
