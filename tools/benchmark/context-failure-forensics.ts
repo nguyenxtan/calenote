@@ -6,14 +6,21 @@ export async function sealProviderFailure(response:Response,publicKey:string,inc
  try{
   reader=response.clone().body?.getReader();if(!reader)return {state:'CAPTURE_UNAVAILABLE',reason:'BODY_MISSING'} as const;
   // 8192 raw bytes + base64/encryption envelope stays below the 16KiB journal cap.
-  const chunks:Buffer[]=[];let size=0;
+  const chunks:Buffer[]=[];let size=0,captured=0,truncated=false;
   const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('READ_TIMEOUT')),5000);});
-  for(;;){const part=await Promise.race([reader.read(),deadline]);if(part.done)break;size+=part.value.byteLength;if(size>8192)return {state:'CAPTURE_UNAVAILABLE',reason:'BODY_LIMIT'} as const;chunks.push(Buffer.from(part.value));}
+  for(;;){const part=await Promise.race([reader.read(),deadline]);if(part.done)break;size+=part.value.byteLength;
+   if(size>8192&&!includeSuccess)return {state:'CAPTURE_UNAVAILABLE',reason:'BODY_LIMIT'} as const;
+   const take=Math.min(part.value.byteLength,8192-captured);if(take){chunks.push(Buffer.from(part.value.subarray(0,take)));captured+=take;}
+   if(size>8192){truncated=true;break;}
+  }
   const bytes=Buffer.concat(chunks),key=randomBytes(32),iv=randomBytes(12);
   try{
    const cipher=createCipheriv('aes-256-gcm',key,iv),ciphertext=Buffer.concat([cipher.update(bytes),cipher.final()]);
    const wrappedKey=publicEncrypt({key:publicKey,oaepHash:'sha256',padding:constants.RSA_PKCS1_OAEP_PADDING},key);
-   return {state:'SEALED',version:'provider-failure-sealed-1',algorithm:'RSA-OAEP-SHA256+AES-256-GCM',httpStatus:response.status,bodyBytes:size,bodySha256:createHash('sha256').update(bytes).digest('hex'),publicKeySha256:createHash('sha256').update(publicKey).digest('hex'),wrappedKey:wrappedKey.toString('base64'),iv:iv.toString('base64'),authTag:cipher.getAuthTag().toString('base64'),ciphertext:ciphertext.toString('base64')} as const;
+   const sealed={state:'SEALED',algorithm:'RSA-OAEP-SHA256+AES-256-GCM',httpStatus:response.status,publicKeySha256:createHash('sha256').update(publicKey).digest('hex'),wrappedKey:wrappedKey.toString('base64'),iv:iv.toString('base64'),authTag:cipher.getAuthTag().toString('base64'),ciphertext:ciphertext.toString('base64')} as const;
+   const digest=createHash('sha256').update(bytes).digest('hex');
+   // A partial envelope is never identified or hashed as a complete body.
+   return truncated?{...sealed,version:'provider-failure-sealed-prefix-1',capture:'TRUNCATED_PREFIX',capturedBytes:captured,observedBytesLowerBound:size,capturedSha256:digest} as const:{...sealed,version:'provider-failure-sealed-1',bodyBytes:size,bodySha256:digest} as const;
   }finally{key.fill(0);bytes.fill(0);}
  }catch{return {state:'CAPTURE_UNAVAILABLE',reason:'READ_OR_SEAL_FAILED'} as const;}
  finally{if(timer)clearTimeout(timer);if(reader)void reader.cancel().catch(()=>{});}
