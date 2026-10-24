@@ -85,7 +85,7 @@ it('excludes an ungrounded series-count offset at the small generation boundary 
  const proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1));
  const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);
  expect(generation.safeParse(wire).success).toBe(true);
- const bad=structuredClone(wire);bad.changes=[{field:'leadOffsetDays',rank:0,operation:'SET',value:2,text:null,date:[],clock:null,evidence:['U2']}];
+ const bad=structuredClone(wire);bad.changes=[{field:'leadOffsetDays',rank:0,operation:'SET',value:2,text:null,date:[],evidence:['U2']}];
  expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');
  expect(generation.safeParse(bad).success).toBe(false);
 },30000);
@@ -97,9 +97,9 @@ it('does not admit date or cadence rewrites for a certified retained-series rela
  const input=ContextInputSchema.parse(captured),proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',1));
  const {isBoundRelationUncertaintyAbsent}=await import('../../src/modules/conversation/context-contract/field-capability');expect(isBoundRelationUncertaintyAbsent(input)).toBe(true);
  const wire=encodeSmallContextV3(proposal,input),generation=z.fromJSONSchema(smallContextSchemaV3(input).schema as Parameters<typeof z.fromJSONSchema>[0]);expect(generation.safeParse(wire).success).toBe(true);
- const bad=structuredClone(wire);bad.changes=[{field:'reminderDate',rank:0,operation:'SET',value:null,text:null,date:[{kind:'RELATIVE_DAY',offsetDays:-2}],clock:null,evidence:['U2']}];
+ const bad=structuredClone(wire);bad.changes=[{field:'reminderDate',rank:0,operation:'SET',value:null,text:null,date:[{kind:'RELATIVE_DAY',offsetDays:-2}],evidence:['U2']}];
  expect(generation.safeParse(bad).success).toBe(false);
- for(const field of ['frequency','occurrenceCount']){const cadence=structuredClone(wire);cadence.changes=[{field,rank:0,operation:'REPLACE',value:field==='occurrenceCount'?2:null,text:field==='frequency'?'DAILY':null,date:[],clock:null,evidence:['U2']},...wire.changes.map(change=>({...change,rank:change.rank+1}))];expect(generation.safeParse(cadence).success).toBe(false);expect(decodeSmallContextV3(cadence,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
+ for(const field of ['frequency','occurrenceCount']){const cadence=structuredClone(wire);cadence.changes=[{field,rank:0,operation:'REPLACE',value:field==='occurrenceCount'?2:null,text:field==='frequency'?'DAILY':null,date:[],evidence:['U2']},...wire.changes.map(change=>({...change,rank:change.rank+1}))];expect(generation.safeParse(cadence).success).toBe(false);expect(decodeSmallContextV3(cadence,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
  for(const text of ['Ngày mai nhắc tôi.','Nhắc trước 3 ngày.','Không nhắc trước 2 ngày.','Tôi chỉ trích câu “Nhắc trước 2 ngày”.','Nếu nhắc trước 2 ngày thì sao?']){
   const independent=structuredClone(input);independent.turns[independent.currentTurn].text=text;expect(isBoundRelationUncertaintyAbsent(independent)).toBe(false);
   type RowSchema={properties:{field:{enum:string[]}}};const independentSchema=smallContextSchemaV3(independent).schema as unknown as {properties:{changes:{items:RowSchema&{anyOf?:RowSchema[]}}}};const item=independentSchema.properties.changes.items,fields=(item.anyOf??[item]).flatMap(branch=>branch.properties.field.enum);for(const field of ['reminderDate','frequency','occurrenceCount'])expect(fields).toContain(field);
