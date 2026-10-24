@@ -89,12 +89,15 @@ export function smallContextSchemaV3(input:ContextInput){
  // Do not infer CURRENT versus NEW from the relation certificate.
  const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
  const {$schema:ignoredClockSchema,...clockSchema}=z.toJSONSchema(ClockOperandSchema,{unrepresentable:'any',io:'input'});void ignoredClockSchema;
+ // Ordinary collection maxima stay strict downstream: provider compilers may
+ // unroll bounded object arrays. Preserve the previously admitted grammar,
+ // while typed/canonical/ref checks and guidance quarantine retain authority.
  const schema=obj({operation,
-  changes:{...arr(changeItem),maxItems:relationOnly?1:13},
+  changes:relationOnly?{...arr(changeItem),maxItems:1}:arr(changeItem),
   query:{...arr(obj({period:periodCell,date:dateCell,outputCalendar:{type:['string','null'],enum:[...SlotValueSchemas.calendar.options,null]},topic:nullableString,evidence})),maxItems:1},
-  uncertainties:{...arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:{...arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence})),maxItems:2}})),maxItems:4},
-  directive:{...arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),maxItems:1},reply:{...arr(obj({text:str})),maxItems:1},
-  texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:{...arr(clockSchema),maxItems:10},periods:empty});
+  uncertainties:arr(obj({fieldCode:integer,reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:arr(obj({value:nullableInteger,text:nullableString,date:dateCell,period:periodCell,evidence}))})),
+  directive:arr(obj({kind:str,field:nullableString,reason:nullableString,issue:nullableString,topic:nullableString})),reply:arr(obj({text:str})),
+  texts:{...arr(str),maxItems:0},integers:{...arr(integer),maxItems:0},dates:empty,clocks:arr(clockSchema),periods:empty});
  return {version:CONTEXT_SMALL_PROTOCOL_V3.wireVersion,schema:compilerNumericPrimitives(schema) as unknown as ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"]};
 }
 export interface SmallContextWire {

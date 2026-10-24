@@ -2,6 +2,7 @@
 import {beforeAll,expect,it} from 'vitest';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {z} from 'zod';
+import {createHash} from 'node:crypto';
 import {runContextFixtureCampaign,createContextContractProbe} from './context-contract-probe';
 import {admitCanonicalCampaign,type ContextManifest} from './context-contract';
 import {frozenContextProposal} from './context-contract-fixtures';
@@ -132,11 +133,18 @@ it('does not apply initial-only restrictions to independent relation, date, cade
  const base=captured.find(row=>isInitialFiniteSeriesWithoutRelationSource(row.input))!;
  for(const text of ['Nhắc trước ngày thi.','Đổi ngày thi sang 12/10.','Đổi số lần nhắc thành 3 lần.','Đổi thành nhắc 3 ngày liên tiếp.','Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp đến ngày 15/10.']){const input=structuredClone(base.input);input.turns[input.currentTurn].text=text;expect(isInitialFiniteSeriesWithoutRelationSource(input),text).toBe(false);}
 });
-it('bounds all variable collections by existing canonical capacities without changing advice quarantine',()=>{
+it('keeps ordinary collection cardinality as strict downstream refusal or advice quarantine without provider unrolling',()=>{
  const row=captured.find(row=>!isBoundRelationUncertaintyAbsent(row.input)&&original(row).changes.length>0)!,wire=original(row),schema=smallContextSchemaV3(row.input).schema as unknown as {properties:Record<string,{maxItems?:number;items:unknown}>};
- const item=(key:string)=>(schema.properties[key].items as {properties?:Record<string,unknown>});
- const cases=[['changes',13,wire.changes[0]],['uncertainties',4,{fieldCode:0,reason:'MISSING',alternatives:[]}],['clocks',10,{hour:8,minute:0,qualifier:'H24'}],['directive',1,{kind:'HELP',field:null,reason:null,issue:null,topic:null}],['reply',1,{text:'synthetic'}]] as const;
- for(const [field,limit,value]of cases){const validate=z.fromJSONSchema(schema.properties[field] as Parameters<typeof z.fromJSONSchema>[0]);expect(validate.safeParse(Array.from({length:limit},()=>structuredClone(value))).success,field+'/limit').toBe(true);expect(validate.safeParse(Array.from({length:limit+1},()=>structuredClone(value))).success,field+'/over').toBe(false);}
- const alternatives=item('uncertainties').properties!.alternatives as Parameters<typeof z.fromJSONSchema>[0];const alt={value:null,text:'synthetic',date:[],period:[],evidence:[`U${row.input.currentTurn}`]};expect(z.fromJSONSchema(alternatives).safeParse([alt,alt]).success).toBe(true);expect(z.fromJSONSchema(alternatives).safeParse([alt,alt,alt]).success).toBe(false);
+ for(const field of ['changes','uncertainties','clocks','directive','reply'])expect(schema.properties[field]).not.toHaveProperty('maxItems');
+ const item=schema.properties.uncertainties.items as {properties:Record<string,unknown>};expect(item.properties.alternatives).not.toHaveProperty('maxItems');
+ const altered=()=>structuredClone(wire),accept=validator(row.input);
+ const changes=altered();changes.changes=Array.from({length:14},()=>structuredClone(wire.changes[0]));expect(accept.safeParse(changes).success).toBe(true);expect(decodeSmallContextV3(changes,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const issue={fieldCode:0,reason:'MISSING',alternatives:[]};const uncertainties=altered();uncertainties.uncertainties=Array.from({length:5},()=>structuredClone(issue));expect(accept.safeParse(uncertainties).success).toBe(true);expect(decodeSmallContextV3(uncertainties,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const alt={value:null,text:'synthetic',date:[],period:[],evidence:[`U${row.input.currentTurn}`]};const alternatives=altered();alternatives.uncertainties=[{...issue,alternatives:[alt,alt,alt]}];expect(accept.safeParse(alternatives).success).toBe(true);expect(decodeSmallContextV3(alternatives,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
+ const clocks=altered();clocks.clocks=Array.from({length:11},()=>({hour:8,minute:0,qualifier:'H24'}));expect(accept.safeParse(clocks).success).toBe(true);expect(decodeSmallContextV3(clocks,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('REFUSED');
  const tooMuchAdvice={...wire,directive:Array.from({length:2},()=>({kind:'HELP',field:null,reason:null,issue:null,topic:null})),reply:[{text:'a'},{text:'b'}]};expect(decodeSmallContextV3(tooMuchAdvice,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input).status).toBe('PARSED');
+});
+it('reproduces the previously admitted08 R01 schema without any of the six collection additions',()=>{
+ const row=captured.find(row=>row.id==='R01'&&row.index===0)!;const schema=smallContextSchemaV3(row.input).schema;
+ expect(createHash('sha256').update(JSON.stringify(schema)).digest('hex')).toBe('1bc22c766e3157729eeb987b0492c21891fdd2782d42aa19087b72c7cf14c844');
 });
