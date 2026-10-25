@@ -5,7 +5,8 @@ export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
- change:{rank:'r',operation:'o',value:'v',text:'t',date:'d',evidence:'e',clock:'k'},
+ fieldOperations:{SET:'s',REPLACE:'r',CLEAR:'c'},
+ mutationRow:{rank:'r',value:'v',evidence:'e'},
  queryCarriers:{list:'l',calendar:'c',capability:'b'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
  uncertainty:{fieldCode:'f',reason:'r',alternatives:'a'},
@@ -16,7 +17,7 @@ export const COMPACT_KEYS={
  directive:{kind:'k',field:'f',reason:'r',issue:'i',topic:'t'},reply:{text:'t'},
 } as const;
 export const COMPACT_ENUMS={
- mutation:{SET:'s',REPLACE:'r',CLEAR:'c'},date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
+ date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
  calendar:{GREGORIAN:'g',LUNAR_VN:'l'},weekday:{THIS_WEEK:'t',NEXT_WEEK:'n',UNRESOLVED:'u'},
  clock:{H24:'h',AM:'a',PM:'p',UNKNOWN:'u'},frequency:{ONCE:'o',DAILY:'d',WEEKLY:'w',MONTHLY:'m',YEARLY:'y',UNKNOWN:'u'},
  relation:{BEFORE_EVENT:'b',INCLUDING_EVENT:'i',STARTING_ON:'s'},
@@ -27,9 +28,11 @@ const record=(value:unknown):value is Row=>!!value&&typeof value==='object'&&!Ar
 function check(valid:unknown):asserts valid {if(!valid)throw Error('COMPACT_SHAPE_INVALID');}
 function invert(map:Readonly<Record<string,string>>){check(new Set(Object.values(map)).size===Object.keys(map).length);return Object.fromEntries(Object.entries(map).map(([key,value])=>[value,key]));}
 for(const map of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)])invert(map);
-function child(scope:Scope,key:string):Scope {
+function child(scope:Scope,key:string,field?:string):Scope {
  if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'queryCarriers',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
- if(scope==='fields')return 'change';
+ if(scope==='fields')return 'fieldOperations';
+ if(scope==='fieldOperations')return 'mutationRow';
+ if(scope==='mutationRow'&&key==='value'){if(['eventDate','reminderDate','endDate'].includes(field??''))return 'date';if(['eventTime','reminderTime'].includes(field??''))return 'clock';}
  if(scope==='queryCarriers')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
  if(key==='period')return 'period';
@@ -38,8 +41,7 @@ function child(scope:Scope,key:string):Scope {
  return scope;
 }
 function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,string>>|undefined {
- if(scope==='change'&&key==='operation')return COMPACT_ENUMS.mutation;
- if(scope==='change'&&key==='text'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
+ if(scope==='mutationRow'&&key==='value'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
  if(scope==='date'){if(key==='kind')return COMPACT_ENUMS.date;if(key==='calendar')return COMPACT_ENUMS.calendar;if(key==='qualifier')return COMPACT_ENUMS.weekday;}
  if(scope==='period'&&key==='kind')return COMPACT_ENUMS.period;
  if(scope==='clock'&&key==='qualifier')return COMPACT_ENUMS.clock;
@@ -60,7 +62,7 @@ export function compileCompactContext(source:unknown){
   if(schema.type==='object'){
    check(record(schema.properties)&&Array.isArray(schema.required));
    const names=COMPACT_KEYS[scope] as Readonly<Record<string,string>>;
-   const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name),name,scope==='fields'?name:field)};});
+   const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name,field),name,scope==='fields'?name:field)};});
    check(new Set(entries.map(e=>e.alias)).size===entries.length&&schema.required.length===entries.length&&schema.required.every(name=>typeof name==='string'&&Object.hasOwn(schema.properties as Row,name)));
    const transform=(value:unknown,forward:boolean)=>{check(record(value));const from=entries.map(e=>forward?e.name:e.alias);check(Object.keys(value).length===entries.length&&from.every(name=>Object.hasOwn(value,name)));return Object.fromEntries(entries.map(e=>[forward?e.alias:e.name,(forward?e.node.pack:e.node.unpack)(value[forward?e.name:e.alias])]));};
    return {schema:{...schema,properties:Object.fromEntries(entries.map(e=>[e.alias,e.node.schema])),required:entries.map(e=>e.alias)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(entries.map(e=>[e.name,e.alias,e.node.signature]))};

@@ -1,7 +1,9 @@
 import type {ActiveCarrierWire} from './context-small-active-carriers';
 type Row=Record<string,unknown>;
 type Query=ActiveCarrierWire['query'][number];
-export interface KindQueryWire extends Omit<ActiveCarrierWire,'query'> {query:{list:Array<Pick<Query,'period'|'evidence'>>;calendar:Array<Pick<Query,'date'|'outputCalendar'|'evidence'>>;capability:Array<Pick<Query,'topic'|'evidence'>>}}
+interface KindQueryCarriers {list:Array<Pick<Query,'period'|'evidence'>>;calendar:Array<Pick<Query,'date'|'outputCalendar'|'evidence'>>;capability:Array<Pick<Query,'topic'|'evidence'>>}
+type QuerySource=Pick<ActiveCarrierWire,'operation'|'query'>;
+export type KindQueryWire<T extends QuerySource=ActiveCarrierWire> = Omit<T,'query'>&{query:KindQueryCarriers};
 const kinds=['list','calendar','capability'] as const;
 type Kind=typeof kinds[number];
 const columns={list:['period','evidence'],calendar:['date','outputCalendar','evidence'],capability:['topic','evidence']} as const;
@@ -19,8 +21,8 @@ export function kindQuerySchema(source:unknown):Row {
  (schema.properties as unknown as Row).query={type:'object',additionalProperties:false,required:[...kinds],properties};return schema as unknown as Row;
 }
 /** Trusted authoring rejects contradictory inactive data before selecting a kind. */
-export function attachKindQueries(flat:ActiveCarrierWire):KindQueryWire {
- check(Array.isArray(flat.query)&&flat.query.length<=1);const query:KindQueryWire['query']={list:[],calendar:[],capability:[]};
+export function attachKindQueries<T extends QuerySource>(flat:T):KindQueryWire<T> {
+ check(Array.isArray(flat.query)&&flat.query.length<=1);const query:KindQueryCarriers={list:[],calendar:[],capability:[]};
  if(flat.query.length){const row=flat.query[0],kind=selected(flat.operation.code);check(kind&&exact(row,['period','date','outputCalendar','topic','evidence']));
   if(kind==='list'){check(empty(row.date)&&row.outputCalendar===null&&row.topic===null);query.list=[{period:structuredClone(row.period),evidence:structuredClone(row.evidence)}];}
   else if(kind==='calendar'){check(empty(row.period)&&row.topic===null);query.calendar=[{date:structuredClone(row.date),outputCalendar:row.outputCalendar,evidence:structuredClone(row.evidence)}];}
@@ -29,7 +31,7 @@ export function attachKindQueries(flat:ActiveCarrierWire):KindQueryWire {
  const result={...flat,query};expandKindQueries(result);return result;
 }
 /** Validate all carriers before expanding only declared inactive syntax. No selection, inference or repair. */
-export function expandKindQueries(owned:KindQueryWire):ActiveCarrierWire {
+export function expandKindQueries<T extends {operation:QuerySource['operation'];query:KindQueryCarriers}>(owned:T):Omit<T,'query'>&{query:Query[]} {
  check(exact(owned.query,kinds));let active:Kind|undefined;
  for(const kind of kinds){const rows=owned.query[kind];check(Array.isArray(rows)&&rows.length<=1);
   for(const row of rows){check(exact(row,columns[kind])&&evidence(row.evidence));

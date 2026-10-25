@@ -6,19 +6,19 @@ import {projectWireValidation} from '../../../conversation/context-contract/vali
 import {internalFlatSchemaV3,encodeInternalFlatV3,decodeInternalFlatV3} from './context-small-intermediate';
 import {compileCompactContext} from './context-small-compact';
 import {attachOwnedClocks,flattenOwnedClocks,ownedClockSchema} from './context-small-owned-clocks';
-import {activeCarrierSchema,attachActiveCarriers,expandActiveCarriers} from './context-small-active-carriers';
+import {operationValueSchema,attachOperationValues,expandOperationValues,type OperationValueWire} from './context-small-operation-values';
 type Observer=Parameters<typeof decodeInternalFlatV3>[2];
 type Row=Record<string,unknown>;
 const record=(value:unknown):value is Row=>!!value&&typeof value==='object'&&!Array.isArray(value);
-function selected(input:ContextInput){const flat=internalFlatSchemaV3(input);return {...flat,codec:compileCompactContext(kindQuerySchema(activeCarrierSchema(ownedClockSchema(flat.schema))))};}
+function selected(input:ContextInput){const flat=internalFlatSchemaV3(input),operations=operationValueSchema(ownedClockSchema(flat.schema));return {...flat,operations,codec:compileCompactContext(kindQuerySchema(operations))};}
 export function smallContextSchemaV3(input:ContextInput){const value=selected(input);return {version:value.version,schema:value.codec.schema as unknown as ReturnType<typeof internalFlatSchemaV3>['schema']};}
 /** Trusted canonical fixture authoring only; the inverse is the sole model entry. */
-export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):Row {return selected(input).codec.pack(attachKindQueries(attachActiveCarriers(attachOwnedClocks(encodeInternalFlatV3(value,input))))) as Row;}
+export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):Row {const selectedValue=selected(input);return selectedValue.codec.pack(attachKindQueries(attachOperationValues(attachOwnedClocks(encodeInternalFlatV3(value,input)),selectedValue.operations))) as Row;}
 export function decodeSmallContextV3(raw:unknown,protocol:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput){
  if(!isContextSmallProtocolV3(protocol))return {status:'REFUSED' as const,reason:'ENVELOPE_INVALID' as const};
  try {
   if(!record(raw))throw Error('COMPACT_SHAPE_INVALID');
-  const {codec}=selected(input);
+  const {codec,operations}=selected(input);
   // Only the two declared advice roots are quarantined. Extra roots still refuse.
   const core={...raw,g:[],r:[]};
   const parsed=z.fromJSONSchema(codec.schema as Parameters<typeof z.fromJSONSchema>[0]).parse(core);
@@ -27,6 +27,6 @@ export function decodeSmallContextV3(raw:unknown,protocol:unknown,observeInvalid
    try {if(!Object.hasOwn(raw,alias))throw Error('COMPACT_GUIDANCE_INVALID');flat[name]=(codec.unpack({...core,[alias]:raw[alias]}) as Row)[name];}
    catch {flat[name]=name==='directive'?[{kind:'INVALID_PROVIDER_WIRE'}]:[{invalid:true}];}
   }
-  return decodeInternalFlatV3(flattenOwnedClocks(expandActiveCarriers(expandKindQueries(flat as unknown as KindQueryWire))),protocol,observeInvalid,observeWireInvalid,input);
+  return decodeInternalFlatV3(flattenOwnedClocks(expandOperationValues(expandKindQueries(flat as unknown as KindQueryWire<OperationValueWire>),operations)),protocol,observeInvalid,observeWireInvalid,input);
  }catch{try {const projection=projectWireValidation(raw,[],"SMALL_TYPED_TABLES",undefined,"calenote-context-3");projection.issues[0].smallTables={reason:'GENERATION_SHAPE_INVALID'};observeWireInvalid?.(projection);}catch{/* Diagnostics cannot change refusal. */}return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
 }
