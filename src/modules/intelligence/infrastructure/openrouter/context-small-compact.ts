@@ -5,8 +5,8 @@ export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
- fieldOperations:{WRITE:'w',CLEAR:'c'},
- mutationRow:{rank:'r',operation:'o',value:'v',evidence:'e'},
+ fieldMutation:{rank:'r',write:'w',evidence:'e'},
+ mutationRow:{operation:'o',value:'v'},
  queryCarriers:{list:'l',calendar:'c',capability:'b'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
  uncertainty:{fieldCode:'f',reason:'r',alternatives:'a'},
@@ -31,8 +31,8 @@ function invert(map:Readonly<Record<string,string>>){check(new Set(Object.values
 for(const map of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)])invert(map);
 function child(scope:Scope,key:string,field?:string):Scope {
  if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'queryCarriers',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
- if(scope==='fields')return 'fieldOperations';
- if(scope==='fieldOperations')return 'mutationRow';
+ if(scope==='fields')return 'fieldMutation';
+ if(scope==='fieldMutation'&&key==='write')return 'mutationRow';
  if(scope==='mutationRow'&&key==='value'){if(['eventDate','reminderDate','endDate'].includes(field??''))return 'date';if(['eventTime','reminderTime'].includes(field??''))return 'clock';}
  if(scope==='queryCarriers')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';

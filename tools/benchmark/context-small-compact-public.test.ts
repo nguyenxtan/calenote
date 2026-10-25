@@ -19,15 +19,16 @@ const captured:Array<{input:ContextInput;id:string;index:number}>=[];
 beforeAll(async()=>{const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};await runContextFixtureCampaign(admitCanonicalCampaign(manifest,'FULL'),{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'TYPED_105'},(input,id,index)=>{captured.push({input:structuredClone(input),id,index});return frozenContextProposal(input,id,index);});},30000);
 const original=(row:typeof captured[number])=>encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),row.input);
 const decode=(wire:unknown,input:ContextInput)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
-const carriers=(wire:Row)=>wire.c as Record<string,Record<string,Row[]>>;
-const control=(wire:Row,key:string)=>{const rows=Object.values(carriers(wire)[key]).flat();expect(rows).toHaveLength(1);return rows[0];};
+const carriers=(wire:Row)=>wire.c as Record<string,Row[]>;
+const change=(wire:Row,key:string)=>{const rows=carriers(wire)[key];expect(rows).toHaveLength(1);return rows[0];};
+const control=(wire:Row,key:string)=>{const rows=change(wire,key).w as Row[];expect(rows).toHaveLength(1);return rows[0];};
 function mutation(input:ContextInput,field:typeof SLOT_NAMES[number],operation:string){
  const date=['eventDate','reminderDate','endDate'].includes(field),clock=['eventTime','reminderTime'].includes(field),numeric=['occurrenceCount','leadOffsetDays'].includes(field);
  const value=date?{k:'c',c:['g'],d:[11],m:[10],y:[],l:[],o:[],w:[],q:[]}:clock?{h:8,m:0,q:'h'}:numeric?2:field==='frequency'?'d':field==='calendar'?'g':field==='eventRelation'?'b':'synthetic';
- return {r:0,...(operation==='CLEAR'?{}:{o:operation==='SET'?'s':'r',v:value}),e:[`U${input.currentTurn}`]};
+ return {r:0,w:operation==='CLEAR'?[]:[{o:operation==='SET'?'s':'r',v:value}],e:[`U${input.currentTurn}`]};
 }
-function clearFields(wire:Row){for(const ops of Object.values(carriers(wire)))for(const key of Object.keys(ops))ops[key]=[];}
-function put(wire:Row,field:typeof SLOT_NAMES[number],operation:'SET'|'REPLACE'|'CLEAR',row:Row){const key=COMPACT_KEYS.fields[field],op=COMPACT_KEYS.fieldOperations[operation==='CLEAR'?'CLEAR':'WRITE'];carriers(wire)[key]??={};carriers(wire)[key][op]=[row];}
+function clearFields(wire:Row){for(const key of Object.keys(carriers(wire)))carriers(wire)[key]=[];}
+function put(wire:Row,field:typeof SLOT_NAMES[number],_operation:'SET'|'REPLACE'|'CLEAR',row:Row){carriers(wire)[COMPACT_KEYS.fields[field]]=[row];}
 it('proves all144 public compact schemas and exact bidirectional valid-domain inverses before canonical decoding',()=>{
  expect(captured).toHaveLength(144);let nullable=0,unions=0,maxBytes=0;
  for(const row of captured){
@@ -56,8 +57,8 @@ it('retains117 relation and234 initial negative controls through the actual publ
 it('refuses raw-null, multi, wrong-type cells, unknown aliases, obsolete protocols and contradictory KEEP without mutation',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),slot=carriers(wire).g;expect(slot).toBeDefined();
  for(const value of [null,0,[0],[123],[false],['0'],[[],[]]]){const bad=structuredClone(wire);control(bad,'g').v=value;const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
- for(const value of [null,[],[0],[0,1],['0'],[[0]]]){const bad=structuredClone(wire);control(bad,'g').r=value;expect(decode(bad,row.input).status).toBe('REFUSED');}
- for(const mutate of [(w:Row)=>{control(w,'g').v=null;},(w:Row)=>{control(w,'g').v=[control(w,'g').v,control(w,'g').v];},(w:Row)=>{w.changes=w.c;delete w.c;},(w:Row)=>{carriers(w).unknown={s:[]};},(w:Row)=>{Object.assign(carriers(w),{a:[{r:0,o:'k',v:[],t:['hidden'],d:[],e:[],k:[]}]});},(w:Row)=>{Object.assign(control(w,'g'),{field:'eventTime'});},(w:Row)=>{control(w,'g').o='SET';}]){const bad=structuredClone(wire);mutate(bad);expect(decode(bad,row.input).status).toBe('REFUSED');}
+ for(const value of [null,[],[0],[0,1],['0'],[[0]]]){const bad=structuredClone(wire);change(bad,'g').r=value;expect(decode(bad,row.input).status).toBe('REFUSED');}
+ for(const mutate of [(w:Row)=>{control(w,'g').v=null;},(w:Row)=>{control(w,'g').v=[control(w,'g').v,control(w,'g').v];},(w:Row)=>{w.changes=w.c;delete w.c;},(w:Row)=>{Object.assign(carriers(w),{unknown:{s:[]}});},(w:Row)=>{Object.assign(carriers(w),{a:[{r:0,o:'k',v:[],t:['hidden'],d:[],e:[],k:[]}]});},(w:Row)=>{Object.assign(control(w,'g'),{field:'eventTime'});},(w:Row)=>{control(w,'g').o='SET';}]){const bad=structuredClone(wire);mutate(bad);expect(decode(bad,row.input).status).toBe('REFUSED');}
  for(const id of ['kind-queries-26','active-carriers-25','owned-clocks-24','compact-cells-23','flat-dates-22','field-controls-21','clock-stream-19'])expect(decodeSmallContextV3(wire,{...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-'+id,wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-'+id},undefined,undefined,row.input).status).toBe('REFUSED');
 });
 it('keeps valid core when optional compact advice is malformed, but refuses unknown roots',()=>{const row=captured[0],wire=original(row);for(const advice of [{g:'bad',r:null},{g:[{k:'HELP',t:[1]}],r:[{t:42}]},{g:[{k:'HELP',f:[],r:[],i:[],t:['GENERAL','LUNAR']}],r:[]}])expect(decode({...wire,...advice},row.input).status).toBe('PARSED');expect(decode({...wire,unknownAdvice:[]},row.input).status).toBe('REFUSED');});
@@ -67,7 +68,7 @@ it('preserves alias-looking free text and exact U/S/F evidence without global en
  const wire=original(captured[0]);wire.g=[{k:'HELP',f:[],r:[],i:[],t:['g']}];wire.r=[{t:'s'}];const codec=compileCompactContext(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(captured[0].input).schema))));expect((codec.unpack(wire) as Row).reply).toEqual([{text:'s'}]);expect((codec.unpack(wire) as Row).directive).toEqual([{kind:'HELP',field:null,reason:null,issue:null,topic:'g'}]);
 });
 it('retains authored rank addresses, gaps, clock order and meaningful date nulls',()=>{
- const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'reminderTime',operation:'SET',value:{hour:8,minute:0,qualifier:'H24'},evidence},{field:'eventTime',operation:'SET',value:{hour:9,minute:30,qualifier:'H24'},evidence}],uncertainties:[]}),wire=encodeSmallContextV3(value,row.input),expected=decode(wire,row.input);expect(expected.status).toBe('PARSED');control(wire,'g').r=2;control(wire,'e').r=8;wire.c=Object.fromEntries(Object.entries(carriers(wire)).reverse());expect(decode(wire,row.input)).toEqual(expected);const collision=structuredClone(wire);control(collision,'e').r=2;expect(decode(collision,row.input).status).toBe('REFUSED');
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'reminderTime',operation:'SET',value:{hour:8,minute:0,qualifier:'H24'},evidence},{field:'eventTime',operation:'SET',value:{hour:9,minute:30,qualifier:'H24'},evidence}],uncertainties:[]}),wire=encodeSmallContextV3(value,row.input),expected=decode(wire,row.input);expect(expected.status).toBe('PARSED');change(wire,'g').r=2;change(wire,'e').r=8;wire.c=Object.fromEntries(Object.entries(carriers(wire)).reverse());expect(decode(wire,row.input)).toEqual(expected);const collision=structuredClone(wire);change(collision,'e').r=2;expect(decode(collision,row.input).status).toBe('REFUSED');
 });
 
 /** Pure schema specimens test the syntax bijection; never fed to the application or a provider. */
@@ -143,16 +144,16 @@ it('validates every owned clock before interpreting any consumer, retaining dupl
 });
 
 it('represents the entire unchanged field family as empty carriers and refuses the recorded21 KEEP-rank pattern unchanged',()=>{
- const row=captured.find(row=>row.id==='R01'&&row.index===0)!,wire=original(row);expect(Object.values(carriers(wire)).every(ops=>Object.values(ops).every(rows=>rows.length===0))).toBe(true);expect(decode(wire,row.input).status).toBe('PARSED');
+ const row=captured.find(row=>row.id==='R01'&&row.index===0)!,wire=original(row);expect(Object.values(carriers(wire)).every(rows=>rows.length===0)).toBe(true);expect(decode(wire,row.input).status).toBe('PARSED');
  const legacy=structuredClone(wire);for(const [rank,key]of Object.keys(carriers(legacy)).entries())Object.assign(carriers(legacy),{[key]:{r:[rank],o:'k',v:[],t:[],d:[],e:[],k:[]}});const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
  const accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);
  for(const [key]of Object.entries(carriers(wire)))for(const value of [null,{},[{r:0,o:'k',v:[],t:[],d:[],e:[],k:[]}],[{},{}]]){const bad=structuredClone(wire);Object.assign(carriers(bad),{[key]:value});expect(accept.safeParse(bad).success).toBe(false);expect(decode(bad,row.input).status).toBe('REFUSED');}
  const missing=structuredClone(wire);delete carriers(missing).a;expect(decode(missing,row.input).status).toBe('REFUSED');
 });
 it('keeps authored primitive active ranks and refuses null/wrapped ranks or empty active evidence at the producer boundary',()=>{
- const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);expect(typeof control(wire,'g').r).toBe('number');expect(accept.safeParse(wire).success).toBe(true);
- for(const rank of [null,[],[0],[[0]],'0']){const bad=structuredClone(wire);control(bad,'g').r=rank;expect(accept.safeParse(bad).success).toBe(false);expect(decode(bad,row.input).status).toBe('REFUSED');}
- const empty=structuredClone(wire);control(empty,'g').e=[];expect(accept.safeParse(empty).success).toBe(false);expect(decode(empty,row.input).status).toBe('REFUSED');
+ const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);expect(typeof change(wire,'g').r).toBe('number');expect(accept.safeParse(wire).success).toBe(true);
+ for(const rank of [null,[],[0],[[0]],'0']){const bad=structuredClone(wire);change(bad,'g').r=rank;expect(accept.safeParse(bad).success).toBe(false);expect(decode(bad,row.input).status).toBe('REFUSED');}
+ const empty=structuredClone(wire);change(empty,'g').e=[];expect(accept.safeParse(empty).success).toBe(false);expect(decode(empty,row.input).status).toBe('REFUSED');
 });
 
 // Semantic-boundary counterfactuals use authored fixtures, never replay a paid payload.
@@ -199,29 +200,28 @@ it.each(['LIST','CALENDAR_DATE','CAPABILITY'] as const)('preserves source-author
  const value=ConversationInterpretationV3Schema.parse({...base,query:exact,uncertainties:[{field:kind==='CAPABILITY'?'intent':'queryRange',reason:'MISSING',alternatives:[]}]});const wire=encodeSmallContextV3(value,row.input);expect(decode(wire,row.input).status).toBe('PARSED');
 });
 
-it('requires nonnull SET/REPLACE values and valueless CLEAR across all13 fields and actual selected operations',()=>{
+it('requires nonnull selected WRITE values or explicitly permitted CLEAR across all13 fields and actual selected operations',()=>{
  const covered=new Set<string>();
- for(const row of captured){const source=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{properties:Record<string,{properties:Record<string,{items:unknown}>}>}}};
-  for(const field of SLOT_NAMES){const policy=source.properties.c.properties[COMPACT_KEYS.fields[field]];if(!policy)continue;
-   for(const operation of ['SET','REPLACE','CLEAR'] as const){const alias=COMPACT_KEYS.fieldOperations[operation==='CLEAR'?'CLEAR':'WRITE'],selected=policy.properties[alias],id=field+'/'+operation;if(!selected||covered.has(id))continue;if(operation!=='CLEAR'&&!(selected.items as {properties:{o:{enum:string[]}}}).properties.o.enum.includes(operation==='SET'?'s':'r'))continue;
-    const accept=z.fromJSONSchema(selected.items as Parameters<typeof z.fromJSONSchema>[0]),value=mutation(row.input,field,operation);expect(accept.safeParse(value).success,id).toBe(true);
-    for(const invalid of operation==='CLEAR'?[{...value,v:null},{...value,v:'not a clear'}]:[{...value,v:null},Object.fromEntries(Object.entries(value).filter(([key])=>key!=='v'))])expect(accept.safeParse(invalid).success,id).toBe(false);
+ for(const row of captured){const source=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{properties:Record<string,{items:{properties:{w:{minItems?:number;maxItems:number;items:{properties?:{o:{enum:string[]}}}}}}}>}}};
+  for(const field of SLOT_NAMES){const policy=source.properties.c.properties[COMPACT_KEYS.fields[field]];if(!policy)continue;const write=policy.items.properties.w;
+   for(const operation of ['SET','REPLACE','CLEAR'] as const){const id=field+'/'+operation;if(covered.has(id))continue;if(operation==='CLEAR'?(write.minItems??0)!==0:!write.items.properties?.o.enum.includes(operation==='SET'?'s':'r'))continue;
+    const accept=z.fromJSONSchema(policy.items as Parameters<typeof z.fromJSONSchema>[0]),value=mutation(row.input,field,operation);expect(accept.safeParse(value).success,id).toBe(true);
+    const invalid=operation==='CLEAR'?[{...value,v:null},{...value,o:'c'}]:[{...value,w:[{o:operation==='SET'?'s':'r',v:null}]},{...value,w:[{o:operation==='SET'?'s':'r'}]},{...value,w:[{o:'c',v:(value.w[0] as Row).v}]}];for(const bad of invalid)expect(accept.safeParse(bad).success,id).toBe(false);
     const missing=original(row);clearFields(missing);expect(z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(missing).success).toBe(true);covered.add(id);
    }
   }
- }
- expect(covered.size).toBe(39);expect(new Set([...covered].map(v=>v.split('/')[0])).size).toBe(13);
+ }expect(covered.size).toBe(39);expect(new Set([...covered].map(v=>v.split('/')[0])).size).toBe(13);
 });
 it('refuses competing operation carriers before projection without choosing, dropping or mutating',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),bad=structuredClone(wire);clearFields(bad);
- put(bad,'reminderTime','SET',mutation(row.input,'reminderTime','SET'));put(bad,'reminderTime','CLEAR',{r:8,e:[`U${row.input.currentTurn}`]});const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
+ put(bad,'reminderTime','SET',mutation(row.input,'reminderTime','SET'));carriers(bad).g.push({r:8,w:[],e:[`U${row.input.currentTurn}`]});const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
 });
 it('refuses the recorded25 missing SET value syntax unchanged instead of inferring a relation',()=>{
  const row=captured.find(row=>row.id==='R02'&&row.index===1)!,wire=original(row),legacy={...wire,c:{k:[{r:0,o:'s',v:[],t:[],d:[],e:['U2'],k:[]}]}};const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
  const expected=control(wire,'k');expect(expected.v).toBe('b');const noValue=structuredClone(wire);delete control(noValue,'k').v;expect(decode(noValue,row.input).status).toBe('REFUSED');const nullable=structuredClone(wire);control(nullable,'k').v=null;expect(decode(nullable,row.input).status).toBe('REFUSED');
 });
 
-it('rejects legacy27 operation-key dictionaries and unpermitted or missing WRITE operation without changing payload',()=>{const row=captured.find(r=>r.id==='R02'&&r.index===1)!,wire=original(row);for(const mutate of [(w:Row)=>{const c=carriers(w).k;carriers(w).k={s:c.w};},(w:Row)=>{delete control(w,'k').o;},(w:Row)=>{control(w,'k').o='c';},(w:Row)=>{control(w,'k').o=['s'];}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}});
+it('rejects legacy27 operation-key dictionaries and unpermitted or missing WRITE operation without changing payload',()=>{const row=captured.find(r=>r.id==='R02'&&r.index===1)!,wire=original(row);for(const mutate of [(w:Row)=>{const c=carriers(w).k;Object.assign(carriers(w),{k:{w:[{r:c[0].r,...(c[0].w as Row[])[0],e:c[0].e}],c:[]}});},(w:Row)=>{delete control(w,'k').o;},(w:Row)=>{control(w,'k').o='c';},(w:Row)=>{control(w,'k').o=['s'];}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}});
 
 // Authored semantic counterfactuals, not a replay or repair of provider payloads.
 it.each(['đi thi','đi họp','uống thuốc','đóng tiền'])('preserves the complete authored activity %s through public wire, evidence and draft observation',async(activity)=>{
@@ -237,4 +237,9 @@ it.each([11,12])('retains the unchanged bounded exam evidence refusal when an au
    const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',0));return ConversationInterpretationV3Schema.parse({...baseline,changes:baseline.changes.map(c=>c.field==='title'?{...c,value:shortened?'thi':'đi thi'}:c.field==='eventDate'?{...c,value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day,month:10,year:null,leapMonth:null}}:c),conversationDirective:null,replyProposal:null});
   });try{const result=await probe.turn(text,'2026-09-28T03:00:00Z');expect(result.fullSchemaValid).toBe(true);expect(result.mutations).toBe(0);if(shortened){expect(result.status).toBe('REJECTED');expect(result.downstreamDiagnostics).toContainEqual(expect.objectContaining({stage:'EVIDENCE',reason:'SEMANTIC_TITLE_OMITTED'}));}else{expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.fields.title).toBe('đi thi');expect(result.draftRevision).toBe(1);}}finally{probe.dispose();}
  }
+});
+
+it('requires one outer active row and a present permission-bound inner write without selecting competing data',()=>{
+ const row=captured.find(r=>r.id==='R04'&&r.index===2)!,wire=original(row),accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);for(const mutate of [(w:Row)=>{carriers(w).g.push({r:8,w:[],e:[`U${row.input.currentTurn}`]});},(w:Row)=>{(change(w,'g').w as Row[]).push(structuredClone(control(w,'g')));},(w:Row)=>{delete change(w,'g').w;},(w:Row)=>{change(w,'g').w=null;},(w:Row)=>{Object.assign(change(w,'g'),{c:[]});}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(accept.safeParse(bad).success).toBe(false);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
+ const clear=structuredClone(wire);change(clear,'g').w=[];expect(accept.safeParse(clear).success).toBe(true);expect(decode(clear,row.input).status).toBe('PARSED');const setOnly=captured.find(r=>r.id==='R02'&&r.index===1)!,s=original(setOnly);change(s,'k').w=[];expect(decode(s,setOnly.input).status).toBe('REFUSED');
 });

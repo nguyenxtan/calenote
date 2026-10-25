@@ -42,8 +42,8 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   const fieldCapability=JSON.parse(request.messages[1].content).fieldCapability;
   if(fieldCapability.eventDateYearNullRequired){
    const bad=structuredClone(wire) as unknown as ReturnType<typeof encodeSmallContextV3>;
-   const row=(bad.c as Record<string,Array<{d:Array<Record<string,unknown>>}>>).d[0];
-   if(row?.d[0]){row.d[0].y=[2026];expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
+   const row=(bad.c as Record<string,Array<{w:Array<{v:Record<string,unknown>}>}>>).d[0];
+   if(row?.w[0]){row.w[0].v.y=[2026];expect(generation.safeParse(bad).success).toBe(false);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
   }
   if(malformed)wire.q=JSON.stringify(wire.q);
   return {status:200,body:JSON.stringify({model:request.model,provider:'Google',id:`gen-typed-${calls}`,choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}],usage:{cost:.001,prompt_tokens:100,completion_tokens:100}})};
