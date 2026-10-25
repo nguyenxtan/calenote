@@ -5,7 +5,7 @@ type Scope=keyof typeof COMPACT_KEYS;
 export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e'},
- fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
+ fields:{title:'a',location:'b',notes:'c',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'},
  fieldMutation:{rank:'r',write:'w',evidence:'e'},
  mutationRow:{operation:'o',value:'v'},
  queryCarriers:{list:'l',calendar:'c',capability:'b'},
@@ -19,7 +19,7 @@ export const COMPACT_KEYS={
 } as const;
 export const COMPACT_ENUMS={
  writeOperation:{SET:'s',REPLACE:'r'},
- date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
+ date:{CIVIL_DATE:'date',RELATIVE_DAY:'receipt',WEEKDAY:'weekday'},
  calendar:{GREGORIAN:'g',LUNAR_VN:'l'},weekday:{THIS_WEEK:'t',NEXT_WEEK:'n',UNRESOLVED:'u'},
  clock:{H24:'h',AM:'a',PM:'p',UNKNOWN:'u'},frequency:{ONCE:'o',DAILY:'d',WEEKLY:'w',MONTHLY:'m',YEARLY:'y',UNKNOWN:'u'},
  relation:{BEFORE_EVENT:'b',INCLUDING_EVENT:'i',STARTING_ON:'s'},
@@ -67,7 +67,7 @@ function scopeDescription(scope:Scope,entries:ReadonlyArray<{name:string;alias:s
   }).join(';');
   return `${alias}=${name}`+(legend?(itemLegend?`[item:${legend}]`:`(${legend})`):'');
  });
- return `${scope}: ${parts.join(';')}`;
+ return `${scope}:${parts.join(';')}`;
 }
 /** The source schema and scoped descriptor compile schema,forward and inverse together. */
 export function compileCompactContext(source:unknown){

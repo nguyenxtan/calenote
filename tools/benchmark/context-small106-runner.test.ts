@@ -36,13 +36,13 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   const schema=request.response_format.json_schema.schema;
   expect((schema.properties!.o as unknown as {anyOf:unknown[]}).anyOf).toHaveLength(2);
   expect(JSON.stringify(schema)).not.toMatch(/"(?:oneOf|\$ref|\$defs)"/u);
-  expect(JSON.stringify(schema)).toContain('"enum":["c","r","w"]');
+  expect(JSON.stringify(schema)).toContain('"enum":["date","receipt","weekday"]');
   const generation=z.fromJSONSchema(request.response_format.json_schema.schema as Parameters<typeof z.fromJSONSchema>[0]);
   expect(generation.safeParse(wire).success,JSON.stringify({fixture:item.id,turn:item.index})).toBe(true);
   const fieldCapability=JSON.parse(request.messages[1].content).fieldCapability;
   if(fieldCapability.eventDateYearNullRequired){
    const bad=structuredClone(wire) as unknown as ReturnType<typeof encodeSmallContextV3>;
-   const row=(bad.c as Record<string,Array<{w:Array<{v:Record<string,unknown>}>}>>).d[0];
+   const row=(bad.c as Record<string,Array<{w:Array<{v:Record<string,unknown>}>}>>)[COMPACT_KEYS.fields.eventDate][0];
    if(row?.w[0]){row.w[0].v.y=[2026];expect(generation.safeParse(bad).success).toBe(false);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
   }
   if(malformed)wire.q=JSON.stringify(wire.q);
