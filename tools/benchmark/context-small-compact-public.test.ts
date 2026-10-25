@@ -24,10 +24,10 @@ const control=(wire:Row,key:string)=>{const rows=Object.values(carriers(wire)[ke
 function mutation(input:ContextInput,field:typeof SLOT_NAMES[number],operation:string){
  const date=['eventDate','reminderDate','endDate'].includes(field),clock=['eventTime','reminderTime'].includes(field),numeric=['occurrenceCount','leadOffsetDays'].includes(field);
  const value=date?{k:'c',c:['g'],d:[11],m:[10],y:[],l:[],o:[],w:[],q:[]}:clock?{h:8,m:0,q:'h'}:numeric?2:field==='frequency'?'d':field==='calendar'?'g':field==='eventRelation'?'b':'synthetic';
- return {r:0,...(operation==='CLEAR'?{}:{v:value}),e:[`U${input.currentTurn}`]};
+ return {r:0,...(operation==='CLEAR'?{}:{o:operation==='SET'?'s':'r',v:value}),e:[`U${input.currentTurn}`]};
 }
 function clearFields(wire:Row){for(const ops of Object.values(carriers(wire)))for(const key of Object.keys(ops))ops[key]=[];}
-function put(wire:Row,field:typeof SLOT_NAMES[number],operation:'SET'|'REPLACE'|'CLEAR',row:Row){const key=COMPACT_KEYS.fields[field],op=COMPACT_KEYS.fieldOperations[operation];carriers(wire)[key]??={};carriers(wire)[key][op]=[row];}
+function put(wire:Row,field:typeof SLOT_NAMES[number],operation:'SET'|'REPLACE'|'CLEAR',row:Row){const key=COMPACT_KEYS.fields[field],op=COMPACT_KEYS.fieldOperations[operation==='CLEAR'?'CLEAR':'WRITE'];carriers(wire)[key]??={};carriers(wire)[key][op]=[row];}
 it('proves all144 public compact schemas and exact bidirectional valid-domain inverses before canonical decoding',()=>{
  expect(captured).toHaveLength(144);let nullable=0,unions=0,maxBytes=0;
  for(const row of captured){
@@ -94,7 +94,7 @@ it('exhausts every nullable scalar scope and constrained enum member with exact 
   else if(types.includes('boolean'))values.push(false,true);
   for(const replacement of values){const flat=structuredClone(base);replacePath(flat,path,replacement);const compact=codec.pack(flat);expect(codec.unpack(compact),path.join('.')).toEqual(flat);expect(codec.pack(codec.unpack(compact))).toEqual(compact);}
  };
- visit(schema);expect(nullablePaths).toBeGreaterThan(100);expect(enumValues).toBeGreaterThan(100);expect(freePaths).toBeGreaterThan(10);
+ visit(schema);expect(nullablePaths).toBe(98);expect(enumValues).toBeGreaterThan(100);expect(freePaths).toBeGreaterThan(10);
 },30000);
 it('refuses malformed cell shape at every populated nullable scope before any semantic interpretation',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,source=kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema))),codec=compileCompactContext(source),flat=specimen(source),compact=codec.pack(flat);let covered=0;
@@ -103,7 +103,7 @@ it('refuses malformed cell shape at every populated nullable scope before any se
   if(Array.isArray(logical)){logical.forEach((v,i)=>visit(v,(packed as unknown[])[i],[...path,i]));return;}
   if(logical&&typeof logical==='object'){const a=Object.values(logical),b=Object.entries(packed as Row);a.forEach((v,i)=>visit(v,b[i][1],[...path,b[i][0]]));}
  };
- visit(flat,compact);expect(covered).toBeGreaterThan(100);
+ visit(flat,compact);expect(covered).toBe(98);
 });
 it('keeps all constrained codebooks bijective and rejects undeclared alias values',()=>{
  for(const book of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)])expect(new Set(Object.values(book)).size).toBe(Object.keys(book).length);
@@ -203,7 +203,7 @@ it('requires nonnull SET/REPLACE values and valueless CLEAR across all13 fields 
  const covered=new Set<string>();
  for(const row of captured){const source=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{properties:Record<string,{properties:Record<string,{items:unknown}>}>}}};
   for(const field of SLOT_NAMES){const policy=source.properties.c.properties[COMPACT_KEYS.fields[field]];if(!policy)continue;
-   for(const operation of ['SET','REPLACE','CLEAR'] as const){const alias=COMPACT_KEYS.fieldOperations[operation],selected=policy.properties[alias],id=field+'/'+operation;if(!selected||covered.has(id))continue;
+   for(const operation of ['SET','REPLACE','CLEAR'] as const){const alias=COMPACT_KEYS.fieldOperations[operation==='CLEAR'?'CLEAR':'WRITE'],selected=policy.properties[alias],id=field+'/'+operation;if(!selected||covered.has(id))continue;if(operation!=='CLEAR'&&!(selected.items as {properties:{o:{enum:string[]}}}).properties.o.enum.includes(operation==='SET'?'s':'r'))continue;
     const accept=z.fromJSONSchema(selected.items as Parameters<typeof z.fromJSONSchema>[0]),value=mutation(row.input,field,operation);expect(accept.safeParse(value).success,id).toBe(true);
     for(const invalid of operation==='CLEAR'?[{...value,v:null},{...value,v:'not a clear'}]:[{...value,v:null},Object.fromEntries(Object.entries(value).filter(([key])=>key!=='v'))])expect(accept.safeParse(invalid).success,id).toBe(false);
     const missing=original(row);clearFields(missing);expect(z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(missing).success).toBe(true);covered.add(id);
@@ -220,3 +220,5 @@ it('refuses the recorded25 missing SET value syntax unchanged instead of inferri
  const row=captured.find(row=>row.id==='R02'&&row.index===1)!,wire=original(row),legacy={...wire,c:{k:[{r:0,o:'s',v:[],t:[],d:[],e:['U2'],k:[]}]}};const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
  const expected=control(wire,'k');expect(expected.v).toBe('b');const noValue=structuredClone(wire);delete control(noValue,'k').v;expect(decode(noValue,row.input).status).toBe('REFUSED');const nullable=structuredClone(wire);control(nullable,'k').v=null;expect(decode(nullable,row.input).status).toBe('REFUSED');
 });
+
+it('rejects legacy27 operation-key dictionaries and unpermitted or missing WRITE operation without changing payload',()=>{const row=captured.find(r=>r.id==='R02'&&r.index===1)!,wire=original(row);for(const mutate of [(w:Row)=>{const c=carriers(w).k;carriers(w).k={s:c.w};},(w:Row)=>{delete control(w,'k').o;},(w:Row)=>{control(w,'k').o='c';},(w:Row)=>{control(w,'k').o=['s'];}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}});

@@ -5,8 +5,8 @@ export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'a',location:'b',notes:'c',eventDate:'d',eventTime:'e',reminderDate:'f',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'m'},
- fieldOperations:{SET:'s',REPLACE:'r',CLEAR:'c'},
- mutationRow:{rank:'r',value:'v',evidence:'e'},
+ fieldOperations:{WRITE:'w',CLEAR:'c'},
+ mutationRow:{rank:'r',operation:'o',value:'v',evidence:'e'},
  queryCarriers:{list:'l',calendar:'c',capability:'b'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
  uncertainty:{fieldCode:'f',reason:'r',alternatives:'a'},
@@ -17,6 +17,7 @@ export const COMPACT_KEYS={
  directive:{kind:'k',field:'f',reason:'r',issue:'i',topic:'t'},reply:{text:'t'},
 } as const;
 export const COMPACT_ENUMS={
+ writeOperation:{SET:'s',REPLACE:'r'},
  date:{CIVIL_DATE:'c',RELATIVE_DAY:'r',WEEKDAY:'w'},
  calendar:{GREGORIAN:'g',LUNAR_VN:'l'},weekday:{THIS_WEEK:'t',NEXT_WEEK:'n',UNRESOLVED:'u'},
  clock:{H24:'h',AM:'a',PM:'p',UNKNOWN:'u'},frequency:{ONCE:'o',DAILY:'d',WEEKLY:'w',MONTHLY:'m',YEARLY:'y',UNKNOWN:'u'},
@@ -41,6 +42,7 @@ function child(scope:Scope,key:string,field?:string):Scope {
  return scope;
 }
 function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,string>>|undefined {
+ if(scope==='mutationRow'&&key==='operation')return COMPACT_ENUMS.writeOperation;
  if(scope==='mutationRow'&&key==='value'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
  if(scope==='date'){if(key==='kind')return COMPACT_ENUMS.date;if(key==='calendar')return COMPACT_ENUMS.calendar;if(key==='qualifier')return COMPACT_ENUMS.weekday;}
  if(scope==='period'&&key==='kind')return COMPACT_ENUMS.period;

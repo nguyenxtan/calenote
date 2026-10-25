@@ -53,7 +53,7 @@ export function verifyContextRequestSchema(request: Parameters<SemanticTransport
   if (digest(JSON.stringify(fieldCapability)) !== digest(JSON.stringify(expected))) throw new Error("FIELD_CAPABILITY_CHANGED");
   if (wireProtocol === "TYPED_105" || wireProtocol === "SMALL_106") {
     const selected = wireProtocol === "SMALL_106" ? serializeSmallContextRequest(context) : serializeTypedContextRequest(context);
-    if (digest(selected.messages[0].content) !== (wireProtocol === "SMALL_106" ? "c6ed1cd11f5c68ad966ee370e55d84fec6d92178ec63c9286e21f874b96c8b19" : "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01")) throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
+    if (digest(selected.messages[0].content) !== (wireProtocol === "SMALL_106" ? "a2f120528dfa3acf6233caf90c719896b880e290e9495968a3ac5509be4c5fdc" : "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01")) throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
     for (const key of Object.keys(selected) as Array<keyof typeof selected>) {
       if (!isDeepStrictEqual(request[key], selected[key])) throw new Error("TYPED_PROVIDER_REQUEST_CHANGED");
     }
@@ -250,7 +250,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if(input.pilotRoute===AI_STUDIO_PILOT_RETENTION_POLICY&&(request.provider.only.join("|")!=="google-ai-studio"||request.provider.zdr!==false))throw Error("AI_STUDIO_ROUTE_BINDING");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== (input.wireProtocol === "SMALL_106" ? "c6ed1cd11f5c68ad966ee370e55d84fec6d92178ec63c9286e21f874b96c8b19" : input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
+    if (digest(request.messages[0].content) !== (input.wireProtocol === "SMALL_106" ? "a2f120528dfa3acf6233caf90c719896b880e290e9495968a3ac5509be4c5fdc" : input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
     if (providerWireSchemaDigest !== "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request, input.wireProtocol);
