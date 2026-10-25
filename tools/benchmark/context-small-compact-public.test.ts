@@ -224,7 +224,7 @@ it('refuses the recorded25 missing SET value syntax unchanged instead of inferri
 it('rejects legacy27 operation-key dictionaries and unpermitted or missing WRITE operation without changing payload',()=>{const row=captured.find(r=>r.id==='R02'&&r.index===1)!,wire=original(row);for(const mutate of [(w:Row)=>{const c=carriers(w).k;Object.assign(carriers(w),{k:{w:[{r:c[0].r,...(c[0].w as Row[])[0],e:c[0].e}],c:[]}});},(w:Row)=>{delete control(w,'k').o;},(w:Row)=>{control(w,'k').o='c';},(w:Row)=>{control(w,'k').o=['s'];}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}});
 
 // Authored semantic counterfactuals, not a replay or repair of provider payloads.
-it.each(['đi thi','đi họp','uống thuốc','đóng tiền'])('preserves the complete authored activity %s through public wire, evidence and draft observation',async(activity)=>{
+it.each(['đi thi','đi họp','uống thuốc','đóng tiền','đi khám định kỳ','nộp báo cáo quý','mua vé tàu','báo cáo quý'])('preserves the complete authored activity %s through public wire, evidence and draft observation',async(activity)=>{
  const text=`Ngày 11/10 ${activity} ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.`;
  const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
   const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',0));return ConversationInterpretationV3Schema.parse({...baseline,changes:baseline.changes.map(c=>c.field==='title'?{...c,value:activity}:c),conversationDirective:null,replyProposal:null});
