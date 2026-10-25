@@ -222,3 +222,19 @@ it('refuses the recorded25 missing SET value syntax unchanged instead of inferri
 });
 
 it('rejects legacy27 operation-key dictionaries and unpermitted or missing WRITE operation without changing payload',()=>{const row=captured.find(r=>r.id==='R02'&&r.index===1)!,wire=original(row);for(const mutate of [(w:Row)=>{const c=carriers(w).k;carriers(w).k={s:c.w};},(w:Row)=>{delete control(w,'k').o;},(w:Row)=>{control(w,'k').o='c';},(w:Row)=>{control(w,'k').o=['s'];}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}});
+
+// Authored semantic counterfactuals, not a replay or repair of provider payloads.
+it.each(['đi thi','đi họp','uống thuốc','đóng tiền'])('preserves the complete authored activity %s through public wire, evidence and draft observation',async(activity)=>{
+ const text=`Ngày 11/10 ${activity} ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.`;
+ const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
+  const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',0));return ConversationInterpretationV3Schema.parse({...baseline,changes:baseline.changes.map(c=>c.field==='title'?{...c,value:activity}:c),conversationDirective:null,replyProposal:null});
+ });try{const result=await probe.turn(text,'2026-09-28T03:00:00Z');expect(result.fullSchemaValid).toBe(true);expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.fields.title).toBe(activity);expect(result.draftRevision).toBe(1);expect(result.mutations).toBe(0);}finally{probe.dispose();}
+});
+it.each([11,12])('retains the unchanged bounded exam evidence refusal when an authored action is shortened on day%s',async(day)=>{
+ for(const shortened of [false,true]){
+  const text=`Ngày ${day}/10 đi thi ở Quang Trung, nhắc 2 ngày liên tiếp giúp tôi.`;
+  const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},input=>{
+   const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R02',0));return ConversationInterpretationV3Schema.parse({...baseline,changes:baseline.changes.map(c=>c.field==='title'?{...c,value:shortened?'thi':'đi thi'}:c.field==='eventDate'?{...c,value:{kind:'CIVIL_DATE',calendar:'GREGORIAN',day,month:10,year:null,leapMonth:null}}:c),conversationDirective:null,replyProposal:null});
+  });try{const result=await probe.turn(text,'2026-09-28T03:00:00Z');expect(result.fullSchemaValid).toBe(true);expect(result.mutations).toBe(0);if(shortened){expect(result.status).toBe('REJECTED');expect(result.downstreamDiagnostics).toContainEqual(expect.objectContaining({stage:'EVIDENCE',reason:'SEMANTIC_TITLE_OMITTED'}));}else{expect(result.status).toBe('CLARIFICATION_REQUESTED');expect(result.fields.title).toBe('đi thi');expect(result.draftRevision).toBe(1);}}finally{probe.dispose();}
+ }
+});
