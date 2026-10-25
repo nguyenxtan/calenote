@@ -1,4 +1,5 @@
 /** Versioned scoped syntax codec. No semantic defaults, inference or global text replacement. */
+import {CONTEXT_OPERATION_WIRE_METADATA_V1,UNCERTAINTY_FIELD_WIRE_CODE_V1} from './context-provider-wire';
 type Row=Record<string,unknown>;
 type Scope=keyof typeof COMPACT_KEYS;
 export const COMPACT_KEYS={
@@ -52,6 +53,22 @@ function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,st
  return undefined;
 }
 interface Node {schema:Row;pack:(value:unknown)=>unknown;unpack:(value:unknown)=>unknown;signature:string}
+function scopeDescription(scope:Scope,entries:ReadonlyArray<{name:string;alias:string;node:Node}>,field?:string){
+ const parts=entries.map(({name,alias,node})=>{
+  const schema=node.schema,directEnums=Array.isArray(schema.enum)?schema.enum:undefined;
+  const itemEnums=schema.type==='array'&&record(schema.items)&&Array.isArray(schema.items.enum)?schema.items.enum:undefined;
+  const domain=directEnums??itemEnums,itemLegend=!directEnums&&!!itemEnums;
+  const aliases=enumMap(scope,name,field);
+  let legend=aliases&&domain?Object.entries(aliases).filter(([,value])=>domain.includes(value)).map(([canonical,value])=>`${value}=${canonical}`).join(';'):'';
+  if(scope==='uncertainty'&&name==='fieldCode')legend=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(([,code])=>!domain||domain.includes(code)).map(([canonical,code])=>`${code}=${canonical}`).join(';');
+  if(scope==='operation'&&name==='code'&&domain)legend=domain.flatMap(code=>{
+   const tuple=typeof code==='string'&&/^(0|[1-9]\d*)$/.test(code)?CONTEXT_OPERATION_WIRE_METADATA_V1[Number(code)]:undefined;
+   return tuple?[`${code}=${tuple.filter(value=>value!==null).join('/')}`]:[];
+  }).join(';');
+  return `${alias}=${name}`+(legend?(itemLegend?`[item:${legend}]`:`(${legend})`):'');
+ });
+ return `${scope}: ${parts.join(';')}`;
+}
 /** The source schema and scoped descriptor compile schema,forward and inverse together. */
 export function compileCompactContext(source:unknown){
  const compile=(schema:unknown,scope:Scope,key='',field?:string):Node=>{
@@ -67,7 +84,7 @@ export function compileCompactContext(source:unknown){
    const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name,field),name,scope==='fields'?name:field)};});
    check(new Set(entries.map(e=>e.alias)).size===entries.length&&schema.required.length===entries.length&&schema.required.every(name=>typeof name==='string'&&Object.hasOwn(schema.properties as Row,name)));
    const transform=(value:unknown,forward:boolean)=>{check(record(value));const from=entries.map(e=>forward?e.name:e.alias);check(Object.keys(value).length===entries.length&&from.every(name=>Object.hasOwn(value,name)));return Object.fromEntries(entries.map(e=>[forward?e.alias:e.name,(forward?e.node.pack:e.node.unpack)(value[forward?e.name:e.alias])]));};
-   return {schema:{...schema,properties:Object.fromEntries(entries.map(e=>[e.alias,scope==='fields'?{...e.node.schema,description:`Canonical field: ${e.name}.`}:e.node.schema])),required:entries.map(e=>e.alias)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(entries.map(e=>[e.name,e.alias,e.node.signature]))};
+   return {schema:{...schema,...(scope==='fields'?{}:{description:scopeDescription(scope,entries,field)}),properties:Object.fromEntries(entries.map(e=>[e.alias,scope==='fields'?{...e.node.schema,description:`Canonical field: ${e.name}.`}:e.node.schema])),required:entries.map(e=>e.alias)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(entries.map(e=>[e.name,e.alias,e.node.signature]))};
   }
   if(schema.type==='array'){
    if(schema.maxItems===0){const transform=(value:unknown)=>{check(Array.isArray(value)&&value.length===0);return [];};return {schema:{...schema,items:{type:'string'}},pack:transform,unpack:transform,signature:'empty-array'};}

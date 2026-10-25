@@ -512,6 +512,7 @@ const operationTuples = Object.freeze([
  ["HELP",null,null],["UNSUPPORTED",null,null],["AMBIGUOUS",null,null],
  ["AMBIGUOUS","CURRENT",null],["AMBIGUOUS","NEW",null],["AMBIGUOUS","UNRESOLVED",null],
 ].map(tuple=>Object.freeze(tuple)));
+export const CONTEXT_OPERATION_WIRE_METADATA_V1=operationTuples;
 const operationWireCodes=Object.freeze(operationTuples.map((_,index)=>String(index)));
 function operationSchema(root:Schema):Schema{
  const result=structuredClone(root);
