@@ -4,7 +4,7 @@ type Row=Record<string,unknown>;
 type Scope=keyof typeof COMPACT_KEYS;
 export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
- operation:{code:'c',targetEvidence:'e'},
+ operation:{code:'c',targetEvidence:'e',query:'q'},
  fields:{title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'},
  fieldMutation:{rank:'r',write:'w',evidence:'e'},
  orderedChange:{field:'f',write:'w',evidence:'e'},
@@ -36,7 +36,7 @@ function child(scope:Scope,key:string,field?:string):Scope {
  if(scope==='fields')return 'fieldMutation';
  if((scope==='fieldMutation'||scope==='orderedChange')&&key==='write')return 'mutationRow';
  if(scope==='mutationRow'&&key==='value'){if(['eventDate','reminderDate','endDate'].includes(field??''))return 'date';if(['eventTime','reminderTime'].includes(field??''))return 'clock';}
- if(scope==='queryCarriers')return 'query';
+ if(scope==='queryCarriers'||scope==='operation'&&key==='query')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
  if(key==='period')return 'period';
  if(key==='clock')return 'clock';

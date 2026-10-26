@@ -6,6 +6,10 @@ it('an unsigned raw proposal cannot load itself as paid authority',()=>{expect((
 
 import {mkdtempSync,realpathSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
 import {RATE_POLICY as P} from './context-rate-policy';import {appendCampaignEvent,reserveCampaignCall,markCampaignDispatched,finishCampaignCall,auditCampaignAccountRoot} from './context-contract-live';import {candidateValidationProof} from './context-contract-candidate-validation';import {deriveBoundedPilotManifest} from './context-bounded-pilot';import {ContextInputSchema,ConversationInterpretationV3Schema} from '../../src/modules/conversation/context-contract/contracts';import {frozenContextProposal} from './context-contract-fixtures';import {encodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+// These orchestration fixtures already mock source/identity/loaded-module guards.
+// Keep the consumed13804 policy frozen; use an explicit synthetic proof rather
+// than requiring future application source to equal a historical paid candidate.
+vi.mock('./context-contract-candidate-validation',async(importOriginal)=>{const actual=await importOriginal<typeof import('./context-contract-candidate-validation')>();return {...actual,candidateValidationProof:(root:string,candidate:string)=>{void root;return {evaluationCandidateSha:candidate,harnessRevisionSha:'a'.repeat(40),candidateProofSha256:'b'.repeat(64),harnessProofSha256:'c'.repeat(64)};}};});
 vi.mock('./context-rate-source',()=>({assertRateHarnessCommit:vi.fn()}));
 vi.mock('./register-conversation-loader.mjs',()=>({assertLoadedCandidateModules:vi.fn()}));
 const fixtureRuntime=vi.hoisted(()=>({clock:()=>({wall:0,mono:0}),jitter:()=>0,wait:async(_ms:number,_signal?:AbortSignal)=>{void _ms;void _signal;}}));

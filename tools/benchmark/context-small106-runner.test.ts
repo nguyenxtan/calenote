@@ -34,7 +34,7 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
   const input=ContextInputSchema.parse(raw),item=healthy[calls++];
   const wire=encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,item.id,item.index)),input) as unknown as Record<string,unknown>;
   const schema=request.response_format.json_schema.schema;
-  expect((schema.properties!.o as unknown as {anyOf:unknown[]}).anyOf).toHaveLength(2);
+  expect((schema.properties!.o as unknown as {anyOf:unknown[]}).anyOf).toHaveLength(5);
   expect(JSON.stringify(schema)).not.toMatch(/"(?:oneOf|\$ref|\$defs)"/u);
   expect(JSON.stringify(schema)).toContain('"enum":["date","receipt","weekday"]');
   const generation=z.fromJSONSchema(request.response_format.json_schema.schema as Parameters<typeof z.fromJSONSchema>[0]);
@@ -45,7 +45,7 @@ it.each([false,true])('small106 frozen formal pilot uses typed application path 
    const row=(bad.c as Array<{f:string;w:Array<{v:Record<string,unknown>}>}>).find(row=>row.f===COMPACT_KEYS.fields.eventDate);
    if(row?.w[0]){row.w[0].v.y=[2026];expect(generation.safeParse(bad).success).toBe(false);expect(decodeSmallContextV3(bad,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input).status).toBe('REFUSED');}
   }
-  if(malformed)wire.q=JSON.stringify(wire.q);
+  if(malformed)(wire.o as Record<string,unknown>).q=JSON.stringify((wire.o as Record<string,unknown>).q);
   return {status:200,body:JSON.stringify({model:request.model,provider:'Google',id:`gen-typed-${calls}`,choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}],usage:{cost:.001,prompt_tokens:100,completion_tokens:100}})};
  }});
  if(malformed){expect(result.status).toBe('STOP');expect(calls).toBe(1);expect(result.applicationEvidence[0].mutations).toBe(0);}
