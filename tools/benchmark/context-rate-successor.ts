@@ -12,11 +12,12 @@ type ParentReport={status:string;configuredProvider:string;privacyPolicy:string;
 /** Lifecycle closure is not billing settlement: last UNKNOWN remains full B.
  * Caller must bind these files/receipt to the exact reviewed parent or its own
  * just-finished child, never accept a caller-authored eligibility projection. */
-export function verifyRateSuccessor(directory:string,manifest:string,receipt:RateReceipt,root=process.cwd()):{receiptAt:number;hint:RateHint}{
+export function verifyRateSuccessor(directory:string,manifest:string,receipt:RateReceipt,root=process.cwd()):{receiptAt:number;hint:RateHint}{return verifyRateParentForSource(directory,manifest,receipt,P.app,root);}
+export function verifyRateParentForSource(directory:string,manifest:string,receipt:RateReceipt,source:string,root=process.cwd()):{receiptAt:number;hint:RateHint}{
  const fail=():never=>{throw Error('RATE_PARENT');};
  try{
   const rows=readCampaignLedger(directory),b=rows[0],end=rows.at(-1),reserves=rows.filter(r=>r.event==='RESERVE'),dispatches=rows.filter(r=>r.event==='DISPATCH'),finishes=rows.filter(r=>r.event==='FINISH');
-  if(b?.event!=='BEGIN'||b.profile!=='PILOT'||b.sourceSha!==P.app||b.executionKind!=='BOUNDED_PILOT'||b.targetManifestSha256!==manifest||b.maxTargetRequests!==76||b.accountingPolicy!=='CONFIRMED_COST_V1'||b.requestExposureBoundMicrounits!==P.reserve||end?.event!=='STOP'||end.reason!=='UNKNOWN_USAGE')return fail();
+  if(b?.event!=='BEGIN'||b.profile!=='PILOT'||b.sourceSha!==source||!(/^[a-f0-9]{40}$/u).test(source)||b.executionKind!=='BOUNDED_PILOT'||b.targetManifestSha256!==manifest||b.maxTargetRequests!==76||b.accountingPolicy!=='CONFIRMED_COST_V1'||b.requestExposureBoundMicrounits!==P.reserve||end?.event!=='STOP'||end.reason!=='UNKNOWN_USAGE')return fail();
   const n=reserves.length;if(n<2||n>76||dispatches.length!==n||finishes.length!==n)return fail();
   for(const r of reserves)if(!dispatches.some(d=>d.reservationId===r.reservationId)||!finishes.some(f=>f.reservationId===r.reservationId))return fail();
   const lastFinish=finishes.at(-1)!;if(lastFinish.observedMicrounits!=null||lastFinish.reservationId!==`call-${n}`||finishes.slice(0,-1).some(f=>f.observedMicrounits==null))return fail();

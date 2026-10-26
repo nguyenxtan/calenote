@@ -1,3 +1,4 @@
+import {CURRENT_RATE_SCOPE,createCurrentRateBudget} from './context-rate-current-policy';
 /** Durable scheduling/accounting controller only; it owns no provider transport,
  * credential callback or paid authority. The reviewed launch bridge supplies
  * fresh trusted account/source checks while holding the physical account lock. */
@@ -17,16 +18,18 @@ export function readRateBatchJournal(directory:string):Row[]{
  for(const [index,{hash:actual,...r}] of rows.entries()){if(r.sequence!==index+1||r.previousHash!==prior||hash(JSON.stringify(r))!==actual)throw Error('RATE_JOURNAL');prior=actual;}
  return rows;
 }
-export interface RateBatchOptions{accountRoot:string;directory:string;recordDigest:string;clock:()=>RateClock;wait:(ms:number,signal:AbortSignal)=>Promise<void>;jitter:()=>number;verify:()=>{retained:number;unknown:number};signal:AbortSignal}
+export interface RateBatchBudget{baseline:number;unknown:number;subcap:number;runs:number;batchMs:number;phaseEnvelope:boolean}
+export interface RateBatchOptions{budget?:Readonly<RateBatchBudget>;accountRoot:string;directory:string;recordDigest:string;clock:()=>RateClock;wait:(ms:number,signal:AbortSignal)=>Promise<void>;jitter:()=>number;verify:()=>{retained:number;unknown:number};signal:AbortSignal}
 export class RateBatchController{
- private readonly origin:RateClock;private last:RateClock;private readonly expiry:RateClock;private rows:Row[]=[];private run=0;private requests=0;private total=0;private start?:RateClock;private previousStart:number|null=null;private inflight?:{id:string;dispatched:boolean};private closed=false;private busy=false;
+ private readonly budget:Readonly<RateBatchBudget>;private readonly origin:RateClock;private last:RateClock;private readonly expiry:RateClock;private rows:Row[]=[];private run=0;private requests=0;private total=0;private start?:RateClock;private previousStart:number|null=null;private inflight?:{id:string;dispatched:boolean};private closed=false;private busy=false;
  constructor(private readonly options:RateBatchOptions){
   const {accountRoot:root,directory,recordDigest}=options;
   if(realpathSync(root)!==root||!isAbsolute(directory)||relative(root,directory).startsWith('..')||join(root,relative(root,directory))!==directory||relative(root,directory).includes('/')||!/^[a-f0-9]{64}$/u.test(recordDigest))throw Error('RATE_PATH');
-  const c=options.clock();this.origin=checkRateClock(c,c,c);this.last=this.origin;this.expiry={wall:rateSum(c.wall,P.batchMs),mono:rateSum(c.mono,P.batchMs)};
+  if(options.budget){const expected=createCurrentRateBudget({baseline:options.budget.baseline,unknown:options.budget.unknown});if(Object.keys(options.budget).length!==Object.keys(expected).length||Object.entries(expected).some(([k,v])=>options.budget![k as keyof RateBatchBudget]!==v))throw Error('RATE_CURRENT_SCOPE');this.budget=expected;}else this.budget=Object.freeze({baseline:P.baseline,unknown:P.unknown,subcap:P.subcap,runs:P.runs,batchMs:P.batchMs,phaseEnvelope:false});
+  const c=options.clock();this.origin=checkRateClock(c,c,c);this.last=this.origin;this.expiry={wall:rateSum(c.wall,this.budget.batchMs),mono:rateSum(c.mono,this.budget.batchMs)};
   // mkdir is the atomic, never-repaired batch claim. An interrupted controller
   // cannot reopen it even if the process/account lock later disappears.
-  mkdirSync(directory,{mode:0o700});syncDir(root);writeExclusive(join(directory,'controller.claim'),{recordDigest,pid:process.pid,origin:c});syncDir(directory);
+  mkdirSync(directory,{mode:0o700});syncDir(root);writeExclusive(join(directory,'controller.claim'),{recordDigest,pid:process.pid,origin:c,...(options.budget?{budget:this.budget}:{})});syncDir(directory);
   const fd=openSync(join(directory,'journal.jsonl'),'wx',0o600);fsyncSync(fd);closeSync(fd);syncDir(directory);
   this.append('BEGIN',c);
  }
@@ -43,14 +46,14 @@ export class RateBatchController{
  canCredit(){const n=this.sample();return !this.closed&&!this.options.signal.aborted&&!!this.start&&n.wall-this.start.wall<P.runMs&&n.mono-this.start.mono<P.runMs&&n.wall<this.expiry.wall&&n.mono<this.expiry.mono;}
  private verify(){
   const disk=readRateBatchJournal(this.options.directory);if(JSON.stringify(disk)!==JSON.stringify(this.rows))throw Error('RATE_JOURNAL_DRIFT');
-  const b=this.options.verify();if(!rateNatural(b.retained)||!rateNatural(b.unknown)||b.retained<P.baseline||b.unknown<P.unknown)throw Error('RATE_BASELINE');
-  const prospective=rateSum(b.retained,P.reserve);if(prospective>P.cap)throw Error('RATE_GLOBAL_CAP');if(prospective-P.baseline>P.subcap)throw Error('RATE_SUBCAP');
+  const b=this.options.verify();if(!rateNatural(b.retained)||!rateNatural(b.unknown)||b.retained<this.budget.baseline||b.unknown<this.budget.unknown)throw Error('RATE_BASELINE');
+  const prospective=rateSum(b.retained,P.reserve);if(prospective>P.cap)throw Error('RATE_GLOBAL_CAP');if(this.budget.phaseEnvelope&&prospective-CURRENT_RATE_SCOPE.phaseBaseline>CURRENT_RATE_SCOPE.phaseCap)throw Error('RATE_PHASE_CAP');if(prospective-this.budget.baseline>this.budget.subcap)throw Error('RATE_SUBCAP');
  }
  private async waitUntil(until:RateClock){
   while(true){this.options.signal.throwIfAborted();const n=this.tick();const remaining=Math.max(0,until.wall-n.wall,until.mono-n.mono);if(!remaining)return n;await this.options.wait(Math.min(remaining,1000),this.options.signal);}
  }
  async startRun(receipt:number,hint:RateHint){
-  if(this.closed)throw Error('RATE_CIRCUIT');if(this.busy||this.start||this.inflight)throw Error('RATE_INFLIGHT');if(this.run>=P.runs)throw Error('RATE_RUN_LIMIT');this.busy=true;
+  if(this.closed)throw Error('RATE_CIRCUIT');if(this.busy||this.start||this.inflight)throw Error('RATE_INFLIGHT');if(this.run>=this.budget.runs)throw Error('RATE_RUN_LIMIT');this.busy=true;
   try{const plan=planRateCooldown(receipt,hint,this.tick(),this.expiry.wall);await this.waitUntil(plan);this.verify();const n=this.tick();
    if(rateSum(n.wall,P.runMs)>this.expiry.wall||rateSum(n.mono,P.runMs)>this.expiry.mono)throw Error('RATE_BATCH_EXPIRY');
    this.run++;this.requests=0;this.start=n;this.append('RUN_BEGIN',n);return {...n};
@@ -60,7 +63,7 @@ export class RateBatchController{
   if(this.closed)throw Error('RATE_CIRCUIT');if(this.busy||this.inflight)throw Error('RATE_INFLIGHT');if(!this.start||!/^call-[1-9]\d*$/u.test(id)||id!==`call-${this.requests+1}`)throw Error('RATE_TARGET');this.busy=true;
   try{const n=this.tick(),delay=ratePacingDelay(this.previousStart,n.mono,this.options.jitter());const ready=await this.waitUntil({wall:rateSum(n.wall,delay),mono:rateSum(n.mono,delay)});
    if(ready.wall-this.start.wall>=P.runMs||ready.mono-this.start.mono>=P.runMs)throw Error('RATE_RUN_EXPIRY');
-   this.verify();const admitted=this.tick();this.checkRun(admitted);this.options.signal.throwIfAborted();if(this.requests>=P.requests||this.total>=P.batchRequests)throw Error('RATE_REQUEST_LIMIT');
+   this.verify();const admitted=this.tick();this.checkRun(admitted);this.options.signal.throwIfAborted();if(this.requests>=P.requests||this.total>=this.budget.runs*P.requests)throw Error('RATE_REQUEST_LIMIT');
    this.append('CLAIM',admitted,id);this.requests++;this.total++;this.inflight={id,dispatched:false};
   }catch(e){this.closed=true;throw e;}finally{this.busy=false;}
  }

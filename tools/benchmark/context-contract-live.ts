@@ -371,7 +371,7 @@ export function admitHistoricalR01ReplayIntentReference(input: FutureLiveIntent)
   return record;
 }
 
-type Begin = { timingPolicy?: "RATE_AWARE_FRESH_V2"; rateBatchRecordSha256?:string; rateRunOrdinal?:number; event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
+type Begin = { timingPolicy?: "RATE_AWARE_FRESH_V2"|"RATE_AWARE_CURRENT_V3"; rateBatchRecordSha256?:string; rateRunOrdinal?:number; event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
   debugBudgetAuthoritySha256?: string;
   accountingPolicy?: "CONFIRMED_COST_V1";
   requestExposureBoundMicrounits?: number;
@@ -390,7 +390,7 @@ type Complete = { event: "COMPLETE"; runId: string; at: number; gate: "PASS"; re
 export type CampaignEvent = Begin | Reserve | Dispatch | Finish | Stop | Canary | Complete;
 type Stored = CampaignEvent & { sequence: number; previousHash: string; hash: string };
 
-export function campaignRunMilliseconds(begin: {profile:CampaignProfile;timingPolicy?:"RATE_AWARE_FRESH_V2"}) {
+export function campaignRunMilliseconds(begin: {profile:CampaignProfile;timingPolicy?:"RATE_AWARE_FRESH_V2"|"RATE_AWARE_CURRENT_V3"}) {
   return begin.profile === "PILOT" && begin.timingPolicy === undefined ? 1200000 : 2700000;
 }
 function safeCampaignSum(a: number, b: number): number {
@@ -413,7 +413,7 @@ function validateCampaign(rows: readonly Stored[]) {
   if (begin.event !== "BEGIN" || !closed(begin, ["event", "runId", "sourceSha", "profile", "provenanceDigest", "executionKind", "pilotPrefixDigest",
     "authorizationSha256", "historicalCalls", "historicalUnknownReservations", "cumulativeAuthorizedMicrounits", "cumulativeRetainedMicrounits",
     "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits", "targetManifestSha256", "maxTargetRequests", "targetFixture", "targetTurn", "contextSeedDigest", "debugBudgetAuthoritySha256", "timingPolicy", "rateBatchRecordSha256", "rateRunOrdinal"])
-    || (begin.timingPolicy !== undefined ? (begin.timingPolicy !== "RATE_AWARE_FRESH_V2" || begin.profile !== "PILOT" || begin.executionKind !== "BOUNDED_PILOT" || begin.accountingPolicy !== "CONFIRMED_COST_V1" || !digest(begin.debugBudgetAuthoritySha256,64) || !digest(begin.rateBatchRecordSha256,64) || ![1,2].includes(begin.rateRunOrdinal!)) : (begin.rateBatchRecordSha256 !== undefined || begin.rateRunOrdinal !== undefined))
+    || (begin.timingPolicy !== undefined ? (!["RATE_AWARE_FRESH_V2","RATE_AWARE_CURRENT_V3"].includes(begin.timingPolicy) || begin.profile !== "PILOT" || begin.executionKind !== "BOUNDED_PILOT" || begin.accountingPolicy !== "CONFIRMED_COST_V1" || !digest(begin.debugBudgetAuthoritySha256,64) || !digest(begin.rateBatchRecordSha256,64) || !(begin.timingPolicy === "RATE_AWARE_CURRENT_V3" ? [1] : [1,2]).includes(begin.rateRunOrdinal!)) : (begin.rateBatchRecordSha256 !== undefined || begin.rateRunOrdinal !== undefined))
     || !id(begin.runId) || !["PILOT", "FULL"].includes(begin.profile) || !digest(begin.sourceSha, 40) || !digest(begin.provenanceDigest, 64)
     || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits) || begin.cumulativeAuthorizedMicrounits <= 0
     || begin.cumulativeAuthorizedMicrounits > (begin.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 10000000) || !integer(begin.cumulativeRetainedMicrounits)
