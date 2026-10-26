@@ -121,6 +121,37 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const enums=(node:Schema):Schema=>{const result=map(node,enums);delete result.$schema;if(typeof result.const==="string"){result.enum=[result.const];delete result.const;}return result;};
  return {version:CONTEXT_TYPED_PROTOCOL_V3.wireVersion,schema:shareTypedDefinitions(enums(schema))};
 }
+/** Full selected typed language with authored array order and no rank carriers.
+ * This is an internal validation boundary, never a provider generation schema. */
+export function googleLiteEuTypedOrderedContextValidationSchemaV3(input:ContextInput) {
+ const selected=googleLiteEuTypedContextValidationSchemaV3(input),schema=structuredClone(selected.schema) as Schema,branches:Schema[]=[],requiredChangeFields:string[]=[];
+ const changeFields=(raw:Schema):string[]=>{
+  const node=resolve(raw,schema);return [...new Set((node.anyOf??[node]).flatMap(rawBranch=>{const branch=resolve(rawBranch,schema),field=branch.properties?.field?resolve(branch.properties.field,schema):undefined;
+   if(!field?.enum?.length||!field.enum.every(value=>typeof value==='string'))throw Error('TYPED_ORDERED_FIELD_DOMAIN');return field.enum as string[];
+  }))];
+ };
+ const unwrap=(raw:Schema,expectedField?:string)=>{
+  const node=resolve(raw,schema);let nullable=false,active=false;const fields:string[]=[];
+  for(const rawBranch of node.anyOf??[node]){const branch=resolve(rawBranch,schema);if(branch.type==='null'){nullable=true;continue;}
+   // Unsupported wrapper constraints cannot silently disappear at this boundary.
+   if(branch.type!=='object'||!branch.properties?.change||!branch.properties.rank||branch.additionalProperties!==false||JSON.stringify(branch.required)!==JSON.stringify(['rank','change'])||Object.keys(branch).some(key=>!['type','properties','required','additionalProperties','description'].includes(key))||Object.keys(branch.properties).length!==2)throw Error('TYPED_ORDERED_SCHEMA_INVALID');
+   const domain=changeFields(branch.properties.change);if(expectedField&&(domain.length!==1||domain[0]!==expectedField))throw Error('TYPED_ORDERED_FIELD_OWNER');fields.push(...domain);branches.push(branch.properties.change);active=true;
+  }
+  return {nullable,active,fields:[...new Set(fields)]};
+ };
+ const ordinary=resolve(schema.properties!.changes,schema);
+ const minItems=(ordinary.minItems??0) as number,maxItems=ordinary.maxItems as number;
+ if(!Number.isSafeInteger(minItems)||!Number.isSafeInteger(maxItems)||minItems<0||maxItems<minItems||maxItems>13)throw Error('TYPED_ORDERED_SCHEMA_CARDINALITY');
+ const ordinaryFields=unwrap(ordinary.items!).fields;
+ for(const {field,root} of core.singletonChangeDefinitions){
+  if(!(schema.required as string[]).includes(root))throw Error('TYPED_ORDERED_SCHEMA_REQUIRED_ROOT');
+  const domain=unwrap(schema.properties![root],field);if(domain.active&&!domain.nullable)requiredChangeFields.push(field);
+  delete schema.properties![root];schema.required=(schema.required as string[]).filter(name=>name!==root);
+ }
+ if(!branches.length)throw Error('TYPED_ORDERED_SCHEMA_EMPTY');
+ schema.properties!.changes={type:'array',maxItems:13,items:{anyOf:branches}};
+ return {...selected,schema,requiredChangeFields,ordinaryChangeDomain:{fields:ordinaryFields,minItems,maxItems}};
+}
 /** Factor generation-only unions by exact object/array shell. Discriminator
  * correlations stay intact; other sibling constraints retain the strict gate.
  * Different key sets remain distinct typed objects; no padding or JSON strings. */
@@ -191,7 +222,7 @@ function mapEvidence(raw:unknown,transform:(evidence:unknown,path:Array<string|n
  return Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,key==="evidence"?transform(value,[...path,key]):mapEvidence(value,transform,[...path,key])]));
 }
 /** Offline authoring helper; never repairs or selects evidence for a provider. */
-export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {
+function encodeTypedContext(canonical:ConversationInterpretationV3,input:ContextInput,ordered:boolean):unknown {
  const parsed=ConversationInterpretationV3Schema.parse(canonical),book=primaryEvidenceSourceCodebook(input);
  const pointer=(raw:unknown):Record<string,unknown>=>{
   if(!object(raw))throw Error("TYPED_EVIDENCE_INVALID");
@@ -215,13 +246,19 @@ export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpret
  let output=stripDatePadding(core.canonicalCodec(generated,"encode")) as Record<string,unknown>;
  output=mapEvidence(output,raw=>{if(!Array.isArray(raw)||!raw.length)throw Error("TYPED_EVIDENCE_INVALID");const refs=raw.map(pointer);return {primaryEvidence:book.encode(JSON.stringify(refs[0])),additionalEvidence:refs.slice(1)};}) as Record<string,unknown>;
  output.uncertainties=parsed.uncertainties.map((issue,index)=>({fieldCode:UNCERTAINTY_FIELD_WIRE_CODE_V1[issue.field],reason:issue.reason,alternatives:(output.uncertainties as Array<{alternatives:Record<string,unknown>[]}>)[index].alternatives.map((alternative,position)=>({...alternative,value:issue.alternatives[position].value}))}));
- return core.indexedChanges(core.operationValues(output,"encode"),"encode");
+ return ordered?core.operationValues(output,"encode"):core.indexedChanges(core.operationValues(output,"encode"),"encode");
 }
-export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {
+export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {return encodeTypedContext(canonical,input,false);}
+/** Trusted fixture authoring only. Canonical array order remains the sole order. */
+export function encodeGoogleLiteEuTypedOrderedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {return encodeTypedContext(canonical,input,true);}
+export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {return decodeTypedContext(raw,selected,observeInvalid,observeWireInvalid,input,false);}
+/** Separately validated entry: no indexedChanges call, rank synthesis or sorting. */
+export function decodeGoogleLiteEuTypedOrderedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {return decodeTypedContext(raw,selected,observeInvalid,observeWireInvalid,input,true);}
+function decodeTypedContext(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput,ordered:boolean) {
  if(!isContextTypedProtocolV3(selected))return {status:"REFUSED" as const,reason:"ENVELOPE_INVALID" as const};
  let stage:DecoderStage="SCHEMA";
  try {
-  const schema=googleLiteEuTypedContextValidationSchemaV3(input).schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+  const validation=ordered?googleLiteEuTypedOrderedContextValidationSchemaV3(input):googleLiteEuTypedContextValidationSchemaV3(input),schema=validation.schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
   if(!object(raw))throw Error("TYPED_ENVELOPE_INVALID");
   let candidate:Record<string,unknown>={...raw,conversationDirective:null,replyProposal:null};
   let unsupported:ListPeriodProposal|undefined;
@@ -238,8 +275,16 @@ export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:u
   stage="SCHEMA";
   const checked=validator.safeParse(candidate);
   if(!checked.success){observeWireInvalid?.(projectCanonicalValidation(raw,checked.error.issues,"calenote-context-3"));return {status:"REFUSED" as const,reason:"SEMANTIC_PATCH_INVALID" as const};}
-  stage="INDEXED_CHANGES";
-  const unfolded=core.indexedChanges(checked.data as Record<string,unknown>,"decode",deriveGenerationFieldCapability(input).titlePresenceRequired),book=primaryEvidenceSourceCodebook(input);
+  stage=ordered?'SCHEMA':'INDEXED_CHANGES';
+  const checkedValue=checked.data as Record<string,unknown>;
+  if(ordered){const changes=checkedValue.changes as Array<{field:string;operation:string}>;
+   if(new Set(changes.map(change=>change.field)).size!==changes.length)throw new WireShapeFailure(['changes'],'UNIQUE_FIELD_OWNER');
+   const policy=validation as ReturnType<typeof googleLiteEuTypedOrderedContextValidationSchemaV3>;
+   for(const field of policy.requiredChangeFields)if(!changes.some(change=>change.field===field))throw new WireShapeFailure(['changes'],'FIELD_CARRIER_REQUIRED');
+   const ordinary=changes.filter(change=>policy.ordinaryChangeDomain.fields.includes(change.field)).length;
+   if(ordinary<policy.ordinaryChangeDomain.minItems||ordinary>policy.ordinaryChangeDomain.maxItems)throw new WireShapeFailure(['changes'],'array');
+  }
+  const unfolded=ordered?checkedValue:core.indexedChanges(checkedValue,"decode",deriveGenerationFieldCapability(input).titlePresenceRequired),book=primaryEvidenceSourceCodebook(input);
   stage="EVIDENCE";
   const evidenced=mapEvidence(unfolded,(raw,path)=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,index===0?[...path,"primaryEvidence"]:[...path,"additionalEvidence",index-1],input));}) as Record<string,unknown>;
   stage="UNCERTAINTIES";

@@ -7,6 +7,7 @@ export const COMPACT_KEYS={
  operation:{code:'c',targetEvidence:'e'},
  fields:{title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'},
  fieldMutation:{rank:'r',write:'w',evidence:'e'},
+ orderedChange:{field:'f',write:'w',evidence:'e'},
  mutationRow:{operation:'o',value:'v'},
  queryCarriers:{list:'l',calendar:'c',capability:'b'},
  query:{period:'p',date:'d',outputCalendar:'c',topic:'t',evidence:'e'},
@@ -33,7 +34,7 @@ for(const map of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)
 function child(scope:Scope,key:string,field?:string):Scope {
  if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'queryCarriers',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
  if(scope==='fields')return 'fieldMutation';
- if(scope==='fieldMutation'&&key==='write')return 'mutationRow';
+ if((scope==='fieldMutation'||scope==='orderedChange')&&key==='write')return 'mutationRow';
  if(scope==='mutationRow'&&key==='value'){if(['eventDate','reminderDate','endDate'].includes(field??''))return 'date';if(['eventTime','reminderTime'].includes(field??''))return 'clock';}
  if(scope==='queryCarriers')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
@@ -43,6 +44,7 @@ function child(scope:Scope,key:string,field?:string):Scope {
  return scope;
 }
 function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,string>>|undefined {
+ if(scope==='orderedChange'&&key==='field')return COMPACT_KEYS.fields;
  if(scope==='mutationRow'&&key==='operation')return COMPACT_ENUMS.writeOperation;
  if(scope==='mutationRow'&&key==='value'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
  if(scope==='date'){if(key==='kind')return COMPACT_ENUMS.date;if(key==='calendar')return COMPACT_ENUMS.calendar;if(key==='qualifier')return COMPACT_ENUMS.weekday;}
@@ -73,6 +75,17 @@ function scopeDescription(scope:Scope,entries:ReadonlyArray<{name:string;alias:s
 export function compileCompactContext(source:unknown){
  const compile=(schema:unknown,scope:Scope,key='',field?:string):Node=>{
   check(record(schema));
+  if(scope==='fields'&&schema.type==='array')return compile(schema,'orderedChange',key,field);
+  if(Array.isArray(schema.anyOf)&&scope==='orderedChange'){
+   const branches=schema.anyOf.map(branch=>{
+    check(record(branch)&&record(branch.properties));const tag=branch.properties.field;
+    check(record(tag)&&Array.isArray(tag.enum)&&tag.enum.length===1&&typeof tag.enum[0]==='string'&&Object.hasOwn(COMPACT_KEYS.fields,tag.enum[0]));
+    const name=tag.enum[0] as keyof typeof COMPACT_KEYS.fields;return {name,alias:COMPACT_KEYS.fields[name],node:compile(branch,scope,key,name)};
+   });
+   check(branches.length>0&&new Set(branches.map(branch=>branch.name)).size===branches.length);
+   const transform=(value:unknown,forward:boolean)=>{check(record(value));const tag=value[forward?'field':'f'];check(typeof tag==='string');const branch=branches.find(branch=>(forward?branch.name:branch.alias)===tag);check(branch);return (forward?branch.node.pack:branch.node.unpack)(value);};
+   return {schema:{...schema,anyOf:branches.map(branch=>branch.node.schema)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(branches.map(branch=>[branch.name,branch.node.signature]))};
+  }
   if(Array.isArray(schema.anyOf)){
    const nodes=schema.anyOf.map(branch=>compile(branch,scope,key,field));check(scope==='operation'&&nodes.length>0);
    const transform=(value:unknown,forward:boolean)=>{const results:unknown[]=[];for(const node of nodes){try{results.push((forward?node.pack:node.unpack)(value));}catch{/* An exact disjoint operation branch may refuse. */}}check(results.length===1);return results[0];};
