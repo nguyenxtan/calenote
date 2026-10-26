@@ -90,3 +90,15 @@ it('leaves heterogeneous provider array cardinality unrolled while strict local 
  const wire=encodeSmallContextV3(proposal,input) as Wire;wire.c=Array.from({length:14},()=>structuredClone(wire.c[0]));const before=JSON.stringify(wire);
  expect(z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);expect(decode(wire).status).toBe('REFUSED');expect(JSON.stringify(wire)).toBe(before);
 });
+
+it('separates initial row authorship from forbidden post-generation salvage and scoped coordinates',async()=>{
+ const {CONTEXT_SMALL_PROMPT:prompt}=await import('../../../conversation/context-contract/small-wire');
+ expect(prompt).toContain('Author source-grounded rows with their selected operations, exact owned values and attached evidence in the intended canonical order.');
+ expect(prompt).toContain('Never add rank, index or position properties to a change row.');
+ expect(prompt).toContain('Never choose one received row, sort, renumber, deduplicate or drop received rows to salvage an invalid patch.');
+ expect(prompt).toContain('Every active row MUST contain the required write key: [] explicitly authors CLEAR only when permitted;');
+ expect(prompt).toContain('Author each WRITE or alternative value only in its declared owner; query, directive and reply operands remain in their declared inline owners. All root value tables remain empty.');
+ expect(prompt).toContain('Never emit rank/r as a change-row property');
+ for(const stale of ['Never author, sort, renumber, deduplicate, choose or drop a row.','Only actual change/alternative consumers may author typed value rows.','Never emit rank/r, old c.field dictionaries'])expect(prompt).not.toContain(stale);
+ expect(prompt).toContain('A field may occur at most ONCE');expect(prompt).toContain('absence of a field means that field is unchanged');
+});
