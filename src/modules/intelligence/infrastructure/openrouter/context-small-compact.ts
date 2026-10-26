@@ -2,10 +2,12 @@
 import {CONTEXT_OPERATION_WIRE_METADATA_V1,UNCERTAINTY_FIELD_WIRE_CODE_V1} from './context-provider-wire';
 type Row=Record<string,unknown>;
 type Scope=keyof typeof COMPACT_KEYS;
+const FIELD_KEYS={title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'} as const;
 export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e',query:'q'},
- fields:{title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'},
+ fields:FIELD_KEYS,ownerFields:FIELD_KEYS,
+ changeOwners:{owners:'v',order:'o'},fieldOrder:{},ownedMutation:{write:'w',evidence:'e'},
  fieldMutation:{rank:'r',write:'w',evidence:'e'},
  orderedChange:{field:'f',write:'w',evidence:'e'},
  mutationRow:{operation:'o',value:'v'},
@@ -34,7 +36,9 @@ for(const map of [...Object.values(COMPACT_KEYS),...Object.values(COMPACT_ENUMS)
 function child(scope:Scope,key:string,field?:string):Scope {
  if(scope==='root'){const scopes:Record<string,Scope>={operation:'operation',changes:'fields',query:'queryCarriers',uncertainties:'uncertainty',directive:'directive',reply:'reply',dates:'date',clocks:'clock',periods:'period'};return scopes[key]??scope;}
  if(scope==='fields')return 'fieldMutation';
- if((scope==='fieldMutation'||scope==='orderedChange')&&key==='write')return 'mutationRow';
+ if(scope==='ownerFields')return 'ownedMutation';
+ if(scope==='changeOwners')return key==='owners'?'ownerFields':'fieldOrder';
+ if((scope==='fieldMutation'||scope==='orderedChange'||scope==='ownedMutation')&&key==='write')return 'mutationRow';
  if(scope==='mutationRow'&&key==='value'){if(['eventDate','reminderDate','endDate'].includes(field??''))return 'date';if(['eventTime','reminderTime'].includes(field??''))return 'clock';}
  if(scope==='queryCarriers'||scope==='operation'&&key==='query')return 'query';
  if(key==='date'||scope==='period'&&(key==='from'||key==='through'))return 'date';
@@ -44,7 +48,7 @@ function child(scope:Scope,key:string,field?:string):Scope {
  return scope;
 }
 function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,string>>|undefined {
- if(scope==='orderedChange'&&key==='field')return COMPACT_KEYS.fields;
+ if(scope==='fieldOrder'||scope==='orderedChange'&&key==='field')return COMPACT_KEYS.fields;
  if(scope==='mutationRow'&&key==='operation')return COMPACT_ENUMS.writeOperation;
  if(scope==='mutationRow'&&key==='value'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
  if(scope==='date'){if(key==='kind')return COMPACT_ENUMS.date;if(key==='calendar')return COMPACT_ENUMS.calendar;if(key==='qualifier')return COMPACT_ENUMS.weekday;}
@@ -75,6 +79,7 @@ function scopeDescription(scope:Scope,entries:ReadonlyArray<{name:string;alias:s
 export function compileCompactContext(source:unknown){
  const compile=(schema:unknown,scope:Scope,key='',field?:string):Node=>{
   check(record(schema));
+  if(scope==='fields'&&schema.type==='object'&&record(schema.properties)&&Object.hasOwn(schema.properties,'owners'))return compile(schema,'changeOwners',key,field);
   if(scope==='fields'&&schema.type==='array')return compile(schema,'orderedChange',key,field);
   if(Array.isArray(schema.anyOf)&&scope==='orderedChange'){
    const branches=schema.anyOf.map(branch=>{
@@ -94,10 +99,10 @@ export function compileCompactContext(source:unknown){
   if(schema.type==='object'){
    check(record(schema.properties)&&Array.isArray(schema.required));
    const names=COMPACT_KEYS[scope] as Readonly<Record<string,string>>;
-   const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name,field),name,scope==='fields'?name:field)};});
+   const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name,field),name,scope==='fields'||scope==='ownerFields'?name:field)};});
    check(new Set(entries.map(e=>e.alias)).size===entries.length&&schema.required.length===entries.length&&schema.required.every(name=>typeof name==='string'&&Object.hasOwn(schema.properties as Row,name)));
    const transform=(value:unknown,forward:boolean)=>{check(record(value));const from=entries.map(e=>forward?e.name:e.alias);check(Object.keys(value).length===entries.length&&from.every(name=>Object.hasOwn(value,name)));return Object.fromEntries(entries.map(e=>[forward?e.alias:e.name,(forward?e.node.pack:e.node.unpack)(value[forward?e.name:e.alias])]));};
-   return {schema:{...schema,...(scope==='fields'?{}:{description:scopeDescription(scope,entries,field)}),properties:Object.fromEntries(entries.map(e=>[e.alias,scope==='fields'?{...e.node.schema,description:`Canonical field: ${e.name}.`}:e.node.schema])),required:entries.map(e=>e.alias)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(entries.map(e=>[e.name,e.alias,e.node.signature]))};
+   return {schema:{...schema,...(scope==='fields'||scope==='ownedMutation'?{}:{description:scopeDescription(scope,entries,field)+(scope==='changeOwners'?';owner:w=write,e=evidence':'')}),properties:Object.fromEntries(entries.map(e=>[e.alias,scope==='fields'?{...e.node.schema,description:`Canonical field: ${e.name}.`}:e.node.schema])),required:entries.map(e=>e.alias)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(entries.map(e=>[e.name,e.alias,e.node.signature]))};
   }
   if(schema.type==='array'){
    if(schema.maxItems===0){const transform=(value:unknown)=>{check(Array.isArray(value)&&value.length===0);return [];};return {schema:{...schema,items:{type:'string'}},pack:transform,unpack:transform,signature:'empty-array'};}

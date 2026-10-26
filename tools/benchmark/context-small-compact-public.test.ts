@@ -1,3 +1,4 @@
+import {changeOwnerSchema,attachChangeOwners} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-change-owners';
 import {operationQuerySchema,attachOperationQuery} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-operation-query';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-typed-wire';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/typed-protocol';
@@ -23,29 +24,34 @@ const captured:Array<{input:ContextInput;id:string;index:number}>=[];
 beforeAll(async()=>{const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(name=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${name}.json`,'utf8')).cases)};await runContextFixtureCampaign(admitCanonicalCampaign(manifest,'FULL'),{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'TYPED_105'},(input,id,index)=>{captured.push({input:structuredClone(input),id,index});return frozenContextProposal(input,id,index);});},30000);
 const original=(row:typeof captured[number])=>encodeSmallContextV3(ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),row.input);
 const decode=(wire:unknown,input:ContextInput)=>decodeSmallContextV3(wire,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
-const carriers=(wire:Row)=>wire.c as Row[];
-const change=(wire:Row,key:string)=>{const rows=carriers(wire).filter(row=>row.f===key);expect(rows).toHaveLength(1);return rows[0];};
+const owners=(wire:Row)=>(wire.c as {v:Record<string,Row[]>}).v;
+const order=(wire:Row)=>(wire.c as {o:string[]}).o;
+const carriers=(wire:Row)=>order(wire).map(f=>({f,...owners(wire)[f][0]}));
+const change=(wire:Row,key:string)=>{const rows=owners(wire)[key];expect(rows).toHaveLength(1);return rows[0];};
+const ownedSource=(input:ContextInput)=>orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(input).schema))));
+const compactSource=(input:ContextInput)=>operationQuerySchema(changeOwnerSchema(ownedSource(input)));
+function renameOwner(wire:Row,key:string,alias:string){const v=owners(wire);if(Object.hasOwn(v,key)){v[alias]=v[key];delete v[key];}const o=order(wire);for(let i=0;i<o.length;i++)if(o[i]===key)o[i]=alias;}
 const control=(wire:Row,key:string)=>{const rows=change(wire,key).w as Row[];expect(rows).toHaveLength(1);return rows[0];};
 function mutation(input:ContextInput,field:typeof SLOT_NAMES[number],operation:string){
  const date=['eventDate','reminderDate','endDate'].includes(field),clock=['eventTime','reminderTime'].includes(field),numeric=['occurrenceCount','leadOffsetDays'].includes(field);
  const value=date?{k:COMPACT_ENUMS.date.CIVIL_DATE,c:['g'],d:[11],m:[10],y:[],l:[],o:[],w:[],q:[]}:clock?{h:8,m:0,q:'h'}:numeric?2:field==='frequency'?'d':field==='calendar'?'g':field==='eventRelation'?'b':'synthetic';
- return {f:COMPACT_KEYS.fields[field],w:operation==='CLEAR'?[]:[{o:operation==='SET'?'s':'r',v:value}],e:[`U${input.currentTurn}`]};
+ return {w:operation==='CLEAR'?[]:[{o:operation==='SET'?'s':'r',v:value}],e:[`U${input.currentTurn}`]};
 }
-function clearFields(wire:Row){wire.c=[];}
-function put(wire:Row,field:typeof SLOT_NAMES[number],_operation:'SET'|'REPLACE'|'CLEAR',row:Row){carriers(wire).push({...row,f:COMPACT_KEYS.fields[field]});}
+function clearFields(wire:Row){for(const key of Object.keys(owners(wire)))owners(wire)[key]=[];(wire.c as {o:string[]}).o=[];}
+function put(wire:Row,field:typeof SLOT_NAMES[number],_operation:'SET'|'REPLACE'|'CLEAR',row:Row){const key=COMPACT_KEYS.fields[field];owners(wire)[key]=[row];order(wire).push(key);}
 it('proves all144 public compact schemas and exact bidirectional valid-domain inverses before canonical decoding',()=>{
  expect(captured).toHaveLength(144);let nullable=0,unions=0,maxBytes=0;
  for(const row of captured){
-  const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),flat=encodeInternalFlatV3(value,row.input),wire=original(row),codec=compileCompactContext(operationQuerySchema(orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))))),schema=smallContextSchemaV3(row.input).schema;
-  expect(codec.unpack(wire),`${row.id}/${row.index}`).toEqual(attachOperationQuery(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(flat),operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))),value.changes,operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))));expect(codec.pack(codec.unpack(wire))).toEqual(wire);
+  const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),flat=encodeInternalFlatV3(value,row.input),wire=original(row),codec=compileCompactContext(compactSource(row.input)),schema=smallContextSchemaV3(row.input).schema;
+  expect(codec.unpack(wire),`${row.id}/${row.index}`).toEqual(attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(flat),operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))),value.changes,operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema))),ownedSource(row.input))));expect(codec.pack(codec.unpack(wire))).toEqual(wire);
   expect(z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
   expect(decode(wire,row.input)).toEqual(decodeInternalFlatV3(flat,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input));expect(decode(wire,row.input).status).toBe('PARSED');
   expect(decode(flat,row.input).status).toBe('REFUSED');
-  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;expect(Array.isArray(n.type)).toBe(false);expect(n.type).not.toBe('null');if(Array.isArray(n.enum))expect(n.enum).not.toContain(null);if(n.anyOf){unions++;if(node===(schema.properties as Row).o)expect(n.anyOf).toHaveLength(5);else {expect(node).toBe(((schema.properties as Row).c as Row).items);const tags=(n.anyOf as Row[]).map(branch=>((branch.properties as Row).f as {enum:string[]}).enum[0]);expect(new Set(tags).size).toBe(tags.length);expect(tags.length).toBeGreaterThan(0);}}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
+  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;expect(Array.isArray(n.type)).toBe(false);expect(n.type).not.toBe('null');if(Array.isArray(n.enum))expect(n.enum).not.toContain(null);if(n.anyOf){unions++;if(node===(schema.properties as Row).o)expect(n.anyOf).toHaveLength(5);else throw Error('UNEXPECTED_NON_OPERATION_UNION');}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
   const inventory=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;if(Array.isArray(n.type)&&n.type.includes('null'))nullable++;for(const v of Object.values(n))if(Array.isArray(v))v.forEach(inventory);else inventory(v);};inventory(internalFlatSchemaV3(row.input).schema);
   maxBytes=Math.max(maxBytes,Buffer.byteLength(JSON.stringify(schema)));
  }
- expect(unions).toBe(288);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
+ expect(unions).toBe(144);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
 },30000);
 it('retains117 relation and234 initial negative controls through the actual public compact boundary',()=>{
  let relation=0,initial=0;
@@ -62,14 +68,14 @@ it('refuses raw-null, multi, wrong-type cells, unknown aliases, obsolete protoco
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),slot=carriers(wire).find(row=>row.f==='g');expect(slot).toBeDefined();
  for(const value of [null,0,[0],[123],[false],['0'],[[],[]]]){const bad=structuredClone(wire);control(bad,'g').v=value;const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
  for(const value of [null,[],[0],[0,1],['0'],[[0]]]){const bad=structuredClone(wire);change(bad,'g').r=value;expect(decode(bad,row.input).status).toBe('REFUSED');}
- for(const mutate of [(w:Row)=>{control(w,'g').v=null;},(w:Row)=>{control(w,'g').v=[control(w,'g').v,control(w,'g').v];},(w:Row)=>{w.changes=w.c;delete w.c;},(w:Row)=>{carriers(w).push({f:'unknown',w:[],e:[]});},(w:Row)=>{carriers(w).push({f:'a',r:0,o:'k',v:[],t:['hidden'],d:[],e:[],k:[]});},(w:Row)=>{Object.assign(control(w,'g'),{field:'eventTime'});},(w:Row)=>{control(w,'g').o='SET';}]){const bad=structuredClone(wire);mutate(bad);expect(decode(bad,row.input).status).toBe('REFUSED');}
+ for(const mutate of [(w:Row)=>{control(w,'g').v=null;},(w:Row)=>{control(w,'g').v=[control(w,'g').v,control(w,'g').v];},(w:Row)=>{w.changes=w.c;delete w.c;},(w:Row)=>{owners(w).unknown=[{w:[],e:[]}];},(w:Row)=>{owners(w).a=[{r:0,o:'k',v:[],t:['hidden'],d:[],e:[],k:[]}];},(w:Row)=>{Object.assign(control(w,'g'),{field:'eventTime'});},(w:Row)=>{control(w,'g').o='SET';}]){const bad=structuredClone(wire);mutate(bad);expect(decode(bad,row.input).status).toBe('REFUSED');}
  for(const id of ['kind-queries-26','active-carriers-25','owned-clocks-24','compact-cells-23','flat-dates-22','field-controls-21','clock-stream-19'])expect(decodeSmallContextV3(wire,{...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-'+id,wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-'+id},undefined,undefined,row.input).status).toBe('REFUSED');
 });
 it('keeps valid core when optional compact advice is malformed, but refuses unknown roots',()=>{const row=captured[0],wire=original(row);for(const advice of [{g:'bad',r:null},{g:[{k:'HELP',t:[1]}],r:[{t:42}]},{g:[{k:'HELP',f:[],r:[],i:[],t:['GENERAL','LUNAR']}],r:[]}])expect(decode({...wire,...advice},row.input).status).toBe('PARSED');expect(decode({...wire,unknownAdvice:[]},row.input).status).toBe('REFUSED');});
 it('preserves alias-looking free text and exact U/S/F evidence without global enum replacement',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];
- for(const text of ['k','s','d','g','u','U0','S0.0','Ff1','constructor','__proto__','a  b',' g ','quoted "k"','literal\\nvalue']){const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'title',operation:'SET',value:text,evidence}],uncertainties:[],conversationDirective:null,replyProposal:null}),flat=encodeInternalFlatV3(value,row.input),wire=encodeSmallContextV3(value,row.input),codec=compileCompactContext(operationQuerySchema(orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema))))));expect(control(wire,COMPACT_KEYS.fields.title).v).toBe(text);expect(codec.unpack(wire)).toEqual(attachOperationQuery(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(flat),operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))),value.changes,operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))));}
- const wire=original(captured[0]);wire.g=[{k:'HELP',f:[],r:[],i:[],t:['g']}];wire.r=[{t:'s'}];const codec=compileCompactContext(operationQuerySchema(orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(captured[0].input).schema))))));expect((codec.unpack(wire) as Row).reply).toEqual([{text:'s'}]);expect((codec.unpack(wire) as Row).directive).toEqual([{kind:'HELP',field:null,reason:null,issue:null,topic:'g'}]);
+ for(const text of ['k','s','d','g','u','U0','S0.0','Ff1','constructor','__proto__','a  b',' g ','quoted "k"','literal\\nvalue']){const value=ConversationInterpretationV3Schema.parse({...base,changes:[{field:'title',operation:'SET',value:text,evidence}],uncertainties:[],conversationDirective:null,replyProposal:null}),flat=encodeInternalFlatV3(value,row.input),wire=encodeSmallContextV3(value,row.input),codec=compileCompactContext(compactSource(row.input));expect(control(wire,COMPACT_KEYS.fields.title).v).toBe(text);expect(codec.unpack(wire)).toEqual(attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(flat),operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))),value.changes,operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema))),ownedSource(row.input))));}
+ const wire=original(captured[0]);wire.g=[{k:'HELP',f:[],r:[],i:[],t:['g']}];wire.r=[{t:'s'}];const codec=compileCompactContext(compactSource(captured[0].input));expect((codec.unpack(wire) as Row).reply).toEqual([{text:'s'}]);expect((codec.unpack(wire) as Row).directive).toEqual([{kind:'HELP',field:null,reason:null,issue:null,topic:'g'}]);
 });
 it('retains authored array order, owned clocks and meaningful date nulls without ranks',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,base=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),evidence=[{kind:'USER_QUOTE',turn:row.input.currentTurn,quote:row.input.turns[row.input.currentTurn].text,occurrence:1}];
@@ -208,8 +214,8 @@ it.each(['LIST','CALENDAR_DATE','CAPABILITY'] as const)('preserves source-author
 
 it('requires nonnull selected WRITE values or explicitly permitted CLEAR across all13 fields and actual selected operations',()=>{
  const covered=new Set<string>();
- for(const row of captured){const source=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{items:{anyOf:Array<{properties:{f:{enum:string[]};w:{minItems?:number;maxItems:number;items:{properties?:{o:{enum:string[]}}}}}} >}}}};
-  for(const field of SLOT_NAMES){const policy=source.properties.c.items.anyOf.find(branch=>branch.properties.f.enum[0]===COMPACT_KEYS.fields[field]);if(!policy)continue;const write=policy.properties.w;
+ for(const row of captured){const source=smallContextSchemaV3(row.input).schema as unknown as Row,fields=((((source.properties as Row).c as Row).properties as Row).v as {properties:Record<string,{items:Row}>}).properties;
+  for(const field of SLOT_NAMES){const policy=fields[COMPACT_KEYS.fields[field]]?.items;if(!policy)continue;const write=(policy.properties as Row).w as {minItems?:number;maxItems:number;items:{properties?:{o:{enum:string[]}}}};
    for(const operation of ['SET','REPLACE','CLEAR'] as const){const id=field+'/'+operation;if(covered.has(id))continue;if(operation==='CLEAR'?(write.minItems??0)!==0:!write.items.properties?.o.enum.includes(operation==='SET'?'s':'r'))continue;
     const accept=z.fromJSONSchema(policy as Parameters<typeof z.fromJSONSchema>[0]),value=mutation(row.input,field,operation);expect(accept.safeParse(value).success,id).toBe(true);
     const invalid=operation==='CLEAR'?[{...value,v:null},{...value,o:'c'}]:[{...value,w:[{o:operation==='SET'?'s':'r',v:null}]},{...value,w:[{o:operation==='SET'?'s':'r'}]},{...value,w:[{o:'c',v:(value.w[0] as Row).v}]}];for(const bad of invalid)expect(accept.safeParse(bad).success,id).toBe(false);
@@ -220,7 +226,7 @@ it('requires nonnull selected WRITE values or explicitly permitted CLEAR across 
 });
 it('refuses competing operation carriers before projection without choosing, dropping or mutating',()=>{
  const row=captured.find(row=>row.id==='R04'&&row.index===2)!,wire=original(row),bad=structuredClone(wire);clearFields(bad);
- put(bad,'reminderTime','SET',mutation(row.input,'reminderTime','SET'));carriers(bad).push({f:'g',w:[],e:[`U${row.input.currentTurn}`]});const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
+ put(bad,'reminderTime','SET',mutation(row.input,'reminderTime','SET'));owners(bad).g.push({w:[],e:[`U${row.input.currentTurn}`]});const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);
 });
 it('refuses the recorded25 missing SET value syntax unchanged instead of inferring a relation',()=>{
  const row=captured.find(row=>row.id==='R02'&&row.index===1)!,wire=original(row),legacy={...wire,c:{k:[{r:0,o:'s',v:[],t:[],d:[],e:['U2'],k:[]}]}};const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
@@ -246,24 +252,24 @@ it.each([11,12])('retains the unchanged bounded exam evidence refusal when an au
 });
 
 it('requires one outer active row and a present permission-bound inner write without selecting competing data',()=>{
- const row=captured.find(r=>r.id==='R04'&&r.index===2)!,wire=original(row),accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);for(const mutate of [(w:Row)=>{carriers(w).push({f:'g',w:[],e:[`U${row.input.currentTurn}`]});},(w:Row)=>{(change(w,'g').w as Row[]).push(structuredClone(control(w,'g')));},(w:Row)=>{delete change(w,'g').w;},(w:Row)=>{change(w,'g').w=null;},(w:Row)=>{Object.assign(change(w,'g'),{c:[]});}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
+ const row=captured.find(r=>r.id==='R04'&&r.index===2)!,wire=original(row),accept=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);for(const mutate of [(w:Row)=>{owners(w).g.push({w:[],e:[`U${row.input.currentTurn}`]});},(w:Row)=>{(change(w,'g').w as Row[]).push(structuredClone(control(w,'g')));},(w:Row)=>{delete change(w,'g').w;},(w:Row)=>{change(w,'g').w=null;},(w:Row)=>{Object.assign(change(w,'g'),{c:[]});}]){const bad=structuredClone(wire);mutate(bad);const before=JSON.stringify(bad);expect(decode(bad,row.input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
  const clear=structuredClone(wire);change(clear,'g').w=[];expect(accept.safeParse(clear).success).toBe(true);expect(decode(clear,row.input).status).toBe('PARSED');const setOnly=captured.find(r=>r.id==='R02'&&r.index===1)!,s=original(setOnly);change(s,'k').w=[];expect(decode(s,setOnly.input).status).toBe('REFUSED');
 });
 
-it('publishes canonical field discriminators locally without adding authored values',()=>{
- let fields=0;for(const row of captured){const schema=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{items:{anyOf:Row[]}}}};for(const branch of schema.properties.c.items.anyOf){fields++;const field=((branch.properties as Row).f as {enum:string[]}).enum[0];const name=Object.entries(COMPACT_KEYS.fields).find(([,alias])=>alias===field)![0];expect(branch.description).toContain(`f=field(${field}=${name})`);expect(branch).not.toHaveProperty('default');expect(branch).not.toHaveProperty('const');}}expect(fields).toBeGreaterThan(13);
+it('publishes all canonical field owners in one scoped static legend without authored values',()=>{
+ let fields=0;for(const row of captured){const schema=smallContextSchemaV3(row.input).schema as unknown as {properties:{c:{properties:{v:{properties:Record<string,Row>;description:string}}}}};const owners=schema.properties.c.properties.v;for(const [field,node]of Object.entries(owners.properties)){fields++;const name=Object.entries(COMPACT_KEYS.fields).find(([,alias])=>alias===field)![0];expect(owners.description).toContain(`${field}=${name}`);expect(node).not.toHaveProperty('default');expect(node).not.toHaveProperty('const');}}expect(fields).toBeGreaterThan(13);
 });
 
 it('keeps every compact ownership scope and selected static codebook local without changing free-string authority',()=>{
  let objects=0;for(const row of captured){const schema=smallContextSchemaV3(row.input).schema as unknown as Row,properties=schema.properties as Row,fields=properties.c;expect(schema.description).toContain('o=operation');expect(properties).not.toHaveProperty('q');const queryBranches=((properties.o as Row).anyOf as Row[]).filter(branch=>Object.hasOwn(branch.properties as Row,'q'));expect(queryBranches).toHaveLength(3);for(const branch of queryBranches)expect(branch.description).toContain('q=query');const issue=((properties.u as Row).items as Row);expect(issue.description).toContain('5=reminderDate');expect(issue.description).toContain('14=queryRange');expect(issue.description).toContain('r=reason(');for(const branch of (properties.o as Row).anyOf as Row[]){const codes=((branch.properties as Row).c as Row).enum as string[];expect(branch.description).toContain('c=code(');for(const code of codes)expect(branch.description).toContain(`${code}=`);}
- const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const n=node as Row;if(n.type==='object'&&node!==fields){objects++;expect(typeof n.description).toBe('string');expect(n.description).not.toMatch(/U\d+|S\d+\.\d+/);if((n.description as string).includes('=CIVIL_DATE'))expect(n.description).toContain('c=calendar[item:');if((n.description as string).includes('c=outputCalendar')&&Object.hasOwn(n.properties as Row,'c'))expect(n.description).toContain('c=outputCalendar[item:');}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
+ const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const n=node as Row;if(n.type==='object'&&node!==fields&&!(n.properties&&Object.keys(n.properties as Row).sort().join(',')==='e,w')){objects++;expect(typeof n.description).toBe('string');expect(n.description).not.toMatch(/U\d+|S\d+\.\d+/);if((n.description as string).includes('=CIVIL_DATE'))expect(n.description).toContain('c=calendar[item:');if((n.description as string).includes('c=outputCalendar')&&Object.hasOwn(n.properties as Row,'c'))expect(n.description).toContain('c=outputCalendar[item:');}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
  }expect(objects).toBeGreaterThan(1000);
 });
 
 it('versions the entire temporal role and intrinsic-kind alphabet without accepting legacy aliases',()=>{
  expect({eventDate:COMPACT_KEYS.fields.eventDate,reminderDate:COMPACT_KEYS.fields.reminderDate,endDate:COMPACT_KEYS.fields.endDate}).toEqual({eventDate:'event',reminderDate:'notify',endDate:'until'});expect(COMPACT_ENUMS.date).toEqual({CIVIL_DATE:'date',RELATIVE_DAY:'receipt',WEEKDAY:'weekday'});
  const row=captured.find(r=>r.id==='R02'&&r.index===0)!,wire=original(row),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-single-field-values-29',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-single-field-values-29'};expect(decode(wire,row.input).status).toBe('PARSED');expect(decodeSmallContextV3(wire,old,undefined,undefined,row.input).status).toBe('REFUSED');
- const legacy=structuredClone(wire);for(const[name,alias]of Object.entries({eventDate:'d',reminderDate:'f',endDate:'m'})){const key=COMPACT_KEYS.fields[name as 'eventDate'|'reminderDate'|'endDate'];for(const c of carriers(legacy))if(c.f===key)c.f=alias;}const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
+ const legacy=structuredClone(wire);for(const[name,alias]of Object.entries({eventDate:'d',reminderDate:'f',endDate:'m'})){const key=COMPACT_KEYS.fields[name as 'eventDate'|'reminderDate'|'endDate'];renameOwner(legacy,key,alias);}const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
  const oldKind=structuredClone(wire);control(oldKind,COMPACT_KEYS.fields.eventDate).v={...(control(oldKind,COMPACT_KEYS.fields.eventDate).v as Row),k:'c'};const oldKindBefore=JSON.stringify(oldKind);expect(decode(oldKind,row.input).status).toBe('REFUSED');expect(JSON.stringify(oldKind)).toBe(oldKindBefore);
 });
 
@@ -276,7 +282,7 @@ it('retains a genuinely authored receipt-date and event-relative series conflict
 });
 
 it('versions all three text roles together and refuses the previous33 protocol and alphabet unchanged',()=>{
- expect({title:COMPACT_KEYS.fields.title,location:COMPACT_KEYS.fields.location,notes:COMPACT_KEYS.fields.notes}).toEqual({title:'title',location:'location',notes:'notes'});const row=captured.find(r=>r.id==='R02'&&r.index===0)!,wire=original(row),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-single-field-values-29-date-roles-33',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-single-field-values-29-date-roles-33'};expect(decodeSmallContextV3(wire,old,undefined,undefined,row.input).status).toBe('REFUSED');const legacy=structuredClone(wire);for(const[field,alias]of Object.entries({title:'a',location:'b',notes:'c'})){const key=COMPACT_KEYS.fields[field as 'title'|'location'|'notes'];for(const c of carriers(legacy))if(c.f===key)c.f=alias;}const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
+ expect({title:COMPACT_KEYS.fields.title,location:COMPACT_KEYS.fields.location,notes:COMPACT_KEYS.fields.notes}).toEqual({title:'title',location:'location',notes:'notes'});const row=captured.find(r=>r.id==='R02'&&r.index===0)!,wire=original(row),old={...CONTEXT_SMALL_PROTOCOL_V3,promptVersion:'calenote-context-small-tables-106-single-field-values-29-date-roles-33',wireVersion:'google-gemini-2.5-flash-lite-vertex-eu-context-small-tables-106-single-field-values-29-date-roles-33'};expect(decodeSmallContextV3(wire,old,undefined,undefined,row.input).status).toBe('REFUSED');const legacy=structuredClone(wire);for(const[field,alias]of Object.entries({title:'a',location:'b',notes:'c'})){const key=COMPACT_KEYS.fields[field as 'title'|'location'|'notes'];renameOwner(legacy,key,alias);}const before=JSON.stringify(legacy);expect(decode(legacy,row.input).status).toBe('REFUSED');expect(JSON.stringify(legacy)).toBe(before);
 });
 
 it.each([true,false])('preserves independent notes and a source-authored venue with explicit-marker=%s',async(explicit)=>{
@@ -307,11 +313,11 @@ it('retains every mandatory selected singleton omission refusal beyond title wit
  expect([...required]).toEqual(expect.arrayContaining(['title','eventTime','reminderTime','frequency','occurrenceCount']));
 },30000);
 
-it('exhausts nullable cells and enum syntax within every selected ordered field branch without skipping union branches',()=>{
+it('exhausts nullable cells and enums within every selected unique owner value domain',()=>{
  let branches=0,nullablePaths=0,enums=0;
  for(const row of captured){const logical=orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))) as {properties:{changes:{items:{anyOf:Row[]}}}};
   for(const branch of logical.properties.changes.items.anyOf){branches++;
-   const source={type:'object',additionalProperties:false,required:['changes'],properties:{changes:{type:'array',maxItems:13,items:{anyOf:[branch]}}}},codec=compileCompactContext(source),base=specimen(source),packed=codec.pack(base);
+   const source={type:'object',additionalProperties:false,required:['changes'],properties:{changes:{type:'array',maxItems:13,items:{anyOf:[branch]}}}},owned=changeOwnerSchema(source),field=((branch.properties as Row).field as {enum:string[]}).enum[0],codec=compileCompactContext(owned),base=attachChangeOwners(specimen(source) as never,source),packed=codec.pack(base);
    expect(codec.unpack(packed)).toEqual(base);
    const visit=(n:Row,path:Array<string|number>)=>{
     if(n.type==='object'){for(const[key,value]of Object.entries(n.properties as Row))visit(value as Row,[...path,key]);return;}
@@ -323,7 +329,7 @@ it('exhausts nullable cells and enum syntax within every selected ordered field 
     else if(types.includes('integer'))values.push(0,1,-1,Number.MAX_SAFE_INTEGER);else if(types.includes('boolean'))values.push(false,true);
     for(const value of values){const sample=structuredClone(base);replacePath(sample,path,value);expect(codec.unpack(codec.pack(sample))).toEqual(sample);}
    };
-   visit(branch,['changes',0]);
+   const ownerProperties=(((owned.properties as Row).changes as Row).properties as Row).owners as Row;const ownerRow=((ownerProperties.properties as Row)[field] as Row).items as Row;visit(ownerRow,['changes','owners',field,0]);
    const malformed=(value:unknown,packedValue:unknown,path:Array<string|number>)=>{
     if(value===null){for(const bad of [null,0,[null],[[]],[{}],[[],[]],[{},{}]]){const sample=structuredClone(packed);replacePath(sample,path,bad);expect(()=>codec.unpack(sample)).toThrow('COMPACT_SHAPE_INVALID');}return;}
     if(Array.isArray(value)){value.forEach((v,i)=>malformed(v,(packedValue as unknown[])[i],[...path,i]));return;}

@@ -53,7 +53,7 @@ it('keeps small prompt unambiguous and publishes the complete immutable field co
  for(const phrase of ['Core roots:','Ten singleton roots required','extras use {','entries {field,operation,value,evidence}','Absent carriers:null'])expect(CONTEXT_SMALL_PROMPT).not.toContain(phrase);
  expect(CONTEXT_SMALL_PROMPT).not.toContain('WEEK,MONTH,WEEKEND(offset');expect(CONTEXT_SMALL_PROMPT).not.toContain('period=null');
  for(const phrase of ['MONTH_CURRENT','MONTH_PREVIOUS','MONTH_NEXT','There is NO offset field'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
- for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','Absent field row means unchanged','Source meaning completeness:','Source-conditional title examples:'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
+ for(const phrase of ['Multiple actions:','NEW:no old facts','Side queries/corrections KEEP','Empty field owner means unchanged','Source meaning completeness:','Source-conditional title examples:'])expect(CONTEXT_SMALL_PROMPT).toContain(phrase);
 });
 
 it('rejects malformed dates/period references and ranks but quarantines optional guidance',()=>{
