@@ -1,3 +1,5 @@
+import {rateExecutionState,awaitRateExecutionAdmission,rateExecutionCanCredit,type RateExecution} from './context-rate-execution';
+import {RATE_POLICY} from './context-rate-policy';
 import {serializeSmallContextRequest} from "../../src/modules/conversation/context-contract/small-wire";
 import {CONTEXT_SMALL_PROTOCOL_V3} from "../../src/modules/conversation/context-contract/small-protocol";
 import { isDeepStrictEqual } from "node:util";
@@ -71,11 +73,12 @@ interface ApplicationTurnEvidence { fixtureId: string; turnIndex: number; status
 export interface ObservableExecution { directory: string; sourceSha: string; provenanceDigest: string; profile: CampaignProfile; runId: string;
   wireProtocol?: "TYPED_105" | "SMALL_106";
   pilotRoute?:typeof AI_STUDIO_PILOT_RETENTION_POLICY;
+  rateExecution?:RateExecution;
   debugBudgetAuthoritySha256?: string;
   singleTarget?: {fixture:string;turn:number;manifestSha256:string;contextSeedDigest?:string};
   accountingPolicy?: "CONFIRMED_COST_V1";
   boundedPilot?: { manifestSha256: string; maxRequests: number;
-    beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void;
+    beforeDispatch(target: {fixtureId:string;turnIndex:number}, reservationId:string): void | Promise<void>;
     settled(target: {fixtureId:string;turnIndex:number}, reservationId:string, costMicrounits:number|null): void;
     outcome(target: {fixtureId:string;turnIndex:number}, accepted:boolean): void;
     afterEvidence?(target: {fixtureId:string;turnIndex:number}): void; };
@@ -191,8 +194,10 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   if (input.accountingPolicy && ((!turnZeroOnly && !input.boundedPilot) || input.profile !== "PILOT")) throw new Error("INVALID_CONFIRMED_COST_SCOPE");
   if (input.boundedPilot && (input.accountingPolicy !== "CONFIRMED_COST_V1" || input.profile !== "PILOT" || turnZeroOnly || replayOnly || input.pilotPrefix)) throw new Error("INVALID_BOUNDED_PILOT_SCOPE");
   if (!/^[A-Za-z0-9_-]{1,100}$/u.test(input.runId)) throw new Error("INVALID_RUN_ID");
-  const now = input.now ?? Date.now, startedAt = input.startedAt ?? now(), root = input.root ?? process.cwd();
-  const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (input.profile === "PILOT" ? 1200000 : 2700000));
+  const rate=input.rateExecution?rateExecutionState(input.rateExecution):undefined;
+  if(rate&&(input.profile!=="PILOT"||input.wireProtocol!=="SMALL_106"||input.pilotRoute!==AI_STUDIO_PILOT_RETENTION_POLICY||!input.boundedPilot||input.accountingPolicy!=="CONFIRMED_COST_V1"||input.debugBudgetAuthoritySha256!==rate.recordDigest||input.directory!==rate.directory||input.provenanceDigest!==rate.provenanceDigest||input.boundedPilot.manifestSha256!==rate.manifestSha256||input.sourceSha!==RATE_POLICY.app||input.pilotPrefix||input.singleTarget))throw Error("RATE_EXECUTION_SCOPE");
+  const now = input.rateExecution ? ()=>rateExecutionState(input.rateExecution!).now : input.now ?? Date.now, startedAt = rate?.startedAt ?? input.startedAt ?? now(), root = input.root ?? process.cwd();
+  const ownerDeadline = Math.min(input.expiresAt ?? Number.MAX_SAFE_INTEGER, startedAt + (rate ? RATE_POLICY.runMs : input.profile === "PILOT" ? 1200000 : 2700000));
   const deadline = Math.min(ownerDeadline, input.paidExpiresAt ?? Number.MAX_SAFE_INTEGER);
   const manifest: ContextManifest = { version: "context-contract-corpus-1", cases: ["regressions", "development", "heldout"].flatMap(name =>
     (JSON.parse(readFileSync(join(root, `src/modules/conversation/context-contract/benchmark/${name}.json`), "utf8")) as ContextManifest).cases) };
@@ -202,7 +207,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
   if(selected&&((selected.turn>0&&!input.singleTarget!.contextSeedDigest)||(input.singleTarget!.contextSeedDigest&&input.singleTarget!.contextSeedDigest!==selected.contextSeedDigest)))throw Error("SINGLE_TARGET_CONTEXT_SEED_BINDING");
   const pilotPrefix = verifyPilotPrefix(input, root, admitted);
   if (pilotPrefix && replayOnly) throw new Error("INVALID_PILOT_PREFIX");
-  ledgerOps.appendCampaignEvent(input.directory, { event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
+  ledgerOps.appendCampaignEvent(input.directory, { ...(rate?{timingPolicy:RATE_POLICY.version,rateBatchRecordSha256:rate.recordDigest,rateRunOrdinal:rate.ordinal}:{}),event: "BEGIN", runId: input.runId, sourceSha: input.sourceSha, profile: input.profile,
     ...(input.debugBudgetAuthoritySha256 ? {debugBudgetAuthoritySha256:input.debugBudgetAuthoritySha256} : {}),
     ...(input.accountingPolicy ? {accountingPolicy:input.accountingPolicy,requestExposureBoundMicrounits:contextCampaignMaximumReservation} : {}),
     ...(input.boundedPilot ? {executionKind:"BOUNDED_PILOT" as const,targetManifestSha256:input.boundedPilot.manifestSha256,maxTargetRequests:input.boundedPilot.maxRequests} : {}),
@@ -273,7 +278,7 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
       if ((turnZeroOnly && applicationLlmCalls >= 1) || (replayOnly && (!seed || applicationLlmCalls >= 1))) throw new Error("REPLAY_SEED_OR_CALL_CAP");
       if (now() >= deadline) { stop("AUTHORIZATION_EXPIRED"); throw new Error("AUTHORIZATION_EXPIRED"); }
       const reservationId = `call-${applicationLlmCalls + 1}`;
-      if(input.boundedPilot){if(!preparedTarget)throw new Error("BOUNDED_TARGET_MISSING");input.boundedPilot.beforeDispatch(preparedTarget,reservationId);}
+      if(input.boundedPilot){if(!preparedTarget)throw new Error("BOUNDED_TARGET_MISSING");if(input.rateExecution)await awaitRateExecutionAdmission(input.rateExecution,preparedTarget,reservationId);await input.boundedPilot.beforeDispatch(preparedTarget,reservationId);}
       const reserved = ledgerOps.reserveCampaignCall(input.directory, { runId: input.runId, profile: input.profile, provenanceDigest: input.provenanceDigest,
         reservationId, maximumMicrounits: input.accountingPolicy ? 0 : prepared.maximumCostMicrounits, now: now(), startedAt });
       if (reserved.status !== "RESERVED") throw new Error("CAMPAIGN_CAP");
@@ -385,9 +390,10 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     const scopedReplayPassed = replayOnly && score.passedTurns === 1 && score.healthyFullSchemaValid === 1 && score.detailPassed === score.detailPlanned && score.safetyFailures === 0 && score.failedMandatory.length === 0;
     if (turnZeroOnly) stop("SINGLE_REPLAY_TERMINAL");
     else if ((!scopedReplayPassed && score.gate !== "PASS") || !canaryPassed || score.actualDispatches !== httpCount() || applicationLlmCalls !== httpCount()) stop("CAMPAIGN_GATE_FAILED");
-    else ledgerOps.completeCampaign(input.directory, { runId: input.runId, at: now() });
+    else if(input.rateExecution&&!rateExecutionCanCredit(input.rateExecution))stop("RATE_WINDOW_OR_ABORT");
+    else if(!input.rateExecution)ledgerOps.completeCampaign(input.directory, { runId: input.runId, at: now() });
   } catch { stop("EXECUTION_FAILED"); }
-  const status = stopped() ? "STOP" : "PASS";
+  const status = stopped() ? "STOP" : input.rateExecution ? "PENDING_RATE_FINALIZATION" : "PASS";
   const finalLedger = readCampaignLedger(input.directory);
   if(compilerDiagnostic&&(compilerLedgerUncertain||finalLedger.some(row=>row.event==="RESERVE"&&!finalLedger.some(finish=>finish.event==="FINISH"&&finish.reservationId===row.reservationId))))throw Error("COMPILER_LEDGER_PERSISTENCE_UNCERTAIN");
   const result = { ...(input.pilotRoute?{pilotRoute:input.pilotRoute,configuredProvider:"google-ai-studio",privacyPolicy:input.pilotRoute,zdr:false}:{}),status, routeAdmission: canaryPassed ? "PASS" : "STOP", applicationLlmCalls, providerHttpRequests: httpCount(),

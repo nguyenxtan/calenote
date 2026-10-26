@@ -371,7 +371,7 @@ export function admitHistoricalR01ReplayIntentReference(input: FutureLiveIntent)
   return record;
 }
 
-type Begin = { event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
+type Begin = { timingPolicy?: "RATE_AWARE_FRESH_V2"; rateBatchRecordSha256?:string; rateRunOrdinal?:number; event: "BEGIN"; runId: string; sourceSha: string; profile: CampaignProfile; provenanceDigest: string;
   debugBudgetAuthoritySha256?: string;
   accountingPolicy?: "CONFIRMED_COST_V1";
   requestExposureBoundMicrounits?: number;
@@ -390,6 +390,9 @@ type Complete = { event: "COMPLETE"; runId: string; at: number; gate: "PASS"; re
 export type CampaignEvent = Begin | Reserve | Dispatch | Finish | Stop | Canary | Complete;
 type Stored = CampaignEvent & { sequence: number; previousHash: string; hash: string };
 
+export function campaignRunMilliseconds(begin: {profile:CampaignProfile;timingPolicy?:"RATE_AWARE_FRESH_V2"}) {
+  return begin.profile === "PILOT" && begin.timingPolicy === undefined ? 1200000 : 2700000;
+}
 function safeCampaignSum(a: number, b: number): number {
   const result = a + b;
   if (!Number.isSafeInteger(result) || result < 0) throw new Error("PRIOR_LEDGER_BINDING: ACCOUNTING_OVERFLOW");
@@ -409,7 +412,8 @@ function validateCampaign(rows: readonly Stored[]) {
   if (!begin) return { begin: undefined, reserves, dispatches, finishes, retained, unknown, stopped, completed };
   if (begin.event !== "BEGIN" || !closed(begin, ["event", "runId", "sourceSha", "profile", "provenanceDigest", "executionKind", "pilotPrefixDigest",
     "authorizationSha256", "historicalCalls", "historicalUnknownReservations", "cumulativeAuthorizedMicrounits", "cumulativeRetainedMicrounits",
-    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits", "targetManifestSha256", "maxTargetRequests", "targetFixture", "targetTurn", "contextSeedDigest", "debugBudgetAuthoritySha256"])
+    "startedAt", "observableAdmission", "expiresAt", "version", "method", "campaignRoot", "approvedAt", "accountingPolicy", "requestExposureBoundMicrounits", "targetManifestSha256", "maxTargetRequests", "targetFixture", "targetTurn", "contextSeedDigest", "debugBudgetAuthoritySha256", "timingPolicy", "rateBatchRecordSha256", "rateRunOrdinal"])
+    || (begin.timingPolicy !== undefined ? (begin.timingPolicy !== "RATE_AWARE_FRESH_V2" || begin.profile !== "PILOT" || begin.executionKind !== "BOUNDED_PILOT" || begin.accountingPolicy !== "CONFIRMED_COST_V1" || !digest(begin.debugBudgetAuthoritySha256,64) || !digest(begin.rateBatchRecordSha256,64) || ![1,2].includes(begin.rateRunOrdinal!)) : (begin.rateBatchRecordSha256 !== undefined || begin.rateRunOrdinal !== undefined))
     || !id(begin.runId) || !["PILOT", "FULL"].includes(begin.profile) || !digest(begin.sourceSha, 40) || !digest(begin.provenanceDigest, 64)
     || !integer(begin.startedAt) || !integer(begin.cumulativeAuthorizedMicrounits) || begin.cumulativeAuthorizedMicrounits <= 0
     || begin.cumulativeAuthorizedMicrounits > (begin.debugBudgetAuthoritySha256 === undefined ? cumulativeAuthorizedMicrounits : 10000000) || !integer(begin.cumulativeRetainedMicrounits)
@@ -430,7 +434,7 @@ function validateCampaign(rows: readonly Stored[]) {
     || (begin.method !== undefined && begin.method !== "OBSERVABLE_CANARY")
     || (begin.campaignRoot !== undefined && (typeof begin.campaignRoot !== "string" || !isAbsolute(begin.campaignRoot)))
     || (begin.approvedAt !== undefined && (!integer(begin.approvedAt) || begin.approvedAt > begin.startedAt))) return fail();
-  const cap = begin.profile === "PILOT" ? { cost: pilotAuthorizedMicrounits, calls: 192, ms: 1200000 } : { cost: fullAuthorizedMicrounits, calls: 480, ms: 2700000 };
+  const cap = begin.profile === "PILOT" ? { cost: pilotAuthorizedMicrounits, calls: 192, ms: campaignRunMilliseconds(begin) } : { cost: fullAuthorizedMicrounits, calls: 480, ms: 2700000 };
   const deadline = Math.min(begin.expiresAt ?? Number.MAX_SAFE_INTEGER, safeCampaignSum(begin.startedAt, cap.ms));
   const confirmedPolicy = begin.accountingPolicy === "CONFIRMED_COST_V1";
   let lastAt = begin.startedAt;
@@ -471,6 +475,7 @@ function validateCampaign(rows: readonly Stored[]) {
       canary = true;
     } else if (row.event === "COMPLETE") {
       if (!closed(row, ["event", "runId", "at", "gate", "retainedMicrounits"]) || stopped || !canary || row.gate !== "PASS"
+        || (begin.timingPolicy !== undefined && row.at >= deadline)
         || reserves.size !== dispatches.size || dispatches.size !== finishes.size || unknown !== 0
         || !integer(row.retainedMicrounits) || BigInt(row.retainedMicrounits) !== retained) return fail();
       completed = true;
@@ -580,7 +585,7 @@ function reserveUnlocked(directory: string, input: { runId: string; profile: Cam
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "AUTHORIZATION_EXPIRED" });
     throw new Error("AUTHORIZATION_EXPIRED");
   }
-  const cap = input.profile === "PILOT" ? { calls: 192, cost: pilotAuthorizedMicrounits, ms: 1200000 } : { calls: 480, cost: fullAuthorizedMicrounits, ms: 2700000 };
+  const cap = input.profile === "PILOT" ? { calls: 192, cost: pilotAuthorizedMicrounits, ms: campaignRunMilliseconds(begin) } : { calls: 480, cost: fullAuthorizedMicrounits, ms: 2700000 };
   const reservations = rows.filter((r): r is Stored & Reserve => r.event === "RESERVE");
   if (begin.observableAdmission && rows.some(r => r.event === "DISPATCH") && !rows.some(r => r.event === "CANARY_PASS")) {
     appendUnlocked(directory, { event: "STOP", runId: input.runId, at: input.now, reason: "CANARY_UNSETTLED" });
@@ -616,7 +621,7 @@ function markDispatchedUnlocked(directory: string, input: { runId: string; reser
   const reservation = rows.find((r): r is Stored & Reserve => r.event === "RESERVE" && r.runId === input.runId && r.reservationId === input.reservationId);
   if (!reservation
     || rows.some(r => r.event === "DISPATCH" && r.reservationId === input.reservationId)) throw new Error("MISSING_OR_DUPLICATE_RESERVATION");
-  const maximumMs = begin?.profile === "PILOT" ? 1200000 : 2700000;
+  const maximumMs = begin ? campaignRunMilliseconds(begin) : 0;
   if (!begin || begin.event !== "BEGIN" || !Number.isSafeInteger(input.at) || input.at < reservation.at
     || input.at - begin.startedAt >= maximumMs || (begin.expiresAt !== undefined && input.at >= begin.expiresAt)) throw new Error("DISPATCH_DEADLINE");
   return appendUnlocked(directory, { event: "DISPATCH", ...input });
