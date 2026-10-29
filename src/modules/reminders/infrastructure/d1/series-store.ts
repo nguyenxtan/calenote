@@ -28,7 +28,7 @@ const afterSource = `EXISTS (SELECT 1 FROM inbound_updates current JOIN inbound_
   AND (source.received_at < current.received_at OR (source.received_at = current.received_at AND source.rowid < current.rowid)))`;
 type MutationScope = ConversationScope & { webSessionId?: string };
 const ownedWeb = `SELECT s.id FROM sessions s JOIN chat_identities ci ON ci.id = ?
-  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
+  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
   WHERE s.id = ? AND s.user_id = ? AND c.user_id = s.user_id AND s.revoked_at IS NULL AND s.expires_at > ?`;
 const authority = (scope: MutationScope) => scope.webSessionId ? ownedWeb : ownedInbound;
 const auth = (scope: MutationScope) => scope.webSessionId

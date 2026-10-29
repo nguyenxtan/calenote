@@ -389,6 +389,7 @@ class SqliteDatabase {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    for(const file of ["0010_primary_login_provenance", "0011_connection_pause"]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${file}.sql`), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new SqliteStatement(this.sqlite, sql) as unknown as D1PreparedStatement;

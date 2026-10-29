@@ -72,6 +72,7 @@ export interface SafeAuditEvent {
   id: string;
   actorUserId: string;
   action:
+    | "CONNECTION_ADDED"
     | "ONBOARDING_CREATED"
     | "ONBOARDING_RECOVERED"
     | "WEBHOOK_ACTIVATED"
@@ -112,6 +113,7 @@ export interface OwnedConnection {
 }
 
 export interface RecoveryConnection extends OwnedConnection {
+  processingPaused?:boolean;
   provider: BotProvider;
   providerBotId: string;
   displayName: string;
@@ -157,6 +159,7 @@ export interface OnboardingStore {
   failActivation(input: ActivationFailure): Promise<void>;
   findOwnedConnection(userId: string, publicId: string): Promise<OwnedConnection | null>;
   rotateConnectCode(input: ConnectCodeRotation): Promise<void>;
+  isPausedRecovery(email:string,provider:BotProvider,tokenFingerprint:string):Promise<boolean>;
   findExactRecovery(input: {
     email: string;
     provider: BotProvider;
@@ -356,12 +359,13 @@ export async function onboard(
   const now = dependencies.now ?? systemClock;
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
 
+  const tokenFingerprint = await dependencies.keyring.fingerprintToken(input.token);
+  if(await dependencies.store.isPausedRecovery(input.email,input.provider,tokenFingerprint)) throw new OnboardingConflictError();
   const profile = await dependencies.verifyToken(input.provider, input.token);
   if (profile.provider !== input.provider) {
     throw new ProviderVerificationError("INVALID_PROVIDER_RESPONSE");
   }
 
-  const tokenFingerprint = await dependencies.keyring.fingerprintToken(input.token);
   const proof = {
     email: input.email,
     provider: input.provider,
@@ -527,6 +531,7 @@ async function recoverOnboarding(
   now: Clock,
   randomBytes: RandomBytes,
 ): Promise<OnboardingResult> {
+  if(connection.processingPaused) throw new OnboardingConflictError();
   const recoveryAt = now();
   if (connection.state === "VALIDATING" && connection.updatedAt >= recoveryAt - ACTIVATION_LEASE_MS) {
     throw new OnboardingConflictError();
@@ -716,6 +721,7 @@ export async function retryWebhook(
 ): Promise<RetryWebhookResult> {
   const connection = await dependencies.store.findOwnedRecovery(input.userId, input.publicId);
   if (!connection) throw new ConnectionNotFoundError();
+  if(connection.processingPaused) throw new ConnectionStateError();
   const now = dependencies.now ?? systemClock;
   const currentTime = now();
   if (

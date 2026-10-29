@@ -44,7 +44,31 @@ interface IssueLoginCodeInput {
   now: number;
 }
 
+interface VerificationChannelSnapshot {
+  connectionId: string;
+  provider: BotProvider;
+  credentialVersion: number;
+  encryptedToken: EncryptedValue;
+  connectionUpdatedAt: number;
+  connectionTransitionMarker: string | null;
+  chatIdentityId: string;
+  providerUserId: string;
+  privateChatId: string;
+  linkedAt: number;
+}
+
 interface VerifiableLoginCodeRow {
+  connection_id: string;
+  provider: BotProvider;
+  credential_version: number;
+  encrypted_token: unknown;
+  encrypted_token_iv: unknown;
+  connection_updated_at: number;
+  connection_transition_marker: string | null;
+  chat_identity_id: string;
+  provider_user_id: string;
+  private_chat_id: string;
+  linked_at: number;
   id: string;
   user_id: string;
   code_ciphertext: unknown;
@@ -53,6 +77,7 @@ interface VerifiableLoginCodeRow {
 }
 
 export interface VerifiableLoginCode {
+  channel: VerificationChannelSnapshot | null;
   id: string;
   userId: string;
   encryptedCode: EncryptedValue;
@@ -234,17 +259,33 @@ function expectedDeliveryRace(error: unknown): boolean {
     && /NOT NULL constraint failed:\s*audit_events\.id/iu.test(error.message);
 }
 
+function proofProvenance(alias: "l" | "login_codes"): string {
+  return `EXISTS (
+    SELECT 1 FROM bot_connections auth_c
+    JOIN chat_identities auth_ci ON auth_ci.connection_id = auth_c.id
+    JOIN primary_login_channels auth_p ON auth_p.user_id = auth_c.user_id AND auth_p.connection_id = auth_c.id
+    WHERE auth_c.id = ${alias}.connection_id AND auth_c.user_id = ${alias}.user_id
+      AND auth_c.state = 'ACTIVE_BOUND' AND auth_c.processing_paused=0
+      AND auth_c.auth_revision = ${alias}.proof_auth_revision
+      AND auth_p.revision = ${alias}.proof_primary_revision
+      AND auth_p.generation = ${alias}.proof_primary_generation
+      AND auth_ci.id = ${alias}.proof_identity_id
+      AND length(auth_ci.private_chat_id) > 0 AND length(auth_ci.provider_user_id) > 0
+  )`;
+}
+
 export class D1LoginCodeStore implements LoginCodeStore {
   constructor(private readonly database: D1Database) {}
 
   async issue(input: IssueLoginCodeInput): Promise<boolean> {
-    const eligible = `SELECT u.id AS user_id, MIN(c.id) AS connection_id
+    const eligible = `SELECT u.id AS user_id, c.id AS connection_id,
+        c.auth_revision, p.revision AS primary_revision, p.generation AS primary_generation, ci.id AS identity_id
       FROM users u
-      JOIN bot_connections c ON c.user_id = u.id AND c.state = 'ACTIVE_BOUND'
+      JOIN primary_login_channels p ON p.user_id = u.id
+      JOIN bot_connections c ON c.id = p.connection_id AND c.user_id = u.id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
       JOIN chat_identities ci ON ci.connection_id = c.id
       WHERE u.email = ? COLLATE NOCASE
-      GROUP BY u.id
-      HAVING COUNT(*) = 1`;
+        AND length(ci.private_chat_id) > 0 AND length(ci.provider_user_id) > 0`;
     const statements = [
       this.database
         .prepare(
@@ -270,10 +311,12 @@ export class D1LoginCodeStore implements LoginCodeStore {
              verification_marker, delivery_status, delivery_attempt_count,
              send_started_at, retry_not_before, safe_error_code,
              transition_marker, dispatch_started_at, dispatch_attempt_count,
-             dispatch_marker, created_at, updated_at
+             dispatch_marker, created_at, updated_at,
+             proof_auth_revision, proof_primary_revision, proof_primary_generation, proof_identity_id
            )
            SELECT ?, eligible.user_id, eligible.connection_id, ?, ?, ?, ?, 0, NULL,
-                  NULL, 'PENDING', 0, NULL, NULL, NULL, NULL, ?, 1, ?, ?, ?
+                  NULL, 'PENDING', 0, NULL, NULL, NULL, NULL, ?, 1, ?, ?, ?,
+                  eligible.auth_revision, eligible.primary_revision, eligible.primary_generation, eligible.identity_id
            FROM (${eligible}) AS eligible`,
         )
         .bind(
@@ -309,11 +352,21 @@ export class D1LoginCodeStore implements LoginCodeStore {
   async findVerifiable(email: string, now: number): Promise<VerifiableLoginCode | null> {
     const row = await this.database
       .prepare(
-        `SELECT l.id, l.user_id, l.code_ciphertext, l.code_iv, l.code_key_version
+        `SELECT l.id, l.user_id, l.code_ciphertext, l.code_iv, l.code_key_version,
+                c.id AS connection_id, c.provider, c.credential_version,
+                c.encrypted_token, c.encrypted_token_iv,
+                c.updated_at AS connection_updated_at,
+                c.transition_marker AS connection_transition_marker,
+                ci.id AS chat_identity_id, ci.provider_user_id, ci.private_chat_id, ci.linked_at
          FROM users u
          JOIN login_codes l ON l.user_id = u.id
+         JOIN bot_connections c ON c.id = l.connection_id
+           AND c.user_id = l.user_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
+         JOIN chat_identities ci ON ci.connection_id = c.id
+           AND length(ci.provider_user_id) > 0 AND length(ci.private_chat_id) > 0
          WHERE u.email = ? COLLATE NOCASE
            AND l.consumed_at IS NULL AND l.expires_at > ? AND l.attempt_count < ?
+           AND ${proofProvenance("l")}
          ORDER BY l.created_at DESC, l.rowid DESC
          LIMIT 1`,
       )
@@ -325,6 +378,18 @@ export class D1LoginCodeStore implements LoginCodeStore {
           userId: row.user_id,
           encryptedCode: encrypted(row.code_ciphertext, row.code_iv),
           codeKeyVersion: row.code_key_version,
+          channel: {
+            connectionId: row.connection_id,
+            provider: row.provider,
+            credentialVersion: row.credential_version,
+            encryptedToken: encrypted(row.encrypted_token, row.encrypted_token_iv),
+            connectionUpdatedAt: row.connection_updated_at,
+            connectionTransitionMarker: row.connection_transition_marker,
+            chatIdentityId: row.chat_identity_id,
+            providerUserId: row.provider_user_id,
+            privateChatId: row.private_chat_id,
+            linkedAt: row.linked_at,
+          },
         }
       : null;
   }
@@ -336,15 +401,35 @@ export class D1LoginCodeStore implements LoginCodeStore {
     auditId: string,
     now: number,
   ): Promise<boolean> {
+    const channel = code.channel;
+    if (!channel || session.userId !== code.userId) return false;
     const statements = [
       this.database
         .prepare(
           `UPDATE login_codes
            SET consumed_at = ?, verification_marker = ?, updated_at = ?
            WHERE id = ? AND user_id = ? AND consumed_at IS NULL
-             AND expires_at > ? AND attempt_count < ?`,
+             AND expires_at > ? AND attempt_count < ?
+             AND ${proofProvenance("login_codes")}
+             AND EXISTS (
+               SELECT 1 FROM bot_connections c
+               JOIN chat_identities ci ON ci.connection_id = c.id
+               WHERE c.id = login_codes.connection_id AND c.id = ?
+                 AND c.user_id = login_codes.user_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
+                 AND c.provider = ? AND c.credential_version = ?
+                 AND c.encrypted_token = ? AND c.encrypted_token_iv = ?
+                 AND c.updated_at = ? AND c.transition_marker IS ?
+                 AND ci.id = ? AND ci.provider_user_id = ?
+                 AND ci.private_chat_id = ? AND ci.linked_at = ?
+             )`,
         )
-        .bind(now, marker, now, code.id, code.userId, now, MAX_LOGIN_CODE_ATTEMPTS),
+        .bind(
+          now, marker, now, code.id, code.userId, now, MAX_LOGIN_CODE_ATTEMPTS,
+          channel.connectionId, channel.provider, channel.credentialVersion,
+          channel.encryptedToken.ciphertext, channel.encryptedToken.iv,
+          channel.connectionUpdatedAt, channel.connectionTransitionMarker,
+          channel.chatIdentityId, channel.providerUserId, channel.privateChatId, channel.linkedAt,
+        ),
       this.database
         .prepare(
           `INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at)
@@ -481,10 +566,11 @@ export class D1LoginCodeStore implements LoginCodeStore {
          FROM login_codes l
          JOIN bot_connections c
            ON c.id = l.connection_id AND c.user_id = l.user_id
-             AND c.state = 'ACTIVE_BOUND'
+             AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
          JOIN chat_identities ci ON ci.connection_id = c.id
          WHERE l.id = ? AND l.consumed_at IS NULL AND l.expires_at > ?
            AND l.delivery_attempt_count < ?
+           AND ${proofProvenance("l")}
            AND (
              l.delivery_status = 'PENDING'
              OR (l.delivery_status = 'RETRYABLE'
@@ -570,12 +656,13 @@ export class D1LoginCodeStore implements LoginCodeStore {
         OR (delivery_status = 'RETRYABLE'
           AND retry_not_before IS NOT NULL AND retry_not_before <= ?)
       )
+      AND ${proofProvenance("login_codes")}
       AND EXISTS (
         SELECT 1 FROM bot_connections c
         JOIN chat_identities ci ON ci.connection_id = c.id
         WHERE c.id = ? AND c.id = login_codes.connection_id
           AND c.user_id = ? AND c.user_id = login_codes.user_id
-          AND c.provider = ? AND c.state = 'ACTIVE_BOUND'
+          AND c.provider = ? AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
           AND c.credential_version = ? AND c.encrypted_token = ?
           AND c.encrypted_token_iv = ? AND c.updated_at = ?
           AND c.transition_marker IS ? AND ci.id = ?
@@ -729,7 +816,8 @@ export class D1LoginCodeStore implements LoginCodeStore {
                  WHERE id = ? AND delivery_status = 'FAILED'
                    AND safe_error_code = 'REJECTED_CREDENTIAL'
                    AND transition_marker = ?
-               )`,
+               )
+           RETURNING id`,
           )
           .bind(
             input.now,
@@ -1140,6 +1228,7 @@ export async function verifyLoginCode(
   const dummyId = randomOpaqueId(randomBytes);
   const dummyCode = generateLoginCode(randomBytes);
   const dummy: VerifiableLoginCode = {
+    channel: null,
     id: dummyId,
     userId: dummyUserId,
     encryptedCode: await dependencies.keyring.encryptSensitive(

@@ -120,7 +120,7 @@ export class D1InboundWebhookStore implements InboundStore {
       .prepare(
         `SELECT id, provider, public_id FROM bot_connections
          WHERE provider = ? AND public_id = ?
-           AND state IN ('VALIDATING', 'ACTIVE_UNBOUND', 'ACTIVE_BOUND', 'WEBHOOK_FAILED')
+           AND processing_paused=0 AND state IN ('VALIDATING', 'ACTIVE_UNBOUND', 'ACTIVE_BOUND', 'WEBHOOK_FAILED')
          LIMIT 1`,
       )
       .bind(provider, publicId)
@@ -160,7 +160,8 @@ export class D1InboundWebhookStore implements InboundStore {
            message_key_version, state, received_at, processing_started_at,
            attempt_count, processed_at, transition_marker, dispatch_started_at,
            dispatch_attempt_count, dispatch_marker, safe_error_code
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?
+           WHERE EXISTS(SELECT 1 FROM bot_connections WHERE id=? AND processing_paused=0)`,
       )
       .bind(
         record.id,
@@ -182,6 +183,7 @@ export class D1InboundWebhookStore implements InboundStore {
         record.dispatchAttemptCount,
         record.dispatchMarker,
         record.safeErrorCode,
+        record.connectionId,
       )
       .run();
     return d1Changes(result) === 1;
@@ -295,7 +297,7 @@ export async function acceptWebhookMessage(
     privateChatId,
     providerMessageId,
   );
-  if (!raced) throw new Error("Inbound dedupe result was unavailable");
+  if (!raced) return {status:204};
   return publishOrUnavailable(raced.id, receivedNow, dependencies, randomBytes);
 }
 

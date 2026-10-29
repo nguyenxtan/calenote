@@ -74,6 +74,11 @@ function operations(overrides: Partial<RouteOperations> = {}): RouteOperations {
       email: "owner@example.com",
       timezone: "Asia/Ho_Chi_Minh" as const,
     })),
+    getLifecycle:vi.fn(),
+    changeLifecycle:vi.fn(),
+    getLoginChannel: vi.fn(),
+    selectLoginChannel: vi.fn(),
+    addConnection: vi.fn(),
     listConnections: vi.fn(async () => [{
       publicId: CONNECTION_PUBLIC_ID,
       provider: "telegram" as const,

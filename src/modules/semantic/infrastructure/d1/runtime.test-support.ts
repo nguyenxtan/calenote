@@ -34,6 +34,10 @@ export async function seedSemanticRuntime(db: D1Database) {
       await db.prepare(statement).run();
     }
   }
+  for (const file of ["0010_primary_login_provenance.sql","0011_connection_pause.sql"]) {
+    const sql=readFileSync(resolve(process.cwd(), "migrations",file),"utf8");
+    for(const statement of sql.split("-- statement-breakpoint").map(part=>part.replace(/^--.*$/gm, "").trim()).filter(Boolean)) await db.prepare(statement).run();
+  }
   await applySemanticMigration(db);
   for (const owner of ["one", "two"]) {
     await db.batch([

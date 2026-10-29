@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -146,10 +146,10 @@ describe("FinalScreenExperience connections", () => {
 
     await screen.findByRole("heading", { name: "Kết nối" });
     await interaction.click(screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true }));
-    expect(screen.getByRole("menu", { name: "Điều hướng thêm", hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
+    expect(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).getByRole("link", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
     await interaction.keyboard("{Escape}");
-    expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tất cả điều hướng", hidden: true })).not.toBeInTheDocument();
   });
 
   it("shows a generic recovery state without exposing a failed response secret", async () => {
@@ -206,4 +206,23 @@ describe("FinalScreenExperience settings", () => {
     expect(screen.getByText(/chỉ tạo lời nhắc sau bước xác nhận/i)).toBeVisible();
     expect(screen.queryByText(/miễn phí|chi phí rất thấp/i)).not.toBeInTheDocument();
   });
+});
+
+it.each([200,401])("ignores an older connections response after a newer screen/session (%s)",async(status)=>{
+ let resolveOld!:(value:Response)=>void;const old=new Promise<Response>(resolve=>{resolveOld=resolve;});
+ const fetcher=vi.fn(async(input:unknown)=>{if(input==="/api/session")return json({data:{user}});if(input==="/api/connections")return old;if(input==="/api/preferences")return json({data:{preferences:{addressStyle:"ban",customDisplayName:null,tone:"friendly"}}});throw new Error("Unexpected path");});vi.stubGlobal("fetch",fetcher);replace.mockClear();
+ const view=render(<FinalScreenExperience screen="connections"/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledWith("/api/connections",expect.anything()));view.rerender(<FinalScreenExperience screen="settings"/>);await screen.findByRole("heading",{name:"Cài đặt"});
+ resolveOld(status===401?json({error:{code:"UNAUTHENTICATED",message:"Old session"}},401):json({data:{connections:[{publicId:"A".repeat(22),provider:"telegram",displayName:"Old bot",handle:null,state:"ACTIVE_BOUND"}]}}));await waitFor(()=>expect(fetcher).toHaveBeenCalledWith("/api/preferences",expect.anything()));await new Promise(resolve=>setTimeout(resolve,0));expect(replace).not.toHaveBeenCalled();expect(screen.queryByText("Old bot")).not.toBeInTheDocument();
+});
+
+it.each([200,401])("ignores old code-rotation completion after a new screen/session (%s)",async(status)=>{
+ let resolveOld!:(value:Response)=>void;const old=new Promise<Response>(resolve=>{resolveOld=resolve;});const id="A".repeat(22);
+ vi.stubGlobal("fetch",vi.fn(async(input:unknown,init?:RequestInit)=>{if(input==="/api/session")return json({data:{user}});if(input==="/api/connections")return json({data:{connections:[{publicId:id,provider:"telegram",displayName:"Fixture bot",handle:null,state:"ACTIVE_UNBOUND"}]}});if(input===`/api/connections/${id}/connect-code`&&init?.method==="POST")return old;if(input==="/api/preferences")return json({data:{preferences:{addressStyle:"ban",customDisplayName:null,tone:"friendly"}}});throw new Error("Unexpected path");}));replace.mockClear();
+ const view=render(<FinalScreenExperience screen="connections"/>);await userEvent.click(await screen.findByRole("button",{name:"Tạo mã kết nối"}));view.rerender(<FinalScreenExperience screen="settings"/>);await screen.findByRole("heading",{name:"Cài đặt"});resolveOld(status===401?json({error:{code:"UNAUTHENTICATED",message:"Old session"}},401):json({data:{connectCommand:"/connect STALE-FIXTURE",expiresAt:Date.now()+60000}}));await new Promise(resolve=>setTimeout(resolve,0));expect(replace).not.toHaveBeenCalled();expect(screen.queryByText("/connect STALE-FIXTURE")).not.toBeInTheDocument();view.rerender(<FinalScreenExperience screen="connections"/>);await waitFor(()=>expect(screen.getByRole("button",{name:"Tạo mã kết nối"})).toBeEnabled());
+});
+
+it("releases settings save busy state after a deferred response across screen changes",async()=>{
+ let resolveOld!:(value:Response)=>void;const old=new Promise<Response>(resolve=>{resolveOld=resolve;});const preferences={addressStyle:"ban",customDisplayName:null,tone:"friendly"};
+ vi.stubGlobal("fetch",vi.fn(async(input:unknown,init?:RequestInit)=>{if(input==="/api/session")return json({data:{user}});if(input==="/api/connections")return json({data:{connections:[]}});if(input==="/api/preferences")return init?.method==="PATCH"?old:json({data:{preferences}});throw new Error("Unexpected path");}));
+ const view=render(<FinalScreenExperience screen="settings"/>);await userEvent.click(await screen.findByRole("button",{name:"Lưu cá nhân hoá"}));view.rerender(<FinalScreenExperience screen="connections"/>);await screen.findByRole("heading",{name:"Kết nối"});resolveOld(json({data:{preferences}}));await new Promise(resolve=>setTimeout(resolve,0));view.rerender(<FinalScreenExperience screen="settings"/>);await waitFor(()=>expect(screen.getByRole("button",{name:"Lưu cá nhân hoá"})).toBeEnabled());expect(screen.queryByText("Cài đặt đã được lưu.")).not.toBeInTheDocument();
 });

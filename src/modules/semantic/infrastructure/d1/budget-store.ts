@@ -57,7 +57,7 @@ export class D1SemanticBudgetStore implements SemanticBudgetStore {
            (id, owner_id, source_inbound_id, daily_window_key, monthly_window_key,
             reserved_maximum_microunits, state, expires_at, created_at, updated_at)
            VALUES ((SELECT ? FROM inbound_updates i
-             JOIN bot_connections c ON c.id = i.connection_id AND c.state = 'ACTIVE_BOUND'
+             JOIN bot_connections c ON c.id = i.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
              JOIN chat_identities ci ON ci.connection_id = c.id
                AND ci.provider_user_id = i.provider_user_id AND ci.private_chat_id = i.private_chat_id
              WHERE i.id = ? AND c.user_id = ? AND changes() = 1),

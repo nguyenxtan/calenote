@@ -12,6 +12,7 @@ const CREATE_BODY_BYTES = 16 * 1_024;
 const EMPTY_BODY_BYTES = 1_024;
 const BODY_TIMEOUT_MS = 5_000;
 const createSchema = z.object({
+  connectionPublicId:z.string().length(22).regex(/^[A-Za-z0-9_-]+$/u).optional(),
   title: z.string(),
   scheduledAt: z.number(),
   timezone: z.literal("Asia/Ho_Chi_Minh"),
@@ -55,6 +56,7 @@ export async function handleCreateReminder(
     await readBoundedJson(request, CREATE_BODY_BYTES, { timeoutMs: BODY_TIMEOUT_MS }),
   );
   if (!parsed.success) throw new InvalidReminderError();
+  if(parsed.data.connectionPublicId!==undefined) requireCanonicalPublicId(parsed.data.connectionPublicId);
   const operations = await createOperations();
   const principal = await operations.requireUser(credentials);
   const reminder = await operations.createReminder({

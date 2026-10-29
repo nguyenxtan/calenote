@@ -14,6 +14,7 @@ import {
   sendProviderProcessingFeedback,
   sendProviderText,
   type ProcessInboundDependencies,
+  fenceInboundGateway,
 } from "./processor";
 
 const master = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -48,6 +49,33 @@ describe("provider processing feedback", () => {
     await processInbound(inboundId, deps);
 
     expect(feedback).not.toHaveBeenCalled();
+  });
+});
+
+describe("provider acquisition before dispatch",()=>{
+  it("blocks model dispatch paused during preparation, including a typed V2 result",async()=>{
+    const h=await setup({state:"ACTIVE_BOUND",text:"synthetic"});
+    h.database.sqlite.exec("INSERT INTO chat_identities VALUES ('chat','connection-1','provider-user-1','chat-1',NULL,1)");
+    const claimed=await claimInbound(h.inboundId,h.deps);if(claimed.status!=="CLAIMED") throw new Error("Fixture claim failed");
+    const dispatch=vi.fn(async()=>({status:"SUCCESS" as const,interpretation:{intent:"HELP"},usage:{costMicrounits:0}}));
+    const gateway=fenceInboundGateway({prepare:()=>({status:"READY" as const,model:"synthetic",provider:"synthetic",maximumCostMicrounits:1,dispatch})},claimed.message,h.deps);
+    const attempt=gateway.prepare("PRIMARY",{synthetic:true});if(attempt.status!=="READY") throw new Error("Fixture preparation failed");
+    h.database.sqlite.exec("UPDATE bot_connections SET processing_paused=1 WHERE id='connection-1';UPDATE inbound_updates SET lifecycle_hold=1");
+    expect(await attempt.dispatch()).toEqual({status:"FAILURE",category:"UNAVAILABLE",usage:{costMicrounits:0}});expect(dispatch).not.toHaveBeenCalled();
+  });
+  it("retains a model call acquired before pause and records its real outcome",async()=>{
+    const h=await setup({state:"ACTIVE_BOUND",text:"synthetic"});
+    h.database.sqlite.exec("INSERT INTO chat_identities VALUES ('chat','connection-1','provider-user-1','chat-1',NULL,1)");
+    const claimed=await claimInbound(h.inboundId,h.deps);if(claimed.status!=="CLAIMED") throw new Error("Fixture claim failed");
+    const dispatch=vi.fn(async()=>{
+      h.database.sqlite.exec("UPDATE bot_connections SET processing_paused=1 WHERE id='connection-1';UPDATE inbound_updates SET lifecycle_hold=1");
+      return {status:"SUCCESS" as const,interpretation:{intent:"HELP"},usage:{costMicrounits:0}};
+    });
+    const gateway=fenceInboundGateway({prepare:()=>({status:"READY" as const,model:"synthetic",provider:"synthetic",maximumCostMicrounits:1,dispatch})},claimed.message,h.deps);
+    const attempt=gateway.prepare("PRIMARY",{synthetic:true});if(attempt.status!=="READY") throw new Error("Fixture preparation failed");
+    expect((await attempt.dispatch()).status).toBe("SUCCESS");expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(h.database.sqlite.prepare("SELECT status FROM inbound_egress").get()).toEqual({status:"SENT"});
+    expect((await attempt.dispatch()).status).toBe("FAILURE");expect(dispatch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -94,6 +122,8 @@ class SqliteD1Database {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0010_primary_login_provenance.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0011_connection_pause.sql"), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new SqliteStatement(this.sqlite, sql, () => this.blobReadsAsArrays) as unknown as D1PreparedStatement;

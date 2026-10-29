@@ -18,5 +18,7 @@ export function randomOpaqueId(randomBytes: RandomBytes = cryptoRandomBytes): st
 }
 
 export function d1Changes(result: D1Result<unknown>): number {
+  // RETURNING reports target rows; D1 meta.changes can include trigger writes.
+  if (result.results?.length) return result.results.length;
   return typeof result.meta.changes === "number" ? result.meta.changes : 0;
 }

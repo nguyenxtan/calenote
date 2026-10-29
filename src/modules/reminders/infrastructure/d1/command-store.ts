@@ -74,7 +74,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                 u.timezone, i.rowid AS inbound_rowid
          FROM inbound_updates i
          JOIN bot_connections c
-           ON c.id = i.connection_id AND c.state = 'ACTIVE_BOUND'
+           ON c.id = i.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
          JOIN chat_identities ci
            ON ci.connection_id = c.id
           AND ci.provider_user_id = i.provider_user_id
@@ -86,7 +86,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
            ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
          WHERE i.id = ? AND i.connection_id = ?
            AND i.provider_user_id = ? AND i.private_chat_id = ?
-           AND i.state = 'PROCESSING' AND i.transition_marker = ?
+           AND i.lifecycle_hold=0 AND i.state = 'PROCESSING' AND i.transition_marker = ?
          LIMIT 1`,
       )
       .bind(
@@ -122,7 +122,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
          WHERE draft.chat_identity_id = ? AND draft.status = 'PENDING'
            AND current.connection_id = ?
            AND current.provider_user_id = ? AND current.private_chat_id = ?
-           AND current.state = 'PROCESSING' AND current.transition_marker = ?
+           AND current.lifecycle_hold=0 AND current.state = 'PROCESSING' AND current.transition_marker = ?
            AND (
              source.received_at < current.received_at OR
              (source.received_at = current.received_at AND source.rowid < current.rowid)
@@ -146,7 +146,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
     return `SELECT ci.id
             FROM inbound_updates current
             JOIN bot_connections c
-              ON c.id = current.connection_id AND c.state = 'ACTIVE_BOUND'
+              ON c.id = current.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
             JOIN chat_identities ci
               ON ci.connection_id = c.id
              AND ci.provider_user_id = current.provider_user_id
@@ -158,7 +158,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
               ON m.workspace_id = w.id AND m.user_id = c.user_id AND m.role = 'OWNER'
             WHERE current.id = ? AND current.connection_id = ?
               AND current.provider_user_id = ? AND current.private_chat_id = ?
-              AND current.state = 'PROCESSING' AND current.transition_marker = ?
+              AND current.lifecycle_hold=0 AND current.state = 'PROCESSING' AND current.transition_marker = ?
               ${enforceConversationOrder ? `AND NOT ${newerConversationOutcomeSql("current")}` : ""}`;
   }
 
@@ -205,7 +205,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                SELECT 1
                FROM inbound_updates current
                JOIN inbound_updates source ON source.id = command_drafts.source_inbound_id
-               WHERE current.id = ? AND current.state = 'PROCESSING'
+               WHERE current.id = ? AND current.lifecycle_hold=0 AND current.state = 'PROCESSING'
                  AND current.transition_marker = ?
                  AND (
                    source.received_at < current.received_at OR
@@ -349,7 +349,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                FROM inbound_updates source
                JOIN inbound_updates current ON current.id = ?
                WHERE source.id = command_drafts.source_inbound_id
-                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND current.lifecycle_hold=0 AND current.state = 'PROCESSING' AND current.transition_marker = ?
                  AND (
                    source.received_at < current.received_at OR
                    (source.received_at = current.received_at AND source.rowid < current.rowid)
@@ -379,7 +379,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                FROM command_drafts d
                JOIN chat_identities ci ON ci.id = d.chat_identity_id
                JOIN bot_connections c
-                 ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
+                 ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
                JOIN workspaces w
                  ON w.owner_user_id = c.user_id AND w.kind = 'PERSONAL'
                JOIN memberships m
@@ -387,7 +387,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                JOIN inbound_updates i ON i.id = d.resolution_inbound_id
                WHERE d.id = ? AND d.status = 'CONFIRMED'
                  AND d.resolution_inbound_id = ?
-                 AND i.state = 'PROCESSING' AND i.transition_marker = ?
+                 AND i.lifecycle_hold=0 AND i.state = 'PROCESSING' AND i.transition_marker = ?
                  AND ci.id = ? AND c.id = ?
                  AND ci.provider_user_id = ? AND ci.private_chat_id = ?
              ), NULL), COALESCE((
@@ -397,7 +397,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                JOIN inbound_updates i ON i.id = d.resolution_inbound_id
                WHERE d.id = ? AND d.status = 'CONFIRMED'
                  AND d.resolution_inbound_id = ?
-                 AND i.state = 'PROCESSING' AND i.transition_marker = ?
+                 AND i.lifecycle_hold=0 AND i.state = 'PROCESSING' AND i.transition_marker = ?
                  AND ci.id = ?
              ), NULL), ?, ?, ?, ?, ?, ?, 'PENDING', NULL, NULL, ?, ?
            )`,
@@ -503,7 +503,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                FROM inbound_updates source
                JOIN inbound_updates current ON current.id = ?
                WHERE source.id = command_drafts.source_inbound_id
-                 AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 AND current.lifecycle_hold=0 AND current.state = 'PROCESSING' AND current.transition_marker = ?
                  AND (
                    source.received_at < current.received_at OR
                    (source.received_at = current.received_at AND source.rowid < current.rowid)
@@ -592,7 +592,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                     FROM inbound_updates source
                     JOIN inbound_updates current ON current.id = ?
                     WHERE source.id = draft.source_inbound_id
-                      AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                      AND current.lifecycle_hold=0 AND current.state = 'PROCESSING' AND current.transition_marker = ?
                       AND (
                         source.received_at < current.received_at OR
                         (source.received_at = current.received_at AND source.rowid < current.rowid)

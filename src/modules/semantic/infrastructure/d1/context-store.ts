@@ -11,13 +11,13 @@ import {
 } from "../../context-store";
 
 const boundIdentity = `SELECT ci.id FROM chat_identities ci
-  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
+  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
   WHERE ci.id = ? AND c.user_id = ?`;
 const ownedInbound = `SELECT i.id FROM inbound_updates i
   JOIN chat_identities ci ON ci.connection_id = i.connection_id
     AND ci.provider_user_id = i.provider_user_id AND ci.private_chat_id = i.private_chat_id
-  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
-  WHERE i.id = ? AND i.state = 'PROCESSING' AND i.transition_marker = ?
+  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
+  WHERE i.id = ? AND i.lifecycle_hold=0 AND i.state = 'PROCESSING' AND i.transition_marker = ?
     AND ci.id = ? AND c.user_id = ?
     AND NOT ${newerConversationOutcomeSql("i")}`;
 

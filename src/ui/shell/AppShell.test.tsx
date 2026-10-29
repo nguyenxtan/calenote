@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/contracts/api/session";
 import { AppShell } from "./AppShell";
@@ -73,6 +74,29 @@ describe("AppShell account menu", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => expect(screen.queryByRole("group", { name: "Tài khoản" })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+});
+
+describe("unified navigation", () => {
+  it("offers the same grouped destinations and current page in the mobile panel", async () => {
+    const interaction = userEvent.setup();
+    const { container } = render(<AppShell user={account} activePath="/app/settings"><main><h1>Cài đặt</h1></main></AppShell>);
+    const desktop = screen.getByRole("navigation", { name: "Điều hướng chính" });
+    expect(within(desktop).getByRole("link", { name: "Hướng dẫn" })).toHaveAttribute("href", "/docs");
+    const trigger = screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true });
+    await interaction.click(trigger);
+    const panel = screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true });
+    for (const link of within(desktop).getAllByRole("link")) {
+      expect(within(panel).getByRole("link", { name: link.textContent!.trim(), hidden: true })).toHaveAttribute("href", link.getAttribute("href"));
+    }
+    expect(within(panel).getByRole("link", { name: "Cài đặt", hidden: true })).toHaveAttribute("aria-current", "page");
+    expect(within(panel).getByText(account.displayName)).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: "Hôm nay", hidden: true })).toHaveFocus();
+    const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(result.violations.filter((item) => ["serious", "critical"].includes(item.impact ?? ""))).toEqual([]);
+    await interaction.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Tất cả điều hướng", hidden: true })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
 });

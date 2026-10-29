@@ -1,3 +1,4 @@
+import { base64UrlToBytes } from "@/modules/security/encoding";
 import {
   cryptoRandomBytes,
   randomOpaqueId,
@@ -54,6 +55,7 @@ export interface CancellationRow {
 }
 
 export interface ManualReminderRecord {
+  connectionPublicId?:string;
   id: string;
   publicId: string;
   userId: string;
@@ -164,6 +166,7 @@ export function normalizeManualReminderTitle(value: string): string {
 
 export async function createManualReminder(
   input: {
+    connectionPublicId?:string;
     userId: string;
     title: string;
     scheduledAt: number;
@@ -184,7 +187,8 @@ export async function createManualReminder(
     ? normalizeManualReminderTitle(input.title)
     : "";
   if (
-    input.userId.length === 0
+    (input.connectionPublicId!==undefined && (input.connectionPublicId.length!==22 || !base64UrlToBytes(input.connectionPublicId)))
+    || input.userId.length === 0
     || title.length === 0
     || title.length > MAX_REMINDER_TITLE_CODE_UNITS
     || input.timezone !== VIETNAM_TIMEZONE
@@ -220,6 +224,7 @@ export async function createManualReminder(
     id,
     publicId,
     userId: input.userId,
+    ...(input.connectionPublicId===undefined?{}:{connectionPublicId:input.connectionPublicId}),
     encryptedTitle,
     titleKeyVersion: REMINDER_TITLE_KEY_VERSION,
     scheduledAt: input.scheduledAt,

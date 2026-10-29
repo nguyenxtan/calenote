@@ -78,6 +78,7 @@ class MemoryOnboardingStore implements OnboardingStore {
     this.rotations.push(structuredClone(input));
   }
 
+  async isPausedRecovery() { return this.recovery?.processingPaused===true; }
   async findExactRecovery(): Promise<RecoveryConnection | null> {
     this.events.push("find-recovery");
     return this.recovery;

@@ -1,3 +1,5 @@
+import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
+import { D1InboundEgressStore, type InboundEgressKind } from "@/modules/connections/lifecycle/egress-store";
 import type {
   BotProvider,
   ProviderRequester,
@@ -49,6 +51,7 @@ const BIND_FAILURE_REPLY = "Không thể kết nối. Mã không hợp lệ, đ�
 const CONNECT_HELP_REPLY = "Hãy gửi đúng lệnh /connect <MÃ_26_KÝ_TỰ> từ trang Calenote.";
 
 interface ClaimedRow {
+  auth_revision:number;
   id: string;
   connection_id: string;
   provider: BotProvider;
@@ -73,6 +76,7 @@ interface ClaimedRow {
 }
 
 interface StateRow {
+  lifecycle_blocked:number;
   state: InboundState;
   processing_started_at: number | null;
   attempt_count: number;
@@ -81,6 +85,7 @@ interface StateRow {
 type ConnectionState = "VALIDATING" | "ACTIVE_UNBOUND" | "ACTIVE_BOUND" | "WEBHOOK_FAILED" | "SUSPENDED";
 
 export interface ClaimedInboundMessage {
+  authRevision:number;
   id: string;
   connectionId: string;
   connectionUserId: string;
@@ -125,6 +130,8 @@ export interface BindPrivateChatInput {
 }
 
 export interface InboundProcessorStore extends ReminderCommandStore {
+  acquireEgress(message:ClaimedInboundMessage,kind:InboundEgressKind,index:number,now:number):Promise<boolean>;
+  finalizeEgress(inboundId:string,kind:InboundEgressKind,index:number,status:"SENT"|"FAILED"|"UNCERTAIN",now:number):Promise<void>;
   claimSemanticAttempt(message: BoundChatMessage, ownerId: string, now: number): Promise<boolean>;
   completeSemanticMessage(message: BoundChatMessage, context: BoundChatContext, now: number): Promise<boolean>;
   listSemanticReminders(input: SemanticReminderQuery): Promise<QueriedReminder[]>;
@@ -253,6 +260,7 @@ function mapClaimed(row: ClaimedRow): StoreClaimResult & { status: "CLAIMED" } {
       connectionId: row.connection_id,
       connectionUserId: row.connection_user_id,
       connectionState: row.connection_state,
+      authRevision: row.auth_revision,
       provider: row.provider,
       providerMessageId: row.provider_message_id,
       providerUserId: row.provider_user_id,
@@ -284,6 +292,12 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
     this.reminderCommands = reminderCommands;
   }
 
+  acquireEgress(message:ClaimedInboundMessage,kind:InboundEgressKind,index:number,now:number):Promise<boolean> {
+    return new D1InboundEgressStore(this.database).acquire(message,kind,index,now);
+  }
+  finalizeEgress(inboundId:string,kind:InboundEgressKind,index:number,status:"SENT"|"FAILED"|"UNCERTAIN",now:number):Promise<void> {
+    return new D1InboundEgressStore(this.database).finalize(inboundId,kind,index,status,now);
+  }
   findBoundContext(message: BoundChatMessage): Promise<BoundChatContext | null> {
     return this.reminderCommands.findBoundContext(message);
   }
@@ -319,13 +333,13 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
       `INSERT INTO audit_events (id,actor_user_id,action,target_user_id,target_connection_id,result,created_at)
        SELECT ?,c.user_id,'SEMANTIC_ATTEMPT_CLAIMED',c.user_id,c.id,'SUCCESS',?
        FROM inbound_updates i
-       JOIN bot_connections c ON c.id=i.connection_id AND c.state='ACTIVE_BOUND'
+       JOIN bot_connections c ON c.id=i.connection_id AND c.state='ACTIVE_BOUND' AND c.processing_paused=0
        JOIN chat_identities ci ON ci.connection_id=c.id
          AND ci.provider_user_id=i.provider_user_id AND ci.private_chat_id=i.private_chat_id
        JOIN workspaces w ON w.owner_user_id=c.user_id AND w.kind='PERSONAL'
        JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
        WHERE i.id=? AND i.connection_id=? AND i.provider_user_id=? AND i.private_chat_id=?
-         AND i.state='PROCESSING' AND i.transition_marker=? AND c.user_id=?
+         AND i.lifecycle_hold=0 AND i.state='PROCESSING' AND i.transition_marker=? AND c.user_id=?
        ON CONFLICT (id) DO NOTHING`,
     ).bind(`semantic-attempt:${message.id}`, now, message.id, message.connectionId,
       message.providerUserId, message.privateChatId, message.claimMarker, ownerId).run();
@@ -336,12 +350,12 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
     const result = await this.database.prepare(
       `UPDATE inbound_updates SET state='PROCESSED',processed_at=?
        WHERE id=? AND connection_id=? AND provider_user_id=? AND private_chat_id=?
-         AND state='PROCESSING' AND transition_marker=? AND EXISTS (
+         AND lifecycle_hold=0 AND state='PROCESSING' AND transition_marker=? AND EXISTS (
            SELECT 1 FROM bot_connections c
            JOIN chat_identities ci ON ci.connection_id=c.id
            JOIN workspaces w ON w.owner_user_id=c.user_id AND w.kind='PERSONAL'
            JOIN memberships m ON m.workspace_id=w.id AND m.user_id=c.user_id AND m.role='OWNER'
-           WHERE c.id=inbound_updates.connection_id AND c.state='ACTIVE_BOUND'
+           WHERE c.id=inbound_updates.connection_id AND c.state='ACTIVE_BOUND' AND c.processing_paused=0
              AND ci.provider_user_id=inbound_updates.provider_user_id AND ci.private_chat_id=inbound_updates.private_chat_id
              AND c.user_id=? AND ci.id=? AND w.id=?)
          AND NOT ${newerConversationOutcomeSql("inbound_updates")}`,
@@ -362,7 +376,7 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
         `UPDATE inbound_updates
          SET state = 'PROCESSING', processing_started_at = ?, attempt_count = attempt_count + 1,
              transition_marker = ?, dispatch_started_at = NULL, dispatch_marker = NULL
-         WHERE id = ? AND (
+         WHERE lifecycle_hold=0 AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=0) AND id = ? AND (
            state = 'PENDING' OR
            (state = 'PROCESSING' AND (processing_started_at IS NULL OR processing_started_at <= ?))
          )
@@ -382,7 +396,7 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
       const row = await this.database
         .prepare(
           `SELECT i.*, c.user_id AS connection_user_id, c.state AS connection_state,
-                  c.encrypted_token, c.encrypted_token_iv, c.credential_version
+                  c.auth_revision,c.encrypted_token, c.encrypted_token_iv, c.credential_version
            FROM inbound_updates i
            JOIN bot_connections c ON c.id = i.connection_id AND c.provider = i.provider
            WHERE i.id = ? AND i.state = 'PROCESSING' AND i.transition_marker = ?
@@ -399,10 +413,11 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
     }
 
     const current = await this.database
-      .prepare("SELECT state, processing_started_at, attempt_count FROM inbound_updates WHERE id = ? LIMIT 1")
+      .prepare("SELECT state, processing_started_at, attempt_count, (lifecycle_hold=1 OR EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=1)) AS lifecycle_blocked FROM inbound_updates WHERE id = ? LIMIT 1")
       .bind(inboundId)
       .first<StateRow>();
     if (!current) return { status: "MISSING" };
+    if (current.lifecycle_blocked) return {status:"TERMINAL"};
     if (current.state !== "PENDING" && current.state !== "PROCESSING") {
       return { status: "TERMINAL" };
     }
@@ -458,7 +473,7 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
         .prepare(
           `UPDATE bot_connections
            SET state = 'ACTIVE_BOUND', transition_marker = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
+           WHERE id = ? AND user_id = ? AND processing_paused=0 AND state = 'ACTIVE_UNBOUND'
              AND NOT EXISTS (SELECT 1 FROM chat_identities WHERE connection_id = ?)
              AND EXISTS (
                SELECT 1 FROM inbound_updates
@@ -469,7 +484,8 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
                SELECT 1 FROM connect_codes
                WHERE connection_id = ? AND user_id = ? AND digest = ?
                  AND consumed_at IS NULL AND expires_at > ?
-             )`,
+             )
+           RETURNING id`,
         )
         .bind(
           input.claimMarker, input.now, input.connectionId, input.connectionUserId,
@@ -485,7 +501,8 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
                SELECT id FROM bot_connections
                WHERE id = ? AND state = 'ACTIVE_BOUND' AND transition_marker = ?
              ), NULL), ?, ?, ?, ?
-           )`,
+           )
+           RETURNING id`,
         )
         .bind(
           input.chatIdentityId, input.connectionId, input.claimMarker,
@@ -618,6 +635,26 @@ export async function claimInbound(
   return { status: "CLAIMED", message: { ...message, text } };
 }
 
+export function fenceInboundGateway<T,I>(gateway:SemanticGateway<T,I>,message:ClaimedInboundMessage,deps:ProcessInboundDependencies):SemanticGateway<T,I> {
+  const now=deps.now??systemClock;
+  return {prepare:(tier,input)=>{
+    const attempt=gateway.prepare(tier,input);
+    if(attempt.status!=="READY") return attempt;
+    const kind=tier==="FREE_PRIMARY"?"SEMANTIC_FREE":"SEMANTIC_PAID";
+    return {...attempt,dispatch:async()=>{
+      if(!await deps.store.acquireEgress(message,kind,0,now())) return {status:"FAILURE",category:"UNAVAILABLE",usage:{costMicrounits:0}};
+      try {
+        const result=await attempt.dispatch();
+        await deps.store.finalizeEgress(message.id,kind,0,result.status==="SUCCESS"?"SENT":"UNCERTAIN",now());
+        return result;
+      } catch(error) {
+        try { await deps.store.finalizeEgress(message.id,kind,0,"UNCERTAIN",now()); } catch { /* one-shot */ }
+        throw error;
+      }
+    }};
+  }};
+}
+
 function parseConnectCommand(text: string): string | null {
   return CONNECT_COMMAND.exec(text.trim())?.[1] ?? null;
 }
@@ -626,7 +663,10 @@ async function replyAfterTerminal(
   message: ClaimedInboundMessage,
   text: string,
   dependencies: ProcessInboundDependencies,
+  actionIndex = 0,
 ): Promise<boolean> {
+  let acquired=false;
+  const now=dependencies.now??systemClock;
   try {
     const token = await dependencies.keyring.decryptCredential(
       message.connectionId,
@@ -634,14 +674,18 @@ async function replyAfterTerminal(
       message.credentialVersion,
       { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
     );
+    acquired=await dependencies.store.acquireEgress(message,"REPLY",actionIndex,now());
+    if(!acquired) return false;
     await (dependencies.sendText ?? sendProviderText)(
       message.provider,
       token,
       message.privateChatId,
       text,
     );
+    await dependencies.store.finalizeEgress(message.id,"REPLY",actionIndex,"SENT",now());
     return true;
   } catch {
+    if(acquired) { try { await dependencies.store.finalizeEgress(message.id,"REPLY",actionIndex,"UNCERTAIN",now()); } catch { /* Stale SENDING remains one-shot. */ } }
     // Binding/help replies are best effort after the terminal database transition.
     return false;
   }
@@ -769,6 +813,7 @@ export async function processInbound(
     const eligibleStarted = performance.now();
     const semantic: BoundChatSemanticDependencies | undefined = dependencies.semantic && {
       service: createSemanticService({ ...dependencies.semantic, now,
+        gateway:fenceInboundGateway(dependencies.semantic!.gateway,message,dependencies),
         attemptStore: { claimInbound: async (scope) => scope.sourceInboundId === message.id
           && dependencies.store.claimSemanticAttempt(message, scope.ownerId, now()) },
       }),
@@ -790,31 +835,52 @@ export async function processInbound(
             { ciphertext: message.encryptedToken, iv: message.encryptedTokenIv },
           );
           if (signal.aborted) return;
+          if(!await dependencies.store.acquireEgress(message,"TYPING",0,now())) { releaseDispatch(); return; }
           observeTiming(dependencies.observeTiming, "TYPING_DISPATCH", performance.now() - eligibleStarted);
           releaseDispatch();
-          await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
+          try { await (dependencies.sendProcessingFeedback ?? sendProviderProcessingFeedback)(
             message.provider,
             token,
             message.privateChatId,
             signal,
           );
+            await dependencies.store.finalizeEgress(message.id,"TYPING",0,signal.aborted?"UNCERTAIN":"SENT",now());
+          } catch(error) {
+            try { await dependencies.store.finalizeEgress(message.id,"TYPING",0,"UNCERTAIN",now()); } catch { /* one-shot */ }
+            throw error;
+          }
         }
       });
       // V1 waits only for local credential preparation/dispatch, never provider
       // settlement. V2 starts this managed operation before loading context.
       await dispatched;
       } : undefined;
+    let replyIndex=0;
     const reply = async (text: string) => {
-      try { await replyAfterTerminal(message, text, dependencies); }
+      try { await replyAfterTerminal(message, text, dependencies,replyIndex++); }
       finally { observeTiming(dependencies.observeTiming, "FINAL_REPLY", performance.now() - eligibleStarted); }
     };
     const conversation = dependencies.conversation ? createConversationService({ ...dependencies.conversation,
+      gateway:fenceInboundGateway(dependencies.conversation.gateway,message,dependencies),
       commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback, observeTiming: dependencies.observeTiming,
       list: input => dependencies.store.listSemanticReminders(input),
     }) : undefined;
     return processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
-      intelligence: dependencies.intelligence,
+      intelligence: dependencies.intelligence && {...dependencies.intelligence,gateway:{
+        extractAction:input=>dependencies.intelligence!.gateway.extractAction(input),
+        interpretReminder:async input=>{
+          const kind=dependencies.intelligence!.mode==="privacy"?"SEMANTIC_PAID":"SEMANTIC_FREE";
+          if(!await dependencies.store.acquireEgress(message,kind,0,now())) throw new Error("Inbound egress denied");
+          try {
+            const result=await dependencies.intelligence!.gateway.interpretReminder(input);
+            await dependencies.store.finalizeEgress(message.id,kind,0,"SENT",now());return result;
+          } catch(error) {
+            try { await dependencies.store.finalizeEgress(message.id,kind,0,"UNCERTAIN",now()); } catch { /* one-shot */ }
+            throw error;
+          }
+        },
+      }},
       semantic,
     });
   }

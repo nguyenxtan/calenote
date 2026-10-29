@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +58,18 @@ describe("CoreScreenExperience", () => {
     expect(screen.getByRole("button", { name: "Hôm nay" })).toBeVisible();
   });
 
+  it("shows both calendars near Tet and preserves selection through month navigation", async () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse("2026-02-16T17:30:00Z"));
+    installFetch(); const interaction = userEvent.setup();
+    render(<CoreScreenExperience screen="calendar" />);
+    await screen.findByRole("heading", { name: "Lịch" });
+    expect(screen.getByRole("button", { name: /Dương lịch 2026-02-17, Âm lịch 1\/1\/2026.*đã chọn/ })).toBeVisible();
+    expect(screen.getByText(/Âm lịch 1\/1\/2026/)).toBeVisible();
+    await interaction.click(screen.getByRole("button", { name: "Tháng sau" }));
+    expect(screen.getByText(/Âm lịch 1\/1\/2026/)).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /Dương lịch 2026-03-\d+, Âm lịch/ })).toHaveLength(31);
+  });
+
   it("approves an Inbox ActionCandidate through its decision endpoint only", async () => {
     const fetcher = installFetch((path) => path === `/api/actions/${action.id}/approve` ? json({ data: { decision: "APPROVED", reminderPublicId: "B".repeat(22) } }) : undefined);
     const interaction = userEvent.setup();
@@ -83,10 +95,10 @@ describe("CoreScreenExperience", () => {
     render(<CoreScreenExperience screen="calendar" />);
     await screen.findByRole("heading", { name: "Lịch" });
     await interaction.click(screen.getByRole("button", { name: "Mở thêm điều hướng", hidden: true }));
-    expect(screen.getByRole("menu", { name: "Điều hướng thêm", hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
+    expect(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Tất cả điều hướng", hidden: true })).getByRole("link", { name: "Kết nối", hidden: true })).toHaveAttribute("href", "/app/connections");
     await interaction.keyboard("{Escape}");
-    expect(screen.queryByRole("menu", { name: "Điều hướng thêm", hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tất cả điều hướng", hidden: true })).not.toBeInTheDocument();
   });
 
   it.each(["calendar", "inbox", "reminders"] as const)("has no serious axe violations for %s", async (screenName) => {

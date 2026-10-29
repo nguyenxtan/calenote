@@ -26,6 +26,7 @@ interface OwnedConnectionRow {
 }
 
 interface RecoveryConnectionRow extends OwnedConnectionRow {
+  processing_paused:number;
   provider: RecoveryConnection["provider"];
   provider_bot_id: string;
   display_name: string;
@@ -93,7 +94,7 @@ export class D1OnboardingStore implements OnboardingStore {
       ) VALUES (
         ?, COALESCE((
           SELECT id FROM bot_connections
-          WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'${transitionGuard}
+          WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'${transitionGuard}
         ), NULL), ?, ?, ?, ?, ?
       )`,
     );
@@ -115,7 +116,7 @@ export class D1OnboardingStore implements OnboardingStore {
       ) VALUES (
         COALESCE((
           SELECT ? FROM bot_connections
-          WHERE id = ? AND user_id = ? AND state = ?${transitionGuard}
+          WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ?${transitionGuard}
         ), NULL), ?, ?, ?, ?, ?, ?
       )`,
     );
@@ -130,6 +131,52 @@ export class D1OnboardingStore implements OnboardingStore {
       event.createdAt,
     );
     return statement.bind(...values);
+  }
+
+  private prepareConnection(connection: AccountGraph["connection"]): D1PreparedStatement {
+    return this.database
+        .prepare(
+          `INSERT INTO bot_connections (
+            id, user_id, provider, public_id, provider_bot_id, display_name, handle,
+            account_type, can_join_groups, encrypted_token, encrypted_token_iv,
+            token_fingerprint, credential_version, state, webhook_registered_at,
+            created_at, updated_at, transition_marker
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .bind(
+          connection.id,
+          connection.userId,
+          connection.provider,
+          connection.publicId,
+          connection.providerBotId,
+          connection.displayName,
+          connection.handle,
+          connection.accountType,
+          connection.canJoinGroups === null ? null : Number(connection.canJoinGroups),
+          connection.encryptedToken,
+          connection.encryptedTokenIv,
+          connection.tokenFingerprint,
+          connection.credentialVersion,
+          connection.state,
+          connection.createdAt,
+          connection.createdAt,
+          connection.transitionMarker,
+        );
+  }
+
+  async commitOwnedConnection(connection: AccountGraph["connection"], audit: SafeAuditEvent): Promise<void> {
+    if (audit.actorUserId !== connection.userId || audit.targetUserId !== connection.userId
+      || audit.targetConnectionId !== connection.id || audit.action !== "CONNECTION_ADDED") {
+      throw new OnboardingConflictError();
+    }
+    try {
+      const results = await this.database.batch([this.prepareConnection(connection), this.prepareAudit(audit)]);
+      if (results.length !== 2) throw new Error("Connection batch result was incomplete");
+      results.forEach(result => requireChange(result, "Connection insert did not commit"));
+    } catch (error) {
+      if (uniqueConstraint(error)) throw new OnboardingConflictError();
+      throw error;
+    }
   }
 
   async commitAccountGraph(graph: AccountGraph): Promise<void> {
@@ -161,34 +208,7 @@ export class D1OnboardingStore implements OnboardingStore {
           "INSERT INTO memberships (workspace_id, user_id, role, created_at) VALUES (?, ?, 'OWNER', ?)",
         )
         .bind(graph.membership.workspaceId, graph.membership.userId, graph.membership.createdAt),
-      this.database
-        .prepare(
-          `INSERT INTO bot_connections (
-            id, user_id, provider, public_id, provider_bot_id, display_name, handle,
-            account_type, can_join_groups, encrypted_token, encrypted_token_iv,
-            token_fingerprint, credential_version, state, webhook_registered_at,
-            created_at, updated_at, transition_marker
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
-        )
-        .bind(
-          graph.connection.id,
-          graph.connection.userId,
-          graph.connection.provider,
-          graph.connection.publicId,
-          graph.connection.providerBotId,
-          graph.connection.displayName,
-          graph.connection.handle,
-          graph.connection.accountType,
-          graph.connection.canJoinGroups === null ? null : Number(graph.connection.canJoinGroups),
-          graph.connection.encryptedToken,
-          graph.connection.encryptedTokenIv,
-          graph.connection.tokenFingerprint,
-          graph.connection.credentialVersion,
-          graph.connection.state,
-          graph.connection.createdAt,
-          graph.connection.createdAt,
-          graph.connection.transitionMarker,
-        ),
+      this.prepareConnection(graph.connection),
       this.database
         .prepare(
           "INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -221,8 +241,9 @@ export class D1OnboardingStore implements OnboardingStore {
         .prepare(
           `UPDATE bot_connections
            SET state = 'ACTIVE_UNBOUND', transition_marker = ?, webhook_registered_at = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
-             AND transition_marker = ?`,
+           WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ?
+           RETURNING id`,
         )
         .bind(input.audit.id, input.registeredAt, input.registeredAt, input.connectionId, input.userId, input.expectedMarker),
       codeStatements[0],
@@ -241,8 +262,9 @@ export class D1OnboardingStore implements OnboardingStore {
       this.database
         .prepare(
           `UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
-             AND transition_marker = ?`,
+           WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ?
+           RETURNING id`,
         )
         .bind(input.state, input.audit.id, input.failedAt, input.connectionId, input.userId, input.expectedMarker),
       this.prepareGuardedAudit(input.audit, input.state, input.audit.id),
@@ -281,9 +303,10 @@ export class D1OnboardingStore implements OnboardingStore {
         .prepare(
           `UPDATE bot_connections
            SET transition_marker = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
+           WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
              AND updated_at = ?
-             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))`,
+             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))
+           RETURNING id`,
         )
         .bind(
           input.audit.id,
@@ -312,6 +335,9 @@ export class D1OnboardingStore implements OnboardingStore {
     }
   }
 
+  async isPausedRecovery(email:string,provider:RecoveryConnection["provider"],fingerprint:string):Promise<boolean> {
+    return !!await this.database.prepare("SELECT c.id FROM bot_connections c JOIN users u ON u.id=c.user_id WHERE u.email=? COLLATE NOCASE AND c.provider=? AND c.token_fingerprint=? AND c.processing_paused=1").bind(email,provider,fingerprint).first();
+  }
   async findExactRecovery(input: {
     email: string;
     provider: RecoveryConnection["provider"];
@@ -321,7 +347,7 @@ export class D1OnboardingStore implements OnboardingStore {
     const row = await this.database
       .prepare(
         `SELECT c.id, c.public_id, c.user_id, c.provider, c.provider_bot_id,
-                c.display_name, c.handle, c.state, c.updated_at,
+                c.display_name, c.handle, c.state, c.updated_at,c.processing_paused,
                 c.transition_marker, c.encrypted_token, c.encrypted_token_iv,
                 c.credential_version,
                 EXISTS(SELECT 1 FROM chat_identities ci WHERE ci.connection_id = c.id) AS has_private_chat
@@ -340,7 +366,7 @@ export class D1OnboardingStore implements OnboardingStore {
     const row = await this.database
       .prepare(
         `SELECT c.id, c.public_id, c.user_id, c.provider, c.provider_bot_id,
-                c.display_name, c.handle, c.state, c.updated_at,
+                c.display_name, c.handle, c.state, c.updated_at,c.processing_paused,
                 c.transition_marker, c.encrypted_token, c.encrypted_token_iv,
                 c.credential_version,
                 EXISTS(SELECT 1 FROM chat_identities ci WHERE ci.connection_id = c.id) AS has_private_chat
@@ -358,6 +384,7 @@ export class D1OnboardingStore implements OnboardingStore {
       id: row.id,
       publicId: row.public_id,
       userId: row.user_id,
+      processingPaused:row.processing_paused===1,
       provider: row.provider,
       providerBotId: row.provider_bot_id,
       displayName: row.display_name,
@@ -381,7 +408,7 @@ export class D1OnboardingStore implements OnboardingStore {
       .prepare(
         `UPDATE bot_connections
          SET state = 'VALIDATING', transition_marker = ?, updated_at = ?
-         WHERE id = ? AND user_id = ? AND state = ? AND updated_at = ?
+         WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND updated_at = ?
            AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))
            AND (
              state IN ('WEBHOOK_FAILED', 'SUSPENDED')
@@ -411,8 +438,9 @@ export class D1OnboardingStore implements OnboardingStore {
           `UPDATE bot_connections
            SET state = ?, transition_marker = ?, webhook_registered_at = COALESCE(webhook_registered_at, ?),
                updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = ? AND updated_at = ?
-             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))`,
+           WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND updated_at = ?
+             AND ((transition_marker = ?) OR (transition_marker IS NULL AND ? IS NULL))
+           RETURNING id`,
         )
         .bind(
           input.targetState,
@@ -453,7 +481,7 @@ export class D1OnboardingStore implements OnboardingStore {
             `INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at)
              VALUES (?, COALESCE((
                SELECT user_id FROM bot_connections
-               WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+               WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND transition_marker = ?
              ), NULL), ?, ?, ?, ?)`,
           )
           .bind(
@@ -477,7 +505,7 @@ export class D1OnboardingStore implements OnboardingStore {
                id, connection_id, user_id, digest, expires_at, consumed_at, created_at
              ) VALUES (?, COALESCE((
                SELECT id FROM bot_connections
-               WHERE id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
+               WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'ACTIVE_UNBOUND'
                  AND transition_marker = ?
              ), NULL), ?, ?, ?, ?, ?)`,
           )
@@ -501,7 +529,7 @@ export class D1OnboardingStore implements OnboardingStore {
              id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
            ) VALUES (COALESCE((
              SELECT ? FROM bot_connections
-             WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+             WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND transition_marker = ?
            ), NULL), ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
@@ -532,8 +560,9 @@ export class D1OnboardingStore implements OnboardingStore {
       this.database
         .prepare(
           `UPDATE bot_connections SET state = ?, transition_marker = ?, updated_at = ?
-           WHERE id = ? AND user_id = ? AND state = 'VALIDATING'
-             AND transition_marker = ? AND updated_at = ?`,
+           WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = 'VALIDATING'
+             AND transition_marker = ? AND updated_at = ?
+           RETURNING id`,
         )
         .bind(
           input.state,
@@ -568,7 +597,7 @@ export class D1OnboardingStore implements OnboardingStore {
             `INSERT INTO sessions (id, user_id, digest, expires_at, revoked_at, created_at)
              VALUES (?, COALESCE((
                SELECT user_id FROM bot_connections
-               WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+               WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND transition_marker = ?
              ), NULL), ?, ?, ?, ?)`,
           )
           .bind(
@@ -591,7 +620,7 @@ export class D1OnboardingStore implements OnboardingStore {
              id, actor_user_id, action, target_user_id, target_connection_id, result, created_at
            ) VALUES (COALESCE((
              SELECT ? FROM bot_connections
-             WHERE id = ? AND user_id = ? AND state = ? AND transition_marker = ?
+             WHERE processing_paused=0 AND id = ? AND user_id = ? AND state = ? AND transition_marker = ?
            ), NULL), ?, ?, ?, ?, ?, ?)`,
         )
         .bind(

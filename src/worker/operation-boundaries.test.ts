@@ -44,6 +44,11 @@ function authOperations(): AuthOperations {
 function connectionsOperations(): ConnectionsOperations {
   return {
     requireUser: vi.fn(async () => ({ userId: "user-1" })),
+    getLifecycle:vi.fn(),
+    changeLifecycle:vi.fn(),
+    getLoginChannel: vi.fn(),
+    selectLoginChannel: vi.fn(),
+    addConnection: vi.fn(),
     listConnections: vi.fn(async () => []),
     rotateConnectCode: vi.fn(async () => ({ command: "/connect ABC", expiresAt: 1_700_000_000_000 })),
     retryWebhook: vi.fn(async () => ({

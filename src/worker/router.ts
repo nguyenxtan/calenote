@@ -1,3 +1,4 @@
+import { handleLifecycle } from "./routes/connections";
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { InvalidUserPreferencesError } from "@/modules/preferences/service";
@@ -42,6 +43,9 @@ import {
 } from "./routes/actions";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import {
+  handleGetLoginChannel,
+  handleSelectLoginChannel,
+  handleAddConnection,
   handleConnectCodeRotation,
   handleListConnections,
   handleWebhookRetry,
@@ -236,6 +240,16 @@ export function createRouter(options: RouterOptions = {}) {
       }
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
+      }
+      const lifecycleMatch=/^\/api\/connections\/([A-Za-z0-9_-]+)\/(lifecycle|pause|resume)$/u.exec(pathname);
+      if(lifecycleMatch && ((request.method==="GET" && lifecycleMatch[2]==="lifecycle") || (request.method==="POST" && lifecycleMatch[2]!=="lifecycle"))) {
+        return await handleLifecycle(request,appOrigin!,lifecycleMatch[1],lifecycleMatch[2]==="lifecycle"?null:lifecycleMatch[2]==="pause",()=>connectionsOperationsFactory(env));
+      }
+      if(request.method === "GET" && pathname === "/api/connections/login-channel") return await handleGetLoginChannel(request,()=>connectionsOperationsFactory(env));
+      const loginChannelMatch=request.method === "POST" ? /^\/api\/connections\/([A-Za-z0-9_-]+)\/login-channel$/u.exec(pathname) : null;
+      if(loginChannelMatch) return await handleSelectLoginChannel(request,appOrigin!,loginChannelMatch[1],()=>connectionsOperationsFactory(env));
+      if (request.method === "POST" && pathname === "/api/connections") {
+        return await handleAddConnection(request, appOrigin!, () => connectionsOperationsFactory(env));
       }
       if (request.method === "GET" && pathname === "/api/connections") {
         return await handleListConnections(request, () => connectionsOperationsFactory(env));

@@ -45,6 +45,9 @@ export type DeliveryStatus =
   | "CANCELLED";
 
 export interface DeliveryContextRow {
+  auth_revision?:number;
+  processing_paused?:number;
+  lifecycle_hold?:number;
   reminder_id: string;
   reminder_status: ReminderStatus;
   scheduled_at: number;
@@ -68,6 +71,8 @@ export interface DeliveryContextRow {
 }
 
 export interface ReminderDeliveryContext {
+  authRevision?:number;
+  lifecycleBlocked?:boolean;
   reminderId: string;
   reminderStatus: ReminderStatus;
   scheduledAt: number;
@@ -128,6 +133,7 @@ export interface ReminderDeliveryStore {
     deliveryId: string,
     marker: string,
     now: number,
+    expected?:ReminderDeliveryContext,
   ): Promise<AcquireDeliveryResult>;
   finalizeSuccess(
     reminderId: string,
@@ -161,6 +167,8 @@ export interface ReminderDeliveryStore {
 
 export function contextFromRow(row: DeliveryContextRow): ReminderDeliveryContext {
   return {
+    authRevision:row.auth_revision,
+    lifecycleBlocked:row.processing_paused===1 || row.lifecycle_hold===1,
     reminderId: row.reminder_id,
     reminderStatus: row.reminder_status,
     scheduledAt: row.scheduled_at,
@@ -308,6 +316,8 @@ export async function deliverReminder(
     return { status: "NOOP" };
   }
 
+  if(context.lifecycleBlocked) return {status:"NOOP"};
+
   if (
     context.deliveryStatus === "RETRYABLE"
     && context.retryNotBefore !== null
@@ -385,6 +395,7 @@ export async function deliverReminder(
     randomOpaqueId(randomBytes),
     ownershipMarker,
     startedAt,
+    context,
   );
   if (acquired.status !== "OWNED") return acquired;
 

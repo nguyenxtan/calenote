@@ -1,3 +1,5 @@
+import { D1PrimaryLoginStore } from "@/modules/auth/primary-login";
+import { D1ConnectionLifecycleStore } from "@/modules/connections/lifecycle/store";
 // @vitest-environment node
 
 import { readFileSync } from "node:fs";
@@ -44,6 +46,34 @@ interface RuntimeFixture {
 
 const instances: Miniflare[] = [];
 
+describe("pause lifecycle on real local D1",()=>{
+  it("serializes concurrent pause and primary selection with only one winner",async()=>{
+    const fixture=await migratedRuntime();await addBoundChannel(fixture,"alternate");
+    const lifecycle=new D1ConnectionLifecycleStore(fixture.db);const primary=new D1PrimaryLoginStore(fixture.db);
+    const candidate=(await primary.candidate("user-workerd","alternate"))!;
+    const snapshot=(await lifecycle.get("user-workerd","alternate"))!;
+    const expected=await primary.snapshot("user-workerd");
+    const outcomes=await Promise.all([
+      lifecycle.change({userId:"user-workerd",publicId:"alternate",paused:true,expected:snapshot.cas,marker:"pause-winner",now:NOW}),
+      primary.select("user-workerd",candidate,expected,"primary-winner",NOW),
+    ]);
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    const paused=(await lifecycle.get("user-workerd","alternate"))!.paused;
+    expect((await primary.snapshot("user-workerd"))!.connection_id==="alternate").toBe(!paused);
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE id IN ('pause-winner','primary-winner')").first()).toEqual({n:1});
+  },20_000);
+  it("rejects stale resume CAS and rolls back a real D1 audit failure",async()=>{
+    const fixture=await migratedRuntime();await addBoundChannel(fixture,"alternate");const store=new D1ConnectionLifecycleStore(fixture.db);
+    const original=(await store.get("user-workerd","alternate"))!;
+    expect(await store.change({userId:"user-workerd",publicId:"alternate",paused:true,expected:original.cas,marker:"pause",now:NOW})).toBe(true);
+    expect(await store.change({userId:"user-workerd",publicId:"alternate",paused:false,expected:original.cas,marker:"stale",now:NOW+1})).toBe(false);
+    const paused=(await store.get("user-workerd","alternate"))!;
+    await fixture.db.prepare("CREATE TRIGGER lifecycle_audit_failure BEFORE INSERT ON audit_events WHEN NEW.action='CONNECTION_RESUMED' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END").run();
+    await expect(store.change({userId:"user-workerd",publicId:"alternate",paused:false,expected:paused.cas,marker:"resume",now:NOW+1})).rejects.toThrow("synthetic audit failure");
+    expect((await store.get("user-workerd","alternate"))!.paused).toBe(true);
+  },20_000);
+});
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(instances.splice(0).map((instance) => instance.dispose()));
@@ -87,8 +117,8 @@ function verifyRequest(email: string, ip: string): Request {
 async function applyMigration(db: D1Database, file: string): Promise<void> {
   const source = readFileSync(resolve(process.cwd(), file), "utf8");
   const statements = source
-    .split(";")
-    .map((statement) => statement.trim())
+    .split(source.includes("-- statement-breakpoint") ? "-- statement-breakpoint" : ";")
+    .map((statement) => statement.replace(/^--.*$/gm, "").trim())
     .filter(Boolean);
   for (const statement of statements) {
     await db.prepare(statement).run();
@@ -97,6 +127,7 @@ async function applyMigration(db: D1Database, file: string): Promise<void> {
 
 async function migratedRuntime(
   state: "ACTIVE_BOUND" | "WEBHOOK_FAILED" = "ACTIVE_BOUND",
+  provenance = true,
 ): Promise<RuntimeFixture> {
   const miniflare = new Miniflare(convertV4MiniflareOptions({
     modules: true,
@@ -111,6 +142,7 @@ async function migratedRuntime(
   await applyMigration(db, "migrations/0001_production_mvp.sql");
   await applyMigration(db, "migrations/0002_onboarding_transition_marker.sql");
   await applyMigration(db, "migrations/0003_source_action_foundation.sql");
+  if (provenance) { await applyMigration(db, "migrations/0010_primary_login_provenance.sql"); await applyMigration(db, "migrations/0011_connection_pause.sql"); }
 
   const keyring = await createKeyring(MASTER);
   const encrypted = await keyring.encryptCredential("connection-workerd", "telegram", 1, TOKEN);
@@ -208,6 +240,13 @@ async function exactConnection(fixture: RuntimeFixture): Promise<RecoveryConnect
   return connection;
 }
 
+async function addBoundChannel(fixture:RuntimeFixture,id:string):Promise<void> {
+  const encrypted=await fixture.keyring.encryptCredential(id,"telegram",1,"12345678:synthetic-extra-token");
+  await fixture.db.prepare(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at,transition_marker)
+    VALUES (?,'user-workerd','telegram',?,?,'Synthetic',?,?,?,1,'ACTIVE_BOUND',1,1,'extra-marker')`).bind(id,id,id,encrypted.ciphertext,encrypted.iv,id).run();
+  await fixture.db.prepare("INSERT INTO chat_identities VALUES (?,?,'extra-provider-user',?,NULL,1)").bind(`identity-${id}`,id,`chat-${id}`).run();
+}
+
 describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", () => {
   it("rolls back every session/code/audit side effect when a guarded recovery CAS misses", async () => {
     const fixture = await migratedRuntime();
@@ -283,6 +322,62 @@ describe("Task 8 recovery transactions on a real Miniflare/workerd D1 binding", 
       marker: "loser-workerd",
       claimedAt: NOW,
     })).resolves.toBe(false);
+  }, 15_000);
+
+  it("gives exactly one overlapping primary selection the workerd transaction",async()=>{
+    const fixture=await migratedRuntime();await addBoundChannel(fixture,"second-channel");
+    const proof=await issueLoginProof(fixture),store=new D1PrimaryLoginStore(fixture.db);
+    const expected=await store.snapshot("user-workerd"),a=await store.candidate("user-workerd","AAAAAAAAAAAAAAAAAAAAAA"),b=await store.candidate("user-workerd","second-channel");
+    if(!a||!b)throw new Error("Missing synthetic candidates");
+    const outcomes=await Promise.all([store.select("user-workerd",a,expected,"primary-winner-a",NOW),store.select("user-workerd",b,expected,"primary-winner-b",NOW)]);
+    expect(outcomes.sort()).toEqual([false,true]);
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action='LOGIN_CHANNEL_SELECTED'").first()).toEqual({count:1});
+    await expect(verifyLoginCode("owner@example.com",proof.code,{store:fixture.loginStore,keyring:fixture.keyring,now:()=>NOW,randomBytes:sequencedRandomBytes(64)})).rejects.toBeInstanceOf(InvalidLoginCodeError);
+  },15000);
+
+  it("rejects post-issuance restored private binding on workerd D1",async()=>{
+    const fixture=await migratedRuntime(),proof=await issueLoginProof(fixture);
+    await fixture.db.prepare("UPDATE chat_identities SET private_chat_id='ABA' WHERE id='identity-workerd'").run();
+    await fixture.db.prepare("UPDATE chat_identities SET private_chat_id='private-chat-workerd' WHERE id='identity-workerd'").run();
+    await expect(verifyLoginCode("owner@example.com",proof.code,{store:fixture.loginStore,keyring:fixture.keyring,now:()=>NOW,randomBytes:sequencedRandomBytes(64)})).rejects.toBeInstanceOf(InvalidLoginCodeError);
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE id<>'old-session-workerd'").first()).toEqual({count:0});
+  },15000);
+
+  it("keeps legacy multi-bound primary unresolved through workerd migration and later binding",async()=>{
+    const fixture=await migratedRuntime("ACTIVE_BOUND",false);await addBoundChannel(fixture,"second-channel");
+    await applyMigration(fixture.db,"migrations/0010_primary_login_provenance.sql");await applyMigration(fixture.db,"migrations/0011_connection_pause.sql");await addBoundChannel(fixture,"third-channel");
+    await fixture.db.prepare("UPDATE bot_connections SET state='SUSPENDED' WHERE id='connection-workerd'").run();
+    await fixture.db.prepare("UPDATE bot_connections SET state='ACTIVE_BOUND' WHERE id='connection-workerd'").run();
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS count FROM primary_login_channels").first()).toEqual({count:0});
+  },15000);
+
+  it.each(["suspended", "reassigned", "chat-changed", "marker-changed"])("rolls back stale %s verification on the actual workerd D1 binding", async change => {
+    const fixture = await migratedRuntime();
+    const login = await issueLoginProof(fixture);
+    const guardedStore = new Proxy(fixture.loginStore, {
+      get(target, property, receiver) {
+        if (property === "commitCorrectVerification") {
+          return async (...args: Parameters<LoginCodeStore["commitCorrectVerification"]>) => {
+            if (change === "suspended") await fixture.db.prepare("UPDATE bot_connections SET state='SUSPENDED' WHERE id='connection-workerd'").run();
+            if (change === "reassigned") {
+              await fixture.db.prepare("INSERT INTO users VALUES ('foreign-fence','foreign-fence@example.invalid','Synthetic','Asia/Ho_Chi_Minh',1,1)").run();
+              await fixture.db.prepare("UPDATE bot_connections SET user_id='foreign-fence' WHERE id='connection-workerd'").run();
+            }
+            if (change === "chat-changed") await fixture.db.prepare("UPDATE chat_identities SET private_chat_id='changed-fence-chat' WHERE connection_id='connection-workerd'").run();
+            if (change === "marker-changed") await fixture.db.prepare("UPDATE bot_connections SET transition_marker='changed-fence-marker' WHERE id='connection-workerd'").run();
+            return target.commitCorrectVerification(...args);
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as LoginCodeStore;
+    await expect(verifyLoginCode("owner@example.com", login.code, {
+      store: guardedStore, keyring: fixture.keyring, now: () => NOW, randomBytes: sequencedRandomBytes(64),
+    })).rejects.toBeInstanceOf(InvalidLoginCodeError);
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE id <> 'old-session-workerd'").first()).toEqual({count:0});
+    expect(await fixture.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action='LOGIN_VERIFIED'").first()).toEqual({count:0});
+    expect(await fixture.db.prepare("SELECT consumed_at FROM login_codes WHERE id=?").bind(login.id).first()).toEqual({consumed_at:null});
   }, 15_000);
 
   it("gives public recovery the sole live session when verification paused on its old proof", async () => {

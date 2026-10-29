@@ -1,3 +1,5 @@
+import type { LifecycleCas, LifecycleSnapshot } from "@/modules/connections/lifecycle/store";
+import type { AddConnectionInput, AddConnectionResult } from "@/modules/connections/add-service";
 import type { PublicConnection, PublicSessionUser } from "@/modules/auth/dashboard-service";
 import type { SessionCredentials, SessionPrincipal } from "@/modules/auth/session";
 import type { PublicSeriesView, SeriesDecisionRequest } from "@/contracts/api/reminder-series";
@@ -22,6 +24,11 @@ export interface AuthOperations {
 }
 
 export interface ConnectionsOperations {
+  getLifecycle(userId:string,publicId:string):Promise<LifecycleSnapshot|null>;
+  changeLifecycle(input:{userId:string;publicId:string;paused:boolean;expected:LifecycleCas}):Promise<LifecycleSnapshot>;
+  getLoginChannel(userId: string): Promise<PublicConnection | null>;
+  selectLoginChannel(input: {userId: string; publicId: string}): Promise<PublicConnection>;
+  addConnection(input: AddConnectionInput & { userId: string }): Promise<AddConnectionResult>;
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listConnections(userId: string): Promise<PublicConnection[]>;
   rotateConnectCode(input: { userId: string; publicId: string }): Promise<{ command: string; expiresAt: number }>;
@@ -32,6 +39,7 @@ export interface RemindersOperations {
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listReminders(userId: string): Promise<PublicReminder[]>;
   createReminder(input: {
+    connectionPublicId?:string;
     userId: string;
     title: string;
     scheduledAt: number;
@@ -43,7 +51,7 @@ export interface RemindersOperations {
 export interface ActionsOperations {
   requireUser(credentials: SessionCredentials): Promise<{ userId: string }>;
   listPendingActions(userId: string): Promise<PublicPendingActionCandidate[]>;
-  approveAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
+  approveAction(input: { userId: string; candidateId: string; connectionPublicId?:string }): Promise<CandidateDecisionResult>;
   rejectAction(input: { userId: string; candidateId: string }): Promise<CandidateDecisionResult>;
 }
 

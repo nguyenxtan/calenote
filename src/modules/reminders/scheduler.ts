@@ -123,6 +123,7 @@ export async function claimDueReminders(
 type DispatchableInboundState = "PENDING" | "PROCESSING";
 
 interface InboundDispatchRow {
+  lifecycle_blocked: number;
   id: string;
   state: DispatchableInboundState;
   received_at: number;
@@ -182,6 +183,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
     return this.database
       .prepare(
         `SELECT id, state, received_at, processing_started_at, attempt_count,
+                (lifecycle_hold=1 OR EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=1)) AS lifecycle_blocked,
                 dispatch_started_at, dispatch_attempt_count, dispatch_marker
          FROM inbound_updates WHERE id = ? LIMIT 1`,
       )
@@ -194,7 +196,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
       .prepare(
         `SELECT id
          FROM inbound_updates
-         WHERE (
+         WHERE lifecycle_hold=0 AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=0) AND ((
            state = 'PENDING'
            AND (dispatch_started_at IS NULL OR dispatch_started_at <= ?)
          ) OR (
@@ -202,7 +204,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
            AND (processing_started_at IS NULL OR processing_started_at <= ?)
            AND (dispatch_started_at IS NULL OR dispatch_started_at <= ?)
          )
-         ORDER BY received_at, id
+         ) ORDER BY received_at, id
          LIMIT ?`,
       )
       .bind(
@@ -218,6 +220,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
   async reserve(inboundId: string, now: number, marker: string): Promise<InboundDispatchResult> {
     const prior = await this.read(inboundId);
     if (!prior) return { status: "MISSING" };
+    if (prior.lifecycle_blocked) return {status:"TERMINAL"};
     if (prior.state !== "PENDING" && prior.state !== "PROCESSING") {
       return { status: "TERMINAL" };
     }
@@ -237,7 +240,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
           `UPDATE inbound_updates
            SET state = 'FAILED', processed_at = ?, safe_error_code = ?,
                dispatch_started_at = NULL, dispatch_marker = NULL
-           WHERE id = ? AND state = ? AND processing_started_at IS ?
+           WHERE lifecycle_hold=0 AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=0) AND id = ? AND state = ? AND processing_started_at IS ?
              AND attempt_count = ? AND dispatch_started_at IS ?
              AND dispatch_attempt_count = ? AND dispatch_marker IS ?
              AND (
@@ -281,7 +284,7 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
         `UPDATE inbound_updates
          SET dispatch_started_at = ?, dispatch_attempt_count = dispatch_attempt_count + 1,
              dispatch_marker = ?
-         WHERE id = ? AND state = ? AND processing_started_at IS ?
+         WHERE lifecycle_hold=0 AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.processing_paused=0) AND id = ? AND state = ? AND processing_started_at IS ?
            AND attempt_count = ? AND dispatch_started_at IS ?
            AND dispatch_attempt_count = ? AND dispatch_marker IS ?
            AND attempt_count < ? AND dispatch_attempt_count < ?

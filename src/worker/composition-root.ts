@@ -1,3 +1,8 @@
+import { D1InboundEgressStore } from "@/modules/connections/lifecycle/egress-store";
+import { D1ConnectionLifecycleStore } from "@/modules/connections/lifecycle/store";
+import { changeConnectionLifecycle } from "@/modules/connections/lifecycle/service";
+import { D1PrimaryLoginStore, selectPrimaryLoginChannel } from "@/modules/auth/primary-login";
+import { addConnection } from "@/modules/connections/add-service";
 import { D1DashboardStore } from "@/modules/auth/dashboard-service";
 import {
   deliverLoginCode,
@@ -172,6 +177,11 @@ export async function createConnectionsOperations(env: Env): Promise<Connections
       const principal = await requireSession(credentials, { store: sessionStore, keyring });
       return { userId: principal.userId };
     },
+    getLifecycle:(userId,publicId)=>new D1ConnectionLifecycleStore(env.DB).get(userId,publicId),
+    changeLifecycle:input=>changeConnectionLifecycle(input,{store:new D1ConnectionLifecycleStore(env.DB),keyring,rateLimitStore}),
+    getLoginChannel: (userId) => new D1PrimaryLoginStore(env.DB).get(userId),
+    selectLoginChannel: (input) => selectPrimaryLoginChannel(input, { store: new D1PrimaryLoginStore(env.DB), keyring, rateLimitStore }),
+    addConnection: ({ userId, ...input }) => addConnection(userId, input, { store, keyring, rateLimitStore, verifyToken: verifyBotToken, registerWebhook, appOrigin: env.APP_ORIGIN }),
     listConnections: (userId) => dashboardStore.listConnections(userId),
     rotateConnectCode: (input) => rotateConnectCode(input, { store, keyring, rateLimitStore }),
     retryWebhook: (input) => retryConnectionWebhook(input, { store, keyring, rateLimitStore, registerWebhook, appOrigin: env.APP_ORIGIN }),
@@ -402,7 +412,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
-    claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
+    claimDueReminders: async (now, limit) => { await new D1InboundEgressStore(env.DB).reconcile(now,300_000); return claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }); },
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, { store: loginStore, enqueue: (job) => env.JOBS.send(job) }),
     ...(contexts ? { purgeConversationContexts: async (now: number, limit: number) => {

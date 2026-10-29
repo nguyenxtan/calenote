@@ -1,3 +1,4 @@
+import { base64UrlToBytes } from "@/modules/security/encoding";
 import {
   cryptoRandomBytes,
   randomOpaqueId,
@@ -87,6 +88,7 @@ export interface SourceActionStore {
   listOwnedPendingCandidates(userId: string): Promise<ActionCandidateRow[]>;
   findOwnedCandidate(userId: string, candidateId: string): Promise<ActionCandidateRow | null>;
   approveCandidate(input: {
+    connectionPublicId?:string;
     userId: string;
     candidateId: string;
     decisionId: string;
@@ -245,7 +247,7 @@ export async function admitIntelligenceActionProposal(
 }
 
 export async function approveActionCandidate(
-  input: { userId: string; candidateId: string },
+  input: { userId: string; candidateId: string; connectionPublicId?:string },
   dependencies: {
     store: SourceActionStore;
     keyring: Pick<Keyring, "decryptSensitive" | "encryptSensitive">;
@@ -256,6 +258,7 @@ export async function approveActionCandidate(
   const now = dependencies.now ?? systemClock;
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const decidedAt = now();
+  if(input.connectionPublicId!==undefined && (input.connectionPublicId.length!==22 || !base64UrlToBytes(input.connectionPublicId))) return {status:"CHANNEL_UNAVAILABLE"};
   const candidate = await dependencies.store.findOwnedCandidate(input.userId, input.candidateId);
   if (!candidate) return { status: "NOT_FOUND" };
   if (candidate.status !== "PENDING") return { status: "ALREADY_DECIDED" };
@@ -283,6 +286,7 @@ export async function approveActionCandidate(
     approved = await dependencies.store.approveCandidate({
       userId: input.userId,
       candidateId: candidate.id,
+      ...(input.connectionPublicId===undefined?{}:{connectionPublicId:input.connectionPublicId}),
       decisionId: randomOpaqueId(randomBytes),
       reminderId,
       reminderPublicId,

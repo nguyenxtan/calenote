@@ -17,7 +17,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
         `SELECT r.id AS reminder_id, r.status AS reminder_status, r.scheduled_at,
                 r.title_ciphertext, r.title_iv, r.title_key_version,
                 c.id AS connection_id, c.user_id AS connection_user_id,
-                c.provider, c.state AS connection_state, c.encrypted_token,
+                c.auth_revision,c.processing_paused,r.lifecycle_hold,c.provider, c.state AS connection_state, c.encrypted_token,
                 c.encrypted_token_iv, c.credential_version, ci.private_chat_id,
                 d.id AS delivery_id, d.status AS delivery_status,
                 d.attempt_count, d.send_started_at, d.retry_not_before,
@@ -41,6 +41,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
     reminderId: string,
     marker: string,
     now: number,
+    expected:ReminderDeliveryContext,
   ): Promise<OwnedDelivery | null> {
     try {
       await this.database.batch([
@@ -59,7 +60,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                    AND w.owner_user_id = c.user_id
                  WHERE d.reminder_id = reminders.id AND d.status = 'SENDING'
                    AND d.send_started_at = ? AND d.transition_marker = ?
-                   AND c.state = 'ACTIVE_BOUND'
+                   AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0 AND reminders.lifecycle_hold=0
                )`,
           )
           .bind(now, marker, now, reminderId, now, marker),
@@ -79,7 +80,9 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                  WHERE r.id = ? AND r.status = 'CLAIMED' AND r.claimed_at = ?
                    AND r.transition_marker = ? AND d.status = 'SENDING'
                    AND d.send_started_at = ? AND d.transition_marker = ?
-                   AND c.state = 'ACTIVE_BOUND'
+                   AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0 AND r.lifecycle_hold=0
+                   AND c.auth_revision=? AND c.user_id=? AND c.provider=? AND c.credential_version=?
+                   AND c.encrypted_token=? AND c.encrypted_token_iv=? AND ci.private_chat_id=?
                ), NULL),
                (SELECT w.owner_user_id FROM reminders r JOIN workspaces w ON w.id = r.workspace_id WHERE r.id = ?),
                'REMINDER_DELIVERY_STARTED',
@@ -95,6 +98,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
             marker,
             now,
             marker,
+            expected.authRevision,expected.connectionUserId,expected.provider,expected.credentialVersion,expected.encryptedToken.ciphertext,expected.encryptedToken.iv,expected.privateChatId,
             reminderId,
             reminderId,
             reminderId,
@@ -130,7 +134,10 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
     deliveryId: string,
     marker: string,
     now: number,
+    snapshot?:ReminderDeliveryContext,
   ): Promise<AcquireDeliveryResult> {
+    const expected=snapshot??await this.read(reminderId);
+    if(!expected) return {status:"MISSING"};
     const inserted = await this.commitOwnership(
       this.database.prepare(
         `INSERT OR IGNORE INTO reminder_deliveries (
@@ -145,7 +152,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
          JOIN bot_connections c ON c.id = ci.connection_id
            AND c.user_id = w.owner_user_id
          WHERE r.id = ? AND r.status IN ('CLAIMED', 'RETRYABLE')
-           AND c.state = 'ACTIVE_BOUND'
+           AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0 AND r.lifecycle_hold=0
            AND NOT EXISTS (
              SELECT 1 FROM reminder_deliveries d WHERE d.reminder_id = r.id
            )
@@ -155,6 +162,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
       reminderId,
       marker,
       now,
+      expected,
     );
     if (inserted) return { status: "OWNED", delivery: inserted };
 
@@ -179,13 +187,14 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                AND c.user_id = w.owner_user_id
              WHERE r.id = reminder_deliveries.reminder_id
                AND r.status IN ('CLAIMED', 'RETRYABLE')
-               AND c.state = 'ACTIVE_BOUND'
+               AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0 AND r.lifecycle_hold=0
            )`,
       )
         .bind(now, marker, now, reminderId, MAX_DELIVERY_ATTEMPTS, now),
       reminderId,
       marker,
       now,
+      expected,
     );
     if (updated) return { status: "OWNED", delivery: updated };
 
@@ -330,7 +339,8 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                  WHERE d.reminder_id = ? AND d.status = 'FAILED'
                    AND d.safe_error_code = 'REJECTED_CREDENTIAL'
                    AND d.transition_marker = ?
-               )`,
+               )
+           RETURNING id`,
           )
           .bind(input.now, input.connectionId, input.reminderId, input.marker),
       );
@@ -456,7 +466,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
             `UPDATE reminders
              SET status = 'FAILED', claimed_at = NULL,
                  transition_marker = ?, updated_at = ?
-             WHERE id = ? AND status IN ('PENDING', 'CLAIMED', 'RETRYABLE')
+             WHERE lifecycle_hold=0 AND EXISTS(SELECT 1 FROM chat_identities ci JOIN bot_connections c ON c.id=ci.connection_id WHERE ci.id=reminders.chat_identity_id AND c.processing_paused=0) AND id = ? AND status IN ('PENDING', 'CLAIMED', 'RETRYABLE')
                AND NOT EXISTS (
                  SELECT 1 FROM reminder_deliveries d
                  WHERE d.reminder_id = reminders.id

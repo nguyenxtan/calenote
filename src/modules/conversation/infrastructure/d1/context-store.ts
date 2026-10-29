@@ -14,8 +14,8 @@ const newerV2 = `EXISTS (SELECT 1 FROM conversation_context_outcomes outcome
 export const ownedInbound = `SELECT i.id FROM inbound_updates i
   JOIN chat_identities ci ON ci.connection_id = i.connection_id
     AND ci.provider_user_id = i.provider_user_id AND ci.private_chat_id = i.private_chat_id
-  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND'
-  WHERE i.id = ? AND i.transition_marker = ? AND i.state = 'PROCESSING'
+  JOIN bot_connections c ON c.id = ci.connection_id AND c.state = 'ACTIVE_BOUND' AND c.processing_paused=0
+  WHERE i.id = ? AND i.transition_marker = ? AND i.lifecycle_hold=0 AND i.state = 'PROCESSING'
     AND ci.id = ? AND c.user_id = ? AND i.received_at <= ?
     AND NOT ${newerConversationOutcomeSql("i")} AND NOT ${newerV2}
     AND NOT EXISTS (SELECT 1 FROM conversation_contexts wc WHERE wc.chat_identity_id = ci.id

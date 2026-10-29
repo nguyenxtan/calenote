@@ -66,6 +66,7 @@ export class D1SourceActionStore implements SourceActionStore {
   }
 
   async approveCandidate(input: {
+    connectionPublicId?:string;
     userId: string;
     candidateId: string;
     decisionId: string;
@@ -89,11 +90,13 @@ export class D1SourceActionStore implements SourceActionStore {
          JOIN memberships membership
            ON membership.workspace_id = workspace.id AND membership.user_id = workspace.owner_user_id
          JOIN bot_connections connection
-           ON connection.user_id = workspace.owner_user_id AND connection.state = 'ACTIVE_BOUND'
+           ON connection.user_id = workspace.owner_user_id AND connection.state = 'ACTIVE_BOUND' AND connection.processing_paused=0
          JOIN chat_identities identity ON identity.connection_id = connection.id
          WHERE candidate.id = ? AND candidate.status = 'PENDING'
            AND candidate.scheduled_at > ? AND workspace.kind = 'PERSONAL'
            AND workspace.owner_user_id = ? AND membership.role = 'OWNER'
+           AND (? IS NULL OR connection.public_id=?)
+           AND length(identity.private_chat_id)>0 AND length(identity.provider_user_id)>0
            AND NOT EXISTS (
              SELECT 1 FROM action_decisions decision
              WHERE decision.action_candidate_id = candidate.id
@@ -110,7 +113,7 @@ export class D1SourceActionStore implements SourceActionStore {
         input.now,
         input.candidateId,
         input.now,
-        input.userId,
+        input.userId,input.connectionPublicId??null,input.connectionPublicId??null,
       ),
       this.database.prepare(
         `INSERT INTO action_decisions (

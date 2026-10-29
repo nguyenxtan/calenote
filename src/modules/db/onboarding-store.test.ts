@@ -31,6 +31,7 @@ class Database {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    for(const file of ["0010_primary_login_provenance", "0011_connection_pause"]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${file}.sql`), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new Statement(this.sqlite, sql) as unknown as D1PreparedStatement;
@@ -99,6 +100,13 @@ function replacementActivation(): ActivationSuccess {
 }
 
 describe("D1 onboarding persistence", () => {
+  it("rejects an incomplete owned-connection batch result", async () => {
+    const input = graph();
+    const database = { prepare: () => ({bind: () => ({})}), batch: async () => [] } as unknown as D1Database;
+    const store = new D1OnboardingStore(database);
+    await expect(store.commitOwnedConnection(input.connection, {...input.audit, action: "CONNECTION_ADDED"})).rejects.toThrow("Connection batch result was incomplete");
+  });
+
   it("atomically persists the account graph and activates it with a digest-only connect code", async () => {
     const { database, store } = setup();
     await store.commitAccountGraph(graph());

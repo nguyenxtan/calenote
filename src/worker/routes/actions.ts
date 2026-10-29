@@ -98,10 +98,12 @@ export async function handleApproveAction(
   requireSameOrigin(request, appOrigin);
   const credentials = requireCanonicalSession(request);
   requireCanonicalActionId(candidateId);
-  await requireEmptyBody(request);
+  const parsed=z.object({connectionPublicId:z.string().length(22).regex(/^[A-Za-z0-9_-]+$/u).optional()}).strict().safeParse(await readBoundedJson(request,EMPTY_BODY_BYTES,{timeoutMs:BODY_TIMEOUT_MS}));
+  if(!parsed.success) throw new InvalidRequestError();
+  if(parsed.data.connectionPublicId!==undefined) requireCanonicalActionId(parsed.data.connectionPublicId);
   const operations = await createOperations();
   const principal = await operations.requireUser(credentials);
-  return decisionResponse(await operations.approveAction({ userId: principal.userId, candidateId }));
+  return decisionResponse(await operations.approveAction({ userId: principal.userId, candidateId,...parsed.data }));
 }
 
 export async function handleRejectAction(
