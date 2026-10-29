@@ -57,3 +57,24 @@
 @media(max-width: 1100px) { .settingsLayout { grid-template-columns: 1fr; } .settingsNav { position: static; display: flex; flex-wrap: wrap; gap: 4px; } .settingsNav a { background: var(--cn-surface); border: 1px solid var(--cn-border); } }
 @media(max-width: 900px) { .page { padding: 28px 20px 32px; } .page header h1 { font-size: 26px; } .settingsCard { padding: 22px; } .settingsNav svg { display: none; } }
 @media(max-width: 520px) { .fieldGrid,.densityChoices { grid-template-columns: 1fr; } .details div { grid-template-columns: 1fr; gap: 4px; } .settingsCard { padding: 20px; } .settingsNav a { padding: 8px 10px; font-size: 12px; } }
+
+.addBot { margin: 24px 0; }
+.addBot form { display: grid; gap: 18px; padding: 24px; margin-top: 16px; border: 1px solid var(--cn-border); border-radius: 14px; background: var(--cn-surface); }
+.addBot h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.addBot p { color: var(--cn-text-2); font-size: 13px; line-height: 1.7; }
+.addBot label { display: grid; gap: 8px; font-size: 14px; }
+.addBot input,.addBot select { min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid var(--cn-border-strong); border-radius: 10px; background: #fff; font: inherit; }
+.addBot button { min-height: 44px; }
+.addBot input:focus-visible,.addBot select:focus-visible,.addBot button:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 3px; }
+
+.primaryBot { font-weight: 600; }
+.loginCandidates { display: grid; gap: 12px; padding: 0; margin: 20px 0; list-style: none; }
+.loginCandidates li { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--cn-border); }
+.loginCandidates strong,.loginCandidates small { display: block; overflow-wrap: anywhere; }
+.loginCandidates strong { font-size: 14px; font-weight: 600; }
+.loginCandidates small { color: var(--cn-text-2); font-size: 12px; margin-top: 6px; }
+.loginCandidates .action { flex-shrink: 0; margin-top: 0; min-height: 44px; }
+.loginConfirmation { padding: 18px; margin: 18px 0; border: 1px solid var(--cn-border); border-radius: 12px; background: var(--cn-brand-soft); }
+.loginConfirmation button { margin: 0 12px 8px 0; }
+.loginCandidates button:focus-visible,.loginConfirmation button:focus-visible { outline: 3px solid var(--cn-brand-600); outline-offset: 3px; }
+@media(max-width:400px) { .loginCandidates li { align-items: flex-start; flex-direction: column; gap: 8px; } }

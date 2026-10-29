@@ -10,6 +10,8 @@ import { PreferencesResponseSchema, type PublicPreferences } from "@/contracts/a
 import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
 import { ApiResponseError, apiRequest } from "@/lib/client-api";
 import { AppShell } from "@/ui/shell/AppShell";
+import { PrimaryLoginPanel } from "./PrimaryLoginPanel";
+import { AddBotPanel } from "./AddBotPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import styles from "./FinalScreenExperience.module.css";
 
@@ -19,7 +21,7 @@ const ConnectCodeResultSchema = z.object({ connectCommand: z.string().regex(/^\/
 function status(state: PublicConnection["state"]): string { if (state === "ACTIVE_BOUND") return "Đã kết nối"; if (state === "WEBHOOK_FAILED" || state === "SUSPENDED") return "Cần kiểm tra"; return "Chưa kết nối"; }
 function safeMutationMessage(error: unknown, fallback: string): string { return error instanceof ApiResponseError ? error.message : fallback; }
 
-export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
+export function FinalScreenExperience({ screen, allowAddConnection = false, allowPrimaryLogin = false }: { screen: FinalScreen; allowAddConnection?: boolean; allowPrimaryLogin?: boolean }) {
   const { replace } = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [error, setError] = useState(false);
@@ -58,7 +60,7 @@ export function FinalScreenExperience({ screen }: { screen: FinalScreen }) {
   async function copyConnectCode(command: string) { try { if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable"); await navigator.clipboard.writeText(command); setConnectionNotice("Đã sao chép mã kết nối."); } catch { setConnectionError("Chưa thể sao chép mã. Bạn có thể sao chép thủ công."); } }
 
   if (!user) return <main className={styles.entry}><section><h1>{error ? "Chưa mở được Calenote" : "Đang mở Calenote"}</h1>{error && <button onClick={() => void load()}>Thử lại</button>}</section></main>;
-  return <AppShell user={user} activePath={`/app/${screen}`}><main className={styles.page}><header><p>{screen === "connections" ? "Kênh hỗ trợ" : screen === "activity" ? "Hoạt động" : "Không gian cá nhân"}</p><h1>{screen === "connections" ? "Kết nối" : screen === "activity" ? "Hoạt động" : "Cài đặt"}</h1><span>{screen === "connections" ? "Kết nối những nơi bạn muốn Calenote hỗ trợ." : screen === "activity" ? "Những thay đổi quan trọng gần đây." : "Điều chỉnh cách Calenote đồng hành cùng bạn."}</span></header>{error ? <LoadError retry={load} /> : screen === "connections" ? <Connections value={connections} pending={connectionMutationPending} notice={connectionNotice} error={connectionError} connectCodes={connectCodes} retryWebhook={retryWebhook} rotateConnectCode={rotateConnectCode} copyConnectCode={copyConnectCode} /> : screen === "activity" ? <ActivityFeed value={activities} /> : preferences ? <SettingsPanel user={user} value={preferences} save={save} notice={settingsNotice} busy={saving} /> : <Loading />}</main></AppShell>;
+  return <AppShell user={user} activePath={`/app/${screen}`}><main className={styles.page}><header><p>{screen === "connections" ? "Kênh hỗ trợ" : screen === "activity" ? "Hoạt động" : "Không gian cá nhân"}</p><h1>{screen === "connections" ? "Kết nối" : screen === "activity" ? "Hoạt động" : "Cài đặt"}</h1><span>{screen === "connections" ? "Kết nối những nơi bạn muốn Calenote hỗ trợ." : screen === "activity" ? "Những thay đổi quan trọng gần đây." : "Điều chỉnh cách Calenote đồng hành cùng bạn."}</span></header>{error ? <LoadError retry={load} /> : screen === "connections" ? <>{allowPrimaryLogin && <PrimaryLoginPanel />}{allowAddConnection && <AddBotPanel onAdded={load} />}<Connections value={connections} pending={connectionMutationPending} notice={connectionNotice} error={connectionError} connectCodes={connectCodes} retryWebhook={retryWebhook} rotateConnectCode={rotateConnectCode} copyConnectCode={copyConnectCode} /></> : screen === "activity" ? <ActivityFeed value={activities} /> : preferences ? <SettingsPanel primaryLoginEnabled={allowPrimaryLogin} user={user} value={preferences} save={save} notice={settingsNotice} busy={saving} /> : <Loading />}</main></AppShell>;
 }
 
 function ActivityFeed({ value }: { value: PublicActivity[] | null }) { if (value === null) return <Loading />; if (!value.length) return <Empty title="Chưa có hoạt động nào." text="Những thay đổi quan trọng sẽ xuất hiện ở đây." />; const copy = { REMINDER_CREATED: "Đã tạo lời nhắc", REMINDER_CANCELLED: "Đã huỷ lời nhắc", CONNECT_CODE_ROTATED: "Đã làm mới mã kết nối", CHAT_BOUND: "Đã kết nối kênh" } as const; return <ol className={styles.activityList}>{value.map((item, index) => <li className={styles.activityItem} key={`${item.createdAt}-${index}`}><span className={styles.iconTile}><Clock3 size={18} aria-hidden="true" /></span><div><h2>{copy[item.action]}</h2><time dateTime={new Date(item.createdAt).toISOString()}>{new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</time></div></li>)}</ol>; }

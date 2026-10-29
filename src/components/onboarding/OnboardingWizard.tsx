@@ -1,5 +1,6 @@
 "use client";
 
+import { BotCreationGuide } from "@/components/docs/BotCreationGuide";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,7 +11,6 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
-  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
@@ -72,25 +72,11 @@ interface ActivationState {
 const providerGuides = {
   zalo: {
     heading: "Kết nối Zalo Bot Platform",
-    sourceName: "hướng dẫn tạo Zalo bot",
-    sourceUrl: "https://docs.zaloplatforms.com/docs/BOT/create_bot",
     tokenHint: "Dán token do Zalo Bot Platform cấp",
-    items: [
-      "Mở Zalo Bot Manager bằng tài khoản Zalo của bạn.",
-      "Tạo bot riêng và sao chép Bot Token được cấp.",
-      "Dán token ở đây để Calenote kiểm tra và mở đường nhận tin.",
-    ],
   },
   telegram: {
     heading: "Kết nối Telegram Bot API",
-    sourceName: "@BotFather",
-    sourceUrl: "https://t.me/BotFather",
     tokenHint: "Dán HTTP API token do BotFather cấp",
-    items: [
-      "Mở @BotFather trong Telegram và gửi /newbot.",
-      "Đặt tên, username rồi sao chép HTTP API token.",
-      "Dán token ở đây để Calenote kiểm tra và mở đường nhận tin.",
-    ],
   },
 } as const;
 
@@ -599,14 +585,9 @@ export function OnboardingWizard() {
                 icon={<KeyRound size={20} />}
                 kicker="Bước 3 · Kích hoạt"
                 title={guide.heading}
-                description="Một yêu cầu duy nhất sẽ kiểm tra token, tạo tài khoản, mã hóa token khi lưu và mở đường nhận tin."
+                description="Đã có token? Nhập vào biểu mẫu bên dưới. Chưa có? Làm từng bước trong hướng dẫn này."
               />
-              <ol className={styles.guideList}>
-                {guide.items.map((item, index) => <li key={item}><span>{index + 1}</span><p>{item}</p></li>)}
-              </ol>
-              <a href={guide.sourceUrl} className={styles.officialLink} target="_blank" rel="noreferrer">
-                Mở {guide.sourceName} <ExternalLink size={15} />
-              </a>
+              <BotCreationGuide key={provider} provider={provider} />
               <form className={styles.form} onSubmit={submitOnboarding} aria-label="Kích hoạt bot">
                 <div className={styles.field}>
                   <label htmlFor="bot-token">Bot token</label>

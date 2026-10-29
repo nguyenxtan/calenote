@@ -4,10 +4,11 @@ import { useState, type FormEvent } from "react";
 import { ArrowUpRight, Bell, LockKeyhole, SlidersHorizontal, UserRound } from "lucide-react";
 import type { SessionUser } from "@/contracts/api/session";
 import type { PublicPreferences } from "@/contracts/api/preferences";
+import { PrimaryLoginPanel } from "./PrimaryLoginPanel";
 import styles from "./FinalScreenExperience.module.css";
 
-type Props = { user: SessionUser; value: PublicPreferences; save(value: PublicPreferences): Promise<boolean>; notice: string | null; busy: boolean };
-export function SettingsPanel({ user, value, save, notice, busy }: Props) {
+type Props = { user: SessionUser; value: PublicPreferences; save(value: PublicPreferences): Promise<boolean>; notice: string | null; busy: boolean; primaryLoginEnabled?: boolean };
+export function SettingsPanel({ user, value, save, notice, busy, primaryLoginEnabled = false }: Props) {
   const [draft, setDraft] = useState(value);
   const [editedSinceSubmit, setEditedSinceSubmit] = useState(false);
   function edit(next: PublicPreferences) { setDraft(next); setEditedSinceSubmit(true); }
@@ -38,6 +39,7 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
       <a href="#personalisation"><SlidersHorizontal size={17} />Cá nhân hoá</a>
       <a href="#appearance"><SlidersHorizontal size={17} />Giao diện</a>
       <a href="#account"><UserRound size={17} />Tài khoản</a>
+      {primaryLoginEnabled && <a href="#primary-login"><UserRound size={17} />Bot đăng nhập</a>}
       <a href="#delivery"><Bell size={17} />Kênh nhận lời nhắc</a>
       <a href="#privacy"><LockKeyhole size={17} />Quyền riêng tư</a>
     </nav>
@@ -72,6 +74,7 @@ export function SettingsPanel({ user, value, save, notice, busy }: Props) {
         <p className={styles.help}>Tên tài khoản và email hiện chỉ xem. Bạn có thể đặt tên gọi riêng ở Cá nhân hoá. Lịch nhắc hiện hỗ trợ giờ Việt Nam.</p>
         <p className={styles.help}>Đăng xuất ở menu tài khoản; trên điện thoại, mở Menu → Đăng xuất.</p>
       </section>
+      {primaryLoginEnabled && <PrimaryLoginPanel />}
       <section className={styles.settingsCard} id="delivery">
         <h2>Kênh nhận lời nhắc</h2><p>Lời nhắc được gửi qua bot đã kết nối với cuộc trò chuyện riêng của bạn.</p>
         <a className={styles.destination} href="/app/connections"><span><strong>Quản lý Zalo & Telegram</strong><small>Xem trạng thái và hoàn tất kết nối bot</small></span><ArrowUpRight size={19} /></a>

@@ -58,6 +58,18 @@ describe("CoreScreenExperience", () => {
     expect(screen.getByRole("button", { name: "Hôm nay" })).toBeVisible();
   });
 
+  it("shows both calendars near Tet and preserves selection through month navigation", async () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse("2026-02-16T17:30:00Z"));
+    installFetch(); const interaction = userEvent.setup();
+    render(<CoreScreenExperience screen="calendar" />);
+    await screen.findByRole("heading", { name: "Lịch" });
+    expect(screen.getByRole("button", { name: /Dương lịch 2026-02-17, Âm lịch 1\/1\/2026.*đã chọn/ })).toBeVisible();
+    expect(screen.getByText(/Âm lịch 1\/1\/2026/)).toBeVisible();
+    await interaction.click(screen.getByRole("button", { name: "Tháng sau" }));
+    expect(screen.getByText(/Âm lịch 1\/1\/2026/)).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /Dương lịch 2026-03-\d+, Âm lịch/ })).toHaveLength(31);
+  });
+
   it("approves an Inbox ActionCandidate through its decision endpoint only", async () => {
     const fetcher = installFetch((path) => path === `/api/actions/${action.id}/approve` ? json({ data: { decision: "APPROVED", reminderPublicId: "B".repeat(22) } }) : undefined);
     const interaction = userEvent.setup();

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Bot, CalendarDays, CheckCircle2, BookOpen } from "lucide-react";
 import { CalenoteMark } from "@/components/brand/CalenoteMark";
+import { BotCreationGuide } from "./BotCreationGuide";
 import styles from "./PipelineGuide.module.css";
 
 const tasks = [
@@ -23,9 +24,9 @@ export function PipelineGuide() {
     <div className={styles.body}>
       <section id="start" className={styles.task} aria-labelledby="start-title">
         <header><Bot aria-hidden="true" /><p className={styles.eyebrow}>01 · Lần đầu sử dụng</p><h2 id="start-title">Kết nối bot của riêng bạn</h2><p>Calenote dùng bot bạn sở hữu trên Zalo Bot Platform hoặc Telegram. Hướng dẫn này dành cho cuộc chat riêng với bot.</p></header>
-        <ol><li><strong>Tạo bot.</strong> Với Zalo, mở Zalo Bot Manager → Tạo bot. Với Telegram, tìm tài khoản chính thức @BotFather và gửi /newbot.</li><li><strong>Mở Bắt đầu.</strong> Điền thông tin được yêu cầu, chọn đúng nền tảng và nhập token trong ô dành cho token. Không gửi token qua chat hay ảnh chụp.</li><li><strong>Liên kết chat riêng.</strong> Sao chép lệnh /connect được Calenote cung cấp, gửi cho đúng bot trong cuộc chat riêng. Dùng mã trước khi hết hạn.</li><li><strong>Kiểm tra lại.</strong> Mở Kết nối để xem trạng thái. Lưu thông tin bot hoặc đăng ký đường nhận tin chưa đủ để kết luận bot đã gửi và nhận tin thành công.</li></ol>
-        <div className={styles.taskActions}><Link href="/onboarding">Bắt đầu kết nối <ArrowRight size={16} aria-hidden="true" /></Link><Link href="/app/connections">Mở Kết nối</Link></div>
-        <div className={styles.providerLinks}><a href="https://bot.zapps.me/docs/create-bot/" target="_blank" rel="noreferrer">Cách tạo bot trên Zalo</a><a href="https://core.telegram.org/bots/features#creating-a-new-bot" target="_blank" rel="noreferrer">Cách tạo bot trên Telegram</a></div>
+        <BotCreationGuide />
+        <h3>Tiếp tục trên Calenote</h3>
+        <ol><li><strong>Mở Bắt đầu kết nối.</strong> Điền thông tin tài khoản. Bạn sẽ đến bước chọn nền tảng.<div className={styles.taskActions}><Link href="/onboarding">Bắt đầu kết nối <ArrowRight size={16} aria-hidden="true" /></Link></div></li><li><strong>Nhập Bot token.</strong> Chọn đúng nền tảng và tự dán token vào ô Bot token. Sau khi bấm Kích hoạt bot, Calenote hiển thị bước liên kết.</li><li><strong>Gửi lệnh kết nối.</strong> Mở cuộc chat riêng với bot vừa tạo; trên Telegram bấm Start trước. Gửi nguyên lệnh /connect do Calenote cung cấp trước khi mã hết hạn. Bạn sẽ nhận được kết quả liên kết.</li><li><strong>Kiểm tra Kết nối.</strong> Xem trạng thái đã liên kết chat riêng. Việc lưu token chưa chứng minh đã liên kết thành công.<div className={styles.taskActions}><Link href="/app/connections">Mở Kết nối</Link></div></li></ol>
       </section>
       <section id="create" className={styles.task} aria-labelledby="create-title">
         <header><CalendarDays aria-hidden="true" /><p className={styles.eyebrow}>02 · Thêm một việc cần nhớ</p><h2 id="create-title">Tạo lời nhắc trên web</h2><p>Dùng biểu mẫu trên Hôm nay khi bạn đã biết nội dung và thời điểm chính xác.</p></header>

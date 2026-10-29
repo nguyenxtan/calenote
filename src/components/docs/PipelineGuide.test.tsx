@@ -12,7 +12,7 @@ describe("task guide", () => {
     expect(within(manual).getByText(/giờ Việt Nam/i)).toBeVisible();
     expect(within(manual).getByRole("link", { name: "Mở Hôm nay" })).toHaveAttribute("href", "/app/today");
     expect(screen.getByRole("link", { name: "Mở Cài đặt" })).toHaveAttribute("href", "/app/settings");
-    expect(screen.getByRole("link", { name: "Cách tạo bot trên Zalo" })).toHaveAttribute("href", "https://bot.zapps.me/docs/create-bot/");
+    expect(screen.getByRole("link", { name: /Cách tạo bot trên Zalo/ })).toHaveAttribute("href", "https://docs.zaloplatforms.com/docs/BOT/create_bot");
     expect(screen.getByRole("link", { name: "Bắt đầu kết nối" })).toHaveAttribute("href", "/onboarding");
     expect(screen.getAllByText(/ảnh chụp.+dữ liệu mẫu/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/giá|miễn phí không giới hạn|thu chi|bot dùng chung/i)).not.toBeInTheDocument();
