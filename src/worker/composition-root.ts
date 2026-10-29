@@ -205,16 +205,25 @@ export async function createRemindersOperations(env: Env): Promise<RemindersOper
   };
 }
 
-export async function createContextApiOperations(env: Env): Promise<import("./routes/operations").ContextApiOperations> {
+export async function createContextApiOperations(env: Env, capabilities: { contextContract?: "calenote-context-2"; sourceSha?: string } = {}): Promise<import("./routes/operations").ContextApiOperations> {
+  if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createRouteKeyring(env);
   const sessions = new D1SessionStore(env.DB);
   const reminderStore = new D1ReminderApiStore(env.DB);
-  const contextStore = new D1ContextContractStore(env.DB, keyring);
+  // Explicit offline composition is independent of provider admission. Existing
+  // routes remain dormant and never touch successor tables by default.
+  const contextStore = capabilities.contextContract ? new D1ContextContractStore(env.DB, keyring, Date.now, CONTEXT_PROTOCOL_V3) : undefined;
   return {
     requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
-    listDetailedReminders: principal => listDetailedReminders(principal, { store: reminderStore, contextStore, keyring }),
-    listPreviews: () => Promise.resolve({ previews: [], hasMore: false }),
-    decidePreview: () => { throw new PreviewUnavailableError(); },
+    listDetailedReminders: async principal => {
+      if (!contextStore) throw new PreviewUnavailableError();
+      return listDetailedReminders(principal, { store: reminderStore, contextStore, keyring });
+    },
+    listPreviews: principal => contextStore ? contextStore.listWebPreviews(principal) : Promise.resolve({ previews: [], hasMore: false }),
+    decidePreview: async (principal, request) => {
+      if (!contextStore) throw new PreviewUnavailableError();
+      return contextStore.decideWebPreview(principal, request);
+    },
   };
 }
 
