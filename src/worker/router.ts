@@ -1,3 +1,5 @@
+import { handleAdminOverview } from "./routes/admin-overview";
+import { createAdminOverviewOperations } from "@/modules/admin/composition";
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { InvalidUserPreferencesError } from "@/modules/preferences/service";
@@ -222,6 +224,9 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
+      if (pathname === "/api/admin/overview") {
+        return await handleAdminOverview(request, createAdminOverviewOperations(env));
+      }
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
         return await handleRequestLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
