@@ -6,7 +6,7 @@ import {ContextInputSchema,ConversationInterpretationV3Schema,SlotValueSchemas} 
 import {CONTEXT_CONTRACT_PROMPT} from "../../../conversation/context-contract/prompt";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import {decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 
 it("producer alternative enum guidance binds code10 to every exact canonical relation without authoring candidates",()=>{
  const sentence=/^Alternative relation enum: (.+)$/m.exec(CONTEXT_CONTRACT_PROMPT);expect(sentence).not.toBeNull();

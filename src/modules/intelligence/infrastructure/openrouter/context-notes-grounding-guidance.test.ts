@@ -7,7 +7,7 @@ import {createContextContractProbe} from "../../../../../tools/benchmark/context
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import manifest from "../../../conversation/context-contract/benchmark/regressions.json";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";

@@ -9,12 +9,12 @@ import { ModelSemanticInterpretationJsonSchema, ModelSemanticInterpretationSchem
 import { CANONICAL_SEMANTIC_PROMPT, SemanticInputSchema, type SemanticAttemptResult, type SemanticGateway,
   type SemanticUsage } from "../../semantic-gateway";
 import { projectProviderFailure } from "./failure-diagnostics";
-import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, decodeGoogleLiteEuContextTransportV3 as parseGoogleLiteEuContextSections } from "./context-provider-wire";
+import { googleLiteEuContextWireSchemaV3 as googleLiteEuContextWireSchema, decodeGoogleLiteEuContextTransportV3 as parseGoogleLiteEuContextSections, validateTypedSingletonCarrierJsonV3 } from "./context-literal-insertion-wire";
 import type { SemanticFailureDiagnostics } from "../../semantic-gateway";
 import { projectCanonicalValidation, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import { projectProviderEnvelope } from "./envelope-diagnostics";
-import { projectTransportException, type SemanticTransportDiagnostics } from "./transport-diagnostics";
+import { projectTransportException, type SemanticTransportDiagnostics, type SemanticHttpResponseCorrelation } from "./transport-diagnostics";
 
 async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransport>>, config: SemanticGatewayConfig, maximum: number,input:ContextInput): Promise<SemanticAttemptResult<ContextGatewayInterpretation>> {
   const version = googleLiteEuContextWireSchema().version;
@@ -31,7 +31,10 @@ async function decodeContextResponse(response: Awaited<ReturnType<SemanticTransp
     if (parsed.status === "PARSED") return parsed.value;
     ctx.addIssue({ code: "custom", message: "Invalid context envelope" }); return z.NEVER;
   });
-  const result = decodeResponse(response, config, maximum, output, true);
+  const result = decodeResponse(response, config, maximum, output, true,content=>{
+    wireValidation=validateTypedSingletonCarrierJsonV3(content,input);
+    return !wireValidation;
+  });
   if (!validation && !wireValidation) {
     if (response.status === 200 && result.status === "FAILURE" && result.category === "SCHEMA_INVALID") {
       const raw: unknown = JSON.parse(response.body);
@@ -94,7 +97,10 @@ export interface SemanticJsonRequest {
     zdr?: true; max_price: { prompt: number; completion: number } };
 }
 /** Supplied by composition. Credentials belong to the HTTP factory's header only. */
-export type SemanticTransport = (request: SemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{
+// Provenance is private to this module: a custom transport cannot inject
+// arbitrary diagnostic objects through the observer. Weak entries retain no request.
+const observedHttpCorrelations = new WeakMap<object, WeakSet<object>>();
+export type SemanticTransport = (request: SemanticJsonRequest, options: { signal: AbortSignal; onHttpResponse?: (metadata: Readonly<SemanticHttpResponseCorrelation>) => void }) => Promise<{
   status: number;
   body: string;
   oversized?: boolean;
@@ -133,7 +139,7 @@ function containsSensitiveInput(value: string): boolean {
 }
 
 function decodeResponse<T>(response: { status: number; body: string; oversized?: boolean }, config: SemanticGatewayConfig,
-  maximum: number, output: z.ZodType<T>, enforceTokenBounds = false): SemanticAttemptResult<T> {
+  maximum: number, output: z.ZodType<T>, enforceTokenBounds = false,payloadGuard?:(content:string)=>boolean): SemanticAttemptResult<T> {
   if (response.status === 408) return { status: "FAILURE", category: "TIMEOUT" };
   if (response.status === 429) return { status: "FAILURE", category: "RATE_LIMITED" };
   if (response.status === 404) return { status: "FAILURE", category: "UNAVAILABLE" };
@@ -158,6 +164,7 @@ function decodeResponse<T>(response: { status: number; body: string; oversized?:
       || typeof reported.data.completion_tokens === "number" && reported.data.completion_tokens > config.maxOutputTokens)) return { status: "FAILURE", category: "SCHEMA_INVALID" };
   }
   const usage = safeUsage(envelope.data.usage, config, maximum);
+  if(payloadGuard&&!payloadGuard(envelope.data.choices[0].message.content))return {status:"FAILURE",category:"SCHEMA_INVALID",usage};
   let payload: unknown;
   try { payload = JSON.parse(envelope.data.choices[0].message.content); } catch {
     return { status: "FAILURE", category: "INVALID_JSON", usage };
@@ -275,7 +282,7 @@ export const CONTEXT_FINANCIAL_RESERVATION_MICROUNITS = 105472;
 export function createContextHttpTransport(apiKey: string,
   fetcher: (url: string, init: RequestInit) => Promise<Response> = fetch): SemanticTransport {
   if (!apiKey || /[\r\n]/u.test(apiKey)) throw new TypeError("Credential unavailable");
-  return async (request, { signal }) => {
+  return async (request, { signal, onHttpResponse }) => {
     const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal,
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
     const media = response.headers.get("content-type"), failed = response.status !== 200;
@@ -286,6 +293,13 @@ export function createContextHttpTransport(apiKey: string,
       const user = JSON.parse(request.messages[1].content) as { turns?: Array<{ text?: string }> };
       for (const turn of user.turns ?? []) if (typeof turn.text === "string") sensitive.push(turn.text);
     } catch { /* No request diagnostics. */ }
+    if (onHttpResponse && !signal.aborted) {
+      const projected = await projectProviderFailure({ status: response.status, length: 0, media, state: "EMPTY", headers: response.headers, sensitive });
+      const metadata = Object.freeze({ httpStatus: projected.httpStatus,
+        ...(projected.requestId ? { requestId: projected.requestId } : {}), ...(projected.traceId ? { traceId: projected.traceId } : {}) });
+      observedHttpCorrelations.get(onHttpResponse)?.add(metadata);
+      if (!signal.aborted) { try { onHttpResponse(metadata); } catch { /* Diagnostic observation cannot change transport policy. */ } }
+    }
     const failure = async (length: number, state?: SemanticFailureDiagnostics["bodyState"], bytes?: Uint8Array, oversized = false) => {
       const failureDiagnostics = await projectProviderFailure({ status: response.status, length, media, state, bytes, headers: response.headers, sensitive,
         schema: request.response_format.json_schema.schema });
@@ -443,21 +457,28 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
           dispatched = true;
           const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
           let boundary: SemanticTransportDiagnostics["boundary"] = "TRANSPORT";
+          let httpResponse: Readonly<SemanticHttpResponseCorrelation> | undefined, completed = false;
+          const observed = new WeakSet<object>();
+          const onHttpResponse = (value: Readonly<SemanticHttpResponseCorrelation>) => {
+            if (!completed && !controller.signal.aborted && !httpResponse && observed.has(value)) httpResponse = value;
+          };
+          observedHttpCorrelations.set(onHttpResponse, observed);
           try {
             return await Promise.race([
-              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal })).then(async response => {
+              Promise.resolve().then(() => transport(structuredClone(providerRequest), { signal: controller.signal, onHttpResponse })).then(async response => {
                 boundary = "DECODE";
                 return ({
                 ...await decodeObservableResponse(response, config,input.data), ...(response.rawResponseBytes !== undefined && Number.isSafeInteger(response.rawResponseBytes)
                   && response.rawResponseBytes >= 0 ? { rawResponseBytes: response.rawResponseBytes } : {}),
               }); }),
               new Promise<SemanticAttemptResult<ContextGatewayInterpretation>>(resolve => { timer = setTimeout(() => {
-                controller.abort(); resolve({ status: "FAILURE", category: "TIMEOUT", usage: { costMicrounits: null } });
+                controller.abort(); resolve({ status: "FAILURE", category: "TIMEOUT", usage: { costMicrounits: null },
+                  ...(httpResponse ? { transportDiagnostics: { version: "gateway-exception-1", boundary, errorName: "UNKNOWN", httpResponse } } : {}) });
               }, config.timeoutMs); }),
             ]);
           } catch (error) { return { status: "FAILURE", category: controller.signal.aborted ? "TIMEOUT" : "PROVIDER_FAILURE", usage: { costMicrounits: null },
-            transportDiagnostics: projectTransportException(error, boundary) }; }
-          finally { clearTimeout(timer); }
+            transportDiagnostics: { ...projectTransportException(error, boundary), ...(httpResponse ? { httpResponse } : {}) } }; }
+          finally { completed = true; httpResponse = undefined; clearTimeout(timer); }
         } };
     }
     if (!offline?.success) return { status: "FAILURE", category: "ROUTE_ADMISSION_UNVERIFIED" };

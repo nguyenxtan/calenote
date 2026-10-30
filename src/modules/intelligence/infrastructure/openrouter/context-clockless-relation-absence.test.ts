@@ -1,13 +1,15 @@
 // @vitest-environment node
+// Schema-wide historical comparisons undo wire105 transport only; actual
+// producer membership and service/decoder assertions use current wire105.
 import {beforeAll,expect,it} from "vitest";
 import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
-import {wire96RequestFixture,wire97RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire104SchemaFixture,wire96RequestFixture,wire97RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {googleLiteEuContextWireSchemaV3,decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
 let initial:ContextInput;
@@ -41,10 +43,10 @@ it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.","Ngày 11/10 đi th
 });
 it.each(["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 25h.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc chưa rõ."])("absence proof never creates clock authority for %s",text=>{
  const input=structuredClone(initial);input.turns[0].text=text;const before=capability.deriveGenerationFieldCapability(input);capability.isInitialFiniteSeriesWithoutRelationSource(input);expect(capability.deriveGenerationFieldCapability(input)).toEqual(before);expect(capability.isInitialExplicitReminderClockRequired(input)).toBe(false);
- const current=structuredClone(schema(input)),old=structuredClone(wire96RequestFixture(input).response_format.json_schema.schema);delete current.properties!.uncertainties;delete old.properties!.uncertainties;expect(current).toEqual(old);
+ const current=wire104SchemaFixture(schema(input)),old=structuredClone(wire96RequestFixture(input).response_format.json_schema.schema);delete current.properties!.uncertainties;delete old.properties!.uncertainties;expect(current).toEqual(old);
 });
 it("independent relation/offset, unknown or occupied state keeps entire prior schema",()=>{
- for(const text of ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp trước sự kiện.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc trước 5 ngày.","Nếu ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 31 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc hai ngày liên tiếp."]){const input=structuredClone(initial);input.turns[0].text=text;expect(capability.isInitialFiniteSeriesWithoutRelationSource(input)).toBe(false);expect(schema(input)).toEqual(wire96RequestFixture(input).response_format.json_schema.schema);}
+ for(const text of ["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp trước sự kiện.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc trước 5 ngày.","Nếu ngày 11/10 đi thi, nhắc 2 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc 31 ngày liên tiếp.","Ngày 11/10 đi thi, nhắc hai ngày liên tiếp."]){const input=structuredClone(initial);input.turns[0].text=text;expect(capability.isInitialFiniteSeriesWithoutRelationSource(input)).toBe(false);expect(wire104SchemaFixture(schema(input))).toEqual(wire96RequestFixture(input).response_format.json_schema.schema);}
  for(const patch of [{activeRequest:{}},{facts:[{alias:"f1",field:"eventRelation"}]},{pendingQuestion:{}},{ambiguities:[{}]},{currentTurn:1},{reference:{...initial.reference,instant:"invalid"}},{capabilities:{...initial.capabilities,calendars:[]}}])expect(capability.isInitialFiniteSeriesWithoutRelationSource({...structuredClone(initial),...patch} as unknown as ContextInput)).toBe(false);
 });
 it("direct combined marker consumer preserves existing parsing and input immutability",()=>{

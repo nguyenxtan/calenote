@@ -1,17 +1,24 @@
 // @vitest-environment node
+vi.mock('../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire',async()=> (await import('./wire108-reference-codec.test-support')).wire108ReferenceCodec);
+vi.mock('../../src/modules/conversation/context-contract/protocol',async()=>{const r=await import('./wire108-protocol.test-support');return {CONTEXT_PROTOCOL_V3:r.wire108ProtocolReference,isContextProtocolV3:r.isWire108ProtocolReference}});
+import {vi} from "vitest";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { measureLegacyV2EnvelopeReference as measureEnvelope, preflightLegacyV2EnvelopeReference as preflightEnvelopeTransition } from "../../src/modules/conversation/context-contract/admission";
 import { LegacyV2ContextInputSchema as ContextInputSchema, LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, SLOT_NAMES, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2ContextInput as ContextInput } from "../../src/modules/conversation/context-contract/contracts";
+import {isBoundOperationMissingExcluded} from "../../src/modules/conversation/context-contract/field-capability";
 import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
 import { serializeLegacyV2ContextRequestReference as serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
 import { decodeIdentityViews, encodeIdentityViews } from "./snapshot-identity-view";
+import { wire104PromptFixture, wire105PromptFixture, wire106PromptFixture, wire106RequestFixture } from "./context-singleton-json.test-support";
 import { measureLocalTokens, measureLocalTokenArtifacts } from "./local-tokenizer";
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal, encodeFixtureV3 } from "./context-pointer-fixtures";
 import { admitContextManifest, expandContextCampaign, type ContextManifest } from "./context-contract";
-import { ConversationInterpretationSchema as SelectedInterpretationSchema, InterpretationJsonSchema as SelectedInterpretationJsonSchema } from "../../src/modules/conversation/context-contract/contracts";
+import { ContextInputSchema as SelectedContextInputSchema, ConversationInterpretationSchema as SelectedInterpretationSchema, InterpretationJsonSchema as SelectedInterpretationJsonSchema } from "../../src/modules/conversation/context-contract/contracts";
+import {CONTEXT_ORDER_REFERENCE_PROMPT as SELECTED_CONTEXT_PROMPT} from "../../src/modules/intelligence/infrastructure/openrouter/context-order-reference-wire";
+import {serializeWire107ContextRequestReference} from "../../src/modules/conversation/context-contract/wire";
 import { serializeContextRequest as serializeSelectedRequest } from "../../src/modules/conversation/context-contract/wire";
 import { measureEnvelope as measureSelectedEnvelope } from "../../src/modules/conversation/context-contract/admission";
 import { encodeContextSnapshotV2 } from "../../src/modules/conversation/context-contract/state";
@@ -25,7 +32,10 @@ it("wire_complexity_before_after_is_source_bound", () => {
   expect(golden).toBe("840ad3ff121dc4a5ad61016ad65a37f37a5f5b0819851e6cdb04952fb12705ab");
   expect(digest(JSON.stringify(legacyV2GoogleLiteEuContextWireSchema().schema))).toBe(golden);
   console.log(JSON.stringify({ promptDigest: digest(CONTEXT_CONTRACT_PROMPT), baselineDigest: golden, targetDigest: digest(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)),baseMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3().schema),titleMetrics:schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-16",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}).schema) }));
-  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9");
+  expect(digest(wire104PromptFixture(CONTEXT_CONTRACT_PROMPT))).toBe("5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9");
+  expect(digest(wire105PromptFixture(CONTEXT_CONTRACT_PROMPT))).toBe("d8861a0c7564d4ac56d8258f981f44aa0c4096b9045d9cef2b87a7c7af0cd545");
+  expect(digest(wire106PromptFixture(CONTEXT_CONTRACT_PROMPT))).toBe("de374ad28348280bc28303bc41a45aa63baa7e6d0bd24e2c0b611e608d796e57");
+  expect(digest(CONTEXT_CONTRACT_PROMPT)).toBe("7db8fb4852fb707ee960288cbf4c30519474ab866b29f40924fdbfb1cb9f7c7d");
 expect(schemaMetrics(googleLiteEuContextWireSchemaV3().schema)).toEqual({"utf8Bytes":10011,"rootKeys":17,"recursiveObjectArrayNodes":315,"maximumDepth":11,"unionBranches":57,"requiredEntries":120,"enumArrays":27,"enumValues":86,"largestEnum":16,"nullableNodes":45,"references":26,"definitions":11,"constantDiscriminators":3});
   expect(schemaMetrics(googleLiteEuContextWireSchemaV3({version:"generation-field-capability-16",allowedNumericFields:["leadOffsetDays"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:true,notesProposalAllowed:true,reminderDateProposalAllowed:true,eventDateYearNullRequired:false}).schema)).toEqual({"utf8Bytes":8908,"rootKeys":17,"recursiveObjectArrayNodes":271,"maximumDepth":11,"unionBranches":45,"requiredEntries":109,"enumArrays":25,"enumValues":70,"largestEnum":16,"nullableNodes":43,"references":19,"definitions":8,"constantDiscriminators":3});
 });
@@ -72,8 +82,8 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
       const wireOutput = JSON.stringify(encodeFixtureV3(proposal));
       const request = serializeSelectedRequest(value);
       const name = `${script.id}_dispatch_${count}`;
-      artifacts.push({ case: name, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: wireOutput });
-      artifacts.push({ case: `${name}_canonical_output`, prompt: CONTEXT_CONTRACT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: canonical });
+      artifacts.push({ case: name, prompt: SELECTED_CONTEXT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: wireOutput });
+      artifacts.push({ case: `${name}_canonical_output`, prompt: SELECTED_CONTEXT_PROMPT, inputJson: request.messages[1].content, schemaJson: JSON.stringify(request.response_format.json_schema.schema), wireJson: JSON.stringify(request), outputJson: canonical });
       outputs.push(canonical);
       return proposal;
     });
@@ -101,8 +111,8 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
   const observed = await runContextFixtureCampaign(planned, { sourceSha: "68fac9b2b5e95ee57c53f0ac1f491210e153ed01", referenceNow: Date.parse("2026-09-28T03:00:00Z") }, (value, id, index) => {
     const proposal = frozenContextProposal(value, id, index), parsed = SelectedInterpretationSchema.safeParse(proposal);
     if (parsed.success) {
-      const wire = serializeSelectedRequest(value), common = { prompt: CONTEXT_CONTRACT_PROMPT, inputJson: wire.messages[1].content, schemaJson: JSON.stringify(wire.response_format.json_schema.schema), wireJson: JSON.stringify(wire) };
-      candidates.set(`${id}:${index}`, [{ ...common, case: `FULL_${id}_${index}_wire`, outputJson: JSON.stringify(encodeFixtureV3(parsed.data)) }, { ...common, case: `FULL_${id}_${index}_canonical`, outputJson: JSON.stringify(parsed.data) }]);
+      const wire = serializeSelectedRequest(value), common = { prompt: SELECTED_CONTEXT_PROMPT, inputJson: wire.messages[1].content, schemaJson: JSON.stringify(wire.response_format.json_schema.schema), wireJson: JSON.stringify(wire) };
+      candidates.set(`${id}:${index}`, [{ ...common, case: `FULL_${id}_${index}_wire`, outputJson: JSON.stringify(encodeFixtureV3(parsed.data,value)) }, { ...common, case: `FULL_${id}_${index}_canonical`, outputJson: JSON.stringify(parsed.data) }]);
     }
     return proposal;
   });
@@ -124,6 +134,21 @@ it.skipIf(process.env.CONTEXT_FIT_LOCAL_TOKENS !== "1")("selected_V3_actual_serv
   const evidenceResult = measureLocalTokenArtifacts(artifacts);
   const actualRows=evidenceResult.rows.filter(r=>!r.case.startsWith("schema_maximal")&&r.case!=="wire9_immutable_schema_same_input");
   expect(actualRows).toHaveLength(326);
+  const affected=new Map<string,{current:string;historical:string;currentBytes:number;historicalBytes:number;currentUnions:number;historicalUnions:number}>();
+  for(const artifact of artifacts.filter(a=>!a.case.startsWith("schema_maximal")&&!a.case.startsWith("wire9_"))){
+    const current=JSON.parse(artifact.schemaJson),projected=JSON.parse(artifact.inputJson);
+    for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete projected[key];
+    const bound=SelectedContextInputSchema.parse(projected);
+    const before=serializeWire107ContextRequestReference(bound).response_format.json_schema.schema;
+    const currentMetrics=schemaMetrics(current),historicalMetrics=schemaMetrics(before);
+    expect(current).not.toEqual(before);
+    const identity=digest(artifact.inputJson);affected.set(identity,{current:digest(artifact.schemaJson),historical:digest(JSON.stringify(before)),currentBytes:currentMetrics.utf8Bytes,historicalBytes:historicalMetrics.utf8Bytes,currentUnions:currentMetrics.unionBranches,historicalUnions:historicalMetrics.unionBranches});
+  }
+  expect(affected.size).toBeGreaterThan(0);
+  if(actualRows.some(row=>row.outputTextTokens===null))throw Error("WIRE108_OUTPUT_MEASUREMENT_MISSING");
+  if(process.env.CONTEXT_FIT_WIRE108_REPORT==="1")writeFileSync(".superpowers/sdd/2026-10-13-typed-date-authoring/wire108-offline-metrics.json",JSON.stringify({actualEnvelopeRows:actualRows.length,uniqueAffectedRequests:affected.size,schemaPairs:[...affected.values()],maxConservativeInputTokens:Math.max(...actualRows.map(r=>r.applicationTextTokens+r.rawSchemaDiagnosticTokens)),maxOutputTokens:Math.max(...actualRows.map(r=>r.outputTextTokens!)),networkGuard:evidenceResult.provenance.networkGuardActive,networkAttempts:evidenceResult.provenance.networkAttemptsAfterSelfCheck,providerCompilerAdmission:"UNVERIFIED"},null,2));
+  console.log(JSON.stringify({wire108Applicability:{actualEnvelopeRows:actualRows.length,uniqueAffectedRequests:affected.size,schemaPairs:[...affected.values()]},providerCompilerAdmission:"UNVERIFIED"}));
+
   const actualSchemaMetrics=artifacts.filter(a=>!a.case.startsWith("schema_maximal")&&a.case!=="wire9_immutable_schema_same_input").map(a=>schemaMetrics(JSON.parse(a.schemaJson)));
   console.log(JSON.stringify({actualSchemaMaximumMetrics:Object.fromEntries(Object.keys(actualSchemaMetrics[0]).map(key=>[key,Math.max(...actualSchemaMetrics.map(metrics=>metrics[key as keyof typeof metrics]))])),providerStateAdmission:"UNVERIFIED"}));
   console.log(JSON.stringify({actualRequestRows:actualRows.length,maxApplicationTextTokens:Math.max(...actualRows.map(r=>r.applicationTextTokens)),maxConservativeTextPlusSchemaTokens:Math.max(...actualRows.map(r=>r.applicationTextTokens+r.rawSchemaDiagnosticTokens)),largestRequests:[...actualRows].sort((a,b)=>(b.applicationTextTokens+b.rawSchemaDiagnosticTokens)-(a.applicationTextTokens+a.rawSchemaDiagnosticTokens)).slice(0,4).map(r=>({case:r.case,text:r.applicationTextTokens,schema:r.rawSchemaDiagnosticTokens})),routeFramingTokens:"UNKNOWN",sdkFullStructuredUnavailableRows:actualRows.filter(r=>r.sdkFullStructuredTokens===null).length}));

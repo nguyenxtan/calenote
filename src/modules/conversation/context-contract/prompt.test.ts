@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { ContextInputSchema } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
-import {wire89PromptFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
-import { numericOwnershipCatalogue, serializeContextRequest } from "./wire";
+import {wire89PromptFixture,wire104PromptFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
+import { numericOwnershipCatalogue, serializeWire107ContextRequestReference as serializeContextRequest } from "./wire";
 import { ContextInputV2Schema } from "./contracts";
 import { deriveGenerationFieldCapability } from "./field-capability";
 const innerEvidenceSentence83=' Inside change JSON, evidence MUST include primaryEvidence and additionalEvidenceJson; when no extras, additionalEvidenceJson:"[]" is still required. Primary uses the actual available source code, never an example/default.';
@@ -284,7 +284,7 @@ it("numeric ownership catalogue preserves explicitly single cadence", () => {
 it("rank transport keeps single active membership and payload ownership",()=>{
  expect(CONTEXT_CONTRACT_PROMPT).not.toContain('Example: titleChange=');
  expect(CONTEXT_CONTRACT_PROMPT).toContain("titlePresenceRequired=true requires nonnull SET of grounded current USER subject/current USER_TURN evidence, not subject questions.");
- expect(CONTEXT_CONTRACT_PROMPT).toContain("Nonnull carrier={rank,change:JSON string of {field,operation,value,evidence}}; ordinary={rank,change:object}");
+ expect(CONTEXT_CONTRACT_PROMPT).toContain("Nonnull schema-selected eventDateChange/frequencyChange OBJECT carriers={rank,change:object}");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent=null/no rank/change; CLEAR ranked despite value=null");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Inner values unchanged");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("exclusive SET/REPLACE/CLEAR, never ordinary");
@@ -312,4 +312,19 @@ it("uncertainty candidates distinguish absence from typed grounded MISSING", () 
  expect(CONTEXT_CONTRACT_PROMPT).toContain("even MISSING");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Absent carriers:null; inner null legal");
  expect(CONTEXT_CONTRACT_PROMPT).toContain("Unknown required:null,targeted uncertainty");
+});
+
+it("date carrier authoring checks distinguish the outer JSON string from the selected inner value type", () => {
+  const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-10-13T03:00:00Z",localDate:"2026-10-13",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"synthetic"}],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"v1",supported:["ONCE"],unsupported:[],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
+  const policy=serializeContextRequest(input).messages[0].content;
+  expect(policy).toContain("Date carrier emission check:");
+  expect(policy).toContain("The selected eventDateChange change carrier is an OBJECT when eventDateYearNullRequired=true, never a JSON string.");
+  expect(policy).toContain("eventDateYearNullRequired=true: c.value must be a non-array OBJECT with the six CIVIL_DATE keys and year:null");
+  expect(policy).toContain("eventDateYearNullRequired=false: c.value must be a STRING encoding the grounded DateOperand");
+  expect(policy).toContain("For reminderDate/endDate SET or REPLACE the inner value remains a STRING regardless of that flag; CLEAR stays null.");
+  expect(policy).toContain("Check your authored object before encoding; never parse, coerce or repair a received invalid proposal.");
+});
+
+it("the date emission amendment preserves the exact historical wire104 notes policy specimen", () => {
+ expect(createHash("sha256").update(wire104PromptFixture(CONTEXT_CONTRACT_PROMPT)).digest("hex")).toBe("5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9");
 });

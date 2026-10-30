@@ -1,4 +1,7 @@
 // @vitest-environment node
+// Named wire107 historical qualification. Selected108 has its own unmocked regression suite.
+vi.mock("./context-literal-insertion-wire",async()=> (await import("../../../../../tools/benchmark/wire107-reference-codec.test-support")).wire107ReferenceCodec);
+vi.mock("./context-order-reference-wire",async()=> (await import("../../../../../tools/benchmark/wire107-reference-codec.test-support")).wire107ReferenceCodec);
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gateway";

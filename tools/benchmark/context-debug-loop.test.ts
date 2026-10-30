@@ -1,4 +1,7 @@
 // @vitest-environment node
+// Named wire107 historical qualification. Selected108 has its own unmocked regression suite.
+vi.mock("../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire",async()=> (await import("./wire107-reference-codec.test-support")).wire107ReferenceCodec);
+vi.mock("../../src/modules/intelligence/infrastructure/openrouter/context-order-reference-wire",async()=> (await import("./wire107-reference-codec.test-support")).wire107ReferenceCodec);
 import {it,expect,vi} from "vitest";
 import {execFileSync} from "node:child_process";
 import {runInNewContext} from "node:vm";

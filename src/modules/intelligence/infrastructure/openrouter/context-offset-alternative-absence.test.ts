@@ -6,7 +6,7 @@ import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protoc
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {wire94RequestFixture,wire96RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";

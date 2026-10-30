@@ -1,4 +1,7 @@
 // @vitest-environment node
+// Named wire107 historical qualification. Selected108 has its own unmocked regression suite.
+vi.mock("./context-literal-insertion-wire",async()=> (await import("../../../../../tools/benchmark/wire107-reference-codec.test-support")).wire107ReferenceCodec);
+vi.mock("./context-order-reference-wire",async()=> (await import("../../../../../tools/benchmark/wire107-reference-codec.test-support")).wire107ReferenceCodec);
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { ContextInputSchema, SLOT_NAMES, ConversationInterpretationSchema, ConversationInterpretationV3Schema, parseInterpretationSections, parseInterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
@@ -16,6 +19,8 @@ import {frozenContextProposal} from "../../../../../tools/benchmark/context-cont
 import {resolveSingleValidationTarget} from "../../../../../tools/benchmark/context-contract-runner";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
+import {PreviewResponseV1Schema} from "../../../../contracts/api/conversation-previews";
+import {ReminderListResponseV2Schema} from "../../../../contracts/api/reminders-v2";
 // Pre-wire82 structural cases use an explicit authoring view. Actual wire82
 // syntax tests below bypass these adapters through the raw wireModule exports.
 const googleLiteEuContextWireSchema=typedSingletonSchemaFixture;
@@ -23,7 +28,7 @@ const encodeGoogleLiteEuContextV3=(...args:Parameters<typeof encodeOpaqueSinglet
 const encodeFixtureV3=(...args:Parameters<typeof encodeOpaqueFixtureV3>)=>unwrapSingletonAuthoringFixture(encodeOpaqueFixtureV3(...args));
 const parseGoogleLiteEuContextSectionsV3=(raw:unknown,...args:TailParseArgs)=>parseOpaqueSingletonV3(wrapSingletonAuthoringFixture(raw),...args);
 type TailParseArgs=Parameters<typeof parseOpaqueSingletonV3> extends [unknown,...infer Rest]?Rest:never;
-const decodeSingletonAuthoringFixture=(raw:unknown,...args:TailDecodeArgs)=>wireModule.decodeGoogleLiteEuContextTransportV3(wrapSingletonAuthoringFixture(raw),...args);
+const decodeSingletonAuthoringFixture=(raw:unknown,...args:TailDecodeArgs)=>wireModule.decodeGoogleLiteEuContextTransportV3(wrapSingletonAuthoringFixture(raw,args[3]),...args);
 type TailDecodeArgs=Parameters<typeof wireModule.decodeGoogleLiteEuContextTransportV3> extends [unknown,...infer Rest]?Rest:never;
 it("wire85 actual shared rank domain admits exactly thirteen decimal strings with scalar-only inverse",()=>{
  const schema=structuredClone(wireModule.googleLiteEuContextWireSchemaV3().schema);schema.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};const scalar=schema.$defs!.r;
@@ -300,7 +305,7 @@ it("wire55 typed civil rejects invalid authored slots and private/getter values 
 });
 it.each(["valid","numeric"] as const)("wire55 actual gateway consumes typed authored date: %s",async mode=>{
  const {bound,raw,value}=wire55Example();raw.eventDateChange.change.value=mode==="numeric"?{...value,year:2026}:value;
- let calls=0;const transport=createContextHttpTransport("fixture",async()=>{calls++;return new Response(JSON.stringify({model:config.primary.model,provider:"Google",choices:[{finish_reason:"stop",message:{content:JSON.stringify(wrapSingletonAuthoringFixture(raw))}}],usage:{cost:.0001,prompt_tokens:100,completion_tokens:100}}),{headers:{"content-type":"application/json"}})});
+ let calls=0;const transport=createContextHttpTransport("fixture",async()=>{calls++;return new Response(JSON.stringify({model:config.primary.model,provider:"Google",choices:[{finish_reason:"stop",message:{content:JSON.stringify(wrapSingletonAuthoringFixture(raw,bound))}}],usage:{cost:.0001,prompt_tokens:100,completion_tokens:100}}),{headers:{"content-type":"application/json"}})});
  const attempt=createContextContractGateway(config,transport,{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576}).prepare("PRIMARY",bound);if(attempt.status!=="READY")throw Error("Expected ready");
  const result=await attempt.dispatch();expect(result.status).toBe(mode==="valid"?"SUCCESS":"FAILURE");expect(calls).toBe(1);expect(raw.eventDateChange.change.value).toEqual(mode==="numeric"?{...value,year:2026}:value);
 });
@@ -1218,7 +1223,7 @@ it("wire82 RAW matched ten-root guard preserves request-local availability prese
  }
  const {bound,canonical}=wire55Example(),original=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{rank:number;change:string}>;
  expect(wireModule.decodeGoogleLiteEuContextTransportV3(original,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("PARSED");
- for(const root of ["titleChange","eventDateChange"]){const bad=structuredClone(original),change=JSON.parse(bad[root].change);if(root==="titleChange")change.operation="REPLACE";else change.value.year=2026;bad[root].change=JSON.stringify(change);expect(wireModule.decodeGoogleLiteEuContextTransportV3(bad,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");}
+ for(const root of ["titleChange","eventDateChange"]){const bad=structuredClone(original),encoded=typeof bad[root].change==="string",change=encoded?JSON.parse(bad[root].change):bad[root].change;if(root==="titleChange")change.operation="REPLACE";else change.value.year=2026;bad[root].change=encoded?JSON.stringify(change):change;expect(wireModule.decodeGoogleLiteEuContextTransportV3(bad,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");}
  const prohibited=structuredClone(original);prohibited.reminderDateChange={rank:10,change:JSON.stringify({field:"reminderDate",operation:"SET",value:JSON.stringify({kind:"RELATIVE_DAY",offsetDays:2}),evidence:{primaryEvidence:"U0",additionalEvidenceJson:"[]"}})};
  expect(wireModule.decodeGoogleLiteEuContextTransportV3(prohibited,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");
  const clock=ContextInputSchema.parse({...occupiedGenericControlContext(),turns:[{role:"USER",text:"synthetic"},{role:"ASSISTANT",text:"clock?"},{role:"USER",text:"8h."}],currentTurn:2,pendingQuestion:{scope:"REMINDER",field:"reminderTime",reason:"MISSING",text:"clock?",decisionKind:null}}),clockEvidence=[{kind:"USER_QUOTE",turn:2,quote:"8h.",occurrence:1}];
@@ -1267,7 +1272,7 @@ it("versioned encoder matches independent fixtures and reconstructs every typed 
   }
   expect(() => encodeGoogleLiteEuContext({ ...canonical, changes: [...canonical.changes, canonical.changes[0]] })).toThrow();
   const schema = googleLiteEuContextWireSchema();
-  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-104");
+  expect(schema.version).toBe("google-gemini-2.5-flash-lite-vertex-eu-context-bound-operation-missing-107");
   const previous=structuredClone(schema.schema);previous.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};expect(createHash("sha256").update(JSON.stringify(previous)).digest("hex")).toBe("7cb6dc6f5d8dd626289c3c1aa63dfb9aecd940977bb3493b47e10fc8b0f93f46");
   schema.schema.required = [];
   expect(googleLiteEuContextWireSchema().schema.required).not.toEqual([]);
@@ -1332,3 +1337,232 @@ it("current pointer transport rejects quote-authored evidence padding at the HTT
 
 function encodeGoogleLiteEuContext(value: unknown) { return encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(value)); }
 function parseGoogleLiteEuContextSections(value: unknown) { return parseGoogleLiteEuContextSectionsV3(value, CONTEXT_PROTOCOL_V3); }
+
+it("wire105 exposes only the source-required event-date typed carrier and refuses its legacy string",()=>{
+ const {bound,canonical}=wire55Example(),cap=deriveGenerationFieldCapability(bound);
+ expect(cap.eventDateYearNullRequired).toBe(true);
+ const schema=wireModule.googleLiteEuContextWireSchemaV3(cap,bound).schema;
+ const eventNode=schema.properties!.eventDateChange;if(typeof eventNode==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+ const event=eventNode.anyOf![0].properties!.change;
+ expect(event).not.toEqual({type:"string"});
+ for(const root of singletonRoots82.filter(root=>root!=="eventDateChange")){
+  const node=schema.properties![root];if(typeof node==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+  if(node.type==="null")continue;
+  expect((node.anyOf?.[0]??node).properties!.change).toEqual({type:"string"});
+ }
+ const raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{rank:number;change:Record<string,unknown>}>;
+ expect(typeof raw.eventDateChange.change).toBe("object");
+ expect(typeof raw.eventDateChange.change.value).toBe("object");
+ let inlineNodes=0;
+ const inline=(node:unknown,depth=0):unknown=>{
+  if(depth>64||++inlineNodes>8192)throw Error("TEST_INLINE_BOUND");
+  if(Array.isArray(node))return node.map(value=>inline(value,depth+1));
+  if(!node||typeof node!=="object")return node;
+  const object=node as Record<string,unknown>;
+  if(typeof object.$ref==="string")return inline(object.$ref.slice(2).split("/").reduce((parent,key)=>(parent as Record<string,unknown>)[key],schema as unknown),depth+1);
+  return Object.fromEntries(Object.entries(object).filter(([key])=>key!=="$defs").map(([key,value])=>[key,inline(value,depth+1)]));
+ };
+ const providerCheck=z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+ expect(providerCheck.safeParse(raw).success).toBe(true);
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("PARSED");
+ const old=structuredClone(raw) as Record<string,{rank:number;change:unknown}>;
+ old.eventDateChange.change=JSON.stringify(old.eventDateChange.change);
+ expect(providerCheck.safeParse(old).success).toBe(false);
+ const stringValue=structuredClone(raw);stringValue.eventDateChange.change.value=JSON.stringify(stringValue.eventDateChange.change.value);
+ expect(providerCheck.safeParse(stringValue).success).toBe(false);
+ const before=JSON.stringify(old);
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(old,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");
+ expect(JSON.stringify(old)).toBe(before);
+ const generic=wireModule.googleLiteEuContextWireSchemaV3().schema;
+ const genericEvent=generic.properties!.eventDateChange;if(typeof genericEvent==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+ expect(genericEvent.anyOf![0].properties!.change).toEqual({type:"string"});
+ const flagOnly=wireModule.googleLiteEuContextWireSchemaV3(cap).schema.properties!.eventDateChange;
+ if(typeof flagOnly==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+ expect(flagOnly.anyOf![0].properties!.change).toEqual({type:"string"});
+ const unqualified=ContextInputSchema.parse({...bound,turns:[{role:"USER",text:"synthetic"}]});
+ const unqualifiedEvent=wireModule.googleLiteEuContextWireSchemaV3(cap,unqualified).schema.properties!.eventDateChange;
+ if(typeof unqualifiedEvent==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+ expect(unqualifiedEvent.anyOf![0].properties!.change).toEqual({type:"string"});
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,unqualified).status).toBe("REFUSED");
+});
+
+it.each([false,true])("wire105 actual BE preview and FE response contract reject legacy event carrier=%s",async legacy=>{
+ const script=regressions.cases.find(value=>value.id==="R02")!;let calls=0;
+ const liveGateway=createContextContractGateway(config,async request=>{
+  const value=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete value[key];
+  const bound=ContextInputSchema.parse(value),proposal=frozenContextProposal(bound,"R02",calls++);
+  const raw=encodeOpaqueFixtureV3(proposal,bound) as Record<string,{change:unknown}>;
+  if(calls===1){expect(typeof raw.eventDateChange.change).toBe("object");if(legacy)raw.eventDateChange.change=JSON.stringify(raw.eventDateChange.change);}
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})};
+ },{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const probe=await createContextContractProbe({sourceSha:"a".repeat(40),referenceNow:Date.parse(script.turns[0].receipt),liveGateway},()=>{throw Error("UNEXPECTED_FIXTURE_DISPATCH")});
+ try {
+  const first=await probe.turn(script.turns[0].text,script.turns[0].receipt);
+  if(legacy){expect(first.status).toBe("REJECTED");expect(first.apiPreviews).toBe(0);expect(first.mutations).toBe(0);expect(calls).toBe(1);}
+  else {for(const turn of script.turns.slice(1)){const result=await probe.turn(turn.text,turn.receipt);expect(result.status).not.toBe("REJECTED");}expect(calls).toBe(script.turns.length);}
+  const api=await probe.readBack();
+  const previews=PreviewResponseV1Schema.parse({data:{schemaVersion:"conversation-previews-1",...api.previews}});
+  const reminders=ReminderListResponseV2Schema.parse({data:api.reminders});
+  expect(reminders.data.reminders).toHaveLength(0);
+  expect(previews.data.previews).toHaveLength(legacy?0:1);
+  if(!legacy)expect(previews.data.previews[0].details.eventDate).not.toBeNull();
+ }finally{probe.dispose();}
+});
+
+it.each(["year","y\\u0065ar","root-escaped"])("wire105 raw HTTP refuses duplicate decoded date key %s before collapse",async key=>{
+ const {bound,canonical}=wire55Example(),raw=encodeOpaqueFixtureV3(canonical,bound);
+ const content=key==="root-escaped"?JSON.stringify(raw).replace('"eventDateChange":','"eventDateChange":null,"e\\u0076entDateChange":'):JSON.stringify(raw).replace('"year":null',`"${key}":2026,"year":null`);
+ const gateway=createContextContractGateway(config,async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content}}]})}),{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const prepared=gateway.prepare("PRIMARY",bound);if(prepared.status!=="READY")throw Error("EXPECTED_READY");
+ expect(await prepared.dispatch()).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{validation:{issues:expect.arrayContaining([expect.objectContaining({singletonJson:{stage:"JSON_SCAN",reason:"DUPLICATE_KEY"}})])}}});
+});
+
+it.each(["primaryEvidence","additionalEvidenceJson"])("wire105 nested evidence accessor %s refuses without invocation",key=>{
+ const {bound,canonical}=wire55Example(),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{change:{evidence:Record<string,unknown>}}>;
+ let calls=0;Object.defineProperty(raw.eventDateChange.change.evidence,key,{enumerable:true,get(){calls++;throw Error("PRIVATE_NESTED_GETTER")}});
+ const diagnostics:unknown[]=[];
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value),bound).status).toBe("REFUSED");
+ expect(calls).toBe(0);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_NESTED_GETTER");
+ expect(Object.getOwnPropertyDescriptor(raw.eventDateChange.change.evidence,key)?.get).toBeDefined();
+});
+
+it.each(["depth","width"])("wire105 invalid optional guidance %s cannot veto valid typed date",async mode=>{
+ const {bound,canonical}=wire55Example(),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,unknown>;
+ let guidance:unknown=mode==="width"?Array.from({length:300},()=>null):null;
+ if(mode==="depth")for(let depth=0;depth<20;depth++)guidance={nested:guidance};
+ raw.replyProposal=guidance;
+ const gateway=createContextContractGateway(config,async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})}),{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const prepared=gateway.prepare("PRIMARY",bound);if(prepared.status!=="READY")throw Error("EXPECTED_READY");
+ expect(await prepared.dispatch()).toMatchObject({status:"SUCCESS",interpretation:{fullSchemaValid:false,semantic:{changes:expect.arrayContaining([{field:"eventDate",operation:"SET",value:expect.objectContaining({year:null}),evidence:expect.any(Array)}])}}});
+});
+
+it("typed event-date singleton rejects a stringified operand atomically with its complete carrier now a typed object",()=>{
+ const {bound,canonical}=wire55Example();
+ expect(deriveGenerationFieldCapability(bound).eventDateYearNullRequired).toBe(true);
+ const raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{rank:number;change:Record<string,unknown>}>;
+ expect(typeof raw.eventDateChange.change).toBe("object");
+ expect(typeof raw.eventDateChange.change.value).toBe("object");
+ expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("PARSED");
+ for(const value of [JSON.stringify(raw.eventDateChange.change.value),"invalid-date-string"]){
+  const bad=structuredClone(raw),change=bad.eventDateChange.change;change.value=value;
+  const before=JSON.stringify(bad),diagnostics:unknown[]=[];
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(bad,CONTEXT_PROTOCOL_V3,undefined,d=>diagnostics.push(d),bound).status).toBe("REFUSED");
+  expect(JSON.stringify(bad)).toBe(before);
+  expect(diagnostics).toMatchObject([{issues:expect.arrayContaining([{path:["eventDateChange","change","value"],code:"invalid_type",actualType:"string",unknownPathSegments:0,classification:"value",expected:"object"}])}]);
+ }
+});
+
+function wire106Example(text="Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi."){
+ const bound=ContextInputSchema.parse({...input,capabilities:{...input.capabilities,supported:["ONCE","FINITE_DAILY"]},turns:[{role:"USER",text}]});
+ const evidence=[{kind:"USER_QUOTE",turn:0,quote:text,occurrence:1}];
+ const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"NEW",evidence},conversationDirective:null,changes:[{field:"title",operation:"SET",value:"đi thi",evidence},{field:"eventDate",operation:"SET",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null},evidence},{field:"frequency",operation:"SET",value:"DAILY",evidence},{field:"occurrenceCount",operation:"SET",value:2,evidence}]});
+ return {bound,canonical};
+}
+function wire106ProviderCheck(bound:typeof input){
+ const schema=wireModule.googleLiteEuContextWireSchemaV3(deriveGenerationFieldCapability(bound),bound).schema;
+ const inline=(value:unknown):unknown=>{if(Array.isArray(value))return value.map(inline);if(!value||typeof value!=="object")return value;const node=value as Record<string,unknown>;if(typeof node.$ref==="string")return inline(node.$ref.slice(2).split("/").reduce((parent,key)=>(parent as Record<string,unknown>)[key],schema as unknown));return Object.fromEntries(Object.entries(node).filter(([key])=>key!=="$defs").map(([key,child])=>[key,inline(child)]));};
+ return z.fromJSONSchema(inline(schema) as Parameters<typeof z.fromJSONSchema>[0]);
+}
+it("wire106 source-required frequency exposes full enum and rejects hidden invalid or legacy string",()=>{
+ const {bound,canonical}=wire106Example(),check=wire106ProviderCheck(bound);
+ for(const value of ["ONCE","DAILY","WEEKLY","MONTHLY","YEARLY","UNKNOWN"]){
+  const proposal=ConversationInterpretationV3Schema.parse({...canonical,changes:canonical.changes.map(change=>change.field==="frequency"?{...change,value}:change)});
+  const raw=encodeOpaqueFixtureV3(proposal,bound) as Record<string,{change:Record<string,unknown>}>;
+  expect(typeof raw.frequencyChange.change).toBe("object");expect(raw.frequencyChange.change.value).toBe(value);
+  expect(check.safeParse(raw).success).toBe(true);
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,bound)).toMatchObject({status:"PARSED",value:{semantic:{changes:proposal.changes}}});
+  for(const invalid of ["SYNTHETIC_INVALID_ENUM",value.toLowerCase(),{value},2,null]){
+   const bad=structuredClone(raw);bad.frequencyChange.change.value=invalid;
+   expect(check.safeParse(bad).success).toBe(false);
+   expect(wireModule.decodeGoogleLiteEuContextTransportV3(bad,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");
+  }
+  const old=structuredClone(raw) as Record<string,{change:unknown}>;old.frequencyChange.change=JSON.stringify(old.frequencyChange.change);
+  expect(check.safeParse(old).success).toBe(false);expect(wireModule.decodeGoogleLiteEuContextTransportV3(old,CONTEXT_PROTOCOL_V3,undefined,undefined,bound).status).toBe("REFUSED");
+ }
+});
+it.each([["Ngày 11/10 đi thi.",true,false],["Tôi đi thi, nhắc 2 ngày liên tiếp giúp tôi.",false,true],["Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp giúp tôi.",true,true],["synthetic",false,false]] as const)("wire106 selectors use actual source independently: %s",(text,date,frequency)=>{
+ const {bound,canonical}=wire106Example(text),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{change:unknown}>;
+ expect(typeof raw.eventDateChange.change).toBe(date?"object":"string");expect(typeof raw.frequencyChange.change).toBe(frequency?"object":"string");
+ const cap=deriveGenerationFieldCapability(bound),generic=wireModule.googleLiteEuContextWireSchemaV3(cap).schema;
+ const node=generic.properties!.frequencyChange;if(typeof node==="boolean")throw Error("TEST_SCHEMA_OBJECT");
+ if(node.type!=="null")expect((node.anyOf?.[0]??node).properties!.change).toEqual({type:"string"});
+});
+it.each(["value","v\\u0061lue","root-escaped"])("wire106 raw HTTP rejects frequency duplicate %s alongside typed date",async key=>{
+ const {bound,canonical}=wire106Example(),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{change:unknown}>;
+ expect(typeof raw.frequencyChange.change).toBe("object");
+ const frequency=JSON.stringify(raw.frequencyChange),content=key==="root-escaped"?JSON.stringify(raw).replace('"frequencyChange":','"frequencyChange":null,"fr\\u0065quencyChange":'):JSON.stringify(raw).replace(frequency,frequency.replace('"value":"DAILY"',`"${key}":"ONCE","value":"DAILY"`));
+ const gateway=createContextContractGateway(config,async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content}}]})}),{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const prepared=gateway.prepare("PRIMARY",bound);if(prepared.status!=="READY")throw Error("EXPECTED_READY");
+ expect(await prepared.dispatch()).toMatchObject({status:"FAILURE",category:"SCHEMA_INVALID",canonicalValidationDiagnostics:{validation:{issues:expect.arrayContaining([expect.objectContaining({path:["frequencyChange","change"],singletonJson:{stage:"JSON_SCAN",reason:"DUPLICATE_KEY"}})])}}});
+});
+it.each(["primaryEvidence","additionalEvidenceJson"])("wire106 frequency evidence accessor %s is never invoked",key=>{
+ const {bound,canonical}=wire106Example(),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,{change:{evidence:Record<string,unknown>}}>;
+ expect(typeof raw.frequencyChange.change).toBe("object");let calls=0;
+ Object.defineProperty(raw.frequencyChange.change.evidence,key,{enumerable:true,get(){calls++;throw Error("PRIVATE_FREQUENCY_GETTER")}});
+ const diagnostics:unknown[]=[];expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,value=>diagnostics.push(value),bound).status).toBe("REFUSED");
+ expect(calls).toBe(0);expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_FREQUENCY_GETTER");
+});
+it.each(["depth","width"])("wire106 both typed carriers survive invalid optional guidance %s",async mode=>{
+ const {bound,canonical}=wire106Example(),raw=encodeOpaqueFixtureV3(canonical,bound) as Record<string,unknown>;
+ expect(typeof (raw.frequencyChange as {change:unknown}).change).toBe("object");
+ let guidance:unknown=mode==="width"?Array.from({length:300},()=>null):null;if(mode==="depth")for(let i=0;i<20;i++)guidance={nested:guidance};raw.replyProposal=guidance;
+ const gateway=createContextContractGateway(config,async()=>({status:200,body:JSON.stringify({model:config.primary.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})}),{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const prepared=gateway.prepare("PRIMARY",bound);if(prepared.status!=="READY")throw Error("EXPECTED_READY");
+ expect(await prepared.dispatch()).toMatchObject({status:"SUCCESS",interpretation:{fullSchemaValid:false,semantic:{changes:expect.arrayContaining([{field:"frequency",operation:"SET",value:"DAILY",evidence:expect.any(Array)}])}}});
+});
+
+it.each(["valid","invalid-enum","legacy-string"])("wire106 actual BE to FE response seam: frequency %s",async mode=>{
+ const script=regressions.cases.find(value=>value.id==="R02")!;let calls=0;
+ const liveGateway=createContextContractGateway(config,async request=>{
+  const value=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete value[key];
+  const bound=ContextInputSchema.parse(value),proposal=frozenContextProposal(bound,"R02",calls++);
+  const raw=encodeOpaqueFixtureV3(proposal,bound) as Record<string,{change:unknown}>;
+  if(calls===1){expect(typeof raw.frequencyChange.change).toBe("object");if(mode==="legacy-string")raw.frequencyChange.change=JSON.stringify(raw.frequencyChange.change);if(mode==="invalid-enum")(raw.frequencyChange.change as Record<string,unknown>).value="SYNTHETIC_INVALID_ENUM";}
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",usage:{cost:.0001,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})};
+ },{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const probe=await createContextContractProbe({sourceSha:"a".repeat(40),referenceNow:Date.parse(script.turns[0].receipt),liveGateway},()=>{throw Error("UNEXPECTED_FIXTURE_DISPATCH")});
+ try{
+  const first=await probe.turn(script.turns[0].text,script.turns[0].receipt);
+  if(mode!=="valid"){expect(first.status).toBe("REJECTED");expect(first.listStoreReads).toBe(0);expect(first.mutations).toBe(0);expect(first.apiPreviews).toBe(0);expect(calls).toBe(1);}
+  else for(const turn of script.turns.slice(1)){const result=await probe.turn(turn.text,turn.receipt);expect(result.status).not.toBe("REJECTED");}
+  const api=await probe.readBack(),previews=PreviewResponseV1Schema.parse({data:{schemaVersion:"conversation-previews-1",...api.previews}}),reminders=ReminderListResponseV2Schema.parse({data:api.reminders});
+  expect(reminders.data.reminders).toHaveLength(0);expect(previews.data.previews).toHaveLength(mode==="valid"?1:0);
+  if(mode==="valid"){const occurrences=previews.data.previews[0].occurrences;expect(occurrences.length).toBeGreaterThan(1);for(let i=1;i<occurrences.length;i++)expect(occurrences[i].scheduledAt-occurrences[i-1].scheduledAt).toBe(86400000);}
+ }finally{probe.dispose();}
+});
+it("wire106 generic frequency preserves every authoritative enum and operation without coercion",()=>{
+ for(const value of ["ONCE","DAILY","WEEKLY","MONTHLY","YEARLY","UNKNOWN"])for(const operation of ["SET","REPLACE","CLEAR"] as const){
+  const canonical=ConversationInterpretationV3Schema.parse({...minimal,intent:"CREATE_REMINDER",requestTarget:{kind:"CURRENT",evidence:[quote]},changes:[{field:"frequency",operation,value:operation==="CLEAR"?null:value,evidence:[quote]}]});
+  const raw=wireModule.encodeGoogleLiteEuContextV3(canonical),before=JSON.stringify(raw);
+  expect(wireModule.decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3)).toMatchObject({status:"PARSED",value:{semantic:{changes:canonical.changes}}});expect(JSON.stringify(raw)).toBe(before);
+ }
+});
+it("wire106 selected raw scan gives each carrier an independent bounded subtree budget",()=>{
+ const {bound}=wire106Example();
+ const envelope={eventDateChange:{rank:0,change:{evidence:Array.from({length:150},()=>null)}},frequencyChange:{rank:1,change:{evidence:Array.from({length:150},()=>null)}}};
+ expect(wireModule.validateTypedSingletonCarrierJsonV3(JSON.stringify(envelope),bound)).toBeUndefined();
+ envelope.frequencyChange.change.evidence.push(...Array.from({length:150},()=>null));
+ expect(wireModule.validateTypedSingletonCarrierJsonV3(JSON.stringify(envelope),bound)).toMatchObject({issues:[{path:["frequencyChange","change"],singletonJson:{stage:"JSON_SCAN",reason:"NODE_LIMIT"}}]});
+});
+
+it.each(["valid","manual-missing","manual-ambiguous"])("wire107 BE to FE seam keeps received operation uncertainty fail-closed: %s",async mode=>{
+ const selected=resolveSingleValidationTarget(process.cwd(),{fixture:"R02",turn:1}),script=regressions.cases.find(item=>item.id==="R02")!;
+ let calls=0,producerAllowed:boolean|undefined;
+ const gateway=createContextContractGateway(config,async request=>{
+  calls++;const projected=JSON.parse(request.messages[1].content);for(const key of ["fieldCapability","evidenceSources","numericOwnership"])delete projected[key];
+  const bound=ContextInputSchema.parse(projected),proposal=ConversationInterpretationV3Schema.parse(frozenContextProposal(bound,"R02",1));
+  if(mode!=="valid")proposal.uncertainties.push({field:"operation",reason:mode==="manual-missing"?"MISSING":"AMBIGUOUS",alternatives:[]});
+  const raw=encodeOpaqueFixtureV3(proposal,bound);
+  producerAllowed=wire106ProviderCheck(bound).safeParse(raw).success;
+  return {status:200,body:JSON.stringify({model:request.model,provider:"Google",usage:{cost:0,prompt_tokens:100,completion_tokens:100},choices:[{finish_reason:"stop",message:{content:JSON.stringify(raw)}}]})};
+ },{status:"OBSERVABLE_CANARY",advertisedContextTokens:1048576});
+ const probe=await createContextContractProbe({sourceSha:"a".repeat(40),referenceNow:Date.parse(script.turns[1].receipt),contextSeed:selected.contextSeed.state,liveGateway:gateway},()=>{throw Error("FORBIDDEN_FIXTURE_PATH")});
+ try{
+  const result=await probe.turn(script.turns[1].text,script.turns[1].receipt);
+  expect(producerAllowed).toBe(mode!=="manual-missing");expect(calls).toBe(1);
+  expect(result).toMatchObject({fullSchemaValid:true,pendingField:mode==="valid"?"reminderTime":"operation",draftRevision:mode==="valid"?2:1,listStoreReads:0,mutations:0});
+  expect(result.fields.eventRelation).toBe(mode==="valid"?"BEFORE_EVENT":null);
+  const api=await probe.readBack();expect(PreviewResponseV1Schema.parse({data:{schemaVersion:"conversation-previews-1",...api.previews}}).data.previews).toHaveLength(0);
+  expect(ReminderListResponseV2Schema.parse({data:api.reminders}).data.reminders).toHaveLength(0);
+ }finally{probe.dispose();}
+});

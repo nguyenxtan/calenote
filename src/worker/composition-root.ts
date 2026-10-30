@@ -1,3 +1,4 @@
+import {D1LocalMonthQueryStore} from '@/modules/reminders/infrastructure/d1/local-month-query-store';
 import { D1DashboardStore } from "@/modules/auth/dashboard-service";
 import {
   deliverLoginCode,
@@ -435,7 +436,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;
         },
-        gateway: conversationGateway, budgetStore: semantic.budgetStore } } : {}),
+        gateway: conversationGateway, budgetStore: semantic.budgetStore, listMonth: input => new D1LocalMonthQueryStore(env.DB).list(input) } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),

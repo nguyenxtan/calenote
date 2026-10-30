@@ -111,3 +111,9 @@ it("provider query evidence slots remain untrusted selections without execution 
   expect(authority.classifyOutputPathV3("transport.inactivePadding")).toMatchObject({ class: "APPLICATION_OWNED", canCauseHardReject: false, canAuthorizeRead: false, canAuthorizeWrite: false });
   expect(() => authority.classifyOutputPathV3("query.evidence.fourthEvidence" as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");
 });
+it('selected109 schema enumerates every exact placement authority path without execution permission',async()=>{
+ const selected=await import('../../intelligence/infrastructure/openrouter/context-literal-insertion-wire');
+ const node=selected.googleLiteEuContextWireSchemaV3().schema.properties!.placements as {properties:Record<string,unknown>};
+ for(const path of ['placements',...Object.keys(node.properties).map(owner=>`placements.${owner}`)])expect(authority.classifyOutputPathV3(path as Parameters<typeof authority.classifyOutputPathV3>[0])).toMatchObject({class:'SEMANTIC_UNTRUSTED',applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
+ expect(()=>authority.classifyOutputPathV3('placements.PRIVATE_OWNER' as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow('OUTPUT_AUTHORITY_UNCLASSIFIED');
+});

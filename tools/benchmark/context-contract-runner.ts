@@ -8,7 +8,7 @@ import { createContextContractGateway, createContextHttpTransport, CONTEXT_FINAN
 import { ContextInputSchema, InterpretationJsonSchema, type ContextInput } from "../../src/modules/conversation/context-contract/contracts";
 import { numericOwnershipCatalogue } from "../../src/modules/conversation/context-contract/wire";
 import { deriveGenerationFieldCapability } from "../../src/modules/conversation/context-contract/field-capability";
-import { googleLiteEuContextWireSchemaV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { googleLiteEuContextWireSchemaV3,SELECTED_CONTEXT_PROMPT_SHA256,SELECTED_CONTEXT_SCHEMA_SHA256 } from "../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire";
 import type { SemanticGateway, SemanticUsage, SemanticProviderEvidence, SemanticFailureDiagnostics, CanonicalResponseDiagnostics } from "../../src/modules/intelligence/semantic-gateway";
 import type { SemanticTransportDiagnostics } from "../../src/modules/intelligence/infrastructure/openrouter/transport-diagnostics";
 import { admitCanonicalCampaign, scoreContextCampaign, scoreContextAction, diagnoseContextTurn, captureContextOracleState, captureValidationSemanticState, type OracleDiagnostics, type CampaignProfile, type ContextManifest } from "./context-contract";
@@ -210,9 +210,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if ((replayOnly || turnZeroOnly) && httpCount() >= 1) throw new Error("REPLAY_HTTP_CAP");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9"
+    if (digest(request.messages[0].content) !== SELECTED_CONTEXT_PROMPT_SHA256
       || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== SELECTED_CONTEXT_SCHEMA_SHA256) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request);
     if (!input.httpRequestCount) providerHttpRequests++;
     const remaining = deadline - now();

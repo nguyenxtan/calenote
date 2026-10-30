@@ -5,7 +5,7 @@ import {ContextInputSchema,ConversationInterpretationV3Schema} from "../../../co
 import {CONTEXT_CONTRACT_PROMPT} from "../../../conversation/context-contract/prompt";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import {decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {primaryEvidenceSourceCodebook} from "./evidence-pointer";
 import {wire91PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 

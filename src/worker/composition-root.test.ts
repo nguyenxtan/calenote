@@ -16,6 +16,24 @@ function environment(): Env {
 }
 
 describe("Worker composition root", () => {
+  it("wires the legacy V2 month reader into inbound processing without successor capability", async () => {
+    const inbound = await import("@/modules/inbound/processor");
+    const month = await import("@/modules/reminders/infrastructure/d1/local-month-query-store");
+    const process = vi.spyOn(inbound, "processInbound").mockResolvedValue({ status: "REJECTED" });
+    const list = vi.spyOn(month.D1LocalMonthQueryStore.prototype, "list").mockResolvedValue({ status: "UNAVAILABLE" });
+    try {
+      const root = await import("./composition-root");
+      const operations = await root.createRuntimeOperations(environment(), { conversationV2: true });
+      await operations.processInbound("local-month-inbound");
+      const dependencies = process.mock.calls[0][1];
+      expect(dependencies.contextContract).toBeUndefined();
+      expect(dependencies.conversation?.listMonth).toBeTypeOf("function");
+      const query = {} as Parameters<import("@/modules/reminders/infrastructure/d1/local-month-query-store").D1LocalMonthQueryStore["list"]>[0];
+      await expect(dependencies.conversation!.listMonth!(query)).resolves.toEqual({ status: "UNAVAILABLE" });
+      expect(list).toHaveBeenCalledExactlyOnceWith(query);
+    } finally { process.mockRestore(); list.mockRestore(); }
+  });
+
   it("keeps observable HTTP gateway wiring dormant behind the explicit successor capability", async () => {
     const gateway = await import("@/modules/intelligence/infrastructure/openrouter/semantic-gateway");
     const factory = vi.spyOn(gateway, "createContextContractGateway");

@@ -1,4 +1,4 @@
-import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import {ContextInputSchema,type ContextInput} from "../../src/modules/conversation/context-contract/contracts";
 import {materializeProviderEvidence,expandPrimaryEvidenceSourceCodes} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";

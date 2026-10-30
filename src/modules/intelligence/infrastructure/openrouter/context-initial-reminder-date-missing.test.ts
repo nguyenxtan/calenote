@@ -1,4 +1,6 @@
 // @vitest-environment node
+// Schema-wide historical comparisons undo wire105 transport only; actual
+// producer membership and service/decoder assertions use current wire105.
 import {beforeAll,expect,it} from "vitest";
 import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
@@ -7,8 +9,8 @@ import * as capability from "../../../conversation/context-contract/field-capabi
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import {googleLiteEuContextWireSchemaV3,decodeGoogleLiteEuContextTransportV3,UNCERTAINTY_FIELD_WIRE_CODE_V1} from "./context-provider-wire";
-import {wire99RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {wire104SchemaFixture,wire99RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import regressions from "../../../conversation/context-contract/benchmark/regressions.json";
 let clockless:ContextInput,clocked:ContextInput,bound:ContextInput;
 beforeAll(async()=>{
@@ -35,11 +37,11 @@ it.each(["clockless","clocked"])("raw %s field/reason language differs only at M
  const input=kind==="clockless"?clockless:clocked,current=schema(input),old=wire99RequestFixture(input).response_format.json_schema.schema;
  const a=validator(input),b=z.fromJSONSchema(inline(old,old.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
  for(const fieldCode of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1))for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(const n of [0,1,2]){const raw=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(raw).success,`${fieldCode}/${reason}/${n}`).toBe(fieldCode===5&&reason==="MISSING"?false:b.safeParse(raw).success);}
- const ac=structuredClone(current),bc=structuredClone(old);delete ac.properties!.uncertainties;delete bc.properties!.uncertainties;expect(ac).toEqual(bc);
+ const ac=wire104SchemaFixture(current),bc=structuredClone(old);delete ac.properties!.uncertainties;delete bc.properties!.uncertainties;expect(ac).toEqual(bc);
 });
 it.each(["Ngày 11/10 đi thi, nhắc tôi ngày 10/10.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc trước 500 ngày.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp, nhắc 5 ngày trước.","Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp trước sự kiện.","Ngày 11/10 đi thi, nhắc 2  ngày liên tiếp.","Ngày 11/10 âm đi thi, nhắc 2 ngày liên tiếp.","Mai nhắc tôi gọi mẹ."])("independent or uncertified source %s retains whole prior language",text=>{
  const input=structuredClone(clockless);input.turns[0].text=text;const before=JSON.stringify(input);
- expect(capability.isInitialReminderDateMissingExcluded(input)).toBe(false);expect(schema(input)).toEqual(wire99RequestFixture(input).response_format.json_schema.schema);
+ expect(capability.isInitialReminderDateMissingExcluded(input)).toBe(false);expect(wire104SchemaFixture(schema(input))).toEqual(wire99RequestFixture(input).response_format.json_schema.schema);
  expect(validator(input).safeParse([{fieldCode:5,reason:"MISSING",alternatives:[]}]).success).toBe(true);expect(JSON.stringify(input)).toBe(before);
 });
 it("invalid reference calendar and incomplete state do not establish initial date bound",()=>{

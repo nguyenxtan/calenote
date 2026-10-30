@@ -17,6 +17,7 @@ CACHE = Path(__file__).resolve().parents[3] / "artifacts/context-contract-tokeni
 TOKENIZER = None
 NETWORK_BLOCKED = False
 NETWORK_ATTEMPTS = []
+TEXT_ONLY = False
 
 
 def block_network():
@@ -72,13 +73,14 @@ def measure(request):
     input_tokens = count(request["inputJson"])
     full_tokens = None
     unsupported = []
-    try:
-        # Entire canonical schema is submitted unchanged. Never prune/ref-expand.
-        sdk_schema = types.Schema.model_validate(schema)
-        full_tokens = engine.count_tokens(request["inputJson"], config=types.CountTokensConfig(
-            system_instruction=request["prompt"], generation_config=types.GenerationConfig(response_schema=sdk_schema))).total_tokens
-    except ValidationError as error:
-        unsupported = [{"path": list(e["loc"]), "type": e["type"]} for e in error.errors()]
+    if not TEXT_ONLY:
+        try:
+            # Entire canonical schema is submitted unchanged. Never prune/ref-expand.
+            sdk_schema = types.Schema.model_validate(schema)
+            full_tokens = engine.count_tokens(request["inputJson"], config=types.CountTokensConfig(
+                system_instruction=request["prompt"], generation_config=types.GenerationConfig(response_schema=sdk_schema))).total_tokens
+        except ValidationError as error:
+            unsupported = [{"path": list(e["loc"]), "type": e["type"]} for e in error.errors()]
     return {
         "schemaUnchanged": original_schema == request["schemaJson"],
         "schemaSha256": hashlib.sha256(original_schema.encode()).hexdigest(),
@@ -88,6 +90,7 @@ def measure(request):
         "rawJsonDiagnosticTokens": count(request["wireJson"]),
         "sdkTextProjectionTokens": engine.count_tokens(request["inputJson"], config=types.CountTokensConfig(system_instruction=request["prompt"])).total_tokens,
         "sdkFullStructuredTokens": full_tokens, "unsupportedSchema": unsupported,
+        "sdkFullStructuredUnavailableReason": "NOT_REQUESTED_DIAGNOSTIC_ONLY" if TEXT_ONLY else None,
         "outputTextTokens": count(request["outputJson"]) if request.get("outputJson") is not None else None,
         "routeFramingTokens": "UNKNOWN",
     }
@@ -109,7 +112,9 @@ def provenance():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--bootstrap", action="store_true")
+    parser.add_argument("--text-only", action="store_true")
     args = parser.parse_args()
+    TEXT_ONLY = args.text_only
     warnings.filterwarnings("ignore", message=".*local tokenizer.*")
     logging.getLogger("google_genai.local_tokenizer").setLevel(logging.ERROR)
     if args.bootstrap:

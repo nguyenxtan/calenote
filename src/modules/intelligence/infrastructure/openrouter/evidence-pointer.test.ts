@@ -9,7 +9,7 @@ import {buildContextInputV2} from "../../../conversation/context-contract/contex
 import {chat,message,observation,snapshot,withNotes} from "../../../conversation/context-contract/context-test-fixtures";
 import {ContextSnapshotV2Schema} from "../../../conversation/context-contract/state";
 import {validateEvidenceV3} from "../../../conversation/context-contract/evidence";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 const input=ContextInputSchema.parse({schemaVersion:"calenote-context-input-2",reference:{instant:"2026-09-28T03:00:00.000Z",localDate:"2026-09-28",timezone:"Asia/Ho_Chi_Minh"},turns:[{role:"USER",text:"nhắc gọi mẹ"},{role:"ASSISTANT",text:"Bạn muốn lúc nào?"},{role:"USER",text:"8h sáng"}],currentTurn:2,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[],capabilities:{version:"context-capabilities-1",supported:["ONCE"],unsupported:["YEARLY"],calendars:["GREGORIAN"],limits:{dailyCount:30,horizonDays:366}}});
 const carrier=(ref:unknown)=>({primaryEvidence:JSON.stringify(ref),additionalEvidenceJson:"[]"});
 it.each(["old-quote","fact","mixed-old-quote","mixed-fact","current"])("wire59 NEW alternative retains strict source scope after code expansion: %s",source=>{

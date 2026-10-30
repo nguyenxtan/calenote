@@ -1,5 +1,8 @@
 // @vitest-environment node
-import { expect, it } from "vitest";
+import { expect, it,vi } from "vitest";
+// Exact historical107 runner qualification; selected108 runner is tested separately.
+vi.mock('../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire',async()=> (await import('./wire107-reference-codec.test-support')).wire107ReferenceCodec);
+vi.mock('../../src/modules/intelligence/infrastructure/openrouter/context-order-reference-wire',async()=> (await import('./wire107-reference-codec.test-support')).wire107ReferenceCodec);
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -503,7 +506,7 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
       canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
       providerWireSchemaDigest: "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421",
-      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-104" });
+      providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-bound-operation-missing-107" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");
       expect(artifact).toContain("invalid_argument");

@@ -3,6 +3,13 @@ const networkCodes = ["ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "E
   "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET", "UND_ERR_ABORTED"] as const;
 type NetworkCode = typeof networkCodes[number];
 
+/** Only allowlisted response headers actually observed by the HTTP adapter. */
+export interface SemanticHttpResponseCorrelation {
+  httpStatus: number;
+  requestId?: string;
+  traceId?: string;
+}
+
 /** Content-free exception evidence only; never application or conversation state. */
 export interface SemanticTransportDiagnostics {
   version: "gateway-exception-1";
@@ -10,6 +17,7 @@ export interface SemanticTransportDiagnostics {
   errorName: typeof errorNames[number] | "UNKNOWN";
   errorCode?: NetworkCode;
   causeCode?: NetworkCode;
+  httpResponse?: Readonly<SemanticHttpResponseCorrelation>;
 }
 
 // Inspect data descriptors only. Error messages, stacks, headers, URLs and

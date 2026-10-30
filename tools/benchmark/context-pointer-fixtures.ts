@@ -1,6 +1,7 @@
 import type {ContextInput} from "../../src/modules/conversation/context-contract/contracts";
 import {ConversationInterpretationV3Schema,ContextInputSchema,ModelDirectiveV3Schema,ReplyProposalSchema} from "../../src/modules/conversation/context-contract/contracts";
-import {encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {encodeGoogleLiteEuContextV3 as encodeWire107} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {encodeGoogleLiteEuContextV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire";
 import {evidenceSourceCatalogue,primaryEvidenceSourceCodebook} from "../../src/modules/intelligence/infrastructure/openrouter/evidence-pointer";
 import {CONTROL_PLACEHOLDER} from "../../src/modules/conversation/context-contract/projection";
 import {frozenContextProposal as historicalProposal} from "./context-contract-fixtures";
@@ -13,9 +14,15 @@ export function frozenContextProposal(input:ContextInput,executionId:string,turn
  return result;
 }
 export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
+ return encodeFixtureWith(value,input,encodeGoogleLiteEuContextV3);
+}
+export function encodeFixtureWire107Reference(value:unknown,input?:ContextInput):unknown {
+ return encodeFixtureWith(value,input,encodeWire107);
+}
+function encodeFixtureWith(value:unknown,input:ContextInput|undefined,encoder:typeof encodeGoogleLiteEuContextV3):unknown {
   const bound=input??(value&&typeof value==="object"?fixtureInputs.get(value):undefined);
   const encode=(canonical:Parameters<typeof encodeGoogleLiteEuContextV3>[0])=>{
-    const wire=encodeGoogleLiteEuContextV3(canonical,bound) as Record<string,unknown>;
+    const wire=encoder(canonical,bound) as Record<string,unknown>;
     if(!bound)return wire; // Explicit historical/schema-only compatibility.
     // Provider input includes three application-owned serialized catalogues;
     // the core codebook validates the canonical dispatch input, not metadata.
@@ -36,7 +43,7 @@ export function encodeFixtureV3(value: unknown,input?:ContextInput): unknown {
     if(wire.requestTarget)carrier(wire.requestTarget as Record<string,unknown>);
     if(wire.query)carrier(wire.query as Record<string,unknown>);
     (wire.changes as Array<{change:Record<string,unknown>}>).forEach(entry=>carrier(entry.change));
-    for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])if(wire[root]){const wrapper=wire[root] as {change:string};const change=JSON.parse(wrapper.change) as Record<string,unknown>;carrier(change);wrapper.change=JSON.stringify(change);}
+    for(const root of ["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"])if(wire[root]){const wrapper=wire[root] as {change:string|Record<string,unknown>};const encoded=typeof wrapper.change==="string";const change=(encoded?JSON.parse(wrapper.change as string):wrapper.change) as Record<string,unknown>;carrier(change);wrapper.change=encoded?JSON.stringify(change):change;}
     for(const issue of wire.uncertainties as Array<{alternatives:string[]}>)issue.alternatives=issue.alternatives.map(text=>{const a=JSON.parse(text);carrier(a);return JSON.stringify(a);});
     return wire;
   };

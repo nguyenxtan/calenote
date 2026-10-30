@@ -1,13 +1,13 @@
 // @vitest-environment node
-import {beforeAll,expect,it} from "vitest";
+import {beforeAll,expect,it,vi} from "vitest";
 import {z} from "zod";
 import {type ContextInput,ContextInputSchema,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import * as capability from "../../../conversation/context-contract/field-capability";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
 import {googleLiteEuContextWireSchemaV3,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
-import {wire100RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {wire100RequestFixture,wire88RequestFixture,typedSingletonSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import {isInitialEventDateOnlySource,isInitialIsolatedExamNotesFree} from "../../../conversation/context-contract/semantic-completeness";
 import {extractTemporalEvidence} from "../../../semantic/temporal-evidence";
@@ -79,7 +79,7 @@ it.each(sourceCases)("actual $id source/fact language changes only when certifie
  expect(capability.isBoundRelationUncertaintyAbsent(input)).toBe(certified);
  const current=schema(input),old=wire100RequestFixture(input).response_format.json_schema.schema;
  const a=validator(input),b=z.fromJSONSchema(inline(old,old.properties!.uncertainties) as Parameters<typeof z.fromJSONSchema>[0]);
- for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(let n=0;n<=2;n++){const raw=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(raw).success,`${id}/${fieldCode}/${reason}/${n}`).toBe(certified&&fieldCode===10?false:b.safeParse(raw).success);}
+ for(let fieldCode=0;fieldCode<16;fieldCode++)for(const reason of ["MISSING","AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])for(let n=0;n<=2;n++){const raw=[{fieldCode,reason,alternatives:Array(n).fill("{}")}];expect(a.safeParse(raw).success,`${id}/${fieldCode}/${reason}/${n}`).toBe((certified&&fieldCode===10||capability.isBoundOperationMissingExcluded(input)&&fieldCode===15&&reason==="MISSING")?false:b.safeParse(raw).success);}
  if(!certified)expect(current).toEqual(old);const ac=structuredClone(current),bc=structuredClone(old);delete ac.properties!.uncertainties;delete bc.properties!.uncertainties;expect(ac).toEqual(bc);expect(JSON.stringify(input)).toBe(before);
 });
 
@@ -155,3 +155,56 @@ it("shared relation catalogue/casefold preserves old unique licensing and declin
  expect(hasEventRelationSourceCue("Bao Gồm Ngày Thi Bắt Đầu Từ Mai")).toBe(true);
 });
 it("historical bound inverse leaves current input and schema immutable",()=>{const before=JSON.stringify(bound),current=schema(bound);wire100RequestFixture(bound);expect(schema(bound)).toEqual(current);expect(JSON.stringify(bound)).toBe(before);});
+
+it("wire107 certified factual continuation excludes only operation MISSING language",()=>{
+ expect(validator(bound).safeParse([{fieldCode:15,reason:"MISSING",alternatives:[]}]).success).toBe(false);
+ expect(validator(bound).safeParse([{fieldCode:6,reason:"MISSING",alternatives:[]}]).success).toBe(true);
+ for(const reason of ["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])
+  expect(validator(bound).safeParse([{fieldCode:15,reason,alternatives:[]}]).success).toBe(true);
+});
+it("wire107 incomplete title or source ownership retains operation MISSING language",()=>{
+ const mutations:((input:ContextInput)=>void)[]=[
+  input=>{input.activeRequest!.slots.title={state:"MISSING",value:null,fact:null};},
+  input=>{input.activeRequest!.slots.title.state="PROPOSED";},
+  input=>{input.activeRequest!.slots.title.state="CONFLICT";},
+  input=>{input.activeRequest!.slots.title.fact="f999";},
+  input=>{input.facts.find(f=>f.field==="title")!.value="other subject";},
+  input=>{input.facts.push({...input.facts.find(f=>f.field==="title")!,alias:"f999"});},
+  input=>{input.facts=input.facts.filter(f=>f.field!=="title");},
+  input=>{input.facts.find(f=>f.field==="title")!.provenance={kind:"DERIVED_POLICY",policyVersion:"control",dependencies:["f1"],referenceTime:input.reference.instant};},
+  input=>{input.facts.find(f=>f.field==="title")!.dependencies=["f1"];},
+  input=>{input.facts.find(f=>f.field==="title")!.sourceReferenceTime="2026-09-27T03:00:00Z";},
+  input=>{input.pendingQuestion!.field="operation";},
+  input=>{input.pendingQuestion!.scope="QUERY";input.pendingQuestion!.field="queryRange";},
+  input=>{input.turns[input.currentTurn].text="Tạo việc mới, nhắc trước 2 ngày.";},
+  input=>{input.turns[input.currentTurn].text="Nhắc trước 3 ngày.";},
+ ];
+ for(const mutate of mutations){const current=structuredClone(bound);mutate(current);
+  expect(validator(current).safeParse([{fieldCode:15,reason:"MISSING",alternatives:[]}]).success).toBe(true);
+ }
+});
+
+it.each([{day:15,month:11,count:3},{day:21,month:12,count:5}])("wire107 source proof generalizes across date/count $day/$month/$count",({day,month,count})=>{
+ const input=structuredClone(bound);
+ input.turns[0].text=`Ngày ${day}/${month} đi thi ở Quang Trung, nhắc ${count} ngày liên tiếp.`;
+ input.turns[input.currentTurn].text=`Nhắc trước ${count} ngày.`;
+ const date={kind:"CIVIL_DATE" as const,calendar:"GREGORIAN" as const,day,month,year:null,leapMonth:null};
+ input.activeRequest!.slots.eventDate.value=date;input.activeRequest!.slots.occurrenceCount.value=count;
+ input.facts.find(f=>f.field==="eventDate")!.value=date;input.facts.find(f=>f.field==="occurrenceCount")!.value=count;
+ ContextInputSchema.parse(input);expect(capability.isBoundOperationMissingExcluded(input)).toBe(true);
+ expect(validator(input).safeParse([{fieldCode:15,reason:"MISSING",alternatives:[]}]).success).toBe(false);
+ expect(validator(input).safeParse([{fieldCode:15,reason:"AMBIGUOUS",alternatives:[]}]).success).toBe(true);
+ const mismatch=structuredClone(input);mismatch.turns[input.currentTurn].text=`Nhắc trước ${count+1} ngày.`;
+ expect(capability.isBoundOperationMissingExcluded(mismatch)).toBe(false);
+ expect(validator(mismatch).safeParse([{fieldCode:15,reason:"MISSING",alternatives:[]}]).success).toBe(true);
+});
+
+it("wire107 historical helpers restore current producer guard on success and exception",()=>{
+ const original=capability.isBoundOperationMissingExcluded;
+ const check=()=>{expect(capability.isBoundOperationMissingExcluded).toBe(original);expect(vi.isMockFunction(capability.isBoundOperationMissingExcluded)).toBe(false);expect(capability.isBoundOperationMissingExcluded(bound)).toBe(true);expect(validator(bound).safeParse([{fieldCode:15,reason:"MISSING",alternatives:[]}]).success).toBe(false);};
+ for(const helper of [wire88RequestFixture,(input:ContextInput)=>typedSingletonSchemaFixture(capability.deriveGenerationFieldCapability(input),input)]){
+  check();helper(bound);check();
+  const invalid=structuredClone(bound);invalid.turns=[];
+  expect(()=>helper(invalid)).toThrow();check();
+ }
+});

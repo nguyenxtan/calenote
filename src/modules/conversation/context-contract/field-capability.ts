@@ -286,6 +286,19 @@ export function isInitialUniqueCadenceCountRequired(input:ContextInput):boolean 
   const probes=initialCadenceCountProbes(input);
   return !!probes&&probes.frequencies.length===1&&probes.counts.length===1;
 }
+/** Certified continuation plus an independently bound initial title proves
+ * only that MISSING operation is unavailable in the producer subset. It does
+ * not choose CURRENT/NEW, produce an operand or repair received uncertainty. */
+export function isBoundOperationMissingExcluded(input:ContextInput):boolean {
+  if(!isBoundRelationUncertaintyAbsent(input))return false;
+  const title=input.activeRequest!.slots.title;
+  if(title.state!=="RESOLVED"||typeof title.value!=="string"||typeof title.fact!=="string")return false;
+  const facts=input.facts.filter(fact=>fact.scope==="REMINDER"&&fact.field==="title"),dates=input.facts.filter(fact=>fact.scope==="REMINDER"&&fact.field==="eventDate");
+  return facts.length===1&&dates.length===1&&facts[0].alias===title.fact
+    &&input.facts.filter(fact=>fact.alias===title.fact).length===1&&facts[0].value===title.value
+    &&facts[0].provenance?.kind==="EXPLICIT_USER"&&facts[0].dependencies?.length===0
+    &&facts[0].sourceReferenceTime===dates[0].sourceReferenceTime;
+}
 /** Numeric-domain support only, never complete schedule readiness or an
  * authored value. All candidates remain private existing entailment probes. */
 export function isInitialSupportedCadenceCount(input:ContextInput):boolean {

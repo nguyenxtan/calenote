@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { ContextInputSchema, SLOT_NAMES, type ContextInput } from "./contracts";
 import { CONTROL_PLACEHOLDER } from "./projection";
-import { serializeContextRequest } from "./wire";
+import { serializeWire107ContextRequestReference as serializeContextRequest } from "./wire";
 import { z } from "zod";
 import { ConversationInterpretationV3Schema } from "./contracts";
 import { encodeGoogleLiteEuContextV3 as encodeCanonical, googleLiteEuContextWireSchemaV3, decodeGoogleLiteEuContextTransportV3 as decodeRawSingletonTransport } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
@@ -11,11 +11,11 @@ import { harness, proposal } from "./service-test-support";
 import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
-import {encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
 import {wire88RequestFixture,wire94RequestFixture,typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
 // Original capability language witnesses inspect the captured typed producer
 // AST, not the deliberately broader opaque upstream change-string schema.
-const decodeGoogleLiteEuContextTransportV3=(raw:unknown,selected:Parameters<typeof decodeRawSingletonTransport>[1],invalid?:Parameters<typeof decodeRawSingletonTransport>[2],wireInvalid?:Parameters<typeof decodeRawSingletonTransport>[3],context?:ContextInput)=>decodeRawSingletonTransport(wrapSingletonAuthoringFixture(raw),selected,invalid,wireInvalid,context);
+const decodeGoogleLiteEuContextTransportV3=(raw:unknown,selected:Parameters<typeof decodeRawSingletonTransport>[1],invalid?:Parameters<typeof decodeRawSingletonTransport>[2],wireInvalid?:Parameters<typeof decodeRawSingletonTransport>[3],context?:ContextInput)=>decodeRawSingletonTransport(wrapSingletonAuthoringFixture(raw,context),selected,invalid,wireInvalid,context);
 function noClockCandidateInput(){
  const context=input("Nhắc trước 2 ngày.");context.turns=[{role:"USER",text:"Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp."},{role:"ASSISTANT",text:"Nhắc lúc nào?"},{role:"USER",text:"Nhắc trước 2 ngày."}];context.currentTurn=2;
  const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
@@ -316,9 +316,9 @@ it.each([[2026,"Ngày 11/10 đi thi.","REJECTED"],[null,"Ngày 11/10 đi thi.","
 });
 it.each(["numeric-year","wrong-day","valid"] as const)("wire55 actual model-authored object retains source fidelity: %s",async mode=>{
  const value={kind:"CIVIL_DATE",calendar:"GREGORIAN",day:11,month:10,year:null,leapMonth:null};
- const h=await harness([proposal({title:"đi thi",eventDate:value})],wire=>{
+ const h=await harness([proposal({title:"đi thi",eventDate:value})],(wire,context)=>{
   const raw=unwrapSingletonAuthoringFixture(wire) as {eventDateChange:{change:{value:Record<string,unknown>}}};
-  raw.eventDateChange.change.value={...raw.eventDateChange.change.value,...(mode==="numeric-year"?{year:2026}:mode==="wrong-day"?{day:10}:{})};return wrapSingletonAuthoringFixture(raw);
+  raw.eventDateChange.change.value={...raw.eventDateChange.change.value,...(mode==="numeric-year"?{year:2026}:mode==="wrong-day"?{day:10}:{})};return wrapSingletonAuthoringFixture(raw,context);
  });
  expect(await h.turn(0,"Ngày 11/10 đi thi.")).toEqual({status:mode==="valid"?"CLARIFICATION_REQUESTED":"REJECTED"});
  const state=await h.read(1);if(mode==="valid")expect(state?.slots.eventDate.value).toEqual(value);else expect(state).toBeNull();

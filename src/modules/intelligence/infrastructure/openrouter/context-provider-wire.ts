@@ -9,7 +9,7 @@ import type {ContextInput} from "../../../conversation/context-contract/contract
 import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent, isInitialRelationUncertaintyAbsent, isWholeSeriesOffsetUncertaintyAbsent, isInitialReminderDateMissingExcluded, isBoundRelationUncertaintyAbsent } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
-import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
+import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, isBoundOperationMissingExcluded, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
 import {z} from "zod";
 
 export const GOOGLE_LITE_EU_CONTEXT_WIRE_VERSION = "google-gemini-2.5-flash-lite-vertex-eu-context-field-codebook-9" as const;
@@ -774,7 +774,7 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
     }
     const initialWithoutRelation=isInitialFiniteSeriesWithoutRelationSource(primaryEvidenceInput);
     const offsetAbsent=isWholeSeriesOffsetAlternativeAbsent(primaryEvidenceInput);
-    const missingExclusionFields=[...requiredFields,...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[]),...(isInitialExplicitReminderIntentKnown(primaryEvidenceInput)?["intent"]:[]),...(isBoundSeriesDistanceOffsetMissingExcluded(primaryEvidenceInput)?["leadOffsetDays"]:[]),...(isBoundSeriesDistanceRelationMissingExcluded(primaryEvidenceInput)?["eventRelation"]:[]),...(initialWithoutRelation?["eventRelation","leadOffsetDays"]:[]),...(offsetAbsent?["leadOffsetDays"]:[]),...(isInitialReminderDateMissingExcluded(primaryEvidenceInput)?["reminderDate"]:[])];
+    const missingExclusionFields=[...requiredFields,...(isBoundOperationMissingExcluded(primaryEvidenceInput)?["operation"]:[]),...(isBoundExactReminderClockMissingExcluded(primaryEvidenceInput)?["reminderTime"]:[]),...(isInitialExplicitReminderIntentKnown(primaryEvidenceInput)?["intent"]:[]),...(isBoundSeriesDistanceOffsetMissingExcluded(primaryEvidenceInput)?["leadOffsetDays"]:[]),...(isBoundSeriesDistanceRelationMissingExcluded(primaryEvidenceInput)?["eventRelation"]:[]),...(initialWithoutRelation?["eventRelation","leadOffsetDays"]:[]),...(offsetAbsent?["leadOffsetDays"]:[]),...(isInitialReminderDateMissingExcluded(primaryEvidenceInput)?["reminderDate"]:[])];
     if(missingExclusionFields.length){
       const item=deref(schema.properties!.uncertainties.items!,schema),reason=deref(item.properties!.reason,schema);
       requireShape(reason.enum && reason.enum.includes("MISSING"));
@@ -929,13 +929,18 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
   return compactSourceDefinition(outgoingStringEnums(prune(schema)));
 }
 const singletonJsonRoots=singletonChangeDefinitions.map(definition=>definition.root);
-export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): ProviderWireSchemaV3 {
+/** Representation selection only: probes never supply an operand or source. */
+function isTypedSingletonRoot(root:string,input?:ContextInput):boolean{
+ if(!input)return false;
+ return root==="eventDateChange"?isInitialEventDateYearNullRequired(input):root==="frequencyChange"&&isInitialUniqueCadenceCountRequired(input);
+}
+export function googleLiteEuContextWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenceInput?:ContextInput): Omit<ProviderWireSchemaV3,"version"> & {version:"google-gemini-2.5-flash-lite-vertex-eu-context-bound-operation-missing-107"} {
  const schema=structuredClone(typedWireSchemaV3(capability,primaryEvidenceInput)),seen=new WeakSet<object>();
- for(const root of singletonJsonRoots){const node=deref(schema.properties![root],schema);for(const raw of node.anyOf??[node]){const wrapper=deref(raw,schema);if(wrapper.type==="null")continue;requireShape(wrapper.type==="object"&&wrapper.properties?.change&&equal(wrapper.required,["rank","change"])&&!seen.has(wrapper));seen.add(wrapper);wrapper.properties.change={type:"string"};}}
- return {version:CONTEXT_PROTOCOL_V3.wireVersion,schema:schema as typeof InterpretationJsonSchemaV3};
+ for(const root of singletonJsonRoots){const node=deref(schema.properties![root],schema);for(const raw of node.anyOf??[node]){const wrapper=deref(raw,schema);if(wrapper.type==="null")continue;requireShape(wrapper.type==="object"&&wrapper.properties?.change&&equal(wrapper.required,["rank","change"])&&!seen.has(wrapper));seen.add(wrapper);if(!isTypedSingletonRoot(root,primaryEvidenceInput))wrapper.properties.change={type:"string"};}}
+ return {version:"google-gemini-2.5-flash-lite-vertex-eu-context-bound-operation-missing-107",schema:schema as typeof InterpretationJsonSchemaV3};
 }
 /** Private lexical syntax guard for a single bounded change envelope only. */
-function parseSingletonChangeJson(value:unknown,path:PropertyKey[]):Record<string,unknown>{
+function parseSingletonChangeJson(value:unknown,path:PropertyKey[],selectedRoot?:string):Record<string,unknown>{
  const fail=(stage:NonNullable<WireShapeFailure["singletonJson"]>["stage"]="JSON_SCAN",reason:NonNullable<WireShapeFailure["singletonJson"]>["reason"]="SCAN_INVALID"):never=>{throw new WireShapeFailure(path,"FIELD_CHANGE_JSON",undefined,undefined,undefined,undefined,undefined,undefined,{stage,reason})};
  if(typeof value!=="string")return fail("WIRE_VALUE","WRONG_WIRE_TYPE");
  if(value.length>32768||new TextEncoder().encode(value).length>32768)return fail("WIRE_VALUE","OVERSIZED");
@@ -945,13 +950,73 @@ function parseSingletonChangeJson(value:unknown,path:PropertyKey[]):Record<strin
  let position=0,nodes=0;
  const next=()=>{token.lastIndex=position;const match=token.exec(value);if(!match)return fail();position=token.lastIndex;return match[0].trim()};
  const scan=(depth:number,part=next()):void=>{
-  if(depth>8)return fail("JSON_SCAN","DEPTH_LIMIT");
-  if(++nodes>256)return fail("JSON_SCAN","NODE_LIMIT");
+  // Selected mode includes its carrier wrapper/rank; budgets still cover
+  // only that subtree, never optional guidance or other outer fields.
+  if(depth>(selectedRoot?9:8))return fail("JSON_SCAN","DEPTH_LIMIT");
+  if(++nodes>(selectedRoot?258:256))return fail("JSON_SCAN","NODE_LIMIT");
   if(part==="{"){const keys=new Set<string>();let key=next();if(key==="}")return;for(;;){if(!key.startsWith('"'))return fail();const decoded=JSON.parse(key) as string;if(keys.has(decoded))return fail("JSON_SCAN","DUPLICATE_KEY");keys.add(decoded);if(next()!==":")return fail();scan(depth+1);const separator=next();if(separator==="}")return;if(separator!==",")return fail();key=next();}}
   if(part==="["){let first=next();if(first==="]")return;for(;;){scan(depth+1,first);const separator=next();if(separator==="]")return;if(separator!==",")return fail();first=next();}}
   if(["}","]",":",","].includes(part))return fail();
  };
- scan(0);if(position!==value.length)return fail();return parsed as Record<string,unknown>;
+ if(selectedRoot){
+  // Native parsing above already verifies outer syntax. Skip unselected
+  // values iteratively, bounded by the existing response byte ceiling.
+  const skip=(part:string)=>{let nesting=part==="{"||part==="["?1:0;while(nesting){const token=next();if(token==="{"||token==="[")nesting++;else if(token==="}"||token==="]")nesting--;}};
+  if(next()!=="{")return fail();
+  let key=next(),seen=false;
+  if(key!=="}")for(;;){
+   const decoded=JSON.parse(key) as string;if(next()!==":")return fail();
+   const part=next();
+   if(decoded===selectedRoot){if(seen)return fail("JSON_SCAN","DUPLICATE_KEY");seen=true;scan(0,part);}else skip(part);
+   const separator=next();if(separator==="}")break;if(separator!==",")return fail();key=next();
+  }
+ }else scan(0);
+ if(position!==value.length)return fail();return parsed as Record<string,unknown>;
+}
+/** Validate raw selected carrier syntax before native parsing can erase keys.
+ * Business/opaque JSON strings are tokens here, never recursively interpreted.
+ */
+export function validateTypedSingletonCarrierJsonV3(value:string,input:ContextInput):CanonicalValidationDiagnostics|undefined{
+ for(const root of singletonJsonRoots){
+ if(!isTypedSingletonRoot(root,input))continue;
+ try{parseSingletonChangeJson(value,[root,"change"],root);}
+ catch(error){
+  if(!(error instanceof WireShapeFailure)||error.singletonJson?.stage==="JSON_PARSE")return;
+  const diagnostic=projectWireValidation(undefined,error.path,error.expected,undefined,"calenote-context-3");
+  if(error.singletonJson)diagnostic.issues[0].singletonJson={...error.singletonJson};
+  return diagnostic;
+ }
+ }
+}
+/** Shared lexical guard; order108 selects only this root, not advisory data. */
+export function validateOrderReferenceRootJsonWire107Reference(value:string):CanonicalValidationDiagnostics|undefined{
+ try{parseSingletonChangeJson(value,["orderRefs"],"orderRefs");}
+ catch(error){if(!(error instanceof WireShapeFailure)||error.singletonJson?.stage==="JSON_PARSE")return;const diagnostic=projectWireValidation(undefined,["orderRefs"],"ORDER_REFERENCE_JSON",undefined,"calenote-context-3");if(error.singletonJson)diagnostic.issues[0].singletonJson={...error.singletonJson};return diagnostic;}
+}
+/** Selected109 raw root guard, using original bytes/native diagnostics. */
+export function validateLiteralInsertionRootJsonWire109(value:string):CanonicalValidationDiagnostics|undefined{
+ try{parseSingletonChangeJson(value,["placements"],"placements");}
+ catch(error){if(!(error instanceof WireShapeFailure)||error.singletonJson?.stage==="JSON_PARSE")return;const diagnostic=projectWireValidation(undefined,["placements"],"LITERAL_INSERTION_JSON",undefined,"calenote-context-3");if(error.singletonJson)diagnostic.issues[0].singletonJson={...error.singletonJson};return diagnostic;}
+}
+/** Native111 guard on original bytes; alternatives stay opaque JSON strings. */
+export function validateUncertaintyFieldNameRootJsonWire111(value:string):CanonicalValidationDiagnostics|undefined{
+ try{parseSingletonChangeJson(value,["uncertainties"],"uncertainties");}
+ catch(error){if(!(error instanceof WireShapeFailure)||error.singletonJson?.stage==="JSON_PARSE")return;const diagnostic=projectWireValidation(undefined,["uncertainties"],"UNCERTAINTY_FIELD_CODE_JSON",undefined,"calenote-context-3");if(error.singletonJson)diagnostic.issues[0].singletonJson={...error.singletonJson};return diagnostic;}
+}
+function assertTypedSingletonOwnData(value:unknown,path:PropertyKey[],depth=0,state={nodes:0}):void{
+ const fail=()=>{throw new WireShapeFailure(path,"FIELD_CHANGE_JSON")};
+ if(depth>8||++state.nodes>256)return fail();
+ if(value===null||typeof value==="string"||typeof value==="boolean")return;
+ if(typeof value==="number"&&Number.isFinite(value))return;
+ if(!value||typeof value!=="object")return fail();
+ const array=Array.isArray(value),prototype=Object.getPrototypeOf(value);
+ if(prototype!==(array?Array.prototype:Object.prototype)&&prototype!==null)return fail();
+ for(const key of Reflect.ownKeys(value)){
+  if(typeof key!=="string")return fail();
+  const descriptor=Object.getOwnPropertyDescriptor(value,key);
+  if(!descriptor||!Object.hasOwn(descriptor,"value"))return fail();
+  assertTypedSingletonOwnData(descriptor.value,path,depth+1,state);
+ }
 }
 function boundedTypedRefInliner(schema:Schema):(node:Schema)=>Schema{
  let nodes=0;
@@ -982,11 +1047,15 @@ function singletonPredicateDiagnostics(shape:Schema,change:unknown,root:string):
   return {issues:projected.issues.slice(0,23),truncated:projected.truncated||projected.issues.length>23};
  }catch{return;}
 }
-function singletonJsonTransport(raw:Record<string,unknown>,mode:"encode"|"decode"):Record<string,unknown>{
+function singletonJsonTransport(raw:Record<string,unknown>,mode:"encode"|"decode",input?:ContextInput):Record<string,unknown>{
  const own=(object:object,key:string,path:PropertyKey[])=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor)throw new WireShapeFailure(path,"REQUIRED_PROPERTY");if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(path,"object");return descriptor.value;};
  const output:Record<string,unknown>={};for(const key of Object.keys(raw))output[key]=own(raw,key,[key]);
  for(const root of singletonJsonRoots){const carrier=own(raw,root,[root]);if(carrier===null)continue;if(!carrier||typeof carrier!=="object"||Array.isArray(carrier))throw new WireShapeFailure([root],"object");requireWireKeys(carrier,["rank","change"],["rank","change"],[root]);const rank=own(carrier,"rank",[root,"rank"]),change=own(carrier,"change",[root,"change"]);
-  output[root]={rank,change:mode==="encode"?JSON.stringify(change):parseSingletonChangeJson(change,[root,"change"])};
+  if(isTypedSingletonRoot(root,input)){
+   if(!change||typeof change!=="object"||Array.isArray(change))throw new WireShapeFailure([root,"change"],"object");
+   assertTypedSingletonOwnData(change,[root,"change"]);
+   output[root]={rank,change};
+  }else output[root]={rank,change:mode==="encode"?JSON.stringify(change):parseSingletonChangeJson(change,[root,"change"])};
  }
  return output;
 }
@@ -1004,7 +1073,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   const encodedUncertainties=output.uncertainties as Array<{alternatives:Array<{evidence:unknown}>}>;
   output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
-  return singletonJsonTransport(indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode"),"encode");
+  return singletonJsonTransport(indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode"),"encode",input);
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
   return decodeContextSectionsV3(raw, selected, false, observeInvalid, observeWireInvalid, observeDecoded) as InterpretationSectionsV3;
@@ -1021,7 +1090,7 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
   const guidance = new Set(["conversationDirective", "replyProposal"]);
   const coreKeys = originalV3.required!.filter(key => !guidance.has(key));
   try {
-    const expanded=singletonJsonTransport(raw as Record<string,unknown>,"decode");
+    const expanded=singletonJsonTransport(raw as Record<string,unknown>,"decode",input);
     const unfolded=indexedChangeCarriers(expanded,"decode",input ? deriveGenerationFieldCapability(input).titlePresenceRequired : false,!!input&&isInitialEventDateYearNullRequired(input));
     assertSingletonTypedRoots(expanded,input);
     const pointed=input?expandPrimaryEvidenceSourceCodes(unfolded,input):unfolded;

@@ -7,7 +7,7 @@ import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protoc
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
 import {frozenContextProposal} from "../../../../../tools/benchmark/context-contract-fixtures";
-import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
+import {encodeFixtureWire107Reference as encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 
 it("date singleton emission explicitly orders operand string, change string and outer JSON without changing other field representations",()=>{
@@ -31,10 +31,11 @@ it.each([
  try{
   const actual=await h.turn(c.text,"2026-09-28T03:00:00Z");expect(actual.fullSchemaValid).toBe(true);expect(actual.mutations).toBe(0);
   expect(deriveGenerationFieldCapability(captured!).eventDateYearNullRequired).toBe(c.typed);
-  const raw=encodeFixtureV3(proposal!,captured!) as Record<string,{change:string}>,before=JSON.stringify(raw),change=JSON.parse(raw[c.root].change);
+  const raw=encodeFixtureV3(proposal!,captured!) as Record<string,{change:string|Record<string,unknown>}>,before=JSON.stringify(raw),change=c.typed?raw[c.root].change as Record<string,unknown>:JSON.parse(raw[c.root].change as string);
+  expect(typeof raw[c.root].change).toBe(c.typed?"object":"string");
   expect(typeof change.value).toBe(c.typed?"object":"string");
   expect(decodeGoogleLiteEuContextTransportV3(raw,CONTEXT_PROTOCOL_V3,undefined,undefined,captured!).status).toBe("PARSED");expect(JSON.stringify(raw)).toBe(before);
-  const wrong=structuredClone(raw),inner=JSON.parse(wrong[c.root].change);inner.value=c.typed?JSON.stringify(inner.value):JSON.parse(inner.value);wrong[c.root].change=JSON.stringify(inner);
+  const wrong=structuredClone(raw),inner=c.typed?wrong[c.root].change as Record<string,unknown>:JSON.parse(wrong[c.root].change as string);inner.value=c.typed?JSON.stringify(inner.value):JSON.parse(inner.value);wrong[c.root].change=c.typed?inner:JSON.stringify(inner);
   const original=JSON.stringify(wrong);expect(decodeGoogleLiteEuContextTransportV3(wrong,CONTEXT_PROTOCOL_V3,undefined,undefined,captured!).status).toBe("REFUSED");expect(JSON.stringify(wrong)).toBe(original);
  }finally{h.dispose();}
 });

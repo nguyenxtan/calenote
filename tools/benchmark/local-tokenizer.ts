@@ -10,10 +10,12 @@ export function measureLocalTokens(samples: { name: string; input: ContextInput 
   return measureLocalTokenArtifacts(rows);
 }
 
-/** Explicit serialized artifacts, including immutable-byte schema comparisons. */
-export function measureLocalTokenArtifacts(rows: { case: string; prompt: string; inputJson: string; schemaJson: string; wireJson: string; outputJson: string | null }[]) {
-  const result = spawnSync("/usr/bin/sandbox-exec", ["-p", "(version 1)(allow default)(deny network*)", resolve("artifacts/context-contract-tokenizer/venv/bin/python"), resolve("tools/benchmark/tokenizer/measure.py")], {
-    input: JSON.stringify(rows), encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+/** Explicit serialized artifacts, including immutable-byte schema comparisons.
+ * Diagnostic-only mode counts the same pinned text/schema bytes, skips the
+ * optional full structured SDK projection and never claims route admission. */
+export function measureLocalTokenArtifacts(rows: { case: string; prompt: string; inputJson: string; schemaJson: string; wireJson: string; outputJson: string | null }[], mode?: "TEXT_SCHEMA_DIAGNOSTIC_ONLY") {
+  const result = spawnSync("/usr/bin/sandbox-exec", ["-p", "(version 1)(allow default)(deny network*)", resolve("artifacts/context-contract-tokenizer/venv/bin/python"), resolve("tools/benchmark/tokenizer/measure.py"), ...(mode === "TEXT_SCHEMA_DIAGNOSTIC_ONLY" ? ["--text-only"] : [])], {
+    input: JSON.stringify(rows), encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 60000,
     // Worker-generated ProcessEnv augmentation is irrelevant to this isolated
     // Python child. Deliberately inherit no application environment/credentials.
     env: { PATH: "/usr/bin:/bin", PYTHONDONTWRITEBYTECODE: "1", PYTHONHASHSEED: "0" } as unknown as NodeJS.ProcessEnv,

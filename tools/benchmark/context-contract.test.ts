@@ -5,7 +5,7 @@ import { admitContextManifest, expandContextCampaign, scoreContextCampaign, type
 import { createContextContractProbe, runContextFixtureCampaign } from "./context-contract-probe";
 import { createContextContractGateway } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { frozenContextProposal, validateContextFixtureCoverage, encodeFixtureV3 } from "./context-pointer-fixtures";
-import { decodeGoogleLiteEuContextTransportV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import { decodeGoogleLiteEuContextTransportV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-literal-insertion-wire";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { ContextInputSchema } from "../../src/modules/conversation/context-contract/contracts";
 
