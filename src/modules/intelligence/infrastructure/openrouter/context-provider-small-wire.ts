@@ -1,4 +1,5 @@
-import {changeOwnerSchema,attachChangeOwners,expandChangeOwners} from './context-small-change-owners';
+import {ChangeOrderValidationError,changeOwnerSchema,attachChangeOwners,expandChangeOwners} from './context-small-change-owners';
+import {smallGuidanceSchema} from './context-small-guidance';
 import {operationQuerySchema,attachOperationQuery,expandOperationQuery} from './context-small-operation-query';
 import {orderedChangeSchema,attachOrderedChanges,projectOrderedSmallV3} from './context-small-ordered-changes';
 import {decodeGoogleLiteEuTypedOrderedContextTransportV3} from './context-provider-typed-wire';
@@ -15,9 +16,18 @@ import {operationValueSchema,attachOperationValues} from './context-small-operat
 type Observer=Parameters<typeof decodeInternalFlatV3>[2];
 type Row=Record<string,unknown>;
 const record=(value:unknown):value is Row=>!!value&&typeof value==='object'&&!Array.isArray(value);
-function selected(input:ContextInput){const flat=internalFlatSchemaV3(input),operations=operationValueSchema(ownedClockSchema(flat.schema));const ordered=orderedChangeSchema(kindQuerySchema(operations));return {...flat,operations,ordered,codec:compileCompactContext(operationQuerySchema(changeOwnerSchema(ordered)))};}
+function selected(input:ContextInput){const flat=internalFlatSchemaV3(input),operations=operationValueSchema(ownedClockSchema(flat.schema));const ordered=orderedChangeSchema(kindQuerySchema(operations));return {...flat,operations,ordered,codec:compileCompactContext(smallGuidanceSchema(operationQuerySchema(changeOwnerSchema(ordered))))};}
 export function smallContextSchemaV3(input:ContextInput){
  const value=selected(input);return {version:value.version,schema:value.codec.schema as unknown as ReturnType<typeof internalFlatSchemaV3>['schema']};
+}
+/** Google admission profile only. The strict codec retains maxItems:13.
+ * The owner/order bijection already requires local validation; extending this
+ * provider grammar never permits a larger accepted patch or repairs output. */
+export function smallContextGenerationSchemaV3(input:ContextInput){
+ const selected=smallContextSchemaV3(input),schema=structuredClone(selected.schema);
+ const order=(schema as unknown as {properties:{c:{properties:{o:{maxItems?:number}}}}}).properties.c.properties.o;
+ delete order.maxItems;
+ return {...selected,schema};
 }
 /** Trusted canonical fixture authoring only; the inverse is the sole model entry. */
 export function encodeSmallContextV3(value:ConversationInterpretationV3,input:ContextInput):Row {const selectedValue=selected(input);return selectedValue.codec.pack(attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(encodeInternalFlatV3(value,input)),selectedValue.operations)),value.changes,selectedValue.operations),selectedValue.ordered))) as Row;}
@@ -35,5 +45,5 @@ export function decodeSmallContextV3(raw:unknown,protocol:unknown,observeInvalid
    catch {flat[name]=name==='directive'?[{kind:'INVALID_PROVIDER_WIRE'}]:[{invalid:true}];}
   }
   return decodeGoogleLiteEuTypedOrderedContextTransportV3(projectOrderedSmallV3(expandChangeOwners(expandOperationQuery(flat),ordered),input),CONTEXT_TYPED_PROTOCOL_V3,observeInvalid,observeWireInvalid,input);
- }catch{try {const projection=projectWireValidation(raw,[],"SMALL_TYPED_TABLES",undefined,"calenote-context-3");projection.issues[0].smallTables={reason:'GENERATION_SHAPE_INVALID'};observeWireInvalid?.(projection);}catch{/* Diagnostics cannot change refusal. */}return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
+ }catch(error){try {const projection=projectWireValidation(raw,[],"SMALL_TYPED_TABLES",undefined,"calenote-context-3");projection.issues[0].smallTables={reason:error instanceof ChangeOrderValidationError?'CHANGE_ORDER_INVALID':'GENERATION_SHAPE_INVALID'};observeWireInvalid?.(projection);}catch{/* Diagnostics cannot change refusal. */}return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
 }

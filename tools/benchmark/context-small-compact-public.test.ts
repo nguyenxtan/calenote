@@ -17,6 +17,8 @@ import {SLOT_NAMES,ConversationInterpretationV3Schema,type ContextInput} from '.
 import {deriveGenerationFieldCapability,isBoundRelationUncertaintyAbsent,isInitialFiniteSeriesWithoutRelationSource} from '../../src/modules/conversation/context-contract/field-capability';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
 import {encodeSmallContextV3,decodeSmallContextV3,smallContextSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
+import {serializeSmallContextRequest} from '../../src/modules/conversation/context-contract/small-wire';
+import {factorContextSchema} from './context-schema-factor';
 import {encodeInternalFlatV3,decodeInternalFlatV3,internalFlatSchemaV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-intermediate';
 import {compileCompactContext,COMPACT_KEYS,COMPACT_ENUMS} from '../../src/modules/intelligence/infrastructure/openrouter/context-small-compact';
 type Row=Record<string,unknown>;
@@ -45,13 +47,26 @@ it('proves all144 public compact schemas and exact bidirectional valid-domain in
   const value=ConversationInterpretationV3Schema.parse(frozenContextProposal(row.input,row.id,row.index)),flat=encodeInternalFlatV3(value,row.input),wire=original(row),codec=compileCompactContext(compactSource(row.input)),schema=smallContextSchemaV3(row.input).schema;
   expect(codec.unpack(wire),`${row.id}/${row.index}`).toEqual(attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(flat),operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema)))),value.changes,operationValueSchema(ownedClockSchema(internalFlatSchemaV3(row.input).schema))),ownedSource(row.input))));expect(codec.pack(codec.unpack(wire))).toEqual(wire);
   expect(z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
+  const generation=serializeSmallContextRequest(row.input).response_format.json_schema.schema;
+  const expected=structuredClone(schema) as unknown as {properties:{c:{properties:{o:{maxItems?:number}}}}};
+  expect(expected.properties.c.properties.o.maxItems).toBe(13);delete expected.properties.c.properties.o.maxItems;
+  expect(generation).toEqual(expected);
+  expect(z.fromJSONSchema(generation as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
+  const factored=factorContextSchema(schema).schema,definitions=factored.$defs as Record<string,unknown>|undefined;
+  const expand=(node:unknown):unknown=>{
+   if(Array.isArray(node))return node.map(expand);
+   if(node&&typeof node==='object'){const value=node as Record<string,unknown>;if(typeof value.$ref==='string'){expect(value.$ref.startsWith('#/$defs/')).toBe(true);expect(Object.hasOwn(definitions!,value.$ref.slice('#/$defs/'.length))).toBe(true);return expand(definitions![value.$ref.slice('#/$defs/'.length)]);}return Object.fromEntries(Object.entries(value).filter(([key])=>key!=='$defs').map(([key,v])=>[key,expand(v)]));}
+   return node;
+  };
+  expect(expand(factored)).toEqual(JSON.parse(JSON.stringify(schema,(key,value)=>key==='description'?undefined:value)));
+  expect(z.fromJSONSchema(factored as Parameters<typeof z.fromJSONSchema>[0]).safeParse(wire).success).toBe(true);
   expect(decode(wire,row.input)).toEqual(decodeInternalFlatV3(flat,CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,row.input));expect(decode(wire,row.input).status).toBe('PARSED');
   expect(decode(flat,row.input).status).toBe('REFUSED');
-  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;expect(Array.isArray(n.type)).toBe(false);expect(n.type).not.toBe('null');if(Array.isArray(n.enum))expect(n.enum).not.toContain(null);if(n.anyOf){unions++;if(node===(schema.properties as Row).o)expect(n.anyOf).toHaveLength(5);else throw Error('UNEXPECTED_NON_OPERATION_UNION');}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
+  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;expect(Array.isArray(n.type)).toBe(false);expect(n.type).not.toBe('null');if(Array.isArray(n.enum))expect(n.enum).not.toContain(null);if(n.anyOf){unions++;if(node===(schema.properties as Row).o)expect(n.anyOf).toHaveLength(5);else if(node===((schema.properties as Row).g as Row).items)expect(n.anyOf).toHaveLength(4);else throw Error('UNEXPECTED_SCHEMA_UNION');}for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else visit(v);};visit(schema);
   const inventory=(node:unknown)=>{if(!node||typeof node!=='object')return;const n=node as Row;if(Array.isArray(n.type)&&n.type.includes('null'))nullable++;for(const v of Object.values(n))if(Array.isArray(v))v.forEach(inventory);else inventory(v);};inventory(internalFlatSchemaV3(row.input).schema);
   maxBytes=Math.max(maxBytes,Buffer.byteLength(JSON.stringify(schema)));
  }
- expect(unions).toBe(144);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
+ expect(unions).toBe(288);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
 },30000);
 it('retains117 relation and234 initial negative controls through the actual public compact boundary',()=>{
  let relation=0,initial=0;

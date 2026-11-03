@@ -1,4 +1,5 @@
 import type { ContextInput } from "./contracts";
+import {SLOT_NAMES} from './contracts';
 import type { SourceEvidence } from "./state";
 import { supportsCadenceOperand } from "./cadence-count-evidence";
 import { isBareRetainedSeriesOffsetAnswer, supportsLeadOffset } from "./lead-offset-evidence";
@@ -141,9 +142,98 @@ export function isWholeSeriesOffsetAlternativeAbsent(input:ContextInput):boolean
 /** Full uncertainty absence is stronger than supported candidate absence.
  * Private negative source classification only; no operand/value is returned. */
 export function isWholeSeriesOffsetUncertaintyAbsent(input:ContextInput):boolean {
+  if(isRetainedWholeRelationOnlyOffsetAbsent(input))return true;
   if(!isWholeSeriesOffsetAlternativeAbsent(input))return false;
   const first=input.turns[0];
   return first?.role==="USER"&&typeof first.text==="string"&&hasConservativeWholeSourceEligibility(first.text);
+}
+
+/** A whole relation-only continuation cannot introduce an independent distance
+ * into the one factual finite series. Unlike the older matched-number proof,
+ * the notification clock may already be resolved. Unfamiliar tails decline.
+ * This returns absence only; no operand or model proposal is produced. */
+function isRetainedWholeRelationOnlyOffsetAbsent(input:ContextInput):boolean {
+  const current=input.turns?.[input.currentTurn],first=input.turns?.[0],active=input.activeRequest,question=input.pendingQuestion;
+  if(!active||active.lifecycle!=='CLARIFYING'||!Number.isSafeInteger(input.currentTurn)||input.currentTurn<=0
+    ||input.currentTurn!==input.turns.length-1||input.turns.length>12||first?.role!=='USER'||current?.role!=='USER'
+    ||!hasConservativeWholeSourceEligibility(first.text)||!hasCanonicalWholeSourceLayout(current.text)
+    ||!/^\s*(?:nhắc(?:\s+(?:tôi|mình|tui))?\s+)?trước\s+(?:sự kiện|ngày thi|hôm thi|đó)\s*[.!]?\s*$/iu.test(current.text)
+    ||input.turns.slice(1,input.currentTurn).some(turn=>turn.role==='USER')||input.ambiguities.length!==0
+    ||question?.scope!=='REMINDER'||question.reason!=='MISSING'||!['reminderDate','reminderTime','eventRelation'].includes(question.field)
+    ||Object.values(active.slots).some(slot=>slot.state==='CONFLICT'))return false;
+  const offset=active.slots.leadOffsetDays;
+  if(offset.state!=='MISSING'||offset.value!==null||offset.fact!==null||input.facts.some(fact=>fact.field==='leadOffsetDays'))return false;
+  const factual=(field:'title'|'eventDate'|'frequency'|'occurrenceCount')=>{
+    const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field);
+    return slot.state==='RESOLVED'&&slot.value!==null&&typeof slot.fact==='string'&&facts.length===1
+      &&facts[0].scope==='REMINDER'&&facts[0].alias===slot.fact&&JSON.stringify(facts[0].value)===JSON.stringify(slot.value)
+      &&facts[0].provenance.kind==='EXPLICIT_USER'&&facts[0].dependencies.length===0&&Number.isFinite(Date.parse(facts[0].sourceReferenceTime));
+  };
+  if(!(['title','eventDate','frequency','occurrenceCount'] as const).every(factual)
+    ||active.slots.frequency.value!=='DAILY'||typeof active.slots.occurrenceCount.value!=='number'
+    ||!Number.isSafeInteger(active.slots.occurrenceCount.value)||active.slots.occurrenceCount.value<2||active.slots.occurrenceCount.value>30
+    ||examTitleCoverage(first.text,active.slots.title.value)!==true)return false;
+  const sourceTime=input.facts.find(fact=>fact.field==='eventDate')!.sourceReferenceTime;
+  if(input.facts.filter(fact=>['title','eventDate','frequency','occurrenceCount'].includes(fact.field)).some(fact=>fact.sourceReferenceTime!==sourceTime)
+    ||Date.parse(sourceTime)>Date.parse(input.reference.instant))return false;
+  // Private source-only negative probe at the already bound source receipt.
+  // Never serialized, used as a request, or returned as state/value authority.
+  const initial={...input,reference:{...input.reference,instant:sourceTime},turns:[first],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[]};
+  return isInitialFiniteSeriesWithoutRelationSource(initial);
+}
+
+/** Comparison-only negative bound for a closed factual source, stronger than
+ * offset silence. Every retained operand is checked against the original
+ * whole source. No parsed operand escapes as a value, evidence or readiness. */
+export function isRetainedClosedRelationFieldUncertaintyAbsent(input:ContextInput):boolean {
+  if(input.ambiguities.length!==0)return false;
+  if(isBoundExplicitNewFiniteSeriesClosed(input))return true;
+  if(!isRetainedWholeRelationOnlyOffsetAbsent(input)&&!isBoundRelationUncertaintyAbsent(input))return false;
+  const active=input.activeRequest!,sourceTime=input.facts.find(fact=>fact.field==='eventDate')!.sourceReferenceTime;
+  const initial={...input,reference:{...input.reference,instant:sourceTime},turns:[input.turns[0]],currentTurn:0,activeRequest:null,facts:[],pendingQuestion:null,ambiguities:[]};
+  if(!isInitialFiniteSeriesWithoutRelationSource(initial)||examTitleCoverage(input.turns[0].text,active.slots.title.value)!==true)return false;
+  const fields=new Set<string>(['title','eventDate','frequency','occurrenceCount']);
+  const factual=(field:keyof typeof active.slots)=>{
+    const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field),fact=facts[0];
+    return slot.state==='RESOLVED'&&slot.value!==null&&facts.length===1&&fact.scope==='REMINDER'&&slot.fact===fact.alias&&JSON.stringify(slot.value)===JSON.stringify(fact.value)&&fact.provenance.kind==='EXPLICIT_USER'&&!fact.dependencies.length&&fact.sourceReferenceTime===sourceTime;
+  };
+  if(!(['title','eventDate','frequency','occurrenceCount'] as const).every(factual))return false;
+  // The base proof admits the complete finite initial grammar. Match its full
+  // capitalized venue clause; partial or unrecognized venue text declines.
+  const venue=/đi thi\s+(?:ở|tại)\s+(\p{Lu}[\p{L}\p{M}\p{N}-]*(?:\s+\p{Lu}[\p{L}\p{M}\p{N}-]*)*)(?=$|[,;.!]|\s+(?:nhắc|lúc|ngày|vào))/u.exec(input.turns[0].text)?.[1];
+  if(venue!==undefined){if(!factual('location')||active.slots.location.value!==venue)return false;fields.add('location');}
+  const cadence=initialCadenceCountProbes(initial),temporal=extractTemporalEvidence({text:input.turns[0].text,referenceNow:Date.parse(sourceTime)});
+  if(!cadence||cadence.frequencies.length!==1||cadence.frequencies[0]!==active.slots.frequency.value||cadence.counts.length!==1||cadence.counts[0]!==active.slots.occurrenceCount.value)return false;
+  if(temporal.time.state!=='MISSING'){
+    const clock=active.slots.reminderTime.value;
+    if(!isInitialExplicitReminderClockRequired(initial)||!factual('reminderTime')||!clock||clock.qualifier!=='H24'||temporal.time.state!=='RESOLVED'||temporal.time.source!=='EXACT_TIME'||temporal.time.localTime!==`${String(clock.hour).padStart(2,'0')}:${String(clock.minute).padStart(2,'0')}`)return false;
+    fields.add('reminderTime');
+  }
+  if(input.facts.length!==fields.size)return false;
+  for(const field of SLOT_NAMES){if(fields.has(field))continue;const slot=active.slots[field];if(slot.state!=='MISSING'||slot.value!==null||slot.fact!==null)return false;}
+  const date=active.slots.eventDate.value;if(!date||date.kind!=='CIVIL_DATE'||date.calendar!=='GREGORIAN'||date.year!==null||date.leapMonth!==null||temporal.date.state!=='RESOLVED')return false;
+  const resolved=resolveDateOperand(date,Date.parse(sourceTime),lunarCalendar);
+  return resolved.status==='RESOLVED'&&resolved.date===temporal.date.localDate;
+}
+
+/** A complete new finite-count clause after a fully factual event assertion.
+ * Sufficient source certificate only: missing notification time remains the
+ * resolver's dependency; no cadence/count/date/clock value is returned. */
+function isBoundExplicitNewFiniteSeriesClosed(input:ContextInput):boolean {
+  const active=input.activeRequest,first=input.turns[0],current=input.turns[input.currentTurn];
+  if(active?.lifecycle!=='CLARIFYING'||first?.role!=='USER'||current?.role!=='USER'||input.currentTurn!==input.turns.length-1||input.turns.filter(turn=>turn.role==='USER').length!==2||input.ambiguities.length||input.pendingQuestion?.scope!=='REMINDER'||input.pendingQuestion.field!=='reminderTime'||input.pendingQuestion.reason!=='MISSING')return false;
+  if(!hasCanonicalWholeSourceLayout(first.text)||!hasCanonicalWholeSourceLayout(current.text)||!isFirstPersonExamClockAssertion(first.text)||!/^(?:\s*)nhắc(?:\s+(?:tôi|mình|tui))?\s+(?:(?:trong|suốt)\s+)?(?:\d{1,2}|một|hai|ba)\s+ngày\s+(?:liên tiếp|liên tục|liền)\s+trước\s+(?:ngày thi|hôm thi|sự kiện|đó)\s*[.!]?\s*$/iu.test(current.text))return false;
+  if(!input.capabilities.supported.includes('FINITE_DAILY')||!input.capabilities.calendars.includes('GREGORIAN')||input.capabilities.limits.dailyCount!==30||input.facts.length!==3)return false;
+  const fields=['title','eventDate','eventTime'] as const,sourceTime=input.facts.find(fact=>fact.scope==='REMINDER'&&fact.field==='eventDate')?.sourceReferenceTime;
+  if(typeof sourceTime!=='string'||!Number.isFinite(Date.parse(sourceTime))||!Number.isFinite(Date.parse(input.reference.instant))||Date.parse(sourceTime)>Date.parse(input.reference.instant))return false;
+  for(const field of fields){const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field),fact=facts[0];if(slot.state!=='RESOLVED'||slot.value===null||facts.length!==1||fact.scope!=='REMINDER'||slot.fact!==fact.alias||JSON.stringify(slot.value)!==JSON.stringify(fact.value)||fact.provenance.kind!=='EXPLICIT_USER'||fact.dependencies.length||fact.sourceReferenceTime!==sourceTime)return false;}
+  for(const field of SLOT_NAMES){if((fields as readonly string[]).includes(field))continue;const slot=active.slots[field];if(slot.state!=='MISSING'||slot.value!==null||slot.fact!==null)return false;}
+  if(examTitleCoverage(first.text,active.slots.title.value)!==true)return false;
+  const temporal=extractTemporalEvidence({text:first.text,referenceNow:Date.parse(sourceTime)}),clock=active.slots.eventTime.value,date=active.slots.eventDate.value;
+  if(!clock||clock.qualifier!=='H24'||temporal.time.state!=='RESOLVED'||temporal.time.source!=='EXACT_TIME'||temporal.time.localTime!==`${String(clock.hour).padStart(2,'0')}:${String(clock.minute).padStart(2,'0')}`||!date||date.kind!=='CIVIL_DATE'||date.calendar!=='GREGORIAN'||date.leapMonth!==null||temporal.date.state!=='RESOLVED')return false;
+  if(temporal.date.source==='DAY_MONTH'?date.year!==null:temporal.date.source!=='EXPLICIT_DATE'||date.year===null)return false;
+  const resolved=resolveDateOperand(date,Date.parse(sourceTime),lunarCalendar);if(resolved.status!=='RESOLVED'||resolved.date!==temporal.date.localDate)return false;
+  const probes=cadenceCountSourceProbes(current.text);return probes.frequencies.length===1&&probes.frequencies[0]==='DAILY'&&probes.counts.length===1&&Number.isSafeInteger(probes.counts[0])&&probes.counts[0]>=1&&probes.counts[0]<=30&&supportsEventRelation('BEFORE_EVENT',[probes.source],[probes.turn],false)&&!deriveGenerationFieldCapability(input).allowedNumericFields.includes('leadOffsetDays');
 }
 
 /** Source-grounded contradiction exclusion only, never carrier/value presence. */

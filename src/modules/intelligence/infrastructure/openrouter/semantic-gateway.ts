@@ -98,16 +98,23 @@ const configSchema = z.object({
   paidFallback: routeSchema.optional(),
 }).strict();
 export type SemanticGatewayConfig = z.infer<typeof configSchema>;
-export interface SemanticJsonRequest {
+interface SemanticJsonRequestBody {
   model: string;
   stream: false;
   messages: Array<{ role: "system" | "user"; content: string }>;
-  max_tokens: number;
   temperature?: number;
+  reasoning_effort?: "minimal" | "low" | "medium" | "high";
+  seed?:number;
+  service_tier?:"flex";
+  reasoning?: {effort:"none"|"minimal"|"low"|"medium"|"high";exclude:true};
   response_format: { type: "json_schema"; json_schema: { name: string; strict: true; schema: typeof ModelSemanticInterpretationJsonSchema | typeof InterpretationJsonSchema | ReturnType<typeof import("./context-provider-typed-wire").googleLiteEuTypedContextWireSchemaV3>["schema"] } };
   provider: { only: [string]; allow_fallbacks: false; require_parameters: true; data_collection: "deny";
     zdr?: boolean; max_price: { prompt: number; completion: number } };
 }
+/** Explicit dialects; exactly one output-token limit is sent on the wire. */
+export type SemanticJsonRequest=SemanticJsonRequestBody & (
+  {max_tokens:number;max_completion_tokens?:never} | {max_completion_tokens:number;max_tokens?:never}
+);
 /** Supplied by composition. Credentials belong to the HTTP factory's header only. */
 export type SemanticTransport = (request: SemanticJsonRequest, options: { signal: AbortSignal }) => Promise<{
   status: number;
@@ -204,6 +211,8 @@ function sensitiveValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(sensitiveValue);
   return value !== null && typeof value === "object" && Object.values(value).some(sensitiveValue);
 }
+/** Shared admission check for explicitly scoped synthetic comparisons. */
+export {sensitiveValue as contextInputContainsSensitiveValue};
 
 function createContractGateway<T, Input>(rawConfig: SemanticGatewayConfig,
   transport: SemanticTransport, contract: { input: z.ZodType<Input>; output: z.ZodType<T>;
@@ -288,8 +297,9 @@ export const CONTEXT_FINANCIAL_RESERVATION_MICROUNITS = 105472;
 /** Worker-valid HTTP boundary; credentials never enter request JSON or logs.
  * Model generation is non-SSE; bounded HTTP body streaming is still required. */
 export function createContextHttpTransport(apiKey: string,
-  fetcher: (url: string, init: RequestInit) => Promise<Response> = fetch): SemanticTransport {
+  fetcher: (url: string, init: RequestInit) => Promise<Response> = fetch, maximumResponseBytes = 32768): SemanticTransport {
   if (!apiKey || /[\r\n]/u.test(apiKey)) throw new TypeError("Credential unavailable");
+  if(maximumResponseBytes!==32768&&maximumResponseBytes!==65536)throw new TypeError('Invalid response boundary');
   return async (request, { signal }) => {
     const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal,
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
@@ -332,7 +342,7 @@ export function createContextHttpTransport(apiKey: string,
       if (failed) return failure(0, "INVALID_LENGTH");
       throw new Error("Invalid provider length");
     }
-    if (declared !== null && Number(declared) > 32768) {
+    if (declared !== null && Number(declared) > maximumResponseBytes) {
       await response.body?.cancel().catch(() => undefined);
       return failed ? failure(0, "OVERSIZED", undefined, true) : { status: response.status, body: "", oversized: true, rawResponseBytes: 0 };
     }
@@ -347,7 +357,7 @@ export function createContextHttpTransport(apiKey: string,
         if (signal.aborted) throw new Error("Provider aborted");
         if (next.done) break;
         length += next.value.byteLength;
-        if (length > 32768) { await reader.cancel().catch(() => undefined); return failed ? failure(length, "OVERSIZED", undefined, true) : { status: response.status, body: "", oversized: true, rawResponseBytes: length }; }
+        if (length > maximumResponseBytes) { await reader.cancel().catch(() => undefined); return failed ? failure(length, "OVERSIZED", undefined, true) : { status: response.status, body: "", oversized: true, rawResponseBytes: length }; }
         chunks.push(next.value);
       }
       const bytes = new Uint8Array(length); let offset = 0;

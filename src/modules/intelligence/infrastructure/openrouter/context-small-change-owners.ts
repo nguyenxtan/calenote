@@ -3,6 +3,10 @@ import {z} from 'zod';
 import type {OrderedChange} from './context-small-ordered-changes';
 type Row=Record<string,unknown>;
 type Owner=Pick<OrderedChange,'write'|'evidence'>;
+/** Finite, payload-free classification after the owner schema has validated. */
+export class ChangeOrderValidationError extends Error {
+ constructor(){super('CHANGE_ORDER_INVALID');this.name='ChangeOrderValidationError';}
+}
 export type ChangeOwnerWire<T extends {changes:OrderedChange[]}>=Omit<T,'changes'>&{changes:{owners:Record<string,Owner[]>;order:string[]}};
 const record=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v);
 function check(v:unknown):asserts v {if(!v)throw Error('CHANGE_OWNER_INVALID');}
@@ -31,6 +35,6 @@ export function attachChangeOwners<T extends {changes:OrderedChange[]}>(source:T
 /** Whole owner/vector validation precedes construction; every valid permutation is authored. */
 export function expandChangeOwners(raw:unknown,schema:unknown):Row {
  check(record(raw));const {owners,order}=selectedChanges(raw,schema),active=Object.keys(owners).filter(field=>owners[field].length===1);
- check(new Set(order).size===order.length&&order.length===active.length&&order.every(field=>Object.hasOwn(owners,field)&&owners[field].length===1));
+ if(!(new Set(order).size===order.length&&order.length===active.length&&order.every(field=>Object.hasOwn(owners,field)&&owners[field].length===1)))throw new ChangeOrderValidationError();
  return {...raw,changes:order.map(field=>({field,...structuredClone(owners[field][0])}))};
 }

@@ -1,0 +1,296 @@
+{
+  "qualificationStatus": "PASS_SYNTHETIC_FULL32_LIVE_NOT_PRODUCTION_QUALIFICATION",
+  "candidate": "prompt139/wire136",
+  "baseSha": "455816a76a51844c9940b60e8b2e20281fe4f9b0",
+  "production": "UNCHANGED_NOT_DEPLOYED",
+  "budget": {
+    "lifetimeLimitUsd": 2,
+    "approval": "OWNER_APPROVED_TOTAL_USD2",
+    "reset": null,
+    "includeByok": true,
+    "expiresAt": "2026-11-03T14:31:48.213Z",
+    "remainingAtFull139StartUsd": 0.681244545,
+    "observedAfterFull139": {
+      "limit": 2,
+      "limit_remaining": 0.509200871,
+      "usage": 1.490799129,
+      "limit_reset": null,
+      "include_byok_in_limit": true,
+      "is_provisioning_key": false,
+      "expires_at": "2026-11-03T14:31:48.213Z"
+    }
+  },
+  "route": {
+    "model": "openai/gpt-5-mini",
+    "provider": "azure/swedencentral",
+    "zdr": true,
+    "configuredRegion": "EU_SWEDEN"
+  },
+  "localVerification": {
+    "focusedTestsPassed": 22,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "wholeSuite138": {
+      "status": "PASS",
+      "files": 276,
+      "passed": 10608,
+      "skipped": 2,
+      "seconds": 660.14,
+      "log": "/tmp/calenote-138-whole-suite.log",
+      "sourceDigest": "94f7c7d6ca6375ad881515a4a5849db6aaf77e40e4da362cb101eaf7990e8b87"
+    },
+    "previousWhole136": {
+      "files": 274,
+      "passed": 10587,
+      "skipped": 2,
+      "seconds": 654.63
+    },
+    "build": "PASS",
+    "architecture": "PASS",
+    "credentialScan": {
+      "files": 763,
+      "matches": 0
+    },
+    "businessOracleFilesUnchanged": 5,
+    "workerTypes": "PASS_CURRENT_138",
+    "workerDryRun": "PASS_CURRENT_138",
+    "diffWhitespace": "PASS",
+    "current139": {
+      "typecheck": "PASS",
+      "focusedFiles": 3,
+      "focusedTestsPassed": 45,
+      "canonicalRoundtrips": 144,
+      "eligibilityProbes": 9216,
+      "changeSinceWhole138": "PROMPT_AND_PROMPT_VERSION_ONLY",
+      "lint": "PASS"
+    },
+    "finalCredentialScan": {
+      "files": 764,
+      "matches": 0
+    }
+  },
+  "live138": {
+    "scope": "FRESH_FULL32_84_TURNS",
+    "log": "/tmp/calenote-138-full-live.log",
+    "status": "STOP",
+    "artifact": "/tmp/calenote-model-comparison-1793674477673",
+    "session": 46972,
+    "completedTurns": 48,
+    "latestFixture": "R07#2",
+    "calls": 30,
+    "knownUsd": 0.06278188400000001,
+    "unknownUsd": 0
+  },
+  "previousLive": {
+    "full136": {
+      "status": "STOP_ORACLE_R04_TURN4",
+      "artifact": "/tmp/calenote-model-comparison-1793670790794",
+      "calls": 22,
+      "knownUsd": 0.058145857,
+      "unknownUsd": 0
+    },
+    "R04_137": {
+      "status": "PASS_6_TURNS_SUBSET_ONLY",
+      "artifact": "/tmp/calenote-model-comparison-1793672650004"
+    },
+    "R07_137": {
+      "status": "STOP_YEAR_NOT_EXPLICIT",
+      "artifact": "/tmp/calenote-model-comparison-1793672765257"
+    },
+    "GPT41_R07_137": {
+      "status": "STOP_YEAR_NOT_EXPLICIT",
+      "artifact": "/tmp/calenote-model-comparison-1793674011279"
+    },
+    "full138": {
+      "status": "STOP_ORACLE_R10_TURN0",
+      "artifact": "/tmp/calenote-model-comparison-1793674477673",
+      "passedTurns": 60,
+      "calls": 58,
+      "knownUsd": 0.131218197,
+      "unknownUsd": 0,
+      "reason": "UNSUPPORTED_FREQUENCY_OMITTED_FROM_CORE_ADVICE_ONLY"
+    }
+  },
+  "R07_138": {
+    "status": "PASS_4_TURNS_SUBSET_ONLY",
+    "artifact": "/tmp/calenote-model-comparison-1793674401393",
+    "calls": 4,
+    "knownUsd": 0.015462425,
+    "unknownUsd": 0
+  },
+  "sourceDigest": "7c8939ddf9ce9f345b52f3ee0bd48f66711c295bd10b2992d7f0b20225c2e73f",
+  "live139": {
+    "status": "PASS",
+    "log": "/tmp/calenote-139-full-live.log",
+    "scripts": 32,
+    "turns": 84,
+    "artifact": "/tmp/calenote-model-comparison-1793675847437",
+    "session": 17285,
+    "scope": {
+      "clockGuard": {
+        "kind": "WALL_VS_MONOTONIC",
+        "maximumDivergenceMs": 30000
+      },
+      "approvedLifetimeLimitUsd": 2,
+      "kind": "SYNTHETIC_MODEL_COMPARISON_NOT_FORMAL_PILOT",
+      "profile": "GPT5_MINI_LOW_AZURE_SWEDEN_ZDR_KEYED_136",
+      "model": "openai/gpt-5-mini",
+      "provider": "azure/swedencentral",
+      "zdr": true,
+      "configuredRegion": "EU_SWEDEN",
+      "codec": {
+        "canonicalVersion": "calenote-context-3",
+        "promptVersion": "calenote-context-readable-keyed-139-unsupported-operands",
+        "inputVersion": "calenote-context-input-2",
+        "stateVersion": "calenote-context-state-2",
+        "wireVersion": "calenote-context-readable-keyed-136",
+        "codebookVersion": "context-uncertainty-fields-1",
+        "storageFenceFamily": 2
+      },
+      "baseSha": "455816a76a51844c9940b60e8b2e20281fe4f9b0",
+      "sourceDigest": "7c8939ddf9ce9f345b52f3ee0bd48f66711c295bd10b2992d7f0b20225c2e73f",
+      "limits": {
+        "maxInputTokens": 12000,
+        "maxOutputTokens": 3072,
+        "maxResponseBytes": 32768,
+        "timeoutMs": 45000
+      },
+      "scripts": 32,
+      "turns": 84,
+      "maxRequests": 76,
+      "maxAdditionalUsd": 0.95,
+      "maximumPerRequestUsd": 0.116759,
+      "deadlineMs": 3600000,
+      "stopOnFirstOracleFailure": true,
+      "executionOrder": "GROUP_REPEATS_FOR_PREFIX_CACHING",
+      "executionIds": [
+        "R01",
+        "R02",
+        "R02#2",
+        "R02#3",
+        "R03",
+        "R03#2",
+        "R03#3",
+        "R04",
+        "R05",
+        "R05#2",
+        "R05#3",
+        "R06",
+        "R06#2",
+        "R06#3",
+        "R07",
+        "R07#2",
+        "R07#3",
+        "R08",
+        "R08#2",
+        "R08#3",
+        "R09",
+        "R10",
+        "R11",
+        "R11#2",
+        "R11#3",
+        "R12",
+        "R13",
+        "R13#2",
+        "R13#3",
+        "R14",
+        "R15",
+        "R16"
+      ],
+      "keyLimitUsd": 2,
+      "keyRemainingAtStartUsd": 0.681244545
+    },
+    "completedTurns": 84,
+    "latestFixture": "R16",
+    "calls": 76,
+    "priorR10FailureRegression": "PASS_WITH_GROUNDED_YEARLY_AND_NO_PARTIAL_DRAFT",
+    "result": {
+      "status": "PASS",
+      "score": {
+        "gate": "PASS",
+        "profile": "PILOT",
+        "plannedScripts": 32,
+        "passedScripts": 32,
+        "plannedTurns": 84,
+        "passedTurns": 84,
+        "healthyPlanned": 76,
+        "healthyFullSchemaValid": 76,
+        "actualDispatches": 76,
+        "rawValid": 76,
+        "detailPlanned": 2043,
+        "detailPassed": 2043,
+        "safetyFailures": 0,
+        "heldoutPassed": 0,
+        "plannedActions": 5,
+        "passedActions": 5,
+        "missingScripts": [],
+        "failedScripts": [],
+        "failedMandatory": []
+      },
+      "calls": 76,
+      "knownUsd": 0.16775013200000002,
+      "unknownUsd": 0,
+      "sourceDigest": "7c8939ddf9ce9f345b52f3ee0bd48f66711c295bd10b2992d7f0b20225c2e73f"
+    }
+  },
+  "canaries139": [
+    {
+      "case": "R10",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675667148",
+      "calls": 1,
+      "knownUsd": 0.002501411,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R11",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675724365",
+      "calls": 3,
+      "knownUsd": 0.010606563,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R12",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675769641",
+      "calls": 1,
+      "knownUsd": 0.002542386,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R13",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675776940",
+      "calls": 2,
+      "knownUsd": 0.006711089,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R14",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675803958",
+      "calls": 1,
+      "knownUsd": 0.00381315,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R15",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675811828",
+      "calls": 0,
+      "knownUsd": 0,
+      "unknownUsd": 0
+    },
+    {
+      "case": "R16",
+      "status": "PASS",
+      "directory": "/tmp/calenote-model-comparison-1793675812444",
+      "calls": 1,
+      "knownUsd": 0.002349787,
+      "unknownUsd": 0
+    }
+  ],
+  "acceptanceArtifact": "docs/implementation/ai-pilot-live-result-2026-11-03.json",
+  "sourceFreeze": "UNCHANGED_AT_COMPLETION"
+}

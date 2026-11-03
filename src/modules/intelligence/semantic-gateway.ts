@@ -53,8 +53,8 @@ export interface SemanticUsage {
   completionTokens?: number;
 }
 export interface SemanticProviderEvidence {
-  model: "google/gemini-2.5-flash-lite";
-  provider: "Google" | "google-vertex" | "google-vertex/eu" | "Google AI Studio" | "google-ai-studio";
+  model: "google/gemini-2.5-flash-lite" | "google/gemini-2.5-flash" | "openai/gpt-5-mini" | "openai/gpt-4.1-mini" | "openai/gpt-5.4-nano" | "openai/gpt-5.4-mini";
+  provider: "Google" | "google-vertex" | "google-vertex/eu" | "Google AI Studio" | "google-ai-studio" | "Azure" | "OpenAI";
   location: "eu" | "UNEXPOSED";
   generationId: string | null;
 }

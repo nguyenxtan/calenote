@@ -1,0 +1,694 @@
+{
+  "kind": "SYNTHETIC_FULL32_LIVE_COMPARISON_NOT_PRODUCTION_QUALIFICATION",
+  "candidate": "prompt139/wire136",
+  "baseSha": "455816a76a51844c9940b60e8b2e20281fe4f9b0",
+  "sourceDigest": "7c8939ddf9ce9f345b52f3ee0bd48f66711c295bd10b2992d7f0b20225c2e73f",
+  "protocol": {
+    "canonicalVersion": "calenote-context-3",
+    "promptVersion": "calenote-context-readable-keyed-139-unsupported-operands",
+    "inputVersion": "calenote-context-input-2",
+    "stateVersion": "calenote-context-state-2",
+    "wireVersion": "calenote-context-readable-keyed-136",
+    "codebookVersion": "context-uncertainty-fields-1",
+    "storageFenceFamily": 2
+  },
+  "route": {
+    "model": "openai/gpt-5-mini",
+    "provider": "azure/swedencentral",
+    "zdr": true,
+    "configuredRegion": "EU_SWEDEN"
+  },
+  "result": {
+    "status": "PASS",
+    "score": {
+      "gate": "PASS",
+      "profile": "PILOT",
+      "plannedScripts": 32,
+      "passedScripts": 32,
+      "plannedTurns": 84,
+      "passedTurns": 84,
+      "healthyPlanned": 76,
+      "healthyFullSchemaValid": 76,
+      "actualDispatches": 76,
+      "rawValid": 76,
+      "detailPlanned": 2043,
+      "detailPassed": 2043,
+      "safetyFailures": 0,
+      "heldoutPassed": 0,
+      "plannedActions": 5,
+      "passedActions": 5,
+      "missingScripts": [],
+      "failedScripts": [],
+      "failedMandatory": []
+    },
+    "calls": 76,
+    "knownUsd": 0.16775013200000002,
+    "unknownUsd": 0,
+    "sourceDigest": "7c8939ddf9ce9f345b52f3ee0bd48f66711c295bd10b2992d7f0b20225c2e73f"
+  },
+  "budgetObservedAfterRun": {
+    "limit": 2,
+    "limit_remaining": 0.509200871,
+    "usage": 1.490799129,
+    "limit_reset": null,
+    "include_byok_in_limit": true,
+    "is_provisioning_key": false,
+    "expires_at": "2026-11-03T14:31:48.213Z"
+  },
+  "rawArtifactsPrivateTemporary": "/tmp/calenote-model-comparison-1793675847437",
+  "rawArtifactCaveat": "Summary and hashes are durable; private temporary raw artifacts are not a historical Formal Pilot evidence package.",
+  "verification": {
+    "whole138": {
+      "files": 276,
+      "passed": 10608,
+      "skipped": 2,
+      "seconds": 660.14,
+      "skipReason": "Existing opt-in local tokenizer measurements"
+    },
+    "delta139": "Prompt and prompt version only; no schema/decoder/scorer change",
+    "focused139": {
+      "files": 3,
+      "passed": 45,
+      "canonicalRoundtrips": 144,
+      "eligibilityProbes": 9216
+    },
+    "typecheck139": "PASS",
+    "lint139": "PASS",
+    "build138": "PASS",
+    "architecture138": "PASS",
+    "workerTypes138": "PASS",
+    "workerDryRun138": "PASS",
+    "businessOracleFilesUnchanged": 5,
+    "production": "UNCHANGED_NOT_DEPLOYED"
+  },
+  "exchanges": [
+    {
+      "call": 1,
+      "requestSha256": "a3a1b520d4bb73b75a43d6e28fc3296acbfcf29adbda32878f5caa41e8976fd3",
+      "responseSha256": "6ee95bda19284792283d839d23dd4a81cd34384a12caed63928dcea2326d0df2",
+      "promptTokens": 7010,
+      "completionTokens": 949,
+      "reportedCostUsd": 0.002838462
+    },
+    {
+      "call": 2,
+      "requestSha256": "579b7eb4cccd06570476f2db2049903cd68bafa03c97e51d087a1306f64b9789",
+      "responseSha256": "6155961077191c9a5306466056129ae075072c1d6a07d2de7e38f6c28717772f",
+      "promptTokens": 7304,
+      "completionTokens": 692,
+      "reportedCostUsd": 0.002353912
+    },
+    {
+      "call": 3,
+      "requestSha256": "b010a49a7b47103efd24596482062e665cabf4bcbc95f69a868fe3bf8d932694",
+      "responseSha256": "21099073db51a4736cd45aa3287354bff0913dc218f06e4e12fa482acd6c187f",
+      "promptTokens": 6019,
+      "completionTokens": 821,
+      "reportedCostUsd": 0.002532145
+    },
+    {
+      "call": 4,
+      "requestSha256": "4f666d7d0f723b75f41248a3f2245277bd60593c8b845b78797b0e735171e956",
+      "responseSha256": "448231548a48f972cee1d297b38b531239331ef4d21696ac7d71f02161e7e458",
+      "promptTokens": 6565,
+      "completionTokens": 1124,
+      "reportedCostUsd": 0.003379871
+    },
+    {
+      "call": 5,
+      "requestSha256": "d84e6590a53d562aa42ca42f592b59a0af91bb3bb755beb6e2b9d69f34232fe4",
+      "responseSha256": "9e616c4c19799c8b068f43b9fdd5f619bc546e7727c431b29914b4d7b498e212",
+      "promptTokens": 8043,
+      "completionTokens": 700,
+      "reportedCostUsd": 0.002543761
+    },
+    {
+      "call": 6,
+      "requestSha256": "b010a49a7b47103efd24596482062e665cabf4bcbc95f69a868fe3bf8d932694",
+      "responseSha256": "0cdc24d78926aea49fdd018a9ae31c49eedfdd3f9bcd36930a7e80a6fda390b8",
+      "promptTokens": 6019,
+      "completionTokens": 1028,
+      "reportedCostUsd": 0.002491929
+    },
+    {
+      "call": 7,
+      "requestSha256": "4f666d7d0f723b75f41248a3f2245277bd60593c8b845b78797b0e735171e956",
+      "responseSha256": "4515fa97063876468ccbaa1bb4cf9097f527b9a94295d9dc101935a2c5138640",
+      "promptTokens": 6565,
+      "completionTokens": 909,
+      "reportedCostUsd": 0.002256375
+    },
+    {
+      "call": 8,
+      "requestSha256": "d84e6590a53d562aa42ca42f592b59a0af91bb3bb755beb6e2b9d69f34232fe4",
+      "responseSha256": "2d2ff38e72c81f0d4cc7476c1106f91dbcdeb8b71f811f4b877e20bf688f2aed",
+      "promptTokens": 8043,
+      "completionTokens": 870,
+      "reportedCostUsd": 0.002205313
+    },
+    {
+      "call": 9,
+      "requestSha256": "b010a49a7b47103efd24596482062e665cabf4bcbc95f69a868fe3bf8d932694",
+      "responseSha256": "5ef5eb7bd3be13186d8957d9cea3f944f4007d971e720f8fb78ae238ba3ecf0b",
+      "promptTokens": 6019,
+      "completionTokens": 1112,
+      "reportedCostUsd": 0.002676729
+    },
+    {
+      "call": 10,
+      "requestSha256": "dcc144d206709e45501fb1a812b629d3f198e682c583496e5ed346f3ff1b2b20",
+      "responseSha256": "4c841032b099bdc18dbbfb0b618dcc1033fb824d9e5f753ce69a572a5d65ab8a",
+      "promptTokens": 6563,
+      "completionTokens": 818,
+      "reportedCostUsd": 0.002241481
+    },
+    {
+      "call": 11,
+      "requestSha256": "72d24593f1b38a7bca407340e2146364f70da5357b916b87ad149c5e2525c929",
+      "responseSha256": "9d0af545b1e66bd8f67945fb4a59fab9c5a21eae2b7d5180881e130d1afd4649",
+      "promptTokens": 8040,
+      "completionTokens": 698,
+      "reportedCostUsd": 0.002073896
+    },
+    {
+      "call": 12,
+      "requestSha256": "95b729434965a38a25a0f4b73e3125ac7c86a846ff50cdbcd7c6d5201ace6af8",
+      "responseSha256": "a23351ce1845e034ea19c8ed9202b9dd888a6af8e1bbedb430813dcb5edac6fb",
+      "promptTokens": 6119,
+      "completionTokens": 823,
+      "reportedCostUsd": 0.002533069
+    },
+    {
+      "call": 13,
+      "requestSha256": "1a7b4e92e68abc132b6f2a5b68168a33c61b96d7cad2bd9763cba52a4dceb153",
+      "responseSha256": "6a0e287b36a3e6aa30e560e21b95d4dde4698610ee9022570750d8837523246a",
+      "promptTokens": 7089,
+      "completionTokens": 1190,
+      "reportedCostUsd": 0.003545267
+    },
+    {
+      "call": 14,
+      "requestSha256": "95b729434965a38a25a0f4b73e3125ac7c86a846ff50cdbcd7c6d5201ace6af8",
+      "responseSha256": "68cb1baba2aaa3ad01bc9ead87f31ee77516c6e80ec53c24dd055054804f426b",
+      "promptTokens": 6119,
+      "completionTokens": 984,
+      "reportedCostUsd": 0.002391653
+    },
+    {
+      "call": 15,
+      "requestSha256": "1a7b4e92e68abc132b6f2a5b68168a33c61b96d7cad2bd9763cba52a4dceb153",
+      "responseSha256": "251c15465022b3b729e2acaf53b2761e210c300cb0de18465a23956f4d6a19c2",
+      "promptTokens": 7089,
+      "completionTokens": 951,
+      "reportedCostUsd": 0.002337995
+    },
+    {
+      "call": 16,
+      "requestSha256": "95b729434965a38a25a0f4b73e3125ac7c86a846ff50cdbcd7c6d5201ace6af8",
+      "responseSha256": "bdcfd9fd3012de859b2e38b97b51d4d984969c381aa7071b0358a6f0b71912d3",
+      "promptTokens": 6119,
+      "completionTokens": 825,
+      "reportedCostUsd": 0.002041853
+    },
+    {
+      "call": 17,
+      "requestSha256": "1a7b4e92e68abc132b6f2a5b68168a33c61b96d7cad2bd9763cba52a4dceb153",
+      "responseSha256": "bbf8fbc3c9fb11034c7126db719e96cc130cdd840decbb8151fc3443974f43d6",
+      "promptTokens": 7089,
+      "completionTokens": 684,
+      "reportedCostUsd": 0.001750595
+    },
+    {
+      "call": 18,
+      "requestSha256": "6382b13fa63d3fed58b3f6284637d237071854c72de751e2d547ee89d0c1660e",
+      "responseSha256": "d17185c55f0419ec0e2bca04f564ceced00b9d510359236af6e18eda2dbfef27",
+      "promptTokens": 6891,
+      "completionTokens": 895,
+      "reportedCostUsd": 0.002717913
+    },
+    {
+      "call": 19,
+      "requestSha256": "bf0c6d04716ce4b3b0d32bea169a4c99386edc3036ed01380347a00f03d25aed",
+      "responseSha256": "43ffbf4c7f4b27993dfe2d5cb6306a09ce936ddfcb845df0a09c274258ed458b",
+      "promptTokens": 7887,
+      "completionTokens": 669,
+      "reportedCostUsd": 0.002401685
+    },
+    {
+      "call": 20,
+      "requestSha256": "b56898d4ab74876395a175f61c6548c15a6db7a6a86175a0c43f5def8a9aa466",
+      "responseSha256": "cfc14ef31d84c86f2bf0db51a5f91378fefc181cd482b9f64e32bd268b5dcdd5",
+      "promptTokens": 8170,
+      "completionTokens": 499,
+      "reportedCostUsd": 0.00210551
+    },
+    {
+      "call": 21,
+      "requestSha256": "2a795f677d116a207f7aabc3f25cca74589dbe85e677b22088e8b0f4e3ac9212",
+      "responseSha256": "74071e473e0cf4a588d431f4b34d84be37faa405de0d34ca22edce353e75d35a",
+      "promptTokens": 6891,
+      "completionTokens": 772,
+      "reportedCostUsd": 0.002013649
+    },
+    {
+      "call": 22,
+      "requestSha256": "1ea6b5ad0af7d476b503121f533d7de7df63f578fb201fa4c1966f83ca19e047",
+      "responseSha256": "fc223bbe2d239592332671eacfbabddceef2647d0b3aedf8310b742ef8f4ee86",
+      "promptTokens": 6961,
+      "completionTokens": 1227,
+      "reportedCostUsd": 0.004613675
+    },
+    {
+      "call": 23,
+      "requestSha256": "49899d9ed15c0faa24c34e548d91cbaf8a1f16443469c7b4c5452eecaebdeadb",
+      "responseSha256": "4cd88b36df9fd3fa4e9cda80802ccdbc416d32a629eae01d050de87fe01de83b",
+      "promptTokens": 8178,
+      "completionTokens": 616,
+      "reportedCostUsd": 0.00236511
+    },
+    {
+      "call": 24,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "29ca21981e9af368396f7d81e3473a0108a5cdd9feb94a151ac6519b016ab5d9",
+      "promptTokens": 6755,
+      "completionTokens": 738,
+      "reportedCostUsd": 0.001870473
+    },
+    {
+      "call": 25,
+      "requestSha256": "be7aa4b5fca0bcd076955558ab4525060c25c2f49a9b1da5f2182ee9b2ee131a",
+      "responseSha256": "1224a8fe73c51ff1b4ef1fc8ac1721c75bc2ee4055d12903f390b7a0eb739a4b",
+      "promptTokens": 7135,
+      "completionTokens": 751,
+      "reportedCostUsd": 0.001972597
+    },
+    {
+      "call": 26,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "3dc2457f717f694f1f4fa66a0b52e1f6ebfd980aee7e4e7717645be26e96e8a6",
+      "promptTokens": 6755,
+      "completionTokens": 977,
+      "reportedCostUsd": 0.002396273
+    },
+    {
+      "call": 27,
+      "requestSha256": "be7aa4b5fca0bcd076955558ab4525060c25c2f49a9b1da5f2182ee9b2ee131a",
+      "responseSha256": "e2aab7829837899f3e9e993859d0faf6d9504e5ca78ad4868c6804de861bc8d2",
+      "promptTokens": 7135,
+      "completionTokens": 678,
+      "reportedCostUsd": 0.001750045
+    },
+    {
+      "call": 28,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "535c71de86c7b9a4b8ea2f238bef4a5d4765f4a519d4ae1f1e94d2ad298f00d7",
+      "promptTokens": 6755,
+      "completionTokens": 873,
+      "reportedCostUsd": 0.002167473
+    },
+    {
+      "call": 29,
+      "requestSha256": "be7aa4b5fca0bcd076955558ab4525060c25c2f49a9b1da5f2182ee9b2ee131a",
+      "responseSha256": "72aa62c961a9586d416fedd3acb98cd2148321adc1dcc3ff3ca80a54483a9327",
+      "promptTokens": 7135,
+      "completionTokens": 903,
+      "reportedCostUsd": 0.002245045
+    },
+    {
+      "call": 30,
+      "requestSha256": "09010005bed4f7e7c9da4e996c81eb00115be339375c03e6fda6fc573bb584b0",
+      "responseSha256": "5be69ccf8f9c287aba4a900d2858d34249e40fe7a57e436fa58b969a5268910d",
+      "promptTokens": 6754,
+      "completionTokens": 700,
+      "reportedCostUsd": 0.00184855
+    },
+    {
+      "call": 31,
+      "requestSha256": "f4839325261c5c5b78c8df0f417b1298a8773f99a8bf9c4ffb3b78274eee401e",
+      "responseSha256": "9f8c5bf075afa539071e62b20f5e5f8bcd120b518857be890cc09a7969f4cfe2",
+      "promptTokens": 7720,
+      "completionTokens": 688,
+      "reportedCostUsd": 0.002459512
+    },
+    {
+      "call": 32,
+      "requestSha256": "6f3b69186176ea877c79bbf881bb88d0211a262766ef55440654abb0857c157d",
+      "responseSha256": "4402fe0c98eb97b1a41bbae97b11a11d0547f46f4b27e9972098f2166ded3d29",
+      "promptTokens": 7858,
+      "completionTokens": 783,
+      "reportedCostUsd": 0.00388355
+    },
+    {
+      "call": 33,
+      "requestSha256": "09010005bed4f7e7c9da4e996c81eb00115be339375c03e6fda6fc573bb584b0",
+      "responseSha256": "b0593b2f7ef76cd05fa92c607edf251f694715e6be1ef549bdc3a5327c5258fd",
+      "promptTokens": 6754,
+      "completionTokens": 713,
+      "reportedCostUsd": 0.001815198
+    },
+    {
+      "call": 34,
+      "requestSha256": "f4839325261c5c5b78c8df0f417b1298a8773f99a8bf9c4ffb3b78274eee401e",
+      "responseSha256": "9d069bbec49adf7c139fc3ad151561b906443850c248e2506e5594ed96baa44e",
+      "promptTokens": 7720,
+      "completionTokens": 738,
+      "reportedCostUsd": 0.001919016
+    },
+    {
+      "call": 35,
+      "requestSha256": "6f3b69186176ea877c79bbf881bb88d0211a262766ef55440654abb0857c157d",
+      "responseSha256": "67ad8579f3fc17769af25cf8a44220b16f1b8c85285a1c2004f0775ace927949",
+      "promptTokens": 7858,
+      "completionTokens": 654,
+      "reportedCostUsd": 0.001710214
+    },
+    {
+      "call": 36,
+      "requestSha256": "09010005bed4f7e7c9da4e996c81eb00115be339375c03e6fda6fc573bb584b0",
+      "responseSha256": "68fe8f642473d24b939102e9a7cc194cb2c5c6c808f648c020598e8b3697aab2",
+      "promptTokens": 6754,
+      "completionTokens": 698,
+      "reportedCostUsd": 0.001782198
+    },
+    {
+      "call": 37,
+      "requestSha256": "f4839325261c5c5b78c8df0f417b1298a8773f99a8bf9c4ffb3b78274eee401e",
+      "responseSha256": "130d6da9f3c8ad209910f06949776bc583cdc7b810fd54fb2396bf0d0f369d91",
+      "promptTokens": 7720,
+      "completionTokens": 969,
+      "reportedCostUsd": 0.002427216
+    },
+    {
+      "call": 38,
+      "requestSha256": "6f3b69186176ea877c79bbf881bb88d0211a262766ef55440654abb0857c157d",
+      "responseSha256": "139be3c4d4fce0306005a6c133b2532c5a68a2a94b3c69942bc0eca57b40ed91",
+      "promptTokens": 7858,
+      "completionTokens": 827,
+      "reportedCostUsd": 0.002090814
+    },
+    {
+      "call": 39,
+      "requestSha256": "d6288c91e6f3f423d930bf70972e0f2563d6170913ef5356dc5f0f00879d2747",
+      "responseSha256": "5ca8443a199d12f32a44c86688dd138b7f1d0bb256926541d8da34c41fb4c4b6",
+      "promptTokens": 7279,
+      "completionTokens": 820,
+      "reportedCostUsd": 0.002566685
+    },
+    {
+      "call": 40,
+      "requestSha256": "dacdcad10657cff29785f8e0b00b472124977bd5f5f55a7edb47530466253158",
+      "responseSha256": "e1c459b5bfc67198e17c885d1050de50d2ce9c7d268907403fbc4b8eafd0402f",
+      "promptTokens": 7803,
+      "completionTokens": 981,
+      "reportedCostUsd": 0.003095961
+    },
+    {
+      "call": 41,
+      "requestSha256": "29a061bbabe3e9aaca1839da08fbfa625078f1c1e1b05293c9b15615c8ff64f8",
+      "responseSha256": "285aa8c29bcfadc1cfe1b2c36bd171dbf69d781e1d213c4dbbcc11083e6d09a9",
+      "promptTokens": 8188,
+      "completionTokens": 731,
+      "reportedCostUsd": 0.00262086
+    },
+    {
+      "call": 42,
+      "requestSha256": "e7ec42114b3974b57eb98ddc13e15a6a3cb425ddfe6926053723c1c639c07e38",
+      "responseSha256": "e013a46ec010a1910562ba8190b844e7f16f5b5622efdb378152cc6704c24e9d",
+      "promptTokens": 8681,
+      "completionTokens": 676,
+      "reportedCostUsd": 0.002604459
+    },
+    {
+      "call": 43,
+      "requestSha256": "d6288c91e6f3f423d930bf70972e0f2563d6170913ef5356dc5f0f00879d2747",
+      "responseSha256": "d78dafcd98ef709e7eb0533e6ef58eabcadfa1e4932bfc4186f1d5e7df949aab",
+      "promptTokens": 7279,
+      "completionTokens": 767,
+      "reportedCostUsd": 0.001954469
+    },
+    {
+      "call": 44,
+      "requestSha256": "dacdcad10657cff29785f8e0b00b472124977bd5f5f55a7edb47530466253158",
+      "responseSha256": "df8f0b1a2ac0ff6fa13a93dba37fb7bc01fd06c902b498e9527bd2108ac8d3c5",
+      "promptTokens": 7803,
+      "completionTokens": 1257,
+      "reportedCostUsd": 0.003052665
+    },
+    {
+      "call": 45,
+      "requestSha256": "29a061bbabe3e9aaca1839da08fbfa625078f1c1e1b05293c9b15615c8ff64f8",
+      "responseSha256": "08f9d0bcf46cf2f2ed019090d35afaad2ce7e9ac250b419edde078a59ca8489f",
+      "promptTokens": 8188,
+      "completionTokens": 602,
+      "reportedCostUsd": 0.001624612
+    },
+    {
+      "call": 46,
+      "requestSha256": "e7ec42114b3974b57eb98ddc13e15a6a3cb425ddfe6926053723c1c639c07e38",
+      "responseSha256": "282f7d1f15423ac2d2c373bdc8f9414a74d02cf9f720a1732b97ad799f20ffde",
+      "promptTokens": 8681,
+      "completionTokens": 706,
+      "reportedCostUsd": 0.001865083
+    },
+    {
+      "call": 47,
+      "requestSha256": "d6288c91e6f3f423d930bf70972e0f2563d6170913ef5356dc5f0f00879d2747",
+      "responseSha256": "0c89bb8d04781040ea5b708456848a644fa99ca0993fbc719c883aa70961f59b",
+      "promptTokens": 7279,
+      "completionTokens": 737,
+      "reportedCostUsd": 0.001888469
+    },
+    {
+      "call": 48,
+      "requestSha256": "a2d704e038a2c8bf0ceff6fd9ed75988aa70b40280d80a75a689249f1a27303b",
+      "responseSha256": "bad99bedf9b5294c26f41c4bed6e119b3a92a606b14c9345a9f3fd808f701b87",
+      "promptTokens": 7807,
+      "completionTokens": 991,
+      "reportedCostUsd": 0.002654421
+    },
+    {
+      "call": 49,
+      "requestSha256": "4ff7ddc7196d3559a9e0c1a54b6f9195e1f88dbc61c7076dbcf05784390ba8df",
+      "responseSha256": "0abe01976f4ca6ec6be3b7983af387339160731df3fa16e750683cc7e6038ca5",
+      "promptTokens": 8194,
+      "completionTokens": 719,
+      "reportedCostUsd": 0.00213147
+    },
+    {
+      "call": 50,
+      "requestSha256": "d248a15363b538fca042c3e361917f341c94e01eefdd60d36dd41780ede9df65",
+      "responseSha256": "40d69c15101a22dfaa39a24cb96e32902f394d381803c39f1a2f74536e2a6ea0",
+      "promptTokens": 8685,
+      "completionTokens": 600,
+      "reportedCostUsd": 0.001973719
+    },
+    {
+      "call": 51,
+      "requestSha256": "5d86afbfb9ee2fa61f8f8e597837bd3cf7661a42147a5f62d23f507f012a51ec",
+      "responseSha256": "87c286c50e43a318c7b75e9ec1125e3651df283d05f01b26f6ecf9d3587b8a97",
+      "promptTokens": 6888,
+      "completionTokens": 825,
+      "reportedCostUsd": 0.002129424
+    },
+    {
+      "call": 52,
+      "requestSha256": "d3d5aaf0c394a23f6b0232dedf8ab2a88399df4a5293eef57d491861244d2b9c",
+      "responseSha256": "c7c753f8f37c763a5c3802711437b9daf92c5e8d8e1ca4b77e6857da10425bfe",
+      "promptTokens": 8368,
+      "completionTokens": 693,
+      "reportedCostUsd": 0.002555784
+    },
+    {
+      "call": 53,
+      "requestSha256": "5d86afbfb9ee2fa61f8f8e597837bd3cf7661a42147a5f62d23f507f012a51ec",
+      "responseSha256": "057761ef712b84c288669c41e8e7bacded1ab48e12a271ea5b83ee33c1693b0d",
+      "promptTokens": 6888,
+      "completionTokens": 695,
+      "reportedCostUsd": 0.001781472
+    },
+    {
+      "call": 54,
+      "requestSha256": "d3d5aaf0c394a23f6b0232dedf8ab2a88399df4a5293eef57d491861244d2b9c",
+      "responseSha256": "787a0a13419d07bdc6f548d6bc23a1f20685be7f8c9a07c3001375979269242e",
+      "promptTokens": 8368,
+      "completionTokens": 577,
+      "reportedCostUsd": 0.00155716
+    },
+    {
+      "call": 55,
+      "requestSha256": "5d86afbfb9ee2fa61f8f8e597837bd3cf7661a42147a5f62d23f507f012a51ec",
+      "responseSha256": "c9755c66e35cb4e4eb1e8b3e11b5723469d6a6546bf119f4ec45fe59ec3241fd",
+      "promptTokens": 6888,
+      "completionTokens": 937,
+      "reportedCostUsd": 0.002313872
+    },
+    {
+      "call": 56,
+      "requestSha256": "d3d5aaf0c394a23f6b0232dedf8ab2a88399df4a5293eef57d491861244d2b9c",
+      "responseSha256": "6895e541e2556bb29b2a40474050b4748e4dbdfec9946e13344f2c64a249534f",
+      "promptTokens": 8368,
+      "completionTokens": 602,
+      "reportedCostUsd": 0.00161216
+    },
+    {
+      "call": 57,
+      "requestSha256": "ca74286c560dcaa957f3a651a5cb6598b7608d383be0775fae1c30313d600af2",
+      "responseSha256": "59e20e95d2e348197e8e59c670211c767005d4ee49e807191c43fc00e0fbc752",
+      "promptTokens": 7089,
+      "completionTokens": 876,
+      "reportedCostUsd": 0.002172995
+    },
+    {
+      "call": 58,
+      "requestSha256": "007e00bab28638d3389d6d5e112ea83976880ec4fe9f6b0b092b500ed7cc23b1",
+      "responseSha256": "1d9e0a9a9cf5448ad3f2763a6ba739438b49b1bae6293c3ebed3c7ec7edee6db",
+      "promptTokens": 7177,
+      "completionTokens": 927,
+      "reportedCostUsd": 0.002309395
+    },
+    {
+      "call": 59,
+      "requestSha256": "6196b38593c14c1c63dbede15c5696d0cd4d2112ac94e3cb3a7769f1132466c6",
+      "responseSha256": "6612083fe154ae8587a4c3bc27f1dc269860da5d0e9f929cd74775e832abc679",
+      "promptTokens": 6889,
+      "completionTokens": 751,
+      "reportedCostUsd": 0.001904947
+    },
+    {
+      "call": 60,
+      "requestSha256": "985797f4018f70d5b73b736aa73541ed032dbd623bb5ae7e7a03990bb2c6ddc5",
+      "responseSha256": "42b02149e871a6cb7d0ca95ad2fa57bd93bca0025b400b887e43b93c3b501d84",
+      "promptTokens": 8305,
+      "completionTokens": 562,
+      "reportedCostUsd": 0.001537811
+    },
+    {
+      "call": 61,
+      "requestSha256": "8bfe977d5b9efc70ed84b908226dc5cecfc416c4c03dcb6905571fc05d4e26eb",
+      "responseSha256": "76558eec17bc3d08d13951bf77b0a11d7cc971b502d525e004a040a48e3a9cb6",
+      "promptTokens": 8503,
+      "completionTokens": 502,
+      "reportedCostUsd": 0.001398309
+    },
+    {
+      "call": 62,
+      "requestSha256": "6196b38593c14c1c63dbede15c5696d0cd4d2112ac94e3cb3a7769f1132466c6",
+      "responseSha256": "5332ff5d7008fb01d9f9eb2e00d070e9557f9d18ea6a5fb7322cbc179a6ec8af",
+      "promptTokens": 6889,
+      "completionTokens": 650,
+      "reportedCostUsd": 0.001682747
+    },
+    {
+      "call": 63,
+      "requestSha256": "985797f4018f70d5b73b736aa73541ed032dbd623bb5ae7e7a03990bb2c6ddc5",
+      "responseSha256": "83f44d29ec469a25813794c2ba8d736dedb9f7f463148e882711386887d2c210",
+      "promptTokens": 8305,
+      "completionTokens": 929,
+      "reportedCostUsd": 0.002345211
+    },
+    {
+      "call": 64,
+      "requestSha256": "8bfe977d5b9efc70ed84b908226dc5cecfc416c4c03dcb6905571fc05d4e26eb",
+      "responseSha256": "a2eadc16d66a8b0511b13930c45cca91643bcab5f67ec3d825883a278facb709",
+      "promptTokens": 8503,
+      "completionTokens": 595,
+      "reportedCostUsd": 0.001602909
+    },
+    {
+      "call": 65,
+      "requestSha256": "6196b38593c14c1c63dbede15c5696d0cd4d2112ac94e3cb3a7769f1132466c6",
+      "responseSha256": "75b214361e0dc9ed34960a80c306833cae623819763c71a18631468ffdb6b8ad",
+      "promptTokens": 6889,
+      "completionTokens": 782,
+      "reportedCostUsd": 0.001973147
+    },
+    {
+      "call": 66,
+      "requestSha256": "985797f4018f70d5b73b736aa73541ed032dbd623bb5ae7e7a03990bb2c6ddc5",
+      "responseSha256": "e90682144794966f44ba252fe6fa8221a45a5c341de196ef724f59bbf996d7fe",
+      "promptTokens": 8305,
+      "completionTokens": 614,
+      "reportedCostUsd": 0.001652211
+    },
+    {
+      "call": 67,
+      "requestSha256": "8bfe977d5b9efc70ed84b908226dc5cecfc416c4c03dcb6905571fc05d4e26eb",
+      "responseSha256": "f5c97a6a9270d9ec1cb24489c99ab49919fb5f382c68c7616e4a8ef79fee1125",
+      "promptTokens": 8503,
+      "completionTokens": 466,
+      "reportedCostUsd": 0.001319109
+    },
+    {
+      "call": 68,
+      "requestSha256": "88e9ffb1ed1a3f752cc91efb38c68432a3dd8be482a26fbbe803fc47b2eccca5",
+      "responseSha256": "db9d5e1d15cfc55fd33ad95cbfe3192e2c45f41203fce82eea611b7b60c3323b",
+      "promptTokens": 7134,
+      "completionTokens": 733,
+      "reportedCostUsd": 0.00187077
+    },
+    {
+      "call": 69,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "0f867670c2e230ac7e97542151420ee56d5a97de83c29740d5dbfccb60dd7337",
+      "promptTokens": 6755,
+      "completionTokens": 561,
+      "reportedCostUsd": 0.001481073
+    },
+    {
+      "call": 70,
+      "requestSha256": "a6788472f6500d77d4cfafc2254fa1a3f7c890340508ef3d928151bec8199428",
+      "responseSha256": "1f12e8163ca7c42b21cd75fd8677e2dd32478b5dcfcb2c56bd4f68b0e04843a7",
+      "promptTokens": 7808,
+      "completionTokens": 686,
+      "reportedCostUsd": 0.00179784
+    },
+    {
+      "call": 71,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "8235b9b3f4d6c3f4cde25eb877874c04862267554d7d79a7a1c98bc0bed8f313",
+      "promptTokens": 6755,
+      "completionTokens": 700,
+      "reportedCostUsd": 0.001786873
+    },
+    {
+      "call": 72,
+      "requestSha256": "a6788472f6500d77d4cfafc2254fa1a3f7c890340508ef3d928151bec8199428",
+      "responseSha256": "af47bad4a3d87a04359a7455ba39fc8eb7e6bea528052745407e1cfad0767580",
+      "promptTokens": 7808,
+      "completionTokens": 969,
+      "reportedCostUsd": 0.00242044
+    },
+    {
+      "call": 73,
+      "requestSha256": "ed3a966b389871c6daa04b62d1e701f1c5599a2b3ccc991e02dc682724ef382a",
+      "responseSha256": "43e845e9f6c5407104bca03ff4d01763ccf3d6d85db690d66f554fae00fb3bf7",
+      "promptTokens": 6755,
+      "completionTokens": 731,
+      "reportedCostUsd": 0.001855073
+    },
+    {
+      "call": 74,
+      "requestSha256": "a6788472f6500d77d4cfafc2254fa1a3f7c890340508ef3d928151bec8199428",
+      "responseSha256": "29365d43c9f241034f4aef1518c7de385225c652fcdf95c52e0b450e1ec6edad",
+      "promptTokens": 7808,
+      "completionTokens": 723,
+      "reportedCostUsd": 0.00187924
+    },
+    {
+      "call": 75,
+      "requestSha256": "37e89083a88eb0cc0e662227098526cb7272ccecf4753955b344c1e0874be622",
+      "responseSha256": "66d9c2669376401df1db67b4563e5dad0dab78a1da7969fc2032ea3ad2233947",
+      "promptTokens": 7194,
+      "completionTokens": 856,
+      "reportedCostUsd": 0.00215787
+    },
+    {
+      "call": 76,
+      "requestSha256": "ca74286c560dcaa957f3a651a5cb6598b7608d383be0775fae1c30313d600af2",
+      "responseSha256": "2faff0c4e2d66871fe57a86deb89fa798b31bc96766a7c33d48d1e356c1fe53a",
+      "promptTokens": 7089,
+      "completionTokens": 738,
+      "reportedCostUsd": 0.001869395
+    }
+  ]
+}

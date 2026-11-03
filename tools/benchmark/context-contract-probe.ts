@@ -43,7 +43,9 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
 export interface ProbeConfig { wireProtocol?: "TYPED_105" | "SMALL_106"; sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
-  liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput>; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null; }
+  liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106" | "KEYED_COMPARISON_136"}; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null;
+  /** Synthetic model-comparison probe only; never selects a production route. */
+  liveBudgetProfile?: "GEMINI_FLASH_AI_STUDIO" | "GPT5_MINI_AZURE_SWEDEN" | "GPT5_MINI_MEDIUM_AZURE_SWEDEN" | "GPT41_MINI_AZURE_SWEDEN" | "NANO54_AZURE_ZDR_SYNTHETIC" | "MINI54_FLEX_SYNTHETIC" | "MINI54_AZURE_ZDR_SYNTHETIC"; }
 
 export async function createContextContractProbe(config: ProbeConfig, fixture: FixtureProposal) {
   if (!/^[0-9a-f]{40}$/u.test(config.sourceSha) || !Number.isSafeInteger(config.referenceNow)) throw new TypeError("INVALID_PROBE_CONFIG");
@@ -72,7 +74,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     let lastSnapshot: ContextSnapshotV2 | null = null;
     const store = new D1ContextContractStore(db, keyring, () => now, CONTEXT_PROTOCOL_V3);
     const service = createContextContractService({ store: createD1ContextContractStoreV3({ db, keyring, clock: () => now, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db, keyring, protocol: CONTEXT_PROTOCOL_V3 }),
-      gateway: { ...(config.wireProtocol === "SMALL_106" ? {contextWire:"SMALL_TABLES_106" as const} : config.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), prepare(tier, input) {
+      gateway: { ...(config.wireProtocol === "SMALL_106" ? {contextWire:"SMALL_TABLES_106" as const} : config.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), ...(config.liveGateway?.contextWire?{contextWire:config.liveGateway.contextWire}:{}), prepare(tier, input) {
         inputs.push(structuredClone(input));
         if (config.liveGateway && index > (config.offlineSeedTurns ?? 0)) {
           const prepared = config.liveGateway.prepare(tier, input), hold = delayed;
@@ -103,7 +105,14 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
         delayed = null;
         return { ...prepared, dispatch: async () => { hold.signalStarted(); await hold.waiting; return prepared.dispatch(); } };
       } }, budgetStore: new D1SemanticBudgetStore(db, { ...budgetLimits,
+        ...(config.liveGateway && config.liveBudgetProfile === "GEMINI_FLASH_AI_STUDIO" ? {promptPriceMicrounitsPerMillionTokens:300000,completionPriceMicrounitsPerMillionTokens:2500000} : {}),
         ...(config.liveGateway ? { reservationInputTokenExposure: 1048576 } : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "GPT5_MINI_AZURE_SWEDEN" ? {promptPriceMicrounitsPerMillionTokens:275000,completionPriceMicrounitsPerMillionTokens:2200000,reservationInputTokenExposure:400000,maxOutputTokens:3072} : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "GPT5_MINI_MEDIUM_AZURE_SWEDEN" ? {promptPriceMicrounitsPerMillionTokens:275000,completionPriceMicrounitsPerMillionTokens:2200000,reservationInputTokenExposure:400000,maxOutputTokens:4096} : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "GPT41_MINI_AZURE_SWEDEN" ? {promptPriceMicrounitsPerMillionTokens:440000,completionPriceMicrounitsPerMillionTokens:1760000,reservationInputTokenExposure:1047576,ownerMonthlyCostMicrounits:1000000} : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "NANO54_AZURE_ZDR_SYNTHETIC" ? {promptPriceMicrounitsPerMillionTokens:200000,completionPriceMicrounitsPerMillionTokens:1250000,reservationInputTokenExposure:400000,maxOutputTokens:3072} : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "MINI54_FLEX_SYNTHETIC" ? {promptPriceMicrounitsPerMillionTokens:375000,completionPriceMicrounitsPerMillionTokens:2250000,reservationInputTokenExposure:400000,maxOutputTokens:1536} : {}),
+        ...(config.liveGateway && config.liveBudgetProfile === "MINI54_AZURE_ZDR_SYNTHETIC" ? {promptPriceMicrounitsPerMillionTokens:750000,completionPriceMicrounitsPerMillionTokens:4500000,reservationInputTokenExposure:400000,maxOutputTokens:1536} : {}),
         ...(config.budgetRefusal ? { ownerDailyFallbackLimit: 0 } : {}) }), keyring, calendar: lunarCalendar,
       channel: "TELEGRAM", sourceSha: config.sourceSha,
       get mode() { return config.liveGateway && index > (config.offlineSeedTurns ?? 0) ? "LIVE" as const : "OFFLINE_FIXTURE" as const; }, now: () => now,

@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as observations from "./observability";
+import {CONTEXT_SMALL_PROTOCOL_V3} from './small-protocol';
+import {CONTEXT_KEYED_COMPARISON_PROTOCOL} from './keyed-small-protocol';
 
 afterEach(() => vi.restoreAllMocks());
 const base = { traceId: "53102386-5ca6-4db5-af63-3882b19059ef", sourceSha: "e1b2e4a6d403fa2046cf104be8ae537ba561a02e",
@@ -10,6 +12,15 @@ function observe(event: unknown) {
   observations.observeContextEvent(event as Parameters<typeof observations.observeContextEvent>[0]);
 }
 describe("content-free successor observations", () => {
+  it('accepts only the exact selected small and keyed prompt identities',()=>{
+    const log=vi.spyOn(console,'info').mockImplementation(()=>{});
+    for(const promptVersion of [CONTEXT_SMALL_PROTOCOL_V3.promptVersion,CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion])observe({...base,promptVersion,event:'MODEL_REQUIRED'});
+    observe({...base,promptVersion:'PRIVATE_SENTINEL',event:'MODEL_REQUIRED'});expect(log).toHaveBeenCalledTimes(2);
+  });
+  it('records bounded actual comparison routes and redacts unrecognized route strings',()=>{
+    expect(observations.contextRouteObservation('openai/gpt-5-mini','azure/swedencentral')).toEqual({configuredModel:'openai/gpt-5-mini',configuredProvider:'azure/swedencentral'});
+    expect(observations.contextRouteObservation('PRIVATE_MODEL_VALUE','PRIVATE_PROVIDER_VALUE')).toEqual({configuredModel:'UNVERIFIED',configuredProvider:'UNVERIFIED'});
+  });
   it("patch_directive_reply_and_full_schema_have_separate_categories", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const events = [

@@ -490,6 +490,15 @@ describe("observable successor route", () => {
       { headers: { "content-type": "application/json", "content-length": "1" } }));
     expect(await transport(contextRequest(), { signal: new AbortController().signal })).toMatchObject({ body: "{}", rawResponseBytes: 5 });
   });
+  it('keeps the default32KiB boundary and permits an explicitly bounded64KiB synthetic reader',async()=>{
+    const request=contextRequest();
+    const body=JSON.stringify({padding:'x'.repeat(40000)}),fetcher=async()=>new Response(body,{headers:{'content-type':'application/json','content-length':String(Buffer.byteLength(body))}});
+    expect((await gateways.createContextHttpTransport('synthetic',fetcher)(request,{signal:new AbortController().signal})).oversized).toBe(true);
+    const larger=await gateways.createContextHttpTransport('synthetic',fetcher,65536)(request,{signal:new AbortController().signal});expect(larger.body===body).toBe(true);expect(larger.rawResponseBytes).toBe(Buffer.byteLength(body));
+    const large=gateways.createContextHttpTransport('synthetic',async()=>new Response(new Uint8Array(65537),{headers:{'content-type':'application/json'}}),65536);
+    expect((await large(request,{signal:new AbortController().signal})).oversized).toBe(true);
+    expect(()=>gateways.createContextHttpTransport('synthetic',fetcher,65537)).toThrow();
+  });
   it("HTTP reader cancels oversized or stalled bodies and rejects non-JSON/invalid UTF8", async () => {
     expect(gateways).toHaveProperty("createContextHttpTransport", expect.any(Function));
     const cancel = vi.fn();

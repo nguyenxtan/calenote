@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { DownstreamDiagnosticSchema } from "./downstream";
+import {CONTEXT_SMALL_PROTOCOL_V3} from './small-protocol';
+import {CONTEXT_KEYED_COMPARISON_PROTOCOL} from './keyed-small-protocol';
 
 const safeCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const reason = z.enum(["AUTH_INVALID", "CONTEXT_INVALID", "DUPLICATE", "DISABLED", "UNAVAILABLE", "BUDGET_EXHAUSTED",
@@ -8,23 +10,30 @@ const reason = z.enum(["AUTH_INVALID", "CONTEXT_INVALID", "DUPLICATE", "DISABLED
   "EVIDENCE_INVALID", "REQUIRED_FEATURE_UNSUPPORTED", "STALE", "EXPIRED", "INVALID", "UNCERTAIN", "UNSUPPORTED",
   "SEMANTIC_INPUT_TOO_LONG", "CONTEXT_SNAPSHOT_TOO_LARGE", "NO_PROGRESS", "DELIVERY_FAILED"]);
 const base = { traceId: z.uuidv4(), sourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
-  contractVersion: z.literal("calenote-context-3"), promptVersion: z.enum(["calenote-context-3", "calenote-context-typed-objects-105"]),
+  contractVersion: z.literal("calenote-context-3"), promptVersion: z.enum(["calenote-context-3", "calenote-context-typed-objects-105",CONTEXT_SMALL_PROTOCOL_V3.promptVersion,CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion]),
   mode: z.enum(["OFFLINE_FIXTURE", "LIVE"]),
   contextRevisionBefore: safeCount.nullable().optional(), contextRevisionAfter: safeCount.nullable().optional(),
   draftRevisionBefore: safeCount.nullable().optional(), draftRevisionAfter: safeCount.nullable().optional(),
 };
 const event = <K extends string, S extends z.ZodRawShape>(kind: K, fields: S) => z.strictObject({ ...base, event: z.literal(kind), ...fields });
 const directive = z.enum(["ASK_FOR_FIELD", "ASK_FOR_DISAMBIGUATION", "EXPLAIN_UNSUPPORTED", "HELP", "PRESENT_PREVIEW", "ANSWER_QUERY", "BACKEND_ONLY"]);
+const configuredModel=z.enum(['google/gemini-2.5-flash-lite','google/gemini-2.5-flash','openai/gpt-5-mini','openai/gpt-4.1-mini','openai/gpt-5.4-nano','openai/gpt-5.4-mini','UNVERIFIED']);
+const configuredProvider=z.enum(['google-vertex/eu','google-ai-studio','azure/swedencentral','azure','openai/flex','UNVERIFIED']);
+/** Preserve actual reviewed route identities without logging arbitrary strings. */
+export function contextRouteObservation(model:string,provider:string){
+ const m=configuredModel.safeParse(model),p=configuredProvider.safeParse(provider);
+ return {configuredModel:m.success?m.data:'UNVERIFIED' as const,configuredProvider:p.success?p.data:'UNVERIFIED' as const};
+}
 const schema = z.discriminatedUnion("event", [
   event("POST_CANONICAL_STAGE", { diagnostic: DownstreamDiagnosticSchema }),
   event("INBOUND_ACCEPTED", {}), event("CONTEXT_LOADED", { presence: z.enum(["PRESENT", "ABSENT", "INVALID", "EXPIRED", "UNAVAILABLE"]) }),
   event("MODEL_REQUIRED", {}), event("MODEL_BYPASSED", { reason }), event("REQUEST_REJECTED", { reason }),
-  event("REQUEST_PREPARED", { configuredModel: z.literal("google/gemini-2.5-flash-lite"), configuredProvider: z.enum(["google-vertex/eu","google-ai-studio"]), routeAdmission: z.enum(["UNVERIFIED", "OFFLINE_FIXTURE", "OBSERVABLE_CANARY"]) }),
+  event("REQUEST_PREPARED", { configuredModel, configuredProvider, routeAdmission: z.enum(["UNVERIFIED", "OFFLINE_FIXTURE", "OBSERVABLE_CANARY"]) }),
   // Protected reservation IDs/owner mappings belong to the budget store. The
   // trace ID links that protected mapping without exposing identifiers here.
   event("BUDGET_RESERVED", { maximumCostMicrounits: safeCount }), event("REQUEST_DISPATCHED", {}),
   event("RESPONSE_RECEIVED", { outcome: z.enum(["SUCCESS", "FAILURE"]), latencyMs: safeCount,
-    observedModel: z.enum(["UNKNOWN", "google/gemini-2.5-flash-lite"]), observedProvider: z.enum(["UNKNOWN", "Google", "google-vertex", "google-vertex/eu","Google AI Studio","google-ai-studio"]),
+    observedModel: z.enum(["UNKNOWN", "google/gemini-2.5-flash-lite","google/gemini-2.5-flash","openai/gpt-5-mini","openai/gpt-4.1-mini","openai/gpt-5.4-nano","openai/gpt-5.4-mini"]), observedProvider: z.enum(["UNKNOWN", "Google", "google-vertex", "google-vertex/eu","Google AI Studio","google-ai-studio","Azure","OpenAI"]),
     promptTokens: safeCount.nullable(), completionTokens: safeCount.nullable(), costMicrounits: safeCount.nullable(), reason: reason.optional() }),
   event("STRUCTURE_VALIDATED", { fullSchemaValid: z.boolean(), semanticPatchValidation: z.enum(["VALID", "INVALID"]),
     directiveValidation: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]), replyEligibility: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]) }),

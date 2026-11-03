@@ -1,3 +1,4 @@
+import {CONTEXT_KEYED_COMPARISON_PROTOCOL,CONTEXT_KEYED_COMPARISON_PROMPT} from './keyed-small-wire';
 import {CONTEXT_SMALL_PROTOCOL_V3} from "./small-protocol";
 import {CONTEXT_SMALL_PROMPT} from "./small-wire";
 import {isUnreconciledListInterpretation, type ContextGatewayInterpretation} from "./list-period-transport";
@@ -13,7 +14,7 @@ import type { ContextInput } from "./contracts";
 import type { ContextReminderQuery, ContextQueryResult } from "./query";
 import type { ReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
-import { createContextTraceId } from "./observability";
+import { createContextTraceId,contextRouteObservation } from "./observability";
 import type { ConversationScope } from "../contracts";
 import { buildContextInputV2 } from "./context";
 import { selectControl } from "./decisions";
@@ -42,7 +43,7 @@ import type { ContextObservation } from "./state";
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
-  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106"}; budgetStore: SemanticBudgetStore;
+  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106" | "KEYED_COMPARISON_136"}; budgetStore: SemanticBudgetStore;
   keyring: Pick<Keyring, "decryptSensitive">; calendar: LunarCalendarAdapter;
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
   now(): number; reply(plan: ReplyPlan): Promise<ReplyReceipt>;
@@ -57,6 +58,7 @@ const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|
 export function createContextContractService(deps: ContextContractServiceDependencies) {
   if (!isContextProtocolV3(deps.store.protocol)) throw new TypeError("Selected context protocol required");
   if (!/^[0-9a-f]{40}$/u.test(deps.sourceSha)) throw new TypeError("Source SHA required");
+  const emission=deps.gateway.contextWire==="KEYED_COMPARISON_136"?{protocol:CONTEXT_KEYED_COMPARISON_PROTOCOL,prompt:CONTEXT_KEYED_COMPARISON_PROMPT}:deps.gateway.contextWire==="SMALL_TABLES_106"?{protocol:CONTEXT_SMALL_PROTOCOL_V3,prompt:CONTEXT_SMALL_PROMPT}:deps.gateway.contextWire==="TYPED_OBJECTS_105"?{protocol:CONTEXT_TYPED_PROTOCOL_V3,prompt:CONTEXT_TYPED_PROMPT}:{protocol:CONTEXT_PROTOCOL_V3,prompt:CONTEXT_CONTRACT_PROMPT};
   const scopeFor = (message: BoundChatMessage, context: BoundChatContext): ConversationScope => ({ ownerId: context.userId,
     chatIdentityId: context.chatIdentityId, sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() });
   return {
@@ -70,7 +72,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
       const traceId = createContextTraceId();
       type EventFields = ContextObservationEvent extends infer E ? E extends ContextObservationEvent ? Omit<E, "traceId" | "sourceSha" | "contractVersion" | "promptVersion" | "mode"> : never : never;
       const emit = (event: EventFields) => { try { deps.observe?.({ traceId, sourceSha: deps.sourceSha, mode: deps.mode,
-        contractVersion: "calenote-context-3", promptVersion: deps.gateway.contextWire === "SMALL_TABLES_106" ? CONTEXT_SMALL_PROTOCOL_V3.promptVersion : deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROTOCOL_V3.promptVersion : "calenote-context-3", ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
+        contractVersion: "calenote-context-3", promptVersion: emission.protocol.promptVersion, ...event } as ContextObservationEvent); } catch { /* telemetry is non-authoritative */ } };
       let sendObservation: ContextObservation | undefined;
       let failureSnapshot: ContextSnapshotV2 | null = null, failureReceived: ContextSnapshotV2 | undefined;
       let downstreamCount = 0;
@@ -179,9 +181,9 @@ export function createContextContractService(deps: ContextContractServiceDepende
           try { void Promise.resolve(deps.processingFeedback?.()).catch(() => {}); } catch { /* best effort */ }
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
-          emit({ event: "REQUEST_PREPARED", configuredModel: "google/gemini-2.5-flash-lite", configuredProvider: attempt.provider==="google-ai-studio"?"google-ai-studio":"google-vertex/eu", routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
-          const inputDigest = await digest(built.input), promptDigest = await digest(deps.gateway.contextWire === "SMALL_TABLES_106" ? CONTEXT_SMALL_PROMPT : deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROMPT : CONTEXT_CONTRACT_PROMPT), contractDigest = await digest(InterpretationJsonSchema);
-          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: deps.gateway.contextWire === "SMALL_TABLES_106" ? CONTEXT_SMALL_PROTOCOL_V3 : deps.gateway.contextWire === "TYPED_OBJECTS_105" ? CONTEXT_TYPED_PROTOCOL_V3 : CONTEXT_PROTOCOL_V3 });
+          emit({ event: "REQUEST_PREPARED", ...contextRouteObservation(attempt.model,attempt.provider), routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
+          const inputDigest = await digest(built.input), promptDigest = await digest(emission.prompt), contractDigest = await digest(InterpretationJsonSchema);
+          const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: emission.protocol });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });
           if (reservation.status !== "RESERVED") { emit({ event: "REQUEST_REJECTED", reason: "BUDGET_EXHAUSTED" }); return finish("BUDGET"); }

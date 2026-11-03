@@ -1,0 +1,187 @@
+{
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-09-28T03:01:00.000Z",
+      "localDate": "2026-09-28",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Ngày 11/10 đi thi, nhắc trước 2 ngày."
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Việc cần nhắc: đi thi\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nQuan hệ với sự kiện: trước sự kiện\nSố ngày trước: 2\nBạn muốn được nhắc lúc mấy giờ?"
+      },
+      {
+        "role": "USER",
+        "text": "Đừng bỏ."
+      }
+    ],
+    "currentTurn": 2,
+    "activeRequest": {
+      "lifecycle": "CLARIFYING",
+      "slots": {
+        "title": {
+          "state": "RESOLVED",
+          "value": "đi thi",
+          "fact": "f1"
+        },
+        "location": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "notes": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventDate": {
+          "state": "RESOLVED",
+          "value": {
+            "kind": "CIVIL_DATE",
+            "calendar": "GREGORIAN",
+            "day": 11,
+            "month": 10,
+            "year": null,
+            "leapMonth": null
+          },
+          "fact": "f2"
+        },
+        "eventTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "calendar": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "frequency": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "occurrenceCount": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventRelation": {
+          "state": "RESOLVED",
+          "value": "BEFORE_EVENT",
+          "fact": "f3"
+        },
+        "leadOffsetDays": {
+          "state": "RESOLVED",
+          "value": 2,
+          "fact": "f4"
+        },
+        "endDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        }
+      }
+    },
+    "facts": [
+      {
+        "alias": "f1",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "title",
+        "value": "đi thi"
+      },
+      {
+        "alias": "f2",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "eventDate",
+        "value": {
+          "kind": "CIVIL_DATE",
+          "calendar": "GREGORIAN",
+          "day": 11,
+          "month": 10,
+          "year": null,
+          "leapMonth": null
+        }
+      },
+      {
+        "alias": "f3",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "eventRelation",
+        "value": "BEFORE_EVENT"
+      },
+      {
+        "alias": "f4",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "leadOffsetDays",
+        "value": 2
+      }
+    ],
+    "pendingQuestion": {
+      "text": "Bạn muốn được nhắc lúc mấy giờ?",
+      "scope": "REMINDER",
+      "field": "reminderTime",
+      "decisionKind": null,
+      "reason": "MISSING"
+    },
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-1",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY"
+      ],
+      "unsupported": [
+        "WEEKLY",
+        "MONTHLY",
+        "YEARLY",
+        "HOUR_OFFSET"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  }
+}

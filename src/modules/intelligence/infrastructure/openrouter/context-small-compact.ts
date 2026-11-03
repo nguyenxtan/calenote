@@ -92,9 +92,9 @@ export function compileCompactContext(source:unknown){
    return {schema:{...schema,anyOf:branches.map(branch=>branch.node.schema)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:JSON.stringify(branches.map(branch=>[branch.name,branch.node.signature]))};
   }
   if(Array.isArray(schema.anyOf)){
-   const nodes=schema.anyOf.map(branch=>compile(branch,scope,key,field));check(scope==='operation'&&nodes.length>0);
+   const nodes=schema.anyOf.map(branch=>compile(branch,scope,key,field));check((scope==='operation'||scope==='directive')&&nodes.length>0);
    const transform=(value:unknown,forward:boolean)=>{const results:unknown[]=[];for(const node of nodes){try{results.push((forward?node.pack:node.unpack)(value));}catch{/* An exact disjoint operation branch may refuse. */}}check(results.length===1);return results[0];};
-   return {schema:{...schema,anyOf:nodes.map(n=>n.schema)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:'operation-union'};
+   return {schema:{...schema,anyOf:nodes.map(n=>n.schema)},pack:v=>transform(v,true),unpack:v=>transform(v,false),signature:`${scope}-union`};
   }
   if(schema.type==='object'){
    check(record(schema.properties)&&Array.isArray(schema.required));
@@ -124,7 +124,7 @@ export function compileCompactContext(source:unknown){
    const translated=aliases?(forward?(typeof value==='string'&&Object.hasOwn(aliases,value)?aliases[value]:undefined):(typeof value==='string'&&Object.hasOwn(inverse!,value)?inverse![value]:undefined)):value;
    check(!enums||enums.includes(forward?value:translated));return translated;
   };
-  if(nullable){const cell:Row={type:'array',items:primitive,...(nullOnly?{maxItems:0}:{})};return {schema:cell,pack:v=>v===null?[]:[scalar(v,true)],unpack:v=>{check(Array.isArray(v)&&v.length<=1&&(!nullOnly||v.length===0));return v.length===0?null:scalar(v[0],false);},signature:`cell:${nullOnly?'null':active[0]}:${JSON.stringify(aliases??{})}`};}
+  if(nullable){const requiredCell=scope==='directive'&&!nullOnly&&Array.isArray(schema.enum)&&!schema.enum.includes(null);const cell:Row={type:'array',items:primitive,...(nullOnly?{maxItems:0}:requiredCell?{minItems:1,maxItems:1}:{})};return {schema:cell,pack:v=>{check(v!==null||!requiredCell);return v===null?[]:[scalar(v,true)];},unpack:v=>{check(Array.isArray(v)&&v.length<=1&&v.length>=(requiredCell?1:0)&&(!nullOnly||v.length===0));return v.length===0?null:scalar(v[0],false);},signature:`cell:${nullOnly?'null':active[0]}:${JSON.stringify(aliases??{})}`};}
   return {schema:primitive,pack:v=>scalar(v,true),unpack:v=>scalar(v,false),signature:`scalar:${active[0]}:${JSON.stringify(aliases??{})}`};
  };
  return compile(source,'root');

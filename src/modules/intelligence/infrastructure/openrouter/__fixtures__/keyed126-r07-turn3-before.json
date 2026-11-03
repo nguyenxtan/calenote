@@ -1,0 +1,270 @@
+{
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-09-28T03:03:00.000Z",
+      "localDate": "2026-09-28",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Việc cần nhắc: đi thi\nĐịa điểm: Quang Trung\nGhi chú: nhớ mang giấy tờ\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nBạn muốn được nhắc lúc mấy giờ?"
+      },
+      {
+        "role": "USER",
+        "text": "Nhắc hai ngày liên tiếp trước hôm thi."
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Việc cần nhắc: đi thi\nĐịa điểm: Quang Trung\nGhi chú: nhớ mang giấy tờ\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nTần suất: mỗi ngày\nSố lần: 2\nQuan hệ với sự kiện: trước sự kiện\nMình cần làm rõ thông tin này. Bạn muốn được nhắc lúc mấy giờ?"
+      },
+      {
+        "role": "USER",
+        "text": "8h."
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Bản nháp chưa lưu:\nđi thi\nĐịa điểm: Quang Trung\nGhi chú: nhớ mang giấy tờ\nSự kiện: 2026-10-11 (chưa có giờ sự kiện)\nThông báo (Asia/Ho_Chi_Minh):\n2026-10-09 08:00\n2026-10-10 08:00\nXác nhận [CONTROL]\nTrả lời 2 để từ chối."
+      },
+      {
+        "role": "USER",
+        "text": "Đổi sang 9h."
+      }
+    ],
+    "currentTurn": 6,
+    "activeRequest": {
+      "lifecycle": "AWAITING_CONFIRMATION",
+      "slots": {
+        "title": {
+          "state": "RESOLVED",
+          "value": "đi thi",
+          "fact": "f1"
+        },
+        "location": {
+          "state": "RESOLVED",
+          "value": "Quang Trung",
+          "fact": "f2"
+        },
+        "notes": {
+          "state": "RESOLVED",
+          "value": "nhớ mang giấy tờ",
+          "fact": "f3"
+        },
+        "eventDate": {
+          "state": "RESOLVED",
+          "value": {
+            "kind": "CIVIL_DATE",
+            "calendar": "GREGORIAN",
+            "day": 11,
+            "month": 10,
+            "year": null,
+            "leapMonth": null
+          },
+          "fact": "f4"
+        },
+        "eventTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderTime": {
+          "state": "RESOLVED",
+          "value": {
+            "hour": 8,
+            "minute": 0,
+            "qualifier": "H24"
+          },
+          "fact": "f5"
+        },
+        "calendar": {
+          "state": "RESOLVED",
+          "value": "GREGORIAN",
+          "fact": "f6"
+        },
+        "frequency": {
+          "state": "RESOLVED",
+          "value": "DAILY",
+          "fact": "f7"
+        },
+        "occurrenceCount": {
+          "state": "RESOLVED",
+          "value": 2,
+          "fact": "f8"
+        },
+        "eventRelation": {
+          "state": "RESOLVED",
+          "value": "BEFORE_EVENT",
+          "fact": "f9"
+        },
+        "leadOffsetDays": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "endDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        }
+      }
+    },
+    "facts": [
+      {
+        "alias": "f1",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "title",
+        "value": "đi thi"
+      },
+      {
+        "alias": "f2",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "location",
+        "value": "Quang Trung"
+      },
+      {
+        "alias": "f3",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "notes",
+        "value": "nhớ mang giấy tờ"
+      },
+      {
+        "alias": "f4",
+        "provenance": {
+          "kind": "DERIVED_POLICY",
+          "policyVersion": "context-resolution-1",
+          "dependencies": [],
+          "referenceTime": "2026-09-28T03:00:00.000Z"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "eventDate",
+        "value": {
+          "kind": "CIVIL_DATE",
+          "calendar": "GREGORIAN",
+          "day": 11,
+          "month": 10,
+          "year": null,
+          "leapMonth": null
+        }
+      },
+      {
+        "alias": "f5",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:02:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "reminderTime",
+        "value": {
+          "hour": 8,
+          "minute": 0,
+          "qualifier": "H24"
+        }
+      },
+      {
+        "alias": "f6",
+        "provenance": {
+          "kind": "DERIVED_POLICY",
+          "policyVersion": "context-resolution-1",
+          "dependencies": [
+            "f4"
+          ],
+          "referenceTime": "2026-09-28T03:00:00.000Z"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [
+          "f4"
+        ],
+        "scope": "REMINDER",
+        "field": "calendar",
+        "value": "GREGORIAN"
+      },
+      {
+        "alias": "f7",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "frequency",
+        "value": "DAILY"
+      },
+      {
+        "alias": "f8",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "occurrenceCount",
+        "value": 2
+      },
+      {
+        "alias": "f9",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "eventRelation",
+        "value": "BEFORE_EVENT"
+      }
+    ],
+    "pendingQuestion": null,
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-1",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY"
+      ],
+      "unsupported": [
+        "WEEKLY",
+        "MONTHLY",
+        "YEARLY",
+        "HOUR_OFFSET"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  }
+}
