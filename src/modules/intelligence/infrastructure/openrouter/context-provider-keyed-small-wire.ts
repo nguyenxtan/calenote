@@ -19,6 +19,7 @@ import {keyedClockCorrectionField,keyedClockNotationField} from './context-keyed
 import {isRetainedClosedRelationFieldUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
+import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 const operationLabels:Record<string,string>={
@@ -150,7 +151,15 @@ function selected(input:ContextInput){
   const codes=branch.properties!.code.enum as string[],evidence=branch.properties!.targetEvidence;
   // Canonical query intents always own a query object, including a genuine
   // missing operand. [] would erase that object and strict decoding refuses it.
-  if(branch.properties!.query)branch.properties!.query.minItems=1;
+  if(branch.properties!.query){
+   const query=branch.properties!.query;query.minItems=1;
+   const kind=codes.length===1?({'3':'LIST','4':'CALENDAR_DATE','5':'CAPABILITY'} as const)[codes[0] as '3'|'4'|'5']:undefined;
+   const items=query.items?.properties?.evidence.items;
+   if(!kind||!items?.enum)throw Error('KEYED_QUERY_EVIDENCE_POLICY');
+   const allowed=new Set([...book.currentCodes,...keyedQueryFactEvidenceCodes(input,kind)]);
+   items.enum=items.enum.filter(code=>typeof code==='string'&&allowed.has(code));
+   if(!items.enum.length)throw Error('KEYED_QUERY_EVIDENCE_EMPTY');
+  }
   branch.properties!.code.enum=codes.map(code=>KEYED_OPERATION_NAMES[code]);
   if(evidence.type==='array'&&evidence.maxItems===0){for(const code of branch.properties!.code.enum as string[])untargeted.add(code);delete branch.properties!.targetEvidence;branch.required=branch.required!.filter(name=>name!=='targetEvidence');}
  }
