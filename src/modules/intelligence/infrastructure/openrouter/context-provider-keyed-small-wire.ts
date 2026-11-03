@@ -18,6 +18,7 @@ import {keyedNoteValuePattern} from './context-keyed-note-boundary';
 import {keyedClockCorrectionField,keyedClockNotationField} from './context-keyed-clock-correction';
 import {isRetainedClosedRelationFieldUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
+import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 const operationLabels:Record<string,string>={
@@ -108,6 +109,11 @@ function selected(input:ContextInput){
  if(clockNotationField){const qualifier=(source as Schema).properties!.changes.properties!.owners.properties![clockNotationField]?.items?.properties?.write.items?.properties?.value.properties?.qualifier;if(!qualifier?.enum?.includes('H24'))throw Error('KEYED_CLOCK_NOTATION_POLICY');qualifier.enum=['H24'];}
  const countOwner=(source as Schema).properties!.changes.properties!.owners.properties!.occurrenceCount;
  if(countOwner&&keyedSingleNotificationCountAbsent(input))countOwner.maxItems=0;
+ if(keyedDailyCadenceRequired(input)){
+  const owner=(source as Schema).properties!.changes.properties!.owners.properties!.frequency,write=owner?.items?.properties?.write,value=write?.items?.properties?.value;
+  if(!owner||!write||!value?.enum?.includes('DAILY')||!write.items?.properties?.operation.enum?.includes('SET'))throw Error('KEYED_DAILY_CADENCE_POLICY');
+  owner.minItems=1;write.minItems=1;write.items.properties.operation.enum=['SET'];value.enum=['DAILY'];
+ }
  for(const key of inactiveTables){const table=source.properties[key] as Schema;if(table.type!=='array'||table.maxItems!==0)throw Error('KEYED_INACTIVE_TABLE_POLICY');delete source.properties[key];source.required=source.required.filter(name=>name!==key);}
  const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.operation;
  const issues=source.properties.uncertainties as Schema;
