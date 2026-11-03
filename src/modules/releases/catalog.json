@@ -1,10 +1,26 @@
 {
-  "latestId": "2026-11-03-ai-conversation-reliability",
+  "latestId": "2026-11-03-bot-expired-clarification",
   "notes": [
     {
-      "id": "2026-11-03-ai-conversation-reliability",
+      "id": "2026-11-03-bot-expired-clarification",
       "commit": null,
       "releasedAt": null,
+      "title": "Bot tiếp tục trả lời sau khi ngữ cảnh cũ hết hạn",
+      "summary": "Dọn ngữ cảnh hỏi tiếp đã hết hạn để cuộc chat có thể tiếp tục.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Kết thúc ngữ cảnh hỏi tiếp của luồng AI cũ khi đã hết hạn, trong đúng cuộc chat đã xác thực.",
+        "Giữ chặn yêu cầu song song khi ngữ cảnh cũ vẫn còn hiệu lực; bảo toàn dữ liệu mã hóa và xác nhận trước khi lưu."
+      ],
+      "memberChanges": [
+        "Bot có thể trả lời trở lại khi cuộc trò chuyện trước đã hết thời gian chờ."
+      ],
+      "verification": "Phạm vi kiểm thử: lời chào, tạo bản nháp sau khi ngữ cảnh cũ hết hạn, thời điểm hết hạn, quyền truy cập, cách ly cuộc chat và ngữ cảnh còn hiệu lực."
+    },
+    {
+      "id": "2026-11-03-ai-conversation-reliability",
+      "commit": "e0e45549d303e69826b2b59e5115f53034b52791",
+      "releasedAt": "2026-11-03T09:41:15.555329Z",
       "title": "Trợ lý giữ đúng yêu cầu và bản nháp",
       "summary": "Giữ đủ thông tin lời nhắc, xử lý sửa giờ và báo rõ lịch chưa được hỗ trợ.",
       "kind": "Sửa lỗi",

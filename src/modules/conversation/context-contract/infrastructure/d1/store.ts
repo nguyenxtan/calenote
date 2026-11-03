@@ -196,6 +196,12 @@ export class D1ContextContractStore implements ContextContractStore {
    const a=this.authority({kind:"CHAT",scope}), auth=authQuery(a,true);
    const binding=await this.statement(auth.sql,auth.args).first<{id:string;connection_id:string;private_chat_id:string;workspace_id:string}>();
    if(!binding)return {failure:"UNAUTHORIZED"};
+   // The successor no longer calls the legacy semantic reader, which used to
+   // expire these rows. Keep its pending-state fence, retiring only expired
+   // clarification in this still-owned chat before observing successor state.
+   await this.statement(`UPDATE semantic_contexts SET status='EXPIRED',updated_at=?
+    WHERE owner_id=? AND chat_identity_id=? AND status='PENDING' AND expires_at<=?
+    AND EXISTS(${ownedInbound})`,[scope.now,scope.ownerId,scope.chatIdentityId,scope.now,...inboundArgs(scope)]).run();
    const inbound=await this.statement("SELECT received_at,rowid FROM inbound_updates WHERE id=?",[scope.sourceInboundId]).first<{received_at:number;rowid:number}>();
    if(!inbound)return {failure:"UNAUTHORIZED"};
    const rows=await this.statement(`SELECT c.*,(SELECT coalesce(max(o.rowid),0) FROM conversation_context_outcomes o JOIN conversation_contexts h ON h.id=o.context_id WHERE h.chat_identity_id=?) history
