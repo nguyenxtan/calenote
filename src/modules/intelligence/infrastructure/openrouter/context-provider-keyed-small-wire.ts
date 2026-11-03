@@ -123,10 +123,14 @@ function selected(input:ContextInput){
  if(!uncertaintyRows.length)throw Error('KEYED_FIELD_UNCERTAINTY_POLICY');issues.maxItems=fieldRows.length?4:0;issues.items=fieldRows.length?{anyOf:fieldRows}:{type:'object',properties:{},required:[],additionalProperties:false};
  if(isRetainedClosedRelationFieldUncertaintyAbsent(input))issues.maxItems=0;
  const operationReasons=uncertaintyReasons.get(operationCode),operationIssue:Schema={type:'object',properties:{reason:{type:'string',enum:[...operationReasons??[]]},alternatives:{type:'array',maxItems:2,items:{type:'object',properties:{value:{type:'string',enum:['CURRENT','NEW']},evidence:{type:'array',minItems:1,maxItems:3,items:{type:'string',enum:[...primaryEvidenceSourceCodebook(input).currentCodes]}}},required:['value','evidence'],additionalProperties:false}}},required:['reason','alternatives'],additionalProperties:false};
- operation.anyOf=operation.anyOf.flatMap(branch=>[false,true].flatMap(ambiguous=>{
-  const codes=(branch.properties!.code.enum as string[]).filter(code=>['9','10','11'].includes(code)===ambiguous);if(!codes.length||ambiguous&&!operationReasons?.size)return [];
+ operation.anyOf=operation.anyOf.flatMap(branch=>['RESOLVED_REMINDER','OTHER','UNKNOWN_ACTION'].flatMap(group=>{
+  const ambiguous=group==='UNKNOWN_ACTION',resolved=group==='RESOLVED_REMINDER';
+  const codes=(branch.properties!.code.enum as string[]).filter(code=>resolved?['0','1'].includes(code):ambiguous?['9','10','11'].includes(code):!['0','1','9','10','11'].includes(code));if(!codes.length||ambiguous&&!operationReasons?.size)return [];
   const selected=structuredClone(branch);selected.properties!.code.enum=codes;
-  if(operationReasons?.size){selected.properties!.operationUncertainties={type:'array',minItems:ambiguous?1:0,maxItems:4,items:structuredClone(operationIssue)};selected.required!.push('operationUncertainties');}return [selected];
+  // A known reminder action with a resolved CURRENT/NEW target cannot also
+  // declare that action/target unresolved. The fixed-empty codec omits only
+  // this structural zero-capacity carrier, never any received authored issue.
+  if(operationReasons?.size){selected.properties!.operationUncertainties={type:'array',minItems:ambiguous?1:0,maxItems:resolved?0:4,items:structuredClone(operationIssue)};selected.required!.push('operationUncertainties');}return [selected];
  }));
  const controlOperations=new Set<string>();
  operation.anyOf=operation.anyOf.flatMap(branch=>[false,true].flatMap(controls=>{

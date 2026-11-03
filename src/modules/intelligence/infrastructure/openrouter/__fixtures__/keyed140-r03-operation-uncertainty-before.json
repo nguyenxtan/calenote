@@ -1,0 +1,261 @@
+{
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-09-28T03:01:00.000Z",
+      "localDate": "2026-09-28",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Ngày 11/10 đi thi, nhắc 2 ngày liên tiếp lúc 8h."
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Việc cần nhắc: đi thi\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nGiờ nhắc: 08:00\nTần suất: mỗi ngày\nSố lần: 2\nBạn muốn được nhắc vào ngày nào?"
+      },
+      {
+        "role": "USER",
+        "text": "Nhắc trước sự kiện."
+      }
+    ],
+    "currentTurn": 2,
+    "activeRequest": {
+      "lifecycle": "CLARIFYING",
+      "slots": {
+        "title": {
+          "state": "RESOLVED",
+          "value": "đi thi",
+          "fact": "f1"
+        },
+        "location": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "notes": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventDate": {
+          "state": "RESOLVED",
+          "value": {
+            "kind": "CIVIL_DATE",
+            "calendar": "GREGORIAN",
+            "day": 11,
+            "month": 10,
+            "year": null,
+            "leapMonth": null
+          },
+          "fact": "f2"
+        },
+        "eventTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderTime": {
+          "state": "RESOLVED",
+          "value": {
+            "hour": 8,
+            "minute": 0,
+            "qualifier": "H24"
+          },
+          "fact": "f3"
+        },
+        "calendar": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "frequency": {
+          "state": "RESOLVED",
+          "value": "DAILY",
+          "fact": "f4"
+        },
+        "occurrenceCount": {
+          "state": "RESOLVED",
+          "value": 2,
+          "fact": "f5"
+        },
+        "eventRelation": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "leadOffsetDays": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "endDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        }
+      }
+    },
+    "facts": [
+      {
+        "alias": "f1",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "title",
+        "value": "đi thi"
+      },
+      {
+        "alias": "f2",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "eventDate",
+        "value": {
+          "kind": "CIVIL_DATE",
+          "calendar": "GREGORIAN",
+          "day": 11,
+          "month": 10,
+          "year": null,
+          "leapMonth": null
+        }
+      },
+      {
+        "alias": "f3",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "reminderTime",
+        "value": {
+          "hour": 8,
+          "minute": 0,
+          "qualifier": "H24"
+        }
+      },
+      {
+        "alias": "f4",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "frequency",
+        "value": "DAILY"
+      },
+      {
+        "alias": "f5",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "occurrenceCount",
+        "value": 2
+      }
+    ],
+    "pendingQuestion": {
+      "text": "Bạn muốn được nhắc vào ngày nào?",
+      "scope": "REMINDER",
+      "field": "reminderDate",
+      "decisionKind": null,
+      "reason": "MISSING"
+    },
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-1",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY"
+      ],
+      "unsupported": [
+        "WEEKLY",
+        "MONTHLY",
+        "YEARLY",
+        "HOUR_OFFSET"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  },
+  "providerWire": {
+    "operation": {
+      "code": "CONTINUE_CURRENT_REMINDER",
+      "targetEvidence": [
+        "U2"
+      ],
+      "operationUncertainties": [
+        {
+          "reason": "AMBIGUOUS",
+          "alternatives": []
+        }
+      ]
+    },
+    "changes": {
+      "owners": {
+        "title": [],
+        "location": [],
+        "notes": [],
+        "eventDate": [],
+        "eventTime": [],
+        "reminderDate": [],
+        "reminderTime": [],
+        "frequency": [],
+        "occurrenceCount": [],
+        "eventRelation": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "BEFORE_EVENT"
+              }
+            ],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ],
+        "endDate": []
+      }
+    },
+    "directive": [
+      {
+        "kind": "ASK_FOR_FIELD",
+        "field": "leadOffsetDays",
+        "reason": null,
+        "issue": null,
+        "topic": null
+      }
+    ],
+    "reply": [
+      {
+        "text": "Bạn muốn nhắc trước sự kiện bao nhiêu ngày?"
+      }
+    ]
+  }
+}

@@ -15,7 +15,7 @@
 - Production branch master; preserve legacy main and existing feature branch.
 - Same GPT-5 mini low/Azure Sweden route, required ZDR, no fallback,3072 output,45s timeout,32KiB response.
 - Preserve atomic budgets50 calls/owner/day,500000 microunits/owner/month,2000000/global/day. Exact reservation116759 from400000 input exposure at275000 and3072 output at2200000 microunits/million.
-- Synthetic inference key lifetime ceiling remainsUSD2; never install the expiring test/management key as a production secret.
+- Aggregate synthetic inference key lifetime ceiling is owner-approvedUSD2.50 (original key2 + separate extra key0.50); never install the expiring test/management key as a production secret.
 - No new migration or secret rotation for transport promotion. Inspect actual remote schema; auth currently denies D1 read with7403, owner asked to reauthenticate while preparation continues.
 - Keep CONTEXT_PROTOCOL_V3 canonical storage, ownership fences and confirmation authority.
 - Upload once with exact40hex master SHA tag; record rollback version and promote that immutable version; provider-free HTTP smoke only.
@@ -67,3 +67,10 @@ The user already directed autonomous work and explicitly requested merge/deploy;
 - Minimal fix140 clarifies semantic ownership: LIST_REMINDERS retrieves scheduled items over a period; CALENDAR_QUERY requests date facts/conversion. No fixture phrase matching, schema widening, output repair or oracle change. The captured live R11 failure is the pre-fix failing test; validate the fix with focused live R11, all144 offline canonical outcomes and the full engineering gate. Preserve139 evidence and add separate140 request hashes.
 - Remaining lifetime key credit after the retry is aboutUSD0.243; a full fresh qualification also needs the116759-microUSD per-call admission reserve. Do not raise the USD2 key ceiling or relabel focused results as full32 qualification.
 - Focused140 validation:66 tests passed across the two complete144-schema audit files and production gateway tests (CI=true,74.95s). Fresh synthetic R11 passed all turns with3 HTTP calls,knownUSD0.009565512,unknown0,artifact /tmp/calenote-model-comparison-1793686568244. This is focused evidence only; full32/84 remains pending.
+
+## Resolved-operation ownership141
+
+- Owner explicitly approved aggregateUSD2.50. Extra synthetic key capped0.50 was created/verified; production secrets untouched. Full140 stopped atR03/1 after13calls/USD0.031939655,unknown0: selected concrete CURRENT plus an invented empty-candidate operation ambiguity blocked a grounded relation. Aggregate known spending1.798387916,remaining0.701612084; no inference in flight.
+- Read-only Claude advice accepted a disjoint emission restriction conditional on a written contract. Native ruling: document the selected keyed subset, preserve the wider canonical/legacy consumers, and retain zero/one-candidate unknown branches because canonicalV3 and existing tests explicitly permit them. No invented two-candidate requirement. See ai-keyed-operation-ownership-2026-11-03.md.
+- Four regression tests were first RED: observed contradictory payload admitted; resolved CURRENT/NEW emitted an operation-uncertainty carrier; encoder accepted a contradictory canonical issue. Implement only the branch capacity restriction and prompt141. Preserve genuine unresolved D07, targeted unknown, field-level ambiguities, all144 roundtrips, and frozen business files. Fresh full current-source live qualification remains required before promotion.
+-141 GREEN:4 new regression tests plus10 existing keyed tests pass, including all144 canonical outcomes/9216 eligibility probes and real unresolved-location continuation.9 gateway/operation tests pass and typecheck passes. Original f83 exact-SHA GitHub CI completed success. The new141 candidate still needs its own frozen full engineering/live checks.
