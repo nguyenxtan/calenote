@@ -160,7 +160,8 @@ export class D1InboundWebhookStore implements InboundStore {
            message_key_version, state, received_at, processing_started_at,
            attempt_count, processed_at, transition_marker, dispatch_started_at,
            dispatch_attempt_count, dispatch_marker, safe_error_code
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?
+           WHERE EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=? AND c.state IN ('VALIDATING','ACTIVE_UNBOUND','ACTIVE_BOUND','WEBHOOK_FAILED'))`,
       )
       .bind(
         record.id,
@@ -182,6 +183,7 @@ export class D1InboundWebhookStore implements InboundStore {
         record.dispatchAttemptCount,
         record.dispatchMarker,
         record.safeErrorCode,
+        record.connectionId,
       )
       .run();
     return d1Changes(result) === 1;

@@ -1,3 +1,4 @@
+import { addressProse, botSalutation, type BotReplyPreferences } from "@/modules/preferences/wording";
 import { localReadOnlyCommand } from "@/modules/conversation/local-read-only";
 import {
   cryptoRandomBytes,
@@ -82,6 +83,8 @@ interface CommandMutationBase {
 
 export interface CreateDraftMutation extends CommandMutationBase {
   conversationFence?: { id: string; revision: number };
+  /** The validated CREATE request itself supplies confirmation; persisted in the same fenced batch. */
+  autoConfirm?: { reminderId: string; reminderPublicId: string; encryptedTitle: EncryptedValue; titleKeyVersion: number };
   draftId: string;
   encryptedTitle: EncryptedValue;
   titleKeyVersion: number;
@@ -117,6 +120,8 @@ export interface ReminderCommandStore {
 }
 
 export interface ProcessBoundChatDependencies {
+  getReplyPreferences?(ownerId: string): Promise<BotReplyPreferences>;
+  getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
   conversation?: {
     handle(message: BoundChatMessage, context: BoundChatContext): Promise<ProcessBoundChatResult>;
     ownsPendingDraft?(message: BoundChatMessage, context: BoundChatContext, draftId: string): Promise<boolean>;
@@ -131,6 +136,8 @@ export interface ProcessBoundChatDependencies {
   semantic?: BoundChatSemanticDependencies;
   processingFeedback?: () => Promise<void>;
 }
+
+type RenderDependencies = ProcessBoundChatDependencies & { resolveReplyPreferences?: () => Promise<BotReplyPreferences | undefined> };
 
 export interface BoundChatSemanticDependencies {
   service: ReturnType<typeof createSemanticService>;
@@ -221,11 +228,15 @@ function draftReply(candidate: ParsedReminderCandidate): string {
 }
 
 async function bestEffortReply(
-  dependencies: ProcessBoundChatDependencies,
+  dependencies: RenderDependencies,
   text: string,
+  literal = false,
 ): Promise<void> {
   try {
-    await dependencies.reply(text);
+    const preferences = await dependencies.resolveReplyPreferences?.();
+    const rendered = botSalutation(preferences) + (literal ? text : addressProse(text, preferences));
+    if (text.length > MAX_PROVIDER_REPLY_LENGTH) throw new TypeError("Provider reply exceeds safe limit");
+    await dependencies.reply(rendered.length <= MAX_PROVIDER_REPLY_LENGTH ? rendered : text);
   } catch {
     // The database is already terminal. Ambiguous provider outcomes are not retried.
   }
@@ -235,7 +246,7 @@ async function rejectWithReply(
   message: BoundChatMessage,
   reply: string,
   now: number,
-  dependencies: ProcessBoundChatDependencies,
+  dependencies: RenderDependencies,
   randomBytes: RandomBytes,
 ): Promise<ProcessBoundChatResult> {
   const rejected = await dependencies.store.rejectMessage(
@@ -252,7 +263,7 @@ async function rejectWithReply(
 async function rejectResolutionConflict(
   message: BoundChatMessage,
   now: number,
-  dependencies: ProcessBoundChatDependencies,
+  dependencies: RenderDependencies,
   randomBytes: RandomBytes,
 ): Promise<ProcessBoundChatResult> {
   return rejectWithReply(message, NO_PENDING_REPLY, now, dependencies, randomBytes);
@@ -261,7 +272,7 @@ async function rejectResolutionConflict(
 async function semanticCommand(
   message: BoundChatMessage,
   context: BoundChatContext,
-  dependencies: ProcessBoundChatDependencies,
+  dependencies: RenderDependencies,
   semantic: BoundChatSemanticDependencies,
   now: Clock,
   randomBytes: RandomBytes,
@@ -305,9 +316,10 @@ async function semanticCommand(
       lines.push(`${local.slice(8, 10)}/${local.slice(5, 7)} ${local.slice(11, 16)} — ${briefTitle}`);
     }
     if (!await semantic.complete(message, context, now())) return { status: "SUPERSEDED" };
+    const replyPreferences = await dependencies.resolveReplyPreferences?.();
     await bestEffortReply(dependencies, lines.length
-      ? `Lời nhắc trong khoảng bạn hỏi (tối đa 5):\n${lines.join("\n")}`
-      : "Không có lời nhắc sắp tới trong khoảng bạn hỏi.");
+      ? `${addressProse("Lời nhắc trong khoảng bạn hỏi (tối đa 5):", replyPreferences)}\n${lines.join("\n")}`
+      : addressProse("Không có lời nhắc sắp tới trong khoảng bạn hỏi.", replyPreferences), true);
     return { status: "REMINDERS_LISTED" };
   }
 
@@ -318,14 +330,15 @@ async function semanticCommand(
   });
   if (saved === "CONFLICT") return rejectResolutionConflict(message, now(), dependencies, randomBytes);
   if (!await semantic.complete(message, context, now())) return { status: "SUPERSEDED" };
-  await bestEffortReply(dependencies, result.clarification.question);
+  await bestEffortReply(dependencies, result.clarification.question, true);
   return { status: "CLARIFICATION_REQUESTED" };
 }
 
 export async function processBoundChatMessage(
   message: BoundChatMessage,
-  dependencies: ProcessBoundChatDependencies,
+  inputDependencies: ProcessBoundChatDependencies,
 ): Promise<ProcessBoundChatResult> {
+  let dependencies: RenderDependencies = inputDependencies;
   const now = dependencies.now ?? systemClock;
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   const processingNow = now();
@@ -333,6 +346,9 @@ export async function processBoundChatMessage(
   if (!context) {
     return rejectWithReply(message, IDENTITY_REPLY, processingNow, dependencies, randomBytes);
   }
+  let preferences: Promise<BotReplyPreferences | undefined> | undefined;
+  dependencies = { ...dependencies, resolveReplyPreferences: () => preferences ??= Promise.resolve()
+    .then(() => inputDependencies.getReplyPreferences?.(context.userId)).catch(() => undefined) };
   if (message.receivedAt > processingNow + MAX_PROVIDER_CLOCK_SKEW_MS) {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
@@ -478,7 +494,13 @@ export async function processBoundChatMessage(
     TITLE_KEY_VERSION,
     candidate.title,
   );
+  const auto = await dependencies.getReminderConfirmation?.(context.userId) === "auto";
+  const reminderId = auto ? randomOpaqueId(randomBytes) : null;
+  const autoConfirm = reminderId ? { reminderId, reminderPublicId: randomOpaqueId(randomBytes),
+    encryptedTitle: await dependencies.keyring.encryptSensitive("reminder-title", reminderId, TITLE_KEY_VERSION, candidate.title),
+    titleKeyVersion: TITLE_KEY_VERSION } : undefined;
   const result = await dependencies.store.createDraft({
+    autoConfirm,
     message,
     context,
     draftId,
@@ -495,6 +517,6 @@ export async function processBoundChatMessage(
   if (result === "CONFLICT") {
     return rejectWithReply(message, HELP_REPLY, processingNow, dependencies, randomBytes);
   }
-  await bestEffortReply(dependencies, draftReply(candidate));
-  return { status: "DRAFT_CREATED" };
+  await bestEffortReply(dependencies, auto ? `Đã tạo lời nhắc. ${draftReply(candidate).split(". Gửi")[0]}.` : draftReply(candidate), true);
+  return { status: auto ? "CONFIRMED" : "DRAFT_CREATED" };
 }

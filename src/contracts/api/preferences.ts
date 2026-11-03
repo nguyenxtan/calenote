@@ -7,12 +7,14 @@ export const PresentationPreferencesSchema = z.object({
   addressStyle: AddressStyleSchema,
   customDisplayName: z.string().nullable(),
   tone: ToneSchema,
+  reminderConfirmation: z.enum(["auto", "preview"]).optional(),
 }).strict();
 
 export const UpdatePreferencesSchema = z.object({
   addressStyle: AddressStyleSchema.optional(),
   customDisplayName: z.string().nullable().optional(),
   tone: ToneSchema.optional(),
+  reminderConfirmation: z.enum(["auto", "preview"]).optional(),
 }).strict();
 
 export const PreferencesResponseSchema = z.object({

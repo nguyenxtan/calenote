@@ -14,6 +14,7 @@ export interface PublicConnection {
   displayName: string;
   handle: string | null;
   state: ConnectionState;
+  disconnected?: boolean;
 }
 
 interface UserRow {
@@ -23,6 +24,7 @@ interface UserRow {
 }
 
 interface ConnectionRow {
+  transition_marker: string | null;
   public_id: string;
   provider: BotProvider;
   display_name: string;
@@ -48,7 +50,7 @@ export class D1DashboardStore {
   async listConnections(userId: string): Promise<PublicConnection[]> {
     const rows = await this.database
       .prepare(
-        `SELECT public_id, provider, display_name, handle, state
+        `SELECT public_id, provider, display_name, handle, state, transition_marker
          FROM bot_connections
          WHERE user_id = ?
          ORDER BY provider ASC, public_id ASC`,
@@ -61,6 +63,7 @@ export class D1DashboardStore {
       displayName: row.display_name,
       handle: row.handle,
       state: row.state,
+      ...(row.transition_marker?.startsWith("disconnected:") ? {disconnected:true} : {}),
     }));
   }
 

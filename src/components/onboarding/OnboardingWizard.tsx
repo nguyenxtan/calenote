@@ -39,6 +39,8 @@ import {
 } from "@/lib/client-api";
 import { ProgressRail } from "./ProgressRail";
 import { ProviderCard } from "./ProviderCard";
+import { getDefaultAppPath } from "@/lib/appearance-preferences";
+import { ContinueEmailRequestSchema } from "@/contracts/api/auth-continue";
 import styles from "./OnboardingWizard.module.css";
 
 const steps = ["Tài khoản", "Kênh chat", "Kích hoạt"] as const;
@@ -209,10 +211,16 @@ export function OnboardingWizard() {
     void apiRequest("/api/session", { signal: controller.signal }).then(() => {
       if (controller.signal.aborted) return;
       setEntryState("redirecting");
-      replace("/app/today");
+      replace(getDefaultAppPath());
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       if (error instanceof ApiResponseError && error.status === 401) {
+        try {
+          const handoff = sessionStorage.getItem("calenote:onboarding-email");
+          sessionStorage.removeItem("calenote:onboarding-email");
+          const parsed = ContinueEmailRequestSchema.safeParse({ email: handoff });
+          if (parsed.success) setEmail(parsed.data.email);
+        } catch { /* Email can be re-entered when device storage is blocked. */ }
         setEntryState("onboarding");
         return;
       }
@@ -518,7 +526,7 @@ export function OnboardingWizard() {
                 icon={<UserRound size={20} />}
                 kicker="Bước 1 · Tài khoản"
                 title="Tạo không gian Calenote của bạn"
-                description="Một tài khoản cá nhân, một múi giờ Việt Nam và một bot do bạn sở hữu."
+                description="Một tài khoản cá nhân, một múi giờ Việt Nam và một bot do bạn sở hữu. Với email đã tồn tại, phải dùng đúng token bot cũ; bot mới không thể thay thế tài khoản."
               />
               <form className={styles.form} aria-label="Thông tin tài khoản" onSubmit={(event) => {
                 event.preventDefault();

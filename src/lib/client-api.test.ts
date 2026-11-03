@@ -224,3 +224,15 @@ describe("apiRequest", () => {
     }
   });
 });
+
+it('does not emit session loss for an aborted request whose late response is401',async()=>{
+ const controller=new AbortController();let finish!:(value:Response)=>void;
+ vi.stubGlobal('fetch',vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;})));
+ const listener=vi.fn(),onUnauthorized=vi.fn();window.addEventListener('calenote-session-changed',listener);
+ try{
+  const pending=apiRequest('/api/session',{authenticated:true,signal:controller.signal,onUnauthorized});
+  controller.abort();finish(new Response(JSON.stringify({error:{code:'UNAUTHENTICATED',message:'Denied'}}),{status:401,headers:{'content-type':'application/json'}}));
+  await expect(pending).rejects.toMatchObject({name:'AbortError'});
+  expect(listener).not.toHaveBeenCalled();expect(onUnauthorized).not.toHaveBeenCalled();
+ }finally{window.removeEventListener('calenote-session-changed',listener);}
+});

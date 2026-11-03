@@ -137,4 +137,11 @@ svg {
   }
 }
 
-html[data-density="compact"] { --cn-card-padding: 18px; --cn-row-pad: 14px; }
+html { --cn-font-scale: 1; --cn-page-pad: 40px; --cn-card-padding: 28px; --cn-row-pad: 20px; --cn-section-gap: 24px; --cn-field-gap: 20px; }
+html[data-density="compact"] { --cn-page-pad: 28px; --cn-card-padding: 18px; --cn-row-pad: 12px; --cn-section-gap: 16px; --cn-field-gap: 14px; }
+html[data-text-size="small"] { --cn-font-scale: .94; }
+html[data-text-size="large"] { --cn-font-scale: 1.14; }
+@media(max-width:900px) {
+ html { --cn-page-pad: 20px; --cn-card-padding: 22px; }
+ html[data-density="compact"] { --cn-page-pad: 16px; --cn-card-padding: 16px; }
+}

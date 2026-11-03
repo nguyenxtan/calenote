@@ -1,3 +1,5 @@
+// Notification polling has its own API/lifecycle tests; isolate it from these request-order fixtures.
+vi.mock("@/features/updates/ProductUpdates", () => ({ ProductUpdates: () => null }));
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -20,6 +22,7 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
   const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     void init;
     const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+    if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
     if (path === "/api/session") return json({ data: { user } });
     if (path === "/api/v2/reminders") return json({ data: { schemaVersion: "reminders-2", reminders: [{ ...reminder, details: null }], hasMore: false, scope: "OWNER" } });
     if (path === "/api/v2/conversation-previews") return json({ data: { schemaVersion: "conversation-previews-1", previews: [], hasMore: false } });
@@ -35,25 +38,30 @@ function installFetch(extra: (path: string) => Response | undefined = () => unde
 describe("CoreScreenExperience", () => {
   it.each([false, true])("refreshes delivered reminders on focus (context %s)", async (contextContractEnabled) => {
     let delivered = false;
-    const listeners = vi.spyOn(window, "addEventListener");
-    const fetcher = vi.fn(async (path: string | URL | Request) => {
+    const reads: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
+      expect(path).toBe(contextContractEnabled ? "/api/v2/reminders" : "/api/reminders");
+      reads.push(delivered ? "SENT" : "PENDING");
       const rows = [{ ...reminder, status: delivered ? "SENT" : "PENDING", ...(contextContractEnabled ? { details: null } : {}) }];
       return json({ data: contextContractEnabled ? { schemaVersion: "reminders-2", reminders: rows, hasMore: false, scope: "OWNER" } : { reminders: rows } });
-    });
-    vi.stubGlobal("fetch", fetcher);
-    render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />);
-    await screen.findByRole("button", { name: "Huỷ Gửi báo giá" });
-    // Visible rows do not establish that the user-dependent passive effect has
-    // installed its refresh listener. Wait for the event precondition first.
-    await waitFor(() => expect(listeners.mock.calls.some(([type]) => String(type) === "focus")).toBe(true));
-    const reads = () => fetcher.mock.calls.filter(([path]) => path === "/api/reminders" || path === "/api/v2/reminders").length;
-    const before = reads();
+    }));
+    // A committed reminder can precede the passive focus subscription. Drain
+    // asynchronous mount work before simulating a user returning to the tab.
+    await act(async () => { render(<CoreScreenExperience screen="reminders" contextContractEnabled={contextContractEnabled} />); });
+    expect(screen.getByRole("button", { name: "Huỷ Gửi báo giá" })).toBeInTheDocument();
+    expect(reads).toEqual(["PENDING"]);
     delivered = true;
     await act(async () => { fireEvent.focus(window); });
-    await waitFor(() => expect(reads()).toBe(before + 1));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument());
+    expect(reads).toEqual(["PENDING", "SENT"]);
+    expect(screen.queryByRole("button", { name: "Huỷ Gửi báo giá" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Không có lời nhắc đang chờ gửi." })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Tất cả" }));
+    expect(screen.getByRole("heading", { name: reminder.title })).toBeInTheDocument();
+    expect(screen.getByText("Đã nhắc")).toBeInTheDocument();
   });
 
   it("refreshes while visible, skips hidden polls and removes refresh listeners on unmount", async () => {
@@ -84,21 +92,32 @@ describe("CoreScreenExperience", () => {
     let resolveStale!: (response: Response) => void;
     let resolveDecision!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
-      if (init?.method === "POST") return new Promise<Response>(resolve => { resolveDecision = resolve; });
+      if (init?.method === "POST") {
+        expect(path).toBe(`/api/actions/${action.id}/approve`);
+        return new Promise<Response>(resolve => { resolveDecision = resolve; });
+      }
+      expect(path).toBe("/api/actions");
       actionReads += 1;
       if (actionReads === 2) return new Promise<Response>(resolve => { resolveStale = resolve; });
       return json({ data: { actions: [action] } });
     }));
-    render(<CoreScreenExperience screen="inbox" />);
-    const approve = await screen.findByRole("button", { name: "Đồng ý Họp với team vận hành" });
+    // The action DOM may commit before the passive focus listener. Finish mount
+    // effects before simulating a tab return, as in the reminder refresh test.
+    await act(async () => { render(<CoreScreenExperience screen="inbox" />); });
+    expect(actionReads).toBe(1);
+    const approve = screen.getByRole("button", { name: "Đồng ý Họp với team vận hành" });
     await act(async () => { fireEvent.focus(window); });
     expect(actionReads).toBe(2);
     fireEvent.click(approve);
     await act(async () => { fireEvent.focus(window); });
     expect(actionReads).toBe(2);
     await act(async () => { resolveDecision(json({ data: { decision: "APPROVED", reminderPublicId: reminder.publicId } })); });
+    expect(screen.getByRole("status")).toHaveTextContent("Đề xuất đã được duyệt.");
+    expect(screen.queryByRole("button", { name: "Đồng ý Họp với team vận hành" })).not.toBeInTheDocument();
     await act(async () => { resolveStale(json({ data: { actions: [action] } })); });
     expect(screen.queryByRole("button", { name: "Đồng ý Họp với team vận hành" })).not.toBeInTheDocument();
   });
@@ -108,7 +127,9 @@ describe("CoreScreenExperience", () => {
     let posts = 0;
     const second = { ...reminder, publicId: "S".repeat(22), title: "Gọi mẹ" };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       if (String(path).startsWith("/api/reminders/")) {
         posts += 1;
@@ -132,7 +153,9 @@ describe("CoreScreenExperience", () => {
     const series = { publicId: "A".repeat(22), title: "Ôn thi", revision: 1, state: "PROPOSED", action: "CREATE",
       calendarLabel: "Dương lịch", eventLabel: null, occurrences: ["2026-10-08", "2026-10-09", "2026-10-10"].map(localDate => ({ localDate, localTime: "12:00", status: "PROPOSED" })) };
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") {
         if (init?.method === "POST") { confirmed = true; return json({ data: { result: "CONFIRMED" } }); }
         return json({ data: { series: confirmed ? [] : [series] } });
@@ -156,7 +179,9 @@ describe("CoreScreenExperience", () => {
     let attempted = false;
     let reads = 0;
     vi.stubGlobal("fetch", vi.fn(async (path: string | URL | Request) => {
+      if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
       if (path === "/api/session") return json({ data: { user } });
+      if (path === "/api/admin/access") return json({ error: { code: "FORBIDDEN", message: "Fixture ordinary user" } },403);
       if (path === "/api/reminder-series") return json({ data: { series: [] } });
       if (path === `/api/reminders/${reminder.publicId}`) {
         attempted = true;
@@ -309,6 +334,7 @@ describe("CoreScreenExperience", () => {
 it("keeps default pages on complete legacy keyset reads without requesting Context endpoints", async () => {
   const second = { ...reminder, publicId: "S".repeat(22), title: "Trang lời nhắc thứ hai" };
   const fetcher = vi.fn(async (path: string | URL | Request) => {
+    if (path === "/api/v1/follow-through") return json({ data: { items: [] } });
     if (path === "/api/session") return json({ data: { user } });
     if (path === "/api/reminder-series") return json({ data: { series: [] } });
     if (path === "/api/actions") return json({ data: { actions: [] } });
@@ -323,4 +349,16 @@ it("keeps default pages on complete legacy keyset reads without requesting Conte
   view.rerender(<CoreScreenExperience screen="inbox" />);
   await screen.findByRole("heading", { name: "Hộp thư" });
   expect(fetcher.mock.calls.some(([path]) => String(path).startsWith("/api/v2/"))).toBe(false);
+});
+
+it("uses Sunday-first calendar and hides lunar display when chosen on this device", async () => {
+  vi.stubGlobal("localStorage", {getItem:(key:string)=>key==="calenote-appearance-v1"?JSON.stringify({weekStart:"sunday",showLunar:false}):null,setItem:vi.fn()});
+  installFetch();
+  render(<CoreScreenExperience screen="calendar" />);
+  await screen.findByRole("heading", {name:"Lịch"});
+  await waitFor(()=>expect(screen.getByLabelText("Các ngày trong tuần").firstElementChild).toHaveTextContent("CN"));
+  const day=screen.getByRole("button",{name:/Dương lịch 2026-09-01,/});
+  expect(day).not.toHaveAccessibleName(/Âm lịch/);
+  expect(screen.queryByText("Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam.")).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
 });

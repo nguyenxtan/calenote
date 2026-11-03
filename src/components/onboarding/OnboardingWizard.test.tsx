@@ -95,6 +95,13 @@ describe("OnboardingWizard", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("consumes a one-time email handoff after unauthenticated bootstrap", async () => {
+    sessionStorage.setItem("calenote:onboarding-email", "new@example.com");
+    await revealWizard(vi.fn().mockResolvedValueOnce(unauthenticated()));
+    expect(screen.getByLabelText("Email")).toHaveValue("new@example.com");
+    expect(sessionStorage.getItem("calenote:onboarding-email")).toBeNull();
+  });
+
   it("redirects an authenticated visitor without flashing onboarding", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({
       data: {

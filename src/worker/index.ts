@@ -29,6 +29,9 @@ export interface QueueOperations {
 }
 
 export interface ScheduledOperations {
+  purgeEmailRegistrationChallenges?(now:number,limit:number):Promise<unknown>;
+  processPersonalAssistant?(now:number,limit:number):Promise<unknown>;
+  processFollowThrough?(now: number, limit: number): Promise<unknown>;
   purgeConversationContexts?(now: number, limit: number): Promise<unknown>;
   claimDueReminders(now: number, limit: number): Promise<unknown>;
   redriveInboundOrphans(now: number, limit: number): Promise<unknown>;
@@ -141,9 +144,14 @@ export async function runScheduledWork(
   operations: ScheduledOperations,
 ): Promise<void> {
   await Promise.allSettled([
-    operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT),
+    (async () => {
+      if (operations.processPersonalAssistant) await operations.processPersonalAssistant(controller.scheduledTime, 20).catch(() => undefined);
+      if (operations.processFollowThrough) await operations.processFollowThrough(controller.scheduledTime, CRON_REMINDER_LIMIT);
+      return operations.claimDueReminders(controller.scheduledTime, CRON_REMINDER_LIMIT);
+    })(),
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
+    ...(operations.purgeEmailRegistrationChallenges ? [operations.purgeEmailRegistrationChallenges(controller.scheduledTime,100)] : []),
     ...(operations.purgeConversationContexts ? [operations.purgeConversationContexts(controller.scheduledTime, 100)] : []),
   ]);
 }

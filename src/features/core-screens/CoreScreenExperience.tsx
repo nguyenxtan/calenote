@@ -1,5 +1,10 @@
 "use client";
 
+import { useSessionLoader } from "@/ui/shell/SessionNavigation";
+
+import { useAppearancePreferences } from "@/lib/use-appearance-preferences";
+import { FollowThroughPanel } from "@/features/follow-through/FollowThroughPanel";
+import { AppLoading } from "@/ui/loading/AppLoading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleCheck, RotateCcw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -8,7 +13,7 @@ import type { ReminderDetailsResponseV2 } from "@/contracts/api/reminders-v2";
 import type { PublicPreviewV1 } from "@/contracts/api/conversation-previews";
 import { ContextPreviewPanel } from "./ContextPreviewPanel";
 import { type PublicReminder } from "@/contracts/api/reminders";
-import { SessionResponseSchema, type SessionUser } from "@/contracts/api/session";
+import { type SessionUser } from "@/contracts/api/session";
 import { AmbiguousMutationError, ApiResponseError, apiRequest, decideConversationPreview, loadConversationPreviews, loadDetailedReminders } from "@/lib/client-api";
 import { loadReminderList } from "@/lib/reminder-list";
 import { AppShell } from "@/ui/shell/AppShell";
@@ -30,6 +35,7 @@ function Empty({ title, text }: { title: string; text: string }) { return <div c
 function Loading() { return <div className={styles.loading} aria-label="Đang tải"><span /><span /><span /></div>; }
 
 export function CoreScreenExperience({ screen, contextContractEnabled = false }: { screen: CoreScreen; contextContractEnabled?: boolean }) {
+  const loadSession = useSessionLoader();
   const { replace } = useRouter(); const epoch = useRef(0);
   const reminderRequest = useRef(0);
   const actionRequest = useRef(0);
@@ -61,7 +67,7 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
   }, [contextContractEnabled, redirect]);
   const loadPreviews = useCallback(async (current: number) => { const request = ++previewRequest.current; setPreviews((old) => ({ ...old, error: null })); try { const data = await loadConversationPreviews({ onUnauthorized: redirect }); if (epoch.current === current && request === previewRequest.current) setPreviews({ value: { previews: data.previews, hasMore: data.hasMore }, error: null }); } catch (error) { if (epoch.current === current && request === previewRequest.current) setPreviews((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải bản xem trước." })); } }, [redirect]);
   const loadActions = useCallback(async (current: number) => { const request = ++actionRequest.current; setActions((old) => ({ ...old, error: null })); try { const data = await apiRequest<unknown>("/api/actions", { authenticated: true, onUnauthorized: redirect }); const value = ActionsResponseSchema.parse({ data }).data.actions; if (epoch.current === current && request === actionRequest.current) setActions({ value, error: null }); } catch (error) { if (epoch.current === current && request === actionRequest.current) setActions((old) => ({ ...old, error: error instanceof ApiResponseError ? error.message : "Chưa thể tải đề xuất." })); } }, [redirect]);
-  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const data = await apiRequest<unknown>("/api/session", { authenticated: true, onUnauthorized: redirect }); const next = SessionResponseSchema.parse({ data }).data.user; if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); return () => { epoch.current += 1; }; }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen]);
+  useEffect(() => { const current = epoch.current + 1; epoch.current = current; void (async () => { try { const next = await loadSession(redirect); if (epoch.current !== current) return; setUser(next); if (screen === "inbox") { void loadActions(current); if (contextContractEnabled) void loadPreviews(current); } else void loadReminders(current); } catch (error) { if (epoch.current === current) setSessionError(error instanceof ApiResponseError ? error.message : "Chưa thể mở Calenote."); } })(); return () => { epoch.current += 1; }; }, [contextContractEnabled, loadActions, loadPreviews, loadReminders, redirect, screen, loadSession]);
   useEffect(() => {
     if (!user) return;
     let refreshing = false;
@@ -108,8 +114,8 @@ export function CoreScreenExperience({ screen, contextContractEnabled = false }:
     }
   } finally { mutationLocked.current = false; if (epoch.current === current) setBusyId(null); } };
   if (sessionError) return <main className={styles.entry}><LocalError message={sessionError} retry={() => location.reload()} /></main>;
-  if (!user) return <main className={styles.entry}><Loading /></main>;
-  return <AppShell user={user} activePath={path}><main className={styles.page}>{notice && <p className={styles.notice} role="status"><CircleCheck size={17} aria-hidden="true" />{notice}</p>}{screen === "calendar" ? <Calendar reminders={reminders} hasMore={reminderHasMore} retry={() => void loadReminders(epoch.current)} /> : screen === "inbox" ? <><Inbox actions={actions} busyId={busyId} decide={decide} retry={() => void loadActions(epoch.current)} />{contextContractEnabled && <ContextPreviewPanel previews={previews.value?.previews ?? []} loading={previews.value === null && previews.error === null} error={previews.error} hasMore={previews.value?.hasMore ?? false} onDecision={decidePreview} onRetry={() => void loadPreviews(epoch.current)} />}</> : <Reminders reminders={reminders} hasMore={reminderHasMore} busyId={busyId} cancel={cancel} retry={() => void loadReminders(epoch.current)} />}{screen !== "calendar" && <ReminderSeriesPanel onUnauthorized={redirect} onChanged={() => void loadReminders(epoch.current)} />}</main></AppShell>;
+  if (!user) return <AppLoading />;
+  return <AppShell user={user} activePath={path}><main className={styles.page}>{notice && <p className={styles.notice} role="status"><CircleCheck size={17} aria-hidden="true" />{notice}</p>}{screen === "calendar" ? <Calendar reminders={reminders} hasMore={reminderHasMore} retry={() => void loadReminders(epoch.current)} /> : screen === "inbox" ? <><Inbox actions={actions} busyId={busyId} decide={decide} retry={() => void loadActions(epoch.current)} />{contextContractEnabled && <ContextPreviewPanel previews={previews.value?.previews ?? []} loading={previews.value === null && previews.error === null} error={previews.error} hasMore={previews.value?.hasMore ?? false} onDecision={decidePreview} onRetry={() => void loadPreviews(epoch.current)} />}</> : <><FollowThroughPanel key={user.email} ownerKey={user.email} reloadVersion={reminders.value?.length} onUnauthorized={redirect} onChanged={() => void loadReminders(epoch.current)} /><Reminders reminders={reminders} hasMore={reminderHasMore} busyId={busyId} cancel={cancel} retry={() => void loadReminders(epoch.current)} /></>}{screen !== "calendar" && <ReminderSeriesPanel onUnauthorized={redirect} onChanged={() => void loadReminders(epoch.current)} />}</main></AppShell>;
 }
 
 function ReminderDetail({ reminder, close }: { reminder: ReminderDetailsResponseV2; close: () => void }) {
@@ -133,33 +139,36 @@ function Calendar({ reminders, hasMore, retry }: { reminders: Resource<ReminderD
   const [month, setMonth] = useState(() => `${vietnamCivilDate(Date.now()).slice(0, 7)}-01`);
   const [selected, setSelected] = useState(() => vietnamCivilDate(Date.now()));
   const [detail, setDetail] = useState<ReminderDetailsResponseV2 | null>(null);
-  const { year, month: monthNumber, days, firstWeekday } = calendarMonth(month);
+  const appearance = useAppearancePreferences();
+  const { year, month: monthNumber, days, firstWeekday: mondayOffset } = calendarMonth(month);
+  const firstWeekday = appearance.weekStart === "sunday" ? (mondayOffset + 1) % 7 : mondayOffset;
+  const weekdays = appearance.weekStart === "sunday" ? "CN T2 T3 T4 T5 T6 T7" : "T2 T3 T4 T5 T6 T7 CN";
   const title = new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC", month: "long", year: "numeric" }).format(Date.parse(`${month}T00:00:00Z`));
   const selectedItems = reminders.value?.filter(item => dateKey(item.scheduledAt) === selected).sort((a, b) => a.scheduledAt - b.scheduledAt) ?? [];
   return <>
-    <header className={styles.header}><p>Lịch cá nhân</p><h1>Lịch</h1><span>Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam.</span></header>
+    <header className={styles.header}><p>Lịch cá nhân</p><h1>Lịch</h1><span>{appearance.showLunar ? "Ngày dương ở trên, ngày âm Việt Nam ở dưới · giờ Việt Nam." : "Dương lịch · giờ Việt Nam."}</span></header>
     {hasMore && <p className={styles.partialNotice}>Danh sách lời nhắc của chủ tài khoản chỉ hiển thị một phần. Lịch có thể còn lời nhắc khác; cuộc trò chuyện chỉ thấy kênh đang dùng.</p>}
-    <section className={styles.calendar} aria-label="Lịch âm dương">
+    <section className={styles.calendar} aria-label={appearance.showLunar ? "Lịch âm dương" : "Lịch dương"}>
       <div className={styles.period}>
         <button type="button" aria-label="Tháng trước" onClick={() => setMonth(shiftCalendarMonth(month, -1))}><ChevronLeft aria-hidden="true" /></button>
         <h2>{title}</h2>
         <button type="button" aria-label="Tháng sau" onClick={() => setMonth(shiftCalendarMonth(month, 1))}><ChevronRight aria-hidden="true" /></button>
         <button type="button" onClick={() => { const today = vietnamCivilDate(Date.now()); setMonth(`${today.slice(0, 7)}-01`); setSelected(today); setDetail(null); }}>Hôm nay</button>
       </div>
-      <div className={styles.week} aria-label="Các ngày trong tuần">{"T2 T3 T4 T5 T6 T7 CN".split(" ").map(day => <span key={day}>{day}</span>)}</div>
+      <div className={styles.week} aria-label="Các ngày trong tuần">{weekdays.split(" ").map(day => <span key={day}>{day}</span>)}</div>
       <div className={styles.month}>{Array.from({ length: firstWeekday }, (_, index) => <span key={`empty-${index}`} aria-hidden="true" />)}
         {Array.from({ length: days }, (_, index) => {
           const day = index + 1;
           const key = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const count = reminders.value?.filter(item => dateKey(item.scheduledAt) === key).length ?? 0;
           const presentation = calendarDayPresentation(key, day === 1);
-          return <button key={key} type="button" aria-label={`${presentation.accessibleText}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
-            <span className={styles.solarDay}>{day}</span><span className={styles.lunarDay} aria-hidden="true">{presentation.lunarAvailable ? presentation.lunarLabel : "—"}</span>{count > 0 && <i aria-hidden="true" />}
+          return <button key={key} type="button" aria-label={`${appearance.showLunar ? presentation.accessibleText : `Dương lịch ${key}`}, ${count} lời nhắc${selected === key ? ", đã chọn" : ""}`} aria-pressed={selected === key} className={selected === key ? styles.selectedDay : undefined} onClick={() => { setSelected(key); setDetail(null); }}>
+            <span className={styles.solarDay}>{day}</span>{appearance.showLunar && <span className={styles.lunarDay} aria-hidden="true">{presentation.lunarAvailable ? presentation.lunarLabel : "—"}</span>}{count > 0 && <i aria-hidden="true" />}
           </button>;
         })}
       </div>
     </section>
-    <section className={styles.agenda} aria-labelledby="agenda-title"><h2 id="agenda-title">{dateLabel(Date.parse(`${selected}T05:00:00Z`))} · {selected.slice(0, 4)}</h2><p>{calendarDayPresentation(selected).fullLabel}</p>
+    <section className={styles.agenda} aria-labelledby="agenda-title"><h2 id="agenda-title">{dateLabel(Date.parse(`${selected}T05:00:00Z`))} · {selected.slice(0, 4)}</h2>{appearance.showLunar && <p>{calendarDayPresentation(selected).fullLabel}</p>}
       {reminders.error ? <LocalError message={reminders.error} retry={retry} /> : reminders.value === null ? <Loading /> : selectedItems.length === 0 ? <Empty title="Ngày này đang khá thoáng." text="Chưa có lời nhắc nào." /> : selectedItems.map(item => <button className={styles.agendaItem} key={item.publicId} type="button" onClick={() => setDetail(item)}><time>{clock(item.scheduledAt)}</time><span><strong>{item.title}</strong><small>{status(item.status)}</small></span></button>)}
     </section>
     {detail && <ReminderDetail reminder={detail} close={() => setDetail(null)} />}

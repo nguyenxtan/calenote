@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeContextReply } from "./responses";
+import { addressContextReply, composeContextReply, type ReplyOutcome } from "./responses";
 import { confirmationFixture } from "./confirmation-test-support";
 import { formatPendingFact } from "./responses";
 
@@ -58,5 +58,59 @@ describe("backend reply composition", () => {
     expect(reply).toMatchObject({ status: "READY", source: "BACKEND" });
     if (reply.status !== "READY") throw new Error("render");
     expect(reply.text).toContain(capability === "DOMAIN_LIMIT" ? "366" : capability === "ASSISTANT_SCOPE" ? "lịch và lời nhắc" : "từng yêu cầu");
+  });
+});
+
+describe("saved addressing on structured replies", () => {
+  it("keeps default plans identical", () => {
+    const plan = composeContextReply({ kind: "NOTICE", notice: "HELP" });
+    if (plan.status !== "READY") throw new Error("render");
+    expect(addressContextReply(plan)).toBe(plan);
+    expect(addressContextReply(plan, { addressStyle: "ban", customDisplayName: null })).toBe(plan);
+  });
+  it("escapes custom addressing once and shifts every UTF-16 span without touching facts or controls", () => {
+    const plan = composeContextReply({ kind: "DECISION", decisionKind: "SAVE_PREVIEW", facts: ["Bạn <🧾> tại nhà bạn"], token: "save-token" });
+    if (plan.status !== "READY") throw new Error("render");
+    const addressed = addressContextReply(plan, { addressStyle: "custom", customDisplayName: "<Sếp 🧾&>" });
+    if (addressed.status !== "READY") throw new Error("render");
+    expect(addressed.text).toContain("&lt;Sếp 🧾&amp;&gt; xác nhận lưu bản nháp này?");
+    expect(addressed.text).not.toContain("&amp;lt;");
+    for (let i = 0; i < plan.spans.length; i++) {
+      const span = addressed.spans[i];
+      const before = plan.spans[i];
+      if (span.kind !== "QUESTION") expect(addressed.text.slice(span.start, span.end)).toBe(plan.text.slice(before.start, before.end));
+      else expect(addressed.text.slice(span.start, span.end)).not.toContain("Bạn");
+    }
+  });
+  it("preserves preview payload and model guidance verbatim under saved sếp addressing", async () => {
+    const { preview } = await confirmationFixture();
+    const inputs = [composeContextReply({ kind: "PREVIEW", preview }), composeContextReply({ kind: "QUESTION", question: "Bạn muốn lúc nào?", facts: ["Bạn 🧾"], field: "reminderTime" }, { source: "MODEL_GUIDANCE", text: "Bạn muốn được nhắc vào lúc nào?" })];
+    for (const plan of inputs) {
+      if (plan.status !== "READY") throw new Error("render");
+      const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
+      if (result.status !== "READY") throw new Error("render");
+      expect(result.text).toBe("Sếp, " + plan.text);
+      expect(result.source).toBe(plan.source);
+      for (let i = 0; i < plan.spans.length; i++) expect(result.text.slice(result.spans[i].start, result.spans[i].end)).toBe(plan.text.slice(plan.spans[i].start, plan.spans[i].end));
+    }
+  });
+  it("addresses only exact canonical backend notices and decision questions", () => {
+    for (const outcome of [{ kind: "NOTICE", notice: "HELP" }, { kind: "FAILURE", reason: "PROVIDER" }, { kind: "DECISION", decisionKind: "SAVE_PREVIEW", facts: [], token: "handle" }] satisfies ReplyOutcome[]) {
+      const plan = composeContextReply(outcome);
+      if (plan.status !== "READY") throw new Error("render");
+      const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
+      if (result.status !== "READY") throw new Error("render");
+      expect(result.text).not.toMatch(/\b[Bb]ạn\b/u);
+      expect(result.text.toLocaleLowerCase("vi")).toContain("sếp");
+    }
+    const question = composeContextReply({ kind: "QUESTION", question: "Bạn xác nhận lưu bản nháp này?", facts: ["Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn."], field: "title" });
+    if (question.status !== "READY") throw new Error("render");
+    const result = addressContextReply(question, { addressStyle: "sep", customDisplayName: null });
+    expect(result).toMatchObject({ text: "Sếp, " + question.text });
+  });
+  it("refuses addressing overflow without clipping authoritative text", () => {
+    const plan = { status: "READY", source: "BACKEND", kind: "NOTICE", text: "🧾".repeat(1000), spans: [{ kind: "FACT", start: 0, end: 2000 }] } as const;
+    expect(addressContextReply({ ...plan, spans: [...plan.spans] }, { addressStyle: "sep", customDisplayName: null })).toMatchObject({ status: "TOO_LONG", limit: 2000 });
+    expect(plan.text.length).toBe(2000);
   });
 });

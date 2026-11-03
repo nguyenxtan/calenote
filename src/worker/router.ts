@@ -1,9 +1,26 @@
+import { handleProductUpdates } from './routes/product-updates';
+import { createEmailRegistrationOperations } from "./composition-root";
+import { EmailRegistrationError } from "@/modules/auth/email-registration";
+import { handleRequestEmailRegistration,handleVerifyEmailRegistration,type EmailRegistrationOperations } from "./routes/email-registration";
+import { createPersonalAssistantOperations } from "./composition-root";
+import { handleGetPersonalAssistantBrief, handleGetPersonalAssistant, handlePutPersonalAssistant, type PersonalAssistantOperations } from "./routes/personal-assistant";
+import { createFollowThroughOperations } from './composition-root';
+import { handleFollowThroughHistory, handleListFollowThrough, handleFollowThroughAction, type FollowThroughOperations } from './routes/follow-through';
+import { FollowThroughError } from '@/contracts/api/follow-through';
+import { createEmailDiscoveryOperations, createAccountOperations } from "./composition-root";
+import { handleContinueEmail, type EmailDiscoveryOperations } from "./routes/auth-continue";
+import { handleGetProfile, handleUpdateProfile, handleGetSessions, handleRevokeOtherSessions, type AccountOperations } from "./routes/account";
+import { InvalidAccountInputError } from "@/modules/account/service";
+import { PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
+import { ConnectionDisconnectError } from "@/modules/connections/lifecycle";
+import { handleAdminOverview } from './routes/admin-overview';
+import { createAdminOverviewOperations } from '@/modules/admin/composition';
 import { InvalidLoginCodeError } from "@/modules/auth/login-service";
 import { SessionAuthError } from "@/modules/auth/session";
 import { InvalidUserPreferencesError } from "@/modules/preferences/service";
 import { ProviderVerificationError } from "@/modules/connections/provider-error";
 import { RequestBodyError } from "@/modules/http/body";
-import { jsonResponse, SameOriginError } from "@/modules/http/security";
+import { jsonResponse, requireSameOrigin, SameOriginError } from "@/modules/http/security";
 import {
   ConnectionNotFoundError,
   ConnectionStateError,
@@ -27,7 +44,6 @@ import {
   createActionsOperations,
   createActivityOperations,
   createConnectionsOperations,
-  createOnboardingOperations,
   createPreferencesOperations,
   createRemindersOperations,
   createContextApiOperations,
@@ -44,12 +60,15 @@ import {
 } from "./routes/actions";
 import { handleGetSession, handleLogout, handleRequestLoginCode, handleVerifyLoginCode } from "./routes/auth";
 import {
+  handleGetPrimaryLogin,
+  handleSelectPrimaryLogin,
+  handleAddConnection,
+  handleDisconnectConnection,
   handleConnectCodeRotation,
   handleListConnections,
   handleWebhookRetry,
   InvalidRequestError,
 } from "./routes/connections";
-import { handleOnboarding } from "./routes/onboarding";
 import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences";
 import { handleListActivity } from "./routes/activity";
 import { handleResolveReminderIntent, handleCancelReminder, handleCreateReminder, handleListReminders, ClientUpgradeRequiredError } from "./routes/reminders";
@@ -74,6 +93,11 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+ emailRegistrationOperations?:(env:Env)=>Promise<EmailRegistrationOperations>;
+ personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
+  followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
+  emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
+  accountOperations?: (env: Env) => Promise<AccountOperations>;
   seriesOperations?: (env: Env) => Promise<SeriesOperations>;
   authOperations?: (env: Env) => Promise<AuthOperations>;
   actionsOperations?: (env: Env) => Promise<ActionsOperations>;
@@ -94,6 +118,8 @@ function requestBodyMessage(code: RequestBodyError["code"]): string {
 }
 
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
+  if (error instanceof EmailRegistrationError) return {code:error.code,message:error.code === "DELIVERY_UNAVAILABLE" ? "Chưa thể gửi email xác minh. Hãy thử lại sau." : "Mã xác minh chưa hợp lệ hoặc đã hết hạn.",status:error.status};
+  if (error instanceof FollowThroughError) return {code:error.code,message: error.code === "CONFLICT" ? "Việc đã thay đổi. Hãy tải lại trước khi thao tác." : error.code === "NOT_FOUND" ? "Không tìm thấy việc này." : error.code === "BLOCKED" ? "Kênh nhận nhắc hiện không sẵn sàng." : "Thao tác chưa hợp lệ.",status:error.code === "NOT_FOUND" ? 404 : error.code === "CONFLICT" ? 409 : error.code === "BLOCKED" ? 409 : 400};
   if (error instanceof ServiceUnavailableError) {
     return { code: "SERVICE_UNAVAILABLE", message: error.message, status: 503 };
   }
@@ -109,6 +135,7 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   if (error instanceof InvalidLoginCodeError) {
     return { code: error.code, message: error.message, status: error.status };
   }
+  if (error instanceof InvalidAccountInputError) return {code:error.code,message:"Thông tin tài khoản chưa hợp lệ.",status:error.status};
   if (error instanceof InvalidUserPreferencesError) {
     return { code: "INVALID_PREFERENCES", message: "Tùy chọn hiển thị chưa hợp lệ.", status: 400 };
   }
@@ -119,6 +146,8 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
   ) {
     return { code: error.code, message: error.message, status: error.status };
   }
+  if (error instanceof PrimaryLoginSelectionError) return {code:error.code,message:error.message,status:error.status};
+  if (error instanceof ConnectionDisconnectError) return {code:error.code,message:error.message,status:error.status};
   if (error instanceof InvalidRequestError) {
     return { code: error.code, message: error.message, status: error.status };
   }
@@ -182,14 +211,18 @@ export function safeErrorResponse(error: unknown, authenticated = false): Respon
 }
 
 export function createRouter(options: RouterOptions = {}) {
+  const emailRegistrationOperationsFactory=options.emailRegistrationOperations??createEmailRegistrationOperations;
+  const personalAssistantOperationsFactory = options.personalAssistantOperations ?? createPersonalAssistantOperations;
   const seriesOperationsFactory = options.seriesOperations
     ?? ((env: Env) => createSeriesOperations(env, { conversationV2: true }));
+  const emailDiscoveryOperationsFactory = options.emailDiscoveryOperations ?? createEmailDiscoveryOperations;
+  const followThroughOperationsFactory = options.followThroughOperations ?? createFollowThroughOperations;
+  const accountOperationsFactory = options.accountOperations ?? createAccountOperations;
   const authOperationsFactory = options.authOperations ?? createAuthOperations;
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const contextApiOperationsFactory = options.contextApiOperations ?? createContextApiOperations;
-  const onboardingOperationsFactory = options.onboardingOperations ?? createOnboardingOperations;
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;
@@ -231,6 +264,20 @@ export function createRouter(options: RouterOptions = {}) {
 
     try {
       if (pathname.startsWith("/api/") && !appOrigin) throw new ServiceUnavailableError();
+      if (pathname === "/api/auth/register/request" && request.method === "POST") return await handleRequestEmailRegistration(request,appOrigin!,()=>emailRegistrationOperationsFactory(env));
+      if (pathname === "/api/auth/register/verify" && request.method === "POST") return await handleVerifyEmailRegistration(request,appOrigin!,()=>emailRegistrationOperationsFactory(env));
+      if (pathname === "/api/v1/personal-assistant/brief" && request.method === "GET") return await handleGetPersonalAssistantBrief(request,()=>personalAssistantOperationsFactory(env));
+      if (pathname === "/api/v1/personal-assistant" && request.method === "GET") return await handleGetPersonalAssistant(request,()=>personalAssistantOperationsFactory(env));
+      if (pathname === "/api/v1/personal-assistant" && request.method === "PUT") return await handlePutPersonalAssistant(request,appOrigin!,()=>personalAssistantOperationsFactory(env));
+      if (pathname === "/api/admin/overview" || pathname === "/api/admin/access") return await handleAdminOverview(request, createAdminOverviewOperations(env));
+      if (request.method === "POST" && pathname === "/api/auth/continue") return await handleContinueEmail(request, appOrigin!, () => emailDiscoveryOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through/history" && request.method === "GET") return await handleFollowThroughHistory(request, () => followThroughOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through" && request.method === "GET") return await handleListFollowThrough(request, () => followThroughOperationsFactory(env));
+      if (pathname === "/api/v1/follow-through/actions" && request.method === "POST") return await handleFollowThroughAction(request, appOrigin!, () => followThroughOperationsFactory(env));
+      if (pathname === "/api/account/profile" && request.method === "GET") return await handleGetProfile(request, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/profile" && request.method === "PATCH") return await handleUpdateProfile(request, appOrigin!, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/sessions" && request.method === "GET") return await handleGetSessions(request, () => accountOperationsFactory(env));
+      if (pathname === "/api/account/sessions/revoke-others" && request.method === "POST") return await handleRevokeOtherSessions(request, appOrigin!, () => accountOperationsFactory(env));
       if (request.method === "POST" && pathname === "/api/auth/request-code") {
         return await handleRequestLoginCode(request, appOrigin!, () => authOperationsFactory(env));
       }
@@ -241,8 +288,10 @@ export function createRouter(options: RouterOptions = {}) {
         return await handleLogout(request, appOrigin!, () => authOperationsFactory(env));
       }
       if (request.method === "POST" && pathname === "/api/onboarding") {
-        return await handleOnboarding(request, appOrigin!, () => onboardingOperationsFactory(env));
+        requireSameOrigin(request,appOrigin!);
+        return jsonResponse({error:{code:"EMAIL_VERIFICATION_REQUIRED",message:"Xác minh email tại trang đăng ký trước khi kết nối bot."}},{status:410});
       }
+      if (request.method === "GET" && (pathname === "/api/product-updates" || pathname === "/api/product-updates/runtime")) return await handleProductUpdates(request,()=>authOperationsFactory(env),env);
       if (request.method === "GET" && pathname === "/api/session") {
         return await handleGetSession(request, () => authOperationsFactory(env));
       }
@@ -307,6 +356,11 @@ export function createRouter(options: RouterOptions = {}) {
           () => connectionsOperationsFactory(env),
         );
       }
+      if (pathname === "/api/connections/primary-login" && request.method === "GET") return await handleGetPrimaryLogin(request,()=>connectionsOperationsFactory(env));
+      if (pathname === "/api/connections/primary-login" && request.method === "PATCH") return await handleSelectPrimaryLogin(request,appOrigin!,()=>connectionsOperationsFactory(env));
+      if (request.method === "POST" && pathname === "/api/connections") return await handleAddConnection(request,appOrigin!,()=>connectionsOperationsFactory(env));
+      const disconnectMatch = request.method === "POST" ? /^\/api\/connections\/([^/]+)\/disconnect$/u.exec(pathname) : null;
+      if (disconnectMatch) return await handleDisconnectConnection(request,appOrigin!,disconnectMatch[1],()=>connectionsOperationsFactory(env));
       const retryMatch = request.method === "POST"
         ? /^\/api\/connections\/([^/]+)\/webhook-retry$/u.exec(pathname)
         : null;
@@ -319,7 +373,10 @@ export function createRouter(options: RouterOptions = {}) {
         );
       }
     } catch (error) {
-      const authenticated = pathname === "/api/auth/logout"
+      const authenticated = pathname.startsWith("/api/auth/register/") || pathname.startsWith("/api/v1/personal-assistant") || pathname.startsWith("/api/v1/follow-through") || pathname.startsWith("/api/account/")
+        || pathname === "/api/auth/logout"
+        || pathname === "/api/product-updates"
+        || pathname === "/api/product-updates/runtime"
         || pathname === "/api/session"
         || pathname === "/api/connections"
         || pathname.startsWith("/api/connections/")

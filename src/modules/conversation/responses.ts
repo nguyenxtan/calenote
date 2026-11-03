@@ -1,3 +1,5 @@
+import { addressProse as addressConversationText, type BotReplyPreferences as ReplyPreferences } from "@/modules/preferences/wording";
+export { addressProse as addressConversationText, type BotReplyPreferences as ReplyPreferences } from "@/modules/preferences/wording";
 import type { MissingField } from "./contracts";
 import type { ConversationDecision } from "./reconcile";
 
@@ -15,7 +17,7 @@ const questions: Record<MissingField, string> = {
 const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 /** Wording is a stable projection of a decision; never another model call. */
-export function composeConversationReply(input: {
+function composeBaseReply(input: {
   decision: ConversationDecision; previousQuestion: MissingField | null;
   tone: "friendly" | "concise"; lunarAvailable: boolean;
 }): string {
@@ -42,4 +44,8 @@ export function composeConversationReply(input: {
       return prefix + questions[decision.field];
     }
   }
+}
+
+export function composeConversationReply(input: Parameters<typeof composeBaseReply>[0] & { preferences?: ReplyPreferences }): string {
+  return addressConversationText(composeBaseReply(input), input.preferences);
 }

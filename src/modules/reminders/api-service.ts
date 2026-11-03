@@ -63,6 +63,7 @@ export interface ManualReminderRecord {
   timezone: typeof VIETNAM_TIMEZONE;
   auditId: string;
   intentId?: string;
+  connectionPublicId?: string;
   payloadDigest?: string;
   now: number;
 }
@@ -180,6 +181,7 @@ export async function createManualReminder(
   input: {
     userId: string;
     intentId?: string;
+    connectionPublicId?: string;
     title: string;
     scheduledAt: number;
     timezone: string;
@@ -203,6 +205,7 @@ export async function createManualReminder(
     || title.length === 0
     || title.length > Math.min(MAX_REMINDER_TITLE_CODE_UNITS, 500)
     || (input.intentId !== undefined && !/^[A-Za-z0-9_-]{16,80}$/u.test(input.intentId))
+    || (input.connectionPublicId !== undefined && !/^[A-Za-z0-9_-]{22}$/u.test(input.connectionPublicId))
     || input.timezone !== VIETNAM_TIMEZONE
     || !Number.isSafeInteger(input.scheduledAt)
 
@@ -211,7 +214,7 @@ export async function createManualReminder(
   }
 
   const payloadDigest = input.intentId ? await dependencies.keyring.digestCode(
-    JSON.stringify(["manual-reminder-intent-v1", input.userId, title, input.scheduledAt, input.timezone]),
+    JSON.stringify(["manual-reminder-intent-v1", input.userId, title, input.scheduledAt, input.timezone, ...(input.connectionPublicId ? [input.connectionPublicId] : [])]),
   ) : undefined;
   const replay = async (): Promise<PublicReminder | null> => {
     if (!input.intentId) return null;
@@ -257,6 +260,7 @@ export async function createManualReminder(
     timezone: VIETNAM_TIMEZONE,
     auditId: randomOpaqueId(randomBytes),
     intentId: input.intentId,
+    connectionPublicId: input.connectionPublicId,
     payloadDigest,
     now: createdAt,
   }); } catch (error) {

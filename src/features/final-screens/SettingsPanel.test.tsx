@@ -7,6 +7,29 @@ import { SettingsPanel } from "./SettingsPanel";
 const user = { displayName: "Mai", email: "mai@example.test", timezone: "Asia/Ho_Chi_Minh" } as const;
 const value = { addressStyle: "ban", customDisplayName: null, tone: "friendly" } as const;
 describe("Settings controls", () => {
+  it("saves preview confirmation only after explicit settings submit", async () => {
+    const save = vi.fn().mockResolvedValue(true), interaction = userEvent.setup();
+    render(<SettingsPanel user={user} value={value} save={save} notice={null} busy={false} />);
+    const toggle = screen.getByRole("switch", { name: /Xem trước và xác nhận/ });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText("Mình đã tạo lời nhắc cho bạn rồi nha!")).toBeVisible();
+    await interaction.click(toggle);
+    expect(save).not.toHaveBeenCalled();
+    await interaction.click(screen.getByRole("button", { name: "Lưu cá nhân hoá" }));
+    expect(save).toHaveBeenCalledWith({ ...value, reminderConfirmation: "preview" });
+  });
+  it("supports keyboard toggle without submitting and disables the switch while saving", async () => {
+    const interaction = userEvent.setup(), save = vi.fn();
+    const { rerender } = render(<SettingsPanel user={user} value={value} save={save} notice={null} busy={false} />);
+    const toggle = screen.getByRole("switch", { name: /Xem trước và xác nhận/ });
+    toggle.focus();
+    await interaction.keyboard(" ");
+    expect(toggle).toBeChecked();
+    expect(toggle).toHaveAccessibleDescription(/Áp dụng chung cho tài khoản/);
+    expect(save).not.toHaveBeenCalled();
+    rerender(<SettingsPanel user={user} value={value} save={save} notice={null} busy />);
+    expect(toggle).toBeDisabled();
+  });
   it("replaces an old save confirmation when the draft changes", async () => {
     const interaction = userEvent.setup();
     render(<SettingsPanel user={user} value={value} save={vi.fn()} notice="Cài đặt đã được lưu." busy={false} />);
@@ -38,18 +61,9 @@ describe("Settings controls", () => {
     expect(screen.getByRole("button", { name: "Đang lưu…" })).toBeDisabled();
     expect(screen.getByLabelText("Cách xưng hô")).toBeDisabled();
   });
-  it("stores browser density without a server mutation and exposes real destination links", async () => {
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) });
-    const save = vi.fn(), interaction = userEvent.setup();
-    render(<SettingsPanel user={user} value={value} save={save} notice={null} busy={false} />);
-    await interaction.click(screen.getByRole("button", { name: /Gọn/ }));
-    expect(document.documentElement.dataset.density).toBe("compact");
-    expect(window.localStorage.getItem("calenote-ui-density")).toBe("compact");
-    expect(save).not.toHaveBeenCalled();
+  it("exposes real connection destinations", () => {
+    render(<SettingsPanel user={user} value={value} save={vi.fn()} notice={null} busy={false} />);
     expect(screen.getByRole("link", { name: /Quản lý Zalo/ })).toHaveAttribute("href", "/app/connections");
-    await interaction.click(screen.getByRole("button", { name: /Thoáng/ }));
-    expect(document.documentElement.dataset.density).toBe("comfortable");
   });
   it("has accessible fields, headings and links", async () => {
     const { container } = render(<SettingsPanel user={user} value={value} save={vi.fn()} notice={null} busy={false} />);

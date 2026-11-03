@@ -28,7 +28,7 @@ export async function semanticRuntime(persist?: string) {
 
 export async function seedSemanticRuntime(db: D1Database) {
   for (const file of ["0001_production_mvp.sql", "0002_onboarding_transition_marker.sql",
-    "0003_source_action_foundation.sql", "0004_user_preferences.sql"]) {
+    "0003_source_action_foundation.sql", "0011_connection_disconnect.sql", "0004_user_preferences.sql", "0012_user_preferences_reminder_confirmation.sql"]) {
     const sql = readFileSync(resolve(process.cwd(), "migrations", file), "utf8");
     for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
       await db.prepare(statement).run();

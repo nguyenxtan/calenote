@@ -4,7 +4,7 @@ import { PreviewResponseV1Schema, PreviewDecisionRequestV1Schema, PreviewDecisio
 const MAX_RESPONSE_BYTES = 128 * 1_024;
 const SAFE_FALLBACK = "Calenote chưa thể hoàn tất yêu cầu.";
 
-type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH";
+type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
 
 interface ApiRequestOptions {
   method?: ApiMethod;
@@ -160,7 +160,16 @@ export async function apiRequest<T>(
     throw new ApiNetworkError();
   }
 
-  if (response.status === 401 && options.authenticated) options.onUnauthorized?.();
+  // A transport/mock may resolve despite cancellation. It must not invalidate a newer session.
+  if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  if (response.status === 401 && options.authenticated) {
+    // Notify the current request before the global event advances subscribers' session epochs.
+    try { options.onUnauthorized?.(); }
+    finally { if (typeof window !== "undefined") window.dispatchEvent(new Event("calenote-session-changed")); }
+  }
+  if (response.ok && method !== "GET" && ["/api/auth/logout", "/api/account/profile"].includes(path) && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("calenote-session-changed"));
+  }
   let payload: Record<string, unknown>;
   try {
     payload = await readBoundedJson(response);

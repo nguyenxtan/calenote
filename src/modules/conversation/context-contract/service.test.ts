@@ -456,3 +456,27 @@ it("I3 bound-only recovery survives uncertain-preview eviction and six USER capa
 });
 
 import { CONTEXT_PROTOCOL_V3 } from "./protocol";
+
+it("reads saved addressing once per authenticated turn and persists the exact dispatched structured plan", async () => {
+  const h = await harness([]);
+  const owners: string[] = [];
+  h.deps.getReplyPreferences = async owner => { owners.push(owner); return { addressStyle: "custom", customDisplayName: "<Sếp 🧾&>" }; };
+  await h.turn(0, "help");
+  expect(owners).toHaveLength(1);
+  expect(h.inputs).toHaveLength(0);
+  const reply = h.replies.at(-1)!;
+  expect(reply.text).toMatch(/^&lt;Sếp 🧾&amp;&gt; có thể/u);
+  const snapshot = await h.read(1);
+  const outbound = snapshot?.transcript.at(-1);
+  expect(outbound?.text).toBe(reply.text);
+  expect(outbound?.semanticView).toContain("Sếp");
+  expect(reply.spans).toEqual([{ kind: "FACT", start: 0, end: reply.text.length }]);
+});
+
+it("falls back to default wording when the saved preference read fails", async () => {
+  const h = await harness([]);
+  h.deps.getReplyPreferences = async () => { throw new Error("unavailable"); };
+  await h.turn(0, "help");
+  expect(h.replies.at(-1)?.text).toBe("Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn.");
+  expect(h.inputs).toHaveLength(0);
+});

@@ -15,6 +15,10 @@ export const metadata: Metadata = {
     default: "Calenote — Lịch bắt đầu từ một câu chat",
     template: "%s · Calenote",
   },
+  icons: {
+    icon: [{ url: "/brand/favicon.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: "/brand/favicon.svg",
+  },
   description:
     "Kết nối bot Zalo hoặc Telegram của riêng bạn để biến những câu chat thành lịch nhắc.",
 };

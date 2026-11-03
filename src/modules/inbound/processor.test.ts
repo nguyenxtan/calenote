@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { D1ConnectionLifecycleStore } from "@/modules/connections/lifecycle";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1ReminderCommandStore } from "@/modules/reminders/infrastructure/d1/command-store";
@@ -94,6 +95,8 @@ class SqliteD1Database {
   constructor() {
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0001_production_mvp.sql"), "utf8"));
     this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0002_onboarding_transition_marker.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0011_connection_disconnect.sql"), "utf8"));
+    this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0013_primary_login_channel.sql"), "utf8"));
   }
   prepare(sql: string): D1PreparedStatement {
     return new SqliteStatement(this.sqlite, sql, () => this.blobReadsAsArrays) as unknown as D1PreparedStatement;
@@ -618,4 +621,82 @@ describe("non-connect processor handoff", () => {
     });
     expect(sendText).toHaveBeenCalledTimes(1);
   });
+});
+
+it.each(["telegram","zalo"] as const)("fences a terminal %s bind reply when disconnect wins before send reservation",async provider=>{
+ const {database,store,deps,inboundId,sendText}=await setup({provider});
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'telegram','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ const bind=store.bindPrivateChat.bind(store);vi.spyOn(store,'bindPrivateChat').mockImplementation(async input=>{
+  const bound=await bind(input);expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now,'disconnect-before-send')).toBe(true);return bound;
+ });
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});expect(sendText).not.toHaveBeenCalled();
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:0});
+});
+it('refuses to disconnect while a terminal reply is already reserved and cleans the reservation after settlement',async()=>{
+ const {database,deps,inboundId,sendText}=await setup();
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'zalo','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ sendText.mockImplementation(async()=>{expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now,'blocked-during-send')).toBe(false);return {providerMessageId:'receipt'};});
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:0});
+ expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(true);
+});
+it.each(['timeout','invalid-receipt','decrypt-failed'] as const)('retains uncertain egress but releases proven pre-dispatch failure: %s',async outcome=>{
+ const {database,deps,inboundId,sendText}=await setup();
+ database.sqlite.exec(`INSERT INTO bot_connections(id,user_id,provider,public_id,provider_bot_id,display_name,encrypted_token,encrypted_token_iv,token_fingerprint,credential_version,state,created_at,updated_at)
+ SELECT 'alternate',user_id,'zalo','alternate-public','alternate-provider','Alternate',encrypted_token,encrypted_token_iv,'alternate-fingerprint',1,'ACTIVE_BOUND',created_at,updated_at FROM bot_connections WHERE id='connection-1';
+ INSERT INTO chat_identities VALUES ('alternate-chat','alternate','alternate-user','alternate-private',NULL,1);`);
+ const lifecycle=new D1ConnectionLifecycleStore(database as unknown as D1Database);deps.connectionEgress=lifecycle;
+ if(outcome==='timeout')sendText.mockRejectedValue(new Error('provider timed out'));
+ if(outcome==='invalid-receipt')sendText.mockResolvedValue({providerMessageId:123} as never);
+ if(outcome==='decrypt-failed')vi.spyOn(deps.keyring,'decryptCredential').mockRejectedValue(new Error('bad ciphertext'));
+ expect(await processInbound(inboundId,deps)).toEqual({status:'BOUND'});
+ expect(database.sqlite.prepare('SELECT COUNT(*) AS n FROM connection_egress').get()).toEqual({n:outcome==='decrypt-failed'?0:1});
+ expect(await lifecycle.disconnect('user-1','AAAAAAAAAAAAAAAAAAAAAA',now+1,'after-send')).toBe(outcome==='decrypt-failed');
+});
+
+describe("follow-through before semantic turns", () => {
+  it.each(["telegram", "zalo"] as const)("uses the exact bound %s identity and durable inbound dedup", async provider => {
+    const h = await setup({ provider, state: "ACTIVE_BOUND", text: "xong ABCDEF01" });
+    h.database.sqlite.exec(readFileSync("migrations/0005_semantic_context_and_budget.sql", "utf8"));
+    h.database.sqlite.prepare("INSERT INTO chat_identities VALUES ('identity-1','connection-1','provider-user-1','chat-1','Sender',?)").run(now);
+    const handler = vi.fn<NonNullable<ProcessInboundDependencies["followThrough"]>>(async () => ({ handled: true as const, text: "Đã xong." }));
+    h.deps.followThrough = handler;
+    h.sendText.mockImplementation(async () => {
+      expect(h.database.sqlite.prepare("SELECT state FROM inbound_updates").get()).toEqual({ state: "PROCESSED" });
+      return { providerMessageId: "follow-through-reply" };
+    });
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "FOLLOW_THROUGH_HANDLED" });
+    expect(handler.mock.calls[0][1]).toMatchObject({ userId: "user-1", chatIdentityId: "identity-1", workspaceId: "workspace-1" });
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "TERMINAL" });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(h.sendText).toHaveBeenCalledTimes(1);
+    expect(h.database.sqlite.prepare("SELECT COUNT(*) AS n FROM command_drafts").get()).toEqual({ n: 0 });
+  });
+  it("never invokes the handler for an unmatched private identity", async () => {
+    const h = await setup({ state: "ACTIVE_BOUND", text: "xong ABCDEF01" });
+    const handler = vi.fn(async () => ({ handled: true as const, text: "must not run" }));
+    h.deps.followThrough = handler;
+    expect(await processInbound(h.inboundId, h.deps)).toEqual({ status: "REJECTED" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('private addressing at the binding boundary',()=>{
+ it('addresses a successful bind using the connection owner, not sender display name',async()=>{
+  const h=await setup();const preferences=vi.fn(async()=>({addressStyle:'custom' as const,customDisplayName:'Chị Tuyền'}));h.deps.getReplyPreferences=preferences;
+  expect(await processInbound(h.inboundId,h.deps)).toEqual({status:'BOUND'});
+  expect(preferences).toHaveBeenCalledExactlyOnceWith('user-1');
+  expect(h.sendText.mock.calls[0][3]).toBe('Chị Tuyền, Đã kết nối cuộc trò chuyện riêng này với Calenote.');
+ });
+ it('does not disclose or even fetch owner naming for an unverified chat',async()=>{
+  const h=await setup({text:'hello'});const preferences=vi.fn(async()=>({addressStyle:'custom' as const,customDisplayName:'private name'}));h.deps.getReplyPreferences=preferences;
+  expect(await processInbound(h.inboundId,h.deps)).toEqual({status:'REJECTED'});
+  expect(preferences).not.toHaveBeenCalled();expect(h.sendText.mock.calls[0][3]).not.toContain('private name');
+ });
 });

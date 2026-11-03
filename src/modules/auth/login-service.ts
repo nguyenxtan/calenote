@@ -1,3 +1,4 @@
+import { addressProse, type BotReplyPreferences } from "@/modules/preferences/wording";
 import { prepareSession, type SessionRecord } from "@/modules/auth/session";
 import type { BotProvider, SendReceipt } from "@/modules/connections/contracts";
 import { ProviderOperationError, ProviderVerificationError } from "@/modules/connections/provider-error";
@@ -243,6 +244,8 @@ export class D1LoginCodeStore implements LoginCodeStore {
       JOIN bot_connections c ON c.user_id = u.id AND c.state = 'ACTIVE_BOUND'
       JOIN chat_identities ci ON ci.connection_id = c.id
       WHERE u.email = ? COLLATE NOCASE
+        AND (c.id=(SELECT p.connection_id FROM primary_login_channels p WHERE p.user_id=u.id)
+          OR NOT EXISTS(SELECT 1 FROM primary_login_channels p WHERE p.user_id=u.id))
       GROUP BY u.id
       HAVING COUNT(*) = 1`;
     const statements = [
@@ -1195,6 +1198,7 @@ type SendText = (
 ) => Promise<SendReceipt>;
 
 export interface DeliverLoginCodeDependencies {
+  getReplyPreferences?(ownerId: string): Promise<BotReplyPreferences>;
   store: LoginCodeStore;
   keyring: Pick<Keyring, "decryptSensitive" | "decryptCredential">;
   sendText?: SendText;
@@ -1234,6 +1238,7 @@ export async function deliverLoginCode(
 
   let code: string;
   let token: string;
+  let text: string;
   try {
     code = await dependencies.keyring.decryptSensitive(
       "login-code",
@@ -1270,12 +1275,20 @@ export async function deliverLoginCode(
     }
   }
 
+  let replyPreferences: BotReplyPreferences | undefined;
+  try {
+    replyPreferences = await dependencies.getReplyPreferences?.(delivery.userId);
+  } catch {
+    // Optional presentation lookup cannot prevent login delivery.
+  }
+  text = `${addressProse("Mã đăng nhập Calenote của bạn: ", replyPreferences)}${code}. Mã có hiệu lực trong 10 phút.`;
+  if (text.length > 2_000) text = `Mã đăng nhập Calenote của bạn: ${code}. Mã có hiệu lực trong 10 phút.`;
+
   const marker = randomOpaqueId(randomBytes);
   const acquired = await dependencies.store.acquireDelivery(delivery, marker, now());
   if (acquired.status !== "OWNED") return acquired;
   const attemptCount = delivery.attemptCount + 1;
 
-  const text = `Mã đăng nhập Calenote của bạn: ${code}. Mã có hiệu lực trong 10 phút.`;
   try {
     await (dependencies.sendText ?? sendProviderText)(
       delivery.provider,

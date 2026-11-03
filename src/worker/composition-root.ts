@@ -1,3 +1,21 @@
+import { requestEmailRegistration, verifyEmailRegistration } from "@/modules/auth/email-registration";
+import { createRegistrationEmailSender } from "@/modules/auth/registration-email-sender";
+import type { EmailRegistrationOperations } from "./routes/email-registration";
+import { createPersonalMemoryChatHandler } from "@/modules/personal-assistant/chat";
+import { D1PersonalAssistantStore } from "@/modules/personal-assistant/store";
+import { personalBrief, D1PersonalAssistantRuntime } from "@/modules/personal-assistant/runtime";
+import type { PersonalAssistantOperations } from "./routes/personal-assistant";
+import { createFollowThroughChatHandler } from '@/modules/follow-through/chat-adapter';
+import { D1FollowThroughService } from '@/modules/follow-through/service';
+import type { FollowThroughOperations } from './routes/follow-through';
+import { D1EmailDiscoveryStore, continueWithEmail } from "@/modules/auth/email-discovery";
+import type { EmailDiscoveryOperations } from "./routes/auth-continue";
+import { D1AccountService } from "@/modules/account/service";
+import type { AccountOperations } from "./routes/account";
+import { D1PrimaryLoginStore, PrimaryLoginSelectionError } from "@/modules/connections/primary-login";
+import { addConnection } from "@/modules/connections/add-service";
+import { D1ConnectionLifecycleStore, ConnectionDisconnectError } from "@/modules/connections/lifecycle";
+import { randomOpaqueId, cryptoRandomBytes } from "@/modules/platform/types";
 import {D1LocalMonthQueryStore} from '@/modules/reminders/infrastructure/d1/local-month-query-store';
 import { D1DashboardStore } from "@/modules/auth/dashboard-service";
 import {
@@ -185,6 +203,17 @@ export async function createConnectionsOperations(env: Env): Promise<Connections
       return { userId: principal.userId };
     },
     listConnections: (userId) => dashboardStore.listConnections(userId),
+    getPrimaryLogin: userId => new D1PrimaryLoginStore(env.DB).get(userId),
+    selectPrimaryLogin: async ({userId,publicId}) => {
+      if(!await new D1PrimaryLoginStore(env.DB).select(userId,publicId,Date.now(),randomOpaqueId(cryptoRandomBytes))) throw new PrimaryLoginSelectionError();
+      return {publicId};
+    },
+    addConnection: ({userId,provider,token}) => addConnection(userId,{provider,token},{store,keyring,rateLimitStore,verifyToken:verifyBotToken,registerWebhook,appOrigin:env.APP_ORIGIN}),
+    disconnectConnection: async ({userId,publicId}) => {
+      const changed = await new D1ConnectionLifecycleStore(env.DB).disconnect(userId,publicId,Date.now(),randomOpaqueId(cryptoRandomBytes));
+      if (!changed) throw new ConnectionDisconnectError();
+      return {disconnected:true};
+    },
     rotateConnectCode: (input) => rotateConnectCode(input, { store, keyring, rateLimitStore }),
     retryWebhook: (input) => retryConnectionWebhook(input, { store, keyring, rateLimitStore, registerWebhook, appOrigin: env.APP_ORIGIN }),
   };
@@ -272,6 +301,7 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         addressStyle: preferences.addressStyle,
         customDisplayName: preferences.customDisplayName,
         tone: preferences.tone,
+        reminderConfirmation: preferences.reminderConfirmation ?? "auto",
       };
     },
     savePreferences: async ({ userId, preferences }) => {
@@ -280,6 +310,7 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         addressStyle: saved.addressStyle,
         customDisplayName: saved.customDisplayName,
         tone: saved.tone,
+        reminderConfirmation: saved.reminderConfirmation ?? "auto",
       };
     },
   };
@@ -401,6 +432,7 @@ export type RuntimeOperations = QueueOperations & ScheduledOperations;
 export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean; contextContract?: "calenote-context-2"; sourceSha?: string } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
   if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  const getReplyPreferences = (ownerId: string) => getUserPreferences(ownerId, new D1UserPreferencesStore(env.DB));
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
   const reminderSchedulerStore = new D1ReminderSchedulerStore(env.DB);
@@ -410,7 +442,7 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const contextPolicy = capabilities.contextContract ? parseContextContractRuntimeConfig(env) : undefined;
   const contextContract = capabilities.contextContract ? {
     store: createD1ContextContractStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), calendar: lunarCalendar,
-    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent,
+    sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent, getReplyPreferences,
     // Dormant until the reviewed capability is enabled after full live PASS.
     gateway: contextPolicy?.status === "READY" ? createTypedContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
       { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
@@ -435,6 +467,13 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
+      getReplyPreferences,
+      connectionEgress: new D1ConnectionLifecycleStore(env.DB),
+      followThrough: async (message,context) => {
+        const memory=await createPersonalMemoryChatHandler(new D1PersonalAssistantStore(env.DB,keyring), getReplyPreferences)(message,context);
+        return memory.handled ? memory : createFollowThroughChatHandler(new D1FollowThroughService(env.DB,keyring), Date.now, getReplyPreferences)(message,context);
+      },
+      getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
       keyring,
       semantic,
       ...(contextContract ? { contextContract } : {}),
@@ -443,6 +482,8 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       observeFeedback: (outcome, elapsedMs) => console.log(JSON.stringify({ operation: "processing_feedback", outcome, elapsedMs })),
       ...(contexts ? { conversation: { contextStore: contexts, seriesStore: new D1SeriesStore(env.DB, keyring),
         runtimeStore: new D1ConversationRuntimeStore(env.DB), calendar: lunarCalendar,
+        getReminderConfirmation: async userId => (await getUserPreferences(userId,new D1UserPreferencesStore(env.DB))).reminderConfirmation ?? "auto",
+        getReplyPreferences,
         getTone: async (ownerId: string) => {
           const tone = (await new D1UserPreferencesStore(env.DB).get(ownerId))?.tone;
           return tone === "concise" || tone === "professional" ? "concise" as const : "friendly" as const;
@@ -453,8 +494,14 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
-    deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring }),
-    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring }),
+    deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring, getReplyPreferences }),
+    deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring, getReplyPreferences }),
+    purgeEmailRegistrationChallenges: async (now,limit) => {
+      if(!await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_registration_challenges'").first())return;
+      return env.DB.prepare('DELETE FROM email_registration_challenges WHERE email IN (SELECT email FROM email_registration_challenges WHERE expires_at<? ORDER BY expires_at LIMIT ?)').bind(now-86_400_000,Math.min(100,Math.max(1,limit))).run();
+    },
+    processPersonalAssistant: (now, limit) => new D1PersonalAssistantRuntime(env.DB,keyring).processDue(now,limit),
+    processFollowThrough: (now, limit) => new D1FollowThroughService(env.DB,keyring).processDue(now,limit),
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, { store: loginStore, enqueue: (job) => env.JOBS.send(job) }),
@@ -469,4 +516,53 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       }
     } } : {}),
   };
+}
+
+export async function createEmailDiscoveryOperations(env: Env): Promise<EmailDiscoveryOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1EmailDiscoveryStore(env.DB);
+  const rateLimitStore = new D1RateLimitStore(env.DB);
+  return { continueEmail: input => continueWithEmail(input, { store, keyring, rateLimitStore }) };
+}
+export async function createAccountOperations(env: Env): Promise<AccountOperations> {
+  const keyring = await createRouteKeyring(env);
+  const sessions = new D1SessionStore(env.DB);
+  const account = new D1AccountService(env.DB);
+  return {
+    requireUser: credentials => requireSession(credentials, { store: sessions, keyring }),
+    getProfile: userId => account.getProfile(userId),
+    updateProfile: (userId, input) => account.updateProfile(userId, input),
+    listSessions: principal => account.listSessions(principal),
+    revokeOtherSessions: principal => account.revokeOtherSessions(principal),
+  };
+}
+
+export async function createFollowThroughOperations(env: Env): Promise<FollowThroughOperations> {
+  const keyring = await createRouteKeyring(env);
+  const store = new D1SessionStore(env.DB);
+  const rateStore = new D1RateLimitStore(env.DB);
+  return {
+    requireUser: credentials => requireSession(credentials, {store,keyring}),
+    service: new D1FollowThroughService(env.DB,keyring),
+    consume: async userId => {
+      const subjectDigest=await keyring.digestCode(`follow-through:${userId}`);
+      const result=await consumeRateLimit({subjectDigest,scope:'follow-through-action',limit:60,windowMs:60_000},{store:rateStore});
+      if(!result.allowed) throw new RateLimitExceededError(Math.max(1,Math.ceil((result.resetAt-Date.now())/1000)));
+    },
+  };
+}
+
+export async function createPersonalAssistantOperations(env: Env): Promise<PersonalAssistantOperations> {
+ const keyring=await createRouteKeyring(env),sessions=new D1SessionStore(env.DB),rateStore=new D1RateLimitStore(env.DB);
+ return {requireUser:credentials=>requireSession(credentials,{store:sessions,keyring}),store:new D1PersonalAssistantStore(env.DB,keyring),getBrief:userId=>personalBrief(env.DB,keyring,userId,Date.now()),consume:async userId=>{
+ const subjectDigest=await keyring.digestCode(`personal-assistant:${userId}`);
+ const rate=await consumeRateLimit({subjectDigest,scope:'personal-assistant',limit:60,windowMs:60_000},{store:rateStore});
+ if(!rate.allowed)throw new RateLimitExceededError(Math.max(1,Math.ceil((rate.resetAt-Date.now())/1000)));
+ }};
+}
+
+export async function createEmailRegistrationOperations(env:Env):Promise<EmailRegistrationOperations> {
+ const keyring=await createRouteKeyring(env),rateLimitStore=new D1RateLimitStore(env.DB);
+ const deps={database:env.DB,keyring,rateLimitStore,sender:createRegistrationEmailSender(env.REGISTRATION_EMAIL,env.REGISTRATION_EMAIL_FROM,env.APP_ORIGIN)};
+ return {requestEmailRegistration:input=>requestEmailRegistration(input,deps),verifyEmailRegistration:async input=>({cookie:(await verifyEmailRegistration(input,deps)).session.cookie})};
 }
