@@ -70,7 +70,8 @@ import type { IntelligenceGateway, IntelligenceMode } from "@/modules/intelligen
 import { createOpenRouterGateway } from "@/modules/intelligence/infrastructure/openrouter/gateway";
 import { createSemanticGateway, createConversationGateway } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { createTypedContextContractGateway, createContextHttpTransport } from "@/modules/intelligence/infrastructure/openrouter/semantic-gateway";
-import { parseContextContractRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import { parseContextContractRuntimeConfig,parseKeyedContextRuntimeConfig } from "@/modules/intelligence/infrastructure/openrouter/config";
+import {createKeyedContextContractGateway} from '@/modules/intelligence/infrastructure/openrouter/keyed-context-gateway';
 import { D1ContextContractStore } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 import { createD1ContextContractStoreV3 } from "@/modules/conversation/context-contract/infrastructure/d1/store";
 import { createD1ContextRuntimeStoreV3 } from "@/modules/conversation/context-contract/runtime-store";
@@ -440,14 +441,16 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   const loginStore = new D1LoginCodeStore(env.DB);
   const semantic = await createSemanticCapability(env, keyring);
   const contextPolicy = capabilities.contextContract ? parseContextContractRuntimeConfig(env) : undefined;
+  const keyedPolicy=capabilities.contextContract?parseKeyedContextRuntimeConfig(env):undefined;
+  const successorCleanup=capabilities.contextContract?new D1ContextContractStore(env.DB,keyring,Date.now,CONTEXT_PROTOCOL_V3):undefined;
   const contextContract = capabilities.contextContract ? {
     store: createD1ContextContractStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db: env.DB, keyring, protocol: CONTEXT_PROTOCOL_V3 }), calendar: lunarCalendar,
     sourceSha: capabilities.sourceSha!, mode: "LIVE" as const, observe: observeContextEvent, getReplyPreferences,
-    // Dormant until the reviewed capability is enabled after full live PASS.
-    gateway: contextPolicy?.status === "READY" ? createTypedContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
+    gateway: keyedPolicy?.status==='READY'?createKeyedContextContractGateway(createContextHttpTransport(keyedPolicy.apiKey),{status:'OBSERVABLE_CANARY',advertisedContextTokens:400000})
+      :contextPolicy?.status === "READY" ? createTypedContextContractGateway({ ...contextPolicy.config, protocol: CONTEXT_TYPED_PROTOCOL_V3 }, createContextHttpTransport(contextPolicy.apiKey),
       { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 })
       : { prepare: () => ({ status: "FAILURE" as const, category: "UNAVAILABLE" as const }) },
-    budgetStore: new D1SemanticBudgetStore(env.DB, { ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
+    budgetStore: new D1SemanticBudgetStore(env.DB, keyedPolicy?.status==='READY'?keyedPolicy.budgetLimits:{ ...(contextPolicy?.status === "READY" ? contextPolicy.budgetLimits : SEMANTIC_BUDGET_CEILINGS),
       maxInputTokens: 12000, maxOutputTokens: 1536, reservationInputTokenExposure: 1048576,
       promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 }),
     list: (input: import("@/modules/conversation/context-contract/query").ContextReminderQuery) => new D1SemanticReminderQueryStore(env.DB).listContext(input),
@@ -505,15 +508,13 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
     claimDueReminders: (now, limit) => claimDueReminders(now, limit, { store: reminderSchedulerStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveInboundOrphans: (now, limit) => redriveInboundOrphans(now, limit, { store: inboundDispatchStore, enqueue: (job) => env.JOBS.send(job) }),
     redriveLoginCodes: (now, limit) => redriveLoginCodes(now, limit, { store: loginStore, enqueue: (job) => env.JOBS.send(job) }),
-    ...(contexts ? { purgeConversationContexts: async (now: number, limit: number) => {
-      try {
-        const count = await contexts.purgeExpired(now, limit);
-        console.log(JSON.stringify({ operation: "conversation_cleanup", outcome: "OK", count }));
-        return count;
-      } catch {
-        console.log(JSON.stringify({ operation: "conversation_cleanup", outcome: "FAILED" }));
-        return 0;
-      }
+    ...(contexts||successorCleanup ? { purgeConversationContexts: async (now: number, limit: number) => {
+      let total=0;
+      for(const store of [contexts,successorCleanup])if(store)try{
+        const count=await store.purgeExpired(now,limit);total+=count;
+        console.log(JSON.stringify({operation:'conversation_cleanup',outcome:'OK',count}));
+      }catch{console.log(JSON.stringify({operation:'conversation_cleanup',outcome:'FAILED'}));}
+      return total;
     } } : {}),
   };
 }

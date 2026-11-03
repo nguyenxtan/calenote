@@ -529,3 +529,5 @@ function createSelectedContextContractGateway(rawConfig: SemanticGatewayConfig &
     };
   } };
 }
+
+export {createKeyedContextContractGateway} from './keyed-context-gateway';

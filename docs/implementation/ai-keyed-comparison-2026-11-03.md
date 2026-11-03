@@ -1,6 +1,6 @@
-# Keyed synthetic comparison — current design
+# Keyed synthetic comparison — qualification checkpoint
 
-Current candidate: prompt139 (`unsupported-operands`), readable keyed wire136.
+At synthetic qualification, candidate: prompt139 (`unsupported-operands`), readable keyed wire136.
 **Full live synthetic comparison passed:**32/32 scripts,84/84 turns,
 76/76 valid model responses,2043/2043 detail checks,5/5 actions,0 safety failures.
 The fresh run used one frozen source digest:
@@ -230,3 +230,14 @@ See the [dated recovery history](ai-readable-prompt-2026-11-03.md) for failure
 artifacts and the source-specific fixes. The synthetic full-run completion gate
 is now met on139. Production promotion remains a separate reviewed change;
 this comparison does not change runtime routing or deploy anything.
+
+## Subsequent production cutover work
+
+The owner subsequently requested merge into master and Cloudflare deployment.
+The qualified gateway/schema transformations now have shared production
+infrastructure and compatibility benchmark entrypoints. Three independently
+frozen request hashes (R01/R07/R10) remain exact. Runtime activation, atomic
+reservation, successor cleanup, real app pages and existing local read behavior
+are covered by dedicated consumer tests. See the Nov3 cutover implementation
+plan and cloudflare-deployment runbook; the historical full139 result above is
+not relabeled as final merged-runtime qualification or a deployment receipt.

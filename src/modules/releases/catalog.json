@@ -1,10 +1,33 @@
 {
-  "latestId": "2026-10-21-admin-updates-auth-refresh",
+  "latestId": "2026-11-03-ai-conversation-reliability",
   "notes": [
     {
-      "id": "2026-10-21-admin-updates-auth-refresh",
+      "id": "2026-11-03-ai-conversation-reliability",
       "commit": null,
       "releasedAt": null,
+      "title": "Trợ lý giữ đúng yêu cầu và bản nháp",
+      "summary": "Giữ đủ thông tin lời nhắc, xử lý sửa giờ và báo rõ lịch chưa được hỗ trợ.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Nối luồng hội thoại đã kiểm thử vào chat, bản xem trước trên web và dữ liệu chi tiết của lời nhắc.",
+        "Giữ nguyên dữ liệu người dùng đã nêu; năm chưa nói rõ không được tự thêm, tiêu đề và ghi chú không bị bỏ khi hỏi tiếp.",
+        "Chu kỳ chưa được hỗ trợ được chuyển đầy đủ cho máy chủ để trả lời đúng giới hạn, thay vì tạo bản nháp thiếu dữ liệu.",
+        "Giữ các câu hỏi lịch đơn giản chạy trực tiếp; tiếp tục bảo toàn lệnh trí nhớ, theo dõi công việc và cá nhân hóa.",
+        "Giữ trần ngân sách, xác nhận trước khi lưu, bỏ phản hồi đến muộn sau khi hủy và dọn bản nháp hết hạn."
+      ],
+      "memberChanges": [
+        "Trợ lý giữ đủ tiêu đề, địa điểm và ghi chú khi bạn bổ sung thời gian.",
+        "Bạn có thể xem và xác nhận bản nháp AI trong Hộp thư, rồi xem chi tiết lời nhắc trên lịch.",
+        "Lịch lặp chưa được hỗ trợ được báo rõ; câu hỏi lịch đơn giản vẫn được xử lý trực tiếp.",
+        "Lời nhắc qua hội thoại AI cần bạn xác nhận bản nháp trước khi lưu."
+      ],
+      "verification": "Phạm vi kiểm thử: lịch và dữ liệu nguồn, sửa giờ, ghi chú, lịch không hỗ trợ, giữ ngữ cảnh, xác nhận/hủy, phản hồi đến muộn, ngân sách, dọn ngữ cảnh và giao diện chat/web. Bằng chứng triển khai được ghi riêng theo từng bản phát hành.",
+      "caveat": "Luồng hội thoại AI luôn yêu cầu xác nhận bản nháp; tùy chọn tự lưu của luồng cũ chưa áp dụng. Lịch tuần, tháng và năm chưa được hỗ trợ."
+    },
+    {
+      "id": "2026-10-21-admin-updates-auth-refresh",
+      "commit": "f11b19d223ddb01abfe9bc1c096d07fc331b8c51",
+      "releasedAt": "2026-10-21T04:30:27.994753Z",
       "title": "Làm mới quản trị và chuông cập nhật theo phiên đăng nhập",
       "summary": "Kiểm tra lại quyền khi quay lại trang, ẩn dữ liệu phiên cũ và đồng bộ màu Bàn việc cá nhân.",
       "kind": "Sửa lỗi",

@@ -31,13 +31,25 @@
 
 ## Tasks
 
-- [ ] Preserve tested repair as candidate commit after fresh full suite; merge origin/master on feature branch, resolve two known conflict areas preserving both behaviors, frozen-install dependencies.
-- [ ] Add failing parity/admission tests; move gateway and schema helpers into production infrastructure, keep benchmark entrypoints as reexports/adapters, run parity/security tests.
-- [ ] Add failing runtime profile/reservation tests; add exact keyed parser and matching D1 limits while retaining legacy parsers; update canonical vars and generated Worker types.
-- [ ] Add failing entrypoint/HTTP/expiry tests; activate with valid CF_VERSION_METADATA.tag and add family2 expiry cleanup; preserve master command ordering and privacy.
+- [x] Preserve tested repair as candidate commit after fresh full suite; merge origin/master on feature branch, resolve two known conflict areas preserving both behaviors, frozen-install dependencies.
+- [x] Add failing parity/admission tests; move gateway and schema helpers into production infrastructure, keep benchmark entrypoints as reexports/adapters, run parity/security tests.
+- [x] Add failing runtime profile/reservation tests; add exact keyed parser and matching D1 limits while retaining legacy parsers; update canonical vars and generated Worker types.
+- [x] Add failing entrypoint/HTTP/expiry tests; activate with valid CF_VERSION_METADATA.tag and add family2 expiry cleanup; preserve master command ordering and privacy.
 - [ ] Run full pnpm check and fresh full32 synthetic campaign on final merged source within existingUSD2; obtain independent read-only review and fix blockers.
 - [ ] Commit immutable reviewed result, update master without force, push. Verify remote migration and secret-name preflight, upload tagged version, promote once, verify health/release metadata/assets and record rollback evidence.
 
 ## Authority and limitations
 
 The user already directed autonomous work and explicitly requested merge/deploy; no repeat integration-choice menu is needed. Existing production credentials remain in Cloudflare. Any unavailable required authentication remains a real external prerequisite, not an authorization inferred from elapsed time. Synthetic qualification does not claim real bot delivery or heldout performance.
+
+## Execution ledger
+
+- Baseline: fresh276 files/10608 tests pass (2 existing optional skips),654.74s; candidate a62fd6b preserves the original139 qualified repair.
+- Merge2e4c12d includes current master f11b19d; two conflicts resolved preserving master UI test and personalized successor replies with keyed emission identity.99 merge-focused tests pass.
+- Gateway:5 new regression tests failed for missing runtime factory/parser, then28 gateway tests pass. Qualified R01/R07/R10 request hashes match the original full139 exchanges exactly.
+- Composition:3 regressions failed for missing metadata activation, mismatched/absent reservation and uncleared family2 state; then18 composition tests pass with actual SQLiteD1 reservation116759 and expiry cleanup.
+- Local/UI:3 local reads attempted model calls and real app Inbox had no preview before wiring; all61 focused consumer/config/API tests pass after retaining exact local reads and enabling all3 real pages. One test-only TypeScript excess-property annotation corrected afterward.
+- Cloudflare reauthentication completed; remote migrations through master have no pending changes; readonly active-context count is empty, no legacy active state to drain. Rollback version50e1bffb-0bdd-4125-8ae6-8dc40f1a25fd, original master f11b19d223ddb01abfe9bc1c096d07fc331b8c51.
+- Ruling: keep explicit preview confirmation for the qualified successor; the old auto-save preference is not granted new confirmation authority. Product release notes disclose this behavior.
+- Ruling: preserve exact local read-only interception only, never fallback after arbitrary model failure; master memory/follow-through and reply personalization remain intact.
+- Ruling: preserve existing production secrets and all account budget ceilings; do not install the expiring test key or management key.

@@ -16,6 +16,7 @@ import {
 import { base64UrlToBytes } from "@/modules/security/encoding";
 import { createRuntimeOperations } from "./composition-root";
 import { routeRequest } from "./router";
+import {contextRuntimeCapabilities} from './release-runtime';
 
 function isCanonicalOpaqueId(value: unknown): value is string {
   if (typeof value !== "string" || value.length !== 22) return false;
@@ -161,11 +162,11 @@ export default {
     return routeRequest(request, env, ctx);
   },
   async queue(batch: MessageBatch<unknown>, env, ctx) {
-    await handleQueueEvent(batch, () => createRuntimeOperations(env, { conversationV2: true }, ctx));
+    await handleQueueEvent(batch, () => createRuntimeOperations(env, { conversationV2: true,...contextRuntimeCapabilities(env) }, ctx));
   },
   async scheduled(controller, env, ctx) {
     void ctx;
-    const operations = await createRuntimeOperations(env, { conversationV2: true });
+    const operations = await createRuntimeOperations(env, { conversationV2: true,...contextRuntimeCapabilities(env) });
     await runScheduledWork(controller, operations);
   },
 } satisfies ExportedHandler<Env>;

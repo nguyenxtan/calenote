@@ -76,6 +76,7 @@ import { handleListRemindersV2 } from "./routes/reminders-v2";
 import { handleConversationPreviews, PreviewUnavailableError } from "./routes/conversation-previews";
 import { handleSeries } from "./routes/reminder-series";
 import { createSeriesOperations } from "./composition-root";
+import {contextRuntimeCapabilities} from './release-runtime';
 import type { SeriesOperations, ContextApiOperations } from "./routes/operations";
 import type {
   AuthOperations,
@@ -222,7 +223,7 @@ export function createRouter(options: RouterOptions = {}) {
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
-  const contextApiOperationsFactory = options.contextApiOperations ?? createContextApiOperations;
+  const contextApiOperationsFactory = options.contextApiOperations ?? ((env:Env)=>createContextApiOperations(env,contextRuntimeCapabilities(env)));
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
   const webhookOperationsFactory = options.webhookOperations ?? createWebhookOperations;

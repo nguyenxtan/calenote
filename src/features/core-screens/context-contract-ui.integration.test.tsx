@@ -8,6 +8,9 @@ import { listDetailedReminders } from "@/modules/reminders/details-api-service";
 import { createRouter } from "@/worker/router";
 import { PreviewUnavailableError } from "@/worker/routes/conversation-previews";
 import { CoreScreenExperience } from "./CoreScreenExperience";
+import InboxPage from '@/app/app/inbox/page';
+import CalendarPage from '@/app/app/calendar/page';
+import RemindersPage from '@/app/app/reminders/page';
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
@@ -41,7 +44,7 @@ it("strict Worker preview, exact web decision and detailed reminder reach the re
     });
     vi.stubGlobal("fetch", fetcher);
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-08T05:00:00Z"));
-    const view = render(<CoreScreenExperience contextContractEnabled screen="inbox" />);
+    const view = render(<InboxPage />);
     expect(await screen.findByRole("heading", { name: f.preview.title })).toBeVisible();
     expect(screen.getByText(/Thời điểm thông báo.*Việt Nam/)).toBeVisible();
     const save = screen.getByRole("button", { name: `Lưu bản xem trước ${f.preview.title}` });
@@ -53,11 +56,13 @@ it("strict Worker preview, exact web decision and detailed reminder reach the re
     expect(body).toMatchObject({ schemaVersion: "conversation-previews-1", action: "SAVE_PREVIEW", draftRevision: 1,
       previewHash: f.proof.draftHash, decisionToken: "CN-test-token" });
     expect(typeof body.idempotencyKey).toBe("string");
-    view.rerender(<CoreScreenExperience contextContractEnabled screen="calendar" />);
+    view.rerender(<CalendarPage />);
     expect(await screen.findByText(f.preview.title)).toBeVisible();
     await userEvent.click(screen.getByText(f.preview.title));
     expect(screen.getByRole("region", { name: "Chi tiết lời nhắc" })).toHaveTextContent(f.preview.details.notes ?? "");
     expect(fetcher.mock.calls.some(([path]) => path === "/api/v2/reminders")).toBe(true);
+    view.rerender(<RemindersPage />);
+    const rows=await screen.findAllByRole("heading",{name:f.preview.title});expect(rows).toHaveLength(2);rows.forEach(row=>expect(row).toBeVisible());
   } finally { f.close(); }
 });
 

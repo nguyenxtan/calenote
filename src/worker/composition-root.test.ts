@@ -56,7 +56,7 @@ describe("Worker composition root", () => {
     const historical = vi.spyOn(gateway, "createContextContractGateway");
     const root = await import("./composition-root");
     const env = { ...environment(), AI_MODE: "privacy", OPENROUTER_API_KEY: "test-only-key", OPENROUTER_PRIVACY_MODEL: "google/gemini-2.5-flash-lite",
-      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu", AI_MAX_PRIVACY_PRICE: "0.4" } as Env;
+      OPENROUTER_PRIVACY_PROVIDER: "google-vertex/eu", AI_MAX_PRIVACY_PRICE: "0.4" } as unknown as Env;
     try {
       await root.createRuntimeOperations(env); expect(factory).not.toHaveBeenCalled();
       await root.createRuntimeOperations(env, { contextContract: "calenote-context-2", sourceSha: "a".repeat(40) });

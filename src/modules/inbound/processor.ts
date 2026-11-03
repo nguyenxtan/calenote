@@ -41,6 +41,7 @@ import type { SemanticContextStore } from "@/modules/semantic/context-store";
 import { D1SemanticReminderQueryStore } from "@/modules/reminders/infrastructure/d1/semantic-query-store";
 import type { QueriedReminder, SemanticReminderQuery } from "@/modules/reminders/semantic-query";
 import { newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
+import {localReadOnlyCommand} from '@/modules/conversation/local-read-only';
 import { createConversationService, type ConversationServiceDependencies } from "@/modules/conversation/service";
 import { createContextContractService, type ContextContractServiceDependencies } from "@/modules/conversation/context-contract/service";
 import type { ReplyReceipt } from "@/modules/conversation/context-contract/responses";
@@ -880,10 +881,13 @@ export async function processInbound(
       commandStore: dependencies.store, keyring: dependencies.keyring, now, reply, processingFeedback, observeTiming: dependencies.observeTiming,
       list: input => dependencies.store.listSemanticReminders(input),
     }) : undefined;
-    const conversation = dependencies.contextContract ? createContextContractService({ ...dependencies.contextContract,
+    const successor = dependencies.contextContract ? createContextContractService({ ...dependencies.contextContract,
       keyring: dependencies.keyring, now, channel: message.provider === "zalo" ? "ZALO" : "TELEGRAM", processingFeedback,
       reply: async plan => plan.status === "READY" ? replyWithReceipt(message, plan.text, dependencies) : { status: "FAILED" },
-    }) : legacyConversation;
+    }) : undefined;
+    // Only the existing exact read-only language uses the local service. An
+    // arbitrary successor failure never grants fallback or another model call.
+    const conversation=successor&&legacyConversation?{...successor,handle:(current:BoundChatMessage,bound:BoundChatContext)=>localReadOnlyCommand(current.text)!==null?legacyConversation.handle(current,bound):successor.handle(current,bound)}:successor??legacyConversation;
     return processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
       getReminderConfirmation: dependencies.getReminderConfirmation,

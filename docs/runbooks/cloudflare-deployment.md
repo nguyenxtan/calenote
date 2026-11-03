@@ -17,9 +17,44 @@ before a response. Treat this as a request-init member-isolation review item,
 not a reason to change TLS, DNS, provider credentials, or egress controls
 without explicit authorization.
 
+## Keyed AI target, 2026-11-03
+
+The current cutover candidate targets keyed prompt139/wire136 on GPT-5 mini
+low via only azure/swedencentral, required ZDR/data-collection denial and no
+fallback. The exact previously qualified request builder and strict decoder
+are shared by runtime and synthetic benchmarks. Canonical storage remains
+calenote-context-3/state2/family2; no new migration is introduced.
+
+Canonical vars: model openai/gpt-5-mini, provider azure/swedencentral,
+AI_MAX_PRIVACY_PRICE2.2, AI_TIMEOUT_MS45000, AI_MAX_OUTPUT_TOKENS3072,
+AI_MAX_INPUT_CHARS1800. Account ceilings stay50 calls/owner/day,
+USD0.5/owner/month and USD2/global/day. Atomic reservation116759 microunits
+matches400000 token financial exposure plus3072 output at pinned prices.
+
+Queue, HTTP previews/details and cleanup use the serving version's full40hex
+CF_VERSION_METADATA.tag. Upload with the exact reviewed master SHA tag.
+Missing/wrong metadata or a different route does not enable the successor.
+AI_MODE off keeps deterministic confirmation and existing previews available.
+Exact local read-only commands stay local; memory/follow-through and stored
+reply personalization retain master behavior. The qualified successor always
+requires explicit preview confirmation; old automatic-save preference is not
+new confirmation authority. Product release notes disclose that behavior.
+
+Existing production secrets are preserved. Do not install .env.local's
+management key or the expiring .env.pilot.local inference key. Test inference
+retains the owner's USD2 lifetime cap. Remote preflight after reauthentication
+found no pending migration through0018 and no active context to drain.
+The pre-cutover rollback version is50e1bffb-0bdd-4125-8ae6-8dc40f1a25fd
+(source f11b19d223ddb01abfe9bc1c096d07fc331b8c51).
+
+At this documentation checkpoint the cutover is prepared, not yet promoted.
+Final exact-SHA checks, immutable upload/promote and provider-free HTTP readback
+are required. Active successor previews must not be handed to old readers on
+rollback; ownership fences and confirmed schedules remain authoritative.
+
 ## Operating model
 
-### Semantic V1 cutover candidate — repository configuration only
+### Historical Semantic V1 cutover candidate
 
 Task 5's accepted hybrid full run is
 `semantic-v1-hybrid-full-20260919-1827-01`; see the
@@ -27,8 +62,7 @@ Task 5's accepted hybrid full run is
 This supersedes older model-selection failures, but does not prove production
 readiness or authorize deployment by itself.
 
-`wrangler.jsonc` is the canonical **target**, not a claim about current live
-settings. Its non-secret vars now select `AI_MODE=privacy`,
+At that historical checkpoint, non-secret target vars selected `AI_MODE=privacy`,
 `OPENROUTER_PRIVACY_MODEL=google/gemini-2.5-flash-lite`, and
 `OPENROUTER_PRIVACY_PROVIDER=google-vertex/eu`. The real Semantic V1 gateway pins
 that one provider with ZDR, data-collection denial, required parameters and

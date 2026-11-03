@@ -38,6 +38,14 @@ async function authorizedFixture() {
   return { ...f, store };
 }
 describe("real Context API factory composition", () => {
+  it('serves successor previews through the actual production router and immutable version identity',async()=>{
+    const f=await authorizedFixture();
+    const env={...environment(f.db),OPENROUTER_PRIVACY_MODEL:'openai/gpt-5-mini',OPENROUTER_PRIVACY_PROVIDER:'azure/swedencentral',CF_VERSION_METADATA:{id:'50e1bffb-0bdd-4125-8ae6-8dc40f1a25fd',tag:'a'.repeat(40)}} as unknown as Env;
+    const router=createRouter();
+    const response=await router(request('/api/v2/conversation-previews'),env,ctx);expect(response.status).toBe(200);
+    const body=await response.json() as {data:{previews:Array<{title:string}>}};expect(body.data.previews).toHaveLength(1);expect(body.data.previews[0].title).toBe(f.preview.title);
+    expect((await router(new Request(origin+'/api/v2/conversation-previews'),env,ctx)).status).toBe(401);
+  });
   it("keeps the default factory independent of successor schema on migrations 0001–0008", async () => {
     const db = new SqliteD1Database(); disposers.push(() => db.close());
     const operations = await createContextApiOperations(environment(db as unknown as D1Database));

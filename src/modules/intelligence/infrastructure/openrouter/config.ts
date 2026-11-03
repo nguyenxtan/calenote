@@ -1,5 +1,6 @@
 import type { OpenRouterConfig } from "./gateway";
 import type { ContextRouteAdmission, SemanticGatewayConfig } from "./semantic-gateway";
+import type {SemanticBudgetLimits as KeyedBudgetLimits} from '../../../semantic/budget-store';
 
 export const SEMANTIC_BUDGET_CEILINGS = Object.freeze({
   ownerDailyFallbackLimit: 50,
@@ -95,4 +96,19 @@ export function parseContextContractRuntimeConfig(env: Parameters<typeof parseSe
   return { ...legacy, routeAdmission: { status: "UNVERIFIED" }, config: {
     ...legacy.config, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   } };
+}
+
+export type KeyedContextRuntimeConfig={status:'OFF'|'UNAVAILABLE'}|{status:'READY';apiKey:string;model:'openai/gpt-5-mini';provider:'azure/swedencentral';budgetLimits:KeyedBudgetLimits};
+/** Exact qualified keyed139 route. Other profiles remain unavailable here. */
+export function parseKeyedContextRuntimeConfig(env:Parameters<typeof parseSemanticRuntimeConfig>[0]):KeyedContextRuntimeConfig {
+ if((env.AI_MODE??'off')==='off')return {status:'OFF'};
+ if(env.AI_MODE!=='privacy'||!env.OPENROUTER_API_KEY?.trim()
+  ||env.OPENROUTER_PRIVACY_MODEL!=='openai/gpt-5-mini'||env.OPENROUTER_PRIVACY_PROVIDER!=='azure/swedencentral'
+  ||env.OPENROUTER_FALLBACK_MODELS||(env.AI_MAX_PRIVACY_PRICE??'2.2')!=='2.2'
+  ||(env.AI_TIMEOUT_MS??'45000')!=='45000'||(env.AI_MAX_INPUT_CHARS??'1800')!=='1800'
+  ||(env.AI_MAX_OUTPUT_TOKENS??'3072')!=='3072')return {status:'UNAVAILABLE'};
+ const limit=(key:BudgetEnvironmentKey,ceiling:number)=>{const value=env[key]===undefined?ceiling:Number(env[key]);return Number.isSafeInteger(value)&&value>0&&value<=ceiling?value:null;};
+ const daily=limit('OWNER_DAILY_CALL_LIMIT',50),monthly=limit('OWNER_MONTHLY_COST_MICROUNITS',500000),global=limit('GLOBAL_DAILY_COST_MICROUNITS',2000000);
+ if(daily===null||monthly===null||global===null)return {status:'UNAVAILABLE'};
+ return {status:'READY',apiKey:env.OPENROUTER_API_KEY,model:'openai/gpt-5-mini',provider:'azure/swedencentral',budgetLimits:{ownerDailyFallbackLimit:daily,ownerMonthlyCostMicrounits:monthly,globalDailyCostMicrounits:global,reservationTtlMs:300000,maxInputTokens:12000,reservationInputTokenExposure:400000,maxOutputTokens:3072,promptPriceMicrounitsPerMillionTokens:275000,completionPriceMicrounitsPerMillionTokens:2200000}};
 }

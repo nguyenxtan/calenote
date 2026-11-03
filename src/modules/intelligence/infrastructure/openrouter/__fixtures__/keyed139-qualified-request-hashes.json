@@ -1,0 +1,143 @@
+[
+  {
+    "fixture": "R01",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Có lịch nào ko?"
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-1",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "WEEKLY",
+          "MONTHLY",
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "a3a1b520d4bb73b75a43d6e28fc3296acbfcf29adbda32878f5caa41e8976fd3"
+  },
+  {
+    "fixture": "R07",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-1",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "WEEKLY",
+          "MONTHLY",
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "d6288c91e6f3f423d930bf70972e0f2563d6170913ef5356dc5f0f00879d2747"
+  },
+  {
+    "fixture": "R10",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Ngày 15/6 âm lịch hằng năm, nhắc ngày giỗ người thân."
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-1",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "WEEKLY",
+          "MONTHLY",
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "007e00bab28638d3389d6d5e112ea83976880ec4fe9f6b0b092b500ed7cc23b1"
+  }
+]

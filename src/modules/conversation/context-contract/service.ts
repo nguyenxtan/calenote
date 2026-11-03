@@ -44,7 +44,7 @@ import type { ContextObservation } from "./state";
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
-  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106" | "KEYED_COMPARISON_136"}; budgetStore: SemanticBudgetStore;
+  gateway: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106" | "KEYED_COMPARISON_136" | "KEYED_OBJECTS_136"}; budgetStore: SemanticBudgetStore;
   keyring: Pick<Keyring, "decryptSensitive">; calendar: LunarCalendarAdapter;
   channel: "ZALO" | "TELEGRAM"; sourceSha: string; mode: "LIVE" | "OFFLINE_FIXTURE";
   now(): number; reply(plan: ReplyPlan): Promise<ReplyReceipt>;
@@ -60,7 +60,7 @@ const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|
 export function createContextContractService(deps: ContextContractServiceDependencies) {
   if (!isContextProtocolV3(deps.store.protocol)) throw new TypeError("Selected context protocol required");
   if (!/^[0-9a-f]{40}$/u.test(deps.sourceSha)) throw new TypeError("Source SHA required");
-  const emission=deps.gateway.contextWire==="KEYED_COMPARISON_136"?{protocol:CONTEXT_KEYED_COMPARISON_PROTOCOL,prompt:CONTEXT_KEYED_COMPARISON_PROMPT}:deps.gateway.contextWire==="SMALL_TABLES_106"?{protocol:CONTEXT_SMALL_PROTOCOL_V3,prompt:CONTEXT_SMALL_PROMPT}:deps.gateway.contextWire==="TYPED_OBJECTS_105"?{protocol:CONTEXT_TYPED_PROTOCOL_V3,prompt:CONTEXT_TYPED_PROMPT}:{protocol:CONTEXT_PROTOCOL_V3,prompt:CONTEXT_CONTRACT_PROMPT};
+  const emission=deps.gateway.contextWire==="KEYED_COMPARISON_136"||deps.gateway.contextWire==="KEYED_OBJECTS_136"?{protocol:CONTEXT_KEYED_COMPARISON_PROTOCOL,prompt:CONTEXT_KEYED_COMPARISON_PROMPT}:deps.gateway.contextWire==="SMALL_TABLES_106"?{protocol:CONTEXT_SMALL_PROTOCOL_V3,prompt:CONTEXT_SMALL_PROMPT}:deps.gateway.contextWire==="TYPED_OBJECTS_105"?{protocol:CONTEXT_TYPED_PROTOCOL_V3,prompt:CONTEXT_TYPED_PROMPT}:{protocol:CONTEXT_PROTOCOL_V3,prompt:CONTEXT_CONTRACT_PROMPT};
   const scopeFor = (message: BoundChatMessage, context: BoundChatContext): ConversationScope => ({ ownerId: context.userId,
     chatIdentityId: context.chatIdentityId, sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() });
   return {
