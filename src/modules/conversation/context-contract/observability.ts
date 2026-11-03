@@ -24,6 +24,10 @@ export function contextRouteObservation(model:string,provider:string){
  const m=configuredModel.safeParse(model),p=configuredProvider.safeParse(provider);
  return {configuredModel:m.success?m.data:'UNVERIFIED' as const,configuredProvider:p.success?p.data:'UNVERIFIED' as const};
 }
+/** Only the numeric HTTP status crosses the provider diagnostics boundary. */
+export function contextHttpStatusObservation(status:unknown):{providerHttpStatus?:number}{
+ return typeof status==='number'&&Number.isInteger(status)&&status>=100&&status<=599?{providerHttpStatus:status}:{};
+}
 const schema = z.discriminatedUnion("event", [
   event("POST_CANONICAL_STAGE", { diagnostic: DownstreamDiagnosticSchema }),
   event("INBOUND_ACCEPTED", {}), event("CONTEXT_LOADED", { presence: z.enum(["PRESENT", "ABSENT", "INVALID", "EXPIRED", "UNAVAILABLE"]) }),
@@ -34,7 +38,8 @@ const schema = z.discriminatedUnion("event", [
   event("BUDGET_RESERVED", { maximumCostMicrounits: safeCount }), event("REQUEST_DISPATCHED", {}),
   event("RESPONSE_RECEIVED", { outcome: z.enum(["SUCCESS", "FAILURE"]), latencyMs: safeCount,
     observedModel: z.enum(["UNKNOWN", "google/gemini-2.5-flash-lite","google/gemini-2.5-flash","openai/gpt-5-mini","openai/gpt-4.1-mini","openai/gpt-5.4-nano","openai/gpt-5.4-mini"]), observedProvider: z.enum(["UNKNOWN", "Google", "google-vertex", "google-vertex/eu","Google AI Studio","google-ai-studio","Azure","OpenAI"]),
-    promptTokens: safeCount.nullable(), completionTokens: safeCount.nullable(), costMicrounits: safeCount.nullable(), reason: reason.optional() }),
+    promptTokens: safeCount.nullable(), completionTokens: safeCount.nullable(), costMicrounits: safeCount.nullable(), reason: reason.optional(),
+    providerHttpStatus:z.number().int().min(100).max(599).optional() }),
   event("STRUCTURE_VALIDATED", { fullSchemaValid: z.boolean(), semanticPatchValidation: z.enum(["VALID", "INVALID"]),
     directiveValidation: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]), replyEligibility: z.enum(["VALID", "INVALID", "NOT_EVALUATED"]) }),
   event("PROVENANCE_DOMAIN_VALIDATED", { result: z.enum(["VALID", "INVALID"]), reason: reason.optional() }),
@@ -49,6 +54,9 @@ const schema = z.discriminatedUnion("event", [
   event("REPLY_SELECTED", { source: z.enum(["MODEL_GUIDANCE", "BACKEND"]) }), event("REPLY_DISPATCHED", {}),
   event("REPLY_SENT", {}), event("REPLY_FAILED", { reason }), event("REPLY_UNCERTAIN", { reason }),
 ]).superRefine((value, ctx) => {
+  if(value.event==='RESPONSE_RECEIVED'&&value.providerHttpStatus!==undefined&&value.outcome!=='FAILURE'){
+    ctx.addIssue({code:'custom',message:'HTTP failure status requires failure outcome'});
+  }
   if ((value.event === "RESPONSE_RECEIVED" && value.outcome === "FAILURE"
     || value.event === "PROVENANCE_DOMAIN_VALIDATED" && value.result === "INVALID") && value.reason === undefined) {
     ctx.addIssue({ code: "custom", message: "Failure requires categorical reason" });

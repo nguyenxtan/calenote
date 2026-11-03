@@ -12,6 +12,15 @@ function observe(event: unknown) {
   observations.observeContextEvent(event as Parameters<typeof observations.observeContextEvent>[0]);
 }
 describe("content-free successor observations", () => {
+  it('records a bounded numeric upstream HTTP status and rejects unsafe diagnostic fields',()=>{
+    const log=vi.spyOn(console,'info').mockImplementation(()=>{});
+    const event={...base,event:'RESPONSE_RECEIVED',outcome:'FAILURE',latencyMs:3,observedModel:'UNKNOWN',observedProvider:'UNKNOWN',promptTokens:null,completionTokens:null,costMicrounits:null,reason:'PROVIDER_FAILURE',providerHttpStatus:401};
+    observe(event);expect(log.mock.calls[0]?.[1]).toEqual(event);
+    for(const providerHttpStatus of [-1,0,99,600,401.5,'401','PRIVATE_CONTENT',NaN,Infinity])observe({...event,providerHttpStatus});
+    for(const key of ['providerErrorCode','errorMessageSanitized','errorMetadataSanitized','requestId','failureDiagnostics'])observe({...event,[key]:'PRIVATE_CONTENT'});
+    observe({...event,outcome:'SUCCESS'});
+    expect(log).toHaveBeenCalledTimes(1);
+  });
   it('accepts only the exact selected small and keyed prompt identities',()=>{
     const log=vi.spyOn(console,'info').mockImplementation(()=>{});
     for(const promptVersion of [CONTEXT_SMALL_PROTOCOL_V3.promptVersion,CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion])observe({...base,promptVersion,event:'MODEL_REQUIRED'});

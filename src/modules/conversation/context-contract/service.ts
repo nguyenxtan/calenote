@@ -15,7 +15,7 @@ import type { ContextInput } from "./contracts";
 import type { ContextReminderQuery, ContextQueryResult } from "./query";
 import type { ReplyPlan, ReplyReceipt } from "./responses";
 import type { ContextObservationEvent } from "./observability";
-import { createContextTraceId,contextRouteObservation } from "./observability";
+import { createContextTraceId,contextRouteObservation,contextHttpStatusObservation } from "./observability";
 import type { ConversationScope } from "../contracts";
 import { buildContextInputV2 } from "./context";
 import { selectControl } from "./decisions";
@@ -226,8 +226,9 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const usage = "usage" in result ? result.usage : undefined;
           try { await deps.budgetStore.finalizeUsage({ ...budget, actualCostMicrounits: usage?.costMicrounits ?? null, now: deps.now() }); } catch { /* Dispatched reservation retains ceiling. */ }
           const providerEvidence = "providerEvidence" in result ? result.providerEvidence : undefined;
+          const failureDiagnostics = result.status === 'FAILURE' && 'failureDiagnostics' in result ? result.failureDiagnostics : undefined;
           emit({ event: "RESPONSE_RECEIVED", outcome: result.status, latencyMs: Math.round(performance.now() - started), observedModel: providerEvidence?.model ?? "UNKNOWN", observedProvider: providerEvidence?.provider ?? "UNKNOWN",
-            promptTokens: usage?.promptTokens ?? null, completionTokens: usage?.completionTokens ?? null, costMicrounits: usage?.costMicrounits ?? null, ...(result.status === "FAILURE" ? { reason: result.category } : {}) });
+            promptTokens: usage?.promptTokens ?? null, completionTokens: usage?.completionTokens ?? null, costMicrounits: usage?.costMicrounits ?? null, ...(result.status === "FAILURE" ? { reason: result.category, ...contextHttpStatusObservation(failureDiagnostics?.httpStatus) } : {}) });
           if (result.status !== "SUCCESS") { if (result.category === "SCHEMA_INVALID") downstream({ stage: "CANONICAL", result: "REJECTED", reason: "SCHEMA_INVALID" }); return finish("PROVIDER"); }
           const reconciled=isUnreconciledListInterpretation(result.interpretation)?reconcileListPeriodV3(result.interpretation,built,downstream):{status:"PARSED" as const,value:result.interpretation};
           if(reconciled.status!=="PARSED") {downstream({stage:"CANONICAL",result:"REJECTED",reason:"SCHEMA_INVALID"});return finish("SEMANTIC");}

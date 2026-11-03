@@ -1,10 +1,26 @@
 {
-  "latestId": "2026-11-03-bot-expired-clarification",
+  "latestId": "2026-11-03-ai-provider-http-status",
   "notes": [
     {
-      "id": "2026-11-03-bot-expired-clarification",
+      "id": "2026-11-03-ai-provider-http-status",
       "commit": null,
       "releasedAt": null,
+      "title": "Chẩn đoán sự cố kết nối AI",
+      "summary": "Phân biệt sự cố truy cập, hạn mức và nhà cung cấp khi trợ lý chưa xử lý được yêu cầu.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Ghi nhận mã HTTP dạng số đã kiểm tra trong sự kiện lỗi nhà cung cấp.",
+        "Giữ thông tin chẩn đoán trong log vận hành để phân biệt lỗi truy cập, hạn mức và cấu hình kết nối."
+      ],
+      "memberChanges": [
+        "Hỗ trợ xác định nguyên nhân khi trợ lý chưa xử lý được yêu cầu."
+      ],
+      "verification": "Phạm vi kiểm thử: mã HTTP 400, 401, 402, 403, 404, 429, 500; giới hạn giá trị số và chặn nội dung nhà cung cấp, định danh hoặc dữ liệu nhạy cảm khỏi log và phản hồi."
+    },
+    {
+      "id": "2026-11-03-bot-expired-clarification",
+      "commit": "9e10a6ec5da533c060a73d189cb9b1c980b980a9",
+      "releasedAt": "2026-11-03T13:37:51.436854Z",
       "title": "Bot tiếp tục trả lời sau khi ngữ cảnh cũ hết hạn",
       "summary": "Dọn ngữ cảnh hỏi tiếp đã hết hạn để cuộc chat có thể tiếp tục.",
       "kind": "Sửa lỗi",

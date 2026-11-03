@@ -6,15 +6,17 @@ import { setup, harness, proposal, complete, completeText, type Proposal } from 
 import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
 import { createContextContractService } from "./service";
 import { chat, message } from "./context-test-fixtures";
-import { createContextContractGateway, createContextHttpTransport } from "../../intelligence/infrastructure/openrouter/semantic-gateway";
-it("provider diagnostics never enter actual service errors, telemetry, replies or persisted conversation state", async () => {
+import { createContextHttpTransport } from "../../intelligence/infrastructure/openrouter/semantic-gateway";
+import { createKeyedContextContractGateway } from '../../intelligence/infrastructure/openrouter/keyed-context-gateway';
+it.each([
+  [400, 'PROVIDER_FAILURE'], [401, 'PROVIDER_FAILURE'], [402, 'PROVIDER_FAILURE'],
+  [403, 'PROVIDER_FAILURE'], [404, 'UNAVAILABLE'], [429, 'RATE_LIMITED'], [500, 'PROVIDER_FAILURE'],
+])("provider HTTP %i is observable without exposing provider payloads", async (httpStatus, reason) => {
   const h = await harness([]);
-  const config = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
-    primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
-  const gateway = createContextContractGateway(config, createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(JSON.stringify({
+  const gateway = createKeyedContextContractGateway(createContextHttpTransport("SYNTHETIC_CREDENTIAL", async () => new Response(JSON.stringify({
     error: { code: "invalid_argument", message: "Authorization: Bearer SYNTHETIC_CREDENTIAL SYNTHETIC_OWNER_ID", metadata: { param: "response_format.json_schema" } },
-  }), { status: 400, headers: { "content-type": "application/json" } })), { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
-  h.deps.gateway = { prepare(tier, input) {
+  }), { status: httpStatus, headers: { "content-type": "application/json" } })), { status: "OBSERVABLE_CANARY", advertisedContextTokens: 400000 });
+  h.deps.gateway = { contextWire: gateway.contextWire, prepare(tier, input) {
     const p = gateway.prepare(tier, input);
     // Fixture budget reserves its approved offline price; only the HTTP boundary
     // is synthetic. Actual failure selection/persistence/telemetry stays real.
@@ -22,12 +24,13 @@ it("provider diagnostics never enter actual service errors, telemetry, replies o
   } };
   const result = await h.turn(0), state = await h.read(1);
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
-  expect(h.events.filter(e => e.event === "RESPONSE_RECEIVED")).toMatchObject([{ outcome: "FAILURE", reason: "PROVIDER_FAILURE" }]);
+  expect(h.events.filter(e => e.event === "RESPONSE_RECEIVED")).toMatchObject([{ outcome: "FAILURE", reason, providerHttpStatus: httpStatus }]);
   for (const value of [result, h.events, h.replies, state]) {
     const encoded = JSON.stringify(value);
     for (const sentinel of ["SYNTHETIC_CREDENTIAL", "SYNTHETIC_OWNER_ID", "failureDiagnostics", "invalid_argument", "response_format"]) expect(encoded).not.toContain(sentinel);
   }
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+  for (const value of [result, h.replies, state]) expect(JSON.stringify(value)).not.toContain('providerHttpStatus');
 });
 it("all_successor_natural_turns_use_one_gateway and reply_captured_after_fenced_transition", async () => {
   const h = await harness([proposal(complete)]);
