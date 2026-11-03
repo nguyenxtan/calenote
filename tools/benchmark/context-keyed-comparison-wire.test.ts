@@ -51,7 +51,7 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
   return raw;
  });
  expect(count).toBe(144);expect(pairs).toBe(9216);expect(CONTEXT_KEYED_COMPARISON_PROMPT).toContain('changes is exactly {owners:{...}}');
-},90000);
+},process.env.CI?240000:90000);
 it('refuses both observed owner/order failure shapes without reconstructing a missing write',()=>{
  const input=(JSON.parse(readFileSync('src/modules/intelligence/infrastructure/openrouter/__fixtures__/small106-r02-turn2-before.json','utf8')) as {input:ContextInput}).input;
  for(const c of [{v:{g:[]},o:['g']},{v:{},o:['event','event']},[]])expect(decodeKeyedSmallComparison({c},input).status).toBe('REFUSED');

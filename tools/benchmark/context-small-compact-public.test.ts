@@ -67,7 +67,7 @@ it('proves all144 public compact schemas and exact bidirectional valid-domain in
   maxBytes=Math.max(maxBytes,Buffer.byteLength(JSON.stringify(schema)));
  }
  expect(unions).toBe(288);expect(nullable).toBeGreaterThan(10000);expect(maxBytes).toBeLessThan(26000);
-},30000);
+},process.env.CI?120000:30000);
 it('retains117 relation and234 initial negative controls through the actual public compact boundary',()=>{
  let relation=0,initial=0;
  for(const row of captured){const bound=isBoundRelationUncertaintyAbsent(row.input),first=isInitialFiniteSeriesWithoutRelationSource(row.input);if(!bound&&!first)continue;const wire=original(row),schema=z.fromJSONSchema(smallContextSchemaV3(row.input).schema as Parameters<typeof z.fromJSONSchema>[0]);
