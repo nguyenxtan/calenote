@@ -478,7 +478,7 @@ describe("observable successor route", () => {
     if (attempt.status !== "READY") throw new Error("prepare failed");
     expect(await attempt.dispatch()).toMatchObject({ status: "SUCCESS", rawResponseBytes: new TextEncoder().encode(response().body).byteLength });
     expect(seen?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
-    expect(seen?.init).toMatchObject({ method: "POST", redirect: "error", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
+    expect(seen?.init).toMatchObject({ method: "POST", redirect: "manual", headers: { Authorization: "Bearer synthetic-test-secret", "Content-Type": "application/json" } });
     const emitted = JSON.parse(String(seen?.init.body));
     expect(emitted.response_format).toEqual(serializeContextRequest(contextInput).response_format);
     expect(emitted).toEqual({ ...contextRequest(), response_format: { type: "json_schema", json_schema: {

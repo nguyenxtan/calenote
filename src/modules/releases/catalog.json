@@ -1,10 +1,26 @@
 {
-  "latestId": "2026-11-03-ai-provider-http-status",
+  "latestId": "2026-11-03-cloudflare-ai-transport",
   "notes": [
     {
-      "id": "2026-11-03-ai-provider-http-status",
+      "id": "2026-11-03-cloudflare-ai-transport",
       "commit": null,
       "releasedAt": null,
+      "title": "Sửa lỗi kết nối AI trên Cloudflare",
+      "summary": "Khắc phục lỗi runtime làm yêu cầu AI bị ngắt trước khi kết nối dịch vụ.",
+      "kind": "Sửa lỗi",
+      "changes": [
+        "Gửi yêu cầu AI bằng chế độ chuyển hướng tương thích với Cloudflare Workers.",
+        "Giữ phản hồi chuyển hướng tại địa chỉ ban đầu để xử lý bằng luồng lỗi HTTP đã kiểm tra."
+      ],
+      "memberChanges": [
+        "Khắc phục lỗi khiến trợ lý chưa gửi được yêu cầu nhắc lịch đến dịch vụ AI."
+      ],
+      "verification": "Phạm vi kiểm thử: chính transport production trong workerd; gửi một yêu cầu thành công; phản hồi 301, 302, 307, 308 được giữ tại đích ban đầu, bảo toàn khóa API; bộ gateway và cấu hình production."
+    },
+    {
+      "id": "2026-11-03-ai-provider-http-status",
+      "commit": "6b62b6652f6ffdd6d0d0d9726bd8e046a9d9705b",
+      "releasedAt": "2026-11-03T14:47:15.915945Z",
       "title": "Chẩn đoán sự cố kết nối AI",
       "summary": "Phân biệt sự cố truy cập, hạn mức và nhà cung cấp khi trợ lý chưa xử lý được yêu cầu.",
       "kind": "Sửa lỗi",

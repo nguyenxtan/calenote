@@ -301,7 +301,8 @@ export function createContextHttpTransport(apiKey: string,
   if (!apiKey || /[\r\n]/u.test(apiKey)) throw new TypeError("Credential unavailable");
   if(maximumResponseBytes!==32768&&maximumResponseBytes!==65536)throw new TypeError('Invalid response boundary');
   return async (request, { signal }) => {
-    const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal,
+    // Workerd supports manual redirects; the non-200 path handles them at the original origin.
+    const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "manual", signal,
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
     const media = response.headers.get("content-type"), failed = response.status !== 200;
     const sensitive = [apiKey, ...request.messages.map(message => message.content)];
