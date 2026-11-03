@@ -1,6 +1,7 @@
+import {LEGACY_AI_PROFILE_VARS} from '@/testing/legacy-ai-profile.test-support';
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Miniflare } from "miniflare";
@@ -53,14 +54,14 @@ describe("atomic paid budgets on disposable workerd D1", () => {
     { OWNER_DAILY_CALL_LIMIT: "1" },
     { OWNER_MONTHLY_COST_MICROUNITS: "1303" },
     { GLOBAL_DAILY_COST_MICROUNITS: "1303" },
-  ])("enforces canonical config through real composition and D1 with tightened limit %j", async (override) => {
+  ])("enforces the reviewed legacy profile through real composition and D1 with tightened limit %j", async (override) => {
     const { createSemanticCapability } = await import("@/worker/composition-root");
-    const config = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
+    const config = {vars:LEGACY_AI_PROFILE_VARS};
     const capability = await createSemanticCapability({
       ...config.vars, ...override, DB: db,
       CALENOTE_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       OPENROUTER_API_KEY: "synthetic-never-dispatched",
-    });
+    } as unknown as Env);
     expect(capability.mode).toBe("privacy");
     const results = await Promise.all([0, 1].map((index) => capability.budgetStore.reservePaidCall(request(index))));
     expect(results.filter((result) => result.status === "RESERVED")).toEqual([

@@ -1,3 +1,4 @@
+import {LEGACY_AI_PROFILE_VARS} from '@/testing/legacy-ai-profile.test-support';
 import { getUserPreferences } from "@/modules/preferences/service";
 import { D1UserPreferencesStore } from "@/modules/db/preferences-store";
 // @vitest-environment node
@@ -148,12 +149,12 @@ describe("guarded conversation V2 integration", () => {
     await h.send("có");
     expect(await h.count()).toBe(0);
   });
-  it.each(["telegram", "zalo"] as const)("real %s runtime applies account auto then preview mode to valid chat requests", async provider => {
+  it.each(["telegram", "zalo"] as const)("real %s legacy runtime applies account auto then preview mode to valid chat requests", async provider => {
     const h = await harness();
     const credential = await h.keyring.encryptCredential("connection-one", provider, 1, "synthetic-token");
     await h.db.prepare("UPDATE bot_connections SET provider=?, encrypted_token=?, encrypted_token_iv=? WHERE id='connection-one'")
       .bind(provider, credential.ciphertext, credential.iv).run();
-    const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
+    const config = {vars:LEGACY_AI_PROFILE_VARS};
     const env = { ...config.vars, DB:h.db, JOBS:{send:vi.fn()}, CALENOTE_MASTER_KEY:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", OPENROUTER_API_KEY:"synthetic-no-network" } as unknown as Env;
     vi.spyOn(Date,"now").mockReturnValue(NOW + 100);
     const outbound: string[] = [];
@@ -176,7 +177,7 @@ describe("guarded conversation V2 integration", () => {
     expect(outbound[1]).toContain("Gửi “có”");
     vi.restoreAllMocks(); vi.unstubAllGlobals();
   });
-  it.each(["telegram", "zalo"] as const)("real %s composition uses V2 and does not wait for typing transport settlement", async provider => {
+  it.each(["telegram", "zalo"] as const)("real %s legacy composition uses V2 and does not wait for typing transport settlement", async provider => {
     const h = await harness();
     const encrypted = await h.keyring.encryptSensitive("inbound-message", "one-0", 1, "thi hết môn ngày 11/10/2026 ở Quang Trung");
     const credential = await h.keyring.encryptCredential("connection-one", provider, 1, "synthetic-token");
@@ -184,7 +185,7 @@ describe("guarded conversation V2 integration", () => {
       .bind(provider, credential.ciphertext, credential.iv).run();
     await h.db.prepare("UPDATE inbound_updates SET provider=?, state = 'PENDING', transition_marker = NULL, message_ciphertext = ?, message_iv = ? WHERE id = 'one-0'")
       .bind(provider, encrypted.ciphertext, encrypted.iv).run();
-    const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
+    const config = {vars:LEGACY_AI_PROFILE_VARS};
     const env = { ...config.vars, DB: h.db, JOBS: { send: vi.fn() }, CALENOTE_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", OPENROUTER_API_KEY: "synthetic-no-network" } as unknown as Env;
     vi.spyOn(Date, "now").mockReturnValue(NOW + 100);
     let elapsed = 0;

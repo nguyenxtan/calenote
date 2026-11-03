@@ -31,6 +31,19 @@ it('composes a real atomic reservation equal to the keyed gateway maximum',async
  const reserved=await selected.budgetStore.reservePaidCall({ownerId:'owner',sourceInboundId:'old',now:now+1});expect(reserved).toMatchObject({status:'RESERVED',reservedMaximumMicrounits:116759});
  expect(await f.db.prepare("SELECT reserved_microunits FROM semantic_budget_windows WHERE kind='USER_MONTHLY' AND scope_id='owner'").first('reserved_microunits')).toBe(116759);
 });
+it.each([{OWNER_DAILY_CALL_LIMIT:'1'},{OWNER_MONTHLY_COST_MICROUNITS:'116759'},{GLOBAL_DAILY_COST_MICROUNITS:'116759'}])('enforces current production configuration and atomic contention at tightened limit %j',async override=>{
+ const f=await fixture();close.push(f.close);vi.spyOn(Date,'now').mockReturnValue(now+1);
+ let selected:Parameters<typeof inbound.processInbound>[1]['contextContract'];
+ vi.spyOn(inbound,'processInbound').mockImplementation(async(_id,deps)=>{selected=deps.contextContract;return {status:'REJECTED'};});
+ const vars=JSON.parse(readFileSync('wrangler.jsonc','utf8')).vars;
+ const env={...environment(f.db),...vars,...override} as Env;
+ await(await createRuntimeOperations(env,{conversationV2:true,contextContract:'calenote-context-2',sourceSha:metadata.tag})).processInbound('old');
+ if(!selected)throw Error('missing context');
+ const outcomes=await Promise.all(['old','in-1'].map(sourceInboundId=>selected!.budgetStore.reservePaidCall({ownerId:'owner',sourceInboundId,now:now+1})));
+ expect(outcomes.filter(result=>result.status==='RESERVED')).toEqual([expect.objectContaining({reservedMaximumMicrounits:116759})]);
+ expect(outcomes.filter(result=>result.status==='BUDGET_EXHAUSTED')).toHaveLength(1);
+ expect(await f.db.prepare('SELECT count(*) n FROM semantic_budget_reservations').first('n')).toBe(1);
+});
 it('expires successor state and releases ownership through the actual scheduled cleanup composition',async()=>{
  const f=await fixture();close.push(f.close);vi.spyOn(Date,'now').mockReturnValue(now+1);
  const store=createD1ContextContractStoreV3({db:f.db,keyring:f.keyring,protocol:CONTEXT_PROTOCOL_V3});const observed=await store.observe(f.scope());if('failure'in observed)throw Error(observed.failure);

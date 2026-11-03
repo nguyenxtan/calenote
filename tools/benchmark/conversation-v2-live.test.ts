@@ -1,16 +1,33 @@
+import {LEGACY_AI_PROFILE_VARS} from '../../src/testing/legacy-ai-profile.test-support';
 // @vitest-environment node
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { preflightConversationLive, runConversationLive, conversationTransport, verifyConversationEndpoint, liveDirectory, safeConversationDiagnostics, safeOutcomeDiagnostics, verifyClosedCampaign, verifyBoundaryRepairAllocation } from "./conversation-v2-live";
 import { D1ReminderCommandStore } from "../../src/modules/reminders/infrastructure/d1/command-store";
 import { CONVERSATION_PROMPT } from "../../src/modules/conversation/prompt";
 import { ConversationModelJsonSchema } from "../../src/modules/conversation/contracts";
 
+const repositoryRoot=process.cwd();
+let referenceRoot:string;
+beforeAll(async()=>{
+ referenceRoot=await mkdtemp(join(tmpdir(),'calenote-legacy-v2-profile-'));
+ for(const name of ['src','tools','migrations','package.json','tsconfig.json','node_modules','.git'])await symlink(join(repositoryRoot,name),join(referenceRoot,name));
+ await writeFile(join(referenceRoot,'wrangler.jsonc'),JSON.stringify({vars:LEGACY_AI_PROFILE_VARS}));
+});
+afterAll(async()=>{await rm(referenceRoot,{recursive:true,force:true});});
+async function withReferenceRoot<T>(run:()=>Promise<T>):Promise<T>{
+ const cwd=vi.spyOn(process,'cwd').mockReturnValue(referenceRoot);
+ try{return await run();}finally{cwd.mockRestore();}
+}
 describe("bounded Conversation V2 live evaluation", () => {
+  it('does not misqualify current keyed production as the historical Gemini profile',()=>{
+    const network=vi.spyOn(globalThis,'fetch').mockRejectedValue(Error('NETWORK_FORBIDDEN'));
+    expect(()=>preflightConversationLive(repositoryRoot)).toThrow('CONFIG_CHANGED');expect(network).not.toHaveBeenCalled();
+  });
   it("fences the temporal-priority repair from all consumed dialogue verification authority", () => {
     const common=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{encoding:"utf8"}).trim();
     const fresh=liveDirectory(process.cwd(),"temporal-priority-verification");
@@ -80,13 +97,13 @@ describe("bounded Conversation V2 live evaluation", () => {
     const transport=vi.fn(async()=>++calls===1?{status:200,body:JSON.stringify({choices:[{message:{content:JSON.stringify(raw.models.create)},finish_reason:"stop"}]})}:{status:503,body:""});
     const original=D1ReminderCommandStore.prototype.createDraft;
     vi.spyOn(D1ReminderCommandStore.prototype,"createDraft").mockImplementation(function(this:D1ReminderCommandStore,input){return original.call(this,{...input,scheduledAt:input.scheduledAt+86400000});});
-    const result=await runConversationLive({root:process.cwd(),directory,transport,mode:"MOCK",runId:"mutant"});
+    const result=await withReferenceRoot(()=>runConversationLive({root:referenceRoot,directory,transport,mode:"MOCK",runId:"mutant"}));
     expect(result.failures[0]).toMatchObject({caseId:"complete-one-off",categories:expect.arrayContaining(["DRAFT_PERSISTENCE"])});
     expect(result.safetyFailures).toBeGreaterThan(0);
   },20000);
   it("runs CLI preflight without a key or HTTP through the real TypeScript loader",()=>{
-    const output=execFileSync(process.execPath,["--import","data:text/javascript,globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')}","--import","./tools/benchmark/register-conversation-loader.mjs","tools/benchmark/run-conversation-v2-live.mjs","--preflight"],
-      {encoding:"utf8",env:{...process.env,OPENROUTER_API_KEY:""}});
+    const output=execFileSync(process.execPath,["--import","data:text/javascript,globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')}","--import",join(repositoryRoot,"tools/benchmark/register-conversation-loader.mjs"),join(repositoryRoot,"tools/benchmark/run-conversation-v2-live.mjs"),"--preflight"],
+      {cwd:referenceRoot,encoding:"utf8",env:{...process.env,OPENROUTER_API_KEY:""}});
     expect(JSON.parse(output)).toMatchObject({cases:22,turns:37,networkRequests:0});
   });
   it("bounds response bodies and refuses credentials embedded in a request",async()=>{
@@ -112,7 +129,7 @@ describe("bounded Conversation V2 live evaluation", () => {
   });
   it("preflights the exact 22/37 corpus without credentials or network", () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("NETWORK_FORBIDDEN"));
-    const report = preflightConversationLive(process.cwd());
+    const report = preflightConversationLive(referenceRoot);
     expect(report).toMatchObject({ cases: 22, turns: 37, maxRequests: 40, maxCostMicrounits: 500000, maximumPerCallMicrounits: 1303 });
     expect(report.provenance.digests.corpus).toBe("5e514ba2c1f53a4a8c06482597530a9eab361f828dc61f3fef5c1d7f6d055382");
     expect(fetcher).not.toHaveBeenCalled();
@@ -128,7 +145,7 @@ describe("bounded Conversation V2 live evaluation", () => {
       expect(request).not.toHaveProperty("reasoning");
       return {status:200,body:JSON.stringify({choices:[{message:{content:JSON.stringify(queue.shift())},finish_reason:"stop"}],usage:{cost:0.0001}})};
     });
-    const report = await runConversationLive({ root: process.cwd(), directory, transport, mode:"MOCK", runId:"test-golden" });
+    const report = await withReferenceRoot(()=>runConversationLive({ root: referenceRoot, directory, transport, mode:"MOCK", runId:"test-golden" }));
     expect(report.total).toBe(37);
     expect(report.failures).toEqual([]);
     expect(report.passed).toBe(37);
@@ -138,14 +155,14 @@ describe("bounded Conversation V2 live evaluation", () => {
     const ledger = await readFile(join(directory,"authorization.jsonl"),"utf8");
     expect(ledger).not.toContain("gọi mẹ");
     expect(ledger).not.toContain("thi hết môn");
-    await expect(runConversationLive({ root:process.cwd(),directory,transport,mode:"MOCK",runId:"other" })).rejects.toThrow("AUTHORIZATION_ALREADY_USED");
+    await expect(withReferenceRoot(()=>runConversationLive({ root:referenceRoot,directory,transport,mode:"MOCK",runId:"other" }))).rejects.toThrow("AUTHORIZATION_ALREADY_USED");
     expect(transport).toHaveBeenCalledTimes(36);
   }, 120000);
   it("refuses simultaneous use of one authorization and records a dispatched failure without retry", async () => {
     const directory = await mkdtemp(join(tmpdir(),"calenote-v2-fence-"));
     const transport = vi.fn(async () => { throw new Error("private-provider-sentinel"); });
-    const args = {root:process.cwd(),directory,transport,mode:"MOCK" as const,runId:"test-failure"};
-    const results = await Promise.allSettled([runConversationLive(args),runConversationLive(args)]);
+    const args = {root:referenceRoot,directory,transport,mode:"MOCK" as const,runId:"test-failure"};
+    const results = await withReferenceRoot(()=>Promise.allSettled([runConversationLive(args),runConversationLive(args)]));
     expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
     const result = results.find(r => r.status === "fulfilled");
     if (result?.status !== "fulfilled") throw new Error("missing report");
