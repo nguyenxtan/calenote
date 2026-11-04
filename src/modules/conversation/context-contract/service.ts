@@ -26,7 +26,7 @@ import { mergePatchV3 } from "./merge";
 import { resolveRequest } from "./resolve";
 import { resolveQuery } from "./query";
 import { computeEffectiveDirectiveV3, validateDirectiveV3, selectGuidance } from "./guidance";
-import { digest } from "./confirmation";
+import { digest, previewHash } from "./confirmation";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { CONTEXT_TYPED_PROMPT } from "./typed-prompt";
 import { CONTEXT_TYPED_PROTOCOL_V3 } from "./typed-protocol";
@@ -81,7 +81,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         // Addressing is optional; never clip an authoritative payload to fit it.
         return result.status === "READY" ? result : reply;
       };
-      const addressTransition = (transition: Exclude<ConversationTransitionV3, { kind: string }>) => {
+      const addressTransition = async (transition: Exclude<ConversationTransitionV3, { kind: string }>) => {
         const reply = address(transition.reply);
         if (reply === transition.reply) return;
         const outbound = transition.snapshot.transcript.at(-1);
@@ -89,14 +89,29 @@ export function createContextContractService(deps: ContextContractServiceDepende
         const projection = projectSemanticView(reply.text, transition.snapshot.controlRegistry.map(control => control.handle));
         if (projection.status !== "READY") return;
         const previous = { ...outbound };
+        const receipt = transition.snapshot.previewReceipt;
+        let preview = transition.preview;
+        if (preview && receipt && reply.kind === "PREVIEW") {
+          const span = reply.spans.find(span => span.kind === "PREVIEW");
+          const original = transition.reply.spans.find(span => span.kind === "PREVIEW");
+          if (!span || !original || reply.text.slice(span.start, span.end) !== transition.reply.text.slice(original.start, original.end)) return;
+          preview = { ...preview, prefix: reply.text.slice(0, span.start), suffix: reply.text.slice(span.end) };
+        }
+        const previousHash = receipt?.draftHash;
+        if (preview && receipt && preview !== transition.preview) receipt.draftHash = await previewHash(preview);
         Object.assign(outbound, { text: reply.text, semanticView: projection.text, sourceMap: projection.sourceMap, controlSpans: projection.controlSpans });
-        if (new TextEncoder().encode(encodeContextSnapshotV2(transition.snapshot)).length > 16384) { Object.assign(outbound, previous); return; }
+        if (new TextEncoder().encode(encodeContextSnapshotV2(transition.snapshot)).length > 16384) {
+          Object.assign(outbound, previous);
+          if (receipt && previousHash) receipt.draftHash = previousHash;
+          return;
+        }
         const question = reply.spans.find(span => span.kind === "QUESTION");
         if (question) {
           const text = reply.text.slice(question.start, question.end);
           if (transition.snapshot.pendingReminderQuestion?.questionId === outbound.id) transition.snapshot.pendingReminderQuestion.text = text;
           if (transition.snapshot.pendingQueryQuestion?.questionId === outbound.id) transition.snapshot.pendingQueryQuestion.text = text;
         }
+        transition.preview = preview;
         transition.reply = reply;
       };
       let sendObservation: ContextObservation | undefined;
@@ -120,7 +135,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
         if (sendObservation && failureSnapshot && failureReceived) {
           const transition = await transitionConversationV3({ snapshot: failureSnapshot, received: failureReceived, failure: reason, control: { kind: "NONE" }, authority, now: deps.now(), channel: deps.channel });
           if (!("kind" in transition)) {
-            addressTransition(transition);
+            await addressTransition(transition);
             const { reply, ...stored } = transition;
             const applied = await deps.store.apply(scope, sendObservation, stored);
             if (applied.status !== "APPLIED") return { status: "SUPERSEDED" };
@@ -279,7 +294,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           if (!transition.confirmationProof) return finish("STALE");
           return confirm(transition.confirmationProof);
         }
-        addressTransition(transition);
+        await addressTransition(transition);
         const { reply, ...stored } = transition;
         const applied = await deps.store.apply(scope, observed.observation, stored);
         if (applied.status !== "APPLIED") { emit({ event: "TRANSITION_REJECTED", reason: applied.status === "IDEMPOTENT" ? "DUPLICATE" : applied.status }); return { status: "SUPERSEDED" }; }

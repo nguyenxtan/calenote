@@ -1,0 +1,11 @@
+# Reminder advance settings and delivery recovery
+
+User request: add Settings choices for advance reminder days (dropdown1–7) and hours, then retest and finish outstanding defects. Existing authorization delegates routine design/implementation, requests economical execution and keeps files inside Calenote. No repeated design approval needed.
+
+Two independent advance notifications were explicitly confirmed by the user on2026-11-04, each optional/off initially, days1–7 and hours1–24; explicit notification times in a request take priority. Apply only to newly created events with a known event instant, never reinterpret an explicit reminder-only time. Existing schedules are unchanged. Native scheduler performs delivery without LLM. User confirmed two distinct sends, e.g. Wednesday15h and Friday12h before a Friday15h meeting.
+
+Keep existing TypeScript/React/Worker/D1 architecture. Persist preferences server-side; validate ranges and authorization; show defaults and effect clearly in Settings. Create notification timestamps deterministically and atomically, reject or omit already-past optional advances with a clear preview; never schedule in the past or duplicate equal instants. Cancellation/completion must not leave unwanted future notifications. Avoid introducing an unbounded recurrence mode.
+
+First repair known blockers: saved addressing must preserve exact preview/receipt integrity; authenticated manual creation must work after a chat acquires conversation ownership without permitting forged chat confirmations or cross-owner writes. Reproduce failures with real D1 integration before changes. Recurrence clarification defects require evidence-based fixes, preserve actual supported limits.
+
+Approaches: settings-only controls would not deliver the requested behavior; asking LLM to calculate preferences would add cost and undermine explicit time precedence. Use deterministic backend scheduling linked to the original event and preserve existing delivery idempotency. New forward-only migration if required; no production migration/deployment without concrete reviewed release and user authorization under AGENTS.md. Paid test ceiling remains cumulative4USD; use synthetic data and existing EU/ZDR route.
