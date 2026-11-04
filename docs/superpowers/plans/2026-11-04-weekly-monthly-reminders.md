@@ -40,10 +40,10 @@
 **Spec:** docs/superpowers/specs/2026-11-04-canonical-series-controls-design.md
 **Files:** new canonical-series API contract/store/route/tests and panel; route operations/composition/router and owned Reminders screen.
 **Interfaces:** separate authenticated GET/POST /api/v2/reminder-series; strict owned CAS cancellation body {publicId,expectedRevision}; bounded safe list and actual cancellation outcome. Legacy series API stays filtered.
-- [ ] RED tests for selected canonical listing/cancellation, owner/session/CAS/acquired-send fencing and rollback; observe before implementation.
-- [ ] Implement bounded atomic cancellation and canonical decryption/listing without protected proposal writes or new migration; GREEN.
-- [ ] Add accessible explicit-confirmation UI with safe retry/auth clearing; tests, typecheck and scoped lint GREEN; report exact evidence for root review.
-- [ ] Integrate actual weekly/monthly service-created rows and verify the previously failed management flow. Root reviews all diff; no production actions.
+- [x] RED tests for selected canonical listing/cancellation, owner/session/CAS/acquired-send fencing and rollback; observe before implementation.
+- [x] Implement bounded atomic cancellation and canonical decryption/listing without protected proposal writes or new migration; GREEN.
+- [x] Add accessible explicit-confirmation UI with safe retry/auth clearing; tests, typecheck and scoped lint GREEN; report exact evidence for root review.
+- [x] Integrate actual weekly/monthly service-created rows and verify the previously failed management flow. Root reviews all diff; no production actions.
 
 ### Task 4: Capability/prompt qualification and release evidence
 **Files:** contracts.ts/context.ts, keyed-small-{wire,protocol}.ts, immutable successor fixture and gateway test reference, releases/catalog.json, capability answers/help where source claims otherwise; documentation.

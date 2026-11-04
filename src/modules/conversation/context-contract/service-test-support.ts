@@ -21,7 +21,7 @@ import { createD1ContextContractStoreV3 } from "./infrastructure/d1/store";
 import { encodeFixtureV3 } from "../../../../tools/benchmark/context-pointer-fixtures";
 const fixtures: Awaited<ReturnType<typeof fixture>>[] = [];
 afterEach(() => fixtures.splice(0).forEach(f => f.close()));
-export async function setup() { const f = await fixture(); fixtures.push(f); return f; }
+export async function setup(database?:D1Database) { const f = await fixture(database); fixtures.push(f); return f; }
 const gatewayConfig = { protocol: CONTEXT_PROTOCOL_V3, maxInputChars: 1800, maxInputTokens: 12000, maxOutputTokens: 1536, maxResponseBytes: 32768, timeoutMs: 30000,
   primary: { model: "google/gemini-2.5-flash-lite", provider: "google-vertex/eu", requireZdr: true, promptPriceMicrounitsPerMillionTokens: 100000, completionPriceMicrounitsPerMillionTokens: 400000 } };
 export const limits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 500000, globalDailyCostMicrounits: 2000000, maxInputTokens: 12000, maxOutputTokens: 1536,
@@ -47,8 +47,8 @@ export function proposal(values: Record<string, unknown>, target: "NEW" | "CURRE
     query: null, uncertainties: [], conversationDirective: guidance, replyProposal: reply });
 }
 export function typedHarness(proposals: Proposal[], transformWire?: (wire:unknown)=>unknown) { return harness(proposals, transformWire, true); }
-export async function harness(proposals: Proposal[], transformWire?: (wire:unknown)=>unknown, typed = false) {
-  const original = await setup(), f = { ...original, store: { ...createD1ContextContractStoreV3({ db: original.db, keyring: original.keyring, protocol: CONTEXT_PROTOCOL_V3 }) } }, inputs: ContextInput[] = [], events: ContextObservationEvent[] = [], replies: ReadyReplyPlan[] = [];
+export async function harness(proposals: Proposal[], transformWire?: (wire:unknown)=>unknown, typed = false, database?:D1Database) {
+  const original = await setup(database), f = { ...original, store: { ...createD1ContextContractStoreV3({ db: original.db, keyring: original.keyring, protocol: CONTEXT_PROTOCOL_V3 }) } }, inputs: ContextInput[] = [], events: ContextObservationEvent[] = [], replies: ReadyReplyPlan[] = [];
   let index = 0, delivery: ReplyReceipt = { status: "SENT", messageRef: "provider-ref" };
   const deps: ContextContractServiceDependencies = { store: f.store, runtimeStore: createD1ContextRuntimeStoreV3({ db: f.db, keyring: f.keyring, protocol: CONTEXT_PROTOCOL_V3 }), gateway: scriptedGateway(proposals, inputs, transformWire, typed),
     budgetStore: new D1SemanticBudgetStore(f.db, limits), keyring: f.keyring, calendar: lunarCalendar, now: () => f.scope(index).now,

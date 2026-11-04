@@ -18,3 +18,7 @@ The Task2 real service test confirmed that canonical weekly/monthly series save 
 ## Evidence
 
 Real SQLite/Miniflare tests: canonical list/metadata, correct and foreign owner/session, legacy filtering, CAS/idempotency, pending and unacquired claimed cancellation, acquired/uncertain preservation, snoozed child and follow-up stopping, other-series isolation, rollback when a later batch statement fails. Test stored weekly/monthly via actual context service where practical. UI tests cover confirmation, error/unknown state and auth clearing. Typecheck/scoped lint. Full pnpm check remains a final root gate after all source is frozen.
+
+## Root integration rulings and evidence
+
+Canonical controls keep owner authorization after a bot disconnects: an authenticated owner can still stop their own outstanding work. The list remains explicitly bounded to ten recent series; current snoozed/rescheduled heads and planned follow-ups keep the group active and visible even after original occurrences finish. Root tests enforce membership revocation, FAILED-delivery parity with individual cancellation, transaction-marker-scoped delivery changes, auth403 clearing and truthful refresh failure copy. Real Workerd/D1 with all migrations exposed trigger-inclusive meta.changes; affected tasks are pre-marked and counted from actual post-state, not that counter. Source scope verified by local tests, not production or provider delivery.

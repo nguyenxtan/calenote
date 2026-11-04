@@ -75,9 +75,10 @@ import { handleResolveReminderIntent, handleCancelReminder, handleCreateReminder
 import { handleListRemindersV2 } from "./routes/reminders-v2";
 import { handleConversationPreviews, PreviewUnavailableError } from "./routes/conversation-previews";
 import { handleSeries } from "./routes/reminder-series";
-import { createSeriesOperations } from "./composition-root";
+import { handleCanonicalSeries, CanonicalSeriesUnavailableError } from "./routes/canonical-series";
+import { createSeriesOperations, createCanonicalSeriesOperations } from "./composition-root";
 import {contextRuntimeCapabilities} from './release-runtime';
-import type { SeriesOperations, ContextApiOperations } from "./routes/operations";
+import type { SeriesOperations, ContextApiOperations, CanonicalSeriesOperations } from "./routes/operations";
 import type {
   AuthOperations,
   ActionsOperations,
@@ -100,6 +101,7 @@ export interface RouterOptions {
   emailDiscoveryOperations?: (env: Env) => Promise<EmailDiscoveryOperations>;
   accountOperations?: (env: Env) => Promise<AccountOperations>;
   seriesOperations?: (env: Env) => Promise<SeriesOperations>;
+  canonicalSeriesOperations?: (env: Env) => Promise<CanonicalSeriesOperations>;
   authOperations?: (env: Env) => Promise<AuthOperations>;
   actionsOperations?: (env: Env) => Promise<ActionsOperations>;
   connectionsOperations?: (env: Env) => Promise<ConnectionsOperations>;
@@ -174,6 +176,7 @@ function errorMessage(error: unknown): { code: string; message: string; status: 
     error instanceof ReminderIntentConflictError ||
     error instanceof ClientUpgradeRequiredError ||
     error instanceof PreviewUnavailableError ||
+    error instanceof CanonicalSeriesUnavailableError ||
     error instanceof ReminderChannelUnavailableError ||
     error instanceof ReminderNotFoundError ||
     error instanceof ReminderNotCancellableError
@@ -223,6 +226,7 @@ export function createRouter(options: RouterOptions = {}) {
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
+  const canonicalSeriesOperationsFactory = options.canonicalSeriesOperations ?? ((env: Env) => createCanonicalSeriesOperations(env, contextRuntimeCapabilities(env)));
   const contextApiOperationsFactory = options.contextApiOperations ?? ((env:Env)=>createContextApiOperations(env,contextRuntimeCapabilities(env)));
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
   const activityOperationsFactory = options.activityOperations ?? createActivityOperations;
@@ -309,6 +313,9 @@ export function createRouter(options: RouterOptions = {}) {
         || (request.method === "POST" && pathname === "/api/v2/conversation-previews/decision")) {
         return await handleConversationPreviews(request, appOrigin!, () => contextApiOperationsFactory(env));
       }
+      if (["GET", "POST"].includes(request.method) && pathname === "/api/v2/reminder-series") {
+        return await handleCanonicalSeries(request, appOrigin!, () => canonicalSeriesOperationsFactory(env));
+      }
       if (["GET", "POST"].includes(request.method) && pathname === "/api/reminder-series") {
         return await handleSeries(request, appOrigin!, () => seriesOperationsFactory(env));
       }
@@ -383,6 +390,7 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname.startsWith("/api/connections/")
         || pathname === "/api/reminders"
         || pathname === "/api/v2/reminders"
+        || pathname === "/api/v2/reminder-series"
         || pathname.startsWith("/api/v2/conversation-previews")
         || pathname.startsWith("/api/reminders/")
         || pathname === "/api/actions"

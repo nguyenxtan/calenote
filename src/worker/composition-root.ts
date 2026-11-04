@@ -82,6 +82,8 @@ import { observeContextEvent } from "@/modules/conversation/context-contract/obs
 import { D1ConversationStore } from "@/modules/conversation/infrastructure/d1/context-store";
 import { D1ConversationRuntimeStore } from "@/modules/conversation/infrastructure/d1/runtime-store";
 import { D1SeriesStore } from "@/modules/reminders/infrastructure/d1/series-store";
+import { D1CanonicalSeriesStore } from "@/modules/reminders/infrastructure/d1/canonical-series-store";
+import { CanonicalSeriesUnavailableError } from "./routes/canonical-series";
 import { lunarCalendar } from "@/modules/conversation/lunar-calendar";
 import type { ConversationServiceDependencies } from "@/modules/conversation/service";
 import type { SemanticGateway } from "@/modules/intelligence/semantic-gateway";
@@ -269,6 +271,20 @@ export async function createSeriesOperations(env: Env, capabilities: { conversat
       if (!capabilities.conversationV2) throw new ServiceUnavailableError();
       return store.decideWeb(principal, decision, Date.now());
     },
+  };
+}
+
+/** Canonical series controls exist only in the selected context-contract
+ * runtime. Default/off composition never constructs the store or touches D1. */
+export async function createCanonicalSeriesOperations(env: Env, capabilities: { contextContract?: "calenote-context-2"; sourceSha?: string } = {}): Promise<import("./routes/operations").CanonicalSeriesOperations> {
+  const selected = capabilities.contextContract === "calenote-context-2" && !!capabilities.sourceSha && /^[0-9a-f]{40}$/u.test(capabilities.sourceSha);
+  let keyring: Promise<Awaited<ReturnType<typeof createKeyring>>> | undefined;
+  const routeKeyring = () => keyring ??= createRouteKeyring(env);
+  const store = async () => { if (!selected) throw new CanonicalSeriesUnavailableError(); return new D1CanonicalSeriesStore(env.DB, await routeKeyring()); };
+  return {
+    requireUser: async credentials => requireSession(credentials, { store: new D1SessionStore(env.DB), keyring: await routeKeyring() }),
+    listSeries: async principal => (await store()).list(principal, Date.now()),
+    cancelSeries: async (principal, request) => (await store()).cancel(principal, request, Date.now()),
   };
 }
 

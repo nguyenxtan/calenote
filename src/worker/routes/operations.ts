@@ -10,6 +10,13 @@ export interface ContextApiOperations {
   decidePreview(principal: SessionPrincipal, request: PreviewDecisionRequestV1): Promise<ConfirmationResult | { status: "DECLINED" | "ALREADY_DECLINED" }>;
 }
 import type { PublicSeriesView, SeriesDecisionRequest } from "@/contracts/api/reminder-series";
+import type { CanonicalSeriesCancelRequest, CanonicalSeriesCancelResult, CanonicalSeriesView } from "@/contracts/api/canonical-series";
+/** Successor-series controls; never shares authority with SeriesOperations. */
+export interface CanonicalSeriesOperations {
+  requireUser(credentials: SessionCredentials): Promise<SessionPrincipal>;
+  listSeries(principal: SessionPrincipal): Promise<CanonicalSeriesView[]>;
+  cancelSeries(principal: SessionPrincipal, request: CanonicalSeriesCancelRequest): Promise<CanonicalSeriesCancelResult>;
+}
 export interface SeriesOperations {
   requireUser(credentials: SessionCredentials): Promise<SessionPrincipal>;
   listSeries(principal: SessionPrincipal): Promise<PublicSeriesView[]>;
