@@ -75,6 +75,7 @@ export class D1ReminderApiStore implements ReminderApiStore {
   }
 
   async createManual(record: ManualReminderRecord): Promise<boolean> {
+    const manualAuthority = !!await this.database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='manual_reminder_write_permits'").first();
     const statements = [
       this.database
         .prepare(
@@ -82,10 +83,10 @@ export class D1ReminderApiStore implements ReminderApiStore {
              id, public_id, workspace_id, chat_identity_id, source_draft_id,
              title_ciphertext, title_iv, title_key_version, scheduled_at,
              timezone, status, claimed_at, cancelled_at, transition_marker,
-             created_at, updated_at
+             created_at, updated_at${manualAuthority ? ", context_write_marker" : ""}
            )
            SELECT ?, ?, eligible.workspace_id, eligible.chat_identity_id, NULL,
-                  ?, ?, ?, ?, ?, 'PENDING', NULL, NULL, NULL, ?, ?
+                  ?, ?, ?, ?, ?, 'PENDING', NULL, NULL, NULL, ?, ?${manualAuthority ? ", ?" : ""}
            FROM (
              SELECT MIN(w.id) AS workspace_id, MIN(ci.id) AS chat_identity_id
              FROM users u
@@ -111,6 +112,7 @@ export class D1ReminderApiStore implements ReminderApiStore {
           record.timezone,
           record.now,
           record.now,
+          ...(manualAuthority ? [record.auditId] : []),
           record.userId,
           record.connectionPublicId ?? null,
           record.connectionPublicId ?? null,
@@ -147,14 +149,27 @@ export class D1ReminderApiStore implements ReminderApiStore {
     if (record.intentId) statements.push(this.database.prepare(
       `INSERT INTO manual_reminder_intents (user_id, intent_id, payload_digest, reminder_id, state) VALUES (?, ?, ?, ?, 'CREATED')`,
     ).bind(record.userId, record.intentId, record.payloadDigest, record.id));
+    if (manualAuthority) {
+      statements.unshift(this.database.prepare(
+        `INSERT INTO manual_reminder_write_permits(reminder_id,owner_user_id,workspace_id,chat_identity_id,marker)
+         SELECT ?,u.id,MIN(w.id),MIN(ci.id),? FROM users u
+         JOIN workspaces w ON w.owner_user_id=u.id AND w.kind='PERSONAL'
+         JOIN memberships m ON m.workspace_id=w.id AND m.user_id=u.id AND m.role='OWNER'
+         JOIN bot_connections c ON c.user_id=u.id AND c.state='ACTIVE_BOUND'
+         JOIN chat_identities ci ON ci.connection_id=c.id
+         WHERE u.id=? AND (? IS NULL OR c.public_id=?) GROUP BY u.id HAVING COUNT(*)=1`,
+      ).bind(record.id, record.auditId, record.userId, record.connectionPublicId ?? null, record.connectionPublicId ?? null));
+      statements.push(this.database.prepare("DELETE FROM manual_reminder_write_permits WHERE reminder_id=? AND marker=?").bind(record.id, record.auditId));
+    }
     try {
       const results = await this.database.batch(statements);
       // D1 includes track_new_reminder trigger writes in the INSERT metadata.
       // The eligible HAVING COUNT(*) = 1 still permits exactly one root row;
       // audit/intent statements keep their exact single-row assertions.
+      const reminderIndex = manualAuthority ? 1 : 0;
       return results.length === statements.length
-        && d1Changes(results[0]) >= 1
-        && results.slice(1).every((result) => d1Changes(result) === 1);
+        && d1Changes(results[reminderIndex]) >= 1
+        && results.every((result, index) => index === reminderIndex || d1Changes(result) === 1);
     } catch (error) {
       if (guardedReminderFailure(error)) return false;
       throw error;

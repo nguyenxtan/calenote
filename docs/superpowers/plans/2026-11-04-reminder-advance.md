@@ -28,9 +28,9 @@ Files: service.ts and service-addressed-confirmation.test.ts in src/modules/conv
 
 ### Task2: Restore manual create for owned conversations
 Files: src/modules/reminders/infrastructure/d1/api-store.ts, real D1 integration tests; new migration only if required.
-- [ ] Reproduce manual create after a real context service turn; assert authenticated create succeeds once and intent replay returns same result.
-- [ ] Observe RED; introduce narrowly scoped manual authority under existing owner/channel checks; test forged/cross-owner/rollback negative paths.
-- [ ] Focused GREEN, commit and ledger.
+- [x] Reproduce manual create after a real context service turn; assert authenticated create succeeds once and intent replay returns same result.
+- [x] Observe RED; introduce narrowly scoped manual authority under existing owner/channel checks; test forged/cross-owner/rollback negative paths.
+- [x] Focused GREEN, commit and ledger.
 
 ### Task3: Add persisted advance preferences and scheduler
 Files: preferences contract/service/D1 store, SettingsPanel; event/reminder creation and cancellation domain; additive migration as needed.
