@@ -24,9 +24,9 @@
 ### Task 1: Exact periodic expansion and resolver integration
 **Files:** new context-contract/finite-recurrence.ts and tests; resolve.ts, resolve-periodic.test.ts, existing resolve.test.ts only for now-supported cases.
 **Interfaces:** expandPeriodicOccurrences({frequency:'WEEKLY'|'MONTHLY',startDate,endDate,count,reminderTime,now}) -> READY{count,occurrences} or CLARIFY{field,reason,invalidMonth?}; resolveRequest preserves resolved facts/preview and may expose backend-only invalidMonth.
-- [ ] Write RED resolver tests for exact 4-week/end ranges, monthly anchor/leap/missing day, 30/366/past/conflict/solar-only/start-relation/default override cases. Run before code; expected existing UNSUPPORTED.
-- [ ] Implement civil expansion from original anchor, bounded counts/horizon, no Date overflow. Branch periodic resolution before old daily arithmetic and reuse finish().
-- [ ] Run focused resolver tests, typecheck; expect GREEN. Update obsolete unsupported expectations only where new behavior is intentional. Commit.
+- [x] Write RED resolver tests for exact 4-week/end ranges, monthly anchor/leap/missing day, 30/366/past/conflict/solar-only/start-relation/default override cases. Run before code; expected existing UNSUPPORTED.
+- [x] Implement civil expansion from original anchor, bounded counts/horizon, no Date overflow. Branch periodic resolution before old daily arithmetic and reuse finish().
+- [x] Run focused resolver tests, typecheck; expect GREEN. Update obsolete unsupported expectations only where new behavior is intentional. Commit.
 
 ### Task 2: Grounding, weekday safety and useful clarification
 **Files:** cadence-count-evidence.ts, event-relation-evidence.ts, evidence.ts call sites, new recurrence-evidence.ts/tests if needed; guidance.ts/transition.ts and focused service tests.

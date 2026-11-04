@@ -29,7 +29,7 @@ describe("structured schedule resolution", () => {
   ])("invalid_ambiguous_incompatible_schedule_clarifies %j", values => {
     expect(resolveRequest(request(values), now, lunarCalendar).status).toBe("CLARIFY");
   });
-  it.each(["YEARLY", "MONTHLY", "WEEKLY"])("unsupported frequency %s never downgrades", frequency => {
+  it.each(["YEARLY"])("unsupported frequency %s never downgrades", frequency => {
     expect(resolveRequest(request({ frequency }), now, lunarCalendar)).toEqual({ status: "UNSUPPORTED", capability: frequency });
   });
   it("missing_year_current_or_next_by_month_day_only_and_policy_provenance", () => {

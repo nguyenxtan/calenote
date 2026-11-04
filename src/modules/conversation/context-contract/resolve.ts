@@ -5,6 +5,7 @@ import { isValidSemanticLocalDate } from "@/modules/semantic/validation";
 import type { SeriesOccurrence } from "@/modules/reminders/series";
 import { planAdvanceReminders } from "@/modules/preferences/advance-reminders";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
+import { expandPeriodicOccurrences } from "./finite-recurrence";
 
 export const RESOLUTION_VERSION = "context-resolution-1";
 export const DAY_MS = 86400000;
@@ -37,7 +38,7 @@ export function resolveDateOperand(operand: DateOperand, receipt: number, calend
   return isValidSemanticLocalDate(date) ? { status: "RESOLVED", date, inferredYear: value.year === null, method: value.year === null ? "POLICY_DEFAULT" : "EXPLICIT_OPERAND" } : clarify(value.year === null ? "YEAR_REQUIRED_INVALID_DATE" : "INVALID_DATE");
 }
 
-export type RequestResolution = { status: "CLARIFY"; fields: string[]; reasons: string[] }
+export type RequestResolution = { status: "CLARIFY"; fields: string[]; reasons: string[]; invalidMonth?: string }
   | { status: "UNSUPPORTED"; capability: string }
   | { status: "READY"; resolvedSlots: ContextSlots; resolvedFacts: ContextSnapshotV1["facts"]; occurrences: SeriesOccurrence[]; details: CanonicalDetailsV1 };
 
@@ -80,7 +81,9 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     derive("calendar", source?.kind === "CIVIL_DATE" ? source.calendar : "GREGORIAN", source ? [slots.eventDate.value ? "eventDate" : "reminderDate"] : []);
   }
   const frequency = slots.frequency.value ?? "ONCE";
-  if (["WEEKLY", "MONTHLY", "YEARLY"].includes(frequency)) return { status: "UNSUPPORTED", capability: frequency };
+  if (frequency === "YEARLY") return { status: "UNSUPPORTED", capability: frequency };
+  const periodic = frequency === "WEEKLY" || frequency === "MONTHLY";
+  if (periodic && (slots.calendar.value !== "GREGORIAN" || [slots.reminderDate.value, slots.endDate.value, slots.eventDate.value].some(d => d?.kind === "CIVIL_DATE" && d.calendar !== "GREGORIAN"))) return { status: "UNSUPPORTED", capability: "LUNAR_RECURRENCE" };
   if (frequency === "UNKNOWN") issue("frequency", "UNKNOWN_FREQUENCY");
   if (!slots.title.value) issue("title", "MISSING");
   const advancePolicy = candidate.schemaVersion === "calenote-context-state-2" ? candidate.advanceReminders : undefined;
@@ -140,6 +143,18 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     return finish(planned.occurrences);
   }
   const relation = slots.eventRelation.value;
+  if (periodic) {
+    if (relation !== null && relation !== "STARTING_ON") return { status: "UNSUPPORTED", capability: "PERIODIC_EVENT_RELATION" };
+    if (relation === null) issue("eventRelation", "MISSING");
+    if (!dates.reminderDate) issue("reminderDate", "MISSING");
+    if (slots.leadOffsetDays.value !== null) issue("leadOffsetDays", "COUNT_OFFSET_CONFLICT");
+    if (fields.length || !dates.reminderDate || !reminderTime) return clarification();
+    const explicitCount = slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
+    const expanded = expandPeriodicOccurrences({ frequency, startDate: dates.reminderDate, endDate: dates.endDate ?? null, count: explicitCount, reminderTime, now });
+    if (expanded.status === "CLARIFY") return { status: "CLARIFY", fields: [expanded.field], reasons: [expanded.reason], ...(expanded.invalidMonth ? { invalidMonth: expanded.invalidMonth } : {}) };
+    if (explicitCount === null) derive("occurrenceCount", expanded.count, ["reminderDate", "endDate"]);
+    return finish(expanded.occurrences);
+  }
   let count = frequency === "ONCE" ? 1 : slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
   let start: number | null = null;
   const midnight = (value: string | undefined) => value ? Date.parse(`${value}T00:00:00+07:00`) : null;
