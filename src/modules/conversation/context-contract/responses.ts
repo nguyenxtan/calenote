@@ -92,11 +92,16 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
     case "UNSUPPORTED": {
       const explanations: Record<string, string> = {
         YEARLY: "Lặp hằng năm chưa được hỗ trợ. Có thể cân nhắc lời nhắc một lần bằng một lựa chọn riêng.",
-        DOMAIN_LIMIT: "Lời nhắc phải ở tương lai, trong 366 ngày; chuỗi mỗi ngày có từ 2 đến 30 lần. Nếu nội dung quá dài, hãy rút gọn để hiển thị đầy đủ.",
+        DOMAIN_LIMIT: "Lời nhắc phải ở tương lai, trong 366 ngày; chuỗi hữu hạn có từ 2 đến 30 lần, theo ngày hoặc theo tuần/tháng dương lịch. Nếu nội dung quá dài, hãy rút gọn để hiển thị đầy đủ.",
         ASSISTANT_SCOPE: "Mình hỗ trợ lịch và lời nhắc cá nhân. Yêu cầu này nằm ngoài phạm vi hiện tại.",
+        LUNAR_RECURRENCE: "Chuỗi theo tuần/tháng âm lịch chưa được hỗ trợ. Bạn có thể chọn ngày bắt đầu theo dương lịch.",
+        PERIODIC_EVENT_RELATION: "Chuỗi theo tuần/tháng cần ngày bắt đầu cụ thể; chưa hỗ trợ lặp tương đối trước hoặc gồm ngày sự kiện.",
+        MULTIPLE_PER_PERIOD: "Chưa hỗ trợ nhiều lần trong mỗi kỳ ngày/tuần/tháng. Bạn có thể chọn một lần mỗi kỳ và số lần tổng cộng.",
+        MULTIPLE_WEEKDAYS: "Chưa hỗ trợ nhiều thứ trong cùng một chuỗi tuần. Bạn có thể tạo riêng từng thứ và xác nhận từng chuỗi.",
+        MONTHLY_WEEKDAY_PATTERN: "Chưa hỗ trợ lặp theo thứ trong tháng. Bạn có thể chọn một ngày dương lịch cố định.",
         REQUEST_COMBINATION: "Hãy chọn từng yêu cầu để xử lý; chưa thực hiện một phần của yêu cầu kết hợp này.",
       };
-      add(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần hoặc mỗi ngày hữu hạn từ 2 đến 30 lần.");
+      add(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần, mỗi ngày, hoặc chuỗi theo tuần/tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày.");
       // The capability fact stays backend-owned. Already validated guidance
       // may add a natural next step, but never replace that factual surface.
       if (guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text) && [...parts.map(p => p.text), guidance.text].join("\n").length <= 2000) {
@@ -129,7 +134,7 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
         if (!outcome.result.rows.length) add("Không có lời nhắc trong khoảng này.");
         if (outcome.result.hasMore) add(CONTEXT_QUERY_PARTIAL);
       } else if (r.status === "CALENDAR_DATE") add(`Dương lịch: ${r.solar}\nÂm lịch Việt Nam: ${r.lunar.day}/${r.lunar.month}/${r.lunar.year}${r.lunar.leap ? " nhuận" : ""}\n${escape(r.convention)}`);
-      else if (r.status === "CAPABILITY") add(r.topic === "ANNUAL" ? "Lặp hằng năm chưa được hỗ trợ." : r.topic === "LUNAR" ? "Có thể dùng ngày âm lịch Việt Nam khi bạn yêu cầu rõ." : "Có thể nhắc mỗi ngày hữu hạn từ 2 đến 30 lần.");
+      else if (r.status === "CAPABILITY") add(r.topic === "ANNUAL" ? "Lặp hằng năm chưa được hỗ trợ." : r.topic === "LUNAR" ? "Có thể dùng ngày âm lịch Việt Nam khi bạn yêu cầu rõ." : "Có thể nhắc mỗi ngày, mỗi tuần hoặc mỗi tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày. Với chuỗi tháng, số lần thực tế còn phụ thuộc giới hạn thời gian này.");
       else return { status: "INVALID" };
       break;
     }

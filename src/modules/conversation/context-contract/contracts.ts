@@ -152,7 +152,7 @@ export const LegacyV2ContextInputSchema = z.strictObject({
   facts: z.array(contextFactSchema({})).max(26),
   pendingQuestion: z.strictObject({ text: nfcText(2000), scope: z.enum(["REMINDER", "QUERY"]), field: IssueFieldSchema, decisionKind: z.enum(["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"]).nullable(), reason }).nullable(),
   ambiguities: z.array(LegacyV2UncertaintySchema).max(4),
-  capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(5), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
+  capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(7), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
 }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });

@@ -217,7 +217,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       facts: projectedFacts,
       pendingQuestion: question ? { text: question.text, scope: question.scope, field: question.field, decisionKind: question.decisionKind, reason: question.reason } : null,
       ambiguities: remapRefs(state?.ambiguities ?? [], "PROVIDER"),
-      capabilities: { version: "capabilities-1", supported: ["ONCE", "FINITE_DAILY", "LIST", "CALENDAR_DATE", "CAPABILITY"], unsupported: ["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } },
+      capabilities: { version: "capabilities-2", supported: ["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY"], unsupported: ["YEARLY", "HOUR_OFFSET"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } },
     };
     // Turns were already projected with maps. Project every other string too,
     // without running a second pass over the deliberately inserted placeholder.
@@ -258,7 +258,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       createdAt: instant,
       idleExpiresAt: new Date(message.receivedAt + 1800000).toISOString(),
       absoluteExpiresAt: new Date(message.receivedAt + 7200000).toISOString(),
-      draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-1",
+      draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-2",
     });
     if (candidateSnapshot.schemaVersion === "calenote-context-state-2" && !state?.requestId && "advanceReminders" in args && args.advanceReminders) {
       candidateSnapshot.advanceReminders = structuredClone(args.advanceReminders);

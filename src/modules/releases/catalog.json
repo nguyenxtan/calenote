@@ -1,26 +1,32 @@
 {
-  "latestId": "2026-11-04-advance-reminder-settings",
+  "latestId": "2026-11-04-reminder-completion",
   "notes": [
     {
-      "id": "2026-11-04-advance-reminder-settings",
+      "id": "2026-11-04-reminder-completion",
       "commit": null,
       "releasedAt": null,
-      "title": "Chọn mốc nhắc trước theo ngày và giờ",
-      "summary": "Chọn hai mốc nhắc trước riêng và khắc phục lỗi xác nhận, tạo nhắc từ web.",
+      "title": "Nhắc trước, lịch tuần/tháng và quản lý chuỗi",
+      "summary": "Chọn mốc nhắc trước, tạo lịch tuần/tháng hữu hạn và quản lý chuỗi lời nhắc AI.",
       "kind": "Tính năng",
       "changes": [
         "Lưu lựa chọn nhắc trước1–7 ngày và1–24 giờ, mỗi mốc có thể tắt; hai mốc trùng nhau chỉ tạo một thông báo.",
         "Tính lịch bằng backend theo ngày giờ sự kiện; giữ nguyên thời gian nhắc được chỉ định và các lịch đã lưu.",
         "Bảo toàn bản xem trước khi thêm xưng hô; sửa tạo thủ công sau khi chat đã có ngữ cảnh.",
         "Hoàn thành hoặc dừng một việc có hai mốc nhắc sẽ đóng các thông báo còn chờ trong cùng nhóm.",
-        "Mở rộng kiểm chứng các cách nói lịch hằng ngày và trước buổi hẹn, giữ giới hạn nhắc hữu hạn."
+        "Mở rộng kiểm chứng các cách nói lịch hằng ngày và trước buổi hẹn, giữ giới hạn nhắc hữu hạn.",
+        "Hỗ trợ lịch dương lặp mỗi tuần hoặc cùng ngày mỗi tháng, tối đa 30 lần trong 366 ngày.",
+        "Nếu tháng không có ngày đã chọn, trợ lý hỏi lại; không tự đổi ngày hoặc bỏ kỳ.",
+        "Xem các lần nhắc, lịch hoãn/dời và hủy phần còn chờ của chuỗi trên trang Lời nhắc.",
+        "Kiểm tra quyền sở hữu và phiên đăng nhập; bảo toàn thông báo đã được lấy để gửi."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
         "Bản xem trước hiển thị chính xác các giờ gửi; mốc đã qua cần được chọn lại.",
-        "Sửa lỗi không lưu được lời nhắc khi dùng cách xưng hô riêng hoặc tạo trên web."
+        "Sửa lỗi không lưu được lời nhắc khi dùng cách xưng hô riêng hoặc tạo trên web.",
+        "Tạo lịch mỗi tuần hoặc mỗi tháng với ngày bắt đầu và số lần/ngày kết thúc.",
+        "Xem và hủy chuỗi lời nhắc AI; lịch năm, lịch lặp âm và nhiều thứ trong tuần chưa hỗ trợ."
       ],
-      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp."
+      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production."
     },
     {
       "id": "2026-11-03-cloudflare-ai-transport",

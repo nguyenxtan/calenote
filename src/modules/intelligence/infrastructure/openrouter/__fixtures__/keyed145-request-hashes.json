@@ -1,0 +1,238 @@
+[
+  {
+    "fixture": "R01",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Có lịch nào ko?"
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-2",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "FINITE_WEEKLY",
+          "FINITE_MONTHLY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "6fa781a6da78729a4aa852af887e629f1819eb50dd9596174a4a7af760abd3f0",
+    "turn": 0
+  },
+  {
+    "fixture": "R07",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-2",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "FINITE_WEEKLY",
+          "FINITE_MONTHLY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "6ccb4720d7e1e0cf7562fb3f5ce82400744c4fd7dbfc278b2df44755cd85cde3",
+    "turn": 0
+  },
+  {
+    "fixture": "R10",
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:00:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Ngày 15/6 âm lịch hằng năm, nhắc ngày giỗ người thân."
+        }
+      ],
+      "currentTurn": 0,
+      "activeRequest": null,
+      "facts": [],
+      "pendingQuestion": null,
+      "ambiguities": [],
+      "capabilities": {
+        "version": "capabilities-2",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "FINITE_WEEKLY",
+          "FINITE_MONTHLY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "14b739162a8e5cc68b9e2a002b3b622750e7d44668791c6122baecb55266c2a1",
+    "turn": 0
+  },
+  {
+    "fixture": "R01",
+    "turn": 1,
+    "input": {
+      "schemaVersion": "calenote-context-input-2",
+      "reference": {
+        "instant": "2026-09-28T03:01:00.000Z",
+        "localDate": "2026-09-28",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "turns": [
+        {
+          "role": "USER",
+          "text": "Có lịch nào ko?"
+        },
+        {
+          "role": "ASSISTANT",
+          "text": "Bạn muốn xem khoảng thời gian nào?"
+        },
+        {
+          "role": "USER",
+          "text": "Tháng này có lịch gì ko?"
+        }
+      ],
+      "currentTurn": 2,
+      "activeRequest": null,
+      "facts": [
+        {
+          "alias": "f1",
+          "provenance": {
+            "kind": "EXPLICIT_USER"
+          },
+          "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+          "dependencies": [],
+          "scope": "QUERY",
+          "field": "queryRange",
+          "value": {
+            "kind": "LIST",
+            "period": null,
+            "statusScope": "DEFAULT",
+            "evidence": [
+              {
+                "kind": "USER_QUOTE",
+                "turn": 0,
+                "quote": "Có lịch nào ko?",
+                "occurrence": 1
+              }
+            ]
+          }
+        }
+      ],
+      "pendingQuestion": {
+        "text": "Bạn muốn xem khoảng thời gian nào?",
+        "scope": "QUERY",
+        "field": "queryRange",
+        "decisionKind": null,
+        "reason": "MISSING"
+      },
+      "ambiguities": [
+        {
+          "field": "queryRange",
+          "reason": "MISSING",
+          "alternatives": []
+        }
+      ],
+      "capabilities": {
+        "version": "capabilities-2",
+        "supported": [
+          "ONCE",
+          "FINITE_DAILY",
+          "FINITE_WEEKLY",
+          "FINITE_MONTHLY",
+          "LIST",
+          "CALENDAR_DATE",
+          "CAPABILITY"
+        ],
+        "unsupported": [
+          "YEARLY",
+          "HOUR_OFFSET"
+        ],
+        "calendars": [
+          "GREGORIAN",
+          "LUNAR_VN"
+        ],
+        "limits": {
+          "dailyCount": 30,
+          "horizonDays": 366
+        }
+      }
+    },
+    "requestSha256": "daf118c7112c53a875569f9253e0af0abe344e2ddc4a34076426e53c9eba3bb2"
+  }
+]

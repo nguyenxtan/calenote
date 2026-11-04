@@ -30,7 +30,14 @@ export function checkReleaseGate(current,previous,changed){
  requireValue(changed.includes(catalogPath),'Product changes require a release note for both members and admin');
  if(previous){
   requireValue(current.latestId!==previous.latestId,'Product changes require a new release ID');
-  for(const note of previous.notes)requireValue(current.notes.some(item=>item.id===note.id),'Do not remove prior release history');
+  for(const [index,note] of previous.notes.entries()){
+   const retained=current.notes.some(item=>item.id===note.id);
+   // A pending source bundle has no deployment to archive. It may be folded
+   // into its successor only when both audiences retain every announced change.
+   const combined=index===0&&note.commit===null&&note.releasedAt===null
+    &&['changes','memberChanges'].every(field=>note[field].every(value=>current.notes[0][field].includes(value)));
+   requireValue(retained||combined,'Do not remove prior release history');
+  }
  }
 }
 function git(args){return execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();}

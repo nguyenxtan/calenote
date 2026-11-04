@@ -48,7 +48,7 @@
 ### Task 4: Capability/prompt qualification and release evidence
 **Files:** contracts.ts/context.ts, keyed-small-{wire,protocol}.ts, immutable successor fixture and gateway test reference, releases/catalog.json, capability answers/help where source claims otherwise; documentation.
 **Interfaces:** capabilities-2 explicitly adds FINITE_WEEKLY/FINITE_MONTHLY to input enum/max7, removes WEEKLY/MONTHLY from unsupported; keyed145 prompt, output wire136/slots unchanged. Existing decoder/store formats unchanged.
-- [ ] RED tests for capability announcement and scoped missing/unsupported questions, then implement accurate UI/backend capability text and prompt guidance.
-- [ ] Qualify new request hashes offline: restoring only old144system prompt and old capability object must reproduce each144anchor. Never rewrite144fixture or make paid requests.
-- [ ] Update release notes and inventory/spec/ledger with evidence. Run targeted gate then freeze final SHA, run pnpm check once; no edits/commits while it runs.
-- [ ] One bounded Claude final diff review, resolve material findings with RED/GREEN and appropriate checks; prepare concrete reviewed release/PR. Ask only required exact-SHA production authorization after all authorized preparation is complete. No false claim of live acceptance.
+- [x] RED tests for capability announcement and scoped missing/unsupported questions, then implement accurate UI/backend capability text and prompt guidance.
+- [x] Qualify new request hashes offline: restoring only old144system prompt and old capability object must reproduce each144anchor. Never rewrite144fixture or make paid requests.
+- [x] Update release notes and inventory/spec/ledger with evidence. Run targeted gate. Expanded user scope defers full pnpm check to the final combined immutable source across all five feature areas.
+- [ ] Final independent whole-branch review after all five feature areas, resolve material findings and prepare reviewed release/PR. Exact-SHA production authorization is still required. No false claim of live acceptance.

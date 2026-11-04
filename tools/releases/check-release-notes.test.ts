@@ -27,3 +27,14 @@ it('rejects transient release claims in the current verification note',()=>{
   expect(()=>validateCatalog(current)).toThrow(/runtime status/);
  }
 });
+
+it('combines an unreleased bundle into a new release without inventing a historical deployment',()=>{
+ const previous=source(),next=source();next.latestId='combined-next';next.notes[0].id=next.latestId;
+ expect(()=>checkReleaseGate(next,previous,['src/a.ts','src/modules/releases/catalog.json'])).not.toThrow();
+ for(const field of ['changes','memberChanges']){
+  const lost=structuredClone(next);lost.notes[0][field]=['A new feature only'];
+  expect(()=>checkReleaseGate(lost,previous,['src/a.ts','src/modules/releases/catalog.json'])).toThrow(/prior release history/);
+ }
+ const released=structuredClone(previous);released.notes[0].commit='a'.repeat(40);released.notes[0].releasedAt='2026-11-04T00:00:00Z';
+ expect(()=>checkReleaseGate(next,released,['src/a.ts','src/modules/releases/catalog.json'])).toThrow(/prior release history/);
+});
