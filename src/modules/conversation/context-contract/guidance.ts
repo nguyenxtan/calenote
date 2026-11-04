@@ -10,7 +10,7 @@ type BackendReason = Extract<EffectiveDirective, { kind: "BACKEND_ONLY" }>["reas
 type ApplicationOutcome = { semantic: ValidatedPatch; merge: MergeResult; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 export type ApplicationOutcomeV3 = { semantic: ValidatedPatchV3; merge: MergeResultV3; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 const failure = (): EffectiveDirective => ({ kind: "BACKEND_ONLY", reason: "FAILURE" });
-const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "ADVANCE_REMINDER_IN_PAST", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
+const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "ADVANCE_REMINDER_IN_PAST", "MONTH_DAY_MISSING", "WEEKDAY_START_CONFLICT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
 
 /** Pure reply routing over accepted T3 results. Returning PRESENT_PREVIEW is
  * only a composition handoff; it creates no decision, token or save authority.
@@ -67,7 +67,7 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
   }
   const resolution = outcome.resolution;
   if (!resolution) return failure();
-  if (resolution.status === "UNSUPPORTED") return ["WEEKLY", "MONTHLY", "YEARLY"].includes(resolution.capability) ? { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" } : failure();
+  if (resolution.status === "UNSUPPORTED") return ["WEEKLY", "MONTHLY", "YEARLY", "LUNAR_RECURRENCE", "PERIODIC_EVENT_RELATION", "MULTIPLE_PER_PERIOD", "MULTIPLE_WEEKDAYS", "MONTHLY_WEEKDAY_PATTERN"].includes(resolution.capability) ? { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" } : failure();
   if (resolution.status === "CLARIFY" && (!resolution.fields.length || !resolution.reasons.length || resolution.reasons.some(reason => !knownReasons.has(reason)) || resolution.fields.some(field => !IssueFieldSchema.safeParse(field).success))) return failure();
   const uncertainty = scopedNonSlotIssue();
   if (uncertainty) return uncertainty;
@@ -84,6 +84,7 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
     if (ambiguity && ambiguity.reason !== "MISSING") return { kind: "ASK_FOR_DISAMBIGUATION", field, reason: ambiguity.reason };
   }
   const field = IssueFieldSchema.parse(resolution.fields[0]);
+  if (resolution.reasons.includes("MONTH_DAY_MISSING") || resolution.reasons.includes("WEEKDAY_START_CONFLICT")) return { kind: "ASK_FOR_DISAMBIGUATION", field: "reminderDate", reason: "CONFLICT" };
   if (resolution.reasons.includes("ADVANCE_REMINDER_IN_PAST")) return { kind: "ASK_FOR_DISAMBIGUATION", field: "eventDate", reason: "CONFLICT" };
   if (resolution.reasons.some(r => ["LIMIT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"].includes(r))) return { kind: "EXPLAIN_UNSUPPORTED", issue: "DOMAIN_LIMIT" };
   // T3's fields/reasons arrays are independently deduplicated, not zipped.

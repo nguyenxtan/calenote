@@ -19,6 +19,7 @@ Evidence: contracts/api/{personal-assistant,follow-through,account,preferences}.
 | --- | --- | --- |
 | Release gate | Deploy approved source and run real acceptance |30 synthetic cases are prepared; live acceptance is not complete. Production mutations still require exact-SHA authorization. |
 | P1 — execute first | Finite weekly/monthly reminders | Frequency enums already exist but resolve.ts returns UNSUPPORTED. Reuse canonical exact occurrences and existing series authority, with explicit finite limits. |
+| P1 — same slice | Manage canonical AI-created series | Legacy series API deliberately hides successor rows; add a selected reader and owned atomic remaining-occurrence cancellation. |
 | P1 — next | Explicit hour/minute lead instructions in chat | Settings can subtract hours in backend, but semantic contract exposes leadOffsetDays only and advertises HOUR_OFFSET unsupported. Design a typed duration before allowing arithmetic. |
 | P2 | Owner-visible AI usage/cost | Budget ledger and admin accounting exist; no dedicated customer usage API/UI found. Show known charges separately from retained unknown reservations; never label held funds as actual provider spend. |
 | P2 | Messages sent in quick succession | Existing ownership, revision and stale-response fences are present. Debounce/grouping needs a separate ordering/confirmation/cancellation design; never change Queue concurrency ad hoc. |

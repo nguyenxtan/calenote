@@ -31,12 +31,21 @@
 ### Task 2: Grounding, weekday safety and useful clarification
 **Files:** cadence-count-evidence.ts, event-relation-evidence.ts, evidence.ts call sites, new recurrence-evidence.ts/tests if needed; guidance.ts/transition.ts and focused service tests.
 **Interfaces:** boolean validators check already-proposed values/evidence only; STARTING_ON accepts optional proposed frequency context; periodic weekday verification returns VALID/CONFLICT/MULTIPLE, never authors an operand.
-- [ ] RED tests for times-per-period vs total, correct/mismatched cadence duration, negation/quotes/foreign counts; named weekday conflict/multi-day, and weekly/monthly STARTING_ON.
-- [ ] Implement narrow evidence guards, matching-cadence start cues and backend conflict/unsupported responses. Keep arbitrary interval and lunar-month unsupported.
-- [ ] RED/GREEN service+D1 tests: exact weekly/monthly previews, addressed confirm/replay, past-at-confirm, month-day explanation, and remaining-series cancellation without advance group rows.
-- [ ] Run changed and existing daily/advance/evidence suites; expect GREEN. Commit.
+- [x] RED tests for times-per-period vs total, correct/mismatched cadence duration, negation/quotes/foreign counts; named weekday conflict/multi-day, and weekly/monthly STARTING_ON.
+- [x] Implement narrow evidence guards, matching-cadence start cues and backend conflict/unsupported responses. Keep arbitrary interval and lunar-month unsupported.
+- [x] RED/GREEN service+D1 tests: exact weekly/monthly previews, addressed confirm/replay, past-at-confirm, month-day explanation, and no advance group rows; remaining-series controls are Task3 after discovering the legacy reader intentionally filters canonical series.
+- [x] Run changed and existing daily/advance/evidence suites; expect GREEN. Commit.
 
-### Task 3: Capability/prompt qualification and release evidence
+### Task 3: Canonical series management (Claude implements, Codex reviews)
+**Spec:** docs/superpowers/specs/2026-11-04-canonical-series-controls-design.md
+**Files:** new canonical-series API contract/store/route/tests and panel; route operations/composition/router and owned Reminders screen.
+**Interfaces:** separate authenticated GET/POST /api/v2/reminder-series; strict owned CAS cancellation body {publicId,expectedRevision}; bounded safe list and actual cancellation outcome. Legacy series API stays filtered.
+- [ ] RED tests for selected canonical listing/cancellation, owner/session/CAS/acquired-send fencing and rollback; observe before implementation.
+- [ ] Implement bounded atomic cancellation and canonical decryption/listing without protected proposal writes or new migration; GREEN.
+- [ ] Add accessible explicit-confirmation UI with safe retry/auth clearing; tests, typecheck and scoped lint GREEN; report exact evidence for root review.
+- [ ] Integrate actual weekly/monthly service-created rows and verify the previously failed management flow. Root reviews all diff; no production actions.
+
+### Task 4: Capability/prompt qualification and release evidence
 **Files:** contracts.ts/context.ts, keyed-small-{wire,protocol}.ts, immutable successor fixture and gateway test reference, releases/catalog.json, capability answers/help where source claims otherwise; documentation.
 **Interfaces:** capabilities-2 explicitly adds FINITE_WEEKLY/FINITE_MONTHLY to input enum/max7, removes WEEKLY/MONTHLY from unsupported; keyed145 prompt, output wire136/slots unchanged. Existing decoder/store formats unchanged.
 - [ ] RED tests for capability announcement and scoped missing/unsupported questions, then implement accurate UI/backend capability text and prompt guidance.

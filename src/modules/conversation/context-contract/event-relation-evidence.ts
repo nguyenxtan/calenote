@@ -1,4 +1,5 @@
 import type { SourceEvidence, TranscriptEntry } from "./state";
+import { hasCadenceCue } from "./recurrence-evidence";
 
 export type EventRelation = "BEFORE_EVENT" | "INCLUDING_EVENT" | "STARTING_ON";
 
@@ -22,7 +23,7 @@ export function hasEventRelationSourceCue(text:string):boolean {
  * Uses source-map validated evidence and its surrounding USER turn so a quote
  * cannot hide negation, hypothetical usage or a conflicting relation.
  */
-export function supportsEventRelation(value: EventRelation, evidence: readonly SourceEvidence[], turns: readonly Pick<TranscriptEntry, "id" | "role" | "semanticView">[], retainedEventContext = false): boolean {
+export function supportsEventRelation(value: EventRelation, evidence: readonly SourceEvidence[], turns: readonly Pick<TranscriptEntry, "id" | "role" | "semanticView">[], retainedEventContext = false, proposedFrequency: unknown = "DAILY"): boolean {
   let covered = false;
   for (const id of new Set(evidence.map(e => e.sourceTurnId))) {
     const turn = turns.find(t => t.id === id);
@@ -38,7 +39,7 @@ export function supportsEventRelation(value: EventRelation, evidence: readonly S
       if (/(?:^|[^\p{L}])(?:cụm từ|từ ngữ|tên|chữ|trích dẫn)(?:[^\p{L}]|$)/u.test(prefix)) continue;
       if (/(?:^|[^\p{L}])(?:không|ko|đừng|chẳng|chưa)(?:[^\p{L}]|$)/u.test(prefix)) continue;
       if (requiredCue && !/(?:^|[^\p{L}])nhắc(?:[^\p{L}]|$)/u.test(prefix)) continue;
-      if (requiredCue === "DAILY_REMINDER" && !/(?:mỗi|hàng|hằng)\s+ngày(?:[^\p{L}]|$)/u.test(prefix)) continue;
+      if (requiredCue === "DAILY_REMINDER" && !hasCadenceCue(prefix, proposedFrequency)) continue;
       if (/^(?:\d+|một|hai|ba) ngày trước$/u.test(match[0])) {
         // A bare backward-day fragment is a scoped answer, not authority to
         // reinterpret a historical narrative as a reminder lead relation.

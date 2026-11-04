@@ -1,5 +1,6 @@
 import type { SourceEvidence, TranscriptEntry } from "./state";
 import { supportsLeadOffset } from "./lead-offset-evidence";
+import { countIsPerPeriod, hasCadenceCue } from "./recurrence-evidence";
 
 type Turn = Pick<TranscriptEntry, "id" | "role" | "semanticView">;
 const words: Readonly<Record<string, number>> = { một: 1, hai: 2, ba: 3 };
@@ -17,7 +18,7 @@ const cadencePatterns: Readonly<Record<string, RegExp>> = {
 /** Only checks an already-proposed finite field/value. No operand extraction
  * is exposed, and source text/state is never rewritten. Unknown wording does
  * not grant cadence/count authority. */
-export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", value: unknown, sources: readonly SourceEvidence[], turns: readonly Turn[], pendingCountTurnId?: string, currentReminderTurnId?: string): boolean {
+export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", value: unknown, sources: readonly SourceEvidence[], turns: readonly Turn[], pendingCountTurnId?: string, currentReminderTurnId?: string, proposedFrequency?: unknown, retainedFrequency?: unknown): boolean {
   const matches = (source: SourceEvidence, pattern: RegExp, accept: (m: RegExpMatchArray, prefix: string, fullAnswer: string, quotePrefix: string, range: {start:number;end:number}) => boolean = () => true): boolean => {
     const turn = turns.find(t => t.id === source.sourceTurnId);
     if (!turn || turn.role !== "USER") return false;
@@ -47,13 +48,22 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
     && /^\s*[.!]?$/u.test([...text].slice(range.end).join(""))
     && !/[;!?\n]|\.(?!\s*$)|(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|rồi|xong|sau đó|nhưng|tên|chữ|trích dẫn|cụm từ|từ ngữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text);
   const direct = new RegExp(`${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)|(?:liên tiếp|liên tục)\\s+${token}\\s+ngày`, "gu");
-  if (sources.some(s => matches(s, direct, (m, prefix, fullAnswer, _quotePrefix, range) => (words[m[1] ?? m[2]] ?? Number(m[1] ?? m[2])) === value
+  if (sources.some(s => matches(s, direct, (m, prefix, fullAnswer, _quotePrefix, range) => !countIsPerPeriod([...fullAnswer].slice(0,range.start).join(""),[...fullAnswer].slice(range.end).join("")) && (words[m[1] ?? m[2]] ?? Number(m[1] ?? m[2])) === value
     && (reminderOwned(prefix) || wholeDailyInstruction(fullAnswer,range) || s.sourceTurnId === currentReminderTurnId && new RegExp(`^\\s*${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)(?:[,\\s]+(?:đúng|lúc)\\s+\\d{1,2}(?:h|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?)?\\s*[.!]?\\s*$`, "u").test(fullAnswer))))) return true;
   if (sources.some(s => matches(s, new RegExp(`(?:trong|suốt)\\s+${token}\\s+ngày`, "gu"), (m, prefix, _full, quotePrefix) => sameNumber(m)
     && reminderOwned(prefix) && /(?:mỗi|hàng|hằng)\s+ngày\s*$/u.test(quotePrefix)))) return true;
+  for (const [frequency, unit] of [["WEEKLY", "tuần"], ["MONTHLY", "tháng"]] as const) {
+    if (proposedFrequency !== undefined && proposedFrequency !== frequency) continue;
+    if (sources.some(s => matches(s, new RegExp(`(?:trong|suốt)\\s+${token}\\s+${unit}`, "gu"), (m, prefix, full, quotePrefix, range) => sameNumber(m)
+      && (reminderOwned(prefix) && hasCadenceCue(quotePrefix, frequency)
+        || /^\s*nhắc(?:$|[^\p{L}])/u.test(full) && hasCadenceCue(full, frequency) && /,\s*$/u.test([...full].slice(0,range.start).join("")) && /^\s*[.!]?$/u.test([...full].slice(range.end).join(""))
+          && !/[;!?\n]|(?:^|[^\p{L}])(?:không|ko|đừng|chưa|rồi|xong|sau đó|nhưng)(?=$|[^\p{L}])/u.test(full))))) return true;
+  }
   // A bare number is only a reply to the application's actual count question;
   // no date, clock, offset, prior question or credential grants this branch.
-  const bare = new RegExp(`^\\s*${token}(?:\\s+(?:lần|ngày))?\\s*[.!]?\\s*$`, "u");
+  const answerFrequency = proposedFrequency ?? retainedFrequency;
+  const unit = answerFrequency === "WEEKLY" ? "lần|tuần" : answerFrequency === "MONTHLY" ? "lần|tháng" : "lần|ngày";
+  const bare = new RegExp(`^\\s*${token}(?:\\s+(?:${unit}))?\\s*[.!]?\\s*$`, "u");
   return sources.some(s => s.sourceTurnId === pendingCountTurnId && matches(s, new RegExp(bare.source, "gu"), (m, _prefix, fullAnswer) => {
     const whole = fullAnswer.match(bare);
     return sameNumber(m) && !!whole && sameNumber(whole);

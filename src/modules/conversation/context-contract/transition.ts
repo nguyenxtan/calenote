@@ -267,6 +267,12 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
         if (effective.field === "queryRange") return fail("SEMANTIC");
         const fallback = selectGuidance({ effectiveDirective: effective, directiveValidation: { status: "INVALID", reason: "DIRECTIVE_INVALID" }, replyProposal: { status: "VALID", value: null }, privacyValidation: { status: "VALID" }, language: "vi" });
         if (resolution.status === "CLARIFY" && resolution.reasons.includes("ADVANCE_REMINDER_IN_PAST")) fallback.text = "Một mốc nhắc trước đã qua. Bạn muốn đổi ngày sự kiện? Bạn cũng có thể bỏ yêu cầu, chỉnh mốc trong Cài đặt rồi tạo lại.";
+        if (resolution.status === "CLARIFY" && resolution.reasons.includes("MONTH_DAY_MISSING")) fallback.text = `Tháng ${resolution.invalidMonth} không có ngày đã chọn. Bạn muốn chọn ngày nào khác (từ 1 đến 28 để có đủ trong mọi tháng)?`;
+        if (resolution.status === "CLARIFY" && resolution.reasons.includes("WEEKDAY_START_CONFLICT")) fallback.text = "Thứ đã chọn không khớp ngày bắt đầu. Bạn muốn bắt đầu chuỗi vào ngày nào đúng thứ đó?";
+        if (["WEEKLY", "MONTHLY"].includes(s.slots.frequency.value ?? "")) {
+          if (effective.field === "occurrenceCount" && effective.kind === "ASK_FOR_FIELD") fallback.text = "Bạn muốn nhắc bao nhiêu lần, hoặc đến hết ngày nào?";
+          if (effective.field === "reminderDate" && effective.kind === "ASK_FOR_FIELD") fallback.text = "Bạn muốn bắt đầu chuỗi nhắc từ ngày nào?";
+        }
         const field = effective.field, progressed = !prior || !equal(prior.slots, s.slots) || !equal(prior.ambiguities, s.ambiguities);
         const count = !progressed && prior?.pendingReminderQuestion?.field === field ? Math.min(3, prior.pendingReminderQuestion.noProgressCount + 1) : 0;
         s.pendingReminderQuestion = { scope: "REMINDER", field, questionId: outboundId, text: fallback.text!, decisionKind: null, reason: effective.kind === "ASK_FOR_FIELD" ? "MISSING" : effective.reason, noProgressCount: count, deliveryState: "UNCERTAIN", issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid } };

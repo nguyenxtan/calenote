@@ -446,8 +446,8 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
         if (supportsCadenceOperand("frequency", value, [source], [turn]) && supportsCadenceOperand("frequency", value, [contextual], [fullTurn])) allowed.add("frequency");
       }
       for (const value of numbers) {
-        if (supportsCadenceOperand("occurrenceCount", value, [source], [turn], pendingCount, input.activeRequest ? turn.id : undefined)
-          && supportsCadenceOperand("occurrenceCount", value, [contextual], [fullTurn], pendingCount ? fullTurn.id : undefined, input.activeRequest ? fullTurn.id : undefined)) allowed.add("occurrenceCount");
+        if (supportsCadenceOperand("occurrenceCount", value, [source], [turn], pendingCount, input.activeRequest ? turn.id : undefined, undefined, frequency?.value)
+          && supportsCadenceOperand("occurrenceCount", value, [contextual], [fullTurn], pendingCount ? fullTurn.id : undefined, input.activeRequest ? fullTurn.id : undefined, undefined, frequency?.value)) allowed.add("occurrenceCount");
         // The lead verifier accepts a bare scoped answer. A segment separated
         // by a control cannot borrow a reminder verb from another segment.
         const leadScope = segments.length === 1 || !!input.activeRequest;

@@ -6,6 +6,7 @@ import type { SeriesOccurrence } from "@/modules/reminders/series";
 import { planAdvanceReminders } from "@/modules/preferences/advance-reminders";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 import { expandPeriodicOccurrences } from "./finite-recurrence";
+import { recurrenceSourceProblem } from "./recurrence-evidence";
 
 export const RESOLUTION_VERSION = "context-resolution-1";
 export const DAY_MS = 86400000;
@@ -147,6 +148,9 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     if (relation !== null && relation !== "STARTING_ON") return { status: "UNSUPPORTED", capability: "PERIODIC_EVENT_RELATION" };
     if (relation === null) issue("eventRelation", "MISSING");
     if (!dates.reminderDate) issue("reminderDate", "MISSING");
+    const sourceProblem = recurrenceSourceProblem(frequency, dates.reminderDate ?? null, slots.frequency.evidence, candidate.transcript);
+    if (sourceProblem === "WEEKDAY_START_CONFLICT") issue("reminderDate", sourceProblem);
+    else if (sourceProblem) return { status: "UNSUPPORTED", capability: sourceProblem };
     if (slots.leadOffsetDays.value !== null) issue("leadOffsetDays", "COUNT_OFFSET_CONFLICT");
     if (fields.length || !dates.reminderDate || !reminderTime) return clarification();
     const explicitCount = slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
@@ -155,6 +159,7 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     if (explicitCount === null) derive("occurrenceCount", expanded.count, ["reminderDate", "endDate"]);
     return finish(expanded.occurrences);
   }
+  if (frequency === "DAILY" && recurrenceSourceProblem(frequency, dates.reminderDate ?? null, slots.frequency.evidence, candidate.transcript) === "MULTIPLE_PER_PERIOD") return { status: "UNSUPPORTED", capability: "MULTIPLE_PER_PERIOD" };
   let count = frequency === "ONCE" ? 1 : slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
   let start: number | null = null;
   const midnight = (value: string | undefined) => value ? Date.parse(`${value}T00:00:00+07:00`) : null;

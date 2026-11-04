@@ -325,7 +325,7 @@ export type ValidatedPatchV3 = {
 export type EvidenceValidationV3 = { status: "VALID"; patch: ValidatedPatchV3 } | { status: "REFUSED"; reason: string };
 const issuedPatchesV3 = new WeakSet<object>();
 export function isValidatedPatchV3(value: unknown): value is ValidatedPatchV3 { return typeof value === "object" && value !== null && issuedPatchesV3.has(value); }
-function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver,target?:SemanticPatchProposalV3["requestTarget"]) {
+function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver,target?:SemanticPatchProposalV3["requestTarget"],proposedFrequency?:unknown) {
   const internal=evidenceContextForV2(built);
   if(!internal) return fail("CONTEXT_NOT_BUILT");
   const frequency = internal.snapshot?.slots.frequency;
@@ -453,7 +453,9 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if ((field === "frequency" || field === "occurrenceCount") && requested !== null && !firstFact
       && !supportsCadenceOperand(field, requested, distinct, built.evidenceIndex,
         target?.kind === "CURRENT" && internal.snapshot?.pendingReminderQuestion?.field === "occurrenceCount" ? built.evidenceIndex[built.input.currentTurn].id : undefined,
-        target?.kind === "CURRENT" ? built.evidenceIndex[built.input.currentTurn].id : undefined)) fail("CADENCE_COUNT_NOT_SUPPORTED");
+        target?.kind === "CURRENT" ? built.evidenceIndex[built.input.currentTurn].id : undefined,
+        proposedFrequency ?? (target?.kind === "CURRENT" && distinct.some(source => source.sourceTurnId === built.evidenceIndex[built.input.currentTurn].id) ? frequency?.value : undefined),
+        target?.kind === "CURRENT" ? frequency?.value : undefined)) fail("CADENCE_COUNT_NOT_SUPPORTED");
     // Necessary source-presence veto only: never turn scanner output into a
     // proposed value or assign event/reminder ownership. Exact fact bindings
     // already prove their value and do not need a fresh clock in the text.
@@ -519,7 +521,8 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
   const value = parsed.data;
-  const {resolve,quoteSource,traceCurrentFailure} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe,value.requestTarget);
+  const proposedFrequency = value.changes.find(c => c.field === "frequency" && c.operation !== "CLEAR")?.value;
+  const {resolve,quoteSource,traceCurrentFailure} = createEvidenceResolverV3(built, diagnostic => { evidenceFailure = diagnostic; },observe,value.requestTarget,proposedFrequency);
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {
@@ -665,7 +668,9 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       const inherited = value.requestTarget?.kind !== "NEW" && bound.factBound === true
         && old?.state === "RESOLVED" && equal(old.value, requested);
       const retainedEvent = value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.eventDate.state === "RESOLVED";
-      return inherited || supportsEventRelation(requested as EventRelation, bound.sources, built.evidenceIndex, retainedEvent);
+      const cadence = resolvedChanges.find(c => c.field === "frequency" && c.operation !== "CLEAR")?.value
+        ?? (value.requestTarget?.kind === "CURRENT" ? internal.snapshot?.slots.frequency.value : undefined);
+      return inherited || supportsEventRelation(requested as EventRelation, bound.sources, built.evidenceIndex, retainedEvent, cadence ?? "DAILY");
     };
     const keptChanges = resolvedChanges.map((change, index) => ({ change, bound: changeEvidence[index] }))
       .filter(({ change, bound }) => relationSupported(change.field, change.value, bound));
