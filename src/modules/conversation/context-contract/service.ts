@@ -186,7 +186,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const proof = await createControlProof(prior, observed.observation.inbound, message.text, control, authority, scope.now);
           return proof ? confirm(proof) : finish("STALE");
         }
-        const built = buildContextInputV2({ message, context, snapshot: prior, observation: observed.observation, advanceReminders: { days: preferences?.advanceReminderDays ?? null, hours: preferences?.advanceReminderHours ?? null } });
+        const built = buildContextInputV2({ message, context, snapshot: prior, observation: observed.observation, ...(preferences && ("advanceReminderDays" in preferences || "advanceReminderHours" in preferences) ? { advanceReminders: { days: preferences.advanceReminderDays ?? null, hours: preferences.advanceReminderHours ?? null } } : {}) });
         if (built.status === "READY") {
           failureSnapshot = prior; failureReceived = built.candidateSnapshot;
         }
