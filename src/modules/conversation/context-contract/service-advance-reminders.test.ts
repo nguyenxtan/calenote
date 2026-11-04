@@ -52,3 +52,18 @@ it.each([
  expect(h.replies.at(-1)?.kind).not.toBe("PREVIEW");
  expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
+
+it("a replacement event captures its own current settings while pending A retains its original policy",async()=>{
+ const h=await harness([proposal(meeting),proposal({...meeting,title:"họp QB",eventDate:date(20,10,2026)})]);
+ h.deps.getReplyPreferences=async()=>preferences;
+ await h.turn(0,text);expect((await h.read(1))?.advanceReminders).toEqual({days:2,hours:3});
+ h.deps.getReplyPreferences=async()=>({...preferences,advanceReminderDays:7,advanceReminderHours:24});
+ await h.turn(1,"Ngày20/10/2026 lúc15h có cuộc họp QB, nhắc giúp tôi.");
+ expect((await h.read(2))?.advanceReminders).toEqual({days:2,hours:3});
+ expect((await h.read(2))?.pendingDecision?.kind).toBe("REPLACE_PENDING");
+ h.deps.getReplyPreferences=async()=>({...preferences,advanceReminderDays:1,advanceReminderHours:2});
+ await h.turn(2,"Có.");const b=(await h.read(3))!;
+ expect(b.advanceReminders).toEqual({days:7,hours:24});
+ expect(await h.turn(3,`xác nhận ${b.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
+ expect((await h.f.db.prepare("SELECT scheduled_at FROM reminders ORDER BY scheduled_at").all<{scheduled_at:number}>()).results.map(r=>r.scheduled_at)).toEqual([Date.parse("2026-10-13T15:00:00+07:00"),Date.parse("2026-10-19T15:00:00+07:00")]);
+});

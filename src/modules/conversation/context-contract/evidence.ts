@@ -320,6 +320,7 @@ export type ValidatedPatchV3 = {
   readonly alternativeEvidence: readonly ValidatedFieldEvidence[];
   readonly observation: ContextObservation;
   readonly candidateSnapshot: ContextSnapshotV2;
+  readonly newRequestAdvanceReminders?: import("@/modules/preferences/advance-reminders").AdvanceReminderPolicy;
 };
 export type EvidenceValidationV3 = { status: "VALID"; patch: ValidatedPatchV3 } | { status: "REFUSED"; reason: string };
 const issuedPatchesV3 = new WeakSet<object>();
@@ -713,6 +714,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       alternativeEvidence: keptAlternativeEvidence,
       observation: built.observation,
       candidateSnapshot: built.candidateSnapshot,
+      newRequestAdvanceReminders: adoptedCandidate ? built.candidateSnapshot.pendingSemanticCandidate?.advanceReminders : built.newRequestAdvanceReminders,
     });
     issuedPatchesV3.add(patch);
     observeDownstream(observe, { stage: "EVIDENCE", result: "PASS", reason: "NONE" });

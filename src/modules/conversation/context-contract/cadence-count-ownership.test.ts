@@ -149,3 +149,13 @@ it.each([
 it.each(["rồi", "xong", "sau đó"])("direct count cannot borrow nhắc across %s", connector => {
   expect(check(`Nhắc mỗi ngày ${connector} đi thi 2 lần.`, { occurrenceCount: 2 }).result.status).toBe("REFUSED");
 });
+
+it("a trailing daily duration cannot grant authority to an earlier foreign count",()=>{
+ const text="Nhắc tôi ôn bài mỗi ngày, khóa học kéo dài 3 ngày liên tiếp, trong 2 ngày liên tiếp.";
+ expect(check(text,{occurrenceCount:3}).result.status).toBe("REFUSED");
+ expect(check(text,{occurrenceCount:2}).result.status).toBe("VALID");
+});
+it("a quoted count from an earlier clause cannot borrow the final duration's authority",()=>{
+ const text="Nhắc tôi ôn bài mỗi ngày, khóa học kéo dài 3 ngày liên tiếp, trong 2 ngày liên tiếp.";
+ expect(check(text,{occurrenceCount:3},"3 ngày liên tiếp").result.status).toBe("REFUSED");
+});

@@ -1,10 +1,31 @@
 {
-  "latestId": "2026-11-03-cloudflare-ai-transport",
+  "latestId": "2026-11-04-advance-reminder-settings",
   "notes": [
     {
-      "id": "2026-11-03-cloudflare-ai-transport",
+      "id": "2026-11-04-advance-reminder-settings",
       "commit": null,
       "releasedAt": null,
+      "title": "Chọn mốc nhắc trước theo ngày và giờ",
+      "summary": "Chọn hai mốc nhắc trước riêng và khắc phục lỗi xác nhận, tạo nhắc từ web.",
+      "kind": "Tính năng",
+      "changes": [
+        "Lưu lựa chọn nhắc trước1–7 ngày và1–24 giờ, mỗi mốc có thể tắt; hai mốc trùng nhau chỉ tạo một thông báo.",
+        "Tính lịch bằng backend theo ngày giờ sự kiện; giữ nguyên thời gian nhắc được chỉ định và các lịch đã lưu.",
+        "Bảo toàn bản xem trước khi thêm xưng hô; sửa tạo thủ công sau khi chat đã có ngữ cảnh.",
+        "Hoàn thành hoặc dừng một việc có hai mốc nhắc sẽ đóng các thông báo còn chờ trong cùng nhóm.",
+        "Mở rộng kiểm chứng các cách nói lịch hằng ngày và trước buổi hẹn, giữ giới hạn nhắc hữu hạn."
+      ],
+      "memberChanges": [
+        "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
+        "Bản xem trước hiển thị chính xác các giờ gửi; mốc đã qua cần được chọn lại.",
+        "Sửa lỗi không lưu được lời nhắc khi dùng cách xưng hô riêng hoặc tạo trên web."
+      ],
+      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp."
+    },
+    {
+      "id": "2026-11-03-cloudflare-ai-transport",
+      "commit": "463b0dc19c30d559befc43a8c07e2a48fa3ef72d",
+      "releasedAt": "2026-11-04T04:41:44Z",
       "title": "Sửa lỗi kết nối AI trên Cloudflare",
       "summary": "Khắc phục lỗi runtime làm yêu cầu AI bị ngắt trước khi kết nối dịch vụ.",
       "kind": "Sửa lỗi",

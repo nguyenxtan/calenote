@@ -73,7 +73,7 @@ const target = z.strictObject({ ownerId: id, chatIdentityId: id, chatId: id, req
 export const PreviewReceiptSchema = z.strictObject({ previewId: id, requestId: id, draftRevision: revision, draftHash: hash, ownerId: id, chatIdentityId: id, chatId: id, channel: z.enum(["ZALO", "TELEGRAM", "WEB"]), issuedAfterOrder: InboundOrderSchema, expiresAt: instant, deliveryState: delivery, replyReference: id.nullable() });
 export type PreviewReceipt = z.infer<typeof PreviewReceiptSchema>;
 const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: SemanticPatchProposalSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(13), createdAt: instant, expiresAt: instant });
-const candidateV3 = candidate.extend({ proposal: SemanticPatchProposalV3Schema });
+const candidateV3 = candidate.extend({ proposal: SemanticPatchProposalV3Schema, advanceReminders: AdvanceReminderPolicySchema.optional() });
 const decisionBase = z.strictObject({ decisionId: id, kind: decisionKind, target, questionId: id, previewId: id.nullable(), draftRevision: revision.nullable(), contextRevision: revision, issuedAfterInbound: InboundOrderSchema, deliveryState: delivery, expiresAt: instant, acceptedReplies: z.array(z.enum(["có", "ok", "1", "xác nhận"])).min(1).max(4), replyReference: id.nullable(), tokenHandle: id.nullable(), candidate: candidate.nullable() });
 const decisionV2Base = decisionBase.extend({ candidate: candidateV3.nullable() });
 function validateDecision(d: z.infer<typeof decisionBase> | z.infer<typeof decisionV2Base>, ctx: z.RefinementCtx) {

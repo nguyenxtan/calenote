@@ -9,9 +9,9 @@ export type ContextBuildArgs = { message: BoundChatMessage; context: BoundChatCo
 export type ReadyContext = { status: "READY"; input: ContextInput; observation: ContextObservation; evidenceIndex: readonly TranscriptEntry[]; sourceMap: readonly TranscriptEntry["sourceMap"][]; candidateSnapshot: ContextSnapshotV1; candidateSnapshotJson: string; measurement: EnvelopeMeasurement };
 export type ContextBuildResult = ReadyContext | { status: "REFUSED"; reason: string };
 export type ContextBuildArgsV2 = Omit<ContextBuildArgs, "snapshot"> & { snapshot: ContextSnapshotV2 | null; advanceReminders?: import("@/modules/preferences/advance-reminders").AdvanceReminderPolicy };
-export type ReadyContextV2 = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInputV2; candidateSnapshot: ContextSnapshotV2 };
+export type ReadyContextV2 = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInputV2; candidateSnapshot: ContextSnapshotV2; newRequestAdvanceReminders?: import("@/modules/preferences/advance-reminders").AdvanceReminderPolicy };
 export type ContextBuildResultV2 = ReadyContextV2 | { status: "REFUSED"; reason: string };
-type AnyReadyContext = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInput | ContextInputV2; candidateSnapshot: ContextSnapshotV1 | ContextSnapshotV2 };
+type AnyReadyContext = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInput | ContextInputV2; candidateSnapshot: ContextSnapshotV1 | ContextSnapshotV2; newRequestAdvanceReminders?: import("@/modules/preferences/advance-reminders").AdvanceReminderPolicy };
 /** A call-local alias binds two different representations to one source. Never
  * compare a supplied operand to the internal value, or persist the supplied
  * placeholder as user content. Source spans do not depend on quote occurrences. */
@@ -283,7 +283,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     const measurement = input.schemaVersion === "calenote-context-input-1" ? measureLegacyV2EnvelopeReference(input, candidateSnapshotJson) : measureSuccessorEnvelope(input, candidateSnapshotJson);
     const localReason = measurement.reasons.find(r => r !== "TOKEN_BOUND_UNVERIFIED");
     if (localReason) return refused(localReason);
-    const ready: AnyReadyContext = freeze({ status: "READY", input, observation, evidenceIndex, sourceMap: evidenceIndex.map(t => t.sourceMap), candidateSnapshot, candidateSnapshotJson, measurement });
+    const ready: AnyReadyContext = freeze({ status: "READY", input, observation, evidenceIndex, sourceMap: evidenceIndex.map(t => t.sourceMap), candidateSnapshot, candidateSnapshotJson, measurement, ...(successor && "advanceReminders" in args && args.advanceReminders ? {newRequestAdvanceReminders: structuredClone(args.advanceReminders)} : {}) });
     builtContexts.set(ready, { snapshot: state ? candidateSnapshot : null, handles, facts });
     return ready;
   } catch (error) { return refused(error instanceof BuildFailure ? error.message : "CONTEXT_INVALID"); }

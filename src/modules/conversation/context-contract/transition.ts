@@ -98,7 +98,8 @@ function candidateFromPatchV3(patch: ValidatedPatchV3, proposalId: string): Cand
   // answer cannot renew a pending proposal or its relative-date anchor.
   const original = patch.adoptedCandidate ? s.pendingSemanticCandidate : null;
   const createdAt = original?.createdAt ?? s.inbound.receivedAt;
-  return { proposalId, proposalRevision: original?.proposalRevision ?? 1, proposal: proposal.data, sourceEvidence: structuredClone(sources), evidenceIndex, createdAt, expiresAt: original?.expiresAt ?? new Date(Math.min(Date.parse(createdAt) + 600000, Date.parse(s.idleExpiresAt), Date.parse(s.absoluteExpiresAt))).toISOString() };
+  const advanceReminders = original?.advanceReminders ?? patch.newRequestAdvanceReminders;
+  return { ...(advanceReminders ? { advanceReminders: structuredClone(advanceReminders) } : {}), proposalId, proposalRevision: original?.proposalRevision ?? 1, proposal: proposal.data, sourceEvidence: structuredClone(sources), evidenceIndex, createdAt, expiresAt: original?.expiresAt ?? new Date(Math.min(Date.parse(createdAt) + 600000, Date.parse(s.idleExpiresAt), Date.parse(s.absoluteExpiresAt))).toISOString() };
 }
 
 /** Successor state is never converted to context2. Decisions are constructed
@@ -319,6 +320,7 @@ function adoptSelected(s: SelectedSnapshot, candidate: Candidate | CandidateV3):
   if (!proposal.success) return null;
   const result = structuredClone(s);
   clearDecision(result); clearSemanticCandidate(result);
+  if (result.schemaVersion === "calenote-context-state-2") result.advanceReminders = "advanceReminders" in candidate && candidate.advanceReminders ? structuredClone(candidate.advanceReminders) : {days:null,hours:null};
   result.slots = emptySlots(); result.facts = []; result.ambiguities = structuredClone(proposal.data.uncertainties);
   result.requestId = candidate.proposalId; result.draftRevision = (s.draftRevision ?? 0) + 1;
   result.draftCreatedAt = candidate.createdAt; result.draftExpiresAt = candidate.expiresAt;

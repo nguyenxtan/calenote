@@ -18,7 +18,7 @@ const cadencePatterns: Readonly<Record<string, RegExp>> = {
  * is exposed, and source text/state is never rewritten. Unknown wording does
  * not grant cadence/count authority. */
 export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", value: unknown, sources: readonly SourceEvidence[], turns: readonly Turn[], pendingCountTurnId?: string, currentReminderTurnId?: string): boolean {
-  const matches = (source: SourceEvidence, pattern: RegExp, accept: (m: RegExpMatchArray, prefix: string, fullAnswer: string, quotePrefix: string) => boolean = () => true): boolean => {
+  const matches = (source: SourceEvidence, pattern: RegExp, accept: (m: RegExpMatchArray, prefix: string, fullAnswer: string, quotePrefix: string, range: {start:number;end:number}) => boolean = () => true): boolean => {
     const turn = turns.find(t => t.id === source.sourceTurnId);
     if (!turn || turn.role !== "USER") return false;
     const text = lower(turn.semanticView), quote = lower(source.quote), view = [...text];
@@ -33,7 +33,7 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
       const suffix = view.slice(end).join("").replace(/^[\s\p{P}]+/u, "");
       if (/(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|tên|chữ|trích dẫn|cụm từ|từ ngữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(negationPrefix)
         || /^(?:thì\s+)?(?:không|ko|đừng|chẳng|chưa)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(suffix)) continue;
-      if (accept(match, prefix, text, quote.slice(0, match.index).split(/[;,.!?\n]|\s+(?:và|rồi|xong|sau đó)\s+/u).at(-1) ?? "")) return true;
+      if (accept(match, prefix, text, quote.slice(0, match.index).split(/[;,.!?\n]|\s+(?:và|rồi|xong|sau đó)\s+/u).at(-1) ?? "", {start,end})) return true;
     }
     return false;
   };
@@ -41,13 +41,14 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) return false;
   const sameNumber = (m: RegExpMatchArray) => (words[m[1]] ?? Number(m[1])) === value;
   const reminderOwned = (prefix: string) => /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix);
-  const wholeDailyInstruction = (text: string) => /^\s*nhắc(?:[^\p{L}\p{M}\p{N}_]|$)/u.test(text)
+  const wholeDailyInstruction = (text: string, range: {start:number;end:number}) => /^\s*nhắc(?:[^\p{L}\p{M}\p{N}_]|$)/u.test(text)
     && /(?:mỗi|hàng|hằng)\s+ngày(?:[^\p{L}]|$)/u.test(text)
-    && /,\s*(?:trong|suốt)\s+(?:\d+|một|hai|ba)\s+ngày\s+(?:liên tiếp|liên tục|liền)\s*[.!]?$/u.test(text)
+    && /,\s*(?:trong|suốt)\s*$/u.test([...text].slice(0,range.start).join(""))
+    && /^\s*[.!]?$/u.test([...text].slice(range.end).join(""))
     && !/[;!?\n]|\.(?!\s*$)|(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|rồi|xong|sau đó|nhưng|tên|chữ|trích dẫn|cụm từ|từ ngữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text);
   const direct = new RegExp(`${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)|(?:liên tiếp|liên tục)\\s+${token}\\s+ngày`, "gu");
-  if (sources.some(s => matches(s, direct, (m, prefix, fullAnswer) => (words[m[1] ?? m[2]] ?? Number(m[1] ?? m[2])) === value
-    && (reminderOwned(prefix) || wholeDailyInstruction(fullAnswer) || s.sourceTurnId === currentReminderTurnId && new RegExp(`^\\s*${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)(?:[,\\s]+(?:đúng|lúc)\\s+\\d{1,2}(?:h|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?)?\\s*[.!]?\\s*$`, "u").test(fullAnswer))))) return true;
+  if (sources.some(s => matches(s, direct, (m, prefix, fullAnswer, _quotePrefix, range) => (words[m[1] ?? m[2]] ?? Number(m[1] ?? m[2])) === value
+    && (reminderOwned(prefix) || wholeDailyInstruction(fullAnswer,range) || s.sourceTurnId === currentReminderTurnId && new RegExp(`^\\s*${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)(?:[,\\s]+(?:đúng|lúc)\\s+\\d{1,2}(?:h|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?)?\\s*[.!]?\\s*$`, "u").test(fullAnswer))))) return true;
   if (sources.some(s => matches(s, new RegExp(`(?:trong|suốt)\\s+${token}\\s+ngày`, "gu"), (m, prefix, _full, quotePrefix) => sameNumber(m)
     && reminderOwned(prefix) && /(?:mỗi|hàng|hằng)\s+ngày\s*$/u.test(quotePrefix)))) return true;
   // A bare number is only a reply to the application's actual count question;

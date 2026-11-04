@@ -102,6 +102,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
       const evidence = sources.filter((e, i) => sources.findIndex(other => equal(e, other)) === i);
       return evidence.length ? [{ field, evidence: structuredClone(evidence) }] : [];
     }),
+    ...(patch.newRequestAdvanceReminders ? {advanceReminders: structuredClone(patch.newRequestAdvanceReminders)} : {}),
     createdAt: candidate.inbound.receivedAt,
     expiresAt: new Date(Math.min(Date.parse(candidate.inbound.receivedAt) + 600000, Date.parse(candidate.idleExpiresAt), Date.parse(candidate.absoluteExpiresAt), candidate.draftExpiresAt ? Date.parse(candidate.draftExpiresAt) : Infinity)).toISOString(),
     baseContextRevision: candidate.contextRevision, questionId: candidate.inbound.id + ":operation",
