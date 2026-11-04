@@ -67,3 +67,19 @@ it("a replacement event captures its own current settings while pending A retain
  expect(await h.turn(3,`xác nhận ${b.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
  expect((await h.f.db.prepare("SELECT scheduled_at FROM reminders ORDER BY scheduled_at").all<{scheduled_at:number}>()).results.map(r=>r.scheduled_at)).toEqual([Date.parse("2026-10-13T15:00:00+07:00"),Date.parse("2026-10-19T15:00:00+07:00")]);
 });
+
+it("a staged ambiguous first request keeps proposal-time advances when NEW is clarified later",async()=>{
+ const staged=(input: Parameters<ReturnType<typeof proposal>>[0])=>{
+  const p=proposal(meeting)(input) as {requestTarget:{evidence:unknown[]}};
+  return {...p,requestTarget:{...p.requestTarget,kind:"UNRESOLVED"}};
+ };
+ const h=await harness([staged,proposal({},"NEW")]);h.deps.getReplyPreferences=async()=>preferences;
+ expect(await h.turn(0,text)).toEqual({status:"CLARIFICATION_REQUESTED"});
+ const pending=(await h.read(1))!;expect(pending.requestId).toBeNull();
+ expect(pending.pendingSemanticCandidate?.advanceReminders).toEqual({days:2,hours:3});
+ h.deps.getReplyPreferences=async()=>({...preferences,advanceReminderDays:7,advanceReminderHours:24});
+ expect(await h.turn(1,"Tạo yêu cầu mới.")).toEqual({status:"DRAFT_CREATED"});
+ const opened=(await h.read(2))!;expect(opened.advanceReminders).toEqual({days:2,hours:3});
+ expect(await h.turn(2,`xác nhận ${opened.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
+ expect((await h.f.db.prepare("SELECT scheduled_at FROM reminders ORDER BY scheduled_at").all<{scheduled_at:number}>()).results.map(r=>r.scheduled_at)).toEqual([Date.parse("2026-09-30T15:00:00+07:00"),Date.parse("2026-10-02T12:00:00+07:00")]);
+});

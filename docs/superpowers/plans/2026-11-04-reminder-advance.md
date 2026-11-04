@@ -40,8 +40,8 @@ Files: preferences contract/service/D1 store, SettingsPanel; event/reminder crea
 
 ### Task4: Repair and recheck recurrence findings
 Files: semantic generation/resolution files identified by reproductions for A06/A07/A08/A10; source fixtures from cost report.
-- [ ] Reproduce grounded finite daily inputs; preserve unsupported weekly/minute behavior with useful answers.
-- [ ] Add failing regressions for confirmed causes, minimal fix, focused GREEN; commit and ledger.
+- [x] Reproduce grounded finite daily inputs; preserve unsupported weekly/minute behavior with useful answers.
+- [x] Add failing regressions for confirmed causes, minimal fix, focused GREEN; commit and ledger.
 
 ### Task5: Verify and finish release work
 - [ ] Run project check, fresh whole-branch independent review, resolve material findings and reverify changed paths.

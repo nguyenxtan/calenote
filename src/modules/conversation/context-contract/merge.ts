@@ -125,6 +125,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   candidate.pendingSemanticCandidate = null;
   if (candidate.requestId === null) {
     const original = patch.adoptedCandidate ? patch.candidateSnapshot.pendingSemanticCandidate : null;
+    if (patch.newRequestAdvanceReminders) candidate.advanceReminders = structuredClone(patch.newRequestAdvanceReminders);
     candidate.requestId = candidate.inbound.id;
     candidate.draftRevision = 1;
     candidate.draftCreatedAt = original?.createdAt ?? candidate.inbound.receivedAt;
