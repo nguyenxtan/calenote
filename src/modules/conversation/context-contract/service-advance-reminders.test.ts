@@ -40,3 +40,15 @@ it("does not silently save a past selected advance or apply defaults to reminder
  expect(await h.turn(3,`xác nhận ${current.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
  expect((await h.f.db.prepare("SELECT scheduled_at FROM reminders").all<{scheduled_at:number}>()).results).toEqual([{scheduled_at:Date.parse("2026-10-02T15:00:00+07:00")}]);
 });
+
+it.each([
+ {extra:" Nhắc một lần.",values:{frequency:"ONCE"}},
+ {extra:" Nhắc hôm đó.",values:{eventRelation:"INCLUDING_EVENT"}},
+ {extra:" Nhắc 3 lần.",values:{occurrenceCount:3}},
+])("advance defaults cannot override an explicit cadence/relation: $extra",async({extra,values})=>{
+ const h=await harness([proposal({...meeting,...values})]);h.deps.getReplyPreferences=async()=>preferences;
+ const result=await h.turn(0,text+extra);
+ expect(result).toEqual({status:"CLARIFICATION_REQUESTED"});
+ expect(h.replies.at(-1)?.kind).not.toBe("PREVIEW");
+ expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
+});

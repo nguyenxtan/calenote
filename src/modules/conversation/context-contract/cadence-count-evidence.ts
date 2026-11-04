@@ -41,9 +41,13 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) return false;
   const sameNumber = (m: RegExpMatchArray) => (words[m[1]] ?? Number(m[1])) === value;
   const reminderOwned = (prefix: string) => /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix);
+  const wholeDailyInstruction = (text: string) => /^\s*nhắc(?:[^\p{L}\p{M}\p{N}_]|$)/u.test(text)
+    && /(?:mỗi|hàng|hằng)\s+ngày(?:[^\p{L}]|$)/u.test(text)
+    && /,\s*(?:trong|suốt)\s+(?:\d+|một|hai|ba)\s+ngày\s+(?:liên tiếp|liên tục|liền)\s*[.!]?$/u.test(text)
+    && !/[;!?\n]|\.(?!\s*$)|(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|rồi|xong|sau đó|nhưng|tên|chữ|trích dẫn|cụm từ|từ ngữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text);
   const direct = new RegExp(`${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)|(?:liên tiếp|liên tục)\\s+${token}\\s+ngày`, "gu");
   if (sources.some(s => matches(s, direct, (m, prefix, fullAnswer) => (words[m[1] ?? m[2]] ?? Number(m[1] ?? m[2])) === value
-    && (reminderOwned(prefix) || s.sourceTurnId === currentReminderTurnId && new RegExp(`^\\s*${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)(?:[,\\s]+(?:đúng|lúc)\\s+\\d{1,2}(?:h|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?)?\\s*[.!]?\\s*$`, "u").test(fullAnswer))))) return true;
+    && (reminderOwned(prefix) || wholeDailyInstruction(fullAnswer) || s.sourceTurnId === currentReminderTurnId && new RegExp(`^\\s*${token}\\s+(?:ngày\\s+(?:liên tiếp|liên tục|liền)|lần|lượt)(?:[,\\s]+(?:đúng|lúc)\\s+\\d{1,2}(?:h|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?)?\\s*[.!]?\\s*$`, "u").test(fullAnswer))))) return true;
   if (sources.some(s => matches(s, new RegExp(`(?:trong|suốt)\\s+${token}\\s+ngày`, "gu"), (m, prefix, _full, quotePrefix) => sameNumber(m)
     && reminderOwned(prefix) && /(?:mỗi|hàng|hằng)\s+ngày\s*$/u.test(quotePrefix)))) return true;
   // A bare number is only a reply to the application's actual count question;

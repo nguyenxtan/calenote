@@ -85,9 +85,10 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   if (!slots.title.value) issue("title", "MISSING");
   const advancePolicy = candidate.schemaVersion === "calenote-context-state-2" ? candidate.advanceReminders : undefined;
   const useAdvance = !!advancePolicy && (advancePolicy.days !== null || advancePolicy.hours !== null)
-    && frequency === "ONCE" && slots.eventDate.value !== null && slots.eventTime.value !== null
+    && frequency === "ONCE" && slots.frequency.provenance?.kind !== "EXPLICIT_USER"
+    && slots.eventDate.value !== null && slots.eventTime.value !== null
     && slots.reminderDate.value === null && slots.reminderTime.value === null && slots.leadOffsetDays.value === null
-    && slots.eventRelation.value !== "BEFORE_EVENT";
+    && slots.eventRelation.value === null && slots.endDate.value === null && slots.occurrenceCount.value === null;
   const clock = (field: "reminderTime" | "eventTime") => {
     const value = slots[field].value;
     if (!value) { if (field === "reminderTime" && !useAdvance) issue(field, "MISSING"); return null; }

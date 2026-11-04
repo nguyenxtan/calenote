@@ -80,6 +80,7 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
     const slot = SLOT_NAMES.includes(field as typeof SLOT_NAMES[number]) ? candidate.slots[field as typeof SLOT_NAMES[number]] : null;
     const ambiguity = candidate.ambiguities.find(u => u.field === field && u.reason !== "MISSING");
     if (slot?.state === "CONFLICT") return { kind: "ASK_FOR_DISAMBIGUATION", field, reason: "CONFLICT" };
+    if (field === "frequency" && ambiguity?.reason === "UNSUPPORTED_COMBINATION") return { kind: "EXPLAIN_UNSUPPORTED", issue: "CAPABILITY" };
     if (ambiguity && ambiguity.reason !== "MISSING") return { kind: "ASK_FOR_DISAMBIGUATION", field, reason: ambiguity.reason };
   }
   const field = IssueFieldSchema.parse(resolution.fields[0]);

@@ -36,3 +36,16 @@ it("retained event context cannot turn historical narrative into a bare answer",
     expect(supportsEventRelation("BEFORE_EVENT",[evidence],[turn(text)],true)).toBe(false);
   }
 });
+
+it.each([
+ ["Nhắc kiểm tra QA mỗi ngày lúc8h, bắt đầu ngày mai, trong3ngày liên tiếp.","STARTING_ON",true],
+ ["Nhắc kiểm tra QA mỗi ngày lúc9h từ ngày06/11/2026 đến hết ngày08/11/2026.","STARTING_ON",true],
+ ["Nhắc lúc8h mỗi ngày trong2ngày liên tiếp trước buổi đó.","BEFORE_EVENT",true],
+ ["Nhắc đi thi lúc8h trong3ngày liên tiếp trước ngày11/10/2026.","BEFORE_EVENT",true],
+ ["Không nhắc mỗi ngày lúc9h từ ngày06/11/2026.","STARTING_ON",false],
+ ["Tôi làm việc mỗi ngày từ ngày06/11/2026.","STARTING_ON",false],
+ ["Nhắc kiểm tra; tôi đã đổi giờ trước ngày11/10/2026.","BEFORE_EVENT",false],
+ ["Ví dụ nhắc trước buổi đó.","BEFORE_EVENT",false],
+ ["Đừng nhắc trước buổi đó.","BEFORE_EVENT",false],
+] as const)("expanded relation grounding: %s",(text,value,want)=>expect(support(text,value)).toBe(want));
+it("an unrelated quote cannot borrow the before-meeting cue",()=>expect(support("Nhắc kiểm tra QA trong2ngày liên tiếp trước buổi đó.","BEFORE_EVENT","trong2ngày liên tiếp")).toBe(false));
