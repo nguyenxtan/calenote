@@ -16,7 +16,8 @@ it("keeps updates unread until acknowledged and remembers acknowledgement after 
  fireEvent.click(trigger);expect(screen.getByRole("dialog")).toBeVisible();
  fireEvent.click(screen.getByRole("button", { name: "Đóng cập nhật" }));expect(trigger).toHaveAccessibleName(/chưa đọc/);
  fireEvent.click(trigger);fireEvent.click(screen.getByRole("button", { name: "Đã đọc cập nhật" }));
- expect(trigger).toHaveAccessibleName("Có gì mới");expect(trigger).toHaveFocus();
+ expect(localStorage.getItem(key)).toBe(catalog.latestId);expect(trigger).toHaveFocus();
+ await waitFor(()=>expect(trigger).toHaveAccessibleName("Có gì mới"));
  view.unmount(); render(<ProductUpdates />);
  await waitFor(()=>expect(screen.getByRole("button", { name: "Có gì mới" })).toBeEnabled());
 });
