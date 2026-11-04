@@ -56,6 +56,19 @@ export function SettingsPanel({ user, value, save, notice, busy, saveProfile, se
             </label>
             <p id="confirmation-help" className={styles.help}>Mặc định, yêu cầu nhắc rõ nội dung và ngày giờ trong Zalo hoặc Telegram được tạo ngay. Bật lựa chọn này để xem trước rồi xác nhận. Áp dụng chung cho tài khoản.</p>
           </div>
+          <div className={styles.confirmationSetting}>
+            <h3>Nhắc trước sự kiện</h3>
+            <div className={styles.fieldGrid}>
+              <label>Nhắc trước theo ngày<select disabled={busy} value={draft.advanceReminderDays ?? ""} onChange={event => edit({ ...draft, advanceReminderDays: event.target.value ? Number(event.target.value) : null })}>
+                <option value="">Tắt</option>{Array.from({ length: 7 }, (_, i) => <option key={i+1} value={i+1}>{i+1} ngày</option>)}
+              </select></label>
+              <label>Nhắc trước theo giờ<select disabled={busy} value={draft.advanceReminderHours ?? ""} onChange={event => edit({ ...draft, advanceReminderHours: event.target.value ? Number(event.target.value) : null })}>
+                <option value="">Tắt</option>{Array.from({ length: 24 }, (_, i) => <option key={i+1} value={i+1}>{i+1} giờ</option>)}
+              </select></label>
+            </div>
+            <p className={styles.help}>Mỗi mốc được gửi riêng. Ví dụ: họp thứ Sáu lúc 15h, nhắc trước 2 ngày và 3 giờ sẽ gửi vào thứ Tư lúc 15h và thứ Sáu lúc 12h. Hai mốc trùng nhau chỉ gửi một lần.</p>
+            <p className={styles.help}>Áp dụng cho yêu cầu mới có ngày và giờ sự kiện rõ ràng khi bạn chưa chỉ định thời gian nhắc. Lịch đã lưu giữ nguyên. Nếu mốc nhắc đã qua, Calenote sẽ yêu cầu chọn lại trước khi lưu.</p>
+          </div>
           <div className={styles.preview}><span>Ví dụ giọng điệu</span><p>{preview}</p><small>Minh hoạ cách diễn đạt; nội dung phản hồi thực tế tuỳ tình huống.</small></div>
           <div className={styles.saveRow}><button className={styles.primary} type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu cá nhân hoá"}</button><span role="status">{editedSinceSubmit ? "Có thay đổi chưa lưu." : notice}</span></div>
           {validation && <p role="alert" className={styles.mutationError}>{validation}</p>}

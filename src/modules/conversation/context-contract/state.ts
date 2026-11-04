@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AdvanceReminderPolicySchema } from "@/modules/preferences/advance-reminders";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { ConversationScope } from "../contracts";
 import { CalendarSchema, contextFactSchema, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, LegacyV2UncertaintySchema as UncertaintySchema } from "./contracts";
@@ -107,6 +108,7 @@ const snapshotV2Base = snapshotV1Base.extend({
   schemaVersion: z.literal("calenote-context-state-2"),
   pendingDecision: PendingDecisionV2Schema.nullable(),
   pendingSemanticCandidate: pendingSemanticCandidate.nullable(),
+  advanceReminders: AdvanceReminderPolicySchema.optional(),
   ambiguities: z.array(UncertaintyV3Schema).max(4),
   modelAttemptBinding: attempt.extend({ contractVersion: z.literal("calenote-context-3") }).nullable(),
 });
@@ -200,7 +202,7 @@ export const ContextSnapshotV1Schema = snapshotV1Base.superRefine(validateSnapsh
 export const ContextSnapshotV2Schema = snapshotV2Base.superRefine(validateSnapshot);
 export type ContextSnapshotV2 = z.infer<typeof ContextSnapshotV2Schema>;
 export type ContextSnapshotV1 = z.infer<typeof ContextSnapshotV1Schema>;
-export const CanonicalDetailsV1Schema = z.strictObject({ schemaVersion: z.literal("calenote-reminder-details-1"), location: SlotValueSchemas.location.nullable(), notes: SlotValueSchemas.notes.nullable(), eventDate: z.iso.date().nullable(), eventTime: z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u).nullable(), calendarProvenance: z.strictObject({ calendar: CalendarSchema, sourceDate: DateOperandSchema.nullable(), provenance }), resolutionVersion: id }).refine(d => d.calendarProvenance.sourceDate?.kind !== "CIVIL_DATE" || d.calendarProvenance.sourceDate.calendar === d.calendarProvenance.calendar, "Calendar provenance mismatch");
+export const CanonicalDetailsV1Schema = z.strictObject({ schemaVersion: z.literal("calenote-reminder-details-1"), location: SlotValueSchemas.location.nullable(), notes: SlotValueSchemas.notes.nullable(), eventDate: z.iso.date().nullable(), eventTime: z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u).nullable(), calendarProvenance: z.strictObject({ calendar: CalendarSchema, sourceDate: DateOperandSchema.nullable(), provenance }), resolutionVersion: id, advanceReminders: AdvanceReminderPolicySchema.optional() }).refine(d => d.calendarProvenance.sourceDate?.kind !== "CIVIL_DATE" || d.calendarProvenance.sourceDate.calendar === d.calendarProvenance.calendar, "Calendar provenance mismatch");
 export type CanonicalDetailsV1 = z.infer<typeof CanonicalDetailsV1Schema>;
 
 // Lossless storage only. The provider representation is unchanged. Strings,

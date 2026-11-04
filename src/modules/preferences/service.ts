@@ -12,6 +12,8 @@ export interface UserPreferences {
   customDisplayName: string | null;
   tone: Tone;
   reminderConfirmation?: ReminderConfirmation;
+  advanceReminderDays?: number | null;
+  advanceReminderHours?: number | null;
   updatedAt: number;
 }
 
@@ -20,6 +22,8 @@ export interface UserPreferencesInput {
   customDisplayName?: string | null;
   tone?: Tone;
   reminderConfirmation?: ReminderConfirmation;
+  advanceReminderDays?: number | null;
+  advanceReminderHours?: number | null;
 }
 
 export interface UserPreferencesStore {
@@ -32,6 +36,8 @@ export const DEFAULT_USER_PREFERENCES = {
   customDisplayName: null,
   tone: "friendly",
   reminderConfirmation: "auto",
+  advanceReminderDays: null,
+  advanceReminderHours: null,
 } as const satisfies Omit<UserPreferences, "userId" | "updatedAt">;
 
 export class InvalidUserPreferencesError extends Error {
@@ -52,6 +58,10 @@ function isTone(value: unknown): value is Tone {
 }
 
 function normalizeInput(input: UserPreferencesInput): UserPreferencesInput {
+  for (const [field, maximum] of [["advanceReminderDays",7],["advanceReminderHours",24]] as const) {
+    const value = input[field];
+    if (value !== undefined && value !== null && (!Number.isSafeInteger(value) || value < 1 || value > maximum)) throw new InvalidUserPreferencesError(`${field} is outside its supported range`);
+  }
   if (input.reminderConfirmation !== undefined && !["auto", "preview"].includes(input.reminderConfirmation)) {
     throw new InvalidUserPreferencesError("reminderConfirmation is not supported");
   }

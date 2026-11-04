@@ -423,6 +423,7 @@ export class D1ContextContractStore implements ContextContractStore {
    if(proposalId){
     statements.push(this.statement(`UPDATE reminder_series_proposals SET status='CONFIRMED',transaction_marker=?,resolution_inbound_id=? WHERE id=? AND ${permitted}`,[marker,authority.kind==="CHAT"?inbound:null,proposalId,marker]),
      this.statement(`INSERT INTO reminder_series(id,public_id,owner_id,chat_identity_id,proposal_id,revision,status,created_at,updated_at) SELECT ?,?,?,?,?,1,'ACTIVE',?,? WHERE ${permitted}`,[seriesId,seriesPublicId,a.owner,a.chat,proposalId,a.now,a.now,marker]));
+    if(preview.details.advanceReminders) statements.push(this.statement(`INSERT INTO advance_notification_groups(series_id,owner_user_id,chat_identity_id) SELECT ?,?,? WHERE ${permitted}`,[seriesId,a.owner,a.chat,marker]));
     const detail=await this.detail("context-contract-series-details",s.scope,seriesId!,preview.details);
     statements.push(this.statement(`INSERT INTO reminder_series_context_details(series_id,owner_id,chat_identity_id,encryption_entity_id,payload_version,payload_ciphertext,payload_iv,key_version) SELECT ?,?,?,?,'calenote-reminder-details-1',?,?,1 WHERE ${permitted}`,[seriesId,a.owner,a.chat,seriesId,detail.ciphertext,detail.iv,marker]));
    }

@@ -90,9 +90,9 @@ export class SqliteD1Database {
     );
     if (options.conversationV2 || options.contextContract) {
       for (const migration of [
-        "0004_user_preferences", "0012_user_preferences_reminder_confirmation", "0005_semantic_context_and_budget",
+        "0004_user_preferences", "0012_user_preferences_reminder_confirmation", "0020_advance_reminder_preferences", "0005_semantic_context_and_budget",
         "0006_semantic_budget_dispatch_fence", "0007_conversation_context_v2",
-        "0008_finite_reminder_series",
+        "0008_finite_reminder_series", "0021_advance_notification_groups",
       ]) this.sqlite.exec(readFileSync(resolve(process.cwd(), `migrations/${migration}.sql`), "utf8"));
     }
     if (options.contextContract) this.sqlite.exec(readFileSync(resolve(process.cwd(), "migrations/0009_llm_context_contract.sql"), "utf8"));

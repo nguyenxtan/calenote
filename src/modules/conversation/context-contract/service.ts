@@ -186,8 +186,10 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const proof = await createControlProof(prior, observed.observation.inbound, message.text, control, authority, scope.now);
           return proof ? confirm(proof) : finish("STALE");
         }
-        const built = buildContextInputV2({ message, context, snapshot: prior, observation: observed.observation });
-        if (built.status === "READY") { failureSnapshot = prior; failureReceived = built.candidateSnapshot; }
+        const built = buildContextInputV2({ message, context, snapshot: prior, observation: observed.observation, advanceReminders: { days: preferences?.advanceReminderDays ?? null, hours: preferences?.advanceReminderHours ?? null } });
+        if (built.status === "READY") {
+          failureSnapshot = prior; failureReceived = built.candidateSnapshot;
+        }
         else if (prior) {
           // Refused content never enters the accepted semantic transcript.
           // Retain validated facts/candidate/lifetimes, bind only the actual

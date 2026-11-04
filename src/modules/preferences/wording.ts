@@ -1,6 +1,6 @@
 import type { UserPreferences } from './service';
 
-export type BotReplyPreferences = Pick<UserPreferences,'addressStyle'|'customDisplayName'> & Partial<Pick<UserPreferences,'tone'>>;
+export type BotReplyPreferences = Pick<UserPreferences,'addressStyle'|'customDisplayName'> & Partial<Pick<UserPreferences,'tone'|'advanceReminderDays'|'advanceReminderHours'>>;
 export type BotReplyPreferencesGetter = (ownerId:string)=>Promise<BotReplyPreferences>;
 function words(preferences:BotReplyPreferences){
  const custom=preferences.customDisplayName?.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f]/gu,' ').trim();

@@ -10,7 +10,7 @@ type BackendReason = Extract<EffectiveDirective, { kind: "BACKEND_ONLY" }>["reas
 type ApplicationOutcome = { semantic: ValidatedPatch; merge: MergeResult; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 export type ApplicationOutcomeV3 = { semantic: ValidatedPatchV3; merge: MergeResultV3; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 const failure = (): EffectiveDirective => ({ kind: "BACKEND_ONLY", reason: "FAILURE" });
-const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
+const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "ADVANCE_REMINDER_IN_PAST", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
 
 /** Pure reply routing over accepted T3 results. Returning PRESENT_PREVIEW is
  * only a composition handoff; it creates no decision, token or save authority.
@@ -83,6 +83,7 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
     if (ambiguity && ambiguity.reason !== "MISSING") return { kind: "ASK_FOR_DISAMBIGUATION", field, reason: ambiguity.reason };
   }
   const field = IssueFieldSchema.parse(resolution.fields[0]);
+  if (resolution.reasons.includes("ADVANCE_REMINDER_IN_PAST")) return { kind: "ASK_FOR_DISAMBIGUATION", field: "eventDate", reason: "CONFLICT" };
   if (resolution.reasons.some(r => ["LIMIT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"].includes(r))) return { kind: "EXPLAIN_UNSUPPORTED", issue: "DOMAIN_LIMIT" };
   // T3's fields/reasons arrays are independently deduplicated, not zipped.
   // Fixed typed reason mappings prevent an earlier missing field acquiring a

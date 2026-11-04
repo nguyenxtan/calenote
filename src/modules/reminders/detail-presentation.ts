@@ -22,6 +22,10 @@ export function renderReminderDetails(title: string, details: CanonicalDetailsV1
   if (details.eventDate !== null) lines.push(`Sự kiện: ${details.eventDate}${details.eventTime ? ` ${details.eventTime}` : " (chưa có giờ sự kiện)"}`);
   const source = details.calendarProvenance.sourceDate;
   if (source?.kind === "CIVIL_DATE" && source.calendar === "LUNAR_VN") lines.push(`Ngày âm lịch nguồn: ${source.day}/${source.month}/${source.year}${source.leapMonth ? " nhuận" : ""}`);
+  if (details.advanceReminders) {
+    const offsets = [details.advanceReminders.days === null ? null : `${details.advanceReminders.days} ngày`, details.advanceReminders.hours === null ? null : `${details.advanceReminders.hours} giờ`].filter(Boolean);
+    lines.push(`Nhắc trước theo Cài đặt: ${offsets.join(" và ")}`);
+  }
   lines.push(`Thông báo (Asia/Ho_Chi_Minh):\n${notifications.join("\n")}`);
   const text = lines.join("\n"), units = text.length + DELIVERY_PREFIX.length + additionalUnits;
   return units <= 2000 ? { status: "COMPLETE", text } : { status: "TOO_LONG", units, limit: 2000 };

@@ -265,6 +265,7 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
       } else if (effective.kind === "ASK_FOR_FIELD" || effective.kind === "ASK_FOR_DISAMBIGUATION") {
         if (effective.field === "queryRange") return fail("SEMANTIC");
         const fallback = selectGuidance({ effectiveDirective: effective, directiveValidation: { status: "INVALID", reason: "DIRECTIVE_INVALID" }, replyProposal: { status: "VALID", value: null }, privacyValidation: { status: "VALID" }, language: "vi" });
+        if (resolution.status === "CLARIFY" && resolution.reasons.includes("ADVANCE_REMINDER_IN_PAST")) fallback.text = "Một mốc nhắc trước đã qua. Bạn muốn đổi ngày sự kiện hay chỉnh mốc nhắc trước trong Cài đặt?";
         const field = effective.field, progressed = !prior || !equal(prior.slots, s.slots) || !equal(prior.ambiguities, s.ambiguities);
         const count = !progressed && prior?.pendingReminderQuestion?.field === field ? Math.min(3, prior.pendingReminderQuestion.noProgressCount + 1) : 0;
         s.pendingReminderQuestion = { scope: "REMINDER", field, questionId: outboundId, text: fallback.text!, decisionKind: null, reason: effective.kind === "ASK_FOR_FIELD" ? "MISSING" : effective.reason, noProgressCount: count, deliveryState: "UNCERTAIN", issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid } };

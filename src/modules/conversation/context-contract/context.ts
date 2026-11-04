@@ -8,7 +8,7 @@ import { containsForbiddenControl, projectSemanticView } from "./projection";
 export type ContextBuildArgs = { message: BoundChatMessage; context: BoundChatContext; snapshot: ContextSnapshotV1 | null; observation: ContextObservation };
 export type ReadyContext = { status: "READY"; input: ContextInput; observation: ContextObservation; evidenceIndex: readonly TranscriptEntry[]; sourceMap: readonly TranscriptEntry["sourceMap"][]; candidateSnapshot: ContextSnapshotV1; candidateSnapshotJson: string; measurement: EnvelopeMeasurement };
 export type ContextBuildResult = ReadyContext | { status: "REFUSED"; reason: string };
-export type ContextBuildArgsV2 = Omit<ContextBuildArgs, "snapshot"> & { snapshot: ContextSnapshotV2 | null };
+export type ContextBuildArgsV2 = Omit<ContextBuildArgs, "snapshot"> & { snapshot: ContextSnapshotV2 | null; advanceReminders?: import("@/modules/preferences/advance-reminders").AdvanceReminderPolicy };
 export type ReadyContextV2 = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInputV2; candidateSnapshot: ContextSnapshotV2 };
 export type ContextBuildResultV2 = ReadyContextV2 | { status: "REFUSED"; reason: string };
 type AnyReadyContext = Omit<ReadyContext, "input" | "candidateSnapshot"> & { input: ContextInput | ContextInputV2; candidateSnapshot: ContextSnapshotV1 | ContextSnapshotV2 };
@@ -260,6 +260,10 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       absoluteExpiresAt: new Date(message.receivedAt + 7200000).toISOString(),
       draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-1",
     });
+    if (candidateSnapshot.schemaVersion === "calenote-context-state-2" && !state?.requestId && "advanceReminders" in args && args.advanceReminders) {
+      candidateSnapshot.advanceReminders = structuredClone(args.advanceReminders);
+      ContextSnapshotV2Schema.parse(candidateSnapshot);
+    }
     const candidateSnapshotJson = candidateSnapshot.schemaVersion === "calenote-context-state-2" ? encodeContextSnapshotV2(candidateSnapshot) : encodeContextSnapshot(candidateSnapshot);
     if (new TextEncoder().encode(candidateSnapshotJson).length > 16384) return refused("CONTEXT_SNAPSHOT_TOO_LARGE");
 

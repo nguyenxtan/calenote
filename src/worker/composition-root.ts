@@ -303,6 +303,8 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         customDisplayName: preferences.customDisplayName,
         tone: preferences.tone,
         reminderConfirmation: preferences.reminderConfirmation ?? "auto",
+        advanceReminderDays: preferences.advanceReminderDays ?? null,
+        advanceReminderHours: preferences.advanceReminderHours ?? null,
       };
     },
     savePreferences: async ({ userId, preferences }) => {
@@ -312,6 +314,8 @@ export async function createPreferencesOperations(env: Env): Promise<Preferences
         customDisplayName: saved.customDisplayName,
         tone: saved.tone,
         reminderConfirmation: saved.reminderConfirmation ?? "auto",
+        advanceReminderDays: saved.advanceReminderDays ?? null,
+        advanceReminderHours: saved.advanceReminderHours ?? null,
       };
     },
   };

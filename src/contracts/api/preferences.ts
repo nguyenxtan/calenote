@@ -8,6 +8,8 @@ export const PresentationPreferencesSchema = z.object({
   customDisplayName: z.string().nullable(),
   tone: ToneSchema,
   reminderConfirmation: z.enum(["auto", "preview"]).optional(),
+  advanceReminderDays: z.number().int().min(1).max(7).nullable().optional(),
+  advanceReminderHours: z.number().int().min(1).max(24).nullable().optional(),
 }).strict();
 
 export const UpdatePreferencesSchema = z.object({
@@ -15,6 +17,8 @@ export const UpdatePreferencesSchema = z.object({
   customDisplayName: z.string().nullable().optional(),
   tone: ToneSchema.optional(),
   reminderConfirmation: z.enum(["auto", "preview"]).optional(),
+  advanceReminderDays: z.number().int().min(1).max(7).nullable().optional(),
+  advanceReminderHours: z.number().int().min(1).max(24).nullable().optional(),
 }).strict();
 
 export const PreferencesResponseSchema = z.object({

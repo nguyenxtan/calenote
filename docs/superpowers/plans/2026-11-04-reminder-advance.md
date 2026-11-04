@@ -34,9 +34,9 @@ Files: src/modules/reminders/infrastructure/d1/api-store.ts, real D1 integration
 
 ### Task3: Add persisted advance preferences and scheduler
 Files: preferences contract/service/D1 store, SettingsPanel; event/reminder creation and cancellation domain; additive migration as needed.
-- [ ] Confirm independent-offset interpretation from pending answer or ledger reasonable assumption.
-- [ ] Write range/persistence/UI save tests and real-D1 scheduling tests with known event time, explicit override, past/duplicate/cancel cases; observe RED.
-- [ ] Implement validated controls and deterministic event-linked scheduling; observe GREEN; commit and ledger.
+- [x] Confirm independent-offset interpretation from pending answer or ledger reasonable assumption.
+- [x] Write range/persistence/UI save tests and real-D1 scheduling tests with known event time, explicit override, past/duplicate/cancel cases; observe RED.
+- [x] Implement validated controls and deterministic event-linked scheduling; observe GREEN; commit and ledger.
 
 ### Task4: Repair and recheck recurrence findings
 Files: semantic generation/resolution files identified by reproductions for A06/A07/A08/A10; source fixtures from cost report.

@@ -3,6 +3,7 @@ import { encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV2,
 import type { LunarCalendarAdapter } from "../lunar-calendar";
 import { isValidSemanticLocalDate } from "@/modules/semantic/validation";
 import type { SeriesOccurrence } from "@/modules/reminders/series";
+import { planAdvanceReminders } from "@/modules/preferences/advance-reminders";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
 
 export const RESOLUTION_VERSION = "context-resolution-1";
@@ -82,9 +83,14 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   if (["WEEKLY", "MONTHLY", "YEARLY"].includes(frequency)) return { status: "UNSUPPORTED", capability: frequency };
   if (frequency === "UNKNOWN") issue("frequency", "UNKNOWN_FREQUENCY");
   if (!slots.title.value) issue("title", "MISSING");
+  const advancePolicy = candidate.schemaVersion === "calenote-context-state-2" ? candidate.advanceReminders : undefined;
+  const useAdvance = !!advancePolicy && (advancePolicy.days !== null || advancePolicy.hours !== null)
+    && frequency === "ONCE" && slots.eventDate.value !== null && slots.eventTime.value !== null
+    && slots.reminderDate.value === null && slots.reminderTime.value === null && slots.leadOffsetDays.value === null
+    && slots.eventRelation.value !== "BEFORE_EVENT";
   const clock = (field: "reminderTime" | "eventTime") => {
     const value = slots[field].value;
-    if (!value) { if (field === "reminderTime") issue(field, "MISSING"); return null; }
+    if (!value) { if (field === "reminderTime" && !useAdvance) issue(field, "MISSING"); return null; }
     const parsed = ClockOperandSchema.safeParse(value);
     if (!parsed.success || value.qualifier === "UNKNOWN") { issue(field, "AMBIGUOUS_TIME"); return null; }
     const hour = value.qualifier === "PM" ? value.hour % 12 + 12 : value.qualifier === "AM" ? value.hour % 12 : value.hour;
@@ -102,6 +108,35 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     dates[field] = result.date;
     slot.resolution = { method: result.method, version: RESOLUTION_VERSION, referenceTime: new Date(receipt).toISOString(), timezone: "Asia/Ho_Chi_Minh", dependencies: [] };
     if (result.inferredYear) slot.provenance = { kind: "DERIVED_POLICY", policyVersion: RESOLUTION_VERSION, referenceTime: new Date(receipt).toISOString(), dependencies: [] };
+  }
+  const finish = (occurrences: SeriesOccurrence[]): RequestResolution => {
+    const source = slots.eventDate.value ?? slots.reminderDate.value;
+    const selected = slots.eventDate.value ? slots.eventDate : slots.reminderDate;
+    const provenance = selected.provenance ?? { kind: "DERIVED_POLICY", policyVersion: RESOLUTION_VERSION, dependencies: [], referenceTime: selected.resolution!.referenceTime } as SlotProvenance;
+    const details: CanonicalDetailsV1 = { schemaVersion: "calenote-reminder-details-1", location: slots.location.value, notes: slots.notes.value, eventDate: dates.eventDate ?? null, eventTime,
+      calendarProvenance: { calendar: source?.kind === "CIVIL_DATE" ? source.calendar : slots.calendar.value ?? "GREGORIAN", sourceDate: source, provenance: provenance.kind === "DERIVED_POLICY" ? { ...provenance, dependencies: [] } : provenance }, resolutionVersion: RESOLUTION_VERSION, ...(useAdvance ? { advanceReminders: advancePolicy } : {}) };
+    const render = renderReminderDetails(slots.title.value!, details, occurrences);
+    if (render.status === "TOO_LONG") {
+      for (const field of ["title", "location", "notes"] as const) if (slots[field].value !== null) issue(field, "DETAILS_TOO_LONG");
+      return clarification();
+    }
+    // A residual invariant failure is not evidence that the user's notes are
+    // wrong. Known missing dependencies are targeted above before rendering.
+    if (render.status === "INVALID") { issue("operation", "INVALID_DETAILS"); return clarification(); }
+    const resolvedFacts = projectResolvedFacts(slots, candidate.facts);
+    try {
+      const encoded = candidate.schemaVersion === "calenote-context-state-2" ? encodeContextSnapshotV2({ ...candidate, slots, facts: resolvedFacts }) : encodeContextSnapshot({ ...candidate, slots, facts: resolvedFacts });
+      if (new TextEncoder().encode(encoded).length > 16384) { issue("operation", "CONTEXT_SNAPSHOT_TOO_LARGE"); return clarification(); }
+    } catch { issue("operation", "INVALID_RESOLVED_STATE"); return clarification(); }
+    return { status: "READY", resolvedSlots: slots, resolvedFacts, occurrences, details };
+  };
+  if (useAdvance && advancePolicy && dates.eventDate && eventTime) {
+    if (fields.length) return clarification();
+    const eventAt = Date.parse(`${dates.eventDate}T${eventTime}:00+07:00`);
+    const planned = planAdvanceReminders(eventAt, advancePolicy, now);
+    if (planned.status !== "READY") { issue("eventDate", planned.status === "PAST" ? "ADVANCE_REMINDER_IN_PAST" : "INVALID_ADVANCE_POLICY"); return clarification(); }
+    if (planned.occurrences.some(o => o.scheduledAt-now > 366*DAY_MS)) { issue("eventDate","HORIZON_LIMIT"); return clarification(); }
+    return finish(planned.occurrences);
   }
   const relation = slots.eventRelation.value;
   let count = frequency === "ONCE" ? 1 : slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
@@ -145,23 +180,5 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     occurrences.push({ index, scheduledAt, localDate: civil(day) });
   }
   if (fields.length) return clarification();
-  const source = slots.eventDate.value ?? slots.reminderDate.value;
-  const selected = slots.eventDate.value ? slots.eventDate : slots.reminderDate;
-  const provenance = selected.provenance ?? { kind: "DERIVED_POLICY", policyVersion: RESOLUTION_VERSION, dependencies: [], referenceTime: selected.resolution!.referenceTime } as SlotProvenance;
-  const details: CanonicalDetailsV1 = { schemaVersion: "calenote-reminder-details-1", location: slots.location.value, notes: slots.notes.value, eventDate: dates.eventDate ?? null, eventTime,
-    calendarProvenance: { calendar: source?.kind === "CIVIL_DATE" ? source.calendar : slots.calendar.value ?? "GREGORIAN", sourceDate: source, provenance: provenance.kind === "DERIVED_POLICY" ? { ...provenance, dependencies: [] } : provenance }, resolutionVersion: RESOLUTION_VERSION };
-  const render = renderReminderDetails(slots.title.value!, details, occurrences);
-  if (render.status === "TOO_LONG") {
-    for (const field of ["title", "location", "notes"] as const) if (slots[field].value !== null) issue(field, "DETAILS_TOO_LONG");
-    return clarification();
-  }
-  // A residual invariant failure is not evidence that the user's notes are
-  // wrong. Known missing dependencies are targeted above before rendering.
-  if (render.status === "INVALID") { issue("operation", "INVALID_DETAILS"); return clarification(); }
-  const resolvedFacts = projectResolvedFacts(slots, candidate.facts);
-  try {
-    const encoded = candidate.schemaVersion === "calenote-context-state-2" ? encodeContextSnapshotV2({ ...candidate, slots, facts: resolvedFacts }) : encodeContextSnapshot({ ...candidate, slots, facts: resolvedFacts });
-    if (new TextEncoder().encode(encoded).length > 16384) { issue("operation", "CONTEXT_SNAPSHOT_TOO_LARGE"); return clarification(); }
-  } catch { issue("operation", "INVALID_RESOLVED_STATE"); return clarification(); }
-  return { status: "READY", resolvedSlots: slots, resolvedFacts, occurrences, details };
+  return finish(occurrences);
 }

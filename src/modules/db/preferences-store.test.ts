@@ -51,3 +51,15 @@ describe("D1UserPreferencesStore", () => {
     expect(calls[1].sql).toMatch(/ON CONFLICT\s*\(user_id\)/i);
   });
 });
+
+it("persists both advance choices per account and retains them across a new store instance", async () => {
+ const {SqliteD1Database}=await import("@/testing/sqlite-d1.test-support");const db=new SqliteD1Database({conversationV2:true});
+ try {
+  db.sqlite.exec("INSERT INTO users VALUES('advance-owner','a@example.test','A','Asia/Ho_Chi_Minh',1,1),('advance-other','b@example.test','B','Asia/Ho_Chi_Minh',1,1)");
+  const {getUserPreferences,saveUserPreferences}=await import("@/modules/preferences/service");
+  await saveUserPreferences("advance-owner",{advanceReminderDays:7,advanceReminderHours:24},new D1UserPreferencesStore(db as unknown as D1Database),100);
+  const read=new D1UserPreferencesStore(db as unknown as D1Database);
+  expect(await getUserPreferences("advance-owner",read)).toMatchObject({advanceReminderDays:7,advanceReminderHours:24});
+  expect(await getUserPreferences("advance-other",read)).toMatchObject({advanceReminderDays:null,advanceReminderHours:null});
+ } finally {db.close();}
+});
