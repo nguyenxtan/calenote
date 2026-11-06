@@ -15,7 +15,7 @@ import {frozenContextProposal} from './context-contract-fixtures';
 import {factorContextSchema} from './context-schema-factor';
 import {openAiComparisonAdmissionSchema} from './context-openai-admission-schema';
 import {constrainComparisonDateSchema} from './context-comparison-date-schema';
-import {isRetainedClosedRelationFieldUncertaintyAbsent} from '../../src/modules/conversation/context-contract/field-capability';
+import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../src/modules/conversation/context-contract/field-capability';
 import {isUnreconciledListInterpretation,readListTransport} from '../../src/modules/conversation/context-contract/list-period-transport';
 type AuditShape={properties?:Record<string,AuditShape>;anyOf?:AuditShape[];items?:AuditShape;$defs?:unknown;[key:string]:unknown};
 function noForcedEmpty(value:unknown):void {if(Array.isArray(value)){value.forEach(noForcedEmpty);return;}if(!value||typeof value!=='object')return;const node=value as Record<string,unknown>;expect(node.maxItems).not.toBe(0);for(const key of ['anyOf','oneOf'])if(Array.isArray(node[key]))expect(node[key].length).toBeGreaterThan(0);Object.values(node).forEach(noForcedEmpty);}
@@ -43,7 +43,7 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
   const operationIssuesSchema=selected.properties!.operation.anyOf!.find(branch=>branch.properties!.operationUncertainties)?.properties!.operationUncertainties.items,operationIssues=operationIssuesSchema?compileAuditShape(operationIssuesSchema):null;
   for(let fieldCode=0;fieldCode<=15;fieldCode++)for(const reason of ['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']){
    pairs++;const row={fieldCode,reason,alternatives:[]},actual=fieldCode===15?(operationIssues?.safeParse({reason,alternatives:[]}).success??false):[13,14].includes(fieldCode)?(controlIssues?.safeParse(row).success??false)||(controlIssues?.safeParse({fieldCode,reason}).success??false):(fieldIssues?.safeParse(row).success??false)||(fieldIssues?.safeParse({fieldCode,reason}).success??false);
-   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(!(fieldCode<13)||!isRetainedClosedRelationFieldUncertaintyAbsent(input)));
+   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(fieldCode>=13||!(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input))));
   }
   const actual=decodeKeyedSmallComparison(wire,input),expected=decodeSmallContextV3(encodeSmallContextV3(sorted,input),CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
   if(actual.status==='PARSED'&&expected.status==='PARSED'&&isUnreconciledListInterpretation(actual.value)&&isUnreconciledListInterpretation(expected.value))expect(readListTransport(actual.value)).toEqual(readListTransport(expected.value));else expect(actual).toEqual(expected);

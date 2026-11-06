@@ -45,7 +45,9 @@ it('preserves holes in R02 input-selected field-code domains',()=>{
  const codes=new Set<number>();
  const collect=(value:unknown):void=>{if(!value||typeof value!=='object')return;if(Array.isArray(value)){value.forEach(collect);return;}const node=value as Record<string,unknown>;const properties=node.properties as Record<string,unknown>|undefined;if(properties?.fieldCode){const points=(field:unknown):void=>{const raw=field as Record<string,unknown>;if(Array.isArray(raw.anyOf))raw.anyOf.forEach(points);else if(typeof raw.minimum==='number'&&raw.minimum===raw.maximum)codes.add(raw.minimum);};points(properties.fieldCode);}Object.values(node).forEach(collect);};
  collect(strict.properties.uncertainties.items);
- expect([...codes].sort((a,b)=>a-b)).toEqual([0,1,2,3,4,5,6,7,12,13,14,15,16,17]);
+ // This closed day/count source proves hours/minutes absent. The generic
+ // eighteen-code domain and the immutable V1 specimen remain covered above.
+ expect([...codes].sort((a,b)=>a-b)).toEqual([0,1,2,3,4,5,6,7,12,13,14,15]);
  const validator=uncertaintyCodes(googleLiteEuTypedContextWireSchemaV3(input).schema);
  for(let value=-1;value<=18;value++)expect(validator.safeParse(value).success).toBe(codes.has(value));
 });
