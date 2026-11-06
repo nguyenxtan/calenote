@@ -15,7 +15,7 @@ import {CONTEXT_OPERATION_WIRE_METADATA_V1} from './context-provider-wire';
 import {UNCERTAINTY_FIELD_WIRE_CODE_V2} from './context-provider-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
 import {keyedNoteValuePattern} from './context-keyed-note-boundary';
-import {keyedClockCorrectionField,keyedClockNotationField} from './context-keyed-clock-correction';
+import {keyedClockCorrectionField,keyedClockNotationField,keyedBoundReminderClockRequired} from './context-keyed-clock-correction';
 import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
@@ -107,6 +107,11 @@ function selected(input:ContextInput){
  if(notePattern&&noteValue){if(noteValue.type!=='string')throw Error('KEYED_NOTE_VALUE_POLICY');noteValue.pattern=notePattern;}
  const correctionField=keyedClockCorrectionField(input);
  if(correctionField){const write=(source as Schema).properties!.changes.properties!.owners.properties![correctionField]?.items?.properties?.write,operation=write?.items?.properties?.operation;if(!write||!operation?.enum?.includes('REPLACE'))throw Error('KEYED_CLOCK_CORRECTION_POLICY');write.minItems=1;operation.enum=['REPLACE'];}
+ if(keyedBoundReminderClockRequired(input)){
+  const owner=(source as Schema).properties!.changes.properties!.owners.properties!.reminderTime,write=owner?.items?.properties?.write,operation=write?.items?.properties?.operation;
+  if(!owner||!write||!operation?.enum?.includes('SET'))throw Error('KEYED_BOUND_CLOCK_POLICY');
+  owner.minItems=1;write.minItems=1;operation.enum=['SET'];
+ }
  const clockNotationField=keyedClockNotationField(input);
  if(clockNotationField){const qualifier=(source as Schema).properties!.changes.properties!.owners.properties![clockNotationField]?.items?.properties?.write.items?.properties?.value.properties?.qualifier;if(!qualifier?.enum?.includes('H24'))throw Error('KEYED_CLOCK_NOTATION_POLICY');qualifier.enum=['H24'];}
  const countOwner=(source as Schema).properties!.changes.properties!.owners.properties!.occurrenceCount;
