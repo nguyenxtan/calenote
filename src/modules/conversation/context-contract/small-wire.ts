@@ -1,3 +1,4 @@
+import { contextPromptForInput } from "./burst-prompt";
 import {COMPACT_KEYS,COMPACT_ENUMS} from '../../intelligence/infrastructure/openrouter/context-small-compact';
 import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import type {ContextInput} from './contracts';
@@ -45,5 +46,5 @@ Source-conditional title examples: In the current wire, a title WRITE value is c
 `;
 export function serializeSmallContextRequest(input:ContextInput){
  const evidenceSources=evidenceSourceCatalogue(input),selected=smallContextGenerationSchemaV3(input);
- return {messages:[{role:'system' as const,content:CONTEXT_SMALL_PROMPT},{role:'user' as const,content:JSON.stringify({...input,...(evidenceSources.length?{evidenceSources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_small_106',strict:true as const,schema:selected.schema}},stream:false as const,max_tokens:1536 as const,temperature:0 as const};
+ return {messages:[{role:'system' as const,content:contextPromptForInput(CONTEXT_SMALL_PROMPT,input)},{role:'user' as const,content:JSON.stringify({...input,...(evidenceSources.length?{evidenceSources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_small_106',strict:true as const,schema:selected.schema}},stream:false as const,max_tokens:1536 as const,temperature:0 as const};
 }

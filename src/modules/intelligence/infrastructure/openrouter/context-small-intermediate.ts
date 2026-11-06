@@ -8,6 +8,7 @@ import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
 import {contextTypedWirePrimitives,UNCERTAINTY_FIELD_WIRE_CODE_V2} from './context-provider-wire';
+import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
 type JsonSchema=Parameters<typeof z.fromJSONSchema>[0];
 type Row=Record<string,unknown>;
 type Observer=Parameters<typeof decodeGoogleLiteEuTypedContextTransportV3>[2];
@@ -96,8 +97,13 @@ export function internalFlatSchemaV3(input:ContextInput){
   return [field,obj({rank:nullableInteger,operation:{type:'string',enum:['KEEP',...operations]},value:family(field)==='integers'?nullableInteger:nil,text:nullableText,date:dateValue,evidence:{...evidence,minItems:0}})];
  }));
  const targetEvidence={...arr({type:'string',enum:[...book.currentCodes]}),minItems:1,maxItems:3};
+ const burstMembers=currentBurstTurnIndexes(parsed);
+ const newEvidence=burstMembers.length?{...targetEvidence,items:{type:'string',enum:book.entries.filter(entry=>entry.kind!=='CONTEXT_FACT'&&entry.turn!==undefined&&burstMembers.includes(entry.turn)).map(entry=>entry.code)}}:targetEvidence;
  // Do not infer CURRENT versus NEW from the relation certificate.
- const operation={anyOf:[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence}),obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
+ const targeted=burstMembers.length
+  ?[obj({code:{type:'string',enum:['0','2','9','11']},targetEvidence}),obj({code:{type:'string',enum:['1','10']},targetEvidence:newEvidence})]
+  :[obj({code:{type:'string',enum:['0','1','2','9','10','11']},targetEvidence})];
+ const operation={anyOf:[...targeted,obj({code:{type:'string',enum:['3','4','5','6','7','8']},targetEvidence:{...arr({type:'string',enum:[...codes]}),maxItems:0}})]};
  const {$schema:ignoredClockSchema,...clockSchema}=z.toJSONSchema(ClockOperandSchema,{unrepresentable:'any',io:'input'});void ignoredClockSchema;
  // Ordinary collection maxima stay strict downstream: provider compilers may
  // unroll bounded object arrays. Field-keyed carriers are a new producer grammar; clock values remain a strict ordered stream,

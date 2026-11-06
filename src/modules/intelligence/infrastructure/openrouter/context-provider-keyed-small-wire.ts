@@ -22,6 +22,7 @@ import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
+import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
 const operationLabels:Record<string,string>={
  'CREATE_REMINDER/CURRENT':'CONTINUE_CURRENT_REMINDER','CREATE_REMINDER/NEW':'START_NEW_REMINDER','CREATE_REMINDER/UNRESOLVED':'ASK_WHICH_REMINDER',
  'LIST_REMINDERS':'LIST_REMINDERS','CALENDAR_QUERY':'CALENDAR_QUERY','CAPABILITY_QUERY':'CAPABILITY_QUERY','HELP':'HELP','UNSUPPORTED':'UNSUPPORTED',
@@ -102,7 +103,7 @@ function selected(input:ContextInput){
   title.items!.properties!.write.items!.properties!.operation.enum=['SET'];
   owners.eventDate.items!.properties!.write.items!.properties!.value=structuredClone(primaryDate.items!.properties!.write.items!.properties!.value);
  }
- const notePattern=keyedNoteValuePattern(input),noteValue=(source as Schema).properties!.changes.properties!.owners.properties!.notes?.items?.properties?.write.items?.properties?.value;
+ const notePattern=currentBurstTurnIndexes(input).length?undefined:keyedNoteValuePattern(input),noteValue=(source as Schema).properties!.changes.properties!.owners.properties!.notes?.items?.properties?.write.items?.properties?.value;
  if(notePattern&&noteValue){if(noteValue.type!=='string')throw Error('KEYED_NOTE_VALUE_POLICY');noteValue.pattern=notePattern;}
  const correctionField=keyedClockCorrectionField(input);
  if(correctionField){const write=(source as Schema).properties!.changes.properties!.owners.properties![correctionField]?.items?.properties?.write,operation=write?.items?.properties?.operation;if(!write||!operation?.enum?.includes('REPLACE'))throw Error('KEYED_CLOCK_CORRECTION_POLICY');write.minItems=1;operation.enum=['REPLACE'];}
@@ -130,6 +131,13 @@ function selected(input:ContextInput){
  if(!uncertaintyRows.length)throw Error('KEYED_FIELD_UNCERTAINTY_POLICY');issues.maxItems=fieldRows.length?4:0;issues.items=fieldRows.length?{anyOf:fieldRows}:{type:'object',properties:{},required:[],additionalProperties:false};
  if(isRetainedClosedRelationFieldUncertaintyAbsent(input))issues.maxItems=0;
  const operationReasons=uncertaintyReasons.get(operationCode),operationIssue:Schema={type:'object',properties:{reason:{type:'string',enum:[...operationReasons??[]]},alternatives:{type:'array',maxItems:2,items:{type:'object',properties:{value:{type:'string',enum:['CURRENT','NEW']},evidence:{type:'array',minItems:1,maxItems:3,items:{type:'string',enum:[...primaryEvidenceSourceCodebook(input).currentCodes]}}},required:['value','evidence'],additionalProperties:false}}},required:['reason','alternatives'],additionalProperties:false};
+ const burstMembers=currentBurstTurnIndexes(input);
+ if(burstMembers.length){
+  const alternative=operationIssue.properties!.alternatives.items!,current=structuredClone(alternative),fresh=structuredClone(alternative);
+  current.properties!.value.enum=['CURRENT'];fresh.properties!.value.enum=['NEW'];
+  fresh.properties!.evidence.items!.enum=book.entries.filter(entry=>entry.kind!=='CONTEXT_FACT'&&entry.turn!==undefined&&burstMembers.includes(entry.turn)).map(entry=>entry.code);
+  operationIssue.properties!.alternatives.items={anyOf:[current,fresh]};
+ }
  operation.anyOf=operation.anyOf.flatMap(branch=>['RESOLVED_REMINDER','OTHER','UNKNOWN_ACTION'].flatMap(group=>{
   const ambiguous=group==='UNKNOWN_ACTION',resolved=group==='RESOLVED_REMINDER';
   const codes=(branch.properties!.code.enum as string[]).filter(code=>resolved?['0','1'].includes(code):ambiguous?['9','10','11'].includes(code):!['0','1','9','10','11'].includes(code));if(!codes.length||ambiguous&&!operationReasons?.size)return [];

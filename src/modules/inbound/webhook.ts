@@ -10,6 +10,7 @@ import {
 } from "@/modules/platform/types";
 import type { Keyring } from "@/modules/security/keyring";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
+import {BURST_QUIET_SECONDS,isBurstFragment} from '@/modules/conversation/context-contract/burst-policy';
 import {
   enqueueInboundWithReservation,
   type InboundDispatchStore,
@@ -193,7 +194,7 @@ export class D1InboundWebhookStore implements InboundStore {
 export interface AcceptWebhookDependencies {
   store: InboundStore;
   dispatchStore: InboundDispatchStore;
-  enqueue(job: ProcessInboundJob): Promise<void>;
+  enqueue(job: ProcessInboundJob, options?:{delaySeconds:number}): Promise<void>;
   parseWebhook?(payload: unknown): InboundTextMessage | null;
   keyring: Pick<Keyring, "encryptSensitive">;
   now?: Clock;
@@ -218,10 +219,11 @@ async function publishOrUnavailable(
   now: number,
   dependencies: AcceptWebhookDependencies,
   randomBytes: RandomBytes,
+  delaySeconds = 0,
 ): Promise<WebhookAcceptance> {
   const result = await enqueueInboundWithReservation(inboundId, now, {
     store: dependencies.dispatchStore,
-    enqueue: dependencies.enqueue,
+    enqueue: job=>delaySeconds?dependencies.enqueue(job,{delaySeconds}):dependencies.enqueue(job),
     randomBytes,
   });
   return { status: result.status === "PUBLISH_FAILED" ? 503 : 200 };
@@ -246,6 +248,7 @@ export async function acceptWebhookMessage(
   const privateChatId = normalizeIdentifier(message.privateChatId);
   const displayName = message.displayName?.normalize("NFC") ?? null;
   const text = normalizeLineEndings(message.text);
+  const delaySeconds=isBurstFragment(text)?BURST_QUIET_SECONDS:0;
   const duplicate = await dependencies.store.findDuplicate(
     connection.provider,
     connection.id,
@@ -255,7 +258,7 @@ export async function acceptWebhookMessage(
   const receivedNow = now();
   const randomBytes = dependencies.randomBytes ?? cryptoRandomBytes;
   if (duplicate) {
-    return publishOrUnavailable(duplicate.id, receivedNow, dependencies, randomBytes);
+    return publishOrUnavailable(duplicate.id, receivedNow, dependencies, randomBytes,delaySeconds);
   }
 
   const inboundId = randomOpaqueId(randomBytes);
@@ -288,7 +291,7 @@ export async function acceptWebhookMessage(
   };
 
   if (await dependencies.store.insert(record)) {
-    return publishOrUnavailable(inboundId, receivedNow, dependencies, randomBytes);
+    return publishOrUnavailable(inboundId, receivedNow, dependencies, randomBytes,delaySeconds);
   }
 
   const raced = await dependencies.store.findDuplicate(
@@ -298,7 +301,7 @@ export async function acceptWebhookMessage(
     providerMessageId,
   );
   if (!raced) throw new Error("Inbound dedupe result was unavailable");
-  return publishOrUnavailable(raced.id, receivedNow, dependencies, randomBytes);
+  return publishOrUnavailable(raced.id, receivedNow, dependencies, randomBytes,delaySeconds);
 }
 
 export async function acceptWebhook(

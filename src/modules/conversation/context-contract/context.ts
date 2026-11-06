@@ -5,6 +5,7 @@ import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV
 import { ContextObservationBindingSchema, ContextSnapshotV1Schema, encodeContextSnapshot, type ContextObservation, type ContextSnapshotV1, type TranscriptEntry, type SourceEvidence } from "./state";
 import { measureLegacyV2EnvelopeReference, type EnvelopeMeasurement } from "./admission";
 import { containsForbiddenControl, projectSemanticView } from "./projection";
+import {burstMemberIndexes} from './burst-policy';
 export type ContextBuildArgs = { message: BoundChatMessage; context: BoundChatContext; snapshot: ContextSnapshotV1 | null; observation: ContextObservation };
 export type ReadyContext = { status: "READY"; input: ContextInput; observation: ContextObservation; evidenceIndex: readonly TranscriptEntry[]; sourceMap: readonly TranscriptEntry["sourceMap"][]; candidateSnapshot: ContextSnapshotV1; candidateSnapshotJson: string; measurement: EnvelopeMeasurement };
 export type ContextBuildResult = ReadyContext | { status: "REFUSED"; reason: string };
@@ -210,11 +211,13 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     const questions = [state?.pendingQueryQuestion, state?.pendingReminderQuestion].filter(q => q?.deliveryState === "SENT" && !later(q.issuedAfterOrder, inbound));
     // Latest query question takes priority; assistant receipt is never evidence.
     const question = questions[0];
+    const members=successor?burstMemberIndexes(state as ContextSnapshotV2|null,evidenceIndex):undefined;
     const raw = {
       schemaVersion: successor ? "calenote-context-input-2" : "calenote-context-input-1",
       reference: { instant, localDate: new Date(message.receivedAt + 7 * 3600000).toISOString().slice(0, 10), timezone: "Asia/Ho_Chi_Minh" },
       turns: evidenceIndex.map(t => ({ role: t.role, text: t.semanticView })),
       currentTurn: evidenceIndex.length - 1,
+      ...(members?{currentBurstTurns:members,currentBurstReferences:members.map(turn=>({turn,instant:evidenceIndex[turn].receivedAt,localDate:new Date(Date.parse(evidenceIndex[turn].receivedAt)+7*3600000).toISOString().slice(0,10)}))}:{}),
       activeRequest: active,
       facts: projectedFacts,
       pendingQuestion: question ? { text: question.text, scope: question.scope, field: question.field, decisionKind: question.decisionKind, reason: question.reason } : null,

@@ -15,6 +15,7 @@ import { supportsCadenceOperand, leadDistanceCovered } from "./cadence-count-evi
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
+import { currentRequestTurnIndexes } from "./burst-prompt";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -566,7 +567,9 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       }
     }
     const target = value.requestTarget ? resolve(value.requestTarget.evidence, "CONTROL", "operation", value.requestTarget.kind, ["requestTarget", "evidence"]) : null;
-    const offendingTarget=value.requestTarget?.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||ref.turn!==built.input.currentTurn)??-1;
+    const newRequestTurns = currentRequestTurnIndexes(built.input);
+    const targetTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];
+    const offendingTarget=value.requestTarget?.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||!targetTurns.includes(ref.turn))??-1;
     if (target && offendingTarget>=0) traceCurrentFailure(value.requestTarget!.evidence[offendingTarget],{field:"operation",path:["requestTarget","evidence"],referenceOrdinal:offendingTarget},"FIRST_OFFENDING");
     // Current USER evidence grounds the instruction, not target existence.
     // Only the builder's privately retained, scope/revision/lifetime-checked
@@ -583,7 +586,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       ...value.changes.map(change => change.evidence),
       ...value.uncertainties.flatMap(uncertainty => uncertainty.alternatives.map(alternative => alternative.evidence)),
     ];
-    if (value.requestTarget?.kind === "NEW" && freshOperandEvidence.some(refs => refs.some(ref => ref.kind !== "USER_QUOTE" || ref.turn !== built.input.currentTurn))) fail("NEW_REQUEST_FACT_REUSE");
+    if (value.requestTarget?.kind === "NEW" && freshOperandEvidence.some(refs => refs.some(ref => ref.kind !== "USER_QUOTE" || !newRequestTurns.includes(ref.turn)))) fail("NEW_REQUEST_FACT_REUSE");
     const pending = built.candidateSnapshot.pendingSemanticCandidate;
     const question = built.candidateSnapshot.pendingReminderQuestion;
     const retainedUncertainties: SemanticPatchProposalV3["uncertainties"] = [];
@@ -654,7 +657,8 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
         : V3_SLOT_NAMES.includes(uncertainty.field as typeof V3_SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
       const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
         const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value, ["uncertainties", index, "alternatives", alternativeIndex, "evidence"]);
-        const offending=alternative.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||ref.turn!==built.input.currentTurn);
+        const alternativeTurns = alternative.value === "NEW" ? newRequestTurns : [built.input.currentTurn];
+        const offending=alternative.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||!alternativeTurns.includes(ref.turn));
         if (uncertainty.field === "operation" && offending>=0) traceCurrentFailure(alternative.evidence[offending],{field:uncertainty.field,path:["uncertainties",index,"alternatives",alternativeIndex,"evidence"],referenceOrdinal:offending},"FIRST_OFFENDING");
         alternativeEvidence.push(evidenceMetadata(resolved));
         return { ...alternative, value: resolved.resolvedValue };
@@ -692,21 +696,26 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
     if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!reminderDateCoverageComplete(built.input,value)) fail("SEMANTIC_REMINDER_DATE_UNOWNED");
-    if (!titleCoverageComplete({ intent:value.intent,target:value.requestTarget,currentTurn:built.evidenceIndex[built.input.currentTurn],
+    const coverageTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];
+    for (const turnIndex of coverageTurns) {
+    const currentTurn = built.evidenceIndex[turnIndex];
+    const currentRequestMember = value.requestTarget?.kind === "NEW" && coverageTurns.length > 1;
+    if (!titleCoverageComplete({ intent:value.intent,target:value.requestTarget,currentTurn,currentRequestMember,
       changes:keptChanges.map(p=>p.change),changeEvidence:keptChanges.map(p=>p.bound),uncertainties:resolvedUncertainties,alternativeEvidence:keptAlternativeEvidence,
       retainedTitle:internal.snapshot?.slots.title.state==="RESOLVED" && typeof internal.snapshot.slots.title.value==="string" ? internal.snapshot.slots.title.value : null,
     })) fail("SEMANTIC_TITLE_OMITTED");
     if (!locationCoverageComplete({ intent: value.intent, target: value.requestTarget,
-      currentTurn: built.evidenceIndex[built.input.currentTurn],
+      currentTurn, currentRequestMember,
       changes: keptChanges.map(p => p.change), changeEvidence: keptChanges.map(p => p.bound),
       uncertainties: resolvedUncertainties, alternativeEvidence: keptAlternativeEvidence,
       retainedLocation: internal.snapshot?.slots.location.state === "RESOLVED" && typeof internal.snapshot.slots.location.value === "string" ? internal.snapshot.slots.location.value : null,
     })) fail("SEMANTIC_LOCATION_OMITTED");
-    if (value.intent === "CREATE_REMINDER" && !leadDistanceCovered(built.evidenceIndex[built.input.currentTurn],
+    if (value.intent === "CREATE_REMINDER" && !leadDistanceCovered(currentTurn,
       keptChanges.map(p => p.change), resolvedUncertainties.flatMap(u => u.alternatives.map(a => ({ field: u.field, value: a.value }))),
       value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.leadOffsetDays.state !== "CONFLICT" ? internal.snapshot?.slots.leadOffsetDays.value : null,
       value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.frequency.value === "DAILY" && internal.snapshot.slots.frequency.state !== "CONFLICT" && internal.snapshot.slots.occurrenceCount.state !== "CONFLICT" ? internal.snapshot.slots.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
-    if (value.intent === "CREATE_REMINDER" && !leadDurationCovered(built.evidenceIndex[built.input.currentTurn],keptChanges.map(p=>p.change))) fail("SEMANTIC_LEAD_DURATION_OMITTED");
+    if (value.intent === "CREATE_REMINDER" && !leadDurationCovered(currentTurn,keptChanges.map(p=>p.change))) fail("SEMANTIC_LEAD_DURATION_OMITTED");
+    }
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,
       proposal: value,

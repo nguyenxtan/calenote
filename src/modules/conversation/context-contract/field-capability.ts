@@ -10,6 +10,7 @@ import {resolveDateOperand} from "./resolve";
 import {lunarCalendar} from "../../conversation/lunar-calendar";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isEventDateOnlySourceText, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
+import { currentBurstTurnIndexes } from "./burst-prompt";
 
 /** Sufficient whole initial reminder source only; no operands or proposal output. */
 export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean {
@@ -391,6 +392,23 @@ export function isInitialSupportedCadenceCount(input:ContextInput):boolean {
  * CURRENT retained slots and NEW proposals still require downstream ownership.
  */
 export function deriveGenerationFieldCapability(input: ContextInput): GenerationFieldCapability {
+  const members = currentBurstTurnIndexes(input);
+  if (members.length) {
+    // Isolated source probes only: no joined text or scanner operand escapes.
+    // A whole-message certificate is not a certificate for the whole burst.
+    const capabilities = members.map((index, ordinal) => deriveGenerationFieldCapability({ ...input,
+      currentBurstTurns: undefined, currentBurstReferences: undefined,
+      turns: [input.turns[index]], currentTurn: 0,
+      reference: { ...input.reference, instant: input.currentBurstReferences![ordinal].instant,
+        localDate: input.currentBurstReferences![ordinal].localDate },
+    }));
+    return { version: "generation-field-capability-16", reminderDateProposalAllowed: true,
+      eventDateYearNullRequired: false, notesProposalAllowed: true, titlePresenceRequired: false, titleCorrectionAllowed: false,
+      calendarProposalAllowed: capabilities.some(capability => capability.calendarProposalAllowed),
+      allowedNumericFields: NUMERIC_PROPOSAL_FIELDS.filter(field => capabilities.some(capability => capability.allowedNumericFields.includes(field))),
+      allowedClockFields: CLOCK_PROPOSAL_FIELDS.filter(field => capabilities.some(capability => capability.allowedClockFields.includes(field))),
+    };
+  }
   const allowed = new Set<NumericProposalField>();
   const clocks = new Set<ClockProposalField>();
   const current = input.turns[input.currentTurn];

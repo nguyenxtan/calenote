@@ -5,8 +5,8 @@
       "id": "2026-11-04-reminder-completion",
       "commit": null,
       "releasedAt": null,
-      "title": "Lịch nhắc linh hoạt và mức sử dụng AI",
-      "summary": "Nhắc trước theo giờ/phút, lịch tuần/tháng hữu hạn, quản lý chuỗi và xem mức sử dụng AI của tài khoản.",
+      "title": "Lịch nhắc, tin nhắn liên tiếp và xuất lịch",
+      "summary": "Bổ sung lịch tuần/tháng, nhắc trước theo giờ/phút, mức sử dụng AI, gom tin nhắn và tải lịch; kết nối Google cần được kích hoạt riêng.",
       "kind": "Tính năng",
       "changes": [
         "Lưu lựa chọn nhắc trước1–7 ngày và1–24 giờ, mỗi mốc có thể tắt; hai mốc trùng nhau chỉ tạo một thông báo.",
@@ -21,7 +21,9 @@
         "Nhắc trước sự kiện theo số giờ/phút được nói rõ trong chat; backend tính giờ gửi, kể cả qua nửa đêm.",
         "Hỏi lại khi thiếu giờ sự kiện hoặc có mốc thời gian mâu thuẫn; sửa giờ sự kiện sẽ tính lại, xóa khoảng nhắc sẽ bỏ dữ liệu cũ.",
         "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem.",
-        "Xử lý tin nhắn liên tiếp theo thứ tự trong từng cuộc chat và giữ lượt xử lý cho đến khi phản hồi đã gửi xong."
+        "Xử lý đúng thứ tự và gom tối đa ba tin nhắn liên tiếp thành một yêu cầu, giữ riêng bằng chứng từng tin; xác nhận phải đến sau khi bản nháp được gửi.",
+        "Tải lịch .ics riêng của tài khoản, gồm chuỗi và lịch hoãn; nhóm nhắc trước được xuất thành một sự kiện, thông báo giới hạn dữ liệu rõ ràng.",
+        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
@@ -31,9 +33,11 @@
         "Xem và hủy chuỗi lời nhắc AI; lịch năm, lịch lặp âm và nhiều thứ trong tuần chưa hỗ trợ.",
         "Có thể nói “họp lúc15h, nhắc trước90phút” để nhắc lúc13h30; vẫn cần xác nhận bản nháp.",
         "Xem chi phí AI trong Cài đặt; khoản dự phòng được tách riêng và không được tính thành chi phí trung bình hay hóa đơn.",
-        "Tin nhắn gửi sát nhau được xử lý theo thứ tự, tránh tin sau chạy vượt khi trợ lý đang trả lời tin trước."
+        "Gom các tin gửi sát nhau khi bắt đầu yêu cầu mới để giảm câu hỏi và lượt gọi AI; xác nhận sớm sẽ giữ bản nháp để xác nhận lại.",
+        "Tải file .ics trong Cài đặt để nhập vào ứng dụng lịch; đây là bản tải một lần, không tự cập nhật.",
+        "Có mục Google Calendar trong Cài đặt; đồng bộ chỉ bật sau khi hoàn tất thiết lập và cấp quyền. Ngắt kết nối giữ các sự kiện đã gửi."
       ],
-      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production. Kiểm tra giờ/phút, giữ đơn vị và bằng chứng, sửa/xóa, bản mã dữ liệu cũ, codec production và80 kịch bản với144 lượt diễn giải giả lập. Kiểm tra tổng hợp chi phí, biên kỳ UTC, quyền phiên/tài khoản, dữ liệu cũ thiếu metadata, phản hồi đến muộn và giao diện truy cập được."
+      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production. Kiểm tra giờ/phút, giữ đơn vị và bằng chứng, sửa/xóa, bản mã dữ liệu cũ, codec production và80 kịch bản với144 lượt diễn giải giả lập. Kiểm tra tổng hợp chi phí, biên kỳ UTC, quyền phiên/tài khoản, dữ liệu cũ thiếu metadata, phản hồi đến muộn và giao diện truy cập được. Kiểm tra thứ tự, lượt gửi chưa xong, xác nhận sớm, gom tin và nguồn từng mốc ngày/giờ; xuất lịch, quyền phiên, giới hạn và kết nối Google bằng transport giả lập với D1/Workerd. Google chưa được kích hoạt hoặc kiểm thử trên tài khoản thật."
     },
     {
       "id": "2026-11-03-cloudflare-ai-transport",

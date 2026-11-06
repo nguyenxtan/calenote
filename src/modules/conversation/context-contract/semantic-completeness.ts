@@ -3,6 +3,7 @@ import type { ValidatedFieldEvidence } from "./evidence";
 import type { TranscriptEntry } from "./state";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { isBareRetainedSeriesOffsetAnswer } from "./lead-offset-evidence";
+import { currentBurstTurnIndexes } from "./burst-prompt";
 
 /** Whole numeric clock answer only; the scanner validates existing clock
  * grammar, but its parsed value is never returned or used as a proposal. */
@@ -35,6 +36,8 @@ type CoverageInput = {
   uncertainties: SemanticPatchProposalV3["uncertainties"];
   alternativeEvidence: readonly ValidatedFieldEvidence[];
   retainedLocation: string | null;
+  /** NEW member selected by the backend; never makes its evidence current. */
+  currentRequestMember?: boolean;
 };
 
 /** Sufficient initial whole-clause exclusion only; unknown context never counts as empty. */
@@ -79,6 +82,9 @@ export function isBoundRetainedSeriesNotesFree(input:ContextInput):boolean {
   return earlierUsers.length===1&&offsetSource(current.text);
 }
 export function notesCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
+  if (proposal.intent === "CREATE_REMINDER" && proposal.requestTarget?.kind === "NEW" && currentBurstTurnIndexes(input).length) {
+    return burstFieldSourcesOwned(input, proposal, "notes", isInitialIsolatedExamNotesFree);
+  }
   return proposal.intent!=="CREATE_REMINDER" || !(isInitialIsolatedExamNotesFree(input)||proposal.requestTarget?.kind==="CURRENT"&&isBoundRetainedSeriesNotesFree(input))
     || !proposal.changes.some(change=>change.field==="notes") && !proposal.uncertainties.some(issue=>issue.field==="notes"&&issue.alternatives.length>0);
 }
@@ -96,8 +102,37 @@ export function isEventDateOnlySourceText(text:string,referenceInstant:unknown):
   return date.state==="RESOLVED"&&["DAY_MONTH","EXPLICIT_DATE"].includes(date.source);
 }
 export function reminderDateCoverageComplete(input:ContextInput,proposal:SemanticPatchProposalV3):boolean {
+  if (proposal.intent === "CREATE_REMINDER" && proposal.requestTarget?.kind === "NEW" && currentBurstTurnIndexes(input).length) {
+    return burstFieldSourcesOwned(input, proposal, "reminderDate", isBurstEventDateOnlySource);
+  }
   return proposal.intent!=="CREATE_REMINDER"||!isInitialEventDateOnlySource(input)
     ||!proposal.changes.some(change=>change.field==="reminderDate")&&!proposal.uncertainties.some(issue=>issue.field==="reminderDate"&&issue.alternatives.length>0);
+}
+
+/** Reject-only relative ownership for the same finite exam source language.
+ * A later clock cannot turn its event's today/tomorrow into a notification
+ * date. Unknown clauses decline this veto; scanner values never escape it. */
+function isBurstEventDateOnlySource(source: ContextInput): boolean {
+  if (isInitialEventDateOnlySource(source)) return true;
+  if (!isInitialIsolatedExamNotesFree(source)
+    || !/^\s*(?:mai|hôm nay)\s+đi thi(?:\s|[,;.!]|$)/iu.test(source.turns[0].text)) return false;
+  const date = extractTemporalEvidence({ text: source.turns[0].text, referenceNow: Date.parse(source.reference.instant) }).date;
+  return date.state === "RESOLVED" && (date.source === "TODAY" || date.source === "TOMORROW");
+}
+
+/** Apply the existing sufficient ownership veto to each cited member rather
+ * than granting a whole-burst absence certificate from one message. */
+function burstFieldSourcesOwned(input: ContextInput, proposal: SemanticPatchProposalV3, field: "notes" | "reminderDate", sourceExcludesField: (source: ContextInput) => boolean): boolean {
+  const excluded = new Set(currentBurstTurnIndexes(input).filter((turn, ordinal) => {
+    const reference = input.currentBurstReferences![ordinal];
+    return sourceExcludesField({ ...input, turns: [input.turns[turn]], currentTurn: 0,
+      currentBurstTurns: undefined, currentBurstReferences: undefined,
+      reference: { ...input.reference, instant: reference.instant, localDate: reference.localDate },
+    });
+  }));
+  const evidence = [...proposal.changes.filter(change => change.field === field).map(change => change.evidence),
+    ...proposal.uncertainties.filter(issue => issue.field === field).flatMap(issue => issue.alternatives.map(alternative => alternative.evidence))];
+  return evidence.every(refs => !refs.every(ref => ref.kind === "USER_QUOTE" && excluded.has(ref.turn)));
 }
 
 /** Presence/coverage only for the initial literal complete exam task. Unknown
@@ -128,8 +163,8 @@ export function titleCoverageComplete(input: Omit<CoverageInput,"retainedLocatio
   if(input.target?.kind==="CURRENT"&&isFirstPersonExamClockAssertion(input.currentTurn.semanticView))return true;
   if(input.intent!=="CREATE_REMINDER" || input.currentTurn.role!=="USER" || examTitleCoverage(input.currentTurn.semanticView)===null) return true;
   const text=input.currentTurn.semanticView;
-  const covered=(value:unknown,bound:ValidatedFieldEvidence|undefined)=>examTitleCoverage(text,value)===true && bound?.current===true
-    && bound.sources.some(source=>source.sourceTurnId===input.currentTurn.id && examTitleCoverage([...text].slice(source.viewSpan.start,source.viewSpan.end).join(""),value)===true);
+  const covered=(value:unknown,bound:ValidatedFieldEvidence|undefined)=>examTitleCoverage(text,value)===true && (bound?.current===true || input.currentRequestMember===true)
+    && bound?.sources.some(source=>source.sourceTurnId===input.currentTurn.id && examTitleCoverage([...text].slice(source.viewSpan.start,source.viewSpan.end).join(""),value)===true);
   const titles=input.changes.map((change,index)=>({change,bound:input.changeEvidence[index]})).filter(p=>p.change.field==="title");
   if(titles.some(p=>p.change.operation!=="CLEAR" && covered(p.change.value,p.bound))) return true;
   let index=0, alternativeCovered=false;
@@ -180,7 +215,7 @@ export function locationCoverageComplete(input: CoverageInput): boolean {
     };
     const covered = (value: unknown, bound: ValidatedFieldEvidence | undefined) => {
       const span = literalSpan(value);
-      return span !== null && bound?.current === true && bound.sources.some(source => source.sourceTurnId === input.currentTurn.id
+      return span !== null && (bound?.current === true || input.currentRequestMember === true) && bound?.sources.some(source => source.sourceTurnId === input.currentTurn.id
         && source.viewSpan.start <= start && source.viewSpan.end >= span.end);
     };
     const locations = input.changes.map((change,index) => ({change,bound:input.changeEvidence[index]})).filter(p => p.change.field === "location");

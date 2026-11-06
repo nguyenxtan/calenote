@@ -1,0 +1,23 @@
+# Optional one-way Google Calendar source
+
+User approved source work for area 5. Status is `SOURCE_COMPLETE_NOT_ACTIVATED`; no credentials, resources, provider calls or deployment are authorized by this source change.
+
+Use Google Identity Services code popup, with the authorization code only in a same-origin POST body. A live session, custom `X-Requested-With: XmlHttpRequest` header and hashed single-use nonce bound to the same owner/session are required before exchange. Nonces expire after five minutes. Begin is rate limited to five attempts per owner per fifteen minutes with a domain-separated HMAC bucket. Lifecycle audit rows contain owner/action/result only. Popup exchange redirect URI is the app origin. GIS does not expose PKCE configuration; do not invent it.
+
+Enable only when `CALENDAR_SYNC_ENABLED=true`, `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` are all present. Disabled status is unavailable, with no provider or script requests. Request only `calendar.app.created`; create a dedicated secondary calendar. Token exchange, refresh and revoke use POST bodies. Tokens are encrypted with `calendar-oauth-tokens` purpose, bound to the internal connection id and key version. Never return tokens, provider errors or authorization codes.
+
+Sync consumes an injected owner-authorized projection; notes/location are excluded. Send title, time, dedicated calendar and opaque ownership marker only, with no attendees or provider reminders. Timed reminders occupy one minute; date-only reminders occupy one day. Only explicit CANCELLED records delete their managed event. Missing or truncated projection rows never imply deletion.
+
+One immutable connection lease serializes OAuth/setup/sync/disconnect egress. A successful disconnect refuses unresolved in-flight egress, atomically drops local secrets and stops jobs, then best-effort revokes the token. Keep the remote calendar/events. Reauthorization creates a new dedicated calendar because no unverified Google-account identity is assumed; previous calendars remain. SETUP_UNCERTAIN requires explicit disconnect before another connection attempt. Failed revocation is reported so the user can revoke access in Google. Lost egress settlement blocks disconnect until an operator verifies it; lease expiry alone does not prove a provider write stopped.
+
+Use HMAC-derived base32hex event IDs and keyed payload digests. Persist a WRITING mapping before egress. On an unknown event create or a recovered WRITING mapping, GET the deterministic id first; verify the private ownership marker before updates. Never blindly retry a secondary-calendar create; unknown setup is paused as SETUP_UNCERTAIN. Limit projection to 300 and writes to 20 events per sweep, requests to 50, retry attempts to 6 and delay to at most one hour. Provider HTTP transport is injected with no default global fetch. Retry-After is bounded.
+
+References verified on 2026-11-06:
+- [GIS code model](https://developers.google.com/identity/oauth2/web/guides/use-code-model): popup, custom header, origin redirect URI, server exchange.
+- [GIS JavaScript reference](https://developers.google.com/identity/oauth2/web/reference/js-reference): popup callbacks and scope configuration.
+- [OAuth web server protocol](https://developers.google.com/identity/protocols/oauth2/web-server): token/refresh/revoke POSTs; revocation affects all scopes in the Google project.
+- [Calendars insert](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/insert): app-created scope and secondary calendar.
+- [Events get](https://developers.google.com/workspace/calendar/api/v3/reference/events/get), [update](https://developers.google.com/workspace/calendar/api/v3/reference/events/update), [delete](https://developers.google.com/workspace/calendar/api/v3/reference/events/delete): app-created scope supports managed-event read/write/delete.
+- [Events insert](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert): required inclusive start/exclusive end, client-supplied base32hex event IDs.
+
+Activation still requires human-owned Google Cloud project/client, authorized JavaScript origin, Calendar API enablement, consent/privacy review, environment-scoped secrets, migration/deploy authorization and real account qualification. No working external sync is claimed.

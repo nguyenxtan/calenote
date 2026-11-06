@@ -288,7 +288,17 @@ export class D1ContextContractStore implements ContextContractStore {
     +" AND NOT EXISTS(SELECT 1 FROM semantic_contexts WHERE chat_identity_id=? AND status='PENDING')";
    const delivered=t.decisionProof?.response.kind==="BARE"&&prior?.schemaVersion==="calenote-context-state-2"?prior.pendingDecision?.deliveredAt:undefined;
    const visibility=delivered?" AND EXISTS(SELECT 1 FROM inbound_updates WHERE id=? AND received_at>?)":"";
-   const statements=[this.permit(a,s.id,marker,"APPLY",condition+visibility,[...(cas?[...cas.args,scope.now]:[a.chat]),a.chat,observed.history,a.chat,a.chat,a.chat,...(delivered?[scope.sourceInboundId,Date.parse(delivered)]:[])])];
+   const follower='deferredUntil' in t?t.deferredUntil:undefined;
+   if(follower&&(!this.protocol||s.lifecycle!=="NONE"||s.requestId!==null||s.pendingDecision!==null||s.previewReceipt!==null||t.preview||t.terminal||s.transcript.some(turn=>turn.role!=="USER")
+     ||!Number.isSafeInteger(follower.rowid)||!Number.isSafeInteger(follower.receivedAt)))return {status:"INVALID"};
+   const followerSql=follower?` AND EXISTS(SELECT 1 FROM inbound_updates next JOIN inbound_updates head ON head.id=?
+    WHERE next.id=? AND next.rowid=? AND next.received_at=? AND next.state='PENDING'
+     AND next.connection_id=head.connection_id AND next.provider_user_id=head.provider_user_id AND next.private_chat_id=head.private_chat_id
+     AND (next.received_at>head.received_at OR (next.received_at=head.received_at AND next.rowid>head.rowid))
+     AND NOT EXISTS(SELECT 1 FROM inbound_updates middle WHERE middle.connection_id=head.connection_id
+      AND middle.provider_user_id=head.provider_user_id AND middle.private_chat_id=head.private_chat_id AND middle.id<>head.id
+      AND middle.state IN ('PENDING','PROCESSING') AND (middle.received_at<next.received_at OR (middle.received_at=next.received_at AND middle.rowid<next.rowid))))`:"";
+   const statements=[this.permit(a,s.id,marker,"APPLY",condition+visibility+followerSql,[...(cas?[...cas.args,scope.now]:[a.chat]),a.chat,observed.history,a.chat,a.chat,a.chat,...(delivered?[scope.sourceInboundId,Date.parse(delivered)]:[]),...(follower?[scope.sourceInboundId,follower.id,follower.rowid,follower.receivedAt]:[])])];
    const status=t.terminal??(s.lifecycle==="AWAITING_CONFIRMATION"?"DRAFT_READY":"CLARIFYING");
    if(prior)statements.push(this.statement(`UPDATE conversation_contexts SET revision=?,last_inbound_id=?,claim_marker=?,status=?,updated_at=?,expires_at=?,payload_ciphertext=?,payload_iv=?,key_version=?,write_marker=? WHERE id=? AND ${permitted}`,
     [s.contextRevision,scope.sourceInboundId,scope.claimMarker,status,scope.now,this.expiry(s),t.terminal?null:encrypted.ciphertext,t.terminal?null:encrypted.iv,t.terminal?null:1,marker,s.id,marker]));

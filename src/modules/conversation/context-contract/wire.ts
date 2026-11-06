@@ -1,3 +1,4 @@
+import { contextPromptForInput } from "./burst-prompt";
 import type { ContextInput } from "./contracts";
 import { LegacyV2InterpretationJsonSchema, type LegacyV2ContextInput } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "@/modules/intelligence/infrastructure/openrouter/context-provider-wire";
@@ -15,7 +16,7 @@ export function serializeContextRequest(input: ContextInput) {
   const evidenceSources=evidenceSourceCatalogue(input);
   const fieldCapability = deriveGenerationFieldCapability(input);
   return {
-    messages: [{ role: "system" as const, content: CONTEXT_CONTRACT_PROMPT }, { role: "user" as const, content: JSON.stringify({ ...input, ...(evidenceSources.length ? { evidenceSources } : {}), numericOwnership: numericOwnershipCatalogue(input), fieldCapability }) }],
+    messages: [{ role: "system" as const, content: contextPromptForInput(CONTEXT_CONTRACT_PROMPT, input) }, { role: "user" as const, content: JSON.stringify({ ...input, ...(evidenceSources.length ? { evidenceSources } : {}), numericOwnership: numericOwnershipCatalogue(input), fieldCapability }) }],
     response_format: { type: "json_schema" as const, json_schema: { name: "calenote_context_3", strict: true as const, schema: googleLiteEuContextWireSchemaV3(fieldCapability,input).schema } },
     stream: false as const, max_tokens: 1536 as const, temperature: 0 as const,
   };

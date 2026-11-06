@@ -24,12 +24,14 @@ function isCanonicalOpaqueId(value: unknown): value is string {
 }
 
 export interface QueueOperations {
+  syncCalendar?(connectionId:string):Promise<unknown>;
   processInbound(inboundId: string): Promise<ProcessInboundResult>;
   deliverReminder(reminderId: string): Promise<DeliverReminderResult>;
   deliverLoginCode(loginCodeId: string): Promise<DeliverLoginCodeResult>;
 }
 
 export interface ScheduledOperations {
+  redriveCalendarSync?(now:number,limit:number):Promise<unknown>;
   purgeEmailRegistrationChallenges?(now:number,limit:number):Promise<unknown>;
   processPersonalAssistant?(now:number,limit:number):Promise<unknown>;
   processFollowThrough?(now: number, limit: number): Promise<unknown>;
@@ -48,8 +50,10 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
   return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
 
-export function parseQueueJob(value: unknown): ReminderDispatchJob | DeliverLoginCodeJob | null {
+export type SyncCalendarJob={type:'SYNC_CALENDAR';connectionId:string};
+export function parseQueueJob(value: unknown): ReminderDispatchJob | DeliverLoginCodeJob | SyncCalendarJob | null {
   if (!isRecord(value) || typeof value.type !== "string") return null;
+  if(value.type==='SYNC_CALENDAR')return exactKeys(value,['type','connectionId'])&&isCanonicalOpaqueId(value.connectionId)?{type:'SYNC_CALENDAR',connectionId:value.connectionId}:null;
   if (value.type === "PROCESS_INBOUND") {
     if (!exactKeys(value, ["type", "inboundId"])) return null;
     return isCanonicalOpaqueId(value.inboundId)
@@ -84,6 +88,7 @@ async function queueDisposition(
   if (!job) return { retryAfterSeconds: null };
 
   try {
+    if(job.type==='SYNC_CALENDAR'){await operations.syncCalendar?.(job.connectionId);return {retryAfterSeconds:null};}
     if (job.type === "PROCESS_INBOUND") {
       const result = await operations.processInbound(job.inboundId);
       return {
@@ -152,6 +157,7 @@ export async function runScheduledWork(
     })(),
     operations.redriveInboundOrphans(controller.scheduledTime, CRON_INBOUND_LIMIT),
     operations.redriveLoginCodes(controller.scheduledTime, CRON_LOGIN_LIMIT),
+    ...(operations.redriveCalendarSync?[operations.redriveCalendarSync(controller.scheduledTime,5)]:[]),
     ...(operations.purgeEmailRegistrationChallenges ? [operations.purgeEmailRegistrationChallenges(controller.scheduledTime,100)] : []),
     ...(operations.purgeConversationContexts ? [operations.purgeConversationContexts(controller.scheduledTime, 100)] : []),
   ]);

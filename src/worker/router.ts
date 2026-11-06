@@ -76,8 +76,11 @@ import { handleListRemindersV2 } from "./routes/reminders-v2";
 import { handleConversationPreviews, PreviewUnavailableError } from "./routes/conversation-previews";
 import { handleSeries } from "./routes/reminder-series";
 import {handleAiUsage} from "./routes/ai-usage";
+import {handleCalendarExport,type CalendarExportOperations} from './routes/calendar';
+import {handleCalendarSyncStatus,handleCalendarSyncBegin,handleCalendarSyncCode,handleCalendarSyncDisconnect,type CalendarSyncOperations} from './routes/calendar-sync';
+import {CalendarSyncError} from '@/modules/calendar-sync/contracts';
 import { handleCanonicalSeries, CanonicalSeriesUnavailableError } from "./routes/canonical-series";
-import { createSeriesOperations, createCanonicalSeriesOperations, createAiUsageOperations } from "./composition-root";
+import { createSeriesOperations, createCanonicalSeriesOperations, createAiUsageOperations,createCalendarExportOperations,createCalendarSyncOperations } from "./composition-root";
 import {contextRuntimeCapabilities} from './release-runtime';
 import type { SeriesOperations, ContextApiOperations, CanonicalSeriesOperations, AiUsageOperations } from "./routes/operations";
 import type {
@@ -97,6 +100,8 @@ import {
 
 export interface RouterOptions {
  aiUsageOperations?:(env:Env)=>Promise<AiUsageOperations>;
+ calendarExportOperations?:(env:Env)=>Promise<CalendarExportOperations>;
+ calendarSyncOperations?:(env:Env)=>Promise<CalendarSyncOperations>;
  emailRegistrationOperations?:(env:Env)=>Promise<EmailRegistrationOperations>;
  personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
   followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
@@ -123,6 +128,7 @@ function requestBodyMessage(code: RequestBodyError["code"]): string {
 }
 
 function errorMessage(error: unknown): { code: string; message: string; status: number; retryAfter?: number } {
+  if(error instanceof CalendarSyncError)return {code:error.code,message:error.message,status:error.status};
   if (error instanceof EmailRegistrationError) return {code:error.code,message:error.code === "DELIVERY_UNAVAILABLE" ? "Chưa thể gửi email xác minh. Hãy thử lại sau." : "Mã xác minh chưa hợp lệ hoặc đã hết hạn.",status:error.status};
   if (error instanceof FollowThroughError) return {code:error.code,message: error.code === "CONFLICT" ? "Việc đã thay đổi. Hãy tải lại trước khi thao tác." : error.code === "NOT_FOUND" ? "Không tìm thấy việc này." : error.code === "BLOCKED" ? "Kênh nhận nhắc hiện không sẵn sàng." : "Thao tác chưa hợp lệ.",status:error.code === "NOT_FOUND" ? 404 : error.code === "CONFLICT" ? 409 : error.code === "BLOCKED" ? 409 : 400};
   if (error instanceof ServiceUnavailableError) {
@@ -229,6 +235,8 @@ export function createRouter(options: RouterOptions = {}) {
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
   const aiUsageOperationsFactory=options.aiUsageOperations ?? createAiUsageOperations;
+  const calendarExportOperationsFactory=options.calendarExportOperations??createCalendarExportOperations;
+  const calendarSyncOperationsFactory=options.calendarSyncOperations??createCalendarSyncOperations;
   const canonicalSeriesOperationsFactory = options.canonicalSeriesOperations ?? ((env: Env) => createCanonicalSeriesOperations(env, contextRuntimeCapabilities(env)));
   const contextApiOperationsFactory = options.contextApiOperations ?? ((env:Env)=>createContextApiOperations(env,contextRuntimeCapabilities(env)));
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
@@ -317,6 +325,11 @@ export function createRouter(options: RouterOptions = {}) {
         return await handleConversationPreviews(request, appOrigin!, () => contextApiOperationsFactory(env));
       }
       if(request.method==="GET" && pathname==="/api/ai-usage")return await handleAiUsage(request,()=>aiUsageOperationsFactory(env));
+      if(request.method==='GET'&&pathname==='/api/calendar/export.ics')return await handleCalendarExport(request,()=>calendarExportOperationsFactory(env));
+      if(request.method==='GET'&&pathname==='/api/calendar/sync')return await handleCalendarSyncStatus(request,()=>calendarSyncOperationsFactory(env));
+      if(request.method==='POST'&&pathname==='/api/calendar/sync/begin')return await handleCalendarSyncBegin(request,appOrigin!,()=>calendarSyncOperationsFactory(env));
+      if(request.method==='POST'&&pathname==='/api/calendar/sync/code')return await handleCalendarSyncCode(request,appOrigin!,()=>calendarSyncOperationsFactory(env));
+      if(request.method==='POST'&&pathname==='/api/calendar/sync/disconnect')return await handleCalendarSyncDisconnect(request,appOrigin!,()=>calendarSyncOperationsFactory(env));
       if (["GET", "POST"].includes(request.method) && pathname === "/api/v2/reminder-series") {
         return await handleCanonicalSeries(request, appOrigin!, () => canonicalSeriesOperationsFactory(env));
       }
@@ -400,7 +413,11 @@ export function createRouter(options: RouterOptions = {}) {
         || pathname === "/api/actions"
         || pathname.startsWith("/api/actions/")
         || pathname === "/api/preferences"
-        || pathname === "/api/activity";
+        || pathname === "/api/activity"
+        || pathname === "/api/ai-usage"
+        || pathname === "/api/calendar/export.ics"
+        || pathname === "/api/calendar/sync"
+        || pathname.startsWith('/api/calendar/sync/');
       return safeErrorResponse(error, authenticated);
     }
     if (pathname.startsWith("/api/")) {

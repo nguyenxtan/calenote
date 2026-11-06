@@ -11,7 +11,7 @@ export const contextContractEncryptionIdentity = (scope:{ownerId:string;chatIden
   if (protocol !== undefined && !isContextProtocolV3(protocol)) throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
   return JSON.stringify([scope.ownerId,scope.chatIdentityId,id,protocol?.canonicalVersion ?? "calenote-context-2"]);
 };
-export type StoredTransitionV2 = Omit<StoredTransition, "snapshot"> & { snapshot: ContextSnapshotV2 };
+export type StoredTransitionV2 = Omit<StoredTransition, "snapshot"> & { snapshot: ContextSnapshotV2; deferredUntil?: import('./runtime-store').BurstFollower };
 export type ObservedContextV2 = { observation: ContextObservation; snapshot: ContextSnapshotV2 | null } | Extract<ObservedContext, { failure: string }>;
 export interface ContextContractStoreV3 {
   readonly protocol: Readonly<ContextProtocolV3>;

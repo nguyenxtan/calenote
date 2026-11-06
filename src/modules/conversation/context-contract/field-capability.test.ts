@@ -12,7 +12,7 @@ import { date } from "./resolution-test-support";
 import { deriveGenerationFieldCapability, isInitialEventDateYearNullRequired } from "./field-capability";
 import * as capabilityModule from "./field-capability";
 import {encodeFixtureV3} from "../../../../tools/benchmark/context-pointer-fixtures";
-import {wire88RequestFixture,wire94RequestFixture,typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire88RequestFixture,wire94RequestFixture,preDurationSchemaFixture,typedSingletonSchemaFixture,unwrapSingletonAuthoringFixture,wrapSingletonAuthoringFixture} from "../../../../tools/benchmark/context-singleton-json.test-support";
 // Original capability language witnesses inspect the captured typed producer
 // AST, not the deliberately broader opaque upstream change-string schema.
 const decodeGoogleLiteEuContextTransportV3=(raw:unknown,selected:Parameters<typeof decodeRawSingletonTransport>[1],invalid?:Parameters<typeof decodeRawSingletonTransport>[2],wireInvalid?:Parameters<typeof decodeRawSingletonTransport>[3],context?:ContextInput)=>decodeRawSingletonTransport(wrapSingletonAuthoringFixture(raw),selected,invalid,wireInvalid,context);
@@ -528,7 +528,11 @@ it("R02 simplified request schema pins single title ownership and reachable defi
   expect(catalogue(context)).toEqual({version:"generation-field-capability-16",allowedNumericFields:["frequency","occurrenceCount"],allowedClockFields:[],titlePresenceRequired:true,titleCorrectionAllowed:false,calendarProposalAllowed:false,notesProposalAllowed:false,reminderDateProposalAllowed:false,eventDateYearNullRequired:true});
   const historical=wire94RequestFixture(context).response_format.json_schema.schema;
   expect(request.response_format.json_schema.schema.properties!.titleChange).toEqual(historical.properties!.titleChange);
-  expect(request.response_format.json_schema.schema.$defs).toEqual(historical.$defs);
+  // Successor duration support intentionally expands ranks and directive fields.
+  // Compare historical definitions only after the explicit V1 projection.
+  expect(preDurationSchemaFixture(request.response_format.json_schema.schema).$defs).toEqual(historical.$defs);
+  expect(request.response_format.json_schema.schema.$defs!.r).toMatchObject({maximum:14});
+  expect(Object.values(request.response_format.json_schema.schema.$defs!).some(definition=>Array.isArray(definition.enum)&&definition.enum.includes("leadOffsetHours")&&definition.enum.includes("leadOffsetMinutes"))).toBe(true);
   expect(createHash("sha256").update(JSON.stringify(historical)).digest("hex")).toBe("97c079d1ba05b2c3583dbd52f4957b5a08dd60c249187e6cc4dfaf3b9637de13");
   const withoutCardinality=wire88RequestFixture(context).response_format.json_schema.schema;
   expect(createHash("sha256").update(JSON.stringify(withoutCardinality)).digest("hex")).toBe("bf874811a31e5807c57aabb18116ce8b58abef6587751ffb55a0f7bbf0f97582");withoutCardinality.$defs!.r={type:"string",enum:Array.from({length:13},(_,rank)=>String(rank))};

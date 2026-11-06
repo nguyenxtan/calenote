@@ -5,11 +5,14 @@ import type { FollowThroughChatHandler } from '@/modules/follow-through/chat-ada
 export interface PersonalMemoryChatService {
   get(ownerId: string): Promise<PersonalAssistantEnvelope>;
 }
+export function parsePersonalMemoryChatCommand(text:string):RegExpExecArray|null {
+  return /^(?:trí nhớ|\/memory)(?: (.*))?$/iu.exec(text.normalize('NFC').trim().replace(/\s+/gu,' '));
+}
 /** Explicit, read-only lookup. Memory content never enters a model context. */
 export function createPersonalMemoryChatHandler(service: PersonalMemoryChatService, getReplyPreferences?: (ownerId: string) => Promise<BotReplyPreferences>): FollowThroughChatHandler {
   return async (message, context) => {
     const text = message.text.normalize('NFC').trim().replace(/\s+/gu, ' ');
-    const command = /^(?:trí nhớ|\/memory)(?: (.*))?$/iu.exec(text);
+    const command = parsePersonalMemoryChatCommand(text);
     if (!command) return { handled: false };
     let preferences: BotReplyPreferences | undefined;
     try { preferences = await getReplyPreferences?.(context.userId); } catch { /* Presentation lookup is best effort. */ }

@@ -21,6 +21,11 @@ chứng chính xác.
 
 ## Chạy local
 
+Nhánh tính năng mới bổ sung lịch tuần/tháng hữu hạn, nhắc trước theo giờ/phút,
+bảng chi phí AI, gom tin nhắn liên tiếp và tải lịch `.ics` trong Cài đặt. Các thay
+đổi này cần qua cổng phát hành trước khi có trên production. Đồng bộ Google là
+tùy chọn và mặc định tắt; xem [hướng dẫn kích hoạt](docs/operations/google-calendar-activation.md).
+
 Yêu cầu Node.js 22+ và pnpm 10+.
 
 ```bash

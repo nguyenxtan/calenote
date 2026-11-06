@@ -31,6 +31,17 @@ function batch(messages: TestMessage[]): MessageBatch<unknown> {
 }
 
 describe("strict per-message Queue dispatcher", () => {
+  it('accepts only internal canonical calendar connection jobs and isolates their dispatch',async()=>{
+    const worker=await workerModule(),connectionId=opaqueId(4);
+    expect(worker.parseQueueJob({type:'SYNC_CALENDAR',connectionId})).toEqual({type:'SYNC_CALENDAR',connectionId});
+    expect(worker.parseQueueJob({type:'SYNC_CALENDAR',connectionId,ownerId:'foreign'})).toBeNull();
+    expect(worker.parseQueueJob({type:'SYNC_CALENDAR',connectionId:'invalid'})).toBeNull();
+    const syncCalendar=vi.fn(async()=>({status:'SYNCED'})),item=message({type:'SYNC_CALENDAR',connectionId});
+    const operations={syncCalendar,processInbound:vi.fn(),deliverReminder:vi.fn(),deliverLoginCode:vi.fn()};
+    await worker.handleQueueBatch(batch([item]),operations);
+    expect(syncCalendar).toHaveBeenCalledExactlyOnceWith(connectionId);expect(item.ack).toHaveBeenCalledOnce();expect(item.retry).not.toHaveBeenCalled();
+    expect(operations.deliverReminder).not.toHaveBeenCalled();expect(operations.processInbound).not.toHaveBeenCalled();
+  });
   // Importing the full Worker graph can be delayed by parallel workerd suites.
   it("terminally acknowledges malformed or non-canonical jobs", async () => {
     const worker = await workerModule();

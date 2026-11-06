@@ -9,8 +9,11 @@ import { contextContractEncryptionIdentity } from "./store";
 import { decodeContextSnapshotV2 } from "./state";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import type { Keyring } from "@/modules/security/keyring";
+import {isBurstFragment} from './burst-policy';
+export interface BurstFollower {id:string;rowid:number;receivedAt:number}
 
 export interface ContextRuntimeStore {
+  nextBurstFragment?(scope:ConversationScope):Promise<BurstFollower|null>;
   claimAttempt(scope: ConversationScope, observation: ContextObservation, bindingDigest: string): Promise<boolean>;
   complete(scope: ConversationScope): Promise<boolean>;
   canSend(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }, observation?: ContextObservation): Promise<boolean>;
@@ -20,6 +23,20 @@ export interface ContextRuntimeStore {
 export class D1ContextRuntimeStore implements ContextRuntimeStore {
   constructor(private readonly db: D1Database, private readonly selection?: { protocol: Readonly<ContextProtocolV3>; keyring: Keyring }) {
     if(selection && !isContextProtocolV3(selection.protocol))throw new Error("UNSUPPORTED_CONTEXT_PROTOCOL");
+  }
+  async nextBurstFragment(scope:ConversationScope):Promise<BurstFollower|null>{
+    if(!this.selection)return null;
+    try{
+      const row=await this.db.prepare(`SELECT peer.id,peer.rowid,peer.received_at,peer.state,peer.message_ciphertext,peer.message_iv,peer.message_key_version
+       FROM inbound_updates peer JOIN inbound_updates current ON current.id=?
+       WHERE EXISTS(${ownedInbound}) AND peer.connection_id=current.connection_id AND peer.provider_user_id=current.provider_user_id AND peer.private_chat_id=current.private_chat_id
+        AND peer.state IN ('PENDING','PROCESSING') AND (peer.received_at>current.received_at OR (peer.received_at=current.received_at AND peer.rowid>current.rowid))
+       ORDER BY peer.received_at,peer.rowid LIMIT 1`).bind(scope.sourceInboundId,...auth(scope))
+       .first<{id:string;rowid:number;received_at:number;state:string;message_ciphertext:unknown;message_iv:unknown;message_key_version:number}>();
+      if(!row||row.state!=='PENDING')return null;
+      const text=await this.selection.keyring.decryptSensitive('inbound-message',row.id,row.message_key_version,{ciphertext:persistedD1Blob(row.message_ciphertext),iv:persistedD1Blob(row.message_iv)});
+      return isBurstFragment(text)?{id:row.id,rowid:row.rowid,receivedAt:row.received_at}:null;
+    }catch{return null;}
   }
   private async selectedContext(scope: ConversationScope, expected?: { contextId: string; contextRevision: number }): Promise<boolean> {
     if(!this.selection)return true;

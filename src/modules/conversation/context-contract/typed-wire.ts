@@ -1,3 +1,4 @@
+import { contextPromptForInput } from "./burst-prompt";
 import type { ContextInput } from "./contracts";
 import { googleLiteEuTypedContextWireSchemaV3 } from "@/modules/intelligence/infrastructure/openrouter/context-provider-typed-wire";
 import { CONTEXT_TYPED_PROMPT } from "./typed-prompt";
@@ -11,7 +12,7 @@ export function serializeTypedContextRequest(input: ContextInput) {
   const fieldCapability = deriveGenerationFieldCapability(input);
   const selected = googleLiteEuTypedContextWireSchemaV3(input);
   return {
-    messages: [{ role: "system" as const, content: CONTEXT_TYPED_PROMPT }, {
+    messages: [{ role: "system" as const, content: contextPromptForInput(CONTEXT_TYPED_PROMPT, input) }, {
       role: "user" as const,
       content: JSON.stringify({ ...input, ...(evidenceSources.length ? { evidenceSources } : {}), numericOwnership: numericOwnershipCatalogue(input), fieldCapability }),
     }],

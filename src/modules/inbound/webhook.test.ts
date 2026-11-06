@@ -292,7 +292,7 @@ describe("authenticated webhook acceptance", () => {
       "Xin chào\nNgày mai\nnhắc tôi",
     );
     expect(deps.store.events).toEqual(["insert", "reserve", `enqueue:${row.id}`]);
-    expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id });
+    expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id },{delaySeconds:2});
     expect(JSON.stringify(deps.enqueue.mock.calls)).not.toContain("Xin chào");
   });
 
@@ -311,7 +311,7 @@ describe("authenticated webhook acceptance", () => {
     expect(deps.enqueue).toHaveBeenNthCalledWith(1, {
       type: "PROCESS_INBOUND",
       inboundId: deps.store.rows[1].id,
-    });
+    },{delaySeconds:2});
   });
 
   it("reserves duplicate pending and expired-processing rows only after dispatch lease expiry", async () => {
@@ -330,7 +330,7 @@ describe("authenticated webhook acceptance", () => {
 
     expect([pending.status, expired.status, terminal.status]).toEqual([200, 200, 200]);
     expect(deps.enqueue).toHaveBeenCalledTimes(1);
-    expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id });
+    expect(deps.enqueue).toHaveBeenCalledWith({ type: "PROCESS_INBOUND", inboundId: row.id },{delaySeconds:2});
   });
 
   it("returns a safe 503 after a committed insert when queue publication fails", async () => {
@@ -356,10 +356,16 @@ describe("authenticated webhook acceptance", () => {
     expect(deps.enqueue).toHaveBeenLastCalledWith({
       type: "PROCESS_INBOUND",
       inboundId: deps.store.rows[0].id,
-    });
+    },{delaySeconds:2});
     expect(logged).not.toHaveBeenCalled();
     logged.mockRestore();
   });
+});
+
+it.each(['có','hủy','/memory','xong mãviệc','xin chào'])('publishes local/control barrier %s without a quiet delay',async text=>{
+ const deps=dependencies();deps.parseWebhook.mockReturnValue({...parsedMessage,text});
+ await acceptWebhook(request(),connection,deps);
+ expect(deps.enqueue).toHaveBeenCalledExactlyOnceWith({type:'PROCESS_INBOUND',inboundId:deps.store.rows[0].id});
 });
 
 class SqliteStatement {

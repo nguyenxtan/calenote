@@ -41,6 +41,8 @@ import type { DecisionProof } from "./store";
 import { evidenceReason, type DownstreamDiagnostic } from "./downstream";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3 } from "./protocol";
 import type { ContextObservation } from "./state";
+import {BURST_MAX_TURNS,BURST_SPAN_MS,isBurstFragment,isFreshBurstContext} from './burst-policy';
+import {contextPromptForInput} from './burst-prompt';
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
@@ -229,12 +231,24 @@ export function createContextContractService(deps: ContextContractServiceDepende
             transition = await localTransition(prior, built.candidateSnapshot, reply);
           }
         } else {
+          if(isFreshBurstContext(prior)&&isBurstFragment(message.text)&&built.candidateSnapshot.transcript.length<BURST_MAX_TURNS){
+            const follower=await deps.runtimeStore.nextBurstFragment?.(scope);
+            const first=built.candidateSnapshot.transcript[0];
+            if(follower&&follower.receivedAt>=message.receivedAt&&follower.receivedAt-Date.parse(first.receivedAt)<=BURST_SPAN_MS){
+              const applied=await deps.store.apply(scope,observed.observation,{expectedContextRevision:prior?.contextRevision??null,expectedDraftRevision:prior?.draftRevision??null,
+                snapshot:{...structuredClone(built.candidateSnapshot),contextRevision:(prior?.contextRevision??0)+1},preview:null,terminal:null,inboundOutcome:'PROCESSED',deferredUntil:follower});
+              if(applied.status==='APPLIED'||applied.status==='IDEMPOTENT')return {status:'DEFERRED'};
+              // A newly inserted barrier cancels grouping. The usual attempt
+              // fence below still checks current authority before any call.
+              if(applied.status==='UNCERTAIN')return {status:'SUPERSEDED'};
+            }
+          }
           emit({ event: "MODEL_REQUIRED" });
           try { void Promise.resolve(deps.processingFeedback?.()).catch(() => {}); } catch { /* best effort */ }
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
           emit({ event: "REQUEST_PREPARED", ...contextRouteObservation(attempt.model,attempt.provider), routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
-          const inputDigest = await digest(built.input), promptDigest = await digest(emission.prompt), contractDigest = await digest(InterpretationJsonSchema);
+          const inputDigest = await digest(built.input), promptDigest = await digest(contextPromptForInput(emission.prompt,built.input)), contractDigest = await digest(InterpretationJsonSchema);
           const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: emission.protocol });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });

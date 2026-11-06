@@ -26,6 +26,7 @@ export type SensitiveContentPurpose =
   | "draft-title"
   | "action-candidate-title"
   | "reminder-title"
+  | "calendar-oauth-tokens"
   | "login-code";
 
 export interface EncryptedValue {

@@ -363,7 +363,7 @@ export async function createWebhookOperations(env: Env): Promise<WebhookRouteDep
       store,
       dispatchStore: new D1InboundDispatchStore(env.DB),
       keyring,
-      enqueue: async (job) => { await env.JOBS.send(job); },
+      enqueue: async (job,options) => { if(options)await env.JOBS.send(job,options);else await env.JOBS.send(job); },
     }),
   };
 }
@@ -453,6 +453,8 @@ export type RuntimeOperations = QueueOperations & ScheduledOperations;
 export async function createRuntimeOperations(env: Env, capabilities: { conversationV2?: boolean; contextContract?: "calenote-context-2"; sourceSha?: string } = {}, feedbackLifetime?: import("@/modules/conversation/processing-feedback").FeedbackLifetime): Promise<RuntimeOperations> {
   if (capabilities.contextContract && (!capabilities.sourceSha || !/^[0-9a-f]{40}$/u.test(capabilities.sourceSha))) throw new TypeError("Source SHA required");
   const keyring = await createKeyring(env.CALENOTE_MASTER_KEY);
+  let calendarRuntime:ReturnType<typeof createCalendarSyncService>|undefined;
+  const calendarService=()=>calendarRuntime??=createCalendarSyncService(env,keyring);
   const getReplyPreferences = (ownerId: string) => getUserPreferences(ownerId, new D1UserPreferencesStore(env.DB));
   const inboundStore = new D1InboundProcessorStore(env.DB, new D1ReminderCommandStore(env.DB));
   const deliveryStore = new D1ReminderDeliveryStore(env.DB);
@@ -521,6 +523,9 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
       } } : {}),
       recordDiagnostic: (diagnostic) => console.log(JSON.stringify(diagnostic)),
     }),
+    syncCalendar:async connectionId=>(await calendarService()).sync(connectionId),
+    redriveCalendarSync:async(_now,limit)=>{const service=await calendarService(),ids=await service.selectDue(limit);
+     return Promise.allSettled(ids.map(connectionId=>env.JOBS.send({type:'SYNC_CALENDAR',connectionId})));},
     deliverReminder: (reminderId) => deliverReminder(reminderId, { store: deliveryStore, keyring, getReplyPreferences }),
     deliverLoginCode: (loginCodeId) => deliverLoginCode(loginCodeId, { store: loginStore, keyring, getReplyPreferences }),
     purgeEmailRegistrationChallenges: async (now,limit) => {
@@ -599,4 +604,31 @@ export async function createAiUsageOperations(env:Env):Promise<import('./routes/
  const configuration={runtime:runtime.status,limits:runtime.status==='READY'?{dailyCalls:runtime.budgetLimits.ownerDailyFallbackLimit,monthlyCostMicrounits:runtime.budgetLimits.ownerMonthlyCostMicrounits}:null};
  return {requireUser:credentials=>requireSession(credentials,{store:new D1SessionStore(env.DB),keyring}),
   readUsage:principal=>readOwnerAiUsage(env.DB,principal,Date.now(),configuration)};
+}
+
+export async function createCalendarExportOperations(env:Env):Promise<import('./routes/calendar').CalendarExportOperations>{
+ const {D1CalendarExportStore}=await import('@/modules/calendar/infrastructure/d1/export-store');
+ const {exportOwnerCalendar}=await import('@/modules/calendar/export-service');
+ const keyring=await createRouteKeyring(env),store=new D1CalendarExportStore(env.DB,keyring);
+ return {requireUser:credentials=>requireSession(credentials,{store:new D1SessionStore(env.DB),keyring}),
+  exportCalendar:principal=>exportOwnerCalendar(principal,{store,keyring,rateLimitStore:new D1RateLimitStore(env.DB)})};
+}
+
+async function createCalendarSyncService(env:Env,keyringOverride?:Keyring){
+ const {CalendarSyncService}=await import('@/modules/calendar-sync/service');
+ const {D1CalendarSyncStore}=await import('@/modules/calendar-sync/store');
+ const {GoogleCalendarProvider}=await import('@/modules/calendar-sync/google-provider');
+ const {calendarSyncCapability}=await import('@/modules/calendar-sync/contracts');
+ const {D1CalendarExportStore}=await import('@/modules/calendar/infrastructure/d1/export-store');
+ const keyring=keyringOverride??await createRouteKeyring(env),capability=calendarSyncCapability(env),projection=new D1CalendarExportStore(env.DB,keyring);
+ return new CalendarSyncService({enabled:capability.available,clientId:capability.available?capability.clientId:'',store:new D1CalendarSyncStore(env.DB),keyring,
+  provider:capability.available?new GoogleCalendarProvider({clientId:capability.clientId,clientSecret:env.GOOGLE_CALENDAR_CLIENT_SECRET!,appOrigin:env.APP_ORIGIN},(url,init)=>fetch(url,init)):null,
+  projection:{read:async(ownerId,now)=>{const projected=await projection.readForSyncAuthorizedOwner(ownerId,now);return {events:projected.events.map(({uid,title,start,status})=>({uid,title,start,status})),truncated:projected.truncated||projected.skipped>0};}}});
+}
+export async function createCalendarSyncOperations(env:Env):Promise<import('./routes/calendar-sync').CalendarSyncOperations>{
+ const keyring=await createRouteKeyring(env),service=await createCalendarSyncService(env);
+ return {requireUser:credentials=>requireSession(credentials,{store:new D1SessionStore(env.DB),keyring}),getCalendarSyncStatus:userId=>service.status(userId),
+  beginCalendarSync:principal=>service.begin(principal),completeCalendarSync:async(principal,input)=>{const result=await service.complete(principal,input);
+   try{await env.JOBS.send({type:'SYNC_CALENDAR',connectionId:result.connectionId});}catch{/* The bounded cron sweep redrives a committed connection. */}return result;},
+  disconnectCalendarSync:userId=>service.disconnect(userId)};
 }

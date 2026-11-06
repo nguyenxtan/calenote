@@ -1,5 +1,5 @@
 import {vi} from "vitest";
-import {googleLiteEuContextWireSchemaV3} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
+import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,UNCERTAINTY_FIELD_WIRE_CODE_V2} from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateChange","eventTimeChange","eventRelationChange","frequencyChange","occurrenceCountChange","endDateChange","locationChange"] as const;
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
@@ -52,9 +52,38 @@ export function wire96RequestFixture(input:Parameters<typeof serializeContextReq
  const inverse=vi.spyOn(capabilityModule,"isInitialFiniteSeriesWithoutRelationSource").mockImplementation(value=>capabilityModule.isInitialExplicitReminderClockRequired(value)&&current(value));
  try{return wire97RequestFixture(input);}finally{inverse.mockRestore();}
 }
+/** Representation-only inverse of the independently captured pre-duration
+ * schema. Production successor grammar keeps V2 codes and fifteen ranks. */
+export function preDurationSchemaFixture<T>(schema:T):T {
+ const currentDescription="UncertaintyFieldWireCodeV2: "+Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).map(([field,code])=>`${code}=${field}`).join(",");
+ const historicalDescription="UncertaintyFieldWireCodeV1: "+Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field,code])=>`${code}=${field}`).join(",");
+ // The two extra canonical field unions shifted Zod's anonymous definition
+ // ordinals. These names come from the immutable pre-duration capture.
+ const names:Record<string,string>={__schema23:"__schema21",__schema44:"__schema40"};
+ const restore=(value:unknown,key?:string,fieldCode=false):unknown=>{
+  if(Array.isArray(value))return value.map(child=>restore(child,undefined,fieldCode));
+  if(typeof value==="string")return value.startsWith("#/$defs/")?"#/$defs/"+(names[value.slice(8)]??value.slice(8)):value;
+  if(!value||typeof value!=="object")return value;
+  const isFieldCode=fieldCode||key==="fieldCode";
+  const result=Object.fromEntries(Object.entries(value).map(([name,child])=>[names[name]??name,restore(child,name,isFieldCode)]));
+  if(isFieldCode){
+   if(result.description===currentDescription)result.description=historicalDescription;
+   if(result.maximum===17)result.maximum=15;
+   if(Array.isArray(result.enum))result.enum=result.enum.filter(code=>code!==16&&code!==17);
+  }
+  if(Array.isArray(result.enum))result.enum=result.enum.filter(value=>value!=="leadOffsetHours"&&value!=="leadOffsetMinutes");
+  if(key==="r"&&result.maximum===14)result.maximum=12;
+  return result;
+ };
+ return restore(schema) as T;
+}
 export function wire94RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isWholeSeriesOffsetAlternativeAbsent").mockReturnValue(false);
- try{return wire96RequestFixture(input);}finally{inverse.mockRestore();}
+ try{
+  const request=wire96RequestFixture(input);
+  request.response_format.json_schema.schema=preDurationSchemaFixture(request.response_format.json_schema.schema);
+  return request;
+ }finally{inverse.mockRestore();}
 }
 export function wire93RequestFixture(input:Parameters<typeof serializeContextRequest>[0]):ReturnType<typeof serializeContextRequest> {
  const inverse=vi.spyOn(capabilityModule,"isInitialFiniteSeriesWithoutRelationSource").mockReturnValue(false);

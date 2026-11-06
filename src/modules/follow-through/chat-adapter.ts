@@ -10,6 +10,9 @@ export interface FollowThroughChatService {
 }
 export type FollowThroughChatResult = { handled: false } | { handled: true; text: string };
 export type FollowThroughChatHandler = (message: BoundChatMessage, context: BoundChatContext) => Promise<FollowThroughChatResult>;
+export function parseFollowThroughChatCommand(text:string):RegExpExecArray|null {
+  return /^(?:(xác nhận) )?(dừng theo dõi|chưa xong|xong|hoãn|đổi lịch)(?: (.*))?$/iu.exec(text.normalize("NFC").trim().replace(/\s+/gu," "));
+}
 const DAY = 86_400_000;
 const OFFSET = 7 * 3_600_000;
 function civil(timestamp: number): string { return new Date(timestamp + OFFSET).toISOString().slice(0, 16).replace("T", " "); }
@@ -32,7 +35,7 @@ export function createFollowThroughChatHandler(service: FollowThroughChatService
   const handle: FollowThroughChatHandler =
   async (message, context) => {
     const text = message.text.normalize("NFC").trim().replace(/\s+/gu, " ");
-    const command = /^(?:(xác nhận) )?(dừng theo dõi|chưa xong|xong|hoãn|đổi lịch)(?: (.*))?$/iu.exec(text);
+    const command = parseFollowThroughChatCommand(text);
     if (!command) return { handled: false };
     const confirmed = Boolean(command[1]);
     const verb = command[2].toLocaleLowerCase("vi-VN");

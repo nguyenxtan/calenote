@@ -1,3 +1,4 @@
+import { contextPromptForInput } from "./burst-prompt";
 /** Readable keyed semantics shared by runtime and the comparison harness. */
 import type {ContextInput} from './contracts';
 import {V3_SLOT_NAMES} from './contracts';
@@ -61,5 +62,5 @@ Canonical field traversal is fixed by the application: ${JSON.stringify(V3_SLOT_
 `;
 export function serializeKeyedSmallComparison(input:ContextInput){
  const sources=evidenceSourceCatalogue(input);
- return {messages:[{role:'system' as const,content:CONTEXT_KEYED_COMPARISON_PROMPT},{role:'user' as const,content:JSON.stringify({...input,...(sources.length?{evidenceSources:sources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],stream:false as const,max_tokens:1536 as const,temperature:0 as const,response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_keyed_137',strict:true as const,schema:keyedSmallComparisonSchema(input)}}};
+ return {messages:[{role:'system' as const,content:contextPromptForInput(CONTEXT_KEYED_COMPARISON_PROMPT,input)},{role:'user' as const,content:JSON.stringify({...input,...(sources.length?{evidenceSources:sources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],stream:false as const,max_tokens:1536 as const,temperature:0 as const,response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_keyed_137',strict:true as const,schema:keyedSmallComparisonSchema(input)}}};
 }

@@ -1,0 +1,9 @@
+.panel { border: 1px solid var(--border, #dedbd5); border-radius: 14px; padding: 20px; background: var(--surface, #fff); color: var(--text, #24332b); }
+.panel h3 { margin: 0 0 12px; font-size: 1.1rem; }
+.panel p { margin: 8px 0; font-size: .9rem; line-height: 1.6; }
+.hint { color: var(--text-muted, #59645c); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.actions button { min-height: 40px; border: 1px solid var(--border, #dedbd5); border-radius: 9px; padding: 8px 12px; background: var(--surface, #fff); color: inherit; font: inherit; font-size: .85rem; cursor: pointer; }
+.actions button:disabled { cursor: wait; opacity: .55; }
+.actions button:focus-visible, .panel a:focus-visible { outline: 2px solid var(--accent, #176644); outline-offset: 3px; }
+.panel a { color: var(--accent, #176644); text-decoration: underline; }

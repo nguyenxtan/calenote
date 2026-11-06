@@ -149,6 +149,7 @@ export interface BoundChatSemanticDependencies {
 }
 
 export type ProcessBoundChatResult =
+  | { status: "DEFERRED" }
   | { status: "DRAFT_CREATED" }
   | { status: "CLARIFICATION_REQUESTED" }
   | { status: "REMINDERS_LISTED" }

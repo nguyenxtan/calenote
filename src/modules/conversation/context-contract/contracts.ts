@@ -250,11 +250,19 @@ export function parseInterpretationSectionsV3(raw: unknown, observeInvalid?: (va
 const successorActiveRequest = LegacyV2ContextInputSchema.shape.activeRequest.unwrap();
 const successorInputSlots = successorActiveRequest.shape.slots.extend({leadOffsetHours: slot(values.leadOffsetHours).optional(), leadOffsetMinutes: slot(values.leadOffsetMinutes).optional()});
 export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape,
+ currentBurstTurns:z.array(z.number().int().min(0).max(11)).min(2).max(3).optional(),
+ currentBurstReferences:z.array(z.strictObject({turn:z.number().int().min(0).max(11),instant:z.iso.datetime(),localDate:z.iso.date()})).min(2).max(3).optional(),
  activeRequest: successorActiveRequest.extend({slots:successorInputSlots}).nullable(),
  pendingQuestion: LegacyV2ContextInputSchema.shape.pendingQuestion.unwrap().extend({field:z.enum([...V3_SLOT_NAMES,"intent","queryRange","operation"])}).nullable(),
  schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });
+  if(v.currentBurstTurns||v.currentBurstReferences){
+   const members=v.currentBurstTurns,refs=v.currentBurstReferences;
+   if(!members||!refs||members.length!==refs.length||members.length!==v.turns.length||members[0]!==0||members.at(-1)!==v.currentTurn||refs.at(-1)?.instant!==v.reference.instant||v.activeRequest!==null||v.facts.length||v.pendingQuestion!==null||v.ambiguities.length
+    ||members.some((turn,i)=>v.turns[turn]?.role!=="USER"||i>0&&turn!==members[i-1]+1||refs[i]?.turn!==turn||!Number.isFinite(Date.parse(refs[i].instant))||refs[i]?.localDate!==new Date(Date.parse(refs[i].instant)+7*3600000).toISOString().slice(0,10))
+    ||refs.some((r,i)=>i>0&&Date.parse(r.instant)<Date.parse(refs[i-1].instant))||Date.parse(refs.at(-1)!.instant)-Date.parse(refs[0].instant)>10000){ctx.addIssue({code:"custom",message:"Invalid source-bound burst membership"});}
+  }
 });
 export type ContextInputV2 = z.infer<typeof ContextInputV2Schema>;
 export const InterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema, { target: "draft-07", reused: "ref" });

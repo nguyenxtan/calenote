@@ -25,12 +25,12 @@ Files: state.ts, control-proof.ts/confirmation.ts, D1 context store and service;
 ### Task3: Reply-less fold and eligibility
 Files: new burst-policy.ts, runtime-store.ts/service.ts/context.ts/state schemas, pure command parser exports, webhook delay plumbing.
 - [x] Spike apply NONE snapshot with only USER receipt, re-observe and idempotent replay; prove the store supports the mechanism before relying on it.
-- [ ] RED source-preserving2/3fragment fold,10s/3turn bounds, pending/ownership/barrier/follower-race/decrypt failure and cross-midnight cases.
-- [ ] Implement atomically guarded follower deferral, eligibility and quiet delay; tail reaches one model call and one reply. GREEN focused tests.
+- [x] RED source-preserving2/3fragment fold,10s/3turn bounds, pending/ownership/barrier/follower-race/decrypt failure and cross-midnight cases.
+- [x] Implement atomically guarded follower deferral, eligibility and quiet delay; tail reaches one model call and one reply. GREEN focused tests.
 
 ### Task4: Source/wire qualification
 Files: input/currentBurstTurns, evidence/completeness/field capability, conditional prompts/digests and fixtures/tests; combined release note.
-- [ ] RED NEW evidence from eligible member versus foreign old fact, retained CURRENT restriction, omitted details, exact source dates and single-message byte identity.
-- [ ] Implement bounded backend membership and conditional prompt, preserve146anchors, qualify grouped wire offline.
-- [ ] Bounded synthetic live interpretation under remaining approved4USD cap with reservations for unknown calls; truthful accounting/evidence, no production reminder mutation.
-- [ ] Commit source/notes/ledger and continue area5; final fullcheck/review after allfive stable.
+- [x] RED NEW evidence from eligible member versus foreign old fact, retained CURRENT restriction, omitted details, exact source dates and single-message byte identity.
+- [x] Implement bounded backend membership and conditional prompt, preserve146anchors, qualify grouped wire offline.
+- [x] Bounded synthetic live interpretation under remaining approved4USD cap with reservations for unknown calls; truthful accounting/evidence, no production reminder mutation.
+- [x] Commit source/notes/ledger and continue area5; final fullcheck/review after allfive stable.
