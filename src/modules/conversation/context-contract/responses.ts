@@ -22,7 +22,7 @@ export type ReplyOutcome =
   | { kind: "RECOVERY"; count: 2 | 3; question: string; facts: string[]; token?: string }
   | { kind: "FAILURE"; reason: FailureReason }
   | { kind: "MUTATION"; result: ConfirmationResult }
-  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" };
+  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" | "DECISION_NOT_VISIBLE" };
 const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const failures: Record<FailureReason, string> = {
   PROVIDER: "Chưa thể xử lý câu trả lời lúc này. Bản nháp còn hiệu lực được giữ nguyên; bạn có thể thử lại.",
@@ -41,6 +41,7 @@ const notices = {
   AMBIGUOUS_SEMANTIC_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Mình cần làm rõ yêu cầu bạn đang nói tới.",
   ESCAPE_REQUIRED: "Để bỏ yêu cầu chưa lưu hiện tại, hãy trả lời riêng Bỏ. Nếu đang có cả bản nháp và đề xuất mới, hãy chọn rõ đối tượng trước.",
   RESUME: "Bản nháp còn hiệu lực được giữ nguyên. Bạn có thể tiếp tục để xem lại câu hỏi.",
+  DECISION_NOT_VISIBLE: "Bạn xem lại lựa chọn vừa gửi rồi xác nhận lại nhé. Bản nháp vẫn được giữ nguyên.",
   CHECKING: "Đang kiểm tra phiên bản bạn chọn.", HELP: "Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn.",
 };
 const fieldLabels: Record<string, string> = { title: "Việc cần nhắc", location: "Địa điểm", notes: "Ghi chú", eventDate: "Ngày sự kiện", eventTime: "Giờ sự kiện", reminderDate: "Ngày nhắc", reminderTime: "Giờ nhắc", calendar: "Lịch", frequency: "Tần suất", occurrenceCount: "Số lần", eventRelation: "Quan hệ với sự kiện", leadOffsetHours:"Số giờ trước", leadOffsetMinutes:"Số phút trước", leadOffsetDays: "Số ngày trước", endDate: "Ngày kết thúc" };

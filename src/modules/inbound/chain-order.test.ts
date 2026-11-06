@@ -73,3 +73,22 @@ it('holds the chain until a real processor send settles, then releases and kicks
  expect(kick).toHaveBeenCalledExactlyOnceWith('head');
  expect(await new D1InboundDispatchStore(h.db as unknown as D1Database).nextInChat('head',now)).toBe('tail');
 });
+
+it.each([false,true])('keeps a legacy draft when queued bare approval predates delivery (forged cached cutoff: %s)',async(forged)=>{
+ const h=fixture();h.add('head');h.add('early',now+1);
+ const {createKeyring}=await import('@/modules/security/keyring');
+ const keyring=await createKeyring('A'.repeat(43)),credential=await keyring.encryptCredential('c','telegram',1,'synthetic-token');
+ h.db.sqlite.prepare('UPDATE bot_connections SET encrypted_token=?,encrypted_token_iv=?').run(new Uint8Array(credential.ciphertext),new Uint8Array(credential.iv));
+ h.db.sqlite.exec("INSERT INTO workspaces VALUES ('workspace','owner','PERSONAL',1,1); INSERT INTO memberships VALUES ('workspace','owner','OWNER',1); INSERT INTO chat_identities(id,connection_id,provider_user_id,private_chat_id,linked_at) VALUES ('identity','c','user','chat',1)");
+ const text=async(id:string,value:string)=>{const e=await keyring.encryptSensitive('inbound-message',id,1,value);h.db.sqlite.prepare('UPDATE inbound_updates SET message_ciphertext=?,message_iv=? WHERE id=?').run(new Uint8Array(e.ciphertext),new Uint8Array(e.iv),id);};
+ await text('head','mai 8h nhắc tôi họp');await text('early','có');
+ const deps={store:h.store,keyring,now:()=>now+5,sendText:vi.fn(async()=>({providerMessageId:'reply'}))};
+ expect(await processInbound('head',deps)).toEqual({status:'DRAFT_CREATED'});
+ if(forged){const read=h.store.findPendingDraft.bind(h.store);vi.spyOn(h.store,'findPendingDraft').mockImplementationOnce(async(...args)=>{const draft=await read(...args);return draft?{...draft,approvalVisibleAfter:now-1}:null;});}
+ expect(await processInbound('early',deps)).toEqual({status:'REJECTED'});
+ expect(await h.db.prepare('SELECT status FROM command_drafts').first('status')).toBe('PENDING');
+ expect(await h.db.prepare('SELECT COUNT(*) AS n FROM reminders').first('n')).toBe(0);
+ h.add('later',now+6);await text('later','có');deps.now=()=>now+7;
+ expect(await processInbound('later',deps)).toEqual({status:'CONFIRMED'});
+ expect(await h.db.prepare('SELECT COUNT(*) AS n FROM reminders').first('n')).toBe(1);
+});

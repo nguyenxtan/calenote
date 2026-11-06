@@ -26,7 +26,7 @@ import { mergePatchV3 } from "./merge";
 import { resolveRequest } from "./resolve";
 import { resolveQuery } from "./query";
 import { computeEffectiveDirectiveV3, validateDirectiveV3, selectGuidance } from "./guidance";
-import { digest, previewHash } from "./confirmation";
+import { bareApprovalVisible, digest, previewHash } from "./confirmation";
 import { CONTEXT_CONTRACT_PROMPT } from "./prompt";
 import { CONTEXT_TYPED_PROMPT } from "./typed-prompt";
 import { CONTEXT_TYPED_PROTOCOL_V3 } from "./typed-protocol";
@@ -181,6 +181,13 @@ export function createContextContractService(deps: ContextContractServiceDepende
         const staleControl = localWords.has(normalized) && !prior?.pendingReminderQuestion && !prior?.pendingQueryQuestion;
         const local = control.kind !== "NONE" || staleControl || greeting.test(normalized) || helpWords.has(normalized);
         const recovery = control.kind === "NONE" && isPreviewRecoveryResponse(prior, message.text);
+        if(prior&&control.kind==="APPROVE"&&!bareApprovalVisible(prior,control.response,message.receivedAt)){
+          emit({event:"MODEL_BYPASSED",reason:"LOCAL_CONTROL"});
+          if(!await deps.runtimeStore.complete({...scope,now:deps.now()}))return {status:"SUPERSEDED"};
+          const reply=composeContextReply({kind:"NOTICE",notice:"DECISION_NOT_VISIBLE"});
+          if(reply.status==="READY")await send(address(reply));
+          return {status:"REJECTED"};
+        }
         if (prior && control.kind === "APPROVE" && control.decisionKind === "SAVE_PREVIEW") {
           emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
           const proof = await createControlProof(prior, observed.observation.inbound, message.text, control, authority, scope.now);

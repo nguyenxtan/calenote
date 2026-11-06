@@ -1,4 +1,4 @@
-import { digest, validDecision } from "./confirmation";
+import { digest, validDecision, bareApprovalVisible } from "./confirmation";
 import { selectControl, type ControlSelection } from "./decisions";
 import type { ContextSnapshotV1, ContextSnapshotV2, ControlAuthority } from "./state";
 import type { DecisionProof } from "./store";
@@ -10,6 +10,7 @@ export async function createControlProof(snapshot: ContextSnapshotV1 | ContextSn
   if (authority.kind !== "CHAT" || authority.scope.sourceInboundId !== inbound.id || authority.scope.claimMarker !== inbound.claimMarker) return null;
   const selected = selectControl(text, snapshot.pendingDecision, authority, { snapshot, now, replyReference: control.response.kind === "REPLY" ? control.response.reference : null });
   if (JSON.stringify(selected) !== JSON.stringify(control)) return null;
+  if(!bareApprovalVisible(snapshot,control.response,Date.parse(inbound.receivedAt)))return null;
   const decision = snapshot.pendingDecision;
   if (!decision || Date.parse(inbound.receivedAt) < Date.parse(decision.issuedAfterInbound.receivedAt)
     || (inbound.receivedAt === decision.issuedAfterInbound.receivedAt && inbound.rowid <= decision.issuedAfterInbound.rowid)) return null;

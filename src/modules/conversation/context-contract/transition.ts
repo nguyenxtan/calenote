@@ -127,7 +127,7 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
   const suspendSelectedOffer = () => {
     const retained = s.pendingDecision?.candidate ? structuredClone(s.pendingDecision) : null;
     clearDecision(s);
-    if (retained) { retained.contextRevision = revision; retained.deliveryState = "UNCERTAIN"; retained.replyReference = null; retained.tokenHandle = null; s.pendingDecision = retained; }
+    if (retained) { Reflect.deleteProperty(retained,"deliveredAt"); retained.contextRevision = revision; retained.deliveryState = "UNCERTAIN"; retained.replyReference = null; retained.tokenHandle = null; s.pendingDecision = retained; }
   };
   const composeQuery = (patch: ValidatedPatch | ValidatedPatchV3, query: NonNullable<ValidatedPatch["resolvedQuery"]>, referenceTime: string, supplied?: QueryResolution) => {
     const qr = supplied ?? resolveQuery(query, Date.parse(referenceTime), lunarCalendar);

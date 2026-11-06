@@ -11,6 +11,7 @@ import type {
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
 import { hasContextContract, legacyContractGuard, newerConversationOutcomeSql, rejectSupersededSemanticInbound } from "@/modules/semantic/infrastructure/d1/conversation-order";
 import { ownedInbound, auth } from "@/modules/conversation/infrastructure/d1/context-store";
+import { hasInboundChainFence } from "@/modules/inbound/chain-order";
 
 interface ContextRow {
   chat_identity_id: string;
@@ -29,6 +30,7 @@ interface DraftRow {
   scheduled_at: number;
   timezone: string;
   expires_at: number;
+  approval_visible_after?: number | null;
 }
 
 interface InboundOwnershipRow {
@@ -56,6 +58,7 @@ function pendingDraft(row: DraftRow): PendingDraft {
     scheduledAt: row.scheduled_at,
     timezone: row.timezone,
     expiresAt: row.expires_at,
+    ...(row.approval_visible_after === undefined ? {} : { approvalVisibleAfter: row.approval_visible_after }),
   };
 }
 
@@ -116,6 +119,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         `SELECT draft.id, draft.chat_identity_id, draft.source_inbound_id,
                 draft.title_ciphertext, draft.title_iv, draft.title_key_version,
                 draft.scheduled_at, draft.timezone, draft.expires_at
+                ${await hasInboundChainFence(this.database) ? ", source.chain_released_at AS approval_visible_after" : ""}
          FROM command_drafts draft
          JOIN inbound_updates source ON source.id = draft.source_inbound_id
          JOIN inbound_updates current ON current.id = ?
@@ -360,6 +364,8 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
 
   async confirmDraft(input: ConfirmDraftMutation): Promise<MutationResult> {
     const identitySql = await this.boundIdentityExpression(input.enforceConversationOrder);
+    const visibilitySql = await hasInboundChainFence(this.database)
+      ? "AND source.chain_released_at IS NOT NULL AND current.received_at > source.chain_released_at" : "";
     const ownership = this.ownershipBindings(input.message);
     const statements = [
       this.database
@@ -374,6 +380,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                JOIN inbound_updates current ON current.id = ?
                WHERE source.id = command_drafts.source_inbound_id
                  AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                 ${visibilitySql}
                  AND (
                    source.received_at < current.received_at OR
                    (source.received_at = current.received_at AND source.rowid < current.rowid)
@@ -493,7 +500,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
         ),
     ];
 
-    return this.runResolutionBatch(input, statements);
+    return this.runResolutionBatch(input, statements, visibilitySql);
   }
 
   async cancelDraft(input: ResolveDraftMutation): Promise<MutationResult> {
@@ -598,6 +605,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
   private async runResolutionBatch(
     input: ResolveDraftMutation,
     statements: D1PreparedStatement[],
+    visibilitySql = "",
   ): Promise<MutationResult> {
     try {
       await this.database.batch(statements);
@@ -617,6 +625,7 @@ export class D1ReminderCommandStore implements ReminderCommandStore {
                     JOIN inbound_updates current ON current.id = ?
                     WHERE source.id = draft.source_inbound_id
                       AND current.state = 'PROCESSING' AND current.transition_marker = ?
+                      ${visibilitySql}
                       AND (
                         source.received_at < current.received_at OR
                         (source.received_at = current.received_at AND source.rowid < current.rowid)

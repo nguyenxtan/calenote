@@ -40,6 +40,13 @@ export function validPreview(snapshot: ContextSnapshotV1 | ContextSnapshotV2, pr
     && JSON.stringify(parsed.data.occurrences) === JSON.stringify(resolved.occurrences)
     && renderReminderDetails(preview.title, preview.details, preview.occurrences, preview.prefix.length + preview.suffix.length).status === "COMPLETE";
 }
+/** Natural approval has no addressed receipt. Keep the original channel
+ * timestamp precision and require evidence it arrived after delivery. */
+export function bareApprovalVisible(snapshot:ContextSnapshotV1|ContextSnapshotV2,response:DecisionProof["response"],receivedAt:number):boolean{
+  if(snapshot.schemaVersion!=="calenote-context-state-2"||response.kind!=="BARE")return true;
+  const delivered=snapshot.pendingDecision?.deliveredAt;
+  return typeof delivered==="string"&&Number.isSafeInteger(receivedAt)&&receivedAt>Date.parse(delivered);
+}
 /** No language interpretation here: only exact application controls. Database
  * ownership, inbound order, session and revision are rechecked in the batch. */
 export function validDecision(snapshot: ContextSnapshotV1 | ContextSnapshotV2, proof: DecisionProof, authority: ControlAuthority, now: number): boolean {
@@ -55,6 +62,7 @@ export function validDecision(snapshot: ContextSnapshotV1 | ContextSnapshotV2, p
   if (authority.kind === "WEB" && (authority.principal.expiresAt <= now || authority.chat.ownerId !== owner
     || JSON.stringify(authority.chat) !== JSON.stringify(snapshot.scope) || proof.response.kind !== "TOKEN")) return false;
   const response = proof.response;
+  if(!bareApprovalVisible(snapshot,response,now))return false;
   if (response.kind === "TOKEN") return response.handle === d.tokenHandle && snapshot.controlRegistry.some(c => c.handle === response.handle && c.decisionId === d.decisionId && c.contextRevision === d.contextRevision && c.draftRevision === d.draftRevision && Date.parse(c.expiresAt) > now);
   if (response.kind === "REPLY") return authority.kind === "CHAT" && response.reference === d.replyReference && d.replyReference !== null;
   if (authority.kind !== "CHAT" || (d.kind === "SAVE_PREVIEW" && requiresBoundPreviewConfirmation(snapshot))) return false;

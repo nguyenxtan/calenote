@@ -71,6 +71,8 @@ export interface PendingDraft {
   scheduledAt: number;
   timezone: string;
   expiresAt: number;
+  /** Present on delivery-fenced stores; null means the source has not settled. */
+  approvalVisibleAfter?: number | null;
 }
 
 interface CommandMutationBase {
@@ -427,6 +429,10 @@ export async function processBoundChatMessage(
       return { status: "CANCELLED" };
     }
 
+    if (draft.approvalVisibleAfter !== undefined &&
+      (draft.approvalVisibleAfter === null || message.receivedAt <= draft.approvalVisibleAfter)) {
+      return rejectWithReply(message, "Bạn xem lại bản nháp vừa gửi rồi xác nhận lại nhé. Bản nháp vẫn được giữ nguyên.", processingNow, dependencies, randomBytes);
+    }
     const title = await dependencies.keyring.decryptSensitive(
       "draft-title",
       draft.id,

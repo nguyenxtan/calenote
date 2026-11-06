@@ -1,3 +1,4 @@
+import {bareApprovalVisible} from "../../confirmation";
 import { z } from "zod";
 import type { ConversationScope } from "../../../contracts";
 import { ownedInbound, auth as inboundArgs } from "../../../infrastructure/d1/context-store";
@@ -272,7 +273,7 @@ export class D1ContextContractStore implements ContextContractStore {
     const changed=JSON.stringify(s.slots)!==JSON.stringify(prior.slots);
     if(changed ? s.draftRevision!==(prior.draftRevision??0)+1 : s.draftRevision!==prior.draftRevision&&s.draftRevision!==(prior.draftRevision??0)+1)return {status:"INVALID"};
    }
-   if(t.decisionProof&&(!prior||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
+   if(t.decisionProof&&(!prior||!bareApprovalVisible(prior,t.decisionProof.response,Date.parse(observation.inbound.receivedAt))||!validDecision(prior,t.decisionProof,{kind:"CHAT",scope},scope.now)||t.decisionProof.kind==="SAVE_PREVIEW"))return {status:"INVALID"};
    if(t.decisionProof&&s.pendingDecision?.decisionId===t.decisionProof.decisionId)return {status:"INVALID"};
    if(prior?.requestId && s.requestId!==prior.requestId && !t.terminal && !["REPLACE_PENDING","RESTART_PENDING"].includes(t.decisionProof?.kind??""))return {status:"INVALID"};
    if(t.preview && (!validPreview(s,t.preview,scope.now)||!s.previewReceipt||await previewHash(t.preview)!==s.previewReceipt.draftHash))return {status:"INVALID"};
@@ -285,7 +286,9 @@ export class D1ContextContractStore implements ContextContractStore {
     +" AND NOT EXISTS(SELECT 1 FROM command_drafts WHERE chat_identity_id=? AND status='PENDING' AND contract_version=1)"
     +" AND NOT EXISTS(SELECT 1 FROM reminder_series_proposals WHERE chat_identity_id=? AND status='PENDING' AND contract_version=1)"
     +" AND NOT EXISTS(SELECT 1 FROM semantic_contexts WHERE chat_identity_id=? AND status='PENDING')";
-   const statements=[this.permit(a,s.id,marker,"APPLY",condition,[...(cas?[...cas.args,scope.now]:[a.chat]),a.chat,observed.history,a.chat,a.chat,a.chat])];
+   const delivered=t.decisionProof?.response.kind==="BARE"&&prior?.schemaVersion==="calenote-context-state-2"?prior.pendingDecision?.deliveredAt:undefined;
+   const visibility=delivered?" AND EXISTS(SELECT 1 FROM inbound_updates WHERE id=? AND received_at>?)":"";
+   const statements=[this.permit(a,s.id,marker,"APPLY",condition+visibility,[...(cas?[...cas.args,scope.now]:[a.chat]),a.chat,observed.history,a.chat,a.chat,a.chat,...(delivered?[scope.sourceInboundId,Date.parse(delivered)]:[])])];
    const status=t.terminal??(s.lifecycle==="AWAITING_CONFIRMATION"?"DRAFT_READY":"CLARIFYING");
    if(prior)statements.push(this.statement(`UPDATE conversation_contexts SET revision=?,last_inbound_id=?,claim_marker=?,status=?,updated_at=?,expires_at=?,payload_ciphertext=?,payload_iv=?,key_version=?,write_marker=? WHERE id=? AND ${permitted}`,
     [s.contextRevision,scope.sourceInboundId,scope.claimMarker,status,scope.now,this.expiry(s),t.terminal?null:encrypted.ciphertext,t.terminal?null:encrypted.iv,t.terminal?null:1,marker,s.id,marker]));
@@ -412,12 +415,13 @@ export class D1ContextContractStore implements ContextContractStore {
    catch { return {status:"REJECTED"}; }
    if(!preview||!await validateConfirmation(s,preview,proof,authority,a.now))return {status:"REJECTED"};
    const marker=randomOpaqueId(),cas=this.rowCas(row);
+   const delivered=proof.response.kind==="BARE"&&s.schemaVersion==="calenote-context-state-2"?s.pendingDecision?.deliveredAt:undefined;
    const after=authority.kind==="CHAT"?` AND EXISTS(SELECT 1 FROM inbound_updates WHERE id=?
     AND (received_at>? OR (received_at=? AND rowid>?))
-    AND (received_at>? OR (received_at=? AND rowid>?)))`:"";
+    AND (received_at>? OR (received_at=? AND rowid>?)) ${delivered?"AND received_at>?":""})`:"";
    const order=s.pendingDecision!.issuedAfterInbound,previewOrder=s.previewReceipt!.issuedAfterOrder;
    const statements=[this.permit(a,s.id,marker,"CONFIRM",cas.sql+" AND EXISTS(SELECT 1 FROM conversation_contract_ownership WHERE context_id=? AND chat_identity_id=? AND owner_id=?)"+after,
-    [...cas.args,a.now,s.id,a.chat,a.owner,...(authority.kind==="CHAT"?[authority.scope.sourceInboundId,Date.parse(order.receivedAt),Date.parse(order.receivedAt),order.rowid,Date.parse(previewOrder.receivedAt),Date.parse(previewOrder.receivedAt),previewOrder.rowid]:[])])];
+    [...cas.args,a.now,s.id,a.chat,a.owner,...(authority.kind==="CHAT"?[authority.scope.sourceInboundId,Date.parse(order.receivedAt),Date.parse(order.receivedAt),order.rowid,Date.parse(previewOrder.receivedAt),Date.parse(previewOrder.receivedAt),previewOrder.rowid,...(delivered?[Date.parse(delivered)]:[])]:[])])];
    const proposalId=s.pendingDecision!.target.proposalId,seriesId=proposalId?randomOpaqueId():null,seriesPublicId=proposalId?randomOpaqueId():null;
    const inbound=authority.kind==="CHAT"?authority.scope.sourceInboundId:s.inbound.id;
    if(proposalId){
@@ -477,7 +481,7 @@ export class D1ContextContractStore implements ContextContractStore {
    if(s.previewReceipt?.previewId===receipt.outboundId){s.previewReceipt.deliveryState=receipt.deliveryState;s.previewReceipt.replyReference=receipt.messageRef;}
    if(s.pendingDecision&&(s.pendingDecision.previewId===receipt.outboundId||s.pendingDecision.questionId===receipt.outboundId)){
     if(receipt.deliveryState!=="SENT")s.pendingDecision=null;
-    else {s.pendingDecision.deliveryState="SENT";s.pendingDecision.replyReference=receipt.messageRef;}
+    else {s.pendingDecision.deliveryState="SENT";s.pendingDecision.replyReference=receipt.messageRef;if(s.schemaVersion==="calenote-context-state-2")s.pendingDecision!.deliveredAt=new Date(scope.now).toISOString();}
    }
    const encoded=s.schemaVersion==="calenote-context-state-2"?encodeContextSnapshotV2(s):encodeContextSnapshot(s);if(bytes(encoded)>16384)return "STALE";
    const encrypted=await this.keyring.encryptSensitive("context-contract-state",identity(s.scope,s.id,this.protocol),1,encoded);

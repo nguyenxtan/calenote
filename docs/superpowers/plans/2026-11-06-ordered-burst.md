@@ -18,13 +18,13 @@ Files: migration0024, new inbound chain SQL helper/tests, inbound/processor.ts, 
 
 ### Task2: Confirmation visibility
 Files: state.ts, control-proof.ts/confirmation.ts, D1 context store and service; focused tests.
-- [ ] RED bare approval received before/equal delivery, no delivered timestamp, token/reply/web exceptions; premature rejection keeps decision and later approval saves once.
-- [ ] Implement deliveredAt receipt stamp and proof/final SQL checks; safe no-draft-mutation response.
-- [ ] GREEN confirmation/service/store regressions; no historical snapshot rewrite, commit.
+- [x] RED bare approval received before/equal delivery, no delivered timestamp, token/reply/web exceptions; premature rejection keeps decision and later approval saves once.
+- [x] Implement deliveredAt receipt stamp and proof/final SQL checks; safe no-draft-mutation response.
+- [x] GREEN confirmation/service/store regressions; no historical snapshot rewrite, commit.
 
 ### Task3: Reply-less fold and eligibility
 Files: new burst-policy.ts, runtime-store.ts/service.ts/context.ts/state schemas, pure command parser exports, webhook delay plumbing.
-- [ ] Spike apply NONE snapshot with only USER receipt, re-observe and idempotent replay; prove the store supports the mechanism before relying on it.
+- [x] Spike apply NONE snapshot with only USER receipt, re-observe and idempotent replay; prove the store supports the mechanism before relying on it.
 - [ ] RED source-preserving2/3fragment fold,10s/3turn bounds, pending/ownership/barrier/follower-race/decrypt failure and cross-midnight cases.
 - [ ] Implement atomically guarded follower deferral, eligibility and quiet delay; tail reaches one model call and one reply. GREEN focused tests.
 
