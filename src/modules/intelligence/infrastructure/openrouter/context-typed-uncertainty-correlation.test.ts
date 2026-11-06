@@ -45,7 +45,10 @@ it('retains strict-valid field/reason/value combinations and input-selected code
  }
  const selected=itemSchema(googleLiteEuTypedContextWireSchemaV3(r02).schema);
  for(const code of [8,9,10,11,18])expect(selected.safeParse(issue(code,[],'MISSING')).success).toBe(false);
- for(const code of [16,17]){expect(selected.safeParse(issue(code,[2])).success).toBe(true);expect(selected.safeParse(issue(code,['2'])).success).toBe(false);}
+ // This complete day/count source cannot author an hour/minute issue. The
+ // generic source still retains those correctly typed successor alternatives.
+ const generic=itemSchema(googleLiteEuTypedContextWireSchemaV3(frozen.input).schema);
+ for(const code of [16,17]){expect(selected.safeParse(issue(code,[2])).success).toBe(false);expect(generic.safeParse(issue(code,[2])).success).toBe(true);expect(generic.safeParse(issue(code,['2'])).success).toBe(false);}
 });
 
 it('isolates the historical correlation change through an explicit pre-duration specimen and pins current strict acceptance',()=>{
