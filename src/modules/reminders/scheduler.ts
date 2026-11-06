@@ -1,3 +1,4 @@
+import {hasInboundChainFence,inboundChainBlockedSql} from "@/modules/inbound/chain-order";
 import {
   cryptoRandomBytes,
   d1Changes,
@@ -189,12 +190,22 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
       .first<InboundDispatchRow>();
   }
 
+  async nextInChat(inboundId:string,now:number):Promise<string|null>{
+    if(!await hasInboundChainFence(this.database))return null;
+    const row=await this.database.prepare(`SELECT i.id FROM inbound_updates i JOIN inbound_updates prior
+      ON prior.id=? AND i.connection_id=prior.connection_id AND i.provider_user_id=prior.provider_user_id AND i.private_chat_id=prior.private_chat_id
+      WHERE i.id<>prior.id AND i.state IN ('PENDING','PROCESSING') AND NOT ${inboundChainBlockedSql("i",now-INBOUND_DISPATCH_LEASE_MS)}
+      ORDER BY i.received_at,i.rowid LIMIT 1`).bind(inboundId).first<{id:string}>();
+    return row?.id??null;
+  }
+
   async selectOrphans(now: number, limit: number): Promise<string[]> {
+    const ordered=await hasInboundChainFence(this.database);
     const result = await this.database
       .prepare(
         `SELECT id
          FROM inbound_updates
-         WHERE (
+         WHERE ((
            state = 'PENDING'
            AND (dispatch_started_at IS NULL OR dispatch_started_at <= ?)
          ) OR (
@@ -202,7 +213,8 @@ export class D1InboundDispatchStore implements InboundDispatchStore {
            AND (processing_started_at IS NULL OR processing_started_at <= ?)
            AND (dispatch_started_at IS NULL OR dispatch_started_at <= ?)
          )
-         ORDER BY received_at, id
+         ) ${ordered ? `AND NOT ${inboundChainBlockedSql("inbound_updates",now-INBOUND_DISPATCH_LEASE_MS)}` : ""}
+         ORDER BY received_at, rowid
          LIMIT ?`,
       )
       .bind(

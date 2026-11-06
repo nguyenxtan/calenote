@@ -12,9 +12,9 @@ No fabricated receipts, text concatenation, Queue concurrency change, retry exha
 
 ### Task1: FIFO, holds and recovery
 Files: migration0024, new inbound chain SQL helper/tests, inbound/processor.ts, reminders/scheduler.ts, worker/composition-root.ts and queue tests.
-- [ ] RED reversed/tied jobs, late older date behind live owner, scope isolation/unbound, expired/reclaimed marker, exhausted head, blocked dispatch counters, cron fairness and slow-send hold.
-- [ ] Implement selected SQL guard/BLOCKED acknowledgement, marker release/finally and next-head kick; no processing while send/receipt unsettled.
-- [ ] GREEN focused store/queue/processor and real Workerd fixture tests, types/lint; commit.
+- [x] RED reversed/tied jobs, late older date behind live owner, scope isolation/unbound, expired/reclaimed marker, exhausted head, blocked dispatch counters, cron fairness and slow-send hold.
+- [x] Implement selected SQL guard/BLOCKED acknowledgement, marker release/finally and next-head kick; no processing while send/receipt unsettled.
+- [x] GREEN focused store/queue/processor and real Workerd fixture tests, types/lint; commit.
 
 ### Task2: Confirmation visibility
 Files: state.ts, control-proof.ts/confirmation.ts, D1 context store and service; focused tests.

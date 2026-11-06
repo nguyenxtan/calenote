@@ -303,3 +303,9 @@ describe("awaited minute scheduler", () => {
     ]);
   });
 });
+
+it('acknowledges an ordered blocked inbound without consuming queue retries',async()=>{
+ const worker=await workerModule(),item=message({type:'PROCESS_INBOUND',inboundId});
+ await worker.handleQueueBatch(batch([item]),{processInbound:vi.fn(async()=>({status:'BLOCKED'} as const)),deliverReminder:vi.fn(),deliverLoginCode:vi.fn()});
+ expect(item.ack).toHaveBeenCalledExactlyOnceWith();expect(item.retry).not.toHaveBeenCalled();
+});

@@ -46,7 +46,7 @@ import { D1ReminderSchedulerStore } from "@/modules/reminders/infrastructure/d1/
 import { resolveManualReminderIntent, cancelPublicReminder, createManualReminder, listPublicReminders } from "@/modules/reminders/api-service";
 import { listDetailedReminders } from "@/modules/reminders/details-api-service";
 import { PreviewUnavailableError } from "./routes/conversation-previews";
-import { claimDueReminders, D1InboundDispatchStore, redriveInboundOrphans } from "@/modules/reminders/scheduler";
+import { claimDueReminders, D1InboundDispatchStore, enqueueInboundWithReservation, redriveInboundOrphans } from "@/modules/reminders/scheduler";
 import { createKeyring, type Keyring } from "@/modules/security/keyring";
 import { D1SourceActionStore } from "@/modules/source-actions/infrastructure/d1/store";
 import {
@@ -490,6 +490,10 @@ export async function createRuntimeOperations(env: Env, capabilities: { conversa
   return {
     processInbound: (inboundId) => processInbound(inboundId, {
       store: inboundStore,
+      publishNextInChat:async previous=>{
+        const now=Date.now(),next=await inboundDispatchStore.nextInChat(previous,now);
+        if(next)await enqueueInboundWithReservation(next,now,{store:inboundDispatchStore,enqueue:async job=>{await env.JOBS.send(job);}});
+      },
       getReplyPreferences,
       connectionEgress: new D1ConnectionLifecycleStore(env.DB),
       followThrough: async (message,context) => {

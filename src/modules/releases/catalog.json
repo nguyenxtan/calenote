@@ -20,7 +20,8 @@
         "Kiểm tra quyền sở hữu và phiên đăng nhập; bảo toàn thông báo đã được lấy để gửi.",
         "Nhắc trước sự kiện theo số giờ/phút được nói rõ trong chat; backend tính giờ gửi, kể cả qua nửa đêm.",
         "Hỏi lại khi thiếu giờ sự kiện hoặc có mốc thời gian mâu thuẫn; sửa giờ sự kiện sẽ tính lại, xóa khoảng nhắc sẽ bỏ dữ liệu cũ.",
-        "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem."
+        "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem.",
+        "Xử lý tin nhắn liên tiếp theo thứ tự trong từng cuộc chat và giữ lượt xử lý cho đến khi phản hồi đã gửi xong."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
@@ -29,7 +30,8 @@
         "Tạo lịch mỗi tuần hoặc mỗi tháng với ngày bắt đầu và số lần/ngày kết thúc.",
         "Xem và hủy chuỗi lời nhắc AI; lịch năm, lịch lặp âm và nhiều thứ trong tuần chưa hỗ trợ.",
         "Có thể nói “họp lúc15h, nhắc trước90phút” để nhắc lúc13h30; vẫn cần xác nhận bản nháp.",
-        "Xem chi phí AI trong Cài đặt; khoản dự phòng được tách riêng và không được tính thành chi phí trung bình hay hóa đơn."
+        "Xem chi phí AI trong Cài đặt; khoản dự phòng được tách riêng và không được tính thành chi phí trung bình hay hóa đơn.",
+        "Tin nhắn gửi sát nhau được xử lý theo thứ tự, tránh tin sau chạy vượt khi trợ lý đang trả lời tin trước."
       ],
       "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production. Kiểm tra giờ/phút, giữ đơn vị và bằng chứng, sửa/xóa, bản mã dữ liệu cũ, codec production và80 kịch bản với144 lượt diễn giải giả lập. Kiểm tra tổng hợp chi phí, biên kỳ UTC, quyền phiên/tài khoản, dữ liệu cũ thiếu metadata, phản hồi đến muộn và giao diện truy cập được."
     },

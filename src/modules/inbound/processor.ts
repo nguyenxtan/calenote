@@ -1,3 +1,4 @@
+import {hasInboundChainFence,inboundChainBlockedSql,recoverExhaustedChainHeads} from "./chain-order";
 import { addressProse, botSalutation, type BotReplyPreferencesGetter } from "@/modules/preferences/wording";
 import type { FollowThroughChatHandler } from "@/modules/follow-through/chat-adapter";
 import type {
@@ -109,7 +110,8 @@ export type StoreClaimResult =
   | { status: "CLAIMED"; row: Omit<ClaimedInboundMessage, "text"> & { encryptedMessage: EncryptedValue; messageKeyVersion: number } }
   | { status: "RETRY_AFTER"; retryAfterMs: number }
   | { status: "TERMINAL" }
-  | { status: "MISSING" };
+  | { status: "MISSING" }
+  | { status: "BLOCKED" };
 
 export type ClaimInboundResult =
   | { status: "CLAIMED"; message: ClaimedInboundMessage }
@@ -134,6 +136,7 @@ export interface InboundProcessorStore extends ReminderCommandStore {
   completeSemanticMessage(message: BoundChatMessage, context: BoundChatContext, now: number): Promise<boolean>;
   listSemanticReminders(input: SemanticReminderQuery): Promise<QueriedReminder[]>;
   claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult>;
+  releaseChain?(inboundId:string,claimMarker:string,now:number):Promise<boolean>;
   bindPrivateChat(input: BindPrivateChatInput): Promise<boolean>;
   reject(inboundId: string, claimMarker: string, now: number): Promise<boolean>;
   fail(inboundId: string, claimMarker: string, now: number): Promise<boolean>;
@@ -162,6 +165,7 @@ type SendProcessingFeedback = (
 ) => Promise<void>;
 
 export interface ProcessInboundDependencies {
+  publishNextInChat?:(inboundId:string)=>Promise<void>;
   getReplyPreferences?: BotReplyPreferencesGetter;
   followThrough?: FollowThroughChatHandler;
   getReminderConfirmation?(userId: string): Promise<"auto" | "preview">;
@@ -367,18 +371,27 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
     return new D1SemanticReminderQueryStore(this.database).list(input);
   }
 
-  async claim(inboundId: string, now: number, claimMarker: string): Promise<StoreClaimResult> {
+  async releaseChain(inboundId:string,claimMarker:string,now:number):Promise<boolean>{
+    if(!await hasInboundChainFence(this.database))return false;
+    const result=await this.database.prepare("UPDATE inbound_updates SET chain_released_at=? WHERE id=? AND transition_marker=? AND chain_released_at IS NULL").bind(now,inboundId,claimMarker).run();
+    return d1Changes(result)===1;
+  }
+
+  async claim(inboundId: string, now: number, claimMarker: string, rechecked=false): Promise<StoreClaimResult> {
+    const ordered=await hasInboundChainFence(this.database),cutoff=now-INBOUND_PROCESSING_LEASE_MS;
+    if(ordered&&!rechecked)await recoverExhaustedChainHeads(this.database,inboundId,now,cutoff,MAX_INBOUND_PROCESS_ATTEMPTS);
     const claimed = await this.database
       .prepare(
         `UPDATE inbound_updates
          SET state = 'PROCESSING', processing_started_at = ?, attempt_count = attempt_count + 1,
-             transition_marker = ?, dispatch_started_at = NULL, dispatch_marker = NULL
+             transition_marker = ?, dispatch_started_at = NULL, dispatch_marker = NULL${ordered ? ",chain_released_at=NULL" : ""}
          WHERE id = ? AND (
            state = 'PENDING' OR
            (state = 'PROCESSING' AND (processing_started_at IS NULL OR processing_started_at <= ?))
          )
            AND EXISTS(SELECT 1 FROM bot_connections c WHERE c.id=inbound_updates.connection_id AND c.state IN ('VALIDATING','ACTIVE_UNBOUND','ACTIVE_BOUND','WEBHOOK_FAILED'))
            AND attempt_count < ?
+           ${ordered ? `AND NOT ${inboundChainBlockedSql("inbound_updates",cutoff)}` : ""}
          RETURNING id`,
       )
       .bind(
@@ -410,6 +423,18 @@ export class D1InboundProcessorStore implements InboundProcessorStore {
       }
     }
 
+    if(ordered){
+      const blocked=await this.database.prepare(`UPDATE inbound_updates SET state='PENDING',processing_started_at=NULL,transition_marker=NULL,
+        dispatch_started_at=NULL,dispatch_marker=NULL,dispatch_attempt_count=0
+        WHERE id=? AND (state='PENDING' OR (state='PROCESSING' AND (processing_started_at IS NULL OR processing_started_at<=?)))
+        AND ${inboundChainBlockedSql("inbound_updates",cutoff)}`).bind(inboundId,cutoff).run();
+      if(d1Changes(blocked)===1)return {status:"BLOCKED"};
+      // A predecessor may have released between the claim and blocker check.
+      if(!rechecked){
+        const pending=await this.database.prepare("SELECT 1 FROM inbound_updates WHERE id=? AND state='PENDING' AND attempt_count<?").bind(inboundId,MAX_INBOUND_PROCESS_ATTEMPTS).first();
+        if(pending)return this.claim(inboundId,now,claimMarker,true);
+      }
+    }
     const disabled = await this.database.prepare(`SELECT 1 AS disabled FROM inbound_updates i JOIN bot_connections c ON c.id=i.connection_id WHERE i.id=? AND c.state='SUSPENDED'`).bind(inboundId).first();
     if (disabled) return {status:"TERMINAL"};
 
@@ -748,6 +773,7 @@ export async function processInbound(
   }
   if (claim.status !== "CLAIMED") return claim;
   const message = claim.message;
+  try {
   observeTiming(dependencies.observeTiming, "QUEUE_WAIT", message.processingStartedAt - message.receivedAt);
   const commandCode = parseConnectCommand(message.text);
   recordZaloEarlyDiagnostic(message.provider, dependencies.recordDiagnostic, {
@@ -888,7 +914,7 @@ export async function processInbound(
     // Only the existing exact read-only language uses the local service. An
     // arbitrary successor failure never grants fallback or another model call.
     const conversation=successor&&legacyConversation?{...successor,handle:(current:BoundChatMessage,bound:BoundChatContext)=>localReadOnlyCommand(current.text)!==null?legacyConversation.handle(current,bound):successor.handle(current,bound)}:successor??legacyConversation;
-    return processBoundChatMessage(message, {
+    return await processBoundChatMessage(message, {
       store: dependencies.store, keyring: dependencies.keyring, now, randomBytes, reply, processingFeedback, conversation,
       getReminderConfirmation: dependencies.getReminderConfirmation,
       getReplyPreferences: dependencies.getReplyPreferences,
@@ -902,4 +928,10 @@ export async function processInbound(
   }
   await replyAfterTerminal(message, CONNECT_HELP_REPLY, dependencies);
   return { status: "REJECTED" };
+  } finally {
+    let released=false;
+    try { released=await dependencies.store.releaseChain?.(message.id,message.claimMarker,now()) ?? false; } catch { /* Lease/cron retains recovery authority. */ }
+    if(released)try { await dependencies.publishNextInChat?.(message.id); } catch { /* The durable orphan sweep is the fallback. */ }
+  }
+
 }
