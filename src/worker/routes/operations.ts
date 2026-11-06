@@ -82,3 +82,8 @@ export interface OnboardingOperations {
   consumeOnboardingRateLimit(subjectDigest: string): Promise<RateLimitResult>;
   onboard(input: OnboardingInput): Promise<OnboardingResult>;
 }
+
+export interface AiUsageOperations {
+ requireUser(credentials:SessionCredentials):Promise<SessionPrincipal>;
+ readUsage(principal:SessionPrincipal):Promise<import('@/contracts/api/ai-usage').AiUsage>;
+}

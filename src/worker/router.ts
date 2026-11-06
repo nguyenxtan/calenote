@@ -75,10 +75,11 @@ import { handleResolveReminderIntent, handleCancelReminder, handleCreateReminder
 import { handleListRemindersV2 } from "./routes/reminders-v2";
 import { handleConversationPreviews, PreviewUnavailableError } from "./routes/conversation-previews";
 import { handleSeries } from "./routes/reminder-series";
+import {handleAiUsage} from "./routes/ai-usage";
 import { handleCanonicalSeries, CanonicalSeriesUnavailableError } from "./routes/canonical-series";
-import { createSeriesOperations, createCanonicalSeriesOperations } from "./composition-root";
+import { createSeriesOperations, createCanonicalSeriesOperations, createAiUsageOperations } from "./composition-root";
 import {contextRuntimeCapabilities} from './release-runtime';
-import type { SeriesOperations, ContextApiOperations, CanonicalSeriesOperations } from "./routes/operations";
+import type { SeriesOperations, ContextApiOperations, CanonicalSeriesOperations, AiUsageOperations } from "./routes/operations";
 import type {
   AuthOperations,
   ActionsOperations,
@@ -95,6 +96,7 @@ import {
 } from "./routes/webhooks";
 
 export interface RouterOptions {
+ aiUsageOperations?:(env:Env)=>Promise<AiUsageOperations>;
  emailRegistrationOperations?:(env:Env)=>Promise<EmailRegistrationOperations>;
  personalAssistantOperations?: (env:Env)=>Promise<PersonalAssistantOperations>;
   followThroughOperations?: (env: Env) => Promise<FollowThroughOperations>;
@@ -226,6 +228,7 @@ export function createRouter(options: RouterOptions = {}) {
   const actionsOperationsFactory = options.actionsOperations ?? createActionsOperations;
   const connectionsOperationsFactory = options.connectionsOperations ?? createConnectionsOperations;
   const remindersOperationsFactory = options.remindersOperations ?? createRemindersOperations;
+  const aiUsageOperationsFactory=options.aiUsageOperations ?? createAiUsageOperations;
   const canonicalSeriesOperationsFactory = options.canonicalSeriesOperations ?? ((env: Env) => createCanonicalSeriesOperations(env, contextRuntimeCapabilities(env)));
   const contextApiOperationsFactory = options.contextApiOperations ?? ((env:Env)=>createContextApiOperations(env,contextRuntimeCapabilities(env)));
   const preferencesOperationsFactory = options.preferencesOperations ?? createPreferencesOperations;
@@ -313,6 +316,7 @@ export function createRouter(options: RouterOptions = {}) {
         || (request.method === "POST" && pathname === "/api/v2/conversation-previews/decision")) {
         return await handleConversationPreviews(request, appOrigin!, () => contextApiOperationsFactory(env));
       }
+      if(request.method==="GET" && pathname==="/api/ai-usage")return await handleAiUsage(request,()=>aiUsageOperationsFactory(env));
       if (["GET", "POST"].includes(request.method) && pathname === "/api/v2/reminder-series") {
         return await handleCanonicalSeries(request, appOrigin!, () => canonicalSeriesOperationsFactory(env));
       }

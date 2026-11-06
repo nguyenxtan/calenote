@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowUpRight, Bell, LockKeyhole, SlidersHorizontal, UserRound } from "lucide-react";
 import type { SessionUser } from "@/contracts/api/session";
 import type { PublicPreferences } from "@/contracts/api/preferences";
@@ -10,8 +10,8 @@ import type { PublicConnection } from "@/contracts/api/connections";
 import { PrimaryLoginPanel } from "./PrimaryLoginPanel";
 import styles from "./FinalScreenExperience.module.css";
 
-type Props = AccountSettingsProps & { connections?: PublicConnection[]; user: SessionUser; value: PublicPreferences; save(value: PublicPreferences): Promise<boolean>; notice: string | null; busy: boolean };
-export function SettingsPanel({ user, value, save, notice, busy, saveProfile, sessions, revokeOthers, connections }: Props) {
+type Props = AccountSettingsProps & { usagePanel?:ReactNode; connections?: PublicConnection[]; user: SessionUser; value: PublicPreferences; save(value: PublicPreferences): Promise<boolean>; notice: string | null; busy: boolean };
+export function SettingsPanel({ user, value, save, notice, busy, saveProfile, sessions, revokeOthers, connections, usagePanel }: Props) {
   const [draft, setDraft] = useState(value);
   const [editedSinceSubmit, setEditedSinceSubmit] = useState(false);
   function edit(next: PublicPreferences) { setDraft(next); setEditedSinceSubmit(true); }
@@ -75,6 +75,7 @@ export function SettingsPanel({ user, value, save, notice, busy, saveProfile, se
         </form>
       </section>
       <AppearanceSettings />
+      {usagePanel}
       <AccountSettings user={user} saveProfile={saveProfile} sessions={sessions} revokeOthers={revokeOthers} />
       <section className={styles.settingsCard} id="delivery">
         <h2>Kênh nhận lời nhắc</h2><p>Lời nhắc được gửi qua bot đã kết nối với cuộc trò chuyện riêng của bạn.</p>

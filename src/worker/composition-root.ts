@@ -587,3 +587,12 @@ export async function createEmailRegistrationOperations(env:Env):Promise<EmailRe
  const deps={database:env.DB,keyring,rateLimitStore,sender:createRegistrationEmailSender(env.REGISTRATION_EMAIL,env.REGISTRATION_EMAIL_FROM,env.APP_ORIGIN)};
  return {requestEmailRegistration:input=>requestEmailRegistration(input,deps),verifyEmailRegistration:async input=>({cookie:(await verifyEmailRegistration(input,deps)).session.cookie})};
 }
+
+/** Owner-only ledger reporting never calls a model or provider metadata API. */
+export async function createAiUsageOperations(env:Env):Promise<import('./routes/operations').AiUsageOperations>{
+ const {readOwnerAiUsage}=await import('@/modules/semantic/infrastructure/d1/usage');
+ const keyring=await createRouteKeyring(env),runtime=parseKeyedContextRuntimeConfig(env);
+ const configuration={runtime:runtime.status,limits:runtime.status==='READY'?{dailyCalls:runtime.budgetLimits.ownerDailyFallbackLimit,monthlyCostMicrounits:runtime.budgetLimits.ownerMonthlyCostMicrounits}:null};
+ return {requireUser:credentials=>requireSession(credentials,{store:new D1SessionStore(env.DB),keyring}),
+  readUsage:principal=>readOwnerAiUsage(env.DB,principal,Date.now(),configuration)};
+}
