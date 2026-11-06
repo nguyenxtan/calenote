@@ -1,0 +1,27 @@
+# Ordered quick messages and deferred burst turns
+
+Area4 of the all-five user scope. Claude read-only review found a real claim-order race; root verified independent claims, rowid tie ordering, terminalization-before-send and reply-less apply's NONE-state allowance. User delegated routine design/implementation and opted out of intermediate design questions.
+
+## Choice and behavior
+FIFO alone fixes loss but does not provide the inventory's grouping. Implement both: owned FIFO with a delivery hold, then a narrow deferred USER-turn fold. Never concatenate messages or fabricate their receipt time. No Queue concurrency change. A control/local/memory/follow-through command is a grouping barrier.
+
+### Ordering
+Migration0024 adds nullable chain_released_at plus chat/order and unreleased-hold indexes. Selected ACTIVE_BOUND chats order by connection+provider-user+private-chat and (received_at,rowid). No earlier open row, live processing lease or unreleased delivery hold may be overtaken; a live hold also blocks late rows with an older provider date. Unbound connect traffic retains existing CAS behavior.
+Blocked PENDING work is acknowledged, not retried into the DLQ, and its dispatch lease/attempt counters are reset without consuming a processing attempt. Cron selects chain heads by received_at,rowid, with existing bounded recovery for exhausted or expired heads. Release holds by original claim marker in a finally after all processing/reply/receipt awaits settle; a successful release best-effort enqueues the next head. Lost kicks/crashes recover through existing cron and lease. Zombie markers cannot release a reclaimed row. A poison head may delay its chat up to existing four5-minute processing leases; other chats continue.
+New columns are detected for pre-migration fixture/rollback compatibility; the production release requires0024. Old schema keeps its old behavior; do not claim live ordering before migration/deployment.
+
+### Confirmation visibility
+PendingDecisionV2 gets optional deliveredAt stamped only on SENT delivery. Bare chat approval must have an immutable receivedAt strictly later than deliveredAt. Preserve the channel's full timestamp precision (Telegram whole seconds remain conservative); exact current token/reply-reference proofs are allowed because they address the delivered preview. Cancellation is not visibility-fenced. Old previews without deliveredAt require an addressed control, not an invented delivery time.
+Check in createControlProof and the final D1 authority gates (confirm and non-save decision apply). Premature bare confirmation is completed with a reminder to review/confirm again; it must retain the same draft/decision and not take the failure transition that revokes it. Web confirmation retains its session/token authority.
+
+### Coalescing
+A fold is eligible only in absent/terminal/NONE-no-request state with no decision/question/preview, at most3 trailing eligible USER turns, and span<=10seconds. An owner-scoped peek must find the immediate next pending fragment, decrypt it and confirm eligibility. Before atomically applying a reply-less transition, recheck that exact follower is still the next pending eligible row under the same scope; a later inserted barrier must prevent deferral.
+Apply built.candidateSnapshot with incremented context revision, no preview, no assistant turn and PROCESSED inbound. Tail processing makes one model call over separate USER turns. Membership is the actual trailing transcript, never model-authored. Time-dependent operands retain each source's original receivedAt. Failure closes the run with the existing failure reply; bounded eligibility prevents old buffered content being adopted as a new request later.
+Backend derives optional currentBurstTurns only for such a run. NEW targeting/source admission may use that exact set; CURRENT and old fact restrictions are unchanged. Extend source completeness and generation permissions to each member without returning parser-derived operands. Append a burst prompt addendum only on the grouped path; single-message request146 bodies/hashes stay identical. Durable attempt prompt digest must use the actual conditional prompt.
+A2-second enqueue delay for eligible ordinary text improves grouping; controls/local reads stay immediate. Timing is optimization only, never authority. Cloudflare send delay/retry/ack behavior verified against official docs, URLs below.
+
+## Verification and release
+Prove reply-less apply first; then reversed/tied jobs, lease/exhausted recovery, chat isolation, delivery hold/finally, cron fairness, no retry exhaustion, premature bare confirmation with preserved later retry, actual model input/source time across midnight, barrier races and one-call/replay. Real SQLite plus a Workerd migration/transaction check. Qualify single-message hashes unchanged and grouped source/wire path offline, then bounded synthetic live interpretation under existing4USD cap. No model/provider/price/budget change.
+No remote migrations, provider account changes or production deployment until the final exact-SHA approval. Area4 is not complete merely because FIFO passes while grouping is absent.
+
+References: https://developers.cloudflare.com/queues/configuration/batching-retries/ and https://developers.cloudflare.com/queues/configuration/javascript-apis/ . Claude report: artifacts/diagnostics/product-next-20261104/claude-burst-calendar-design.md.
