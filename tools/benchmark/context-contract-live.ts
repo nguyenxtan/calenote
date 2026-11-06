@@ -98,6 +98,18 @@ export function validateFrozenContextCorpus(root: string, manifests: readonly Co
   }
 }
 
+/** PILOT executes only the original32 scripts. Keep its immutable manifest
+ * identity independent of the approved, nonexecuted H10 oracle revision.
+ * Validate the complete CURRENT corpus first; an old or edited corpus cannot
+ * acquire this identity. Candidate and harness proofs still bind current code. */
+export function historicalPilotCorpusIdentity(root: string, manifests: readonly ContextManifest[]): ContextManifest[] {
+  validateFrozenContextCorpus(root, manifests);
+  const historical = structuredClone([...manifests]);
+  const h10 = historical[2].cases.find(row => row.id === "H10")!;
+  h10.turns[0].expect.pendingField = null;
+  return historical;
+}
+
 export interface FutureLiveIntent { root: string; enableLive: boolean; authorizationPath: string; profile: CampaignProfile; runId: string; now: number; authorizationCapability?: CampaignAuthorization; }
 export interface ObservableAuthorization { version: "context-contract-live-2"; method: "OBSERVABLE_CANARY";
   campaignRoot: string; pilotLedgerHash: string | null; sourceSha: string; provenanceDigest: string; profile: CampaignProfile;

@@ -11,14 +11,21 @@ const v1 = { title: 0, location: 1, notes: 2, eventDate: 3, eventTime: 4,
   reminderDate: 5, reminderTime: 6, calendar: 7, frequency: 8,
   occurrenceCount: 9, eventRelation: 10, leadOffsetDays: 11, endDate: 12,
   intent: 13, queryRange: 14, operation: 15 };
+const v2 = { ...v1, leadOffsetHours: 16, leadOffsetMinutes: 17 };
 const base = { schemaVersion: "calenote-context-2", intent: "HELP", dialogueAct: "GREET", continuation: "NO", changes: [], query: null, uncertainties: [], controlEvidence: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
 const successorBase = { schemaVersion: "calenote-context-3", intent: "HELP", requestTarget: null, changes: [], query: null, uncertainties: [], conversationDirective: { kind: "HELP", topic: "GENERAL" }, replyProposal: null };
-it.each(Object.entries(v1))("all_16_codes_roundtrip_and_unknown_code_rejects: %s=%s", (field, fieldCode) => {
+it.each(Object.entries(v2))("all_18_successor_codes_roundtrip_and_unknown_code_rejects: %s=%s", (field, fieldCode) => {
   const canonical = ConversationInterpretationV3Schema.parse({ ...successorBase, uncertainties: [{ field, reason: "MISSING", alternatives: [] }] });
   const encoded = wire.encodeGoogleLiteEuContextV3(canonical) as Record<string, unknown>;
   expect(encoded.uncertainties).toEqual([{ fieldCode, reason: "MISSING", alternatives: [] }]);
   expect(wire.parseGoogleLiteEuContextSectionsV3(encoded, CONTEXT_PROTOCOL_V3)).toEqual(parseInterpretationSectionsV3(canonical));
-  for (const invalid of [-1, 16, 0.5, "0", null]) expect(wire.parseGoogleLiteEuContextSectionsV3({ ...encoded, uncertainties: [{ fieldCode: invalid, reason: "MISSING", alternatives: [] }] }, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+  for (const invalid of [-1, 18, 0.5, "0", null]) expect(wire.parseGoogleLiteEuContextSectionsV3({ ...encoded, uncertainties: [{ fieldCode: invalid, reason: "MISSING", alternatives: [] }] }, CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
+});
+it("successor codebook appends duration fields without changing immutable V1 meanings", () => {
+  expect(wire.UNCERTAINTY_FIELD_WIRE_CODE_V2).toEqual(v2);
+  expect(Object.isFrozen(wire.UNCERTAINTY_FIELD_WIRE_CODE_V2)).toBe(true);
+  for (const [field, code] of Object.entries(v1)) expect(wire.UNCERTAINTY_FIELD_WIRE_CODE_V2[field as keyof typeof v1]).toBe(code);
+  expect(wire.UNCERTAINTY_FIELD_WIRE_CODE_V1).toEqual(v1);
 });
 it("v3_alternative_json_and_mandatory_evidence_are_atomic", () => {
   const encoded = wire.encodeGoogleLiteEuContextV3(ConversationInterpretationV3Schema.parse(successorBase)) as Record<string, unknown>;

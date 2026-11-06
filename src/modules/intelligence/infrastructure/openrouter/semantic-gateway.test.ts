@@ -421,7 +421,7 @@ describe("observable successor route", () => {
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_3", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
-      .toBe("43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b");
+      .toBe("b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
     expect(requests).toHaveLength(1);
   });

@@ -4,7 +4,7 @@ import {join,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
 import {z} from "zod";
 import {admitCanonicalCampaign,type ContextManifest} from "./context-contract";
-import {auditCampaignAccountRoot,preflightContextCampaign,validateFrozenContextCorpus,withAccountRootLock} from "./context-contract-live";
+import {auditCampaignAccountRoot,preflightContextCampaign,historicalPilotCorpusIdentity,withAccountRootLock} from "./context-contract-live";
 import {candidateValidationProof,prepareCandidateValidation,appendCandidateValidationRecord,validationExecutionKey} from "./context-contract-candidate-validation";
 import {inspectConfirmedCampaignCost} from "./context-confirmed-cost";
 import {executeObservableCampaign,contextCampaignMaximumReservation} from "./context-contract-runner";
@@ -29,10 +29,10 @@ const loadedChecks=new WeakMap<object,()=>void>();
 
 export function deriveBoundedPilotManifest(root:string){
  const manifests=["regressions","development","heldout"].map(n=>JSON.parse(readFileSync(join(root,`src/modules/conversation/context-contract/benchmark/${n}.json`),"utf8")) as ContextManifest);
- validateFrozenContextCorpus(root,manifests);
+ const identityManifests=historicalPilotCorpusIdentity(root,manifests);
  const planned=admitCanonicalCampaign({version:"context-contract-corpus-1",cases:manifests.flatMap(m=>m.cases)},"PILOT");
  const targets=planned.flatMap(s=>s.turns.flatMap((t,i)=>t.model==="HEALTHY"?[{fixtureId:s.executionId,turnIndex:i}]:[]));
- return {manifestSha256:hash(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests,planned})),targets,
+ return {manifestSha256:hash(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests:identityManifests,planned})),targets,
   maxProviderHttpRequests:targets.length,totalFixtures:planned.length,totalTurns:planned.reduce((n,s)=>n+s.turns.length,0)};
 }
 function contained(root:string,path:string){const rel=relative(root,path);if(!isAbsolute(path)||!rel||rel.startsWith("..")||isAbsolute(rel)||realpathSync(path)!==path||lstatSync(path).isSymbolicLink())throw Error("PILOT_PATH_BINDING");}

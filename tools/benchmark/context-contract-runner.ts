@@ -22,7 +22,7 @@ import { runContextFixtureCampaign } from "./context-contract-probe";
 import { frozenContextProposal } from "./context-contract-fixtures";
 import { deriveContextSeed } from "./context-seed";
 import { captureQueryDiagnostics } from "./context-query-diagnostics";
-import { validateFrozenContextCorpus } from "./context-contract-live";
+import { historicalPilotCorpusIdentity } from "./context-contract-live";
 import { CONTEXT_PROTOCOL_V3 } from "../../src/modules/conversation/context-contract/protocol";
 import { admitFutureLiveIntent, appendCampaignEvent, finishCampaignCall, markCampaignDispatched, readCampaignLedger, reserveCampaignCall,
   settleCampaignCanary, completeCampaign, admitR01ReplayIntent, withAuthorizedAccountRootLock, contextCampaignGitEnvironment, revalidateCampaignPaidAdmission, type FutureLiveIntent } from "./context-contract-live";
@@ -180,12 +180,12 @@ export async function executeObservableR01Turn0Replay(input: ObservableExecution
 }
 export function resolveSingleValidationTarget(root:string,target:{fixture:string;turn:number}) {
   const manifests=["regressions","development","heldout"].map(name=>JSON.parse(readFileSync(join(root,`src/modules/conversation/context-contract/benchmark/${name}.json`),"utf8")) as ContextManifest);
-  validateFrozenContextCorpus(root,manifests);
+  const identityManifests=historicalPilotCorpusIdentity(root,manifests);
   const planned=admitCanonicalCampaign({version:"context-contract-corpus-1",cases:manifests.flatMap(m=>m.cases)},"PILOT");
   const script=planned.find(s=>s.executionId===target.fixture);
   if(!script||!Number.isSafeInteger(target.turn)||target.turn<0||!script.turns[target.turn])throw Error("SINGLE_TARGET_NOT_FOUND");
   if(script.turns[target.turn].model!=="HEALTHY"||(script.turns[target.turn].actionsAfter?.length??0)>0)throw Error("SINGLE_TARGET_NOT_STANDALONE");
-  return {...target,...deriveContextSeed(root,script,target.turn),manifestSha256:digest(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests,planned})),script:{...script,turns:[script.turns[target.turn]]}};
+  return {...target,...deriveContextSeed(root,script,target.turn),manifestSha256:digest(JSON.stringify({version:"bounded-formal-pilot-manifest-1",manifests:identityManifests,planned})),script:{...script,turns:[script.turns[target.turn]]}};
 }
 export async function executeObservableSingleTargetValidation(input:ObservableExecution) {
   if(!input.singleTarget||input.profile!=="PILOT"||input.accountingPolicy!=="CONFIRMED_COST_V1"||input.pilotPrefix||input.boundedPilot)throw Error("INVALID_SINGLE_TARGET_SCOPE");

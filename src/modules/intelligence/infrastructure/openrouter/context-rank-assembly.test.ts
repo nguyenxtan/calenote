@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {createHash} from "node:crypto";
-import {wire95PromptFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire95PromptFixture,preDurationSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {expect,it} from "vitest";
 import {CONTEXT_CONTRACT_PROMPT} from "../../../conversation/context-contract/prompt";
 import {ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
@@ -27,7 +27,7 @@ it("observed structural equal10 axis refuses atomically without changing payload
  expect(JSON.stringify(raw)).toBe(before);
 });
 it("every distinct sparse rank pair preserves authored order and every equal pair refuses",()=>{
- for(let ordinary=0;ordinary<13;ordinary++)for(let singleton=0;singleton<13;singleton++){
+ for(let ordinary=0;ordinary<15;ordinary++)for(let singleton=0;singleton<15;singleton++){
   const raw=sample();(raw.changes as Array<{rank:number}>)[0].rank=ordinary;(raw.eventRelationChange as {rank:number}).rank=singleton;
   const before=JSON.stringify(raw),result=parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3);
   if(ordinary===singleton)expect(result.status).toBe("REFUSED");else expect(result).toMatchObject({status:"PARSED",value:{semantic:{changes:ordinary<singleton?canonical.changes:[...canonical.changes].reverse()}}});
@@ -39,7 +39,7 @@ it("omitted rank stays refused rather than defaulted",()=>{
  expect(parseGoogleLiteEuContextSectionsV3(raw,CONTEXT_PROTOCOL_V3).status).toBe("REFUSED");
 });
 
-it("prompt-only inverse preserves every byte of wire95 and generic schema identity",()=>{
- expect(createHash("sha256").update(JSON.stringify(googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421");
+it("explicit pre-duration inverse preserves every byte of wire95 and historical generic schema identity",()=>{
+ expect(createHash("sha256").update(JSON.stringify(preDurationSchemaFixture(googleLiteEuContextWireSchemaV3().schema))).digest("hex")).toBe("5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421");
  expect(createHash("sha256").update(wire95PromptFixture(CONTEXT_CONTRACT_PROMPT)).digest("hex")).toBe("c6fe46f96a8afb3405e8094697a459e5af00a02831b27c7921dba00710838304");
 });

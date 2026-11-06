@@ -21,10 +21,11 @@ describe("content-free successor observations", () => {
     observe({...event,outcome:'SUCCESS'});
     expect(log).toHaveBeenCalledTimes(1);
   });
-  it('accepts only the exact selected small and keyed prompt identities',()=>{
+  it('accepts only the exact selected typed, small and keyed prompt identities',async()=>{
     const log=vi.spyOn(console,'info').mockImplementation(()=>{});
-    for(const promptVersion of [CONTEXT_SMALL_PROTOCOL_V3.promptVersion,CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion])observe({...base,promptVersion,event:'MODEL_REQUIRED'});
-    observe({...base,promptVersion:'PRIVATE_SENTINEL',event:'MODEL_REQUIRED'});expect(log).toHaveBeenCalledTimes(2);
+    const {CONTEXT_TYPED_PROTOCOL_V3}=await import('./typed-protocol');
+    for(const promptVersion of [CONTEXT_SMALL_PROTOCOL_V3.promptVersion,CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion,CONTEXT_TYPED_PROTOCOL_V3.promptVersion])observe({...base,promptVersion,event:'MODEL_REQUIRED'});
+    observe({...base,promptVersion:'PRIVATE_SENTINEL',event:'MODEL_REQUIRED'});expect(log).toHaveBeenCalledTimes(3);
   });
   it('records bounded actual comparison routes and redacts unrecognized route strings',()=>{
     expect(observations.contextRouteObservation('openai/gpt-5-mini','azure/swedencentral')).toEqual({configuredModel:'openai/gpt-5-mini',configuredProvider:'azure/swedencentral'});

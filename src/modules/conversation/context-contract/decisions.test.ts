@@ -74,12 +74,40 @@ describe("pure T5 lifecycle over real T2/T3 data", () => {
     if (kind === "REPLACE_PENDING") { const retained = stored(escaped); expect(retained.terminal).toBeNull(); expect(retained.snapshot.pendingDecision?.candidate).toEqual(s.pendingDecision?.candidate); }
     else expect(stored(escaped).terminal).toBe("CANCELLED");
   });
-  it("a repeated unrelated unsupported request never replaces a valid draft", async () => {
+  it("a repeated unrelated unsupported weekly event relation never replaces a valid draft", async () => {
     const a = delivered(stored(await semantic(null, complete)).snapshot);
-    const result = stored(await semantic(a, { ...complete, title: "gọi mẹ", frequency: "WEEKLY" }, "NEW_REQUEST"));
-    expect(result.snapshot.slots).toEqual(a.slots);
-    expect(result.snapshot.pendingDecision).toBeNull();
-    expect(result.reply.text).toContain("chưa được hỗ trợ");
+    let retained=a;
+    for(let attempt=0;attempt<2;attempt++){
+      const result = stored(await semantic(retained, { ...complete, title: "gọi mẹ", frequency: "WEEKLY",eventDate:date(11,10,2026),eventRelation:"BEFORE_EVENT" }, "NEW_REQUEST"));
+      expect(result.snapshot.slots).toEqual(a.slots);
+      expect(result.snapshot.requestId).toBe(a.requestId);
+      expect(result.snapshot.draftRevision).toBe(a.draftRevision);
+      expect(result.snapshot.draftExpiresAt).toBe(a.draftExpiresAt);
+      expect(result.snapshot.pendingDecision).toBeNull();
+      expect(result.preview).toBeNull();expect(result.terminal).toBeNull();
+      expect(result).not.toHaveProperty('confirmationProof');
+      expect(result.reply.text).toContain("chưa hỗ trợ lặp tương đối");
+      retained=delivered(result.snapshot);
+    }
+  });
+  it('an incomplete supported weekly request needs replacement approval, clarification and a separate save approval',async()=>{
+    const a=delivered(stored(await semantic(null,complete)).snapshot);
+    const offer=stored(await semantic(a,{...complete,title:'gọi mẹ',frequency:'WEEKLY'},'NEW_REQUEST'));
+    expect(offer.snapshot.pendingDecision?.kind).toBe('REPLACE_PENDING');
+    expect(offer.snapshot.slots).toEqual(a.slots);expect(offer.snapshot.requestId).toBe(a.requestId);
+    expect(offer.snapshot.draftRevision).toBe(a.draftRevision);expect(offer.snapshot.draftExpiresAt).toBe(a.draftExpiresAt);
+    expect(offer.preview).toBeNull();expect(offer).not.toHaveProperty('confirmationProof');
+    const unseen=stored(await local(offer.snapshot,'Có.'));
+    expect(unseen.snapshot.slots).toEqual(a.slots);expect(unseen.snapshot.requestId).toBe(a.requestId);expect(unseen).not.toHaveProperty('confirmationProof');
+    const adopted=stored(await local(delivered(offer.snapshot),`đồng ý ${offer.snapshot.pendingDecision!.tokenHandle}`));
+    expect(adopted.decisionProof?.kind).toBe('REPLACE_PENDING');expect(adopted).not.toHaveProperty('confirmationProof');
+    expect(adopted.snapshot.requestId).not.toBe(a.requestId);expect(adopted.snapshot.slots.title.value).toBe('gọi mẹ');expect(adopted.snapshot.slots.frequency.value).toBe('WEEKLY');
+    expect(adopted.preview).toBeNull();expect(adopted.snapshot.pendingReminderQuestion?.field).toBe('eventRelation');
+    const prepared=stored(await semantic(delivered(adopted.snapshot),{eventRelation:'STARTING_ON',occurrenceCount:2},'EDIT'));
+    expect(prepared.snapshot.pendingDecision?.kind).toBe('SAVE_PREVIEW');expect(prepared).not.toHaveProperty('confirmationProof');
+    expect(prepared.preview?.occurrences.map(o=>o.localDate)).toEqual(['2026-10-08','2026-10-15']);
+    const final=await local(delivered(prepared.snapshot),`xác nhận ${prepared.snapshot.pendingDecision!.tokenHandle}`);
+    expect(final).toHaveProperty('confirmationProof.kind','SAVE_PREVIEW');
   });
   it("rejects a stale received context before an escape can use it", async () => {
     const a = delivered(stored(await semantic(null, complete)).snapshot);

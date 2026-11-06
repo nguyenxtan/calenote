@@ -40,6 +40,7 @@ it("unsupported token diagnostics retain only structure and digest, not the toke
  const {readListTransport}=await import("./list-period-transport");
  expect(JSON.stringify(readListTransport(decoded.value))).not.toContain("PRIVATE_SENTINEL");
 });
+// Current successor106 identity; the pre-duration5aaf9 anchor stays pinned in campaign attestation.
 it("emitted provider schema binds the selected semantic evidence representation",()=>{
- expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421");
+ expect(createHash("sha256").update(JSON.stringify(wire.googleLiteEuContextWireSchemaV3().schema)).digest("hex")).toBe("ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3");
 });

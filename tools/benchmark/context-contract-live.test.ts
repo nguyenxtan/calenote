@@ -290,6 +290,9 @@ it("revised_heldout_data_requires_replacement without modifying original corpus 
   historical[2].cases.find((row: {id:string}) => row.id === "H10").turns[0].expect.pendingField = null;
   expect(() => live.validateFrozenContextCorpus(process.cwd(), historical, "historical-v1")).not.toThrow();
   expect(() => live.validateFrozenContextCorpus(process.cwd(), historical)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
+  expect(live.historicalPilotCorpusIdentity(process.cwd(), manifests)).toEqual(historical);
+  expect(() => live.historicalPilotCorpusIdentity(process.cwd(), historical)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
+  expect(manifests[2].cases.find((row: {id:string}) => row.id === "H10").turns[0].expect.pendingField).toBe("reminderTime");
   const extraH10 = structuredClone(manifests);
   extraH10[2].cases.find((row: {id:string}) => row.id === "H10").turns[0].expect.fields.reminderTime = {hour:8,minute:0,qualifier:"H24"};
   expect(() => live.validateFrozenContextCorpus(process.cwd(), extraH10)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");

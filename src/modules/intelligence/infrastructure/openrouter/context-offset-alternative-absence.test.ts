@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import * as capability from "../../../conversation/context-contract/field-capability";
-import {wire94RequestFixture,wire96RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire94RequestFixture,wire96RequestFixture,preDurationSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
@@ -43,7 +43,7 @@ it("independent, unknown and retained offset authority retains the previous whol
  const unknown=structuredClone(bound);unknown.turns[unknown.currentTurn].text="Có thể nhắc trước 2 hoặc 5 ngày.";
  const occupied=structuredClone(bound);occupied.activeRequest!.slots.leadOffsetDays={state:"RESOLVED",value:5,fact:"f999"};occupied.facts.push({...structuredClone(occupied.facts[0]),alias:"f999",scope:"REMINDER",field:"leadOffsetDays",value:5});
  const history=structuredClone(bound);history.turns[0].text=history.turns[0].text.replace(/\.$/u,", nhắc trước 5 ngày.");
- for(const input of [independent,unknown,occupied,history])expect(googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema).toEqual(prior(input).response_format.json_schema.schema);
+ for(const input of [independent,unknown,occupied,history])expect(preDurationSchemaFixture(googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(input),input).schema)).toEqual(prior(input).response_format.json_schema.schema);
 });
 it("direct consumer still parses valid numeric alternatives and refuses numeric strings without source repair",()=>{
  const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(initial,"R03",0)),evidence=[{kind:"USER_QUOTE",turn:initial.currentTurn,quote:initial.turns[initial.currentTurn].text,occurrence:1}];

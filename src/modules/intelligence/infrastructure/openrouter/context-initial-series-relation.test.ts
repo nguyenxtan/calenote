@@ -4,7 +4,7 @@ import {z} from "zod";
 import {type ContextInput,ConversationInterpretationV3Schema} from "../../../conversation/context-contract/contracts";
 import {CONTEXT_PROTOCOL_V3} from "../../../conversation/context-contract/protocol";
 import * as capability from "../../../conversation/context-contract/field-capability";
-import {wire93RequestFixture,wire94RequestFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
+import {wire93RequestFixture,wire94RequestFixture,preDurationSchemaFixture} from "../../../../../tools/benchmark/context-singleton-json.test-support";
 import {googleLiteEuContextWireSchemaV3,UNCERTAINTY_FIELD_WIRE_CODE_V1,decodeGoogleLiteEuContextTransportV3} from "./context-provider-wire";
 import {encodeFixtureV3} from "../../../../../tools/benchmark/context-pointer-fixtures";
 import {createContextContractProbe} from "../../../../../tools/benchmark/context-contract-probe";
@@ -52,7 +52,7 @@ it("historical constructor restores source predicate without mutating input",()=
 });
 it("only uncertainty producer grammar differs and direct singleton/combined-marker consumer acceptance is preserved",()=>{
  const current=structuredClone(googleLiteEuContextWireSchemaV3(capability.deriveGenerationFieldCapability(initial),initial).schema),old=structuredClone(prior(initial).response_format.json_schema.schema);
- delete current.properties!.uncertainties;delete old.properties!.uncertainties;expect(current).toEqual(old);
+ delete current.properties!.uncertainties;delete old.properties!.uncertainties;expect(preDurationSchemaFixture(current)).toEqual(old);
  const baseline=ConversationInterpretationV3Schema.parse(frozenContextProposal(initial,"R03",0));
  const evidence=[{kind:"USER_QUOTE",turn:initial.currentTurn,quote:initial.turns[initial.currentTurn].text,occurrence:1}];
  const canonical=ConversationInterpretationV3Schema.parse({...baseline,changes:[...baseline.changes,{field:"eventRelation",operation:"SET",value:"BEFORE_EVENT",evidence}],uncertainties:[{field:"eventRelation",reason:"MISSING",alternatives:[]},{field:"leadOffsetDays",reason:"MISSING",alternatives:[]}]});

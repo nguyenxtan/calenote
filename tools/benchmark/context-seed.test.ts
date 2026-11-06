@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { CONTEXT_CONTRACT_PROMPT } from "../../src/modules/conversation/context-contract/prompt";
 
 it("rejects changed checkpoint source provenance without silently reseeding", () => {
   const root = mkdtempSync(join(tmpdir(), "seed-provenance-"));
@@ -56,6 +58,13 @@ it.each([["R01",1],["R02",1],["R05",2]] as const)("fixture-owned %s/%s checkpoin
     }
     const actual = await probe.checkpoint();
     const expected=deriveContextSeed(process.cwd(), script, targetTurn).contextSeed.state;
+    // The old accepted checkpoint stays immutable. Qualify current transport
+    // metadata independently, then project only those versioned attributes for
+    // the semantic-state equality below. Hydration still checks exact old data.
+    if (actual.snapshot && expected?.snapshot) {
+      expect(actual.snapshot.capabilityVersion).toBe("capabilities-3");
+      actual.snapshot.capabilityVersion = expected.snapshot.capabilityVersion;
+    }
     // Attempt observation hashes bind the decoder protocol, not semantic
     // checkpoint content. The immutable seed retains its historical protocol;
     // compare semantic state while separately requiring a valid current hash.
@@ -63,7 +72,12 @@ it.each([["R01",1],["R02",1],["R05",2]] as const)("fixture-owned %s/%s checkpoin
       expect(actual.snapshot.modelAttemptBinding.observationId).toMatch(/^[a-f0-9]{64}$/u);
       actual.snapshot.modelAttemptBinding.observationId=expected.snapshot.modelAttemptBinding.observationId;
       expect(actual.snapshot.modelAttemptBinding.promptDigest).toMatch(/^[a-f0-9]{64}$/u);
+      expect(actual.snapshot.modelAttemptBinding.promptDigest).toBe(createHash("sha256").update(JSON.stringify(CONTEXT_CONTRACT_PROMPT)).digest("hex"));
       actual.snapshot.modelAttemptBinding.promptDigest=expected.snapshot.modelAttemptBinding.promptDigest;
+      expect(actual.snapshot.modelAttemptBinding.contractDigest).toBe("b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26");
+      expect(actual.snapshot.modelAttemptBinding.inputDigest).toBe(createHash("sha256").update(JSON.stringify(probe.inputs.at(-1))).digest("hex"));
+      actual.snapshot.modelAttemptBinding.contractDigest=expected.snapshot.modelAttemptBinding.contractDigest;
+      actual.snapshot.modelAttemptBinding.inputDigest=expected.snapshot.modelAttemptBinding.inputDigest;
     }
     if (actual.snapshot?.modelAttemptBinding) actual.snapshot.modelAttemptBinding.attemptId = "seed-attempt";
     for (const row of actual.outcomes) row.proof_hash = null;

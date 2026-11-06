@@ -60,7 +60,7 @@ describe("Worker composition root", () => {
     try {
       await root.createRuntimeOperations(env); expect(factory).not.toHaveBeenCalled();
       await root.createRuntimeOperations(env, { contextContract: "calenote-context-2", sourceSha: "a".repeat(40) });
-      expect(factory).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxInputTokens: 12000, maxOutputTokens: 1536, protocol: expect.objectContaining({ wireVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-typed-objects-105" }) }), expect.any(Function),
+      expect(factory).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxInputTokens: 12000, maxOutputTokens: 1536, protocol: expect.objectContaining({ wireVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-typed-objects-106-hour-minute" }) }), expect.any(Function),
         { status: "OBSERVABLE_CANARY", advertisedContextTokens: 1048576 });
       expect(historical).not.toHaveBeenCalled();
       const source = await readFile(resolve(process.cwd(), "src/worker/composition-root.ts"), "utf8");
