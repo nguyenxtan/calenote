@@ -1,5 +1,6 @@
 import { ReminderListResponseV2Schema } from "@/contracts/api/reminders-v2";
 import { PreviewResponseV1Schema, PreviewDecisionRequestV1Schema, PreviewDecisionResponseV1Schema, type PreviewDecisionRequestV1 } from "@/contracts/api/conversation-previews";
+import {CanonicalSeriesCursorSchema} from '@/contracts/api/canonical-series';
 
 const MAX_RESPONSE_BYTES = 128 * 1_024;
 const SAFE_FALLBACK = "Calenote chưa thể hoàn tất yêu cầu.";
@@ -9,6 +10,7 @@ type ApiMethod = "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
 interface ApiRequestOptions {
   method?: ApiMethod;
   reminderCursor?: string;
+  canonicalSeriesCursor?:string;
   body?: unknown;
   signal?: AbortSignal;
   authenticated?: boolean;
@@ -140,7 +142,8 @@ export async function apiRequest<T>(
   const method = options.method ?? "GET";
   const hasBody = options.body !== undefined;
   if (options.reminderCursor !== undefined && (path !== "/api/reminders" || method !== "GET" || !/^[A-Za-z0-9_-]{1,128}$/u.test(options.reminderCursor))) throw new TypeError("Trang lời nhắc không hợp lệ.");
-  const requestPath = options.reminderCursor === undefined ? path : `${path}?after=${options.reminderCursor}`;
+  if(options.canonicalSeriesCursor!==undefined&&(path!=='/api/v2/reminder-series'||method!=='GET'||!CanonicalSeriesCursorSchema.safeParse(options.canonicalSeriesCursor).success))throw new TypeError('Trang chuỗi nhắc không hợp lệ.');
+  const requestPath = options.canonicalSeriesCursor!==undefined?`${path}?cursor=${options.canonicalSeriesCursor}`:options.reminderCursor === undefined ? path : `${path}?after=${options.reminderCursor}`;
   const headers: Record<string, string> = { accept: "application/json" };
   if (hasBody) headers["content-type"] = "application/json";
 

@@ -1,0 +1,190 @@
+{
+  "sourceCommit": "463b0dc19c30d559befc43a8c07e2a48fa3ef72d",
+  "sourceSha256": "026d51f56e79379e16756ebf51e70d630b20697a9ac34d72c555cf948861f8c3",
+  "logical": {
+    "schemaVersion": "calenote-context-state-1",
+    "id": "context",
+    "scope": {
+      "ownerId": "owner",
+      "chatIdentityId": "identity",
+      "workspaceId": "workspace",
+      "connectionId": "connection",
+      "chatId": "chat"
+    },
+    "inbound": {
+      "id": "inbound",
+      "receivedAt": "2026-09-28T03:00:00.000Z",
+      "rowid": 1,
+      "claimMarker": "claim"
+    },
+    "requestId": "request",
+    "contextRevision": 1,
+    "draftRevision": 1,
+    "lifecycle": "CLARIFYING",
+    "slots": {
+      "title": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "location": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "notes": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "eventDate": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "eventTime": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "reminderDate": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "reminderTime": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "calendar": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "frequency": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "occurrenceCount": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "eventRelation": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "leadOffsetDays": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      },
+      "endDate": {
+        "state": "MISSING",
+        "value": null,
+        "fact": null,
+        "evidence": [],
+        "provenance": null,
+        "resolution": null,
+        "proposalRevision": 1
+      }
+    },
+    "facts": [],
+    "pendingReminderQuestion": null,
+    "pendingQueryQuestion": null,
+    "ambiguities": [],
+    "transcript": [
+      {
+        "id": "turn",
+        "role": "USER",
+        "text": "nhắc tôi",
+        "receivedAt": "2026-09-28T03:00:00.000Z",
+        "kind": "RECEIVED",
+        "deliveryState": "RECEIVED",
+        "messageRef": "message",
+        "semanticView": "nhắc tôi",
+        "controlSpans": [],
+        "sourceMap": {
+          "normalizationVersion": "nfc-codepoint-v1",
+          "sourceCodePoints": 8,
+          "viewCodePoints": 8,
+          "segments": [
+            {
+              "sourceStart": 0,
+              "sourceEnd": 8,
+              "viewStart": 0,
+              "viewEnd": 8,
+              "kind": "UNCHANGED",
+              "sourceStride": 1,
+              "viewStride": 1
+            }
+          ]
+        }
+      }
+    ],
+    "pendingDecision": null,
+    "previewReceipt": null,
+    "controlRegistry": [],
+    "modelAttemptBinding": null,
+    "lastTerminalOutcome": null,
+    "createdAt": "2026-09-28T03:00:00.000Z",
+    "idleExpiresAt": "2026-09-28T03:30:00.000Z",
+    "absoluteExpiresAt": "2026-09-28T05:00:00.000Z",
+    "draftCreatedAt": "2026-09-28T03:00:00.000Z",
+    "draftExpiresAt": "2026-09-28T03:10:00.000Z",
+    "capabilityVersion": "capabilities-1"
+  },
+  "encoded": "{\"encoding\":\"calenote-context-storage-2\",\"strings\":[\"2026-09-28T03:00:00.000Z\"],\"snapshot\":{\"$k1a\":\"calenote-context-state-1\",\"id\":\"context\",\"scope\":{\"$kq\":\"owner\",\"$kp\":\"identity\",\"workspaceId\":\"workspace\",\"connectionId\":\"connection\",\"$kr\":\"chat\"},\"inbound\":{\"id\":\"inbound\",\"$k7\":{\"$s\":0},\"rowid\":1,\"$k1e\":\"claim\"},\"$ks\":\"request\",\"$kn\":1,\"$ko\":1,\"lifecycle\":\"CLARIFYING\",\"slots\":{\"title\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"location\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"notes\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"eventDate\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"eventTime\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"reminderDate\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"reminderTime\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"calendar\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"frequency\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"occurrenceCount\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"eventRelation\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"leadOffsetDays\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1},\"endDate\":{\"state\":\"MISSING\",\"value\":null,\"fact\":null,\"$ki\":[],\"$kj\":null,\"$kk\":null,\"$k5\":1}},\"facts\":[],\"$kx\":null,\"$ky\":null,\"ambiguities\":[],\"transcript\":[{\"id\":\"turn\",\"text\":\"nhắc tôi\",\"$k7\":{\"$s\":0},\"messageRef\":\"message\",\"$k8\":\"nhắc tôi\",\"controlSpans\":[],\"$k9\":{\"$k0\":\"nfc-codepoint-v1\",\"$ka\":8,\"$kb\":8,\"segments\":[{\"$kc\":0,\"$kd\":8,\"$ke\":0,\"$kf\":8,\"kind\":\"UNCHANGED\",\"$kg\":1,\"$kh\":1}]},\"role\":\"USER\",\"kind\":\"RECEIVED\",\"$k6\":\"RECEIVED\"}],\"$kz\":null,\"$k10\":null,\"$k11\":[],\"$k12\":null,\"$k13\":null,\"$k14\":{\"$s\":0},\"$k15\":\"2026-09-28T03:30:00.000Z\",\"$k16\":\"2026-09-28T05:00:00.000Z\",\"$k17\":{\"$s\":0},\"$k18\":\"2026-09-28T03:10:00.000Z\",\"$k19\":\"capabilities-1\"}}",
+  "encodedSha256": "d14b9ca2f9d7092fe79a4534bfea48479975ed40b6e8bb3b06fb09a981e7bb68"
+}

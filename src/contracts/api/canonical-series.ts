@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { base64UrlToBytes } from "@/modules/security/encoding";
+import { base64UrlToBytes,bytesToBase64Url } from "@/modules/security/encoding";
 
 /** Canonical (context-contract) series controls. Separate from the legacy
  * /api/reminder-series authority, which intentionally filters these rows. */
@@ -20,7 +20,16 @@ export const CanonicalSeriesViewSchema = z.strictObject({
   pendingFollowUps:z.number().int().min(0).max(30).optional(),
 });
 export type CanonicalSeriesView = z.infer<typeof CanonicalSeriesViewSchema>;
-export const CanonicalSeriesListResponseSchema = z.strictObject({ data: z.strictObject({ schemaVersion: z.literal("canonical-series-1"), series: z.array(CanonicalSeriesViewSchema).max(10) }) });
+const cursorValue=z.tuple([z.union([z.literal(0),z.literal(1)]),z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),publicId]);
+export function decodeCanonicalSeriesCursor(cursor:string):z.infer<typeof cursorValue>|null{
+ try{if(cursor.length>256)return null;const bytes=base64UrlToBytes(cursor);if(!bytes)return null;const parsed=cursorValue.safeParse(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));return parsed.success?parsed.data:null;}catch{return null;}
+}
+export function encodeCanonicalSeriesCursor(value:z.infer<typeof cursorValue>):string{return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(cursorValue.parse(value))));}
+export const CanonicalSeriesCursorSchema=z.string().min(1).max(256).refine(value=>decodeCanonicalSeriesCursor(value)!==null);
+const pageFields={series:z.array(CanonicalSeriesViewSchema).max(10),hasMore:z.boolean(),nextCursor:CanonicalSeriesCursorSchema.nullable(),skipped:z.number().int().min(0).max(10)};
+export const CanonicalSeriesPageSchema=z.strictObject(pageFields).refine(page=>page.hasMore===(page.nextCursor!==null));
+export type CanonicalSeriesPage=z.infer<typeof CanonicalSeriesPageSchema>;
+export const CanonicalSeriesListResponseSchema = z.strictObject({data:z.strictObject({...pageFields,schemaVersion:z.literal('canonical-series-1')}).refine(page=>page.hasMore===(page.nextCursor!==null))});
 
 export const CanonicalSeriesCancelResultSchema = z.discriminatedUnion("result", [
   z.strictObject({ result: z.literal("CANCELLED"), revision: z.number().int().positive(),

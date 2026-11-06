@@ -283,7 +283,7 @@ export async function createCanonicalSeriesOperations(env: Env, capabilities: { 
   const store = async () => { if (!selected) throw new CanonicalSeriesUnavailableError(); return new D1CanonicalSeriesStore(env.DB, await routeKeyring()); };
   return {
     requireUser: async credentials => requireSession(credentials, { store: new D1SessionStore(env.DB), keyring: await routeKeyring() }),
-    listSeries: async principal => (await store()).list(principal, Date.now()),
+    listSeries: async (principal,cursor) => (await store()).listPage(principal, Date.now(),cursor),
     cancelSeries: async (principal, request) => (await store()).cancel(principal, request, Date.now()),
   };
 }

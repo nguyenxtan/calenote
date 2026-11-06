@@ -1,6 +1,10 @@
 .panel { margin-top:32px; }
 .panel>p { font-size:13px; color:var(--cn-text-2); }
 .panel>button,.card .secondary { min-height:44px; padding:10px 14px; background:var(--cn-surface); color:var(--cn-text); border:1px solid var(--cn-border); border-radius:var(--cn-r-sm); font:inherit; cursor:pointer; }
+.panel nav { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
+.panel nav button { min-height:44px; padding:10px 14px; background:var(--cn-surface); color:var(--cn-text); border:1px solid var(--cn-border); border-radius:var(--cn-r-sm); font:inherit; cursor:pointer; }
+.panel nav button:focus-visible { outline:3px solid var(--cn-brand-700); outline-offset:4px; }
+.panel button:disabled { opacity:.65; cursor:wait; }
 .panel [role=alert],.card [role=alert] { color:#991b1b; }
 .card { padding:24px; margin:20px 0; border:1px solid var(--cn-border); border-radius:var(--cn-r-md); background:var(--cn-surface); overflow-wrap:anywhere; }
 .card header span { color:var(--cn-brand-700); font-size:12px; font-weight:600; }

@@ -6,6 +6,7 @@ import { date, now, time } from "@/modules/conversation/context-contract/resolut
 import { D1FollowThroughService } from "@/modules/follow-through/service";
 import { D1SeriesStore } from "./series-store";
 import { D1CanonicalSeriesStore } from "./canonical-series-store";
+import {D1ReminderDeliveryStore} from './delivery-store';
 
 const principal = { userId: "owner", sessionId: "session", expiresAt: now + 1_000_000 };
 const at = now + 10;
@@ -134,9 +135,9 @@ it("rolls back every mutation when a later batch statement fails", async () => {
 it("fails closed when canonical companion details are missing or bound to another owner", async () => {
   const { db, store } = await created();
   await db.prepare("UPDATE reminder_series_context_details SET encryption_entity_id='forged'").run();
-  await expect(store.list(principal, at)).rejects.toThrow("CANONICAL_SERIES_INTEGRITY");
+  expect(await store.listPage(principal, at)).toMatchObject({series:[],skipped:1,hasMore:false,nextCursor:null});
   await db.prepare("DELETE FROM reminder_series_context_details").run();
-  await expect(store.list(principal, at)).rejects.toThrow("CANONICAL_SERIES_INTEGRITY");
+  expect(await store.listPage(principal, at)).toMatchObject({series:[],skipped:1,hasMore:false,nextCursor:null});
 });
 
 it("loss of OWNER membership removes canonical read and cancellation authority", async () => {
@@ -173,4 +174,30 @@ it("a current snoozed reminder keeps completed roots manageable and visible",asy
  expect(view).toMatchObject({state:'ACTIVE',currentReminders:[{localDate:'2026-11-09',localTime:'12:00',status:'PENDING'}]});
  await store.cancel(principal,{publicId,expectedRevision:1},at);
  expect((await store.list(principal,at)).find(s=>s.publicId===publicId)).toMatchObject({state:'CANCELLED',currentReminders:[{status:'CANCELLED'}]});
+});
+async function untrackedCreated(){
+ const h=await harness([weekly()]);expect(await h.turn(0,weeklyText())).toEqual({status:'DRAFT_CREATED'});const state=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ // 0014 deliberately leaves pre-existing canonical reminders untracked.
+ h.f.sqlite!.sqlite.exec(readFileSync('migrations/0014_reminder_follow_through.sql','utf8'));
+ expect(await h.f.db.prepare('SELECT count(*) n FROM follow_through_items').first('n')).toBe(0);
+ return {db:h.f.db,store:new D1CanonicalSeriesStore(h.f.db,h.f.keyring)};
+}
+it.each([false,true])('settles a retry after canonical cancellation without reacquiring a send (tracked=%s)',async tracked=>{
+ const {db,store}=await (tracked?created():untrackedCreated());const [{publicId}]=await store.list(principal,at);
+ const root=await db.prepare('SELECT reminder_id FROM reminder_series_occurrences ORDER BY occurrence_index LIMIT 1').first<string>('reminder_id');
+ await db.prepare("UPDATE reminders SET status='CLAIMED',claimed_at=? WHERE id=?").bind(at,root).run();
+ const delivery=new D1ReminderDeliveryStore(db),snapshot=(await delivery.read(root!))!.followThrough;
+ expect((await delivery.acquire(root!,'delivery-cancel-test','send-before-cancel',at,snapshot)).status).toBe('OWNED');
+ expect(await store.cancel(principal,{publicId,expectedRevision:1},at+1)).toMatchObject({result:'CANCELLED',preservedUnchanged:1});
+ expect(await db.prepare("SELECT status FROM reminder_deliveries WHERE reminder_id=?").bind(root).first('status')).toBe('SENDING');
+ await delivery.scheduleRetry(root!,'send-before-cancel',at+100,'quota-after-cancel',at+2);
+ expect(await delivery.acquire(root!,'unused-new-delivery','retry-after-cancel',at+100,snapshot)).toEqual({status:'CANCELLED'});
+ expect(await db.prepare('SELECT status,attempt_count,retry_not_before FROM reminder_deliveries WHERE reminder_id=?').bind(root).first()).toEqual({status:'CANCELLED',attempt_count:1,retry_not_before:null});
+ expect(await db.prepare('SELECT status FROM reminders WHERE id=?').bind(root).first('status')).toBe('CANCELLED');
+});
+it('preserves successful settlement of an already acquired send after canonical cancellation',async()=>{
+ const {db,store}=await untrackedCreated();const [{publicId}]=await store.list(principal,at);const root=await db.prepare('SELECT reminder_id FROM reminder_series_occurrences ORDER BY occurrence_index LIMIT 1').first<string>('reminder_id');
+ await db.prepare("UPDATE reminders SET status='CLAIMED',claimed_at=? WHERE id=?").bind(at,root).run();const delivery=new D1ReminderDeliveryStore(db);
+ expect((await delivery.acquire(root!,'already-acquired','send-owner',at)).status).toBe('OWNED');await store.cancel(principal,{publicId,expectedRevision:1},at+1);
+ await delivery.finalizeSuccess(root!,'send-owner','accepted-receipt','accepted-after-cancel',at+2);expect(await db.prepare('SELECT status FROM reminders WHERE id=?').bind(root).first('status')).toBe('SENT');
 });

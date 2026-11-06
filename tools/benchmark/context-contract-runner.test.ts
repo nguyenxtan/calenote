@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +15,7 @@ import { admitCanonicalCampaign, type ContextManifest } from "./context-contract
 import { createContextHttpTransport } from "../../src/modules/intelligence/infrastructure/openrouter/semantic-gateway";
 import { encodeGoogleLiteEuContextV3, parseGoogleLiteEuContextSectionsV3 } from "../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire";
 import { serializeContextRequest } from "../../src/modules/conversation/context-contract/wire";
+import * as requestWireModule from "../../src/modules/conversation/context-contract/wire";
 
 it("persists safe transport failure tokens while stopping with unknown accounting", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-transport-diagnostics-"));
@@ -51,6 +52,22 @@ it.each(["schema", "capability", "input", "strict"])("trusted request proof reje
   expect(() => verify(request)).toThrow(mode === "schema" || mode === "strict" ? "PROVIDER_REQUEST_SCHEMA_CHANGED" : "FIELD_CAPABILITY_CHANGED");
 });
 
+it("qualified current campaign pins reject an altered prompt before physical transport", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "context-qualified-prompt-"));
+  const serialize = requestWireModule.serializeContextRequest;
+  const changed = vi.spyOn(requestWireModule, "serializeContextRequest").mockImplementation(input => {
+    const request = serialize(input); request.messages[0].content += " "; return request;
+  });
+  let calls = 0;
+  try {
+    const result = await runner.executeObservableCampaign({ directory, sourceSha: "a".repeat(40), provenanceDigest: "b".repeat(64), runId: "qualified-prompt", profile: "PILOT",
+      cumulativeAuthorizedMicrounits: 1500000, cumulativeRetainedMicrounits: 0, now: () => 100,
+      transport: async () => { calls++; return { status: 503, body: "{}" }; } });
+    expect(calls).toBe(0); expect(result.providerHttpRequests).toBe(0);
+    expect(result).toMatchObject({ status: "STOP", responses: [{ status: "FAILURE", category: "PROVIDER_FAILURE", usage: { costMicrounits: null } }] });
+  } finally { changed.mockRestore(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 it("runner captures the exact outbound request schema and capability proof separately from immutable family identity", async () => {
   const directory = mkdtempSync(join(tmpdir(), "context-capability-proof-"));
   const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -64,9 +81,9 @@ it("runner captures the exact outbound request schema and capability proof separ
         return { status: 503, body: "{}" };
       } });
     expect(result.providerHttpRequests).toBe(1);
-    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421",
+    expect(result.responses[0]).toMatchObject({ providerWireSchemaDigest: "ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3",
       requestWireSchemaDigest: requestSchemaDigest, fieldCapabilityDigest: capabilityDigest });
-    expect(requestSchemaDigest).not.toBe("5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421");
+    expect(requestSchemaDigest).not.toBe("ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -501,8 +518,8 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
       }) });
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
-      canonicalSchemaDigest: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
-      providerWireSchemaDigest: "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421",
+      canonicalSchemaDigest: "b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26",
+      providerWireSchemaDigest: "ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3",
       providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-104" });
     for (const file of ["responses.json", "report.json"]) {
       const artifact = readFileSync(join(directory, file), "utf8");

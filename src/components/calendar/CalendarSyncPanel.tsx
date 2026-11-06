@@ -52,6 +52,7 @@ export function CalendarSyncPanel({request=fetch,loadGoogle=loadGoogleCalendarId
  return <section className={styles.panel} aria-labelledby="calendar-sync-heading">
   <h3 id="calendar-sync-heading">Google Calendar</h3>
   <p>Đồng bộ một chiều từ Calenote vào một lịch riêng. Chỉ gửi tiêu đề, thời gian và lịch riêng sang Google. Không gửi ghi chú.</p>
+  <p className={styles.hint}>Phạm vi tối đa 300 mục trong 30 ngày qua và 400 ngày tới.</p>
   <p className={styles.hint}>Lời nhắc có giờ chiếm 1 phút trên lịch. Thay đổi ở Google không cập nhật Calenote. Ngắt kết nối giữ nguyên lịch và sự kiện đã gửi. Mỗi lần kết nối lại tạo một lịch riêng mới; lịch cũ được giữ.</p>
   {!status&&!message&&<p role="status">Đang đọc trạng thái đồng bộ…</p>}
   {status&&!status.available&&<p role="status">Đồng bộ tự động chưa khả dụng. Quản trị viên cần thiết lập Google Calendar trước khi bật kết nối.</p>}

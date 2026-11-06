@@ -1,9 +1,9 @@
 import { GOOGLE_CALENDAR_SCOPE, type CalendarTokens, type SyncEvent } from './contracts';
 
 export type CalendarHttpTransport = (url:string,init:RequestInit)=>Promise<Response>;
-export type ProviderErrorKind = 'REAUTH_REQUIRED'|'RETRYABLE'|'UNKNOWN'|'CONFLICT'|'OWNERSHIP_CONFLICT'|'REJECTED';
+export type ProviderErrorKind = 'REAUTH_REQUIRED'|'RETRYABLE'|'UNKNOWN'|'CONFLICT'|'OWNERSHIP_CONFLICT'|'REJECTED'|'NOT_FOUND';
 export class CalendarProviderError extends Error {
- constructor(readonly kind:ProviderErrorKind,readonly retryAfterMs:number|null=null) {super('Calendar provider request failed.');this.name='CalendarProviderError';}
+ constructor(readonly kind:ProviderErrorKind,readonly retryAfterMs:number|null=null,readonly definitelyRejected=false) {super('Calendar provider request failed.');this.name='CalendarProviderError';}
 }
 export interface GoogleCalendarConfig {clientId:string;clientSecret:string;appOrigin:string}
 const API = 'https://www.googleapis.com/calendar/v3';
@@ -24,7 +24,7 @@ function eventPayload(eventId:string,event:SyncEvent):Record<string,unknown> {
   if(!/^\d{4}-\d{2}-\d{2}$/u.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)throw new CalendarProviderError('REJECTED');
   start={date};end={date:new Date(Date.parse(date+'T00:00:00Z')+86_400_000).toISOString().slice(0,10)};
  }
- return {id:eventId,summary:event.title.replace(/[\u0000-\u001f\u007f]/gu,' ').slice(0,512),start,end,transparency:'transparent',reminders:{useDefault:false},extendedProperties:{private:{calenote:eventId}}};
+ return {id:eventId,status:'confirmed',summary:event.title.replace(/[\u0000-\u001f\u007f]/gu,' ').slice(0,512),start,end,transparency:'transparent',reminders:{useDefault:false},extendedProperties:{private:{calenote:eventId}}};
 }
 
 /** Has no ambient network implementation. The caller supplies a transport that honors AbortSignal. */
@@ -35,7 +35,8 @@ export class GoogleCalendarProvider {
  private async request(url:string,init:RequestInit,allowed:number[]=[]):Promise<{status:number;body:unknown}> {
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10_000);
   try {
-   const response=await this.transport(url,{...init,redirect:'error',signal:controller.signal});
+   const response=await this.transport(url,{...init,redirect:'manual',signal:controller.signal});
+   if(response.status>=300&&response.status<400){await response.body?.cancel();throw new CalendarProviderError('UNKNOWN');}
    let payload:unknown=null;
    if(!allowed.includes(response.status)&&response.status!==204){
     const reader=response.body?.getReader();let bytes=0,text='';const decoder=new TextDecoder();
@@ -44,12 +45,13 @@ export class GoogleCalendarProvider {
    }
    if(!response.ok&&!allowed.includes(response.status)){
     const error=record(payload)?payload.error:null;
-    if(response.status===401||error==='invalid_grant'||error==='invalid_token')throw new CalendarProviderError('REAUTH_REQUIRED');
-    if(response.status===409)throw new CalendarProviderError('CONFLICT');
-    const quota=response.status===429||(response.status===403&&record(error)&&Array.isArray(error.errors)&&error.errors.some(e=>record(e)&&['rateLimitExceeded','userRateLimitExceeded','quotaExceeded'].includes(String(e.reason))));
-    if(quota||response.status>=500){const seconds=Number(response.headers.get('retry-after'));throw new CalendarProviderError('RETRYABLE',Number.isFinite(seconds)&&seconds>0?Math.min(seconds*1000,3_600_000):null);}
-    if(response.status===403)throw new CalendarProviderError('REAUTH_REQUIRED');
-    throw new CalendarProviderError('REJECTED');
+    const reasons=record(error)&&Array.isArray(error.errors)?error.errors.filter(record).map(e=>e.reason):[];
+    if(response.status===401||error==='invalid_grant'||error==='invalid_token'||(response.status===403&&reasons.some(reason=>reason==='authError'||reason==='insufficientPermissions')))throw new CalendarProviderError('REAUTH_REQUIRED',null,true);
+    if(response.status===409)throw new CalendarProviderError('CONFLICT',null,true);
+    if(response.status===404||response.status===410)throw new CalendarProviderError('NOT_FOUND',null,true);
+    // A quota/policy/unknown 403 is not evidence that OAuth must be repeated.
+    if(response.status===403||response.status===429||response.status>=500){const seconds=Number(response.headers.get('retry-after'));throw new CalendarProviderError('RETRYABLE',Number.isFinite(seconds)&&seconds>0?Math.min(seconds*1000,3_600_000):null,response.status<500);}
+    throw new CalendarProviderError('REJECTED',null,true);
    }
    return {status:response.status,body:payload};
   }catch(error){if(error instanceof CalendarProviderError)throw error;throw new CalendarProviderError('UNKNOWN');}
@@ -74,7 +76,19 @@ export class GoogleCalendarProvider {
  private verifyEvent(body:unknown,eventId:string):void {
   if(!record(body)||body.id!==eventId||!record(body.extendedProperties)||!record(body.extendedProperties.private)||body.extendedProperties.private.calenote!==eventId)throw new CalendarProviderError('OWNERSHIP_CONFLICT');
  }
- async getEvent(accessToken:string,calendarId:string,eventId:string):Promise<boolean>{const r=await this.request(this.eventUrl(calendarId,eventId),{method:'GET',headers:this.headers(accessToken)},[404,410]);if(r.status===404||r.status===410)return false;this.verifyEvent(r.body,eventId);return true;}
+ async getEvent(accessToken:string,calendarId:string,eventId:string,ownedMapping=false):Promise<boolean|'DELETED'>{
+  const r=await this.request(this.eventUrl(calendarId,eventId),{method:'GET',headers:this.headers(accessToken)},[404,410]);
+  if(r.status===404||r.status===410)return false;
+  if(record(r.body)&&r.body.id===eventId&&r.body.status==='cancelled'){
+   const privateProps=record(r.body.extendedProperties)&&record(r.body.extendedProperties.private)?r.body.extendedProperties.private:null;
+   const marker=privateProps?.calenote;
+   // Google guarantees only id on deleted tombstones. A prior confirmed local
+   // mapping plus our derived id can prove ownership; a foreign marker overrides it.
+   if(marker===eventId||(marker===undefined&&ownedMapping))return 'DELETED';
+   throw new CalendarProviderError('OWNERSHIP_CONFLICT');
+  }
+  this.verifyEvent(r.body,eventId);return true;
+ }
  async insertEvent(accessToken:string,calendarId:string,eventId:string,event:SyncEvent):Promise<void>{const r=await this.request(this.eventUrl(calendarId),{method:'POST',headers:this.headers(accessToken),body:JSON.stringify(eventPayload(eventId,event))});this.verifyEvent(r.body,eventId);}
  async updateEvent(accessToken:string,calendarId:string,eventId:string,event:SyncEvent):Promise<void>{const r=await this.request(this.eventUrl(calendarId,eventId),{method:'PUT',headers:this.headers(accessToken),body:JSON.stringify(eventPayload(eventId,event))});this.verifyEvent(r.body,eventId);}
  async removeEvent(accessToken:string,calendarId:string,eventId:string):Promise<void>{await this.request(this.eventUrl(calendarId,eventId),{method:'DELETE',headers:this.headers(accessToken)},[404,410]);}

@@ -58,7 +58,7 @@ it('partial marker-write failure leaves proposal consumed without reading key',a
 it('typed105 authority selects the typed request and stops on its first provider error without retry',async()=>{
  const s=setup(true),network=vi.fn(async(_url:unknown,init:RequestInit)=>{
   const request=JSON.parse(String(init.body));expect(request.response_format.json_schema.name).toBe('calenote_context_typed_105');
-  expect(request.messages[0].content).toContain('Typed transport105:');
+  expect(request.messages[0].content).toContain('Typed transport106:');
   return new Response(JSON.stringify({error:{code:429,message:'SYNTHETIC_RATE_LIMIT'}}),{status:429,headers:{'content-type':'application/json'}});
  });
  try{vi.stubGlobal('fetch',network);const key=vi.fn(async()=> 'SYNTHETIC_ONLY');const a=s.load();

@@ -9,7 +9,7 @@ const lower = (s: string) => [...s].map(c => { const l = c.toLocaleLowerCase("vi
 // Exact explicit before-event duration phrases. HOUR may be followed only by a
 // stated minute component; MINUTE may be preceded by a stated hour component.
 const patterns: Readonly<Record<LeadDurationUnit, RegExp>> = {
-  HOUR: new RegExp(`trước\\s+${N}\\s+(?:tiếng|giờ)|${N}\\s+(?:tiếng|giờ)\\s+trước`, "gu"),
+  HOUR: new RegExp(`trước\\s+${N}\\s+(?:tiếng|giờ)|${N}\\s+(?:tiếng|giờ)\\s+trước|${N}\\s+(?:tiếng|giờ)\\s+${N}\\s+phút\\s+trước`, "gu"),
   MINUTE: new RegExp(`trước\\s+(?:${N}\\s+(?:tiếng|giờ)\\s+)?${N}\\s+phút|${N}\\s+phút\\s+trước`, "gu"),
 };
 // A clock, fraction or "to" form after the amount is never a duration. The
@@ -20,6 +20,24 @@ const negation = /(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|b�
 const hypothetical = /(?:^|[^\p{L}\p{M}\p{N}_])(?:nếu|ví dụ|giả sử|chẳng hạn)(?:$|[^\p{L}\p{M}\p{N}_])/u;
 const reminder = /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u;
 const amount = (token: string | undefined) => token === undefined ? null : words[token] ?? Number(token);
+const explicitClockSuffix=/^\s*(?:sáng|trưa|chiều|tối|đêm|khuya|[:h]\s*\d)/u;
+function ambiguousBeforeHour(value:number|null,suffix:string):boolean {
+ return value!==null&&value>=1&&value<=23&&!hourThenMinute.test(suffix)&&!explicitClockSuffix.test(suffix)
+  &&!/^\s+(?:so với|trước)(?:$|[^\p{L}\p{M}])/u.test(suffix);
+}
+/** Reject-only distinction: bare 'trước8giờ' can be a clock deadline. No
+ * returned clock, duration, target or evidence is authored by this helper. */
+export function hasAmbiguousLeadHourClock(text:string):boolean {
+ const normalized=lower(text);
+ if(/["'“”‘’`]/u.test(normalized)||hypothetical.test(normalized))return false;
+ for(const match of normalized.matchAll(new RegExp(`trước\\s+${N}\\s+giờ`,'gu'))){
+  const before=normalized[match.index!-1]??'',end=match.index!+match[0].length;
+  if(letter.test(before)||/[.,/:+-]/u.test(before)||letter.test(normalized[end]??''))continue;
+  const clause=normalized.slice(0,match.index).split(/[;,.!?\n]|\s+(?:và|rồi|nhưng|sau đó)\s+/u).at(-1)??'';
+  if(reminder.test(clause)&&!negation.test(clause)&&ambiguousBeforeHour(amount(match[1]),normalized.slice(end)))return true;
+ }
+ return false;
+}
 
 /** Boolean support for an already-proposed amount/unit. It never returns or
  * authors an operand; unknown wording grants no duration authority. */
@@ -35,11 +53,12 @@ export function supportsLeadDuration(unit: LeadDurationUnit, value: unknown, sou
       const start = source.viewSpan.start + [...quote.slice(0, match.index)].length, end = start + [...match[0]].length;
       if (letter.test(view[start - 1] ?? "") || /[.,/:+-]/u.test(view[start - 1] ?? "") || letter.test(view[end] ?? "")) continue;
       const suffix = view.slice(end).join("");
+      if(unit==='HOUR'&&match[1]&&match[0].endsWith('giờ')&&ambiguousBeforeHour(amount(match[1]),suffix))continue;
       const compound = unit === "HOUR" ? hourThenMinute.exec(suffix) : null;
       if (unsafeSuffix.test(compound ? suffix.slice(compound[0].length) : suffix)) continue;
       const clause = view.slice(0, start).join("").split(/[;,.!?\n]|\s+(?:và|rồi|nhưng|sau đó)\s+/u).at(-1) ?? "";
       if (negation.test(clause) || !reminder.test(clause)) continue;
-      const stated = unit === "HOUR" ? amount(match[1] ?? match[2]) : amount(match[2] ?? match[3]);
+      const stated = unit === "HOUR" ? amount(match[1] ?? match[2] ?? match[3]) : amount(match[2] ?? match[3]);
       if (stated === value) return true;
     }
     return false;

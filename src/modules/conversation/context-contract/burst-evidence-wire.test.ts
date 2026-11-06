@@ -17,6 +17,8 @@ import { createKeyedContextContractGateway } from "../../intelligence/infrastruc
 import { contextPromptForInput, currentRequestTurnIndexes } from "./burst-prompt";
 import { ContextInputSchema } from "./contracts";
 import { decodeKeyedSmallComparison, encodeKeyedSmallComparison } from "../../intelligence/infrastructure/openrouter/context-provider-keyed-small-wire";
+import { decodeSmallContextV3, encodeSmallContextV3 } from "../../intelligence/infrastructure/openrouter/context-provider-small-wire";
+import { CONTEXT_SMALL_PROTOCOL_V3 } from "./small-protocol";
 
 /** Build real, privately branded contexts over separate reply-less receipts. */
 const bases = new WeakMap<ReadyContextV2, ContextSnapshotV2 | null>();
@@ -127,6 +129,17 @@ describe("source-bound deferred burst evidence", () => {
 });
 
 describe("conditional burst request envelope", () => {
+  it("a three-member duration burst round-trips both authored units through the compact owner grammar", () => {
+    const built = burst(["Mai đi thi lúc 9h.", "Nhắc trước 1 giờ 30 phút.", "Ghi chú: mang giấy tờ."]);
+    const value = ConversationInterpretationV3Schema.parse({ ...proposal(built, [set(built, "title", "đi thi", 0),
+      set(built, "eventDate", { kind: "RELATIVE_DAY", offsetDays: 1 }, 0), set(built, "eventTime", { hour: 9, minute: 0, qualifier: "H24" }, 0),
+      set(built, "eventRelation", "BEFORE_EVENT", 1), set(built, "leadOffsetHours", 1, 1), set(built, "leadOffsetMinutes", 30, 1), set(built, "notes", "mang giấy tờ", 2)]), conversationDirective: null, replyProposal: null });
+    const request = serializeSmallContextRequest(built.input);
+    expect(request.response_format.json_schema.name).toBe("calenote_context_small_106");
+    const encoded = encodeSmallContextV3(value, built.input);
+    const decoded = decodeSmallContextV3(encoded, CONTEXT_SMALL_PROTOCOL_V3, undefined, undefined, built.input);
+    expect(decoded).toMatchObject({ status: "PARSED", value: { semantic: { changes: value.changes } } });
+  });
   it("the actual grouped prompt constrains event-date ownership and exterior venue punctuation", () => {
     const request = serializeKeyedSmallComparison(burst(["Mai đi thi ở Trường A.", "Nhắc lúc 8h."]).input);
     expect(request.messages[0].content).toContain("An event date in one member plus a notification clock in another does not author a notification date");

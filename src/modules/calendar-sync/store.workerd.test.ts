@@ -34,6 +34,9 @@ it('actual Workerd D1 enforces nonce, claim, unresolved egress and disconnect CA
   await store.finishEgress(winner.id,marker,'in-flight');const successor=await store.claim(winner.id,'new-claim',later);expect(successor?.lease_marker).toBe('new-claim');
   expect(await store.activate(winner.id,marker,'foreign-calendar',later+1)).toBe(false);
   expect(await store.prepareMapping(winner.id,marker,'logical','cn01234','digest','UPSERT',later+1)).toBe(false);
+  expect(await store.prepareMapping(winner.id,'new-claim','logical','cn01234','digest','UPSERT',later+1)).toBe(true);
+  expect((await store.mappings(winner.id,'new-claim',['logical','absent'],later+1)).get('logical')).toMatchObject({remote_event_id:'cn01234',state:'WRITING'});
+  expect((await store.mappings(winner.id,'wrong-marker',['logical'],later+1)).size).toBe(0);
   expect(await store.beginDisconnect(winner,'still-live',later+1)).toBe(false);await store.release(winner.id,'new-claim');
   await db.prepare("CREATE TRIGGER reject_calendar_audit BEFORE INSERT ON audit_events WHEN NEW.action='CALENDAR_DISCONNECTED' BEGIN SELECT RAISE(ABORT,'audit unavailable'); END").run();
   await expect(store.beginDisconnect(winner,'audit-fails',later+2)).rejects.toThrow();

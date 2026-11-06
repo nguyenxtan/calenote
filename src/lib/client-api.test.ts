@@ -236,3 +236,9 @@ it('does not emit session loss for an aborted request whose late response is401'
   expect(listener).not.toHaveBeenCalled();expect(onUnauthorized).not.toHaveBeenCalled();
  }finally{window.removeEventListener('calenote-session-changed',listener);}
 });
+it('restricts canonical-series cursor navigation to validated bounded GET requests',async()=>{
+ const {encodeCanonicalSeriesCursor}=await import('@/contracts/api/canonical-series'),cursor=encodeCanonicalSeriesCursor([0,1,'A'.repeat(22)]);
+ const fetcher=vi.fn<typeof globalThis.fetch>(async()=>json({data:{ok:true}}));vi.stubGlobal('fetch',fetcher);
+ await apiRequest('/api/v2/reminder-series',{canonicalSeriesCursor:cursor});expect(fetcher.mock.calls[0][0]).toBe('/api/v2/reminder-series?cursor='+cursor);
+ await expect(apiRequest('/api/session',{canonicalSeriesCursor:cursor})).rejects.toThrow();await expect(apiRequest('/api/v2/reminder-series',{method:'POST',canonicalSeriesCursor:cursor})).rejects.toThrow();await expect(apiRequest('/api/v2/reminder-series',{canonicalSeriesCursor:'bad'})).rejects.toThrow();
+});

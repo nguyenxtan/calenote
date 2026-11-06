@@ -12,7 +12,7 @@ export type ReplySpan = { kind: "QUESTION" | "PREVIEW" | "CONTROL" | "FACT"; sta
 export type ReadyReplyPlan = { status: "READY"; text: string; source: "BACKEND" | "MODEL_GUIDANCE"; kind: Extract<TranscriptEntry, { role: "ASSISTANT" }>["kind"]; spans: ReplySpan[] };
 /** Span offsets use UTF-16; transcript projection independently maps codepoints. */
 export type ReplyPlan = ReadyReplyPlan | { status: "TOO_LONG"; units: number; limit: 2000 } | { status: "INVALID" };
-export type FailureReason = "PROVIDER" | "CONFIG" | "BUDGET" | "CONTEXT" | "SIZE" | "SEMANTIC" | "STALE" | "EXPIRED";
+export type FailureReason = "PROVIDER" | "CONFIG" | "BUDGET" | "CONTEXT" | "SIZE" | "SEMANTIC" | "STALE" | "EXPIRED" | "DURATION_AMBIGUOUS";
 export type ReplyOutcome =
   | { kind: "QUESTION"; question: string; facts: string[]; field: z.infer<typeof IssueFieldSchema>; alternatives?: string[] }
   | { kind: "PREVIEW"; preview: CanonicalPreview; token?: string }
@@ -25,6 +25,7 @@ export type ReplyOutcome =
   | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" | "DECISION_NOT_VISIBLE" };
 const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const failures: Record<FailureReason, string> = {
+  DURATION_AMBIGUOUS: "Cụm “trước … giờ” có thể là giờ đồng hồ hoặc khoảng thời gian. Bạn gửi lại yêu cầu, dùng “trước … tiếng” nếu là khoảng thời gian, hoặc “lúc …” nếu là giờ nhắc nhé.",
   PROVIDER: "Chưa thể xử lý câu trả lời lúc này. Bản nháp còn hiệu lực được giữ nguyên; bạn có thể thử lại.",
   CONFIG: "Kết nối trợ lý chưa sẵn sàng. Bản nháp còn hiệu lực được giữ nguyên.",
   BUDGET: "Đã chạm giới hạn sử dụng trợ lý. Bản nháp còn hiệu lực được giữ nguyên; bạn có thể quay lại sau.",

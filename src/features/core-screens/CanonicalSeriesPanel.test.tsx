@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import axe from "axe-core";
 import { CanonicalSeriesPanel } from "./CanonicalSeriesPanel";
 import type { CanonicalSeriesView } from "@/contracts/api/canonical-series";
+import {encodeCanonicalSeriesCursor} from '@/contracts/api/canonical-series';
 
 const series = (overrides: Partial<CanonicalSeriesView> = {}): CanonicalSeriesView => ({ publicId: "A".repeat(22), revision: 1, state: "ACTIVE", title: "kiểm tra QA",
   calendar: "GREGORIAN", eventDate: null, eventTime: null,
   occurrences: [{ localDate: "2026-11-09", localTime: "09:00", status: "SENT" }, { localDate: "2026-11-16", localTime: "09:00", status: "PENDING" }], ...overrides });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const list = (items: CanonicalSeriesView[]) => json({ data: { schemaVersion: "canonical-series-1", series: items } });
+const list = (items: CanonicalSeriesView[],page={hasMore:false,nextCursor:null as string|null,skipped:0}) => json({ data: { schemaVersion: "canonical-series-1", series: items,...page } });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("canonical series panel", () => {
@@ -103,4 +104,30 @@ it("a failed refresh after a successful cancel does not claim that data was unch
  await userEvent.click(await screen.findByRole('button',{name:'Hủy các lần còn lại'}));await userEvent.click(screen.getByRole('button',{name:'Xác nhận hủy'}));
  expect(await screen.findByRole('alert')).not.toHaveTextContent('Không thay đổi dữ liệu');
  expect(screen.getByText(/Đã hủy 1 lần nhắc chưa gửi/u)).toBeVisible();
+});
+it('reaches older pages with skipped metadata, then returns to the first bounded page',async()=>{
+ const cursor=encodeCanonicalSeriesCursor([0,1,'A'.repeat(22)]);
+ const fetch=vi.fn().mockResolvedValueOnce(list([series({title:'Trang đầu'})],{hasMore:true,nextCursor:cursor,skipped:1})).mockResolvedValueOnce(list([series({title:'Chuỗi cũ còn hoạt động'})])).mockResolvedValueOnce(list([series({title:'Trang đầu'})],{hasMore:true,nextCursor:cursor,skipped:0}));vi.stubGlobal('fetch',fetch);
+ render(<CanonicalSeriesPanel ownerKey='owner' onUnauthorized={vi.fn()} onChanged={vi.fn()}/>);
+ expect(await screen.findByText(/Bỏ qua 1 chuỗi/)).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'Trang tiếp theo'}));
+ expect(await screen.findByText('Chuỗi cũ còn hoạt động')).toBeVisible();expect(screen.queryByText('Trang đầu')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'Hủy các lần còn lại'})).toBeEnabled();
+ expect(String(fetch.mock.calls[1][0])).toContain('cursor='+cursor);await userEvent.click(screen.getByRole('button',{name:'Trang trước'}));expect(await screen.findByText('Trang đầu')).toBeVisible();expect(screen.queryByText('Chuỗi cũ còn hoạt động')).not.toBeInTheDocument();
+});
+it('does not hide an all-corrupt page with more results, and blocks stale mutation after a failed page request',async()=>{
+ const cursor=encodeCanonicalSeriesCursor([0,1,'A'.repeat(22)]);
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(list([],{hasMore:true,nextCursor:cursor,skipped:10})).mockResolvedValueOnce(list([series({title:'Chuỗi đọc được'})])).mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(list([series({title:'Chuỗi đọc được'})])));
+ render(<CanonicalSeriesPanel ownerKey='owner' onUnauthorized={vi.fn()} onChanged={vi.fn()}/>);expect(await screen.findByText(/Bỏ qua 10 chuỗi/)).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'Trang tiếp theo'}));await screen.findByText('Chuỗi đọc được');
+ await userEvent.click(screen.getByRole('button',{name:'Tải lại chuỗi nhắc'}));expect(await screen.findByRole('alert')).toBeVisible();expect(screen.queryByRole('button',{name:'Hủy các lần còn lại'})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'Tải lại chuỗi nhắc'}));expect(await screen.findByRole('button',{name:'Hủy các lần còn lại'})).toBeEnabled();
+});
+it('clears page titles on owner change and ignores a late old-owner page response',async()=>{
+ let resolve!:(r:Response)=>void;const unauthorized=vi.fn(),changed=vi.fn();
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(list([series({title:'Dữ liệu cũ'})])).mockImplementationOnce(()=>new Promise<Response>(r=>{resolve=r;})).mockResolvedValueOnce(list([series({title:'Dữ liệu mới'})])));
+ const {rerender}=render(<CanonicalSeriesPanel ownerKey='old' onUnauthorized={unauthorized} onChanged={changed}/>);await screen.findByText('Dữ liệu cũ');await userEvent.click(screen.getByRole('button',{name:'Tải lại chuỗi nhắc'}));rerender(<CanonicalSeriesPanel ownerKey='new' onUnauthorized={unauthorized} onChanged={changed}/>);expect(screen.queryByText('Dữ liệu cũ')).not.toBeInTheDocument();await screen.findByText('Dữ liệu mới');
+ await act(async()=>resolve(list([series({title:'Cũ đến muộn'})])));expect(screen.queryByText('Cũ đến muộn')).not.toBeInTheDocument();expect(screen.getByText('Dữ liệu mới')).toBeVisible();
+});
+it('does not invalidate the new owner when an aborted old-owner page returns401',async()=>{
+ let resolve!:(r:Response)=>void;const unauthorized=vi.fn(),changed=vi.fn();vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(list([series({title:'Old'})])).mockImplementationOnce(()=>new Promise<Response>(r=>{resolve=r;})).mockResolvedValueOnce(list([series({title:'New'})])));
+ const {rerender}=render(<CanonicalSeriesPanel ownerKey='old' onUnauthorized={unauthorized} onChanged={changed}/>);await screen.findByText('Old');await userEvent.click(screen.getByRole('button',{name:'Tải lại chuỗi nhắc'}));rerender(<CanonicalSeriesPanel ownerKey='new' onUnauthorized={unauthorized} onChanged={changed}/>);await screen.findByText('New');await act(async()=>resolve(json({error:{code:'UNAUTHENTICATED',message:'Expired'}},401)));
+ expect(unauthorized).not.toHaveBeenCalled();expect(screen.getByText('New')).toBeVisible();
 });

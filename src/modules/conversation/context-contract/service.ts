@@ -43,6 +43,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3 } from "./protocol";
 import type { ContextObservation } from "./state";
 import {BURST_MAX_TURNS,BURST_SPAN_MS,isBurstFragment,isFreshBurstContext} from './burst-policy';
 import {contextPromptForInput} from './burst-prompt';
+import {hasAmbiguousLeadHourClock} from './lead-duration-evidence';
 
 export interface ContextContractServiceDependencies {
   store: ContextContractStoreV3; runtimeStore: ContextRuntimeStore;
@@ -243,6 +244,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
               if(applied.status==='UNCERTAIN')return {status:'SUPERSEDED'};
             }
           }
+          if((built.input.currentBurstTurns??[built.input.currentTurn]).some(index=>hasAmbiguousLeadHourClock(built.input.turns[index].text)))return finish('DURATION_AMBIGUOUS');
           emit({ event: "MODEL_REQUIRED" });
           try { void Promise.resolve(deps.processingFeedback?.()).catch(() => {}); } catch { /* best effort */ }
           const attempt = deps.gateway.prepare("PRIMARY", built.input);

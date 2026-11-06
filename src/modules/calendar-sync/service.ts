@@ -92,42 +92,53 @@ export class CalendarSyncService {
    if(projection.events.length>SYNC_MAX_EVENTS||new Set(projection.events.map(e=>e.uid)).size!==projection.events.length||projection.events.some(e=>!this.validEvent(e))){
     await this.d.store.finish(row.id,marker,{state:'ACTIVE',error:'PROJECTION_INVALID',nextAt:null,attempts:0},this.now());return {status:'PAUSED'};
    }
-   let more=false;
+   let more=false,eventFailures=false,retryEventFailures=false;
+   const mappings=await this.d.store.mappings(row.id,marker,projection.events.map(event=>event.uid),this.now());
    for(const event of projection.events){
-    const old=await this.d.store.mapping(row.id,event.uid);
+    const old=mappings.get(event.uid);
     const digest=await this.digest('payload',[event.uid,event.title,event.start,event.status]);
     if((event.status==='CANCELLED'&&(!old||old.state==='REMOVED'))||(old?.state==='SYNCED'&&old.payload_digest===digest))continue;
-    if(writes>=SYNC_MAX_WRITES||requests>=SYNC_MAX_REQUESTS-2){more=true;break;}
-    if((old?.attempt_count??0)>=SYNC_MAX_ATTEMPTS){await this.d.store.finish(row.id,marker,{state:'ACTIVE',error:'RETRY_EXHAUSTED',nextAt:null,attempts:SYNC_MAX_ATTEMPTS},this.now());return {status:'PAUSED',writes};}
+    if(writes>=SYNC_MAX_WRITES||requests>SYNC_MAX_REQUESTS-6){more=true;break;}
+    if((old?.attempt_count??0)>=SYNC_MAX_ATTEMPTS){eventFailures=true;continue;}
     const bytes=base64UrlToBytes(await this.digest('event-id',[row.id,row.generation,event.uid]));if(!bytes)throw new CalendarProviderError('REJECTED');
-    const remoteId=old?.remote_event_id??'cn'+base32Hex(bytes);
+    const expectedId='cn'+base32Hex(bytes);const remoteId=old?.remote_event_id??expectedId;
+    if(remoteId!==expectedId)throw new CalendarProviderError('OWNERSHIP_CONFLICT');
+    const ownedMapping=old?.payload_digest!==null&&old?.payload_digest!==undefined;
     const recovering=old?.state==='WRITING'||old?.state==='UNCERTAIN';
     if(!await this.d.store.prepareMapping(row.id,marker,event.uid,remoteId,digest,event.status==='CANCELLED'?'REMOVE':'UPSERT',this.now()))throw new CalendarSyncError('CALENDAR_BUSY',409);
     try{
-     let exists=!!old&&old.state!=='REMOVED';
-     if(recovering)exists=await call(()=>provider.getEvent(tokens.accessToken,calendarId!,remoteId));
+     const probe=()=>call(()=>provider.getEvent(tokens.accessToken,calendarId!,remoteId,ownedMapping));
+     let exists:boolean|'DELETED'=!!old&&old.state!=='REMOVED';
+     if(recovering||event.status==='CANCELLED')exists=await probe();
      if(event.status==='CANCELLED'){
-      if(exists)await call(()=>provider.removeEvent(tokens.accessToken,calendarId!,remoteId));
+      if(exists===true)await call(()=>provider.removeEvent(tokens.accessToken,calendarId!,remoteId));
       await this.d.store.settleMapping(row.id,marker,event.uid,'REMOVED',digest,this.now());
      }else{
-      if(exists)await call(()=>provider.updateEvent(tokens.accessToken,calendarId!,remoteId,event));
-      else{
+      const update=()=>call(()=>provider.updateEvent(tokens.accessToken,calendarId!,remoteId,event));
+      const insert=async()=>{
        try{await call(()=>provider.insertEvent(tokens.accessToken,calendarId!,remoteId,event));}
        catch(error){if(!(error instanceof CalendarProviderError)||error.kind!=='CONFLICT')throw error;
-        // A collision or delayed duplicate must prove ownership before replacement.
-        if(!await call(()=>provider.getEvent(tokens.accessToken,calendarId!,remoteId)))throw new CalendarProviderError('UNKNOWN');
-        await call(()=>provider.updateEvent(tokens.accessToken,calendarId!,remoteId,event));}
+        if(!await probe())throw new CalendarProviderError('UNKNOWN');
+        await update();}
+      };
+      try{if(exists)await update();else await insert();}
+      catch(error){
+       if(!(error instanceof CalendarProviderError)||error.kind!=='NOT_FOUND')throw error;
+       // A deleted event (or temporarily inaccessible calendar) cannot authorize
+       // a new calendar. Probe this deterministic id; restore only owned content.
+       const recovered=await probe();if(recovered)await update();else await insert();
       }
       await this.d.store.settleMapping(row.id,marker,event.uid,'SYNCED',digest,this.now());
      }
      writes++;
-    }catch(error){await this.d.store.settleMapping(row.id,marker,event.uid,'UNCERTAIN',digest,this.now());throw error;}
+    }catch(error){await this.d.store.settleMapping(row.id,marker,event.uid,'UNCERTAIN',digest,this.now());
+     if(error instanceof CalendarProviderError&&error.kind==='NOT_FOUND'){eventFailures=true;retryEventFailures=true;continue;}throw error;}
    }
-   await this.d.store.finish(row.id,marker,{state:'ACTIVE',error:null,nextAt:this.now()+(more?60_000:SYNC_INTERVAL_MS),attempts:0,syncedAt:this.now()},this.now());
-   return {status:'SYNCED',writes,truncated:projection.truncated||more};
+   await this.d.store.finish(row.id,marker,{state:'ACTIVE',error:eventFailures?'PROVIDER_UNAVAILABLE':null,nextAt:this.now()+((more||retryEventFailures)?60_000:SYNC_INTERVAL_MS),attempts:0,syncedAt:this.now()},this.now());
+   return {status:'SYNCED',writes,truncated:projection.truncated||more||eventFailures};
   }catch(error){
    const p=error instanceof CalendarProviderError?error:null;const attempts=row.attempt_count+1;
-   if(creating){await this.d.store.finish(row.id,marker,{state:'SETUP_UNCERTAIN',error:'SETUP_UNCERTAIN',nextAt:null,attempts},this.now());return {status:'PAUSED'};}
+   if(creating&&!p?.definitelyRejected){await this.d.store.finish(row.id,marker,{state:'SETUP_UNCERTAIN',error:'SETUP_UNCERTAIN',nextAt:null,attempts},this.now());return {status:'PAUSED'};}
    const reauth=p?.kind==='REAUTH_REQUIRED';const conflict=p?.kind==='OWNERSHIP_CONFLICT';const exhausted=attempts>=SYNC_MAX_ATTEMPTS||p?.kind==='REJECTED';
    await this.d.store.finish(row.id,marker,{state:reauth?'REAUTH_REQUIRED':active?'ACTIVE':'PENDING',error:reauth?'REAUTH_REQUIRED':conflict?'OWNERSHIP_CONFLICT':exhausted?'RETRY_EXHAUSTED':'PROVIDER_UNAVAILABLE',nextAt:reauth||conflict||exhausted?null:this.now()+Math.max(p?.retryAfterMs??0,Math.min(3_600_000,60_000*2**attempts)),attempts},this.now());
    return {status:reauth||conflict||exhausted?'PAUSED':'RETRY',writes};

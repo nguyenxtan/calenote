@@ -206,7 +206,7 @@ export async function executeProviderRequest(
   }
   const response = await fetcher(url.toString(), {
     method: "POST",
-    redirect: input.provider === "zalo" ? "manual" : "error",
+    redirect: "manual",
     signal: signal ?? AbortSignal.timeout(timeoutMs),
     headers: {
       accept: "application/json",
@@ -214,6 +214,13 @@ export async function executeProviderRequest(
     },
     body: JSON.stringify(input.body ?? {}),
   });
+  if (input.provider === "telegram" && response.status >= 300 && response.status < 400) {
+    // Workerd rejects redirect:error before dispatch. Manual must not turn a
+    // redirected credential-bearing write into a known, retryable failure.
+    await response.body?.cancel();
+    if (input.operation === "getMe") throw new ProviderVerificationError("PROVIDER_UNAVAILABLE");
+    throw new ProviderOperationError("UNCERTAIN");
+  }
   const reader = response.body?.getReader();
 
   if (!reader) {

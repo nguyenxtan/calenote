@@ -3,6 +3,7 @@ import { createRouter } from "../router";
 import { createCanonicalSeriesOperations } from "../composition-root";
 import type { CanonicalSeriesOperations } from "./operations";
 import type { CanonicalSeriesView } from "@/contracts/api/canonical-series";
+import {encodeCanonicalSeriesCursor} from '@/contracts/api/canonical-series';
 const origin = "https://calenote.iconiclogs.com";
 const cookie = `__Host-calenote_session=${"A".repeat(43)}`;
 const principal = { userId: "owner", sessionId: "session", expiresAt: 9999999999999 };
@@ -12,7 +13,7 @@ const series = { publicId: "A".repeat(22), revision: 1, state: "ACTIVE", title: 
 
 describe("canonical series routes", () => {
   function fixture(result: Awaited<ReturnType<CanonicalSeriesOperations["cancelSeries"]>> = { result: "CONFLICT" }) {
-    const ops = { requireUser: vi.fn(async () => principal), listSeries: vi.fn(async () => [series]), cancelSeries: vi.fn(async () => result) };
+    const ops = { requireUser: vi.fn(async () => principal), listSeries: vi.fn(async () => ({series:[series],hasMore:false,nextCursor:null,skipped:0})), cancelSeries: vi.fn(async () => result) };
     const legacy = { requireUser: vi.fn(), listSeries: vi.fn(), decideSeries: vi.fn() };
     const route = createRouter({ canonicalSeriesOperations: async () => ops, seriesOperations: async () => legacy as never });
     return { ops, legacy, request: (method: string, body?: unknown, headers: HeadersInit = { cookie, origin }) => route(new Request(`${origin}/api/v2/reminder-series`, {
@@ -30,8 +31,8 @@ describe("canonical series routes", () => {
   it("lists for the session principal with private no-store responses", async () => {
     const h = fixture(); const response = await h.request("GET");
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("no-store");
-    expect(await response.json()).toEqual({ data: { schemaVersion: "canonical-series-1", series: [series] } });
-    expect(h.ops.listSeries).toHaveBeenCalledWith(principal);
+    expect(await response.json()).toEqual({ data: { schemaVersion: "canonical-series-1", series: [series],hasMore:false,nextCursor:null,skipped:0 } });
+    expect(h.ops.listSeries).toHaveBeenCalledWith(principal,undefined);
   });
   it("accepts only strict {publicId,expectedRevision} and maps outcomes", async () => {
     const h = fixture();
@@ -53,5 +54,12 @@ describe("canonical series routes", () => {
     await expect(ops.listSeries(principal)).rejects.toMatchObject({ code: "SERIES_UNAVAILABLE", status: 409 });
     await expect(ops.cancelSeries(principal, { publicId: "A".repeat(22), expectedRevision: 1 })).rejects.toMatchObject({ code: "SERIES_UNAVAILABLE" });
     expect(prepare).not.toHaveBeenCalled();
+  });
+  it('validates the bounded cursor before listing and forwards a valid cursor only with the session principal',async()=>{
+    const cursor=encodeCanonicalSeriesCursor([0,1,'A'.repeat(22)]);
+    const ops={requireUser:vi.fn(async()=>principal),listSeries:vi.fn(async()=>({series:[],hasMore:false,nextCursor:null,skipped:0})),cancelSeries:vi.fn()};
+    const route=createRouter({canonicalSeriesOperations:async()=>ops});
+    expect((await route(new Request(origin+'/api/v2/reminder-series?cursor=bad',{headers:{cookie}}),env,{} as ExecutionContext)).status).toBe(400);expect(ops.listSeries).not.toHaveBeenCalled();
+    expect((await route(new Request(origin+'/api/v2/reminder-series?cursor='+cursor,{headers:{cookie}}),env,{} as ExecutionContext)).status).toBe(200);expect(ops.listSeries).toHaveBeenCalledWith(principal,cursor);
   });
 });

@@ -55,7 +55,12 @@ export class D1CalendarSyncStore {
   await this.db.prepare(`UPDATE calendar_connections SET state=?,last_error=?,next_sync_at=?,attempt_count=?,last_synced_at=COALESCE(?,last_synced_at),updated_at=? WHERE ${lease}`).bind(input.state,input.error,input.nextAt,input.attempts,input.syncedAt??null,now,id,marker,now).run();
  }
  async dropAuthorization(id:string,marker:string,now:number):Promise<void>{await this.db.prepare(`UPDATE calendar_connections SET state='REAUTH_REQUIRED',token_ciphertext=NULL,token_iv=NULL,next_sync_at=NULL,last_error='REAUTH_REQUIRED',updated_at=? WHERE ${lease} AND state='AUTHORIZING'`).bind(now,id,marker,now).run();}
- mapping(id:string,uid:string):Promise<CalendarMappingRow|null>{return this.db.prepare('SELECT * FROM calendar_event_mappings WHERE connection_id=? AND logical_uid=?').bind(id,uid).first<CalendarMappingRow>();}
+ async mappings(id:string,marker:string,uids:string[],now:number):Promise<Map<string,CalendarMappingRow>>{
+  if(uids.length>300)throw new TypeError('Calendar projection exceeds mapping lookup bound');
+  if(!uids.length)return new Map();
+  const rows=await this.db.prepare(`SELECT * FROM calendar_event_mappings WHERE connection_id=? AND logical_uid IN (SELECT value FROM json_each(?)) AND EXISTS(SELECT 1 FROM calendar_connections WHERE ${lease})`).bind(id,JSON.stringify(uids),id,marker,now).all<CalendarMappingRow>();
+  return new Map(rows.results.map(row=>[row.logical_uid,row]));
+ }
  async prepareMapping(id:string,marker:string,uid:string,remoteId:string,digest:string,operation:'UPSERT'|'REMOVE',now:number):Promise<boolean>{
   return d1Changes(await this.db.prepare(`INSERT INTO calendar_event_mappings(connection_id,logical_uid,remote_event_id,target_digest,state,operation,write_marker,attempt_count,updated_at)
    SELECT ?,?,?,?,'WRITING',?,?,1,? WHERE EXISTS(SELECT 1 FROM calendar_connections WHERE ${lease})

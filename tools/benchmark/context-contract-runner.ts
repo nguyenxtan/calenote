@@ -34,6 +34,24 @@ const config = contextCampaignGatewayConfig;
 export const contextCampaignAdvertisedContextTokens = 1048576;
 export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_MICROUNITS;
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
+/** Offline-qualified identities, not values inferred from a received request.
+ * The pre-duration record remains an immutable historical comparison. Current
+ * execution accepts only successor106, including the fixed burst addendum. */
+export const contextCampaignSchemaAttestations = Object.freeze({
+  historical104: Object.freeze({ canonical: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
+    providerWire: "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421" }),
+  successor106: Object.freeze({ version: "duration-fields-2-burst-sources-1",
+    canonical: "b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26",
+    providerWire: "ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3",
+    prompts: Object.freeze({ native: "e98457ad733559d8f14683389702daaa7004c6b0faf725b6aed10d1fc7c1d47b", typed: "688de54c26eaa7f27333bbfefd58e17abac2dcb09fc5f145909e3be838d43b05", small: "8d82de7f620cef785f443123774d6e249d763d017cfb5518c777dd1ba130e3b9" }),
+    burstPrompts: Object.freeze({ native: "ac7905bdf774e6bef78d4e7f898b3ab53de55bcd003fbbd1a64474f185e3abba", typed: "5ce8edac1d0d9d0ea259f8e0c72af84fea0c61a217c3c8aed7828109adeca31a", small: "20948434c02ec6e28022a7846dbd0c35d4efca3cde43e8dad827dd4e13bafbfc" }),
+  }),
+});
+function qualifiedPromptDigest(wireProtocol: "TYPED_105" | "SMALL_106" | undefined, burst: boolean): string {
+  const key = wireProtocol === "SMALL_106" ? "small" : wireProtocol === "TYPED_105" ? "typed" : "native";
+  const qualified = contextCampaignSchemaAttestations.successor106;
+  return (burst ? qualified.burstPrompts : qualified.prompts)[key];
+}
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
   transportDiagnostics?: SemanticTransportDiagnostics;
   semanticState?:ReturnType<typeof captureValidationSemanticState>;
@@ -54,7 +72,7 @@ export function verifyContextRequestSchema(request: Parameters<SemanticTransport
   if (digest(JSON.stringify(fieldCapability)) !== digest(JSON.stringify(expected))) throw new Error("FIELD_CAPABILITY_CHANGED");
   if (wireProtocol === "TYPED_105" || wireProtocol === "SMALL_106") {
     const selected = wireProtocol === "SMALL_106" ? serializeSmallContextRequest(context) : serializeTypedContextRequest(context);
-    if (digest(selected.messages[0].content) !== (wireProtocol === "SMALL_106" ? "8f552c13f1e81af5900915e9d664966841ae231a7c9295c3cca76d9b6e746477" : "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01")) throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
+    if (digest(selected.messages[0].content) !== qualifiedPromptDigest(wireProtocol, !!context.currentBurstTurns)) throw new Error("TYPED_PROMPT_DIGEST_CHANGED");
     for (const key of Object.keys(selected) as Array<keyof typeof selected>) {
       if (!isDeepStrictEqual(request[key], selected[key])) throw new Error("TYPED_PROVIDER_REQUEST_CHANGED");
     }
@@ -254,9 +272,9 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if(input.pilotRoute===AI_STUDIO_PILOT_RETENTION_POLICY&&(request.provider.only.join("|")!=="google-ai-studio"||request.provider.zdr!==false))throw Error("AI_STUDIO_ROUTE_BINDING");
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
-    if (digest(request.messages[0].content) !== (input.wireProtocol === "SMALL_106" ? "8f552c13f1e81af5900915e9d664966841ae231a7c9295c3cca76d9b6e746477" : input.wireProtocol === "TYPED_105" ? "09a65370d049c6d97dda89d131e519ce9d3fca4c3427924eae1fe2dc7791ee01" : "5088b17951d80be7df8987f5df771750ae91c4fd0d42dc9ed0ec9c0fa06909d9")
-      || canonicalSchemaDigest !== "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b") throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421") throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+    if (digest(request.messages[0].content) !== qualifiedPromptDigest(input.wireProtocol, !!JSON.parse(request.messages[1].content).currentBurstTurns)
+      || canonicalSchemaDigest !== contextCampaignSchemaAttestations.successor106.canonical) throw new Error("CANONICAL_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== contextCampaignSchemaAttestations.successor106.providerWire) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request, input.wireProtocol);
     if (input.wireProtocol !== undefined) schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest: requestSchemaProof.requestWireSchemaDigest!, providerWireSchemaVersion: input.wireProtocol === "SMALL_106" ? CONTEXT_SMALL_PROTOCOL_V3.wireVersion : CONTEXT_TYPED_PROTOCOL_V3.wireVersion };
     if (!input.httpRequestCount) providerHttpRequests++;

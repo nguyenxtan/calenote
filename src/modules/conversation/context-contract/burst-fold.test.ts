@@ -84,3 +84,11 @@ it('does not defer when the next eligible receipt is outside the bounded burst s
  await h.f.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id='in-1'").bind(h.f.scope().now+10001).run();
  expect((await h.turn(0,'Nhắc họp QA')).status).not.toBe('DEFERRED');expect(h.inputs).toHaveLength(1);
 });
+it('asks about ambiguous hour ownership in an earlier burst member without a paid attempt',async()=>{
+ const h=await harness([]);await pending(h,1,'ở Phòng A');
+ expect(await h.turn(0,'Khám 9 giờ mai, nhắc trước 8 giờ')).toEqual({status:'DEFERRED'});
+ await h.f.db.prepare("UPDATE inbound_updates SET state='PROCESSING',transition_marker='claim' WHERE id='in-1'").run();
+ expect(await h.turn(1,'ở Phòng A')).toEqual({status:'REJECTED'});
+ expect(h.inputs).toHaveLength(0);expect(h.replies).toHaveLength(1);expect(h.replies[0].text).toContain('tiếng');
+ expect(await h.f.db.prepare('SELECT count(*) n FROM command_drafts').first('n')).toBe(0);
+});

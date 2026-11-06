@@ -183,7 +183,7 @@ describe("secret-aware provider transport", () => {
   it("uses Worker fetch with a fixed host, POST JSON, redirects disabled, and an absolute deadline", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     await expect(executeProviderRequest({ provider: "telegram", hostname: "api.telegram.org", path: "/botredacted/getMe", operation: "getMe" }, fetcher)).resolves.toEqual({ statusCode: 200, body: '{"ok":true}' });
-    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/botredacted/getMe", expect.objectContaining({ method: "POST", redirect: "error", body: "{}", signal: expect.any(AbortSignal) }));
+    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/botredacted/getMe", expect.objectContaining({ method: "POST", redirect: "manual", body: "{}", signal: expect.any(AbortSignal) }));
   });
 
   it("uses a non-following manual redirect policy for Zalo while retaining the absolute deadline", async () => {
@@ -731,4 +731,10 @@ describe("secret-aware provider transport", () => {
       ),
     ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
   });
+});
+it('keeps Telegram redirected writes uncertain without following or exposing the redirect target',async()=>{
+ const fetcher=vi.fn<typeof fetch>(async()=>new Response(null,{status:307,headers:{location:'https://foreign.invalid/credential-target'}}));
+ const input={provider:'telegram',hostname:'api.telegram.org',path:'/botfixture/sendMessage',operation:'sendMessage'} as const;
+ await expect(postSecretProviderJson(input,request=>executeProviderRequest(request,fetcher))).rejects.toEqual(new ProviderOperationError('UNCERTAIN'));
+ expect(fetcher).toHaveBeenCalledTimes(1);expect(fetcher.mock.calls[0]?.[1]).toMatchObject({redirect:'manual'});
 });

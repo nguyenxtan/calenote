@@ -48,6 +48,8 @@ function restorePublicWire68Request(request:{messages:Array<{content:string}>;re
  request.response_format.json_schema.schema=typedSingletonSchemaFixture({...deriveGenerationFieldCapability(input),reminderDateProposalAllowed:true,notesProposalAllowed:initialOnlyNotes},input).schema;
  encoded.fieldCapability.notesProposalAllowed=initialOnlyNotes;
  delete encoded.fieldCapability.reminderDateProposalAllowed;encoded.fieldCapability.version="generation-field-capability-11";
+ // Immutable wire68 predates both finite weekly/monthly and duration support.
+ encoded.capabilities={...encoded.capabilities,version:"capabilities-1",supported:["ONCE","FINITE_DAILY","LIST","CALENDAR_DATE","CAPABILITY"],unsupported:["WEEKLY","MONTHLY","YEARLY","HOUR_OFFSET"]};
  request.messages[1].content=JSON.stringify(encoded);
 }
 // Public wire65 specimen only; never sent through current application authority.
@@ -82,7 +84,7 @@ it("integer order clone preserves exact request outside one item and all thirtee
  const domain=z.fromJSONSchema(order);for(let index=0;index<13;index++)expect(domain.safeParse([index]).success).toBe(true);
  for(const bad of [-1,13,.5,"0",null,{},true])expect(domain.safeParse([bad]).success).toBe(false);
  expect(domain.safeParse([]).success).toBe(true);expect(domain.safeParse(Array(14).fill(0)).success).toBe(false);
- expect(CHANGE_ORDER_FIELDS_V3).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]);
+ expect(CHANGE_ORDER_FIELDS_V3).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate","leadOffsetHours","leadOffsetMinutes"]);
  order.items=structuredClone(originalOrder.items);
  expect(probe).toEqual(original);expect(JSON.stringify(probe)).toBe(before);expect(JSON.stringify(original)).toBe(before);
  for(const mutate of [(r:typeof original)=>{r.messages[0].content+="x";},(r:typeof original)=>{r.messages[1].content+=" ";},(r:typeof original)=>{r.model="other";},(r:typeof original)=>{const value=r.response_format.json_schema.schema.properties!.changeOrder;if(typeof value==="boolean")throw Error("ORDER_SCHEMA_OBJECT");value.maxItems=12;}]){const changed=structuredClone(original);mutate(changed);expect(()=>debugIntegerOrderRequest(changed)).toThrow("DEBUG_INTEGER_ORDER_BINDING");}

@@ -15,15 +15,20 @@ const grounded = (unit: "HOUR" | "MINUTE", value: number, text: string) => suppo
 
 describe("lead duration evidence verifies proposed amount/unit only", () => {
   it.each([
-    ["HOUR", 3, "Ngày 10/11/2026 lúc 15h họp QA, nhắc một lần trước 3 giờ"],
+    ["HOUR", 3, "Ngày 10/11/2026 lúc 15h họp QA, nhắc một lần 3 giờ trước"],
     ["HOUR", 3, "họp lúc 15h, nhắc tôi trước 3 tiếng"],
     ["HOUR", 3, "họp lúc 15h, nhắc 3 tiếng trước"],
     ["MINUTE", 90, "họp lúc 15h, nhắc trước 90 phút"],
     ["HOUR", 1, "họp lúc 15h, nhắc trước 1 tiếng 30 phút"],
     ["MINUTE", 30, "họp lúc 15h, nhắc trước 1 tiếng 30 phút"],
     ["HOUR", 2, "họp lúc 15h, nhắc trước hai tiếng"],
+    ["HOUR", 1, "mai thi 9h, nhắc 1 tiếng 30 phút trước giờ thi"],
+    ["MINUTE", 30, "mai thi 9h, nhắc 1 tiếng 30 phút trước giờ thi"],
+    ["HOUR", 48, "mai thi 9h, nhắc trước 48 giờ"],
   ] as const)("accepts %s=%s in %s", (unit, value, text) => expect(grounded(unit, value, text)).toBe(true));
   it.each([
+    ["HOUR", 8, "Khám 9 giờ mai, nhắc trước 8 giờ"],
+    ["HOUR", 3, "họp lúc 15h, nhắc trước 3 giờ"],
     ["HOUR", 3, "họp lúc 15h, nhắc trước 3 giờ chiều"], // clock usage, not a duration
     ["HOUR", 3, "họp lúc 15h, nhắc trước 3 giờ sáng"],
     ["HOUR", 1, "họp lúc 15h, nhắc trước 1 tiếng rưỡi"],
@@ -45,6 +50,9 @@ describe("lead duration evidence verifies proposed amount/unit only", () => {
     expect(leadDurationCovered(turn("họp lúc 15h, nhắc trước 1 tiếng 30 phút"), [{ field: "leadOffsetHours", value: 1 }])).toBe(false);
     expect(leadDurationCovered(turn("họp lúc 3 giờ chiều"), [])).toBe(true);
     expect(leadDurationCovered(turn("nhắc trước 1 tiếng rưỡi"), [])).toBe(false);
+    expect(leadDurationCovered(turn("nhắc 1 tiếng 30 phút trước giờ thi"), [{field:'leadOffsetMinutes',value:30}])).toBe(false);
+    expect(leadDurationCovered(turn("nhắc 1 tiếng 30 phút trước giờ thi"), [{field:'leadOffsetHours',value:1},{field:'leadOffsetMinutes',value:30}])).toBe(true);
+    expect(leadDurationCovered(turn("Khám 9 giờ mai, nhắc trước 8 giờ"), [{field:'leadOffsetHours',value:8}])).toBe(false);
   });
 });
 

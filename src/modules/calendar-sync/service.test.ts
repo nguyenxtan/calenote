@@ -155,3 +155,51 @@ it('honors next-sync backoff even for duplicate queue deliveries',async()=>{
  const h=await fixture();const {connectionId}=await h.connect();await h.service.sync(connectionId);h.events[0].title='Changed immediately';
  const count=h.transport.mock.calls.length;expect(await h.service.sync(connectionId)).toEqual({status:'SKIPPED'});expect(h.transport).toHaveBeenCalledTimes(count);
 });
+it.each([404,410])('recovers missing update HTTP %s with GET ownership probe and stable event id',async status=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.remote.delete(id);h.events[0].title='Edited after remote deletion';
+ const original=h.transport.getMockImplementation()!;h.transport.mockImplementation(async(url,init)=>init.method==='PUT'&&!h.remote.has(url.split('/').at(-1)!)?new Response(null,{status}):original(url,init));
+ expect(await h.runDue(connectionId)).toMatchObject({status:'SYNCED',writes:1});
+ expect(h.transport.mock.calls.filter(([url])=>url.includes('/events')).map(([,init])=>init.method)).toEqual(['POST','PUT','GET','POST']);
+ expect([...h.remote.keys()]).toEqual([id]);expect((await h.service.status('u')).state).toBe('ACTIVE');
+});
+it('restores an owned id-only tombstone with confirmed status without creating a new event',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.remote.set(id,{id,status:'cancelled'});h.events[0].title='Edited';
+ const original=h.transport.getMockImplementation()!;let failed=false;
+ h.transport.mockImplementation(async(url,init)=>{if(init.method==='PUT'&&!failed){failed=true;return new Response(null,{status:410});}return original(url,init);});
+ expect(await h.runDue(connectionId)).toMatchObject({status:'SYNCED',writes:1});
+ expect(h.transport.mock.calls.filter(([url])=>url.includes('/events')).map(([,init])=>init.method)).toEqual(['POST','PUT','GET','PUT']);
+ expect(h.remote.get(id)).toMatchObject({id,status:'confirmed',extendedProperties:{private:{calenote:id}}});
+});
+it('does not grant ownership from an id-only tombstone after an unconfirmed create',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();h.failCreate();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.remote.set(id,{id,status:'cancelled'});
+ const count=h.transport.mock.calls.length;expect(await h.runDue(connectionId)).toMatchObject({status:'PAUSED'});
+ expect((await h.service.status('u')).error).toBe('OWNERSHIP_CONFLICT');expect(h.transport.mock.calls.slice(count).map(([,init])=>init.method)).toEqual(['GET']);
+});
+it('isolates repeated event-not-found failures while other events continue and the calendar identity is preserved',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const brokenId=[...h.remote.keys()][0];h.remote.delete(brokenId);h.events[0].title='Missing remote';
+ const original=h.transport.getMockImplementation()!;h.transport.mockImplementation(async(url,init)=>{if(url.includes('/events')&&(url.endsWith(brokenId)||(init.method==='POST'&&JSON.parse(init.body as string).id===brokenId)))return new Response(null,{status:404});return original(url,init);});
+ for(let i=0;i<8;i++){h.events.push({uid:'healthy-'+i,title:'Healthy '+i,start:{kind:'UTC',timestamp:300000+i},status:'CONFIRMED'});await h.runDue(connectionId);}
+ expect(h.remote.size).toBe(8);expect((await h.service.status('u')).state).toBe('ACTIVE');expect(h.db.sqlite.prepare('SELECT remote_calendar_id,generation FROM calendar_connections').get()).toEqual({remote_calendar_id:'remote-calendar',generation:1});
+});
+it('reads current event mappings in one bounded query rather than one query per event',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();const read=vi.spyOn(h.store,'mappings');
+ h.events.splice(0,1,...Array.from({length:300},(_,i)=>({uid:'bound-'+i,title:'T',start:{kind:'UTC' as const,timestamp:300000+i},status:'CONFIRMED' as const})));
+ await h.runDue(connectionId);expect(read).toHaveBeenCalledTimes(1);expect(read.mock.calls[0][2]).toHaveLength(300);
+});
+it('does not delete a remote event whose ownership marker conflicts with the original mapping',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.remote.set(id,{id,extendedProperties:{private:{calenote:'foreign'}}});h.events[0].status='CANCELLED';
+ const before=h.transport.mock.calls.length;expect(await h.runDue(connectionId)).toMatchObject({status:'PAUSED'});expect(h.transport.mock.calls.slice(before).map(([,init])=>init.method)).toEqual(['GET']);expect(h.remote.has(id)).toBe(true);
+});
+it('settles cancellation of an originally owned tombstone without deleting anything else',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.remote.set(id,{id,status:'cancelled'});h.events[0].status='CANCELLED';
+ const before=h.transport.mock.calls.length;expect(await h.runDue(connectionId)).toMatchObject({status:'SYNCED',writes:1});expect(h.transport.mock.calls.slice(before).map(([,init])=>init.method)).toEqual(['GET']);expect(h.db.sqlite.prepare('SELECT state FROM calendar_event_mappings').get()).toEqual({state:'REMOVED'});
+});
+it('preserves calendar identity and mappings after an unfamiliar non-auth 403',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();await h.runDue(connectionId);const id=[...h.remote.keys()][0];h.events[0].title='Changed';
+ h.transport.mockImplementationOnce(async()=>Response.json({error:{errors:[{reason:'dailyLimitExceeded'}]}},{status:403}));
+ expect(await h.runDue(connectionId)).toMatchObject({status:'RETRY'});expect((await h.service.status('u')).state).toBe('ACTIVE');expect(h.db.sqlite.prepare('SELECT remote_calendar_id,generation FROM calendar_connections').get()).toEqual({remote_calendar_id:'remote-calendar',generation:1});expect(h.remote.has(id)).toBe(true);
+});
+it('retries a definitely rejected calendar create without forcing reconnect or treating it as an uncertain write',async()=>{
+ const h=await fixture();const {connectionId}=await h.connect();h.transport.mockImplementationOnce(async()=>Response.json({error:{errors:[{reason:'dailyLimitExceeded'}]}},{status:403}));
+ expect(await h.runDue(connectionId)).toMatchObject({status:'RETRY'});expect((await h.service.status('u')).state).toBe('PENDING');expect(await h.runDue(connectionId)).toMatchObject({status:'SYNCED'});expect(h.db.sqlite.prepare('SELECT generation FROM calendar_connections').get()).toEqual({generation:1});
+});

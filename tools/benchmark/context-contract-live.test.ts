@@ -286,6 +286,13 @@ it("revised_heldout_data_requires_replacement without modifying original corpus 
   expect(() => live.validateFrozenContextCorpus(process.cwd(), revised)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
   const changedOracle = structuredClone(manifests); changedOracle[0].cases[0].turns[0].expect.mutations = 1;
   expect(() => live.validateFrozenContextCorpus(process.cwd(), changedOracle)).toThrow("FROZEN_ORACLES_CHANGED");
+  const historical = structuredClone(manifests);
+  historical[2].cases.find((row: {id:string}) => row.id === "H10").turns[0].expect.pendingField = null;
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), historical, "historical-v1")).not.toThrow();
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), historical)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
+  const extraH10 = structuredClone(manifests);
+  extraH10[2].cases.find((row: {id:string}) => row.id === "H10").turns[0].expect.fields.reminderTime = {hour:8,minute:0,qualifier:"H24"};
+  expect(() => live.validateFrozenContextCorpus(process.cwd(), extraH10)).toThrow("HELDOUT_REPLACEMENT_REQUIRED");
 });
 
 it("fresh_run_cannot_reset_budget_or_unknown_reservations without trusted owner authority", () => {

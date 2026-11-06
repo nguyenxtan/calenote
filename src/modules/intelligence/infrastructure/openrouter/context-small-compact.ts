@@ -3,6 +3,9 @@ import {CONTEXT_OPERATION_WIRE_METADATA_V1,UNCERTAINTY_FIELD_WIRE_CODE_V1} from 
 type Row=Record<string,unknown>;
 type Scope=keyof typeof COMPACT_KEYS;
 const FIELD_KEYS={title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'} as const;
+// Duration owners retain their canonical field names when selected. Existing
+// compact codes and the public base prompt codebook remain byte-identical.
+const SELECTED_FIELD_KEYS={...FIELD_KEYS,leadOffsetHours:'leadOffsetHours',leadOffsetMinutes:'leadOffsetMinutes'} as const;
 export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e',query:'q'},
@@ -48,7 +51,7 @@ function child(scope:Scope,key:string,field?:string):Scope {
  return scope;
 }
 function enumMap(scope:Scope,key:string,field?:string):Readonly<Record<string,string>>|undefined {
- if(scope==='fieldOrder'||scope==='orderedChange'&&key==='field')return COMPACT_KEYS.fields;
+ if(scope==='fieldOrder'||scope==='orderedChange'&&key==='field')return SELECTED_FIELD_KEYS;
  if(scope==='mutationRow'&&key==='operation')return COMPACT_ENUMS.writeOperation;
  if(scope==='mutationRow'&&key==='value'){if(field==='frequency')return COMPACT_ENUMS.frequency;if(field==='calendar')return COMPACT_ENUMS.calendar;if(field==='eventRelation')return COMPACT_ENUMS.relation;}
  if(scope==='date'){if(key==='kind')return COMPACT_ENUMS.date;if(key==='calendar')return COMPACT_ENUMS.calendar;if(key==='qualifier')return COMPACT_ENUMS.weekday;}
@@ -84,8 +87,8 @@ export function compileCompactContext(source:unknown){
   if(Array.isArray(schema.anyOf)&&scope==='orderedChange'){
    const branches=schema.anyOf.map(branch=>{
     check(record(branch)&&record(branch.properties));const tag=branch.properties.field;
-    check(record(tag)&&Array.isArray(tag.enum)&&tag.enum.length===1&&typeof tag.enum[0]==='string'&&Object.hasOwn(COMPACT_KEYS.fields,tag.enum[0]));
-    const name=tag.enum[0] as keyof typeof COMPACT_KEYS.fields;return {name,alias:COMPACT_KEYS.fields[name],node:compile(branch,scope,key,name)};
+    check(record(tag)&&Array.isArray(tag.enum)&&tag.enum.length===1&&typeof tag.enum[0]==='string'&&Object.hasOwn(SELECTED_FIELD_KEYS,tag.enum[0]));
+    const name=tag.enum[0] as keyof typeof SELECTED_FIELD_KEYS;return {name,alias:SELECTED_FIELD_KEYS[name],node:compile(branch,scope,key,name)};
    });
    check(branches.length>0&&new Set(branches.map(branch=>branch.name)).size===branches.length);
    const transform=(value:unknown,forward:boolean)=>{check(record(value));const tag=value[forward?'field':'f'];check(typeof tag==='string');const branch=branches.find(branch=>(forward?branch.name:branch.alias)===tag);check(branch);return (forward?branch.node.pack:branch.node.unpack)(value);};
@@ -98,7 +101,7 @@ export function compileCompactContext(source:unknown){
   }
   if(schema.type==='object'){
    check(record(schema.properties)&&Array.isArray(schema.required));
-   const names=COMPACT_KEYS[scope] as Readonly<Record<string,string>>;
+   const names=(scope==='fields'||scope==='ownerFields'?SELECTED_FIELD_KEYS:COMPACT_KEYS[scope]) as Readonly<Record<string,string>>;
    const entries=Object.entries(schema.properties).map(([name,value])=>{check(Object.hasOwn(names,name));return {name,alias:names[name],node:compile(value,child(scope,name,field),name,scope==='fields'||scope==='ownerFields'?name:field)};});
    check(new Set(entries.map(e=>e.alias)).size===entries.length&&schema.required.length===entries.length&&schema.required.every(name=>typeof name==='string'&&Object.hasOwn(schema.properties as Row,name)));
    const transform=(value:unknown,forward:boolean)=>{check(record(value));const from=entries.map(e=>forward?e.name:e.alias);check(Object.keys(value).length===entries.length&&from.every(name=>Object.hasOwn(value,name)));return Object.fromEntries(entries.map(e=>[forward?e.alias:e.name,(forward?e.node.pack:e.node.unpack)(value[forward?e.name:e.alias])]));};

@@ -7,6 +7,7 @@ import {contextContractEncryptionIdentity} from '@/modules/conversation/context-
 import {D1CalendarExportStore} from './export-store';
 import {exportOwnerCalendar} from '../../export-service';
 import {D1RateLimitStore} from '@/modules/db/rate-limit-store';
+import {D1FollowThroughService} from '@/modules/follow-through/service';
 const now=Date.UTC(2026,10,6),principal={userId:'owner',sessionId:'session',expiresAt:now+1_000_000};
 const disposers:Array<()=>void>=[];afterEach(()=>disposers.splice(0).forEach(fn=>fn()));
 async function fixture(){
@@ -126,4 +127,16 @@ it('versions the single advance event from all notification heads, follow-throug
  expect((await f.store.read(principal,now)).events[0].updatedAt).toBe(4000);
  await f.db.prepare("UPDATE reminder_series SET updated_at=5000 WHERE id='advance'").run();
  expect((await f.store.read(principal,now)).events[0].updatedAt).toBe(5000);
+});
+it.each([['SENT','CONFIRMED'],['PENDING','CANCELLED']] as const)('stopping follow-through preserves standalone reminder semantics for %s',async(status,exportedStatus)=>{
+ const f=await fixture();await f.reminder('root',now-1000);await f.db.prepare('UPDATE reminders SET status=? WHERE id=?').bind(status,'root').run();
+ const service=new D1FollowThroughService(f.db,f.keyring,{now:()=>now+10});await service.act({userId:'owner'},{action:'STOP',publicId:'root-public',expectedRevision:0,idempotencyKey:'stop-root'});
+ expect(await f.db.prepare("SELECT status FROM reminders WHERE id='root'").first('status')).toBe(status==='SENT'?'SENT':'CANCELLED');
+ expect((await f.store.read(principal,now+11)).events[0]).toMatchObject({uid:'reminder-root-public@calenote',status:exportedStatus});
+});
+it('stopping a pending follow-up cancels the current reminder projection while retaining its sent original history',async()=>{
+ const f=await fixture();await f.reminder('root',now-1000);await f.db.prepare("UPDATE reminders SET status='SENT' WHERE id='root'").run();await f.db.prepare("INSERT INTO follow_through_spawn_permits VALUES('head','root','head-permit')").run();await f.reminder('head',now+9000);
+ await f.db.prepare("INSERT INTO follow_through_runs VALUES('root','head','FOLLOW_UP',1,'head')").run();await f.db.prepare("UPDATE follow_through_items SET current_reminder_id='head' WHERE id='root'").run();
+ await new D1FollowThroughService(f.db,f.keyring,{now:()=>now+10}).act({userId:'owner'},{action:'STOP',publicId:'root-public',expectedRevision:0,idempotencyKey:'stop-head'});
+ expect(await f.db.prepare("SELECT status FROM reminders WHERE id='root'").first('status')).toBe('SENT');expect((await f.store.read(principal,now+11)).events[0]).toMatchObject({uid:'reminder-root-public@calenote',status:'CANCELLED',start:{kind:'UTC',timestamp:now+9000}});
 });

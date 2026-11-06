@@ -4,8 +4,12 @@ const roots=["titleChange","reminderDateChange","reminderTimeChange","eventDateC
 import * as capabilityModule from "../../src/modules/conversation/context-contract/field-capability";
 import {serializeContextRequest} from "../../src/modules/conversation/context-contract/wire";
 /** Public historical prompt specimen only; immutable hashes remain asserted. */
+export function preDurationPromptFixture(prompt:string):string {
+ return prompt.replace(" Explicit hours/minutes before an event author leadOffsetHours/leadOffsetMinutes with BEFORE_EVENT, never convert units or compute a reminder clock/date. They require eventDate/eventTime, ONCE and no competing reminderDate/reminderTime or day offset.","")
+  .replace("ONCE/finite DAILY/WEEKLY/MONTHLY count2–30 (weekly/monthly Gregorian with a fixed start)","ONCE/finite DAILY count2–30");
+}
 export function wire103PromptFixture(prompt:string):string {
- return prompt.replace(/\nNotes grounding: [^\n]*\n/u,"");
+ return preDurationPromptFixture(prompt).replace(/\nNotes grounding: [^\n]*\n/u,"");
 }
 export function wire102PromptFixture(prompt:string):string {
  return wire103PromptFixture(prompt).replace(/^Date singleton serialization: [^\n]*\n/mu,"Date singleton serialization: for an eventDate/reminderDate/endDate SET or REPLACE whose selected inner grammar requires a STRING, FIRST author an independently grounded canonical DateOperand object and JSON-serialize that operand exactly once into the inner value STRING; SECOND JSON-serialize the completed change object into the carrier change STRING; THIRD JSON-serialize the outer response. Check all three layers separately, escaping quotes and backslashes at each layer. Only the selected eventDateYearNullRequired=true eventDate six-key CIVIL_DATE/year-null branch keeps the inner value as an object and skips FIRST; it still requires SECOND and THIRD. CLEAR stays null, never the string \"null\". Canonical date alternative values remain typed objects inside their alternative JSON strings; do not apply this singleton operand-string step to alternatives. Query date/from/through keep their existing DateOperand JSON-string representation and query envelope grammar; they are not singleton change carriers. These are emission steps only: no received-value repair/coercion, date arithmetic, source/value/default inference or invented evidence.\n");
@@ -59,7 +63,7 @@ export function preDurationSchemaFixture<T>(schema:T):T {
  const historicalDescription="UncertaintyFieldWireCodeV1: "+Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field,code])=>`${code}=${field}`).join(",");
  // The two extra canonical field unions shifted Zod's anonymous definition
  // ordinals. These names come from the immutable pre-duration capture.
- const names:Record<string,string>={__schema23:"__schema21",__schema44:"__schema40"};
+ const names:Record<string,string>={__schema23:"__schema21",__schema25:"__schema23",__schema44:"__schema40"};
  const restore=(value:unknown,key?:string,fieldCode=false):unknown=>{
   if(Array.isArray(value))return value.map(child=>restore(child,undefined,fieldCode));
   if(typeof value==="string")return value.startsWith("#/$defs/")?"#/$defs/"+(names[value.slice(8)]??value.slice(8)):value;
@@ -73,6 +77,7 @@ export function preDurationSchemaFixture<T>(schema:T):T {
   }
   if(Array.isArray(result.enum))result.enum=result.enum.filter(value=>value!=="leadOffsetHours"&&value!=="leadOffsetMinutes");
   if(key==="r"&&result.maximum===14)result.maximum=12;
+  if(key==="changes"&&result.maxItems===5)result.maxItems=3;
   return result;
  };
  return restore(schema) as T;
@@ -143,9 +148,9 @@ export function typedSingletonSchemaFixture(...args:Parameters<typeof googleLite
  const dateMissingInverse=vi.spyOn(capabilityModule,"isInitialReminderDateMissingExcluded").mockReturnValue(false);
  const boundUncertaintyInverse=vi.spyOn(capabilityModule,"isBoundRelationUncertaintyAbsent").mockReturnValue(false);
  const offsetAlternativeInverse=vi.spyOn(capabilityModule,"isWholeSeriesOffsetAlternativeAbsent").mockReturnValue(false);
- const spy=vi.spyOn(globalThis,"structuredClone").mockImplementation(value=>{const result=clone(value);const node=value as {properties?:{changes?:{maxItems?:unknown}}};if(typeof node?.properties?.changes?.maxItems==="number"&&node.properties.changes.maxItems<=3){if(candidates.length>=16)throw Error("PUBLIC_TYPED_SPECIMEN_BOUND");candidates.push(clone(value) as typeof candidates[number]);}return result;});
+ const spy=vi.spyOn(globalThis,"structuredClone").mockImplementation(value=>{const result=clone(value);const node=value as {properties?:{changes?:{maxItems?:unknown}}};if(typeof node?.properties?.changes?.maxItems==="number"&&node.properties.changes.maxItems<=5){if(candidates.length>=16)throw Error("PUBLIC_TYPED_SPECIMEN_BOUND");candidates.push(clone(value) as typeof candidates[number]);}return result;});
  try{const result=googleLiteEuContextWireSchemaV3(...args),matching=new Map<string,typeof result.schema>();
   for(const candidate of candidates){const restored=clone(result.schema);for(const root of roots)restored.properties![root]=candidate.properties![root];if(JSON.stringify(restored)===JSON.stringify(candidate))matching.set(JSON.stringify(candidate),candidate);}
-  if(matching.size!==1)throw Error("PUBLIC_TYPED_SPECIMEN_CAPTURE");return {...result,schema:[...matching.values()][0]};
+  if(matching.size!==1)throw Error("PUBLIC_TYPED_SPECIMEN_CAPTURE");return {...result,schema:preDurationSchemaFixture([...matching.values()][0])};
  }finally{spy.mockRestore();boundUncertaintyInverse.mockRestore();dateMissingInverse.mockRestore();offsetUncertaintyInverse.mockRestore();relationUncertaintyInverse.mockRestore();offsetAlternativeInverse.mockRestore();boundRelationInverse.mockRestore();initialSeriesInverse.mockRestore();seriesInverse.mockRestore();inverse.mockRestore();}
 }

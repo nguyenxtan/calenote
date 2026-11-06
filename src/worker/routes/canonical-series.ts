@@ -1,4 +1,4 @@
-import { CanonicalSeriesCancelRequestSchema, CanonicalSeriesCancelResponseSchema, CanonicalSeriesListResponseSchema } from "@/contracts/api/canonical-series";
+import { CanonicalSeriesCancelRequestSchema, CanonicalSeriesCancelResponseSchema, CanonicalSeriesListResponseSchema,CanonicalSeriesCursorSchema } from "@/contracts/api/canonical-series";
 import { parseSessionCredentials, SessionAuthError } from "@/modules/auth/session";
 import { readBoundedJson } from "@/modules/http/body";
 import { jsonResponse, requireSameOrigin } from "@/modules/http/security";
@@ -22,7 +22,9 @@ export async function handleCanonicalSeries(request: Request, appOrigin: string,
   const principal = await operations.requireUser(credentials);
   const headers = { vary: "Cookie" };
   if (request.method === "GET") {
-    return jsonResponse(CanonicalSeriesListResponseSchema.parse({ data: { schemaVersion: "canonical-series-1", series: await operations.listSeries(principal) } }), { headers });
+    const values=new URL(request.url).searchParams.getAll('cursor'),cursor=values[0];
+    if(values.length>1||(cursor!==undefined&&!CanonicalSeriesCursorSchema.safeParse(cursor).success))throw new InvalidRequestError();
+    return jsonResponse(CanonicalSeriesListResponseSchema.parse({ data: { schemaVersion: "canonical-series-1", ...await operations.listSeries(principal,cursor) } }), { headers });
   }
   const parsed = CanonicalSeriesCancelRequestSchema.safeParse(await readBoundedJson(request, 512, { timeoutMs: 5000 }));
   if (!parsed.success) throw new InvalidRequestError();

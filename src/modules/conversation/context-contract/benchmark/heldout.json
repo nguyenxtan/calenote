@@ -567,7 +567,7 @@
               "Đã lưu"
             ],
             "occurrences": [],
-            "pendingField": null,
+            "pendingField": "reminderTime",
             "contextRevision": 1,
             "draftRevision": 1,
             "queryRange": null,

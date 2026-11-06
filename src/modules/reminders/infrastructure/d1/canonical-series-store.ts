@@ -1,5 +1,5 @@
 import type { SessionPrincipal } from "@/modules/auth/session";
-import { CanonicalSeriesCancelRequestSchema, CanonicalSeriesViewSchema, type CanonicalSeriesCancelRequest, type CanonicalSeriesCancelResult, type CanonicalSeriesView } from "@/contracts/api/canonical-series";
+import { CanonicalSeriesCancelRequestSchema, CanonicalSeriesViewSchema,decodeCanonicalSeriesCursor,encodeCanonicalSeriesCursor, type CanonicalSeriesPage, type CanonicalSeriesCancelRequest, type CanonicalSeriesCancelResult, type CanonicalSeriesView } from "@/contracts/api/canonical-series";
 import { CanonicalDetailsV1Schema } from "@/modules/conversation/context-contract/state";
 import { contextContractEncryptionIdentity } from "@/modules/conversation/context-contract/store";
 import { persistedD1Blob } from "@/modules/db/persisted-blob";
@@ -16,7 +16,7 @@ type Status = CanonicalSeriesView["occurrences"][number]["status"];
 interface SeriesRow {
   id: string; public_id: string; revision: number; status: "ACTIVE" | "CANCELLED"; chat_identity_id: string;
   d_series: string | null; d_owner: string | null; d_chat: string | null; encryption_entity_id: string | null; payload_version: string | null;
-  payload_ciphertext: unknown; payload_iv: unknown; key_version: number | null;
+  payload_ciphertext: unknown; payload_iv: unknown; key_version: number | null;created_at:number;
 }
 interface ChildRow { id: string; scheduled_at: number; status: Status; title_ciphertext: unknown; title_iv: unknown; title_key_version: number }
 
@@ -35,20 +35,29 @@ const personal = `JOIN workspaces w ON w.owner_user_id=s.owner_id AND w.kind='PE
   JOIN memberships m ON m.workspace_id=w.id AND m.user_id=s.owner_id AND m.role='OWNER'`;
 const acquired = "('SENDING','SENT','FAILED','UNCERTAIN','CANCELLED')";
 const terminal = new Set<Status>(["SENT", "CANCELLED", "FAILED"]);
+const wallTime=(scheduledAt:number)=>{try{return new Date(scheduledAt+7*3_600_000).toISOString();}catch{throw new CanonicalSeriesIntegrityError();}};
 
 export class D1CanonicalSeriesStore {
   constructor(private readonly db: D1Database, private readonly keyring: Keyring) {}
 
   async list(principal: SessionPrincipal, now: number): Promise<CanonicalSeriesView[]> {
-    if (!Number.isSafeInteger(now) || !await hasContextContract(this.db)) return [];
-    const rows = (await this.db.prepare(`SELECT s.id,s.public_id,s.revision,s.status,s.chat_identity_id,
+    return (await this.listPage(principal,now)).series;
+  }
+  async listPage(principal:SessionPrincipal,now:number,cursor?:string):Promise<CanonicalSeriesPage>{
+    const empty={series:[],hasMore:false,nextCursor:null,skipped:0};
+    if (!Number.isSafeInteger(now) || !await hasContextContract(this.db)) return empty;
+    const after=cursor===undefined?null:decodeCanonicalSeriesCursor(cursor);if(cursor!==undefined&&!after)throw new TypeError('INVALID_SERIES_CURSOR');
+    const rank="CASE WHEN s.status='ACTIVE' THEN 0 ELSE 1 END";
+    const paging=after?`AND (${rank}>? OR (${rank}=? AND (s.created_at<? OR (s.created_at=? AND s.public_id>?))))`:'';
+    const rows = (await this.db.prepare(`SELECT s.id,s.public_id,s.revision,s.status,s.chat_identity_id,s.created_at,
         d.series_id d_series,d.owner_id d_owner,d.chat_identity_id d_chat,d.encryption_entity_id,d.payload_version,d.payload_ciphertext,d.payload_iv,d.key_version
       ${owned} LEFT JOIN reminder_series_context_details d ON d.series_id=s.id
-      WHERE s.owner_id=? ORDER BY s.created_at DESC,s.id LIMIT 10`)
-      .bind(principal.sessionId, now, principal.userId).all<SeriesRow>()).results;
+      WHERE s.owner_id=? ${paging} ORDER BY ${rank},s.created_at DESC,s.public_id LIMIT 11`)
+      .bind(principal.sessionId, now, principal.userId,...(after?[after[0],after[0],after[1],after[1],after[2]]:[])).all<SeriesRow>()).results;
     const result: CanonicalSeriesView[] = [];
-    for (const row of rows) result.push(await this.view(principal.userId, row));
-    return result;
+    let skipped=0;for (const row of rows.slice(0,10))try{result.push(await this.view(principal.userId,row));}catch(error){if(error instanceof CanonicalSeriesIntegrityError)skipped++;else throw error;}
+    const last=rows[9],hasMore=rows.length>10;
+    return {series:result,hasMore,nextCursor:hasMore?encodeCanonicalSeriesCursor([last.status==='ACTIVE'?0:1,last.created_at,last.public_id]):null,skipped};
   }
 
   private async view(ownerId: string, row: SeriesRow): Promise<CanonicalSeriesView> {
@@ -74,7 +83,7 @@ export class D1CanonicalSeriesStore {
         { ciphertext: persistedD1Blob(children[0].title_ciphertext), iv: persistedD1Blob(children[0].title_iv) });
     } catch { throw new CanonicalSeriesIntegrityError(); }
     const occurrences = children.map(child => {
-      const wall = new Date(child.scheduled_at + 7 * 3_600_000).toISOString();
+      const wall = wallTime(child.scheduled_at);
       return { localDate: wall.slice(0, 10), localTime: wall.slice(11, 16), status: child.status };
     });
     const current = (await this.db.prepare(`SELECT f.root_reminder_id,r.id,r.scheduled_at,r.status,f.progress,f.follow_up_enabled,f.next_follow_up_at
@@ -86,7 +95,7 @@ export class D1CanonicalSeriesStore {
       .bind(ownerId,row.chat_identity_id,row.id).all<{root_reminder_id:string;id:string;scheduled_at:number;status:Status;progress:string;follow_up_enabled:number;next_follow_up_at:number|null}>()).results;
     if(current.length>30)throw new CanonicalSeriesIntegrityError();
     const currentReminders = current.filter(r=>r.id!==r.root_reminder_id).map(child=>{
-      const wall=new Date(child.scheduled_at+7*3_600_000).toISOString();
+      const wall=wallTime(child.scheduled_at);
       return {localDate:wall.slice(0,10),localTime:wall.slice(11,16),status:child.status};
     });
     const pendingFollowUps=current.filter(r=>r.progress==='OPEN'&&r.follow_up_enabled===1&&r.next_follow_up_at!==null).length;

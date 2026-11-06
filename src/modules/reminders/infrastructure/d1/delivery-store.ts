@@ -83,6 +83,21 @@ function followThroughFence(enabled: boolean): string {
   )` : "";
 }
 
+/** Only a canonical owner's cancelled series can stop another delivery attempt.
+ * Already acquired SENDING rows retain their independent settlement authority. */
+function cancelledCanonicalSeries(tracked:boolean):string{
+  return `EXISTS(SELECT 1 FROM reminder_series_occurrences cancelled_o
+    JOIN reminder_series cancelled_s ON cancelled_s.id=cancelled_o.series_id AND cancelled_s.status='CANCELLED'
+      AND cancelled_s.owner_id=w.owner_user_id AND cancelled_s.chat_identity_id=r.chat_identity_id
+    JOIN reminder_series_proposals cancelled_p ON cancelled_p.id=cancelled_s.proposal_id AND cancelled_p.contract_version=2
+      AND cancelled_p.owner_id=cancelled_s.owner_id AND cancelled_p.chat_identity_id=cancelled_s.chat_identity_id
+    WHERE cancelled_o.reminder_id=r.id ${tracked?`OR EXISTS(SELECT 1 FROM follow_through_runs cancelled_run
+      JOIN follow_through_items cancelled_f ON cancelled_f.id=cancelled_run.item_id
+      WHERE cancelled_run.reminder_id=r.id AND cancelled_f.root_reminder_id=cancelled_o.reminder_id
+      AND cancelled_f.owner_user_id=w.owner_user_id AND cancelled_f.workspace_id=w.id
+      AND cancelled_f.chat_identity_id=r.chat_identity_id AND cancelled_f.connection_id=c.id)`:''})`;
+}
+
 export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
   constructor(private readonly database: D1Database) {}
 
@@ -260,6 +275,28 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
     followThrough?: { publicId: string; revision: number },
   ): Promise<AcquireDeliveryResult> {
     const tracked = await hasFollowThrough(this.database);
+    const canonical=await hasCompleteContextContract(this.database),cancelled=canonical?cancelledCanonicalSeries(tracked):'0';
+    if(canonical){
+      // A quota response is a known non-send. Once RETRYABLE, settle the
+      // canonical cancellation atomically; never alter an acquired SENDING row.
+      const settled=await this.database.batch([
+        this.database.prepare(`UPDATE reminders SET status='CANCELLED',cancelled_at=?,claimed_at=NULL,transition_marker=?,updated_at=?
+          WHERE id=? AND status IN ('CLAIMED','RETRYABLE') AND EXISTS(SELECT 1 FROM reminder_deliveries d
+            JOIN reminders r ON r.id=d.reminder_id JOIN workspaces w ON w.id=r.workspace_id
+            JOIN chat_identities ci ON ci.id=r.chat_identity_id JOIN bot_connections c ON c.id=ci.connection_id AND c.user_id=w.owner_user_id
+            WHERE d.reminder_id=reminders.id AND d.status='RETRYABLE' AND ${cancelled})`)
+          .bind(now,marker,now,reminderId),
+        this.database.prepare(`UPDATE reminder_deliveries SET status='CANCELLED',provider_receipt=NULL,safe_error_code='SERIES_CANCELLED',sent_at=NULL,retry_not_before=NULL,transition_marker=?,updated_at=?
+          WHERE reminder_id=? AND status='RETRYABLE' AND EXISTS(SELECT 1 FROM reminders r WHERE r.id=reminder_id AND r.status='CANCELLED' AND r.transition_marker=?)`)
+          .bind(marker,now,reminderId,marker),
+        this.database.prepare(`INSERT INTO audit_events(id,actor_user_id,action,target_user_id,target_connection_id,target_reminder_id,result,created_at)
+          SELECT ?,w.owner_user_id,'REMINDER_CANCELLED',w.owner_user_id,ci.connection_id,r.id,'SUCCESS',?
+          FROM reminders r JOIN workspaces w ON w.id=r.workspace_id JOIN chat_identities ci ON ci.id=r.chat_identity_id
+          JOIN reminder_deliveries d ON d.reminder_id=r.id WHERE r.id=? AND r.status='CANCELLED' AND r.transition_marker=? AND d.status='CANCELLED' AND d.transition_marker=?`)
+          .bind(marker,now,reminderId,marker,marker),
+      ]);
+      if(settled[0].meta.changes===1)return {status:'CANCELLED'};
+    }
     const fence = followThroughFence(tracked);
     const fenceBindings = tracked ? [followThrough?.publicId ?? "", followThrough?.revision ?? -1] : [];
     const inserted = await this.commitOwnership(
@@ -276,6 +313,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
          JOIN bot_connections c ON c.id = ci.connection_id
            AND c.user_id = w.owner_user_id
          WHERE r.id = ? AND r.status IN ('CLAIMED', 'RETRYABLE')
+           AND (r.status<>'RETRYABLE' OR NOT (${cancelled}))
            AND c.state = 'ACTIVE_BOUND'
            ${fence}
            AND NOT EXISTS (
@@ -311,6 +349,7 @@ export class D1ReminderDeliveryStore implements ReminderDeliveryStore {
                AND c.user_id = w.owner_user_id
              WHERE r.id = reminder_deliveries.reminder_id
                AND r.status IN ('CLAIMED', 'RETRYABLE')
+               AND (reminder_deliveries.status<>'RETRYABLE' OR NOT (${cancelled}))
                AND c.state = 'ACTIVE_BOUND'
                ${fence}
            )`,

@@ -58,3 +58,12 @@ Interfaces: GET status and POST begin/code/disconnect; session and Origin checks
 - Final own validation: 35/35 focused tests; targeted ESLint clean; TypeScript noEmit clean. The parent is responsible for integrated full-suite/build and fresh whole-branch review. No real provider calls, credentials, resources or deployment were used.
 - See `docs/superpowers/specs/2026-11-06-calendar-sync-source-report.md` for exact integration and activation limits.
 - Parent-requested actual Workerd/D1 smoke passed with all forward migrations: concurrent nonce/claim/disconnect CAS, expired unresolved egress hold, zombie marker rejection and transactional audit rollback.
+
+## Parent-requested review correction pass
+
+- [x] Reproduce P1-2 with the bundled real adapter inside Workerd: redirect: error fails before local mock egress. Use manual; reject all 3xx as unknown. Test credential-bearing redirects never forward.
+- [x] Verify Telegram's same Workerd bug before touching the conditionally authorized shared transport. Reproduce, then preserve no-follow security with manual and UNCERTAIN redirected writes. Zalo behavior unchanged.
+- [x] Reproduce P2-4 update 404/410, original-owned sparse tombstone restoration and one-event failure stopping healthy events. Implement bounded deterministic-id/ownership probe recovery and per-event exhaustion isolation.
+- [x] Reproduce P2-5 unrecognized non-auth 403 forcing reauthorization. Restrict reauthorization to explicit auth errors; preserve calendar identity on other 403s. Definite setup rejection may retry; ambiguous setup never blindly retries.
+- [x] Reproduce missing batched mapping API and implement one lease-guarded lookup for at most 300 UIDs; verify json_each against actual Workerd D1.
+- [x] Focused correction checks 105/105 and targeted lint clean. No own TypeScript diagnostics; parent notified of concurrent composition-root paged-series port mismatch. Root owns full integrated verification and final review.

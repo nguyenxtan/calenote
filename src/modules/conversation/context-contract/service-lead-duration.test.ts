@@ -6,7 +6,7 @@ const values={title:'họp QA',eventDate:date(10,11,2026),eventTime:time(15),eve
 const text='Ngày10/11/2026 lúc15h họp QA, nhắc một lần trước3tiếng.';
 it.each([
  {rule:'trước3tiếng',duration:{leadOffsetHours:3},at:'12:00'},
- {rule:'trước3giờ',duration:{leadOffsetHours:3},at:'12:00'},
+ {rule:'3giờ trước',duration:{leadOffsetHours:3},at:'12:00'},
  {rule:'trước90phút',duration:{leadOffsetMinutes:90},at:'13:30'},
  {rule:'trước1tiếng30phút',duration:{leadOffsetHours:1,leadOffsetMinutes:30},at:'13:30'},
 ])('confirms $rule exactly once and preserves explicit inputs without computed clock facts',async c=>{
@@ -19,6 +19,12 @@ it.each([
  expect(await h.f.db.prepare('SELECT scheduled_at FROM reminders').first('scheduled_at')).toBe(Date.parse(`2026-11-10T${c.at}:00+07:00`));
  expect(await h.f.db.prepare('SELECT count(*) n FROM advance_notification_groups').first('n')).toBe(0);
  await h.turn(2,`xác nhận ${state.pendingDecision!.tokenHandle}`);expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(1);
+});
+it('asks about an ambiguous bare before-hour phrase without paying for or inventing a duration/clock',async()=>{
+ const h=await harness([proposal({...values,leadOffsetHours:8})]);
+ expect(await h.turn(0,'Khám 9 giờ mai, nhắc trước 8 giờ')).toEqual({status:'REJECTED'});
+ expect(h.inputs).toHaveLength(0);expect(h.replies.at(-1)?.text).toContain('tiếng');
+ expect(await h.f.db.prepare('SELECT count(*) n FROM command_drafts').first('n')).toBe(0);
 });
 it('refuses a model dropping the stated duration instead of using its invented reminder clock',async()=>{
  const h=await harness([proposal({title:'họp QA',eventDate:date(10,11,2026),eventTime:time(15),reminderTime:time(15)})]);

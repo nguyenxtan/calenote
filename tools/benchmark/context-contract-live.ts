@@ -79,11 +79,21 @@ export function preflightContextCampaign({ root }: PreflightOptions) {
     provenanceDigest, digests };
 }
 
-/** Immutable acceptance data is never silently reclassified as new held-out
- * evidence. Replacement and reauthorization are a separate approved workflow. */
-export function validateFrozenContextCorpus(root: string, manifests: readonly ContextManifest[]) {
+export const CURRENT_CONTEXT_ORACLE_REVISION = "weekly-capability-2" as const;
+type ContextOracleRevision = "historical-v1" | typeof CURRENT_CONTEXT_ORACLE_REVISION;
+/** Original acceptance data stays pinned. The explicit successor oracle changes
+ * only the approved H10 missing-clock expectation; it is reused historical
+ * evidence, not newly unseen held-out data. All other bytes remain binding. */
+export function validateFrozenContextCorpus(root: string, manifests: readonly ContextManifest[], revision: ContextOracleRevision = CURRENT_CONTEXT_ORACLE_REVISION) {
+  if (revision !== "historical-v1" && revision !== CURRENT_CONTEXT_ORACLE_REVISION) throw new Error("UNKNOWN_ORACLE_REVISION");
   for (const [i, name] of ["regressions", "development", "heldout"].entries()) {
     const original = JSON.parse(execFileSync("git", ["-C", root, "show", `68fac9b2b5e95ee57c53f0ac1f491210e153ed01:src/modules/conversation/context-contract/benchmark/${name}.json`], { encoding: "utf8", env: contextCampaignGitEnvironment }));
+    if (name === "heldout" && revision === CURRENT_CONTEXT_ORACLE_REVISION) {
+      const h10 = original.cases.find((row: ContextManifest["cases"][number]) => row.id === "H10");
+      if (h10?.turns.length !== 1 || h10.turns[0].text !== "Mỗi thứ hai nhắc tôi gọi khách hàng."
+        || h10.turns[0].expect.fields.frequency !== "WEEKLY" || h10.turns[0].expect.pendingField !== null) throw new Error("ORACLE_REVISION_SOURCE_CHANGED");
+      h10.turns[0].expect.pendingField = "reminderTime";
+    }
     if (hash(JSON.stringify(manifests[i])) !== hash(JSON.stringify(original))) throw new Error(name === "heldout" ? "HELDOUT_REPLACEMENT_REQUIRED" : "FROZEN_ORACLES_CHANGED");
   }
 }
