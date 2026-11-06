@@ -96,6 +96,9 @@ export type PreparedSemanticAttempt<T = ModelSemanticInterpretation> = {
   provider: string;
   maximumCostMicrounits: number;
   routeAdmission?: "OBSERVABLE_CANARY";
+  /** Exact app-rendered system prompt for attempt binding, never provider data.
+   * Keep the text out of logs/state; persist only the existing binding digest. */
+  readonly bindingPrompt?: string;
   /** One shot. No adapter retry or hidden provider fallback is permitted. */
   dispatch(): Promise<SemanticAttemptResult<T>>;
 } | { status: "FAILURE"; category: SemanticFailureCategory };

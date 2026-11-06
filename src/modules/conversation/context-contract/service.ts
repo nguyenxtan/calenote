@@ -1,4 +1,4 @@
-import {CONTEXT_KEYED_COMPARISON_PROTOCOL,CONTEXT_KEYED_COMPARISON_PROMPT} from './keyed-small-wire';
+import {CONTEXT_KEYED_COMPARISON_PROTOCOL,CONTEXT_KEYED_COMPARISON_PROMPT,serializeKeyedSmallComparison} from './keyed-small-wire';
 import {CONTEXT_SMALL_PROTOCOL_V3} from "./small-protocol";
 import {CONTEXT_SMALL_PROMPT} from "./small-wire";
 import type { BotReplyPreferences } from "@/modules/preferences/wording";
@@ -251,7 +251,8 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
           emit({ event: "REQUEST_PREPARED", ...contextRouteObservation(attempt.model,attempt.provider), routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
-          const inputDigest = await digest(built.input), promptDigest = await digest(contextPromptForInput(emission.prompt,built.input,{keyedPeriodic:keyedEmission})), contractDigest = await digest(InterpretationJsonSchema);
+          const bindingPrompt=keyedEmission?(attempt.bindingPrompt??serializeKeyedSmallComparison(built.input).messages[0].content):contextPromptForInput(emission.prompt,built.input);
+          const inputDigest = await digest(built.input), promptDigest = await digest(bindingPrompt), contractDigest = await digest(InterpretationJsonSchema);
           const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: emission.protocol });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });

@@ -60,7 +60,19 @@ Directive and reply are optional advice: [] or one exact schema row. Directive k
 
 Canonical field traversal is fixed by the application: ${JSON.stringify(V3_SLOT_NAMES)}. The model never authors order. Uncertainty fieldCode mapping: ${JSON.stringify(UNCERTAINTY_FIELD_WIRE_CODE_V2)}.
 `;
+/** Trusted schema metadata only. It supplies neither a value nor evidence. */
+function selectedOwnerOrderGuidance(schema:unknown):string {
+ const tree=schema as {properties?:{changes?:{properties?:{owners?:{properties?:Record<string,unknown>;required?:unknown}}}}};
+ if(!tree.properties?.changes)return '';
+ const owners=tree.properties.changes.properties?.owners;
+ if(!owners?.properties||!Array.isArray(owners.required))throw TypeError('KEYED_OWNER_ORDER_SCHEMA');
+ const keys=Object.keys(owners.properties),required=owners.required;
+ if(required.length!==keys.length||new Set(required).size!==keys.length
+   ||keys.some(key=>!(V3_SLOT_NAMES as readonly string[]).includes(key)||!required.includes(key)))throw TypeError('KEYED_OWNER_ORDER_SCHEMA');
+ if(!keys.length)return '';
+ return `\nselectedOwnerKeysInEmissionOrder=${JSON.stringify(keys)}. After each nonfinal owner value, immediately emit a comma and the next listed key. Emit every unchanged listed owner as its actual field name followed by :[]. Close owners only after the last listed key. Emit no whitespace outside strings. This serialization order has no semantic authority.\n`;
+}
 export function serializeKeyedSmallComparison(input:ContextInput){
- const sources=evidenceSourceCatalogue(input);
- return {messages:[{role:'system' as const,content:contextPromptForInput(CONTEXT_KEYED_COMPARISON_PROMPT,input,{keyedPeriodic:true})},{role:'user' as const,content:JSON.stringify({...input,...(sources.length?{evidenceSources:sources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],stream:false as const,max_tokens:1536 as const,temperature:0 as const,response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_keyed_137',strict:true as const,schema:keyedSmallComparisonSchema(input)}}};
+ const sources=evidenceSourceCatalogue(input),schema=keyedSmallComparisonSchema(input);
+ return {messages:[{role:'system' as const,content:contextPromptForInput(CONTEXT_KEYED_COMPARISON_PROMPT,input,{keyedPeriodic:true})+selectedOwnerOrderGuidance(schema)},{role:'user' as const,content:JSON.stringify({...input,...(sources.length?{evidenceSources:sources}:{}),numericOwnership:numericOwnershipCatalogue(input),fieldCapability:deriveGenerationFieldCapability(input)})}],stream:false as const,max_tokens:1536 as const,temperature:0 as const,response_format:{type:'json_schema' as const,json_schema:{name:'calenote_context_keyed_137',strict:true as const,schema}}};
 }
