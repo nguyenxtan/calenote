@@ -36,7 +36,15 @@ Deferred USER burst: the application-owned currentBurstTurns identifies the sepa
 An event date in one member plus a notification clock in another does not author a notification date. An event phrase such as "Ngày 11/11 đi thi" or "Mai đi thi" supplies eventDate only; a later "Nhắc lúc 8h" supplies reminderTime only. Keep reminderDate unchanged unless a member independently authors the notification's date or start. Never duplicate an event's absolute or relative date into reminderDate to complete the schedule; missing scheduling relationships belong to the application. These examples explain ownership only and supply no operands for another source. Exclude exterior sentence punctuation from a venue: the final full stop in "đi thi ở Trường A." terminates the instruction, while the venue is "Trường A". Preserve punctuation inside an explicitly quoted venue, an abbreviation or an actual venue name.
 `;
 
-/** Single-message prompts remain byte-identical, including their whitespace. */
-export function contextPromptForInput(basePrompt: string, input: ContextInput): string {
-  return currentBurstTurnIndexes(input).length ? basePrompt + BURST_ADDENDUM : basePrompt;
+const PERIODIC_KEYED_ADDENDUM = `
+For WEEKLY/MONTHLY notification starts, preserve the independently authored start relation just as for DAILY. When eligible USER evidence says the notification sequence starts "từ" or "bắt đầu" an authored date/time, propose eventRelation=STARTING_ON with that exact source, alongside the authored reminderDate/reminderTime and finite count or endDate. Do not omit STARTING_ON merely because cadence is weekly/monthly. These are notification starts, not an underlying eventDate. Cadence, count and a bare date alone never supply this relation. Never invent a start, clock, count, end date or relation; keep missing information for the application to ask about. Preserve an authored monthly day such as31 and let the backend clarify a missing day; never clamp, skip or calculate replacement occurrences. This guidance supplies no facts, never copies retained cadence into NEW, and does not widen CURRENT/NEW evidence or confirmation authority.
+`;
+
+/** Existing single-message bytes stay fixed unless the selected keyed route
+ * needs the explicitly qualified periodic guidance. No operands are parsed. */
+export function contextPromptForInput(basePrompt: string, input: ContextInput, options?:{keyedPeriodic?:boolean}): string {
+  const burst = currentBurstTurnIndexes(input).length ? basePrompt + BURST_ADDENDUM : basePrompt;
+  const frequency=input.activeRequest?.slots.frequency.value;
+  const periodic=frequency==='WEEKLY'||frequency==='MONTHLY'||currentRequestTurnIndexes(input).some(index=>/(?:^|[^\p{L}\p{M}])(?:mỗi|hàng|hằng)\s+(?:tuần|tháng)(?=$|[^\p{L}\p{M}])/iu.test(input.turns[index].text));
+  return options?.keyedPeriodic&&periodic?burst+PERIODIC_KEYED_ADDENDUM:burst;
 }

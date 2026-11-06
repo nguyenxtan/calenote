@@ -63,6 +63,7 @@ const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|
 export function createContextContractService(deps: ContextContractServiceDependencies) {
   if (!isContextProtocolV3(deps.store.protocol)) throw new TypeError("Selected context protocol required");
   if (!/^[0-9a-f]{40}$/u.test(deps.sourceSha)) throw new TypeError("Source SHA required");
+  const keyedEmission=deps.gateway.contextWire==='KEYED_COMPARISON_137'||deps.gateway.contextWire==='KEYED_COMPARISON_136'||deps.gateway.contextWire==='KEYED_OBJECTS_136';
   const emission=deps.gateway.contextWire==="KEYED_COMPARISON_137"||deps.gateway.contextWire==="KEYED_COMPARISON_136"||deps.gateway.contextWire==="KEYED_OBJECTS_136"?{protocol:CONTEXT_KEYED_COMPARISON_PROTOCOL,prompt:CONTEXT_KEYED_COMPARISON_PROMPT}:deps.gateway.contextWire==="SMALL_TABLES_106"?{protocol:CONTEXT_SMALL_PROTOCOL_V3,prompt:CONTEXT_SMALL_PROMPT}:deps.gateway.contextWire==="TYPED_OBJECTS_106"?{protocol:CONTEXT_TYPED_PROTOCOL_V3,prompt:CONTEXT_TYPED_PROMPT}:{protocol:CONTEXT_PROTOCOL_V3,prompt:CONTEXT_CONTRACT_PROMPT};
   const scopeFor = (message: BoundChatMessage, context: BoundChatContext): ConversationScope => ({ ownerId: context.userId,
     chatIdentityId: context.chatIdentityId, sourceInboundId: message.id, claimMarker: message.claimMarker, now: deps.now() });
@@ -250,7 +251,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           const attempt = deps.gateway.prepare("PRIMARY", built.input);
           if (attempt.status !== "READY") { emit({ event: "REQUEST_REJECTED", reason: attempt.category }); return finish("CONFIG"); }
           emit({ event: "REQUEST_PREPARED", ...contextRouteObservation(attempt.model,attempt.provider), routeAdmission: deps.mode === "OFFLINE_FIXTURE" ? "OFFLINE_FIXTURE" : attempt.routeAdmission ?? "UNVERIFIED" });
-          const inputDigest = await digest(built.input), promptDigest = await digest(contextPromptForInput(emission.prompt,built.input)), contractDigest = await digest(InterpretationJsonSchema);
+          const inputDigest = await digest(built.input), promptDigest = await digest(contextPromptForInput(emission.prompt,built.input,{keyedPeriodic:keyedEmission})), contractDigest = await digest(InterpretationJsonSchema);
           const bindingDigest = await digest({ observation: observed.observation, inputDigest, promptDigest, contractDigest, protocol: emission.protocol });
           if (!await deps.runtimeStore.claimAttempt(scope, observed.observation, bindingDigest)) { emit({ event: "REQUEST_REJECTED", reason: "DUPLICATE" }); return { status: "SUPERSEDED" }; }
           const reservation = await deps.budgetStore.reservePaidCall({ ownerId: scope.ownerId, sourceInboundId: message.id, now: deps.now() });
