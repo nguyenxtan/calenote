@@ -2,7 +2,7 @@
 import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
 import {z} from 'zod';
-import {ConversationInterpretationV3Schema,SLOT_NAMES,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
+import {ConversationInterpretationV3Schema,V3_SLOT_NAMES,type ContextInput} from '../../src/modules/conversation/context-contract/contracts';
 import {decodeSmallContextV3,encodeSmallContextV3} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-small-wire';
 import {CONTEXT_SMALL_PROTOCOL_V3} from '../../src/modules/conversation/context-contract/small-protocol';
 import {keyedSmallComparisonSchema,encodeKeyedSmallComparison,decodeKeyedSmallComparison,KEYED_OPERATION_NAMES} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-keyed-small-wire';
@@ -25,7 +25,7 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
  let count=0,pairs=0;
  await runContextFixtureCampaign(admitCanonicalCampaign(manifest,'FULL'),{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},(input,id,index)=>{
   const raw=frozenContextProposal(input,id,index),canonical=ConversationInterpretationV3Schema.safeParse(raw);if(!canonical.success)return raw;
-  count++;const sorted={...canonical.data,changes:[...canonical.data.changes].sort((a,b)=>SLOT_NAMES.indexOf(a.field)-SLOT_NAMES.indexOf(b.field))};
+  count++;const sorted={...canonical.data,changes:[...canonical.data.changes].sort((a,b)=>V3_SLOT_NAMES.indexOf(a.field)-V3_SLOT_NAMES.indexOf(b.field))};
   expect(serializeKeyedSmallComparison(input).messages[1]).toEqual(serializeSmallContextRequest(input).messages[1]);
   const wire=encodeKeyedSmallComparison(canonical.data,input) as {changes:{owners:Record<string,unknown[]>}};
   expect(Object.keys(wire.changes)).toEqual(['owners']);
@@ -43,7 +43,7 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
   const operationIssuesSchema=selected.properties!.operation.anyOf!.find(branch=>branch.properties!.operationUncertainties)?.properties!.operationUncertainties.items,operationIssues=operationIssuesSchema?compileAuditShape(operationIssuesSchema):null;
   for(let fieldCode=0;fieldCode<=15;fieldCode++)for(const reason of ['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']){
    pairs++;const row={fieldCode,reason,alternatives:[]},actual=fieldCode===15?(operationIssues?.safeParse({reason,alternatives:[]}).success??false):[13,14].includes(fieldCode)?(controlIssues?.safeParse(row).success??false)||(controlIssues?.safeParse({fieldCode,reason}).success??false):(fieldIssues?.safeParse(row).success??false)||(fieldIssues?.safeParse({fieldCode,reason}).success??false);
-   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<SLOT_NAMES.length&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(!(fieldCode<13)||!isRetainedClosedRelationFieldUncertaintyAbsent(input)));
+   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(!(fieldCode<13)||!isRetainedClosedRelationFieldUncertaintyAbsent(input)));
   }
   const actual=decodeKeyedSmallComparison(wire,input),expected=decodeSmallContextV3(encodeSmallContextV3(sorted,input),CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
   if(actual.status==='PARSED'&&expected.status==='PARSED'&&isUnreconciledListInterpretation(actual.value)&&isUnreconciledListInterpretation(expected.value))expect(readListTransport(actual.value)).toEqual(readListTransport(expected.value));else expect(actual).toEqual(expected);
@@ -130,7 +130,7 @@ it('excludes model-authored reminder completeness claims rather than letting opt
 });
 it('still asks for an explicitly unresolved optional location and previews after the grounded answer',async()=>{
  let calls=0;
- const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106',liveBudgetProfile:'GPT5_MINI_AZURE_SWEDEN',liveGateway:{contextWire:'KEYED_COMPARISON_136',prepare(_tier,input){
+ const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106',liveBudgetProfile:'GPT5_MINI_AZURE_SWEDEN',liveGateway:{contextWire:'KEYED_COMPARISON_137',prepare(_tier,input){
   const evidence=[{kind:'USER_QUOTE',turn:input.currentTurn,quote:input.turns[input.currentTurn].text,occurrence:1}];
   const value=ConversationInterpretationV3Schema.parse(calls===0?{...frozenContextProposal(input,'R12',0) as object,uncertainties:[{field:'location',reason:'AMBIGUOUS',alternatives:[]}],conversationDirective:null}:{schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'CURRENT',evidence},changes:[{field:'location',operation:'SET',value:'ở nhà',evidence}],query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
   const decoded=decodeKeyedSmallComparison(encodeKeyedSmallComparison(value,input),input);if(decoded.status!=='PARSED')throw Error('DECODE_UNRESOLVED_LOCATION');

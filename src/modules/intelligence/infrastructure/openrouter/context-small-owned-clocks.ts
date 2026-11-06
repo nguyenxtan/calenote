@@ -1,4 +1,4 @@
-import {ClockOperandSchema,SLOT_NAMES} from '../../../conversation/context-contract/contracts';
+import {ClockOperandSchema,V3_SLOT_NAMES} from '../../../conversation/context-contract/contracts';
 import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from './context-provider-wire';
 import type {SmallChangeCarrier,SmallContextWire} from './context-small-intermediate';
 type Row=Record<string,unknown>;
@@ -32,7 +32,7 @@ export function flattenOwnedClocks(owned:OwnedClockWire):SmallContextWire {
  const ranks=new Set<number>();
  const cell=(value:unknown,count:number)=>{check(Array.isArray(value)&&value.length===count);for(const row of value)check(ClockOperandSchema.safeParse(row).success);};
  for(const [field,c]of Object.entries(owned.changes)){
-  check(SLOT_NAMES.some(name=>name===field));
+  check(V3_SLOT_NAMES.some(name=>name===field));
   if(c.operation==='KEEP')check(c.rank===null);
   else {check(Number.isSafeInteger(c.rank)&&c.rank!==null&&c.rank>=0&&c.rank<=12&&!ranks.has(c.rank));ranks.add(c.rank);}
   cell(c.clock,clockFields.has(field)&&c.operation!=='KEEP'&&c.operation!=='CLEAR'?1:0);

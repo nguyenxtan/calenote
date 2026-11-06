@@ -43,7 +43,7 @@ const budgetLimits = { ownerDailyFallbackLimit: 50, ownerMonthlyCostMicrounits: 
 const scalar = (s: unknown) => s && typeof s === "object" ? structuredClone(s) : s;
 export type FixtureProposal = (input: ContextInput, index: number) => unknown;
 export interface ProbeConfig { wireProtocol?: "TYPED_105" | "SMALL_106"; sourceSha: string; referenceNow: number; budgetRefusal?: boolean;
-  liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_105" | "SMALL_TABLES_106" | "KEYED_COMPARISON_136"}; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null;
+  liveGateway?: SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire?: "TYPED_OBJECTS_106" | "SMALL_TABLES_106" | "KEYED_COMPARISON_137"}; syntheticFaultControl?: boolean; offlineSeedTurns?: number; contextSeed?: CheckpointState | null;
   /** Synthetic model-comparison probe only; never selects a production route. */
   liveBudgetProfile?: "GEMINI_FLASH_AI_STUDIO" | "GPT5_MINI_AZURE_SWEDEN" | "GPT5_MINI_MEDIUM_AZURE_SWEDEN" | "GPT41_MINI_AZURE_SWEDEN" | "NANO54_AZURE_ZDR_SYNTHETIC" | "MINI54_FLEX_SYNTHETIC" | "MINI54_AZURE_ZDR_SYNTHETIC"; }
 
@@ -74,7 +74,7 @@ export async function createContextContractProbe(config: ProbeConfig, fixture: F
     let lastSnapshot: ContextSnapshotV2 | null = null;
     const store = new D1ContextContractStore(db, keyring, () => now, CONTEXT_PROTOCOL_V3);
     const service = createContextContractService({ store: createD1ContextContractStoreV3({ db, keyring, clock: () => now, protocol: CONTEXT_PROTOCOL_V3 }), runtimeStore: createD1ContextRuntimeStoreV3({ db, keyring, protocol: CONTEXT_PROTOCOL_V3 }),
-      gateway: { ...(config.wireProtocol === "SMALL_106" ? {contextWire:"SMALL_TABLES_106" as const} : config.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_105" as const} : {}), ...(config.liveGateway?.contextWire?{contextWire:config.liveGateway.contextWire}:{}), prepare(tier, input) {
+      gateway: { ...(config.wireProtocol === "SMALL_106" ? {contextWire:"SMALL_TABLES_106" as const} : config.wireProtocol === "TYPED_105" ? {contextWire: "TYPED_OBJECTS_106" as const} : {}), ...(config.liveGateway?.contextWire?{contextWire:config.liveGateway.contextWire}:{}), prepare(tier, input) {
         inputs.push(structuredClone(input));
         if (config.liveGateway && index > (config.offlineSeedTurns ?? 0)) {
           const prepared = config.liveGateway.prepare(tier, input), hold = delayed;

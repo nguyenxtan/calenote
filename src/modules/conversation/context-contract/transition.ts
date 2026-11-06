@@ -6,14 +6,14 @@ import type { StoredTransition, StoredTransitionV2, DecisionProof, CanonicalPrev
 import type { ControlSelection } from "./decisions";
 import { selectControl } from "./decisions";
 import { computeLegacyV2EffectiveDirective as computeEffectiveDirective, computeEffectiveDirectiveV3, selectGuidance, type GuidanceSelection } from "./guidance";
-import { composeContextReply, formatPendingFact, type ReplyOutcome, type ReadyReplyPlan, type FailureReason } from "./responses";
+import { composeContextReply, formatPendingFact, formatLeadDurationRule, type ReplyOutcome, type ReadyReplyPlan, type FailureReason } from "./responses";
 import { resolveQuery, type ContextQueryResult, type QueryResolution } from "./query";
 import { digest, previewHash } from "./confirmation";
 import { createControlProof } from "./control-proof";
 import { isPreviewRecoveryResponse, SAVE_APPROVAL_REPLIES } from "./preview-control";
 import { projectSemanticView } from "./projection";
 import { lunarCalendar } from "../lunar-calendar";
-import { SLOT_NAMES, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
+import { SLOT_NAMES, V3_SLOT_NAMES, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
 
 export interface TransitionInput {
   snapshot: ContextSnapshotV1 | null;
@@ -51,7 +51,7 @@ function expiry(s: ContextSnapshotV1 | ContextSnapshotV2): string {
   return new Date(Math.min(Date.parse(s.idleExpiresAt), Date.parse(s.absoluteExpiresAt), s.draftExpiresAt ? Date.parse(s.draftExpiresAt) : Infinity)).toISOString();
 }
 function recap(s: ContextSnapshotV1 | ContextSnapshotV2): string[] {
-  return SLOT_NAMES.flatMap(field => { const slot = s.slots[field]; return slot.value === null ? [] : [formatPendingFact(field, slot.value)]; });
+  return V3_SLOT_NAMES.flatMap(field => { const slot = s.slots[field]; return !slot || slot.value === null ? [] : [formatPendingFact(field, slot.value)]; });
 }
 function clearDecision(s: ContextSnapshotV1 | ContextSnapshotV2) {
   s.pendingDecision = null; s.previewReceipt = null;
@@ -71,7 +71,7 @@ function candidateFromPatch(patch: ValidatedPatch, proposalId: string): Candidat
     || patch.alternativeEvidence.some(e => e.provenance.kind !== "EXPLICIT_USER" || !e.sources.length)) return null;
   const s = patch.candidateSnapshot;
   const refs = (sources: readonly SourceEvidence[]): EvidenceRef[] => sources.map(e => ({ kind: "USER_QUOTE", turn: s.transcript.findIndex(t => t.id === e.sourceTurnId), quote: e.quote, occurrence: e.occurrence }));
-  const evidenceIndex = patch.changeEvidence.map(e => ({ field: SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
+  const evidenceIndex = patch.changeEvidence.map(e => ({ field: V3_SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
   const sources = [...evidenceIndex.flatMap(e => e.evidence), ...patch.alternativeEvidence.flatMap(e => [...e.sources])].filter((e, i, all) => all.findIndex(other => equal(e, other)) === i);
   if (!sources.length || sources.length > 3) return null;
   let alternativeIndex = 0;
@@ -87,7 +87,7 @@ function candidateFromPatchV3(patch: ValidatedPatchV3, proposalId: string): Cand
     || patch.alternativeEvidence.some(e => e.provenance.kind !== "EXPLICIT_USER" || !e.sources.length)) return null;
   const s = patch.candidateSnapshot;
   const refs = (sources: readonly SourceEvidence[]): EvidenceRef[] => sources.map(e => ({ kind: "USER_QUOTE", turn: s.transcript.findIndex(t => t.id === e.sourceTurnId), quote: e.quote, occurrence: e.occurrence }));
-  const evidenceIndex = patch.changeEvidence.map(e => ({ field: SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
+  const evidenceIndex = patch.changeEvidence.map(e => ({ field: V3_SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
   const sources = [...patch.requestTargetEvidence, ...evidenceIndex.flatMap(e => e.evidence), ...patch.alternativeEvidence.flatMap(e => [...e.sources])].filter((e, i, all) => all.findIndex(other => equal(e, other)) === i);
   if (!sources.length || sources.length > 3) return null;
   let alternativeIndex = 0;
@@ -257,7 +257,7 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
         if (!input.channel) return fail("CONFIG", "PREVIEW_CHANNEL_REQUIRED");
         s.slots = structuredClone(resolution.resolvedSlots); s.facts = structuredClone(resolution.resolvedFacts);
         if (prior?.requestId === s.requestId && !equal(prior.slots, s.slots)) s.draftRevision = (prior.draftRevision ?? 0) + 1;
-        preview = { schemaVersion: "calenote-context-preview-1", title: s.slots.title.value!, details: resolution.details, occurrences: resolution.occurrences, prefix: "Bản nháp chưa lưu:\n", suffix: `\nXác nhận ${token}\nTrả lời 2 để từ chối.` };
+        preview = { schemaVersion: "calenote-context-preview-1", title: s.slots.title.value!, details: resolution.details, occurrences: resolution.occurrences, prefix: "Bản nháp chưa lưu:\n" + formatLeadDurationRule(s.slots), suffix: `\nXác nhận ${token}\nTrả lời 2 để từ chối.` };
         issue("SAVE_PREVIEW"); s.lifecycle = "AWAITING_CONFIRMATION"; s.pendingReminderQuestion = null; s.pendingQueryQuestion = null;
         s.pendingDecision!.previewId = outboundId; s.pendingDecision!.acceptedReplies = [...SAVE_APPROVAL_REPLIES];
         s.pendingDecision!.target.proposalId = resolution.occurrences.length > 1 ? proposalId : null;
@@ -337,11 +337,11 @@ function adoptSelected(s: SelectedSnapshot, candidate: Candidate | CandidateV3):
     if (!evidence?.length) return null;
     const referenceTime = evidence.map(e => result.transcript.find(t => t.id === e.sourceTurnId)?.receivedAt).filter((t): t is string => !!t).sort().at(-1);
     if (!referenceTime) return null;
-    Object.assign(result.slots[change.field], { state: "RESOLVED", value: structuredClone(change.value), evidence: structuredClone(evidence), provenance: { kind: "EXPLICIT_USER" }, resolution: { method: "EXPLICIT_OPERAND", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies: [] } });
+    Object.assign(result.slots[change.field] ??= {state:"MISSING",value:null,fact:null,evidence:[],provenance:null,resolution:null,proposalRevision:result.draftRevision!}, { state: "RESOLVED", value: structuredClone(change.value), evidence: structuredClone(evidence), provenance: { kind: "EXPLICIT_USER" }, resolution: { method: "EXPLICIT_OPERAND", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies: [] } });
   }
-  const facts = SLOT_NAMES.flatMap(field => {
-    const slot = result.slots[field]; if (slot.value === null) return [];
-    slot.fact = `f${SLOT_NAMES.indexOf(field) + 1}`;
+  const facts = V3_SLOT_NAMES.flatMap(field => {
+    const slot = result.slots[field]; if (!slot || slot.value === null) return [];
+    slot.fact = `f${V3_SLOT_NAMES.indexOf(field) + 1}`;
     return [{ alias: slot.fact, scope: "REMINDER", field, value: slot.value, evidenceSlot: field, provenance: slot.provenance, sourceReferenceTime: slot.resolution!.referenceTime, dependencies: [] }];
   });
   const parsed = (s.schemaVersion === "calenote-context-state-2" ? ContextSnapshotV2Schema : ContextSnapshotV1Schema).safeParse({ ...result, facts });

@@ -1,3 +1,4 @@
+import {supportsLeadDuration} from "./lead-duration-evidence";
 import type { ContextInput } from "./contracts";
 import {SLOT_NAMES} from './contracts';
 import type { SourceEvidence } from "./state";
@@ -72,7 +73,7 @@ export function isBoundSeriesDistanceOffsetMissingExcluded(input:ContextInput):b
   if(!offset||offset.state!=="MISSING"||offset.value!==null||offset.fact!==null
     ||input.facts.some(fact=>fact?.field==="leadOffsetDays"))return false;
   for(const field of ["frequency","occurrenceCount","eventDate"] as const){
-    const slot=slots[field];if(slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
+    const slot=slots[field];if(!slot||slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
     const facts=input.facts.filter(fact=>fact?.alias===slot.fact);
     if(facts.length!==1||facts[0].scope!=="REMINDER"||facts[0].field!==field
       ||input.facts.filter(fact=>fact?.scope==="REMINDER"&&fact.field===field).length!==1
@@ -165,7 +166,7 @@ function isRetainedWholeRelationOnlyOffsetAbsent(input:ContextInput):boolean {
   if(offset.state!=='MISSING'||offset.value!==null||offset.fact!==null||input.facts.some(fact=>fact.field==='leadOffsetDays'))return false;
   const factual=(field:'title'|'eventDate'|'frequency'|'occurrenceCount')=>{
     const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field);
-    return slot.state==='RESOLVED'&&slot.value!==null&&typeof slot.fact==='string'&&facts.length===1
+    return !!slot && slot.state==='RESOLVED'&&slot.value!==null&&typeof slot.fact==='string'&&facts.length===1
       &&facts[0].scope==='REMINDER'&&facts[0].alias===slot.fact&&JSON.stringify(facts[0].value)===JSON.stringify(slot.value)
       &&facts[0].provenance.kind==='EXPLICIT_USER'&&facts[0].dependencies.length===0&&Number.isFinite(Date.parse(facts[0].sourceReferenceTime));
   };
@@ -195,7 +196,7 @@ export function isRetainedClosedRelationFieldUncertaintyAbsent(input:ContextInpu
   const fields=new Set<string>(['title','eventDate','frequency','occurrenceCount']);
   const factual=(field:keyof typeof active.slots)=>{
     const slot=active.slots[field],facts=input.facts.filter(fact=>fact.field===field),fact=facts[0];
-    return slot.state==='RESOLVED'&&slot.value!==null&&facts.length===1&&fact.scope==='REMINDER'&&slot.fact===fact.alias&&JSON.stringify(slot.value)===JSON.stringify(fact.value)&&fact.provenance.kind==='EXPLICIT_USER'&&!fact.dependencies.length&&fact.sourceReferenceTime===sourceTime;
+    return !!slot && slot.state==='RESOLVED'&&slot.value!==null&&facts.length===1&&fact.scope==='REMINDER'&&slot.fact===fact.alias&&JSON.stringify(slot.value)===JSON.stringify(fact.value)&&fact.provenance.kind==='EXPLICIT_USER'&&!fact.dependencies.length&&fact.sourceReferenceTime===sourceTime;
   };
   if(!(['title','eventDate','frequency','occurrenceCount'] as const).every(factual))return false;
   // The base proof admits the complete finite initial grammar. Match its full
@@ -263,7 +264,7 @@ export function isBoundCompleteFiniteSeriesClockAnswer(input: ContextInput): boo
   if(!isBoundSourceUniqueReminderClock(input))return false;
   const slots=input.activeRequest!.slots;
   const factual=(field:keyof typeof slots)=>{
-    const slot=slots[field];if(slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
+    const slot=slots[field];if(!slot||slot.state!=="RESOLVED"||slot.value===null||typeof slot.fact!=="string")return false;
     const facts=input.facts.filter(fact=>fact.alias===slot.fact);
     return facts.length===1&&facts[0].scope==="REMINDER"&&facts[0].field===field
       &&input.facts.filter(fact=>fact.scope==="REMINDER"&&fact.field===field).length===1
@@ -272,7 +273,7 @@ export function isBoundCompleteFiniteSeriesClockAnswer(input: ContextInput): boo
   if(!(["title","eventDate","frequency","occurrenceCount","eventRelation"] as const).every(factual))return false;
   const date=slots.eventDate.value;
   if(!date||date.kind!=="CIVIL_DATE"||date.calendar!=="GREGORIAN"||slots.eventRelation.value!=="BEFORE_EVENT")return false;
-  for(const field of ["leadOffsetDays","reminderDate","endDate"] as const){const slot=slots[field];if(slot.state!=="MISSING"||slot.value!==null||slot.fact!==null||input.facts.some(fact=>fact.field===field))return false;}
+  for(const field of ["leadOffsetDays","reminderDate","endDate"] as const){const slot=slots[field];if(!slot||slot.state!=="MISSING"||slot.value!==null||slot.fact!==null||input.facts.some(fact=>fact.field===field))return false;}
   if(Object.values(slots).some(slot=>slot.state==="CONFLICT"))return false;
   const calendar=slots.calendar;
   return calendar.state==="MISSING"?calendar.value===null&&calendar.fact===null&&!input.facts.some(fact=>fact.field==="calendar")
@@ -293,7 +294,7 @@ export function isBoundMissingReminderClockWithoutCandidates(input: ContextInput
   return deriveGenerationFieldCapability(input).allowedClockFields.length === 0;
 }
 
-export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays"] as const;
+export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays", "leadOffsetHours", "leadOffsetMinutes"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
@@ -460,6 +461,9 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
           && supportsEventRelation("BEFORE_EVENT", [contextual], [fullTurn], false) && supportsLeadOffset(value, [contextual], [fullTurn]);
         const currentLead = leadScope && supportsLeadOffset(value, [source], [turn], seriesCount) && supportsLeadOffset(value, [contextual], [fullTurn], seriesCount);
         if (currentLead || newLead) allowed.add("leadOffsetDays");
+        for (const [unit,field] of [["HOUR","leadOffsetHours"],["MINUTE","leadOffsetMinutes"]] as const) {
+          if (supportsLeadDuration(unit,value,[source],[turn]) && supportsLeadDuration(unit,value,[contextual],[fullTurn])) allowed.add(field);
+        }
       }
     }
   }

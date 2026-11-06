@@ -495,7 +495,7 @@ describe("evidenced merge", () => {
     expect(rebuilt.status).toBe("MERGED"); if (rebuilt.status !== "MERGED") return;
     expect(rebuilt.candidate.ambiguities).toEqual(stored.ambiguities);
     const recovery = field === "frequency" ? { frequency: "DAILY" } : { occurrenceCount: 4, endDate: { kind: "RELATIVE_DAY", offsetDays: 4 } };
-    const edited = mergePatch(rebuilt.candidate, patch(rebuilt.candidate, recovery, { act: "EDIT", text: "đổi sang mỗi ngày 4 lần" }));
+    const edited = mergePatch(rebuilt.candidate, patch(rebuilt.candidate, recovery, { act: "EDIT", text: field === "frequency" ? "đổi sang mỗi ngày" : "đổi sang nhắc 4 ngày liên tiếp" }));
     expect(edited.status).toBe("MERGED"); if (edited.status !== "MERGED") return;
     expect(edited.candidate.ambiguities).toEqual([]);
     expect(edited.candidate.draftRevision).toBe(rebuilt.candidate.draftRevision! + 1);

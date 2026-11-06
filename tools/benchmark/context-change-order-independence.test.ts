@@ -1,7 +1,7 @@
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
-import {ConversationInterpretationV3Schema,SLOT_NAMES} from '../../src/modules/conversation/context-contract/contracts';
+import {ConversationInterpretationV3Schema,V3_SLOT_NAMES} from '../../src/modules/conversation/context-contract/contracts';
 import {admitCanonicalCampaign,scoreContextCampaign,type ContextManifest} from './context-contract';
 import {runContextFixtureCampaign} from './context-contract-probe';
 import {frozenContextProposal} from './context-contract-fixtures';
@@ -10,7 +10,7 @@ it.each(['REVERSED','SLOT_ORDER'] as const)('retains the full corpus business or
  const planned=admitCanonicalCampaign(manifest,'FULL');let changes=0;
  const observations=await runContextFixtureCampaign(planned,{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},(input,id,index)=>{
   const raw=frozenContextProposal(input,id,index),parsed=ConversationInterpretationV3Schema.safeParse(raw);if(!parsed.success)return raw;
-  const reordered=[...parsed.data.changes];if(mode==='REVERSED')reordered.reverse();else reordered.sort((a,b)=>SLOT_NAMES.indexOf(a.field)-SLOT_NAMES.indexOf(b.field));
+  const reordered=[...parsed.data.changes];if(mode==='REVERSED')reordered.reverse();else reordered.sort((a,b)=>V3_SLOT_NAMES.indexOf(a.field)-V3_SLOT_NAMES.indexOf(b.field));
   if(JSON.stringify(reordered)!==JSON.stringify(parsed.data.changes))changes++;
   return {...parsed.data,changes:reordered};
  });

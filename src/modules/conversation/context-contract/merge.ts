@@ -1,4 +1,4 @@
-import { SLOT_NAMES, LegacyV2UncertaintySchema as UncertaintySchema, type LegacyV2ConversationInterpretation as ConversationInterpretation, type EvidenceRef, type QueryOperand } from "./contracts";
+import { SLOT_NAMES, V3_SLOT_NAMES, LegacyV2UncertaintySchema as UncertaintySchema, type LegacyV2ConversationInterpretation as ConversationInterpretation, type EvidenceRef, type QueryOperand } from "./contracts";
 import { isLegacyV2ValidatedPatch as isValidatedPatch, type ValidatedFieldEvidence, type ValidatedPatch } from "./evidence";
 import { ContextSnapshotV1Schema, encodeContextSnapshot, type ContextSnapshotV1, type SlotProvenance, type SourceEvidence } from "./state";
 import { RESOLUTION_VERSION } from "./resolve";
@@ -10,7 +10,7 @@ export type MergeResult = { status: "MERGED"; candidate: ContextSnapshotV1; chan
   | { status: "REJECTED"; reason: string };
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export type MergeResultV3 = { status: "MERGED"; candidate: ContextSnapshotV2; changedFields: typeof SLOT_NAMES[number][]; uncertainties: SemanticPatchProposalV3["uncertainties"]; query: QueryOperand | null; queryReferenceTime: string | null }
+export type MergeResultV3 = { status: "MERGED"; candidate: ContextSnapshotV2; changedFields: typeof V3_SLOT_NAMES[number][]; uncertainties: SemanticPatchProposalV3["uncertainties"]; query: QueryOperand | null; queryReferenceTime: string | null }
   | { status: "NEEDS_REPLACEMENT"; candidate: ContextSnapshotV2; proposed: ValidatedPatchV3 }
   | { status: "CLARIFY_OPERATION"; candidate: ContextSnapshotV2; pendingSemanticCandidate: NonNullable<ContextSnapshotV2["pendingSemanticCandidate"]> }
   | { status: "REJECTED"; reason: string };
@@ -22,20 +22,21 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   // A MISSING claim is not permission to erase or contradict a grounded
   // operand. Reject the entire proposal; never repair its facts/uncertainties.
   for (const uncertainty of patch.resolvedUncertainties) {
-    if (uncertainty.reason !== "MISSING" || !SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number])) continue;
+    if (uncertainty.reason !== "MISSING" || !V3_SLOT_NAMES.includes(uncertainty.field as typeof V3_SLOT_NAMES[number])) continue;
     const change = patch.resolvedChanges.find(change => change.field === uncertainty.field);
     if (change && change.operation !== "CLEAR" && change.value !== null) return reject("FACT_MISSING_CONTRADICTION");
-    const retained = previous?.slots[uncertainty.field as typeof SLOT_NAMES[number]];
+    const retained = previous?.slots[uncertainty.field as typeof V3_SLOT_NAMES[number]];
     if (!change && patch.requestTarget?.kind === "CURRENT" && retained?.state === "RESOLVED" && retained.value !== null) return reject("FACT_MISSING_CONTRADICTION");
   }
   const candidate = structuredClone(patch.candidateSnapshot), proposal = patch.proposal;
-  const changedFields: typeof SLOT_NAMES[number][] = [];
-  const policyConflicts = new Set<typeof SLOT_NAMES[number]>();
+  const changedFields: typeof V3_SLOT_NAMES[number][] = [];
+  const policyConflicts = new Set<typeof V3_SLOT_NAMES[number]>();
   const refs = (sources: readonly SourceEvidence[]): EvidenceRef[] => sources.map(s => ({ kind: "USER_QUOTE", turn: candidate.transcript.findIndex(t => t.id === s.sourceTurnId), quote: s.quote, occurrence: s.occurrence }));
   const policyFact = (field: string, value: unknown, authority?: Pick<ValidatedFieldEvidence, "provenance" | "referenceTime">) => {
     return candidate.facts.find(f => {
       if (f.scope !== "REMINDER" || f.field !== field || !equal(f.value, value) || f.provenance.kind !== "DERIVED_POLICY") return false;
       const slot = candidate.slots[f.field];
+      if (!slot) return false;
       if (slot.state !== "RESOLVED" || slot.fact !== f.alias || slot.provenance?.kind !== "DERIVED_POLICY" || !equal(slot.value, value)) return false;
       if (slot.provenance.policyVersion !== f.provenance.policyVersion || slot.provenance.referenceTime !== f.sourceReferenceTime || slot.resolution?.referenceTime !== f.sourceReferenceTime) return false;
       return !authority || (equal(slot.provenance, authority.provenance) && f.sourceReferenceTime === authority.referenceTime);
@@ -81,7 +82,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
     candidate.facts.push({ alias: `f${n}`, scope: "QUERY", field: "queryRange", value: query, provenance: { kind: "EXPLICIT_USER" }, sourceReferenceTime: patch.queryReferenceTime!, dependencies: [], evidenceSlot: null });
     // Keep reminder ambiguity and lifetime verbatim; query uncertainties have
     // separate ownership and can never rewrite accepted reminder facts.
-    candidate.ambiguities = [...candidate.ambiguities.filter(u => u.field !== "queryRange"), ...uncertainties.filter(u => !SLOT_NAMES.includes(u.field as typeof SLOT_NAMES[number]))];
+    candidate.ambiguities = [...candidate.ambiguities.filter(u => u.field !== "queryRange"), ...uncertainties.filter(u => !V3_SLOT_NAMES.includes(u.field as typeof V3_SLOT_NAMES[number]))];
     if (candidate.ambiguities.length > 4) return reject("UNCERTAINTY_LIMIT");
     return finish(query);
   }
@@ -96,8 +97,8 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
     proposalId: candidate.inbound.id + ":semantic", proposalRevision: candidate.contextRevision,
     proposal: { ...structuredClone(proposal), changes: patch.resolvedChanges.map((change, i) => ({ ...structuredClone(change), evidence: alternativeRefs(change.field, change.value, patch.changeEvidence[i]) ?? [] })), uncertainties,
       requestTarget: { kind: "UNRESOLVED", evidence: refs(patch.requestTargetEvidence) } },
-    sourceEvidence: structuredClone([...patch.requestTargetEvidence, ...patch.alternativeEvidence.filter(e => !SLOT_NAMES.includes(e.field as typeof SLOT_NAMES[number])).flatMap(e => [...e.sources])].filter((e, i, all) => all.findIndex(other => equal(e, other)) === i)),
-    evidenceIndex: SLOT_NAMES.flatMap(field => {
+    sourceEvidence: structuredClone([...patch.requestTargetEvidence, ...patch.alternativeEvidence.filter(e => !V3_SLOT_NAMES.includes(e.field as typeof V3_SLOT_NAMES[number])).flatMap(e => [...e.sources])].filter((e, i, all) => all.findIndex(other => equal(e, other)) === i)),
+    evidenceIndex: V3_SLOT_NAMES.flatMap(field => {
       const sources = [...patch.changeEvidence, ...patch.alternativeEvidence].filter(e => e.field === field).flatMap(e => [...e.sources]);
       const evidence = sources.filter((e, i) => sources.findIndex(other => equal(e, other)) === i);
       return evidence.length ? [{ field, evidence: structuredClone(evidence) }] : [];
@@ -112,7 +113,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
     return { status: "NEEDS_REPLACEMENT", candidate, proposed: patch };
   }
   if (operationUncertainty || patch.requestTarget.kind === "UNRESOLVED" || (patch.requestTarget.kind === "CURRENT" && !previous?.requestId)
-    || patch.resolvedChanges.some(c => c.operation === "REPLACE" && candidate.slots[c.field].value === null)) {
+    || patch.resolvedChanges.some(c => c.operation === "REPLACE" && (candidate.slots[c.field]?.value ?? null) === null)) {
     const pending = stage()!;
     candidate.pendingDecision = null; candidate.previewReceipt = null;
     candidate.pendingReminderQuestion = { questionId: pending.questionId, text: "Bạn muốn cập nhật yêu cầu hiện tại hay tạo yêu cầu mới?", scope: "REMINDER", field: "operation", decisionKind: null, reason: "AMBIGUOUS", noProgressCount: 0, deliveryState: "UNCERTAIN", issuedAfterOrder: { receivedAt: candidate.inbound.receivedAt, rowid: candidate.inbound.rowid } };
@@ -141,7 +142,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   // with current evidence below; exact context-fact echoes convey no decision.
   candidate.ambiguities.push(...uncertainties.filter(u => !candidate.ambiguities.some(old => old.field === u.field)));
   for (const [index, change] of patch.resolvedChanges.entries()) {
-    const slot = candidate.slots[change.field], bound = patch.changeEvidence[index];
+    const slot = candidate.slots[change.field] ??= {state:"MISSING",value:null,fact:null,evidence:[],provenance:null,resolution:null,proposalRevision:candidate.draftRevision ?? 1}, bound = patch.changeEvidence[index];
     const date = change.value && typeof change.value === "object" && "kind" in change.value ? change.value : null;
     const anchored = date && (date.kind === "RELATIVE_DAY" || date.kind === "WEEKDAY" || (date.kind === "CIVIL_DATE" && date.year === null));
     const localDay = (at: string | undefined) => at ? new Date(Date.parse(at) + 7 * 3600000).toISOString().slice(0, 10) : null;
@@ -187,27 +188,27 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   if (candidate.ambiguities.length > 4) return reject("UNCERTAINTY_LIMIT");
   if (changedFields.length) {
     if (previous?.draftRevision) candidate.draftRevision = previous.draftRevision + 1;
-    for (const field of changedFields) if (!policyConflicts.has(field)) candidate.slots[field].proposalRevision = candidate.draftRevision!;
+    for (const field of changedFields) if (!policyConflicts.has(field)) candidate.slots[field]!.proposalRevision = candidate.draftRevision!;
     candidate.previewReceipt = null; candidate.pendingDecision = null; candidate.lifecycle = "CLARIFYING";
   }
-  const invalidated = new Set<typeof SLOT_NAMES[number]>(changedFields.filter(field => !policyConflicts.has(field)));
+  const invalidated = new Set<typeof V3_SLOT_NAMES[number]>(changedFields.filter(field => !policyConflicts.has(field)));
   // Derived values remain proposed operands until their dependencies are
   // resolved again. Never retain a context-fact alias for a stale derivation.
-  for (let pass = 0; pass < SLOT_NAMES.length; pass++) {
-    for (const field of SLOT_NAMES) {
+  for (let pass = 0; pass < V3_SLOT_NAMES.length; pass++) {
+    for (const field of V3_SLOT_NAMES) {
       if (invalidated.has(field)) continue;
-      const slot = candidate.slots[field];
+      const slot = candidate.slots[field]; if (!slot) continue;
       if (slot.provenance?.kind !== "DERIVED_POLICY" || !slot.provenance.dependencies.some(d => invalidated.has(d))) continue;
       invalidated.add(field); slot.state = "PROPOSED"; slot.fact = null;
     }
   }
   // Keep stable fact IDs for omitted facts. Rebuild only touched slots, so a
   // query and a later continuation retain their original receipt authority.
-  candidate.facts = candidate.facts.filter(f => f.scope !== "REMINDER" || !invalidated.has(f.field));
+  candidate.facts = candidate.facts.filter(f => f.scope !== "REMINDER" || !invalidated.has(f.field as typeof V3_SLOT_NAMES[number]));
   const used = new Set(candidate.facts.map(f => f.alias));
   for (const field of changedFields) {
     if (policyConflicts.has(field)) continue;
-    const slot = candidate.slots[field]; slot.fact = null;
+    const slot = candidate.slots[field]; if (!slot) continue; slot.fact = null;
     if (slot.state !== "RESOLVED" || slot.value === null) continue;
     let n = 1; while (used.has(`f${n}`)) n++; const alias = `f${n}`; used.add(alias); slot.fact = alias;
     const provenance = slot.provenance!;
@@ -231,6 +232,7 @@ export function mergeLegacyV2Patch(previous: ContextSnapshotV1 | null, patch: Va
     return candidate.facts.find(f => {
       if (f.scope !== "REMINDER" || f.field !== field || !equal(f.value, value) || f.provenance.kind !== "DERIVED_POLICY") return false;
       const slot = candidate.slots[f.field];
+      if (!slot) return false;
       if (slot.state !== "RESOLVED" || slot.fact !== f.alias || slot.provenance?.kind !== "DERIVED_POLICY" || !equal(slot.value, value)) return false;
       if (slot.provenance.policyVersion !== f.provenance.policyVersion || slot.provenance.referenceTime !== f.sourceReferenceTime || slot.resolution?.referenceTime !== f.sourceReferenceTime) return false;
       return !authority || (equal(slot.provenance, authority.provenance) && f.sourceReferenceTime === authority.referenceTime);
@@ -341,7 +343,7 @@ export function mergeLegacyV2Patch(previous: ContextSnapshotV1 | null, patch: Va
   if (candidate.ambiguities.length > 4) return reject("UNCERTAINTY_LIMIT");
   if (changedFields.length) {
     if (previous?.draftRevision) candidate.draftRevision = previous.draftRevision + 1;
-    for (const field of changedFields) if (!policyConflicts.has(field)) candidate.slots[field].proposalRevision = candidate.draftRevision!;
+    for (const field of changedFields) if (!policyConflicts.has(field)) candidate.slots[field]!.proposalRevision = candidate.draftRevision!;
     candidate.previewReceipt = null; candidate.pendingDecision = null; candidate.lifecycle = "CLARIFYING";
   }
   const invalidated = new Set<typeof SLOT_NAMES[number]>(changedFields.filter(field => !policyConflicts.has(field)));
@@ -357,7 +359,7 @@ export function mergeLegacyV2Patch(previous: ContextSnapshotV1 | null, patch: Va
   }
   // Keep stable fact IDs for omitted facts. Rebuild only touched slots, so a
   // query and a later continuation retain their original receipt authority.
-  candidate.facts = candidate.facts.filter(f => f.scope !== "REMINDER" || !invalidated.has(f.field));
+  candidate.facts = candidate.facts.filter(f => f.scope !== "REMINDER" || !invalidated.has(f.field as typeof SLOT_NAMES[number]));
   const used = new Set(candidate.facts.map(f => f.alias));
   for (const field of changedFields) {
     if (policyConflicts.has(field)) continue;

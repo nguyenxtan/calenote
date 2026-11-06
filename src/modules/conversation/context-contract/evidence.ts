@@ -1,5 +1,6 @@
+import {supportsLeadDuration,leadDurationCovered} from "./lead-duration-evidence";
 import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./context";
-import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, QueryOperandSchema, LegacyV2UncertaintySchema as UncertaintySchema, SLOT_NAMES, type LegacyV2SemanticPatchProposal as SemanticPatchProposal, type EvidenceRef, type LegacyV2FieldChange as FieldChange, type QueryOperand, type LegacyV2ContextInput as ContextInput } from "./contracts";
+import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, QueryOperandSchema, LegacyV2UncertaintySchema as UncertaintySchema, V3_SLOT_NAMES, type LegacyV2SemanticPatchProposal as SemanticPatchProposal, type EvidenceRef, type LegacyV2FieldChange as FieldChange, type QueryOperand, type LegacyV2ContextInput as ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
 import { containsForbiddenControl, containsForbiddenGuidanceMaterial } from "./projection";
 import { explicitListPeriod, verifyListRangeEvidence } from "./list-range-evidence";
@@ -241,7 +242,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
   try {
     const resolvedChanges: FieldChange[] = [];
     const changeEvidence = value.changes.map((change, index) => {
-      const old = internal.snapshot?.slots[change.field].value ?? null;
+      const old = internal.snapshot?.slots[change.field]?.value ?? null;
       const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && value.dialogueAct === "EDIT");
       const resolved = FieldChangeSchema.parse({ ...change, value: evidence.resolvedValue });
       if ((resolved.operation === "CLEAR" || (old !== null && !equal(old, resolved.value))) && !evidence.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
@@ -269,7 +270,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
     const alternativeEvidence: ValidatedFieldEvidence[] = [];
     let resolvedUncertainties = value.uncertainties.map((uncertainty, index) => {
       const scope = uncertainty.field === "queryRange" ? "QUERY"
-        : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
+        : V3_SLOT_NAMES.includes(uncertainty.field as typeof V3_SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
       const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
         const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value, ["uncertainties", index, "alternatives", alternativeIndex, "evidence"]);
         alternativeEvidence.push(evidenceMetadata(resolved));
@@ -429,6 +430,8 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     // reach that verifier so it can discard the range while retaining intent.
     // Reminder and calendar operands keep the existing explicit-year gate.
     if (!listRangeCandidate) checkYear(requested);
+    if ((field === "leadOffsetHours" || field === "leadOffsetMinutes") && requested !== null && !firstFact
+      && !supportsLeadDuration(field === "leadOffsetHours" ? "HOUR" : "MINUTE", requested, distinct, built.evidenceIndex)) fail("LEAD_DURATION_NOT_EXPLICIT");
     if (field === "leadOffsetDays" && requested !== null && !firstFact
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     // Reject-only fidelity check for a single explicit Gregorian civil source.
@@ -483,7 +486,7 @@ export function resolveListQuerySourcesV3(query:Extract<QueryOperand,{kind:"LIST
     // discarded. Preserve the same field/path/reference ordinals as V3.
     for(const [index,raw] of uncertainties.entries()) {
       const u=UncertaintyV3Schema.parse(raw);
-      const scope=u.field==="queryRange"?"QUERY":SLOT_NAMES.includes(u.field as typeof SLOT_NAMES[number])?"REMINDER":"CONTROL";
+      const scope=u.field==="queryRange"?"QUERY":V3_SLOT_NAMES.includes(u.field as typeof V3_SLOT_NAMES[number])?"REMINDER":"CONTROL";
       for(const [ordinal,a] of u.alternatives.entries()) {
         resolve(a.evidence,scope,u.field,a.value,["uncertainties",index,"alternatives",ordinal,"evidence"]);
         const offending=a.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE" || ref.turn!==built.input.currentTurn);
@@ -526,7 +529,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {
-      const old = internal.snapshot?.slots[change.field].value ?? null;
+      const old = internal.snapshot?.slots[change.field]?.value ?? null;
       const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && change.operation === "REPLACE");
       const resolved = FieldChangeV3Schema.parse({ ...change, value: evidence.resolvedValue });
       if (resolved.operation !== "SET" && !evidence.current) traceCurrentFailure(change.evidence[0],{field:change.field,path:["changes",index,"evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT",resolved.operation);
@@ -631,7 +634,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       for (const [index, uncertainty] of pending.proposal.uncertainties.entries()) {
         // Targeting was answered; factual ambiguity still needs its own answer.
         const keep = uncertainty.field !== "operation" && !value.uncertainties.some(u => u.field === uncertainty.field);
-        const scope = uncertainty.field === "queryRange" ? "QUERY" : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
+        const scope = uncertainty.field === "queryRange" ? "QUERY" : V3_SLOT_NAMES.includes(uncertainty.field as typeof V3_SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
         const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
           const refs = providerRefs(alternative.evidence);
           const requested = retainedOperand(refs, scope, uncertainty.field, alternative.value);
@@ -648,7 +651,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     const alternativeEvidence: ValidatedFieldEvidence[] = [];
     let resolvedUncertainties = value.uncertainties.map((uncertainty, index) => {
       const scope = uncertainty.field === "queryRange" ? "QUERY"
-        : SLOT_NAMES.includes(uncertainty.field as typeof SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
+        : V3_SLOT_NAMES.includes(uncertainty.field as typeof V3_SLOT_NAMES[number]) ? "REMINDER" : "CONTROL";
       const alternatives = uncertainty.alternatives.map((alternative, alternativeIndex) => {
         const resolved = resolve(alternative.evidence, scope, uncertainty.field, alternative.value, ["uncertainties", index, "alternatives", alternativeIndex, "evidence"]);
         const offending=alternative.evidence.findIndex(ref=>ref.kind!=="USER_QUOTE"||ref.turn!==built.input.currentTurn);
@@ -703,6 +706,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       keptChanges.map(p => p.change), resolvedUncertainties.flatMap(u => u.alternatives.map(a => ({ field: u.field, value: a.value }))),
       value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.leadOffsetDays.state !== "CONFLICT" ? internal.snapshot?.slots.leadOffsetDays.value : null,
       value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.frequency.value === "DAILY" && internal.snapshot.slots.frequency.state !== "CONFLICT" && internal.snapshot.slots.occurrenceCount.state !== "CONFLICT" ? internal.snapshot.slots.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
+    if (value.intent === "CREATE_REMINDER" && !leadDurationCovered(built.evidenceIndex[built.input.currentTurn],keptChanges.map(p=>p.change))) fail("SEMANTIC_LEAD_DURATION_OMITTED");
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,
       proposal: value,

@@ -30,7 +30,7 @@ export type Proposal = (input: ContextInput) => unknown;
 // Test-only fixture assembly copies the actual projected request into T6's
 // declarative script. It never evaluates a domain result or calls a transport.
 export function scriptedGateway(proposals: Proposal[], inputs: ContextInput[], transformWire?: (wire:unknown)=>unknown, typed = false) {
-  return { ...(typed ? {contextWire:"TYPED_OBJECTS_105" as const} : {}), prepare(tier: "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK", input: ContextInput) {
+  return { ...(typed ? {contextWire:"TYPED_OBJECTS_106" as const} : {}), prepare(tier: "PRIMARY" | "FREE_PRIMARY" | "CHEAP_PAID_FALLBACK", input: ContextInput) {
     inputs.push(structuredClone(input));
     const value = proposals.shift()?.(input);
     const request = { model: gatewayConfig.primary.model, ...(typed ? serializeTypedContextRequest(input) : serializeContextRequest(input)), provider: {

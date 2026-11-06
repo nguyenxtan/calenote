@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IssueFieldSchema } from "./contracts";
+import { V3IssueFieldSchema as IssueFieldSchema } from "./contracts";
 
 // Diagnostic-only lexical measurements, never evidence or semantic authority.
 export const QuoteClassificationSchema = z.strictObject({

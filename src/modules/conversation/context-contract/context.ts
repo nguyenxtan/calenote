@@ -1,5 +1,5 @@
 import type { BoundChatMessage, BoundChatContext } from "@/modules/reminders/command-service";
-import { LegacyV2ContextInputSchema as ContextInputSchema, SLOT_NAMES, type LegacyV2ContextInput as ContextInput, type EvidenceRef } from "./contracts";
+import { LegacyV2ContextInputSchema as ContextInputSchema, SLOT_NAMES, V3_SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, type LegacyV2ContextInput as ContextInput, type EvidenceRef } from "./contracts";
 import { ContextInputV2Schema, InterpretationJsonSchemaV3, type ContextInputV2 } from "./contracts";
 import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV2 } from "./state";
 import { ContextObservationBindingSchema, ContextSnapshotV1Schema, encodeContextSnapshot, type ContextObservation, type ContextSnapshotV1, type TranscriptEntry, type SourceEvidence } from "./state";
@@ -69,7 +69,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
   if (binding.data.lastTerminalOutcome && !later(inbound, binding.data.lastTerminalOutcome.order)) return refused("CONTEXT_STALE");
   if (state) {
     if (!same(scope, state.scope)) return refused("CONTEXT_SCOPE_MISMATCH");
-    if (state.requestId === null && (state.facts.some(f => f.scope === "REMINDER") || SLOT_NAMES.some(field => state.slots[field].state !== "MISSING"))) return refused("CONTEXT_INVALID");
+    if (state.requestId === null && (state.facts.some(f => f.scope === "REMINDER") || V3_SLOT_NAMES.some(field => state.slots[field] && state.slots[field]!.state !== "MISSING"))) return refused("CONTEXT_INVALID");
     if (!later(inbound, state.inbound) || state.transcript.some(t => t.id === message.id)) return refused("CONTEXT_STALE");
     if (["COMPLETED", "CANCELLED", "EXPIRED", "INVALID"].includes(state.lifecycle)) return refused("CONTEXT_TERMINAL");
     if ([state.idleExpiresAt, state.absoluteExpiresAt, state.draftExpiresAt].some(t => t !== null && message.receivedAt >= Date.parse(t))) return refused("CONTEXT_EXPIRED");
@@ -110,6 +110,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
   if (state) {
     try {
       for (const field of SLOT_NAMES) state.slots[field].evidence = state.slots[field].evidence.map(remapSource);
+      for (const field of V3_EXTENSION_SLOT_NAMES) { const extension = state.slots[field]; if (extension) extension.evidence = extension.evidence.map(remapSource); }
       if (state.pendingDecision?.candidate) {
         state.pendingDecision.candidate.sourceEvidence = state.pendingDecision.candidate.sourceEvidence.map(remapSource);
         state.pendingDecision.candidate.evidenceIndex.forEach(e => { e.evidence = e.evidence.map(remapSource); });
@@ -187,6 +188,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     const projectedFacts = originalFacts.map(f => {
       if (f.scope === "REMINDER") {
         const slot = state!.slots[f.field];
+        if (!slot) fail("CONTEXT_FACT_INVALID");
         if (slot.state !== "RESOLVED" || slot.provenance?.kind !== f.provenance.kind) fail("CONTEXT_FACT_INVALID");
         if (f.provenance.kind === "EXPLICIT_USER" && !slot.evidence.some(e => state!.transcript.find(t => t.id === e.sourceTurnId)?.receivedAt === f.sourceReferenceTime)) fail("CONTEXT_FACT_INVALID");
         if (f.provenance.kind === "DERIVED_POLICY" && (slot.provenance?.kind !== "DERIVED_POLICY" || slot.provenance.policyVersion !== f.provenance.policyVersion || slot.provenance.referenceTime !== f.provenance.referenceTime || f.sourceReferenceTime !== f.provenance.referenceTime)) fail("CONTEXT_FACT_INVALID");
@@ -199,8 +201,8 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       const provenance = f.provenance.kind === "DERIVED_POLICY" ? { ...f.provenance, dependencies: f.provenance.dependencies.map(d => aliases.get(d) ?? fail("CONTEXT_FACT_INVALID")) } : f.provenance;
       return { alias, scope: f.scope, field: f.field, value: remapRefs(f.value, "PROVIDER"), provenance, sourceReferenceTime: f.sourceReferenceTime, dependencies };
     });
-    const active = state && ["CLARIFYING", "AWAITING_CONFIRMATION"].includes(state.lifecycle) ? { lifecycle: state.lifecycle, slots: Object.fromEntries(SLOT_NAMES.map(field => {
-      const slot = state.slots[field];
+    const active = state && ["CLARIFYING", "AWAITING_CONFIRMATION"].includes(state.lifecycle) ? { lifecycle: state.lifecycle, slots: Object.fromEntries((successor ? V3_SLOT_NAMES : SLOT_NAMES).filter(field=>state!.slots[field]).map(field => {
+      const slot = state.slots[field]!;
       const fact = originalFacts.find(f => f.scope === "REMINDER" && f.field === field);
       if (slot.state === "RESOLVED" && !fact) fail("CONTEXT_FACT_INVALID");
       return [field, { state: slot.state, value: slot.value, fact: fact ? aliases.get(fact.alias) : null }];
@@ -217,7 +219,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       facts: projectedFacts,
       pendingQuestion: question ? { text: question.text, scope: question.scope, field: question.field, decisionKind: question.decisionKind, reason: question.reason } : null,
       ambiguities: remapRefs(state?.ambiguities ?? [], "PROVIDER"),
-      capabilities: { version: "capabilities-2", supported: ["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY"], unsupported: ["YEARLY", "HOUR_OFFSET"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } },
+      capabilities: { version: "capabilities-3", supported: ["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY", "HOUR_OFFSET"], unsupported: ["YEARLY"], calendars: ["GREGORIAN", "LUNAR_VN"], limits: { dailyCount: 30, horizonDays: 366 } },
     };
     // Turns were already projected with maps. Project every other string too,
     // without running a second pass over the deliberately inserted placeholder.
@@ -258,7 +260,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       createdAt: instant,
       idleExpiresAt: new Date(message.receivedAt + 1800000).toISOString(),
       absoluteExpiresAt: new Date(message.receivedAt + 7200000).toISOString(),
-      draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-2",
+      draftCreatedAt: null, draftExpiresAt: null, capabilityVersion: "capabilities-3",
     });
     if (candidateSnapshot.schemaVersion === "calenote-context-state-2" && !state?.requestId && "advanceReminders" in args && args.advanceReminders) {
       candidateSnapshot.advanceReminders = structuredClone(args.advanceReminders);
@@ -268,7 +270,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     if (new TextEncoder().encode(candidateSnapshotJson).length > 16384) return refused("CONTEXT_SNAPSHOT_TOO_LARGE");
 
     for (const [index, original] of originalFacts.entries()) {
-      const sources = original.scope === "REMINDER" ? state!.slots[original.field].evidence
+      const sources = original.scope === "REMINDER" ? (state!.slots[original.field]?.evidence ?? [])
         : original.value.evidence.map(ref => ref.kind === "USER_QUOTE" ? sourceForRetainedQuote(ref) : fail("CONTEXT_FACT_INVALID"));
       const supplied = input.facts[index];
       facts.set(supplied.alias, freeze({

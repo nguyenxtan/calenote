@@ -1,4 +1,4 @@
-import { ClockOperandSchema, DateOperandSchema, SLOT_NAMES, type DateOperand } from "./contracts";
+import { ClockOperandSchema, DateOperandSchema, SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, type DateOperand } from "./contracts";
 import { encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV2, type CanonicalDetailsV1, type ContextSlots, type ContextSnapshotV1, type SlotProvenance } from "./state";
 import type { LunarCalendarAdapter } from "../lunar-calendar";
 import { isValidSemanticLocalDate } from "@/modules/semantic/validation";
@@ -45,18 +45,20 @@ export type RequestResolution = { status: "CLARIFY"; fields: string[]; reasons: 
 
 /** A resolved slot and its context fact are one projection. Returning both
  * prevents persistence consumers from retaining stale provenance/defaults. */
+// Successor extension facts are projected too; absence keeps legacy output.
+const PROJECTED_SLOT_NAMES = [...SLOT_NAMES, ...V3_EXTENSION_SLOT_NAMES] as const;
 function projectResolvedFacts(slots: ContextSlots, previous: ContextSnapshotV1["facts"]): ContextSnapshotV1["facts"] {
   const facts: ContextSnapshotV1["facts"] = structuredClone(previous.filter(f => f.scope === "QUERY"));
   const used = new Set(facts.map(f => f.alias));
-  for (const field of SLOT_NAMES) {
-    const slot = slots[field];
+  for (const field of PROJECTED_SLOT_NAMES) {
+    const slot = slots[field]; if (!slot) continue;
     if (slot.state !== "RESOLVED" || slot.value === null) { slot.fact = null; continue; }
     let alias = slot.fact;
     if (!alias || used.has(alias)) { let n = 1; while (used.has(`f${n}`)) n++; alias = `f${n}`; }
     slot.fact = alias; used.add(alias);
   }
-  for (const field of SLOT_NAMES) {
-    const slot = slots[field]; if (!slot.fact) continue;
+  for (const field of PROJECTED_SLOT_NAMES) {
+    const slot = slots[field]; if (!slot?.fact) continue;
     const provenance = slot.provenance!;
     const dependencies = provenance.kind === "DERIVED_POLICY" ? provenance.dependencies.filter(d => d !== field).map(d => slots[d].fact).filter((d): d is string => d !== null) : [];
     facts.push({ alias: slot.fact, scope: "REMINDER", field, value: slot.value, evidenceSlot: field, provenance: provenance.kind === "DERIVED_POLICY" ? { ...provenance, dependencies } : provenance, sourceReferenceTime: slot.resolution!.referenceTime, dependencies } as ContextSnapshotV1["facts"][number]);
@@ -71,7 +73,8 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   const clarification = (): RequestResolution => ({ status: "CLARIFY", fields, reasons });
   if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime())) { issue("operation", "INVALID_PROCESSING_TIME"); return clarification(); }
   for (const field of SLOT_NAMES) if (slots[field].state === "CONFLICT") issue(field, "CONFLICT");
-  for (const u of candidate.ambiguities) if (SLOT_NAMES.includes(u.field as typeof SLOT_NAMES[number])) issue(u.field, u.reason);
+  for (const field of V3_EXTENSION_SLOT_NAMES) if (slots[field]?.state === "CONFLICT") issue(field, "CONFLICT");
+  for (const u of candidate.ambiguities) if (PROJECTED_SLOT_NAMES.includes(u.field as typeof PROJECTED_SLOT_NAMES[number])) issue(u.field, u.reason);
   const derive = (field: "frequency" | "calendar" | "occurrenceCount", value: unknown, dependencies: typeof SLOT_NAMES[number][] = []) => {
     const referenceTime = dependencies.map(d => slots[d].resolution?.referenceTime).find(Boolean) ?? candidate.createdAt;
     Object.assign(slots[field], { state: "RESOLVED", value, fact: null, evidence: [], provenance: { kind: "DERIVED_POLICY", policyVersion: RESOLUTION_VERSION, dependencies, referenceTime }, resolution: { method: field === "occurrenceCount" ? "FINITE_RANGE" : "POLICY_DEFAULT", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies } });
@@ -88,14 +91,18 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   if (frequency === "UNKNOWN") issue("frequency", "UNKNOWN_FREQUENCY");
   if (!slots.title.value) issue("title", "MISSING");
   const advancePolicy = candidate.schemaVersion === "calenote-context-state-2" ? candidate.advanceReminders : undefined;
-  const useAdvance = !!advancePolicy && (advancePolicy.days !== null || advancePolicy.hours !== null)
+  // User-authored hour/minute lead. Backend-only arithmetic; never a reminder slot/fact.
+  const leadHours = slots.leadOffsetHours?.value ?? null, leadMinutes = slots.leadOffsetMinutes?.value ?? null;
+  const useDuration = leadHours !== null || leadMinutes !== null;
+  const durationField = leadHours !== null ? "leadOffsetHours" : "leadOffsetMinutes";
+  const useAdvance = !useDuration && !!advancePolicy && (advancePolicy.days !== null || advancePolicy.hours !== null)
     && frequency === "ONCE" && slots.frequency.provenance?.kind !== "EXPLICIT_USER"
     && slots.eventDate.value !== null && slots.eventTime.value !== null
     && slots.reminderDate.value === null && slots.reminderTime.value === null && slots.leadOffsetDays.value === null
     && slots.eventRelation.value === null && slots.endDate.value === null && slots.occurrenceCount.value === null;
   const clock = (field: "reminderTime" | "eventTime") => {
     const value = slots[field].value;
-    if (!value) { if (field === "reminderTime" && !useAdvance) issue(field, "MISSING"); return null; }
+    if (!value) { if (field === "reminderTime" && !useAdvance && !useDuration) issue(field, "MISSING"); return null; }
     const parsed = ClockOperandSchema.safeParse(value);
     if (!parsed.success || value.qualifier === "UNKNOWN") { issue(field, "AMBIGUOUS_TIME"); return null; }
     const hour = value.qualifier === "PM" ? value.hour % 12 + 12 : value.qualifier === "AM" ? value.hour % 12 : value.hour;
@@ -135,6 +142,25 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     } catch { issue("operation", "INVALID_RESOLVED_STATE"); return clarification(); }
     return { status: "READY", resolvedSlots: slots, resolvedFacts, occurrences, details };
   };
+  if (useDuration) {
+    if (frequency !== "ONCE" || (slots.occurrenceCount.value !== null && slots.occurrenceCount.value !== 1) || slots.endDate.value !== null) issue(durationField, "COUNT_OFFSET_CONFLICT");
+    if (slots.leadOffsetDays.value !== null) issue(durationField, "DAY_DURATION_COMBINATION");
+    if (slots.reminderTime.value !== null || slots.reminderDate.value !== null) issue("reminderTime", "CLOCK_DURATION_CONFLICT");
+    if (slots.eventRelation.value === null) issue("eventRelation", "MISSING");
+    else if (slots.eventRelation.value !== "BEFORE_EVENT") issue("eventRelation", "INCOMPATIBLE_RELATION");
+    if (slots.eventDate.value === null) issue("eventDate", "MISSING");
+    if (slots.eventTime.value === null) issue("eventTime", "DURATION_REQUIRES_EVENT_CLOCK");
+    const valid = (v: number | null, max: number) => v === null || (Number.isSafeInteger(v) && v >= 1 && v <= max);
+    const total = (leadHours ?? 0) * 60 + (leadMinutes ?? 0);
+    if (!valid(leadHours, 8784) || !valid(leadMinutes, 527040) || total > 366 * 1440) issue(leadMinutes !== null ? "leadOffsetMinutes" : "leadOffsetHours", "LIMIT");
+    if (fields.length || !dates.eventDate || !eventTime) return clarification();
+    const scheduledAt = Date.parse(`${dates.eventDate}T${eventTime}:00+07:00`) - total * 60000;
+    if (!Number.isSafeInteger(scheduledAt)) { issue("eventDate", "INVALID_DATE"); return clarification(); }
+    if (scheduledAt <= now) issue("eventDate", "PAST_OCCURRENCE");
+    if (scheduledAt - now > 366 * DAY_MS) issue("eventDate", "HORIZON_LIMIT");
+    if (fields.length) return clarification();
+    return finish([{ index: 0, scheduledAt, localDate: new Date(scheduledAt + 7 * 3600000).toISOString().slice(0, 10) }]);
+  }
   if (useAdvance && advancePolicy && dates.eventDate && eventTime) {
     if (fields.length) return clarification();
     const eventAt = Date.parse(`${dates.eventDate}T${eventTime}:00+07:00`);

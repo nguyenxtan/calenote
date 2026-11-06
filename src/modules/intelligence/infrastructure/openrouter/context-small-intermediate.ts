@@ -2,12 +2,12 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
 import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../../conversation/context-contract/field-capability';
-import {ContextInputSchema,SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
+import {ContextInputSchema,V3_SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
-import {contextTypedWirePrimitives,UNCERTAINTY_FIELD_WIRE_CODE_V1} from './context-provider-wire';
+import {contextTypedWirePrimitives,UNCERTAINTY_FIELD_WIRE_CODE_V2} from './context-provider-wire';
 type JsonSchema=Parameters<typeof z.fromJSONSchema>[0];
 type Row=Record<string,unknown>;
 type Observer=Parameters<typeof decodeGoogleLiteEuTypedContextTransportV3>[2];
@@ -21,13 +21,13 @@ const periodFields:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['
 // or repair of model-authored offsets is possible at the canonical boundary.
 const relativePeriods:Record<string,{kind:string;offset:number}>=Object.fromEntries(['WEEK','MONTH','WEEKEND'].flatMap(kind=>[[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']].map(([offset,label])=>[`${kind}_${label}`,{kind,offset:Number(offset)}])));
 const periodCodes=['DAY',...Object.keys(relativePeriods),'REST_OF_MONTH','NEXT_7_DAYS','UPCOMING','DATE_BOUNDS','UNSUPPORTED'];
-const fieldNames=Object.keys(UNCERTAINTY_FIELD_WIRE_CODE_V1);
-function uncertaintyField(code:number):string {const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,value])=>value===code);if(!entry)throw Error('SMALL_FIELD_CODE_INVALID');return entry[0];}
+const fieldNames=Object.keys(UNCERTAINTY_FIELD_WIRE_CODE_V2);
+function uncertaintyField(code:number):string {const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).find(([,value])=>value===code);if(!entry)throw Error('SMALL_FIELD_CODE_INVALID');return entry[0];}
 type Family='texts'|'integers'|'dates'|'clocks'|'periods';
 function family(field:string):Family {
  if(['eventDate','reminderDate','endDate'].includes(field))return 'dates';
  if(['eventTime','reminderTime'].includes(field))return 'clocks';
- if(['occurrenceCount','leadOffsetDays'].includes(field))return 'integers';
+ if(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'].includes(field))return 'integers';
  if(field==='queryRange')return 'periods';
  if(fieldNames.includes(field))return 'texts';
  throw Error('SMALL_FIELD_INVALID');
@@ -46,10 +46,10 @@ export function internalFlatSchemaV3(input:ContextInput){
  const parsed=ContextInputSchema.parse(input),book=primaryEvidenceSourceCodebook(parsed),codes=book.codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
  const relationOnly=isBoundRelationUncertaintyAbsent(parsed),clockOnlyMutations=isBoundReminderClockAnswer(parsed),initialOnly=isInitialFiniteSeriesWithoutRelationSource(parsed);
- const initialFields=new Set<string>(['title','location','eventDate','eventTime','reminderTime','calendar','frequency','occurrenceCount','leadOffsetDays']);
+ const initialFields=new Set<string>(['title','location','eventDate','eventTime','reminderTime','calendar','frequency','occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes']);
  // Project existing deterministic capabilities before generation. This is a
  // producer language, not permission to bypass canonical or evidence checks.
- const changeFields=SLOT_NAMES.filter(field=>{
+ const changeFields=V3_SLOT_NAMES.filter(field=>{
   if(relationOnly)return field==='eventRelation';
   if(initialOnly&&!initialFields.has(field))return false;
   if(numericFields.has(field))return allowedNumeric.has(field);
@@ -82,7 +82,7 @@ export function internalFlatSchemaV3(input:ContextInput){
  add(['eventDate'],ordinaryOperations,nil,nil,eventDateCell);
  add(['reminderDate','endDate'],ordinaryOperations,nil,nil,{...dateCell,minItems:1});
  add(['eventTime','reminderTime'],initialOnly?['SET']:['SET','REPLACE'],nil,nil,empty);
- add(['occurrenceCount','leadOffsetDays'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
+ add(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
  for(const field of ['frequency','calendar','eventRelation'] as const)add([field],relationOnly?['SET']:ordinaryOperations,nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty);
  if(!rows.length)throw Error('SMALL_CHANGE_DOMAIN_EMPTY');
  // Keep identity required without a null-or-object union per field. KEEP is

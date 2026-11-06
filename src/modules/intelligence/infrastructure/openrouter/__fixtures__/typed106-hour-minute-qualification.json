@@ -1,0 +1,11 @@
+{
+  "previousSource": "cae6d79",
+  "previousSha256": "0363d0b00e38f19c6cedc652eb97a2906b0129af7fce38e1ccd620adb5081f14",
+  "sha256": "c6acc4d2a099b267cf599f2b283cfa5092b6041daee1b44086c24603adbef408",
+  "mode": "OFFLINE_NO_PROVIDER_HTTP",
+  "reviewedChanges": [
+    "Successor integer duration slots hours/minutes and codebook2 appended codes16/17",
+    "V3 field changes/directives include duration fields; legacy codes0–15 retain exact field/value/reason correlation (exhaustive typed test)",
+    "Canonical/state/encryption versions retained; typed emission106 and keyed137 have new identities"
+  ]
+}

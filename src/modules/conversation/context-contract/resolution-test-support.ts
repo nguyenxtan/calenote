@@ -11,7 +11,7 @@ export const now = Date.parse(at);
 export function request(values: Record<string, unknown> = {}): ContextSnapshotV1 {
   const state = withNotes("nhớ mang giấy tờ");
   for (const [field, value] of Object.entries({ title: "đi thi", location: "Quang Trung", eventDate: date(), reminderTime: time(), frequency: "DAILY", occurrenceCount: 2, eventRelation: "BEFORE_EVENT", ...values })) {
-    Object.assign(state.slots[field as keyof typeof state.slots], value === null ? { state: "MISSING", value: null, fact: null, evidence: [], provenance: null, resolution: null, proposalRevision: 1 } : { ...state.slots.notes, value, fact: null });
+    Object.assign((state.slots[field as keyof typeof state.slots] ??= { state: "MISSING", value: null, fact: null, evidence: [], provenance: null, resolution: null, proposalRevision: 1 }), value === null ? { state: "MISSING", value: null, fact: null, evidence: [], provenance: null, resolution: null, proposalRevision: 1 } : { ...state.slots.notes, value, fact: null });
   }
   state.facts = [];
   for (const [field, slot] of Object.entries(state.slots)) if (slot.value !== null) {

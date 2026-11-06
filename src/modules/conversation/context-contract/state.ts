@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AdvanceReminderPolicySchema } from "@/modules/preferences/advance-reminders";
 import type { SessionPrincipal } from "@/modules/auth/session";
 import type { ConversationScope } from "../contracts";
-import { CalendarSchema, contextFactSchema, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, SlotValueSchemas, LegacyV2UncertaintySchema as UncertaintySchema } from "./contracts";
+import { CalendarSchema, contextFactSchema, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, DateOperandSchema, SLOT_NAMES, SlotNameSchema, V3SlotNameSchema, V3_SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, SlotValueSchemas, LegacyV2UncertaintySchema as UncertaintySchema } from "./contracts";
 import { SemanticPatchProposalV3Schema, UncertaintyV3Schema } from "./contracts";
 
 const id = z.string().min(1).max(512);
@@ -43,7 +43,7 @@ function slot<T extends z.ZodType>(value: T) {
     if (v !== null && s.provenance?.kind === "EXPLICIT_USER" && s.evidence.length === 0) ctx.addIssue({ code: "custom", message: "Explicit fact requires source evidence" });
   });
 }
-export const SlotsSchema = z.strictObject({ title: slot(SlotValueSchemas.title), location: slot(SlotValueSchemas.location), notes: slot(SlotValueSchemas.notes), eventDate: slot(SlotValueSchemas.eventDate), eventTime: slot(SlotValueSchemas.eventTime), reminderDate: slot(SlotValueSchemas.reminderDate), reminderTime: slot(SlotValueSchemas.reminderTime), calendar: slot(SlotValueSchemas.calendar), frequency: slot(SlotValueSchemas.frequency), occurrenceCount: slot(SlotValueSchemas.occurrenceCount), eventRelation: slot(SlotValueSchemas.eventRelation), leadOffsetDays: slot(SlotValueSchemas.leadOffsetDays), endDate: slot(SlotValueSchemas.endDate) });
+export const SlotsSchema = z.strictObject({ title: slot(SlotValueSchemas.title), location: slot(SlotValueSchemas.location), notes: slot(SlotValueSchemas.notes), eventDate: slot(SlotValueSchemas.eventDate), eventTime: slot(SlotValueSchemas.eventTime), reminderDate: slot(SlotValueSchemas.reminderDate), reminderTime: slot(SlotValueSchemas.reminderTime), calendar: slot(SlotValueSchemas.calendar), frequency: slot(SlotValueSchemas.frequency), occurrenceCount: slot(SlotValueSchemas.occurrenceCount), eventRelation: slot(SlotValueSchemas.eventRelation), leadOffsetDays: slot(SlotValueSchemas.leadOffsetDays), endDate: slot(SlotValueSchemas.endDate) , leadOffsetHours: slot(SlotValueSchemas.leadOffsetHours).optional(), leadOffsetMinutes: slot(SlotValueSchemas.leadOffsetMinutes).optional() });
 export type ContextSlots = z.infer<typeof SlotsSchema>;
 
 export const SourceMapSchema = z.strictObject({ normalizationVersion: z.literal("nfc-codepoint-v1"), sourceCodePoints: index, viewCodePoints: index, segments: z.array(z.strictObject({ sourceStart: index, sourceEnd: index, viewStart: index, viewEnd: index, kind: z.enum(["UNCHANGED", "NFC_COMPOSITION_RUN", "CONTROL_REPLACEMENT"]), sourceStride: index, viewStride: index })).max(128) }).superRefine((m, ctx) => {
@@ -67,12 +67,12 @@ export const TranscriptEntrySchema = z.discriminatedUnion("role", [
 });
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
 const questionFields = { questionId: id, text: nfc(2000).min(1), decisionKind: decisionKind.nullable(), reason: z.enum(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]), noProgressCount: z.number().int().min(0).max(3), deliveryState: delivery, issuedAfterOrder: InboundOrderSchema };
-const reminderQuestion = z.strictObject({ ...questionFields, scope: z.literal("REMINDER"), field: z.enum([...SLOT_NAMES, "intent", "operation"]) });
+const reminderQuestion = z.strictObject({ ...questionFields, scope: z.literal("REMINDER"), field: z.enum([...V3_SLOT_NAMES, "intent", "operation"]) });
 const queryQuestion = z.strictObject({ ...questionFields, scope: z.literal("QUERY"), field: z.enum(["queryRange", "intent", "operation"]) });
 const target = z.strictObject({ ownerId: id, chatIdentityId: id, chatId: id, requestId: id.nullable(), proposalId: id.nullable() }).refine(t => t.requestId !== null || t.proposalId !== null, "Decision has no target");
 export const PreviewReceiptSchema = z.strictObject({ previewId: id, requestId: id, draftRevision: revision, draftHash: hash, ownerId: id, chatIdentityId: id, chatId: id, channel: z.enum(["ZALO", "TELEGRAM", "WEB"]), issuedAfterOrder: InboundOrderSchema, expiresAt: instant, deliveryState: delivery, replyReference: id.nullable() });
 export type PreviewReceipt = z.infer<typeof PreviewReceiptSchema>;
-const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: SemanticPatchProposalSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(13), createdAt: instant, expiresAt: instant });
+const candidate = z.strictObject({ proposalId: id, proposalRevision: revision, proposal: SemanticPatchProposalSchema, sourceEvidence: z.array(SourceEvidenceSchema).min(1).max(3), evidenceIndex: z.array(z.strictObject({ field: V3SlotNameSchema, evidence: z.array(SourceEvidenceSchema).min(1).max(3) })).max(15), createdAt: instant, expiresAt: instant });
 const candidateV3 = candidate.extend({ proposal: SemanticPatchProposalV3Schema, advanceReminders: AdvanceReminderPolicySchema.optional() });
 const decisionBase = z.strictObject({ decisionId: id, kind: decisionKind, target, questionId: id, previewId: id.nullable(), draftRevision: revision.nullable(), contextRevision: revision, issuedAfterInbound: InboundOrderSchema, deliveryState: delivery, expiresAt: instant, acceptedReplies: z.array(z.enum(["có", "ok", "1", "xác nhận"])).min(1).max(4), replyReference: id.nullable(), tokenHandle: id.nullable(), candidate: candidate.nullable() });
 const decisionV2Base = decisionBase.extend({ candidate: candidateV3.nullable() });
@@ -100,7 +100,7 @@ const control = z.strictObject({ handle: id, kind: z.enum(["TOKEN", "ACTION_URL"
 
 const snapshotV1Base = z.strictObject({
   schemaVersion: z.literal("calenote-context-state-1"), id, scope: ContextScopeSchema, inbound, requestId: id.nullable(), contextRevision: revision, draftRevision: revision.nullable(), lifecycle: z.enum(["NONE", "CLARIFYING", "AWAITING_CONFIRMATION", "COMPLETED", "CANCELLED", "EXPIRED", "INVALID"]),
-  slots: SlotsSchema, facts: z.array(contextFactSchema({ evidenceSlot: SlotNameSchema.nullable() })).max(26), pendingReminderQuestion: reminderQuestion.nullable(), pendingQueryQuestion: queryQuestion.nullable(), ambiguities: z.array(UncertaintySchema).max(4), transcript: z.array(TranscriptEntrySchema).max(12), pendingDecision: PendingDecisionSchema.nullable(), previewReceipt: PreviewReceiptSchema.nullable(), controlRegistry: z.array(control).max(32), modelAttemptBinding: attempt.nullable(), lastTerminalOutcome: terminal.nullable(), createdAt: instant, idleExpiresAt: instant, absoluteExpiresAt: instant, draftCreatedAt: instant.nullable(), draftExpiresAt: instant.nullable(), capabilityVersion: id,
+  slots: SlotsSchema, facts: z.array(contextFactSchema({ evidenceSlot: V3SlotNameSchema.nullable() })).max(26), pendingReminderQuestion: reminderQuestion.nullable(), pendingQueryQuestion: queryQuestion.nullable(), ambiguities: z.array(UncertaintySchema).max(4), transcript: z.array(TranscriptEntrySchema).max(12), pendingDecision: PendingDecisionSchema.nullable(), previewReceipt: PreviewReceiptSchema.nullable(), controlRegistry: z.array(control).max(32), modelAttemptBinding: attempt.nullable(), lastTerminalOutcome: terminal.nullable(), createdAt: instant, idleExpiresAt: instant, absoluteExpiresAt: instant, draftCreatedAt: instant.nullable(), draftExpiresAt: instant.nullable(), capabilityVersion: id,
   webDeclineReceipt: z.strictObject({ publicId: z.string().regex(/^[A-Za-z0-9_-]{22}$/u), operationKey: hash, proofHash: hash, settledRevision: revision, settledAt: instant }).nullable().optional(),
 });
 const pendingSemanticCandidate = candidateV3.extend({ baseContextRevision: revision, questionId: id });
@@ -126,9 +126,9 @@ function validateSnapshot(s: z.infer<typeof snapshotV1Base> | z.infer<typeof sna
     const t = s.transcript.find(t => t.id === e.sourceTurnId);
     if (!t || t.role !== "USER" || e.sourceMapTurnId !== t.id || e.sourceSpan.end > t.sourceMap.sourceCodePoints || e.viewSpan.end > t.sourceMap.viewCodePoints || [...t.semanticView].slice(e.viewSpan.start, e.viewSpan.end).join("") !== e.quote || [...t.text].slice(e.sourceSpan.start, e.sourceSpan.end).join("").normalize("NFC") !== e.quote || t.sourceMap.segments.some(segment => segment.kind === "CONTROL_REPLACEMENT" && segment.viewStart < e.viewSpan.end && segment.viewEnd > e.viewSpan.start)) fail("Missing/invalid retained user evidence");
   };
-  for (const field of SLOT_NAMES) { const slot = s.slots[field]; slot.evidence.forEach(checkEvidence); if (s.draftRevision !== null && slot.proposalRevision > s.draftRevision) fail("Future slot revision"); }
+  for (const field of [...SLOT_NAMES, ...V3_EXTENSION_SLOT_NAMES]) { const slot = s.slots[field]; if (!slot) continue; slot.evidence.forEach(checkEvidence); if (s.draftRevision !== null && slot.proposalRevision > s.draftRevision) fail("Future slot revision"); }
   if (new Set(s.facts.map(f => f.alias)).size !== s.facts.length) fail("Duplicate fact alias");
-  for (const f of s.facts) if (f.scope === "REMINDER" && (f.evidenceSlot !== f.field || !SLOT_NAMES.includes(f.field as typeof SLOT_NAMES[number]) || JSON.stringify(s.slots[f.evidenceSlot!].value) !== JSON.stringify(f.value))) fail("Fact/slot mismatch");
+  for (const f of s.facts) if (f.scope === "REMINDER" && (f.evidenceSlot !== f.field || !(V3_SLOT_NAMES as readonly string[]).includes(f.field) || JSON.stringify(s.slots[f.evidenceSlot!]?.value) !== JSON.stringify(f.value))) fail("Fact/slot mismatch");
   const ownerMatches = (t: { ownerId: string; chatIdentityId: string; chatId: string }) => t.ownerId === s.scope.ownerId && t.chatIdentityId === s.scope.chatIdentityId && t.chatId === s.scope.chatId;
   const boundExpiry = Math.min(idle, absolute, s.draftExpiresAt ? Date.parse(s.draftExpiresAt) : absolute);
   const checkSuccessorCandidate = (c: z.infer<typeof candidateV3>) => {
@@ -224,7 +224,18 @@ export function encodeContextSnapshot(value: unknown): string {
 export function encodeContextSnapshotV2(value: ContextSnapshotV2): string {
   return encodeSnapshot(ContextSnapshotV2Schema.parse(value));
 }
+/** Absent/MISSING successor slots are never written, so a snapshot that does
+ * not use them keeps the exact historical bytes and stays readable by an
+ * older strict decoder. */
+export function omitMissingExtensionSlots<T extends { slots: ContextSlots }>(state: T): T {
+  for (const field of V3_EXTENSION_SLOT_NAMES) {
+    const slot = state.slots[field];
+    if (slot && slot.state === "MISSING" && slot.value === null && slot.fact === null && slot.evidence.length === 0) delete state.slots[field];
+  }
+  return state;
+}
 function encodeSnapshot(state: ContextSnapshotV1 | ContextSnapshotV2): string {
+  omitMissingExtensionSlots(state);
   const counts = new Map<string, number>();
   const count = (v: Json): void => { if (typeof v === "string") counts.set(v, (counts.get(v) ?? 0) + 1); else if (v && typeof v === "object") Object.values(v).forEach(count); };
   count(state as Json);

@@ -3,14 +3,15 @@ import { expect, it } from "vitest";
 import { InterpretationJsonSchemaV3 } from "./contracts";
 import { googleLiteEuContextWireSchemaV3 } from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 import * as authority from "./output-authority";
-import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
+import {UNCERTAINTY_FIELD_WIRE_CODE_V1,UNCERTAINTY_FIELD_WIRE_CODE_V2} from "../../intelligence/infrastructure/openrouter/context-provider-wire";
 it("wire69 reminder-date availability is application-owned without execution authority",()=>{
  expect(authority.classifyOutputPathV3("fieldCapability.reminderDateProposalAllowed")).toMatchObject({class:"APPLICATION_OWNED",applicationDerivable:true,canAuthorizeRead:false,canAuthorizeWrite:false});
 });
 it("wire66 catalogue reuses first13 field identities without granting model authority",()=>{
- expect(authority.CHANGE_ORDER_FIELDS_V3).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]);
+ expect(authority.CHANGE_ORDER_FIELDS_V3.slice(0,13)).toEqual(["title","location","notes","eventDate","eventTime","reminderDate","reminderTime","calendar","frequency","occurrenceCount","eventRelation","leadOffsetDays","endDate"]);
  expect(Object.isFrozen(authority.CHANGE_ORDER_FIELDS_V3)).toBe(true);
- authority.CHANGE_ORDER_FIELDS_V3.forEach((field,code)=>expect(UNCERTAINTY_FIELD_WIRE_CODE_V1[field]).toBe(code));
+ Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(([,code])=>code<13).forEach(([field,code])=>expect((authority.CHANGE_ORDER_FIELDS_V3 as readonly string[])[code]).toBe(field));
+ expect(UNCERTAINTY_FIELD_WIRE_CODE_V2).toMatchObject({leadOffsetHours:16,leadOffsetMinutes:17});
  for(const path of ["changeOrder","changeOrder[]"] as const)expect(authority.classifyOutputPathV3(path)).toMatchObject({class:"SEMANTIC_UNTRUSTED",applicationDerivable:false,canAuthorizeRead:false,canAuthorizeWrite:false});
  expect(authority.classifyOutputPathV3("transport.codebookMapping").class).toBe("APPLICATION_OWNED");
  for(const root of ["titleChange","reminderTimeChange","locationChange"])expect(()=>authority.classifyOutputPathV3(`${root}.index` as Parameters<typeof authority.classifyOutputPathV3>[0])).toThrow("OUTPUT_AUTHORITY_UNCLASSIFIED");

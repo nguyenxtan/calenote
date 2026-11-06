@@ -5,6 +5,12 @@ import { canonicalConstraint, type CanonicalConstraintId, type OwnershipControlS
 /** Dormant canonical successor contract. No execution or confirmation authority. */
 export const SLOT_NAMES = ["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const;
 export const SlotNameSchema = z.enum(SLOT_NAMES);
+/** Optional successor operands. Appended only; the 13 legacy names, their
+ * wire codes and every historical codec remain byte-for-byte unchanged. */
+export const V3_EXTENSION_SLOT_NAMES = ["leadOffsetHours", "leadOffsetMinutes"] as const;
+export type V3ExtensionSlotName = typeof V3_EXTENSION_SLOT_NAMES[number];
+export const V3_SLOT_NAMES = [...SLOT_NAMES, ...V3_EXTENSION_SLOT_NAMES] as const;
+export const V3SlotNameSchema = z.enum(V3_SLOT_NAMES);
 export const CalendarSchema = z.enum(["GREGORIAN", "LUNAR_VN"]);
 const positive = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 const nfcText = (max: number) => z.string().min(1).max(max * 2).refine(s => s.isWellFormed() && s === s.normalize("NFC") && [...s].length <= max && s.trim().length > 0, canonicalConstraint("NFC_SCALAR_TEXT", "Expected nonblank NFC Unicode scalar text within code-point limit")).meta({ maxLength: max });
@@ -32,6 +38,8 @@ export const SlotValueSchemas = {
   calendar: CalendarSchema, frequency: z.enum(["ONCE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY", "UNKNOWN"]),
   occurrenceCount: positive, eventRelation: z.enum(["BEFORE_EVENT", "INCLUDING_EVENT", "STARTING_ON"]),
   leadOffsetDays: positive, endDate: DateOperandSchema,
+  // User-authored amounts only; the backend adds them. Total <= 366 days.
+  leadOffsetHours: z.number().int().min(1).max(8784), leadOffsetMinutes: z.number().int().min(1).max(527040),
 };
 const values = SlotValueSchemas;
 // The generic helper preserves the field/value association in inferred TS types.
@@ -58,6 +66,7 @@ export type QueryOperand = z.infer<typeof QueryOperandSchema>;
 export const IntentSchema = z.enum(["CREATE_REMINDER", "LIST_REMINDERS", "CALENDAR_QUERY", "CAPABILITY_QUERY", "HELP", "UNSUPPORTED", "AMBIGUOUS"]);
 export const DialogueActSchema = z.enum(["NEW_REQUEST", "CONTINUE", "EDIT", "ABANDON_PENDING", "GREET", "AMBIGUOUS"]);
 export const IssueFieldSchema = z.enum([...SLOT_NAMES, "intent", "queryRange", "operation"]);
+export const V3IssueFieldSchema = z.enum([...V3_SLOT_NAMES,"intent","queryRange","operation"]);
 const reason = z.enum(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]);
 // Typed possible values with grounding; never free-form model prose.
 const alternative = <T extends z.ZodType>(value: T) => z.strictObject({ value, evidence });
@@ -92,7 +101,12 @@ export const ConversationDirectiveSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("PRESENT_PREVIEW") }),
   z.strictObject({ kind: z.literal("ANSWER_QUERY"), queryKind: z.enum(["LIST", "CALENDAR_DATE", "CAPABILITY"]) }),
 ]);
-export type ConversationDirective = z.infer<typeof ConversationDirectiveSchema>;
+export const SuccessorConversationDirectiveSchema = z.discriminatedUnion("kind", [
+ z.strictObject({kind:z.literal("ASK_FOR_FIELD"),field:V3IssueFieldSchema}),
+ z.strictObject({kind:z.literal("ASK_FOR_DISAMBIGUATION"),field:V3IssueFieldSchema,reason:z.enum(["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"])}),
+ ...ConversationDirectiveSchema.options.slice(2),
+]);
+export type ConversationDirective = z.infer<typeof SuccessorConversationDirectiveSchema>;
 export const ReplyProposalSchema = z.strictObject({ text: nfcText(400) }).nullable();
 export type ReplyProposal = z.infer<typeof ReplyProposalSchema>;
 export const LegacyV2ConversationInterpretationSchema = LegacyV2SemanticPatchProposalSchema.safeExtend({ conversationDirective: ConversationDirectiveSchema, replyProposal: ReplyProposalSchema });
@@ -134,7 +148,7 @@ export function contextFactSchema<M extends z.ZodRawShape>(metadata: M) {
   const common = { alias: factAlias, provenance, sourceReferenceTime: z.iso.datetime(), dependencies: z.array(factAlias).max(13), ...metadata };
   const reminder = <K extends keyof typeof values>(field: K) => z.strictObject({ ...common, scope: z.literal("REMINDER"), field: z.literal(field), value: values[field] });
   return z.union([
-    reminder("title"), reminder("location"), reminder("notes"), reminder("eventDate"), reminder("eventTime"), reminder("reminderDate"), reminder("reminderTime"), reminder("calendar"), reminder("frequency"), reminder("occurrenceCount"), reminder("eventRelation"), reminder("leadOffsetDays"), reminder("endDate"),
+    reminder("title"), reminder("location"), reminder("notes"), reminder("eventDate"), reminder("eventTime"), reminder("reminderDate"), reminder("reminderTime"), reminder("calendar"), reminder("frequency"), reminder("occurrenceCount"), reminder("eventRelation"), reminder("leadOffsetDays"), reminder("endDate"), reminder("leadOffsetHours"), reminder("leadOffsetMinutes"),
     z.strictObject({ ...common, scope: z.literal("QUERY"), field: z.literal("queryRange"), value: QueryOperandSchema }),
   ]);
 }
@@ -152,7 +166,7 @@ export const LegacyV2ContextInputSchema = z.strictObject({
   facts: z.array(contextFactSchema({})).max(26),
   pendingQuestion: z.strictObject({ text: nfcText(2000), scope: z.enum(["REMINDER", "QUERY"]), field: IssueFieldSchema, decisionKind: z.enum(["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"]).nullable(), reason }).nullable(),
   ambiguities: z.array(LegacyV2UncertaintySchema).max(4),
-  capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY"])).max(7), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
+  capabilities: z.strictObject({ version: nfcText(128), supported: z.array(z.enum(["ONCE", "FINITE_DAILY", "FINITE_WEEKLY", "FINITE_MONTHLY", "LIST", "CALENDAR_DATE", "CAPABILITY", "HOUR_OFFSET"])).max(8), unsupported: z.array(z.enum(["WEEKLY", "MONTHLY", "YEARLY", "HOUR_OFFSET"])).max(4), calendars: z.array(CalendarSchema).max(2), limits: z.strictObject({ dailyCount: z.literal(30), horizonDays: z.literal(366) }) }),
 }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });
@@ -170,12 +184,12 @@ function changeBranchV3<K extends keyof typeof values>(field: K) {
   return z.strictObject({ field: z.literal(field), operation: z.enum(["SET", "REPLACE"]), value: values[field], evidence });
 }
 export const FieldChangeV3Schema = z.union([
-  changeBranchV3("title"), changeBranchV3("location"), changeBranchV3("notes"), changeBranchV3("eventDate"), changeBranchV3("eventTime"), changeBranchV3("reminderDate"), changeBranchV3("reminderTime"), changeBranchV3("calendar"), changeBranchV3("frequency"), changeBranchV3("occurrenceCount"), changeBranchV3("eventRelation"), changeBranchV3("leadOffsetDays"), changeBranchV3("endDate"),
-  z.strictObject({ field: SlotNameSchema, operation: z.literal("CLEAR"), value: z.null(), evidence }),
+  changeBranchV3("title"), changeBranchV3("location"), changeBranchV3("notes"), changeBranchV3("eventDate"), changeBranchV3("eventTime"), changeBranchV3("reminderDate"), changeBranchV3("reminderTime"), changeBranchV3("calendar"), changeBranchV3("frequency"), changeBranchV3("occurrenceCount"), changeBranchV3("eventRelation"), changeBranchV3("leadOffsetDays"), changeBranchV3("endDate"), changeBranchV3("leadOffsetHours"), changeBranchV3("leadOffsetMinutes"),
+  z.strictObject({ field: V3SlotNameSchema, operation: z.literal("CLEAR"), value: z.null(), evidence }),
 ]);
 export type FieldChangeV3 = z.infer<typeof FieldChangeV3Schema>;
 export const UncertaintyV3Schema = z.union([
-  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"),
+  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"), slotUncertainty("leadOffsetHours"), slotUncertainty("leadOffsetMinutes"),
   z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
   z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
   z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(z.enum(["CURRENT", "NEW"]))).max(2) }),
@@ -183,7 +197,7 @@ export const UncertaintyV3Schema = z.union([
 export type UncertaintyV3 = z.infer<typeof UncertaintyV3Schema>;
 export const SemanticPatchProposalV3Schema = z.strictObject({
   schemaVersion: z.literal("calenote-context-3"), intent: IntentSchema, requestTarget: RequestTargetV3Schema.nullable(),
-  changes: z.array(FieldChangeV3Schema).max(13), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
+  changes: z.array(FieldChangeV3Schema).max(15), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
 }).superRefine((v, ctx) => {
   const fail = (id: CanonicalConstraintId, message: string, ownership = false) => {
     const state: OwnershipControlState | undefined = ownership ? {intent: v.intent, requestTargetKind: v.requestTarget?.kind ?? null,
@@ -207,7 +221,7 @@ export const SemanticPatchProposalV3Schema = z.strictObject({
 });
 export type SemanticPatchProposalV3 = z.infer<typeof SemanticPatchProposalV3Schema>;
 // Null is explicit absence of advice, not an inferred model directive.
-export const ModelDirectiveV3Schema = z.discriminatedUnion("kind", [ConversationDirectiveSchema.options[0], ConversationDirectiveSchema.options[1], ConversationDirectiveSchema.options[2], ConversationDirectiveSchema.options[3]]).nullable();
+export const ModelDirectiveV3Schema = z.discriminatedUnion("kind", [SuccessorConversationDirectiveSchema.options[0], SuccessorConversationDirectiveSchema.options[1], ConversationDirectiveSchema.options[2], ConversationDirectiveSchema.options[3]]).nullable();
 export type ModelDirectiveV3 = z.infer<typeof ModelDirectiveV3Schema>;
 export const ConversationInterpretationV3Schema = SemanticPatchProposalV3Schema.safeExtend({ conversationDirective: ModelDirectiveV3Schema, replyProposal: ReplyProposalSchema });
 export type ConversationInterpretationV3 = z.infer<typeof ConversationInterpretationV3Schema>;
@@ -233,7 +247,12 @@ export function parseInterpretationSectionsV3(raw: unknown, observeInvalid?: (va
     fullSchemaValid: full.success,
   } };
 }
-export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape, schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
+const successorActiveRequest = LegacyV2ContextInputSchema.shape.activeRequest.unwrap();
+const successorInputSlots = successorActiveRequest.shape.slots.extend({leadOffsetHours: slot(values.leadOffsetHours).optional(), leadOffsetMinutes: slot(values.leadOffsetMinutes).optional()});
+export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape,
+ activeRequest: successorActiveRequest.extend({slots:successorInputSlots}).nullable(),
+ pendingQuestion: LegacyV2ContextInputSchema.shape.pendingQuestion.unwrap().extend({field:z.enum([...V3_SLOT_NAMES,"intent","queryRange","operation"])}).nullable(),
+ schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
   if (new Set(v.facts.map(f => f.alias)).size !== v.facts.length) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_UNIQUE_FACT_ALIAS", "Duplicate fact alias") });
 });

@@ -1,11 +1,11 @@
 import { addressProse, botSalutation, type BotReplyPreferences } from "@/modules/preferences/wording";
 import { renderReminderDetails } from "@/modules/reminders/detail-presentation";
-import type { IssueFieldSchema } from "./contracts";
+import type { V3IssueFieldSchema as IssueFieldSchema } from "./contracts";
 import type { z } from "zod";
 import { isEligibleGuidanceText, type GuidanceSelection } from "./guidance";
 import { CONTEXT_QUERY_PARTIAL, CONTEXT_QUERY_SCOPE, CONTEXT_STATUS_LABELS, type ContextQueryResult, type QueryResolution } from "./query";
 import type { CanonicalPreview, ConfirmationResult } from "./store";
-import type { PendingDecision, TranscriptEntry } from "./state";
+import type { ContextSlots, PendingDecision, TranscriptEntry } from "./state";
 
 export type ReplyReceipt = { status: "SENT"; messageRef: string | null } | { status: "FAILED" | "UNCERTAIN" };
 export type ReplySpan = { kind: "QUESTION" | "PREVIEW" | "CONTROL" | "FACT"; start: number; end: number; handle?: string };
@@ -43,7 +43,11 @@ const notices = {
   RESUME: "Bản nháp còn hiệu lực được giữ nguyên. Bạn có thể tiếp tục để xem lại câu hỏi.",
   CHECKING: "Đang kiểm tra phiên bản bạn chọn.", HELP: "Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn.",
 };
-const fieldLabels: Record<string, string> = { title: "Việc cần nhắc", location: "Địa điểm", notes: "Ghi chú", eventDate: "Ngày sự kiện", eventTime: "Giờ sự kiện", reminderDate: "Ngày nhắc", reminderTime: "Giờ nhắc", calendar: "Lịch", frequency: "Tần suất", occurrenceCount: "Số lần", eventRelation: "Quan hệ với sự kiện", leadOffsetDays: "Số ngày trước", endDate: "Ngày kết thúc" };
+const fieldLabels: Record<string, string> = { title: "Việc cần nhắc", location: "Địa điểm", notes: "Ghi chú", eventDate: "Ngày sự kiện", eventTime: "Giờ sự kiện", reminderDate: "Ngày nhắc", reminderTime: "Giờ nhắc", calendar: "Lịch", frequency: "Tần suất", occurrenceCount: "Số lần", eventRelation: "Quan hệ với sự kiện", leadOffsetHours:"Số giờ trước", leadOffsetMinutes:"Số phút trước", leadOffsetDays: "Số ngày trước", endDate: "Ngày kết thúc" };
+export function formatLeadDurationRule(slots: ContextSlots): string {
+  const components=[slots.leadOffsetHours?.value ? `${slots.leadOffsetHours.value} giờ` : null, slots.leadOffsetMinutes?.value ? `${slots.leadOffsetMinutes.value} phút` : null].filter(Boolean);
+  return components.length ? `Nhắc trước ${components.join(" ")} so với giờ sự kiện.\n` : "";
+}
 export function formatPendingFact(field: string, value: unknown): string {
   const label = fieldLabels[field] ?? "Thông tin";
   const labels: Record<string, string> = { ONCE: "một lần", DAILY: "mỗi ngày", WEEKLY: "mỗi tuần", MONTHLY: "mỗi tháng", YEARLY: "hằng năm", UNKNOWN: "chưa rõ", GREGORIAN: "dương lịch", LUNAR_VN: "âm lịch Việt Nam", BEFORE_EVENT: "trước sự kiện", INCLUDING_EVENT: "gồm ngày sự kiện", STARTING_ON: "từ ngày sự kiện" };

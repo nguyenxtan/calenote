@@ -1,3 +1,4 @@
+import {hasLeadDurationEvidence,hasLeadDurationSourceCue} from "./lead-duration-evidence";
 import type { SourceEvidence, TranscriptEntry } from "./state";
 import { hasCadenceCue } from "./recurrence-evidence";
 
@@ -15,7 +16,7 @@ const relationSourceCasefold=(text:string)=>[...text].map(c => {const lower = c.
 /** Conservative cue presence, not unique value support or execution authority. */
 export function hasEventRelationSourceCue(text:string):boolean {
   const folded=relationSourceCasefold(text);
-  return patterns.some(([,pattern])=>!folded.matchAll(pattern).next().done);
+  return hasLeadDurationSourceCue(text) || patterns.some(([,pattern])=>!folded.matchAll(pattern).next().done);
 }
 
 /** Narrow support verifier for an already proposed finite enum, not an intent,
@@ -54,5 +55,5 @@ export function supportsEventRelation(value: EventRelation, evidence: readonly S
       if (evidence.some(e => e.sourceTurnId === id && e.viewSpan.start <= start && e.viewSpan.end >= end)) covered = true;
     }
   }
-  return covered;
+  return covered || (value === "BEFORE_EVENT" && hasLeadDurationEvidence(evidence,turns));
 }

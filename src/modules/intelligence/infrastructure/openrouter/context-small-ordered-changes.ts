@@ -16,7 +16,7 @@ const empty=(v:unknown)=>Array.isArray(v)&&v.length===0;
 const dateKeys:Record<string,readonly string[]>={CIVIL_DATE:['kind','calendar','day','month','year','leapMonth'],RELATIVE_DAY:['kind','offsetDays'],WEEKDAY:['kind','weekday','qualifier']};
 const periodKeys:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['kind','offset'],MONTH:['kind','offset'],WEEKEND:['kind','offset'],REST_OF_MONTH:['kind'],NEXT_7_DAYS:['kind'],UPCOMING:['kind'],DATE_BOUNDS:['kind','from','through']};
 const relative=Object.fromEntries(['WEEK','MONTH','WEEKEND'].flatMap(kind=>[[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']].map(([offset,label])=>[`${kind}_${label}`,{kind,offset:Number(offset)}])));
-const family=(field:string)=>['eventDate','reminderDate','endDate'].includes(field)?'date':['eventTime','reminderTime'].includes(field)?'clock':['occurrenceCount','leadOffsetDays'].includes(field)?'number':field==='queryRange'?'period':'text';
+const family=(field:string)=>['eventDate','reminderDate','endDate'].includes(field)?'date':['eventTime','reminderTime'].includes(field)?'clock':['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'].includes(field)?'number':field==='queryRange'?'period':'text';
 /** Copy each selected field's complete write/value/evidence domain, not a union of sibling properties. */
 export function orderedChangeSchema(source:unknown):Row {
  const schema=structuredClone(source) as {properties:Row},fields=(schema.properties.changes as {properties:Record<string,{items:{properties:Row}} >}).properties;

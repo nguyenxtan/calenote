@@ -1,4 +1,4 @@
-import { ConversationDirectiveSchema, ModelDirectiveV3Schema, IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type LegacyV2ParsedInterpretation as ParsedInterpretation, type ParsedInterpretationV3 } from "./contracts";
+import { SuccessorConversationDirectiveSchema as ConversationDirectiveSchema, ModelDirectiveV3Schema, V3IssueFieldSchema as IssueFieldSchema, ReplyProposalSchema, SLOT_NAMES, type ConversationDirective, type LegacyV2ParsedInterpretation as ParsedInterpretation, type ParsedInterpretationV3 } from "./contracts";
 import { isLegacyV2ValidatedPatch as isValidatedPatch, isValidatedPatchV3, type GuidancePrivacyValidation, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
 import type { MergeResult, MergeResultV3 } from "./merge";
 import type { RequestResolution } from "./resolve";
@@ -10,7 +10,7 @@ type BackendReason = Extract<EffectiveDirective, { kind: "BACKEND_ONLY" }>["reas
 type ApplicationOutcome = { semantic: ValidatedPatch; merge: MergeResult; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 export type ApplicationOutcomeV3 = { semantic: ValidatedPatchV3; merge: MergeResultV3; resolution?: RequestResolution; queryResolution?: QueryResolution; queryResult?: ContextQueryResult; backendOnly?: BackendReason };
 const failure = (): EffectiveDirective => ({ kind: "BACKEND_ONLY", reason: "FAILURE" });
-const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "ADVANCE_REMINDER_IN_PAST", "MONTH_DAY_MISSING", "WEEKDAY_START_CONFLICT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
+const knownReasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION", "UNKNOWN_FREQUENCY", "AMBIGUOUS_TIME", "AMBIGUOUS_WEEK", "LUNAR_YEAR_REQUIRED", "LUNAR_LEAP_CHOICE_REQUIRED", "INVALID_DATE", "YEAR_REQUIRED_INVALID_DATE", "CALENDAR_CONFLICT", "ONCE_COUNT_CONFLICT", "COUNT_OFFSET_CONFLICT", "DURATION_REQUIRES_EVENT_CLOCK", "CLOCK_DURATION_CONFLICT", "DAY_DURATION_COMBINATION", "LIMIT", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE", "INCOMPATIBLE_RELATION", "OFFSET_REQUIRES_BEFORE_EVENT", "INCOMPATIBLE_RANGE", "COUNT_RANGE_CONFLICT", "PAST_OCCURRENCE", "ADVANCE_REMINDER_IN_PAST", "MONTH_DAY_MISSING", "WEEKDAY_START_CONFLICT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"]);
 
 /** Pure reply routing over accepted T3 results. Returning PRESENT_PREVIEW is
  * only a composition handoff; it creates no decision, token or save authority.
@@ -84,6 +84,8 @@ function computeMergedDirective(outcome: Omit<ApplicationOutcome, "semantic" | "
     if (ambiguity && ambiguity.reason !== "MISSING") return { kind: "ASK_FOR_DISAMBIGUATION", field, reason: ambiguity.reason };
   }
   const field = IssueFieldSchema.parse(resolution.fields[0]);
+  if (resolution.reasons.includes("DURATION_REQUIRES_EVENT_CLOCK")) return {kind:"ASK_FOR_FIELD",field:"eventTime"};
+  if (resolution.reasons.some(r=>["CLOCK_DURATION_CONFLICT","DAY_DURATION_COMBINATION"].includes(r))) return {kind:"ASK_FOR_DISAMBIGUATION",field,reason:"CONFLICT"};
   if (resolution.reasons.includes("MONTH_DAY_MISSING") || resolution.reasons.includes("WEEKDAY_START_CONFLICT")) return { kind: "ASK_FOR_DISAMBIGUATION", field: "reminderDate", reason: "CONFLICT" };
   if (resolution.reasons.includes("ADVANCE_REMINDER_IN_PAST")) return { kind: "ASK_FOR_DISAMBIGUATION", field: "eventDate", reason: "CONFLICT" };
   if (resolution.reasons.some(r => ["LIMIT", "HORIZON_LIMIT", "DETAILS_TOO_LONG"].includes(r))) return { kind: "EXPLAIN_UNSUPPORTED", issue: "DOMAIN_LIMIT" };
@@ -138,7 +140,7 @@ export function isEligibleGuidanceText(text: string): boolean {
 type ReplyReason = "REPLY_ABSENT" | "REPLY_INVALID" | "REPLY_TOO_LONG" | "REPLY_FORBIDDEN" | "DIRECTIVE_INVALID" | "DIRECTIVE_MISMATCH" | "BACKEND_SURFACE";
 export type GuidanceSelection = { source: "MODEL_GUIDANCE"; text: string } | { source: "BACKEND"; reason: ReplyReason; text: string | null };
 const questions: Record<string, string> = {
-  title: "Bạn muốn được nhắc việc gì?", location: "Địa điểm là ở đâu?", notes: "Bạn muốn ghi chú gì?", eventDate: "Sự kiện diễn ra ngày nào?", eventTime: "Sự kiện diễn ra lúc mấy giờ?", reminderDate: "Bạn muốn được nhắc vào ngày nào?", reminderTime: "Bạn muốn được nhắc lúc mấy giờ?", calendar: "Bạn muốn dùng lịch dương hay lịch âm?", frequency: "Bạn muốn nhắc một lần hay liên tiếp mỗi ngày?", occurrenceCount: "Bạn muốn được nhắc bao nhiêu lần?", eventRelation: "Bạn muốn được nhắc trước, trong hay từ ngày diễn ra sự kiện?", leadOffsetDays: "Bạn muốn được nhắc trước sự kiện bao nhiêu ngày?", endDate: "Bạn muốn kết thúc nhắc vào ngày nào?", intent: "Bạn muốn hỏi về nội dung nào?", queryRange: "Bạn muốn xem khoảng thời gian nào?", operation: "Bạn muốn thực hiện việc nào trước?",
+  title: "Bạn muốn được nhắc việc gì?", location: "Địa điểm là ở đâu?", notes: "Bạn muốn ghi chú gì?", eventDate: "Sự kiện diễn ra ngày nào?", eventTime: "Sự kiện diễn ra lúc mấy giờ?", reminderDate: "Bạn muốn được nhắc vào ngày nào?", reminderTime: "Bạn muốn được nhắc lúc mấy giờ?", calendar: "Bạn muốn dùng lịch dương hay lịch âm?", frequency: "Bạn muốn nhắc một lần hay liên tiếp mỗi ngày?", occurrenceCount: "Bạn muốn được nhắc bao nhiêu lần?", eventRelation: "Bạn muốn được nhắc trước, trong hay từ ngày diễn ra sự kiện?", leadOffsetHours:"Bạn muốn được nhắc trước sự kiện bao nhiêu giờ?", leadOffsetMinutes:"Bạn muốn được nhắc trước sự kiện bao nhiêu phút?", leadOffsetDays: "Bạn muốn được nhắc trước sự kiện bao nhiêu ngày?", endDate: "Bạn muốn kết thúc nhắc vào ngày nào?", intent: "Bạn muốn hỏi về nội dung nào?", queryRange: "Bạn muốn xem khoảng thời gian nào?", operation: "Bạn muốn thực hiện việc nào trước?",
 };
 function fallback(effective: EffectiveDirective): string | null {
   if (effective.kind === "ASK_FOR_FIELD") return questions[effective.field];

@@ -2,7 +2,7 @@ import {z} from "zod";
 import {ContextInputSchema,ConversationInterpretationV3Schema,DateOperandSchema,QueryPeriodSchema,IntentSchema,SlotValueSchemas,parseInterpretationSectionsV3,type ContextInput,type ConversationInterpretationV3} from "../../../conversation/context-contract/contracts";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_TYPED_PROTOCOL_V3,isContextTypedProtocolV3} from "../../../conversation/context-contract/typed-protocol";
-import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V1,WireShapeFailure} from "./context-provider-wire";
+import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V2,WireShapeFailure} from "./context-provider-wire";
 import {primaryEvidenceSourceCodebook,materializeTypedEvidencePointer,evidenceSourceCatalogue,EvidencePointerFailure} from "./evidence-pointer";
 import {projectCanonicalValidation,projectWireValidation} from "../../../conversation/context-contract/validation-diagnostics";
 import {CONTROL_PLACEHOLDER} from "../../../conversation/context-contract/projection";
@@ -98,7 +98,7 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const branches=(items.anyOf??[items]).flatMap(raw=>{
   const branch=resolve(raw,schema),field=resolve(branch.properties!.fieldCode,schema);
   const accepts=(code:number,node:Schema):boolean=>(!node.enum||node.enum.includes(code))&&(node.minimum===undefined||code>=node.minimum)&&(node.maximum===undefined||code<=node.maximum)&&(!node.anyOf||node.anyOf.some(child=>accepts(code,child)));
-  return Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).flatMap(([name,code])=>{
+  return Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).flatMap(([name,code])=>{
    if(!accepts(code,field))return [];
    const result=structuredClone(branch);const value:Schema=name in SlotValueSchemas?jsonSchema(SlotValueSchemas[name as keyof typeof SlotValueSchemas]):name==="queryRange"?jsonSchema(QueryPeriodSchema):name==="intent"?jsonSchema(IntentSchema):{type:"string",enum:["CURRENT","NEW"]};
    result.properties!.fieldCode={type:"integer",minimum:code,maximum:code};
@@ -245,7 +245,7 @@ function encodeTypedContext(canonical:ConversationInterpretationV3,input:Context
  const stripDatePadding=(raw:unknown):unknown=>{if(Array.isArray(raw))return raw.map(stripDatePadding);if(!object(raw))return raw;const keys=raw.kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:raw.kind==="RELATIVE_DAY"?["kind","offsetDays"]:raw.kind==="WEEKDAY"?["kind","weekday","qualifier"]:Object.keys(raw);return Object.fromEntries(keys.map(key=>[key,stripDatePadding(raw[key])]));};
  let output=stripDatePadding(core.canonicalCodec(generated,"encode")) as Record<string,unknown>;
  output=mapEvidence(output,raw=>{if(!Array.isArray(raw)||!raw.length)throw Error("TYPED_EVIDENCE_INVALID");const refs=raw.map(pointer);return {primaryEvidence:book.encode(JSON.stringify(refs[0])),additionalEvidence:refs.slice(1)};}) as Record<string,unknown>;
- output.uncertainties=parsed.uncertainties.map((issue,index)=>({fieldCode:UNCERTAINTY_FIELD_WIRE_CODE_V1[issue.field],reason:issue.reason,alternatives:(output.uncertainties as Array<{alternatives:Record<string,unknown>[]}>)[index].alternatives.map((alternative,position)=>({...alternative,value:issue.alternatives[position].value}))}));
+ output.uncertainties=parsed.uncertainties.map((issue,index)=>({fieldCode:UNCERTAINTY_FIELD_WIRE_CODE_V2[issue.field],reason:issue.reason,alternatives:(output.uncertainties as Array<{alternatives:Record<string,unknown>[]}>)[index].alternatives.map((alternative,position)=>({...alternative,value:issue.alternatives[position].value}))}));
  return ordered?core.operationValues(output,"encode"):core.indexedChanges(core.operationValues(output,"encode"),"encode");
 }
 export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {return encodeTypedContext(canonical,input,false);}
@@ -288,7 +288,7 @@ function decodeTypedContext(raw:unknown,selected:unknown,observeInvalid:Observer
   stage="EVIDENCE";
   const evidenced=mapEvidence(unfolded,(raw,path)=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,index===0?[...path,"primaryEvidence"]:[...path,"additionalEvidence",index-1],input));}) as Record<string,unknown>;
   stage="UNCERTAINTIES";
-  evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
+  evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
   stage="CANONICAL_CODEC";
   const decoded=core.canonicalCodec(core.operationValues(evidenced,"decode"),"decode") as Record<string,unknown>;
   stage="INTERPRETATION";

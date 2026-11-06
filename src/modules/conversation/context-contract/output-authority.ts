@@ -60,7 +60,7 @@ add(["schemaVersion", "query.statusScope", "protocol.canonicalVersion", "protoco
 add(["transport.inactivePadding"], padding);
 add(["fieldCapability.eventDateYearNullRequired","fieldCapability.reminderDateProposalAllowed"], owned);
 add(["eventDateChange.change.value{kind=CIVIL_DATE}"]);
-export const CHANGE_ORDER_FIELDS_V3 = Object.freeze(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate"] as const);
+export const CHANGE_ORDER_FIELDS_V3 = Object.freeze(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "leadOffsetHours", "leadOffsetMinutes"] as const);
 /** Exact authored numeric ordinal; never coerce a model control. */
 export function decodeAuthoredChangeRank(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && !Object.is(value, -0)

@@ -21,6 +21,8 @@ export const UNCERTAINTY_FIELD_WIRE_CODE_V1 = Object.freeze({
   occurrenceCount: 9, eventRelation: 10, leadOffsetDays: 11, endDate: 12,
   intent: 13, queryRange: 14, operation: 15,
 } as const satisfies Record<ConversationInterpretation["uncertainties"][number]["field"], number>);
+export const UNCERTAINTY_FIELD_WIRE_CODE_V2 = Object.freeze({...UNCERTAINTY_FIELD_WIRE_CODE_V1,leadOffsetHours:16,leadOffsetMinutes:17} as const);
+const successorUncertaintyFieldByCode = new Map<number,string>(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).map(([field,code])=>[code,field]));
 const uncertaintyFieldByCode = new Map<number, string>(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => [code, field]));
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
 function requireShape(condition: unknown): asserts condition { if (!condition) throw new Error("CONTEXT_PROVIDER_WIRE_INVALID"); }
@@ -170,8 +172,8 @@ function simplifyUncertainties(root: Schema, successor=false): Schema {
   const reason = items.anyOf[0].properties!.reason;
   requireShape(items.anyOf.every(branch => equal(branch.properties!.reason, reason)));
   output.properties!.uncertainties.items = { type: "object", properties: {
-    fieldCode: { type: "integer", minimum: 0, maximum: 15,
-      description: "UncertaintyFieldWireCodeV1: " + Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => `${code}=${field}`).join(","),
+    fieldCode: { type: "integer", minimum: 0, maximum: successor ? 17 : 15,
+      description: (successor ? "UncertaintyFieldWireCodeV2: " : "UncertaintyFieldWireCodeV1: ") + Object.entries(successor ? UNCERTAINTY_FIELD_WIRE_CODE_V2 : UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => `${code}=${field}`).join(","),
     }, reason: structuredClone(reason), alternatives: { type: "array", items: {
       type: "string", description: successor?"JSON {value,evidence}; canonical field value, evidence {primaryEvidence:available source code,additionalEvidenceJson:JSON array of 0–2 pointers}.":"JSON encoding of a canonical alternative object with value and evidence; use the value type corresponding to the uncertainty field.",
     } },
@@ -330,9 +332,10 @@ function decodeUncertainties(raw: unknown, successor = false): unknown {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new WireShapeFailure(path, "object");
     requireWireKeys(item, ["fieldCode", "reason", "alternatives"], ["fieldCode", "reason", "alternatives"], path);
     if (typeof item.reason !== "string" || !Array.isArray(item.alternatives) || item.alternatives.length > 2) throw new WireShapeFailure(path, "UNCERTAINTY_SHAPE");
-    const allowedCodes = [...uncertaintyFieldByCode].filter(([, field]) => (successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)).map(([code]) => code);
-    if (typeof item.fieldCode !== "number" || !Number.isSafeInteger(item.fieldCode) || !uncertaintyFieldByCode.has(item.fieldCode)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
-    const field = uncertaintyFieldByCode.get(item.fieldCode)!;
+    const codebook=successor ? successorUncertaintyFieldByCode : uncertaintyFieldByCode;
+    const allowedCodes = [...codebook].filter(([, field]) => (successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)).map(([code]) => code);
+    if (typeof item.fieldCode !== "number" || !Number.isSafeInteger(item.fieldCode) || !codebook.has(item.fieldCode)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
+    const field = (successor ? successorUncertaintyFieldByCode : uncertaintyFieldByCode).get(item.fieldCode)!;
     if (!(successor ? UncertaintyV3Schema : UncertaintySchema).options.some(branch => branch.shape.field.safeParse(field).success)) throw new WireShapeFailure([...path, "fieldCode"], "CONTROL_ENUM", undefined, undefined, projectControlEnum(allowedCodes, item.fieldCode));
     return { field, reason: item.reason, alternatives: item.alternatives.map((text: unknown, alternative: number) => {
       if (typeof text !== "string" || text.length > 32768) throw new WireShapeFailure([...path, "alternatives", alternative], "BOUNDED_JSON_STRING");
@@ -781,15 +784,15 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       requireShape(reason.enum && reason.enum.includes("MISSING"));
       const missing=structuredClone(item),other=structuredClone(item);
       missing.properties!.reason={type:"string",enum:["MISSING"]};
-      const excluded=missingExclusionFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V1[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V1]);
-      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>!excluded.includes(code))};
+      const excluded=missingExclusionFields.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V2[field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V2]);
+      missing.properties!.fieldCode={...missing.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2).filter(code=>!excluded.includes(code))};
       other.properties!.reason={...reason,enum:reason.enum.filter(value=>value!=="MISSING")};
       if(uniqueNumeric){
         const supportedNumeric=isInitialSupportedCadenceCount(primaryEvidenceInput);
         const unsupported=structuredClone(item);
         unsupported.properties!.reason={type:"string",enum:["UNSUPPORTED_COMBINATION"]};
         other.properties!.reason={type:"string",enum:supportedNumeric?["AMBIGUOUS","CONFLICT","UNSUPPORTED_COMBINATION"]:["AMBIGUOUS","CONFLICT"]};
-        other.properties!.fieldCode={...other.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.frequency&&code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.occurrenceCount)};
+        other.properties!.fieldCode={...other.properties!.fieldCode,enum:Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2).filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V2.frequency&&code!==UNCERTAINTY_FIELD_WIRE_CODE_V2.occurrenceCount)};
         schema.properties!.uncertainties.items={anyOf:supportedNumeric?[missing,other]:[missing,other,unsupported]};
       }else schema.properties!.uncertainties.items={anyOf:[missing,other]};
       // Fold only equal uncertainty shells differing in one finite control.
@@ -797,10 +800,10 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       schema.properties!.uncertainties.items=coalesceBranches(schema.properties!.uncertainties.items!);
     }
     if(offsetAbsent){
-      const items=deref(schema.properties!.uncertainties.items!,schema),offsetCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays;
+      const items=deref(schema.properties!.uncertainties.items!,schema),offsetCode=UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetDays;
       const branches=(items.anyOf??[items]).flatMap(raw=>{
         const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema),alternatives=deref(item.properties!.alternatives,schema);
-        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===17?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2):undefined);
         requireShape(domain?.length&&alternatives.type==="array");
         const result:Schema[]=[],otherFields=domain.filter(code=>code!==offsetCode);
         if(otherFields.length){const other=structuredClone(item);other.properties!.fieldCode={...fields,enum:otherFields};result.push(other);}
@@ -809,12 +812,12 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       });
       requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
-    const absentUncertaintyCodes=[...((isInitialRelationUncertaintyAbsent(primaryEvidenceInput)||isBoundRelationUncertaintyAbsent(primaryEvidenceInput))?[UNCERTAINTY_FIELD_WIRE_CODE_V1.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V1.leadOffsetDays]:[])];
+    const absentUncertaintyCodes=[...((isInitialRelationUncertaintyAbsent(primaryEvidenceInput)||isBoundRelationUncertaintyAbsent(primaryEvidenceInput))?[UNCERTAINTY_FIELD_WIRE_CODE_V2.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetDays]:[])];
     if(absentUncertaintyCodes.length){
       const items=deref(schema.properties!.uncertainties.items!,schema);
       const branches=(items.anyOf??[items]).flatMap(raw=>{
         const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema);
-        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===17?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2):undefined);
         requireShape(domain?.length);
         const retained=domain.filter(code=>!absentUncertaintyCodes.includes(code as 10|11));if(!retained.length)return [];
         const next=structuredClone(item);next.properties!.fieldCode={...fields,enum:retained};return [next];
@@ -822,12 +825,12 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
     if(isBoundMissingReminderClockWithoutCandidates(primaryEvidenceInput)){
-      const reminderClockCode=UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime;
+      const reminderClockCode=UNCERTAINTY_FIELD_WIRE_CODE_V2.reminderTime;
       const items=deref(schema.properties!.uncertainties.items!,schema);
       const branches=(items.anyOf??[items]).flatMap(raw=>{
         const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema),reasons=deref(item.properties!.reason,schema);
         const alternatives=deref(item.properties!.alternatives,schema);
-        const fieldDomain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        const fieldDomain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===17?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2):undefined);
         requireShape(fieldDomain&&reasons.enum&&alternatives.type==="array");
         const result:Schema[]=[];
         const otherFields=fieldDomain.filter(code=>code!==reminderClockCode);
@@ -846,9 +849,9 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       const items=deref(schema.properties!.uncertainties.items!,schema);
       const branches=(items.anyOf??[items]).flatMap(raw=>{
         const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema);
-        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===15?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V1):undefined);
+        const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===17?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2):undefined);
         requireShape(domain?.length);
-        const permitted=domain.filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V1.reminderTime);
+        const permitted=domain.filter(code=>code!==UNCERTAINTY_FIELD_WIRE_CODE_V2.reminderTime);
         if(!permitted.length)return [];
         const kept=structuredClone(item);kept.properties!.fieldCode={...fields,enum:permitted};return [kept];
       });
@@ -1004,7 +1007,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   const encodedUncertainties=output.uncertainties as Array<{alternatives:Array<{evidence:unknown}>}>;
-  output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V1[item.field], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
+  output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V2[item.field], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
   return singletonJsonTransport(indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {

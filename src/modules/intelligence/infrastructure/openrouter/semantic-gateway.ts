@@ -440,9 +440,9 @@ export function createContextContractGateway(rawConfig: ContextGatewayConfig,
   return createSelectedContextContractGateway(rawConfig, transport, admission, "HISTORICAL_104");
 }
 export function createTypedContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextTypedProtocolV3},
-  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire: "TYPED_OBJECTS_105"} {
+  transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire: "TYPED_OBJECTS_106"} {
   if (!isContextTypedProtocolV3(rawConfig.protocol)) throw new TypeError("Selected typed context protocol required");
-  return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "TYPED_105"), contextWire: "TYPED_OBJECTS_105" as const});
+  return Object.freeze({...createSelectedContextContractGateway(rawConfig, transport, admission, "TYPED_105"), contextWire: "TYPED_OBJECTS_106" as const});
 }
 export function createSmallContextContractGateway(rawConfig: SemanticGatewayConfig & {protocol: ContextSmallProtocolV3},
   transport: SemanticTransport | ContextOfflineTransport, admission: ContextRouteAdmission = { status: "UNVERIFIED" }): SemanticGateway<ContextGatewayInterpretation, ContextInput> & {readonly contextWire: "SMALL_TABLES_106"} {

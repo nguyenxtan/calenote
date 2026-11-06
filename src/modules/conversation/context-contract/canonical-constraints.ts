@@ -41,7 +41,7 @@ const ownershipIds = new Set<CanonicalConstraintId>(["REQUEST_TARGET_INTENT_OWNE
 const intents = new Set(["CREATE_REMINDER", "LIST_REMINDERS", "CALENDAR_QUERY", "CAPABILITY_QUERY", "HELP", "UNSUPPORTED", "AMBIGUOUS"]);
 const targets = new Set(["CURRENT", "NEW", "UNRESOLVED"]);
 const queryKinds = new Set(["LIST", "CALENDAR_DATE", "CAPABILITY"]);
-const fields = new Set(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "intent", "queryRange", "operation"]);
+const fields = new Set(["title", "location", "notes", "eventDate", "eventTime", "reminderDate", "reminderTime", "calendar", "frequency", "occurrenceCount", "eventRelation", "leadOffsetDays", "endDate", "leadOffsetHours", "leadOffsetMinutes", "intent", "queryRange", "operation"]);
 const reasons = new Set(["MISSING", "AMBIGUOUS", "CONFLICT", "UNSUPPORTED_COMBINATION"]);
 const count = (n: number, max: number) => Number.isSafeInteger(n) && n >= 0 && n <= max;
 export function canonicalConstraint(constraintId: CanonicalConstraintId, message: string, state?: OwnershipControlState) {

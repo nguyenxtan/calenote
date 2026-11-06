@@ -27,3 +27,10 @@ User authorizes completing all five feature areas and bounded Claude coding/revi
 
 ## Verification
 Exact service-created preview/confirm/replay, explicit default override/no group, cross-midnight, missing event clock, clock/day/count conflicts, 366-day bounds/past-at-confirm, edits recompute, malicious/ambiguous evidence, omitted duration refusal, codec roundtrip and historical compatibility. Focused suites + typecheck/lint; one combined full check only after all five areas are stable.
+
+## Implementation/compatibility evidence
+- Core plus selected keyed transport implemented; typed bridge emission is now106 and selected keyed emission137, with codebook2; the immutable V1 code map remains0–15. General canonical/state/encryption identities stay3/state2.
+- Historical105 strict schema SHA reproduced from sourcecae6d79, then independent successor106 qualification preserves codes0–15 field/value/reason correlations and adds16/17. All four145request anchors were verified from saved full captures; restoring only145prompt, capabilities2 and old output schema/name reproduces every145hash. Model/provider/pricing/reservations unchanged.
+- Old snapshots with no extension keys preserve exact bytes. New contexts with duration extensions fail closed under an older binary until expiry. Clearing removes the extension fact and key, with current draft revision retained at context level; a later REPLACE of an absent extension cannot manufacture an old value.
+- Typed slots may be proposed together with incompatible cadence operands so the existing target-aware resolver can clarify rather than erase user intent. They never execute with a repeated cadence or count>1.
+- Lint/typecheck and focused service/codec/state/source suites run; full final application check remains deferred to all-five combined source. Zero provider calls in this phase.

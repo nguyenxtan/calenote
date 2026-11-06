@@ -1,4 +1,4 @@
-import {SLOT_NAMES,SlotValueSchemas,ClockOperandSchema} from '../../../conversation/context-contract/contracts';
+import {V3_SLOT_NAMES,SlotValueSchemas,ClockOperandSchema} from '../../../conversation/context-contract/contracts';
 import type {OwnedCarrier,OwnedClockWire} from './context-small-owned-clocks';
 type Row=Record<string,unknown>;
 export interface WriteValue {operation:string;value:unknown}
@@ -9,7 +9,7 @@ const record=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v);
 function check(v:unknown):asserts v {if(!v)throw Error('OPERATION_VALUE_INVALID');}
 const exact=(v:unknown,keys:readonly string[]):v is Row=>record(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const empty=(v:unknown)=>Array.isArray(v)&&v.length===0;
-const family=(f:string)=>['eventTime','reminderTime'].includes(f)?'clock':['eventDate','reminderDate','endDate'].includes(f)?'date':['occurrenceCount','leadOffsetDays'].includes(f)?'number':'text';
+const family=(f:string)=>['eventTime','reminderTime'].includes(f)?'clock':['eventDate','reminderDate','endDate'].includes(f)?'date':['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'].includes(f)?'number':'text';
 const fields=(shape:unknown)=>(shape as {properties:{changes:{properties:Record<string,Row>}}}).properties.changes.properties;
 interface WritePolicy {minItems?:number;maxItems:number;items:{properties?:{operation:{enum:string[]}}}}
 const writePolicy=(field:Row)=>(field.items as {properties:{write:WritePolicy}}).properties.write;
@@ -49,7 +49,7 @@ export function attachOperationValues(flat:OwnedClockWire,shape:unknown):Operati
 /** Empty outer means unchanged; explicitly authored empty inner means permitted CLEAR. */
 export function expandOperationValues(wire:OperationValueWire,shape:unknown):OwnedClockWire {
  const policy=fields(shape),ranks=new Set<number>();check(exact(wire.changes,Object.keys(policy)));
- for(const[field,p]of Object.entries(policy)){check(SLOT_NAMES.some(f=>f===field));const rows=wire.changes[field],selected=writePolicy(p);check(Array.isArray(rows)&&rows.length<=1);
+ for(const[field,p]of Object.entries(policy)){check(V3_SLOT_NAMES.some(f=>f===field));const rows=wire.changes[field],selected=writePolicy(p);check(Array.isArray(rows)&&rows.length<=1);
   for(const row of rows){check(exact(row,['rank','write','evidence']));check(Number.isSafeInteger(row.rank)&&row.rank>=0&&row.rank<=12&&!ranks.has(row.rank));ranks.add(row.rank);check(Array.isArray(row.evidence)&&row.evidence.length>=1&&row.evidence.length<=3&&row.evidence.every(e=>typeof e==='string'&&e.length>0));check(Array.isArray(row.write)&&row.write.length<=selected.maxItems&&row.write.length>=(selected.minItems??0));for(const write of row.write){check(exact(write,['operation','value'])&&typeof write.operation==='string'&&['SET','REPLACE'].includes(write.operation)&&selected.items.properties?.operation.enum.includes(write.operation));check(typed(field,write.value));}}
  }
  const changes:OwnedClockWire['changes']={};for(const[field,rows]of Object.entries(wire.changes)){let c=keep();for(const row of rows){c={...keep(),rank:row.rank,operation:row.write.length===0?'CLEAR':row.write[0].operation,evidence:structuredClone(row.evidence)};if(row.write.length===1){const value=structuredClone(row.write[0].value);if(family(field)==='text')c.text=value as string;else if(family(field)==='number')c.value=value as number;else if(family(field)==='date')c.date=[value as Row];else c.clock=[value as Row];}}changes[field]=c;}return {...wire,changes};

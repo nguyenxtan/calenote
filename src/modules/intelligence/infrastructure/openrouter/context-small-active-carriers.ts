@@ -1,4 +1,4 @@
-import {SLOT_NAMES} from '../../../conversation/context-contract/contracts';
+import {V3_SLOT_NAMES} from '../../../conversation/context-contract/contracts';
 import type {OwnedCarrier,OwnedClockWire} from './context-small-owned-clocks';
 type Row=Record<string,unknown>;
 export interface ActiveCarrier extends Omit<OwnedCarrier,'rank'|'operation'> {rank:number;operation:'SET'|'REPLACE'|'CLEAR'}
@@ -31,7 +31,7 @@ export function attachActiveCarriers(owned:OwnedClockWire):ActiveCarrierWire {
 /** Model inverse: all cells validate before exact inert syntax expansion. */
 export function expandActiveCarriers(active:ActiveCarrierWire):OwnedClockWire {
  for(const [field,rows]of Object.entries(active.changes)){
-  check(SLOT_NAMES.some(name=>name===field)&&Array.isArray(rows)&&rows.length<=1);
+  check(V3_SLOT_NAMES.some(name=>name===field)&&Array.isArray(rows)&&rows.length<=1);
   if(rows.length){const row=rows[0];check(exact(row));check(['SET','REPLACE','CLEAR'].includes(row.operation)&&Number.isSafeInteger(row.rank)&&row.rank>=0&&row.rank<=12);check(Array.isArray(row.evidence)&&row.evidence.length>=1&&row.evidence.length<=3);}
  }
  return {...active,changes:Object.fromEntries(Object.entries(active.changes).map(([field,rows])=>[field,rows.length===0?keep():structuredClone(rows[0])]))};
