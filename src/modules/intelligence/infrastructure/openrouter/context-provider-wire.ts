@@ -6,7 +6,7 @@ import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
 import type {ContextInput} from "../../../conversation/context-contract/contracts";
-import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent, isInitialRelationUncertaintyAbsent, isWholeSeriesOffsetUncertaintyAbsent, isInitialReminderDateMissingExcluded, isBoundRelationUncertaintyAbsent } from "../../../conversation/context-contract/field-capability";
+import { isBoundExactReminderClockMissingExcluded, isBoundSourceUniqueReminderClock, isBoundCompleteFiniteSeriesClockAnswer, isInitialExplicitReminderIntentKnown, isBoundSeriesDistanceOffsetMissingExcluded, isInitialFiniteSeriesWithoutRelationSource, isBoundSeriesDistanceRelationMissingExcluded, isWholeSeriesOffsetAlternativeAbsent, isInitialRelationUncertaintyAbsent, isWholeSeriesOffsetUncertaintyAbsent, isWholeSeriesLeadDurationUncertaintyAbsent, isInitialReminderDateMissingExcluded, isBoundRelationUncertaintyAbsent } from "../../../conversation/context-contract/field-capability";
 import { CHANGE_ORDER_FIELDS_V3, decodeAuthoredChangeRank } from "../../../conversation/context-contract/output-authority";
 import {materializeProviderEvidence,EvidencePointerFailure,primaryEvidenceSourceCodebook,expandPrimaryEvidenceSourceCodes} from "./evidence-pointer";
 import { NUMERIC_PROPOSAL_FIELDS, CLOCK_PROPOSAL_FIELDS, deriveGenerationFieldCapability, isBoundReminderClockAnswer, isBoundMissingReminderClockWithoutCandidates, isInitialExplicitReminderClockRequired, isInitialExplicitEventClockRequired, isInitialEventDateYearNullRequired, isInitialUniqueCadenceCountRequired, isInitialSupportedCadenceCount, type GenerationFieldCapability, type NumericProposalField, type ClockProposalField } from "../../../conversation/context-contract/field-capability";
@@ -812,14 +812,14 @@ function typedWireSchemaV3(capability?: GenerationFieldCapability,primaryEvidenc
       });
       requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});
     }
-    const absentUncertaintyCodes=[...((isInitialRelationUncertaintyAbsent(primaryEvidenceInput)||isBoundRelationUncertaintyAbsent(primaryEvidenceInput))?[UNCERTAINTY_FIELD_WIRE_CODE_V2.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetDays]:[])];
+    const absentUncertaintyCodes=[...((isInitialRelationUncertaintyAbsent(primaryEvidenceInput)||isBoundRelationUncertaintyAbsent(primaryEvidenceInput))?[UNCERTAINTY_FIELD_WIRE_CODE_V2.eventRelation]:[]),...(isWholeSeriesOffsetUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetDays]:[]),...(isWholeSeriesLeadDurationUncertaintyAbsent(primaryEvidenceInput)?[UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetHours,UNCERTAINTY_FIELD_WIRE_CODE_V2.leadOffsetMinutes]:[])];
     if(absentUncertaintyCodes.length){
       const items=deref(schema.properties!.uncertainties.items!,schema);
       const branches=(items.anyOf??[items]).flatMap(raw=>{
         const item=deref(raw,schema),fields=deref(item.properties!.fieldCode,schema);
         const domain=fields.enum??(fields.type==="integer"&&fields.minimum===0&&fields.maximum===17?Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2):undefined);
         requireShape(domain?.length);
-        const retained=domain.filter(code=>!absentUncertaintyCodes.includes(code as 10|11));if(!retained.length)return [];
+        const retained=domain.filter(code=>!absentUncertaintyCodes.includes(code as 10|11|16|17));if(!retained.length)return [];
         const next=structuredClone(item);next.properties!.fieldCode={...fields,enum:retained};return [next];
       });
       requireShape(branches.length);schema.properties!.uncertainties.items=coalesceBranches({anyOf:branches});

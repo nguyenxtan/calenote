@@ -16,7 +16,7 @@ import {UNCERTAINTY_FIELD_WIRE_CODE_V2} from './context-provider-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
 import {keyedNoteValuePattern} from './context-keyed-note-boundary';
 import {keyedClockCorrectionField,keyedClockNotationField} from './context-keyed-clock-correction';
-import {isRetainedClosedRelationFieldUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
+import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
@@ -129,7 +129,7 @@ function selected(input:ContextInput){
  const controlFields=new Set<number>([UNCERTAINTY_FIELD_WIRE_CODE_V2.intent,UNCERTAINTY_FIELD_WIRE_CODE_V2.queryRange]);
  const controlRows=uncertaintyRows.filter(row=>controlFields.has(row.properties!.fieldCode.enum![0] as number)),fieldRows=uncertaintyRows.filter(row=>!controlFields.has(row.properties!.fieldCode.enum![0] as number));
  if(!uncertaintyRows.length)throw Error('KEYED_FIELD_UNCERTAINTY_POLICY');issues.maxItems=fieldRows.length?4:0;issues.items=fieldRows.length?{anyOf:fieldRows}:{type:'object',properties:{},required:[],additionalProperties:false};
- if(isRetainedClosedRelationFieldUncertaintyAbsent(input))issues.maxItems=0;
+ if(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input))issues.maxItems=0;
  const operationReasons=uncertaintyReasons.get(operationCode),operationIssue:Schema={type:'object',properties:{reason:{type:'string',enum:[...operationReasons??[]]},alternatives:{type:'array',maxItems:2,items:{type:'object',properties:{value:{type:'string',enum:['CURRENT','NEW']},evidence:{type:'array',minItems:1,maxItems:3,items:{type:'string',enum:[...primaryEvidenceSourceCodebook(input).currentCodes]}}},required:['value','evidence'],additionalProperties:false}}},required:['reason','alternatives'],additionalProperties:false};
  const burstMembers=currentBurstTurnIndexes(input);
  if(burstMembers.length){

@@ -150,6 +150,38 @@ export function isWholeSeriesOffsetUncertaintyAbsent(input:ContextInput):boolean
   return first?.role==="USER"&&typeof first.text==="string"&&hasConservativeWholeSourceEligibility(first.text);
 }
 
+/** The same closed day/count grammar cannot supply an hour/minute ambiguity.
+ * Unlike the older day-only proof, duration slots/facts and producer capability
+ * must also be absent. This excludes representation only; it emits no operand,
+ * drops no received issue, and never decides schedule completeness. */
+export function isWholeSeriesLeadDurationUncertaintyAbsent(input:ContextInput):boolean {
+  if(!isWholeSeriesOffsetUncertaintyAbsent(input)||hasRetainedLeadDuration(input))return false;
+  return !deriveGenerationFieldCapability(input).allowedNumericFields
+    .some(field=>field==='leadOffsetHours'||field==='leadOffsetMinutes');
+}
+function hasRetainedLeadDuration(input:ContextInput):boolean {
+  for(const field of ['leadOffsetHours','leadOffsetMinutes'] as const){
+    const slot=input.activeRequest?.slots[field];
+    if(slot&&(slot.state!=='MISSING'||slot.value!==null||slot.fact!==null)
+      ||input.facts.some(fact=>fact.field===field))return true;
+  }
+  return false;
+}
+
+/** Complete initial day/count source with no clock, competing detail or
+ * retained state. Missing scheduling dependencies belong to the resolver;
+ * no authored field ambiguity is available in this narrower producer domain.
+ * Explicit, invalid or competing clocks and unfamiliar discourse decline. */
+export function isInitialClocklessSeriesUncertaintyAbsent(input:ContextInput):boolean {
+  if(!isInitialRelationUncertaintyAbsent(input)||!isWholeSeriesLeadDurationUncertaintyAbsent(input)
+    ||deriveGenerationFieldCapability(input).allowedClockFields.length)return false;
+  const text=input.turns[0].text;
+  // Capitalized words can be part of the admitted venue grammar. Decline a
+  // possible conjunction there as well, rather than certifying one location.
+  if(/(?:^|[^\p{L}\p{M}])(?:hoặc|hay|và)(?=$|[^\p{L}\p{M}])/iu.test(text))return false;
+  return extractTemporalEvidence({text,referenceNow:Date.parse(input.reference.instant)}).time.state==='MISSING';
+}
+
 /** A whole relation-only continuation cannot introduce an independent distance
  * into the one factual finite series. Unlike the older matched-number proof,
  * the notification clock may already be resolved. Unfamiliar tails decline.
@@ -188,7 +220,7 @@ function isRetainedWholeRelationOnlyOffsetAbsent(input:ContextInput):boolean {
  * offset silence. Every retained operand is checked against the original
  * whole source. No parsed operand escapes as a value, evidence or readiness. */
 export function isRetainedClosedRelationFieldUncertaintyAbsent(input:ContextInput):boolean {
-  if(input.ambiguities.length!==0)return false;
+  if(input.ambiguities.length!==0||hasRetainedLeadDuration(input))return false;
   if(isBoundExplicitNewFiniteSeriesClosed(input))return true;
   if(!isRetainedWholeRelationOnlyOffsetAbsent(input)&&!isBoundRelationUncertaintyAbsent(input))return false;
   const active=input.activeRequest!,sourceTime=input.facts.find(fact=>fact.field==='eventDate')!.sourceReferenceTime;
