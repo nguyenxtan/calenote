@@ -13,7 +13,7 @@ import { createControlProof } from "./control-proof";
 import { isPreviewRecoveryResponse, SAVE_APPROVAL_REPLIES } from "./preview-control";
 import { projectSemanticView } from "./projection";
 import { lunarCalendar } from "../lunar-calendar";
-import { SLOT_NAMES, V3_SLOT_NAMES, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
+import { SLOT_NAMES, V3_SLOT_NAMES, HISTORICAL_V3_SLOT_NAMES, LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, SemanticPatchProposalV3Schema, type EvidenceRef } from "./contracts";
 
 export interface TransitionInput {
   snapshot: ContextSnapshotV1 | null;
@@ -72,7 +72,7 @@ function candidateFromPatch(patch: ValidatedPatch, proposalId: string): Candidat
     || patch.alternativeEvidence.some(e => e.provenance.kind !== "EXPLICIT_USER" || !e.sources.length)) return null;
   const s = patch.candidateSnapshot;
   const refs = (sources: readonly SourceEvidence[]): EvidenceRef[] => sources.map(e => ({ kind: "USER_QUOTE", turn: s.transcript.findIndex(t => t.id === e.sourceTurnId), quote: e.quote, occurrence: e.occurrence }));
-  const evidenceIndex = patch.changeEvidence.map(e => ({ field: V3_SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
+  const evidenceIndex = patch.changeEvidence.map(e => ({ field: HISTORICAL_V3_SLOT_NAMES.find(f => f === e.field)!, evidence: structuredClone([...e.sources]) }));
   const sources = [...evidenceIndex.flatMap(e => e.evidence), ...patch.alternativeEvidence.flatMap(e => [...e.sources])].filter((e, i, all) => all.findIndex(other => equal(e, other)) === i);
   if (!sources.length || sources.length > 3) return null;
   let alternativeIndex = 0;
@@ -368,7 +368,9 @@ function acceptSelected(candidate: Candidate | CandidateV3, s: SelectedSnapshot)
     return parsed.success ? { ...rest, proposal: parsed.data } : null;
   }
   const parsed = SemanticPatchProposalSchema.safeParse(proposal);
-  return parsed.success ? { ...rest, proposal: parsed.data } : null;
+  if (!parsed.success) return null;
+  const legacy = PendingDecisionSchema.shape.candidate.unwrap().safeParse({ ...rest, proposal: parsed.data });
+  return legacy.success ? legacy.data : null;
 }
 function effectiveSelected(semantic: ValidatedPatch | ValidatedPatchV3, candidate: SelectedSnapshot, resolution?: RequestResolution, queryResolution?: QueryResolution, queryResult?: ContextQueryResult) {
   if (isValidatedPatchV3(semantic) && candidate.schemaVersion === "calenote-context-state-2") {
