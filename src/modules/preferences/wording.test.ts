@@ -2,13 +2,17 @@ import { expect,it } from 'vitest';
 import { addressProse,botSalutation } from './wording';
 it.each([
  ['ban',null,'','Bạn muốn mình nhắc gì?'],
- ['sep',null,'Sếp, ','Sếp muốn mình nhắc gì?'],
+ ['sep',null,'Sếp, ','Sếp muốn em nhắc gì?'],
  ['anh_chi',null,'Anh/chị, ','Anh/chị muốn mình nhắc gì?'],
  ['ong_tui',null,'Ông, ','Ông muốn tui nhắc gì?'],
  ['minh',null,'Mình, ','Mình muốn tớ nhắc gì?'],
  ['custom','Chị Tuyền','Chị Tuyền, ','Chị Tuyền muốn mình nhắc gì?'],
 ] as const)('renders %s consistently', (addressStyle,customDisplayName,salutation,phrase)=>{
  const prefs={addressStyle,customDisplayName};expect(botSalutation(prefs)).toBe(salutation);expect(addressProse('Bạn muốn mình nhắc gì?',prefs)).toBe(phrase);
+});
+it('uses em and Sếp consistently inside application-owned sentences',()=>{
+ expect(addressProse('Chào bạn! Mình có thể giúp bạn. Bạn muốn mình nhắc gì?',{addressStyle:'sep',customDisplayName:null}))
+  .toBe('Chào Sếp! Em có thể giúp Sếp. Sếp muốn em nhắc gì?');
 });
 it('replaces once, preserves words inside a custom name and strips control characters',()=>{
  const prefs={addressStyle:'custom' as const,customDisplayName:'Bạn Mình\nTân'};

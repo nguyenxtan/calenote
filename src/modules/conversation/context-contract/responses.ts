@@ -8,21 +8,24 @@ import type { CanonicalPreview, ConfirmationResult } from "./store";
 import type { ContextSlots, PendingDecision, TranscriptEntry } from "./state";
 
 export type ReplyReceipt = { status: "SENT"; messageRef: string | null } | { status: "FAILED" | "UNCERTAIN" };
-export type ReplySpan = { kind: "QUESTION" | "PREVIEW" | "CONTROL" | "FACT"; start: number; end: number; handle?: string };
+type ProseProvenance = "APPLICATION_PROSE";
+export type ReplySpan = { kind: "QUESTION" | "PREVIEW" | "CONTROL" | "FACT"; start: number; end: number; handle?: string; provenance?: ProseProvenance;
+  /** Optional model wording is discarded, never rewritten, for saved addressing. */
+  addressingFallback?: { text: string; provenance?: ProseProvenance } };
 export type ReadyReplyPlan = { status: "READY"; text: string; source: "BACKEND" | "MODEL_GUIDANCE"; kind: Extract<TranscriptEntry, { role: "ASSISTANT" }>["kind"]; spans: ReplySpan[] };
 /** Span offsets use UTF-16; transcript projection independently maps codepoints. */
 export type ReplyPlan = ReadyReplyPlan | { status: "TOO_LONG"; units: number; limit: 2000 } | { status: "INVALID" };
 export type FailureReason = "PROVIDER" | "CONFIG" | "BUDGET" | "CONTEXT" | "SIZE" | "SEMANTIC" | "STALE" | "EXPIRED" | "DURATION_AMBIGUOUS";
 export type ReplyOutcome =
-  | { kind: "QUESTION"; question: string; facts: string[]; field: z.infer<typeof IssueFieldSchema>; alternatives?: string[] }
+  | { kind: "QUESTION"; question: string; questionProvenance?: "APPLICATION"; facts: string[]; field: z.infer<typeof IssueFieldSchema>; alternatives?: string[] }
   | { kind: "PREVIEW"; preview: CanonicalPreview; token?: string }
   | { kind: "DECISION"; decisionKind: PendingDecision["kind"]; token: string; facts: string[] }
   | { kind: "UNSUPPORTED"; capability: string }
   | { kind: "QUERY"; resolution: QueryResolution; result?: ContextQueryResult; titles?: ReadonlyMap<string, string> }
-  | { kind: "RECOVERY"; count: 2 | 3; question: string; facts: string[]; token?: string }
+  | { kind: "RECOVERY"; count: 2 | 3; question: string; questionProvenance?: "APPLICATION"; facts: string[]; token?: string }
   | { kind: "FAILURE"; reason: FailureReason }
   | { kind: "MUTATION"; result: ConfirmationResult }
-  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" | "DECISION_NOT_VISIBLE" };
+  | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" | "GREET" | "DECISION_NOT_VISIBLE" };
 const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const failures: Record<FailureReason, string> = {
   DURATION_AMBIGUOUS: "Cụm “trước … giờ” có thể là giờ đồng hồ hoặc khoảng thời gian. Bạn gửi lại yêu cầu, dùng “trước … tiếng” nếu là khoảng thời gian, hoặc “lúc …” nếu là giờ nhắc nhé.",
@@ -44,8 +47,9 @@ const notices = {
   RESUME: "Bản nháp còn hiệu lực được giữ nguyên. Bạn có thể tiếp tục để xem lại câu hỏi.",
   DECISION_NOT_VISIBLE: "Bạn xem lại lựa chọn vừa gửi rồi xác nhận lại nhé. Bản nháp vẫn được giữ nguyên.",
   CHECKING: "Đang kiểm tra phiên bản bạn chọn.", HELP: "Bạn có thể mô tả việc cần nhắc và thời điểm mong muốn.",
+  GREET: "Chào bạn! Mình có thể giúp bạn ghi nhớ việc gì?",
 };
-const fieldLabels: Record<string, string> = { title: "Việc cần nhắc", location: "Địa điểm", notes: "Ghi chú", eventDate: "Ngày sự kiện", eventTime: "Giờ sự kiện", reminderDate: "Ngày nhắc", reminderTime: "Giờ nhắc", calendar: "Lịch", frequency: "Tần suất", occurrenceCount: "Số lần", eventRelation: "Quan hệ với sự kiện", leadOffsetHours:"Số giờ trước", leadOffsetMinutes:"Số phút trước", leadOffsetDays: "Số ngày trước", endDate: "Ngày kết thúc" };
+const fieldLabels: Record<string, string> = { title: "Việc cần nhắc", location: "Địa điểm", notes: "Ghi chú", eventDate: "Ngày sự kiện", eventTime: "Giờ sự kiện", reminderDate: "Ngày nhắc", reminderTime: "Giờ nhắc", calendar: "Lịch", frequency: "Tần suất", occurrenceCount: "Số lần", eventRelation: "Quan hệ với sự kiện", leadOffsetHours:"Số giờ trước", leadOffsetMinutes:"Số phút trước", leadOffsetWeeks: "Số tuần trước", leadOffsetDays: "Số ngày trước", endDate: "Ngày kết thúc" };
 export function formatLeadDurationRule(slots: ContextSlots): string {
   const components=[slots.leadOffsetHours?.value ? `${slots.leadOffsetHours.value} giờ` : null, slots.leadOffsetMinutes?.value ? `${slots.leadOffsetMinutes.value} phút` : null].filter(Boolean);
   return components.length ? `Nhắc trước ${components.join(" ")} so với giờ sự kiện.\n` : "";
@@ -60,6 +64,7 @@ export function formatPendingFact(field: string, value: unknown): string {
   else if (value && typeof value === "object" && "kind" in value) {
     if (value.kind === "CIVIL_DATE" && "day" in value && "month" in value && "year" in value && "calendar" in value && "leapMonth" in value) text = `${value.day}/${value.month}${value.year === null ? " (chưa có năm)" : `/${value.year}`}, ${value.calendar === "LUNAR_VN" ? `âm lịch Việt Nam${value.leapMonth === null ? " (chưa rõ tháng nhuận)" : value.leapMonth ? " (tháng nhuận)" : ""}` : "dương lịch"}`;
     else if (value.kind === "RELATIVE_DAY" && "offsetDays" in value) text = `${value.offsetDays} ngày tính từ ngày nhận yêu cầu`;
+    else if (value.kind === "RELATIVE_MONTH" && "offsetMonths" in value) text = `${value.offsetMonths} tháng tính từ ngày nhận yêu cầu`;
     else if (value.kind === "WEEKDAY" && "weekday" in value && "qualifier" in value) text = `${value.weekday === 7 ? "Chủ nhật" : `Thứ ${Number(value.weekday) + 1}`} ${value.qualifier === "THIS_WEEK" ? "tuần này" : value.qualifier === "NEXT_WEEK" ? "tuần sau" : "(chưa rõ tuần)"}`;
     else text = "chưa rõ";
   } else text = "chưa rõ";
@@ -71,9 +76,10 @@ export function decisionQuestion(kind: PendingDecision["kind"]): string {
 /** Every factual/control surface is application-owned. Optional selected prose
  * may replace only an eligible question, and is dropped first on overflow. */
 export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSelection = { source: "BACKEND", reason: "BACKEND_SURFACE", text: null }): ReplyPlan {
-  const parts: { text: string; kind: ReplySpan["kind"]; handle?: string }[] = [];
+  const parts: (Omit<ReplySpan, "start" | "end"> & { text: string })[] = [];
   let kind: ReadyReplyPlan["kind"] = "NOTICE", source: ReadyReplyPlan["source"] = "BACKEND";
-  const add = (text: string, span: ReplySpan["kind"] = "FACT", handle?: string) => { if (text) parts.push({ text, kind: span, ...(handle ? { handle } : {}) }); };
+  const add = (text: string, span: ReplySpan["kind"] = "FACT", handle?: string, metadata: Pick<ReplySpan, "provenance" | "addressingFallback"> = {}) => { if (text) parts.push({ text, kind: span, ...(handle ? { handle } : {}), ...metadata }); };
+  const prose = (text: string, span: ReplySpan["kind"] = "FACT") => add(text, span, undefined, { provenance: "APPLICATION_PROSE" });
   const facts = (values: string[]) => values.forEach(value => add(escape(value)));
   switch (outcome.kind) {
     case "PREVIEW": {
@@ -89,11 +95,15 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
       if (outcome.alternatives?.length) facts(outcome.alternatives);
       const optional = !outcome.alternatives?.length && guidance.source === "MODEL_GUIDANCE" ? guidance.text : null;
       const selected = optional && [...parts.map(p => p.text), optional].join("\n").length <= 2000 ? optional : outcome.question;
-      if (selected === optional) source = "MODEL_GUIDANCE";
-      add(selected, "QUESTION"); break;
+      const provenance = outcome.questionProvenance === "APPLICATION" ? "APPLICATION_PROSE" as const : undefined;
+      if (selected === optional) {
+        source = "MODEL_GUIDANCE";
+        add(selected, "QUESTION", undefined, { addressingFallback: { text: outcome.question, ...(provenance ? { provenance } : {}) } });
+      } else add(selected, "QUESTION", undefined, provenance ? { provenance } : {});
+      break;
     }
     case "DECISION":
-      kind = "DECISION"; facts(outcome.facts); add(decisionQuestion(outcome.decisionKind), "QUESTION");
+      kind = "DECISION"; facts(outcome.facts); prose(decisionQuestion(outcome.decisionKind), "QUESTION");
       add(`${outcome.decisionKind === "SAVE_PREVIEW" ? "Xác nhận" : "Đồng ý"} ${outcome.token}`, "CONTROL", outcome.token); add("Trả lời 2 để từ chối.", "CONTROL"); break;
     case "UNSUPPORTED": {
       const explanations: Record<string, string> = {
@@ -107,40 +117,40 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
         MONTHLY_WEEKDAY_PATTERN: "Chưa hỗ trợ lặp theo thứ trong tháng. Bạn có thể chọn một ngày dương lịch cố định.",
         REQUEST_COMBINATION: "Hãy chọn từng yêu cầu để xử lý; chưa thực hiện một phần của yêu cầu kết hợp này.",
       };
-      add(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần, mỗi ngày, hoặc chuỗi theo tuần/tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày.");
+      prose(explanations[outcome.capability] ?? "Kiểu lặp này chưa được hỗ trợ. Hiện có lời nhắc một lần, mỗi ngày, hoặc chuỗi theo tuần/tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày.");
       // The capability fact stays backend-owned. Already validated guidance
       // may add a natural next step, but never replace that factual surface.
       if (guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text) && [...parts.map(p => p.text), guidance.text].join("\n").length <= 2000) {
-        add(guidance.text, "QUESTION"); source = "MODEL_GUIDANCE";
+        add(guidance.text, "QUESTION", undefined, { addressingFallback: { text: "Bạn có thể diễn đạt lại yêu cầu.", provenance: "APPLICATION_PROSE" } }); source = "MODEL_GUIDANCE";
       }
       break;
     }
     case "RECOVERY":
-      kind = "RECOVERY"; facts(outcome.facts); add(outcome.count === 2 ? `Thông tin đang giữ ở trên. ${outcome.question}` : "Bản nháp vẫn được giữ nguyên và không gia hạn. Bạn có thể trả lời Bỏ để hủy yêu cầu chưa lưu, hoặc đồng ý bắt đầu lại.", "QUESTION");
+      kind = "RECOVERY"; facts(outcome.facts); add(outcome.count === 2 ? `Thông tin đang giữ ở trên. ${outcome.question}` : "Bản nháp vẫn được giữ nguyên và không gia hạn. Bạn có thể trả lời Bỏ để hủy yêu cầu chưa lưu, hoặc đồng ý bắt đầu lại.", "QUESTION", undefined, outcome.count === 3 || outcome.questionProvenance === "APPLICATION" ? { provenance: "APPLICATION_PROSE" } : {});
       if (outcome.count === 3 && outcome.token) add(`Đồng ý ${outcome.token}`, "CONTROL", outcome.token); break;
-    case "FAILURE": add(failures[outcome.reason]); break;
+    case "FAILURE": prose(failures[outcome.reason]); break;
     case "NOTICE":
       if (outcome.notice === "HELP" && guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text)) {
-        add(guidance.text, "QUESTION"); source = "MODEL_GUIDANCE";
-      } else add(notices[outcome.notice]);
+        add(guidance.text, "QUESTION", undefined, { addressingFallback: { text: notices.HELP, provenance: "APPLICATION_PROSE" } }); source = "MODEL_GUIDANCE";
+      } else prose(notices[outcome.notice]);
       break;
-    case "MUTATION": add(outcome.result.status === "COMMITTED" || outcome.result.status === "IDEMPOTENT" ? `Đã lưu ${outcome.result.childCount} lời nhắc.` : outcome.result.status === "UNCERTAIN" ? "Chưa xác định được kết quả lưu. Cần kiểm tra lại trước khi thử tiếp." : "Chưa lưu lời nhắc. Hãy xem lại bản nháp hiện tại."); break;
+    case "MUTATION": prose(outcome.result.status === "COMMITTED" || outcome.result.status === "IDEMPOTENT" ? `Đã lưu ${outcome.result.childCount} lời nhắc.` : outcome.result.status === "UNCERTAIN" ? "Chưa xác định được kết quả lưu. Cần kiểm tra lại trước khi thử tiếp." : "Chưa lưu lời nhắc. Hãy xem lại bản nháp hiện tại."); break;
     case "QUERY": {
       kind = "QUERY_RESULT";
       const r = outcome.resolution;
       if (r.status === "RANGE") {
         if (outcome.result?.status !== "RESULTS") return composeContextReply({ kind: "FAILURE", reason: "PROVIDER" });
-        add(CONTEXT_QUERY_SCOPE); add(escape(r.label)); add(escape(outcome.result.calendarNotice));
+        prose(CONTEXT_QUERY_SCOPE); add(escape(r.label)); add(escape(outcome.result.calendarNotice));
         for (const row of outcome.result.rows) {
           const title = outcome.titles?.get(row.id);
           if (title === undefined || !Number.isFinite(new Date(row.scheduledAt).getTime())) return { status: "INVALID" };
           const local = new Date(row.scheduledAt + 7 * 3600000).toISOString();
           add(`${escape(title)} — ${local.slice(0, 10)} ${local.slice(11, 16)} — ${CONTEXT_STATUS_LABELS[row.status]}`);
         }
-        if (!outcome.result.rows.length) add("Không có lời nhắc trong khoảng này.");
-        if (outcome.result.hasMore) add(CONTEXT_QUERY_PARTIAL);
+        if (!outcome.result.rows.length) prose("Không có lời nhắc trong khoảng này.");
+        if (outcome.result.hasMore) prose(CONTEXT_QUERY_PARTIAL);
       } else if (r.status === "CALENDAR_DATE") add(`Dương lịch: ${r.solar}\nÂm lịch Việt Nam: ${r.lunar.day}/${r.lunar.month}/${r.lunar.year}${r.lunar.leap ? " nhuận" : ""}\n${escape(r.convention)}`);
-      else if (r.status === "CAPABILITY") add(r.topic === "ANNUAL" ? "Lặp hằng năm chưa được hỗ trợ." : r.topic === "LUNAR" ? "Có thể dùng ngày âm lịch Việt Nam khi bạn yêu cầu rõ." : "Có thể nhắc mỗi ngày, mỗi tuần hoặc mỗi tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày. Với chuỗi tháng, số lần thực tế còn phụ thuộc giới hạn thời gian này.");
+      else if (r.status === "CAPABILITY") prose(r.topic === "ANNUAL" ? "Lặp hằng năm chưa được hỗ trợ." : r.topic === "LUNAR" ? "Có thể dùng ngày âm lịch Việt Nam khi bạn yêu cầu rõ." : "Có thể nhắc mỗi ngày, mỗi tuần hoặc mỗi tháng dương lịch hữu hạn từ 2 đến 30 lần trong 366 ngày. Với chuỗi tháng, số lần thực tế còn phụ thuộc giới hạn thời gian này.");
       else return { status: "INVALID" };
       break;
     }
@@ -149,7 +159,7 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
   if (!text || !text.isWellFormed()) return { status: "INVALID" };
   if (text.length > 2000) return { status: "TOO_LONG", units: text.length, limit: 2000 };
   let start = 0;
-  const spans = parts.map(part => { const span = { kind: part.kind, start, end: start + part.text.length, ...(part.handle ? { handle: part.handle } : {}) }; start = span.end + 1; return span; });
+  const spans = parts.map(({ text, ...metadata }) => { const span = { ...metadata, start, end: start + text.length }; start = span.end + 1; return span; });
   return { status: "READY", text, source, kind, spans };
 }
 
@@ -158,14 +168,12 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
 export function addressContextReply(plan: ReadyReplyPlan, preferences?: BotReplyPreferences): ReplyPlan {
   const salutation = escape(botSalutation(preferences));
   if (!salutation) return plan;
-  const literalNotices = new Set<string>([...Object.values(notices), ...Object.values(failures)]);
-  const literalDecisions = new Set<string>((["SAVE_PREVIEW", "REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE", "RESUME_PENDING", "RESTART_PENDING"] as const).map(decisionQuestion));
   const replacements = plan.spans.map(span => {
     const original = plan.text.slice(span.start, span.end);
-    const knownNotice = plan.kind === "NOTICE" && plan.spans.length === 1 && span.kind === "FACT" && literalNotices.has(original);
-    const knownDecision = plan.kind === "DECISION" && span.kind === "QUESTION" && literalDecisions.has(original);
-    // Equality alone is insufficient: an owner fact may equal application prose.
-    return plan.source === "BACKEND" && (knownNotice || knownDecision) ? escape(addressProse(original, preferences)) : original;
+    // Provenance is assigned only where the backend authors literal prose.
+    // Facts with identical wording remain opaque, as does model-authored prose.
+    const selected = span.addressingFallback ?? { text: original, provenance: span.provenance };
+    return selected.provenance === "APPLICATION_PROSE" ? escape(addressProse(selected.text, preferences)) : selected.text;
   });
   const changed = replacements.some((replacement, index) => replacement !== plan.text.slice(plan.spans[index].start, plan.spans[index].end));
   let text = changed ? "" : salutation, cursor = 0;
@@ -176,11 +184,12 @@ export function addressContextReply(plan: ReadyReplyPlan, preferences?: BotReply
     text += plan.text.slice(cursor, span.start);
     const start = text.length;
     text += replacements[index];
-    spans.push({ ...span, start, end: text.length });
+    const { addressingFallback, ...metadata } = span;
+    spans.push({ ...metadata, ...(addressingFallback?.provenance ? { provenance: addressingFallback.provenance } : {}), start, end: text.length });
     cursor = span.end;
   }
   text += plan.text.slice(cursor);
   if (!text.isWellFormed()) return { status: "INVALID" };
   if (text.length > 2000) return { status: "TOO_LONG", units: text.length, limit: 2000 };
-  return { ...plan, text, spans };
+  return { ...plan, text, spans, ...(plan.spans.some(span => span.addressingFallback) ? { source: "BACKEND" as const } : {}) };
 }
