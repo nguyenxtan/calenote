@@ -1,7 +1,7 @@
 import { isLegacyV2ValidatedPatch as isValidatedPatch, isValidatedPatchV3, type ValidatedPatch, type ValidatedPatchV3 } from "./evidence";
 import { mergeLegacyV2Patch as mergePatch, mergePatchV3, type MergeResult, type MergeResultV3 } from "./merge";
 import { resolveRequest, RESOLUTION_VERSION, type RequestResolution } from "./resolve";
-import { ContextSnapshotV1Schema, ContextSnapshotV2Schema, PendingDecisionSchema, PendingDecisionV2Schema, SlotsSchema, encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV1, type ContextSnapshotV2, type ControlAuthority, type PendingDecision, type SourceEvidence } from "./state";
+import { ContextSnapshotV1Schema, ContextSnapshotV2Schema, PendingDecisionSchema, PendingDecisionV2Schema, SlotsSchema, encodeContextSnapshot, encodeContextSnapshotV2, type ContextSlots, type ContextSnapshotV1, type ContextSnapshotV2, type ControlAuthority, type PendingDecision, type SourceEvidence } from "./state";
 import type { StoredTransition, StoredTransitionV2, DecisionProof, CanonicalPreview } from "./store";
 import type { ControlSelection } from "./decisions";
 import { selectControl } from "./decisions";
@@ -51,7 +51,8 @@ function expiry(s: ContextSnapshotV1 | ContextSnapshotV2): string {
   return new Date(Math.min(Date.parse(s.idleExpiresAt), Date.parse(s.absoluteExpiresAt), s.draftExpiresAt ? Date.parse(s.draftExpiresAt) : Infinity)).toISOString();
 }
 function recap(s: ContextSnapshotV1 | ContextSnapshotV2): string[] {
-  return V3_SLOT_NAMES.flatMap(field => { const slot = s.slots[field]; return !slot || slot.value === null ? [] : [formatPendingFact(field, slot.value)]; });
+  const slots: ContextSlots = s.slots;
+  return V3_SLOT_NAMES.flatMap(field => { const slot = slots[field]; return !slot || slot.value === null ? [] : [formatPendingFact(field, slot.value)]; });
 }
 function clearDecision(s: ContextSnapshotV1 | ContextSnapshotV2) {
   s.pendingDecision = null; s.previewReceipt = null;
@@ -122,7 +123,7 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
   const issue = (kind: PendingDecision["kind"], candidate: Candidate | CandidateV3 | null = null) => {
     clearDecision(s); clearSemanticCandidate(s);
     s.pendingDecision = (successor ? PendingDecisionV2Schema : PendingDecisionSchema).parse({ decisionId, kind, target: { ownerId: s.scope.ownerId, chatIdentityId: s.scope.chatIdentityId, chatId: s.scope.chatId, requestId: s.requestId, proposalId: candidate?.proposalId ?? null }, questionId: outboundId, previewId: kind === "SAVE_PREVIEW" ? outboundId : null, draftRevision: s.draftRevision, contextRevision: revision, issuedAfterInbound: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid }, deliveryState: "UNCERTAIN", expiresAt: new Date(Math.min(Date.parse(expiry(s)), candidate ? Date.parse(candidate.expiresAt) : Infinity)).toISOString(), acceptedReplies: ["có", "ok", "1"], replyReference: null, tokenHandle: token, candidate });
-    outcome = { kind: "DECISION", decisionKind: kind, token, facts: candidate ? candidate.proposal.changes.filter(c => c.value !== null).map(c => formatPendingFact(c.field, c.value)) : recap(s) };
+    outcome = { kind: "DECISION", decisionKind: kind, token, naturalControls: successor, facts: candidate ? candidate.proposal.changes.filter(c => c.value !== null).map(c => formatPendingFact(c.field, c.value)) : recap(s) };
   };
   const suspendSelectedOffer = () => {
     const retained = s.pendingDecision?.candidate ? structuredClone(s.pendingDecision) : null;
@@ -135,7 +136,7 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
     if (effective.kind === "ASK_FOR_FIELD" || effective.kind === "ASK_FOR_DISAMBIGUATION") {
       const fallback = selectGuidance({ effectiveDirective: effective, directiveValidation: { status: "INVALID", reason: "DIRECTIVE_INVALID" }, replyProposal: { status: "VALID", value: null }, privacyValidation: { status: "VALID" }, language: "vi" });
       const field = effective.field === "queryRange" ? "queryRange" : "intent";
-      outcome = { kind: "QUESTION", question: fallback.text!, facts: [], field };
+      outcome = { kind: "QUESTION", question: fallback.text!, questionProvenance: "APPLICATION", facts: [], field };
       s.pendingQueryQuestion = { scope: "QUERY", field, questionId: outboundId, text: fallback.text!, decisionKind: null, reason: effective.kind === "ASK_FOR_FIELD" ? "MISSING" : effective.reason, noProgressCount: 0, deliveryState: "UNCERTAIN", issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid } };
     } else if (effective.kind === "ANSWER_QUERY") { s.pendingQueryQuestion = null; outcome = { kind: "QUERY", resolution: qr, result: input.queryResult, titles: input.queryTitles }; }
     else outcome = { kind: "FAILURE", reason: input.queryResult && input.queryResult.status !== "RESULTS" ? "PROVIDER" : "SEMANTIC" };
@@ -252,19 +253,19 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
         s = structuredClone(received); issue("ACCEPT_ONE_TIME_ALTERNATIVE", candidate);
       } else { if (prior?.requestId) { s = structuredClone(received); clearDecision(s); } outcome = { kind: "UNSUPPORTED", capability: resolution.capability }; }
     } else {
-      const localField = resolution.status === "CLARIFY" ? SLOT_NAMES.find(f => f === resolution.fields[0]) : undefined;
+      const localField = resolution.status === "CLARIFY" ? (successor ? V3_SLOT_NAMES : SLOT_NAMES).find(f => f === resolution.fields[0]) : undefined;
       if (!patch && resolution.status === "CLARIFY" && !localField) return fail("SEMANTIC", "UNKNOWN_DIRECTIVE");
       const effective = patch ? effectiveSelected(patch, s, resolution) : resolution.status === "READY" ? { kind: "PRESENT_PREVIEW" as const } : { kind: "ASK_FOR_FIELD" as const, field: localField! };
       if (effective.kind === "PRESENT_PREVIEW" && resolution.status === "READY") {
         if (!input.channel) return fail("CONFIG", "PREVIEW_CHANNEL_REQUIRED");
         s.slots = structuredClone(resolution.resolvedSlots); s.facts = structuredClone(resolution.resolvedFacts);
         if (prior?.requestId === s.requestId && !equal(prior.slots, s.slots)) s.draftRevision = (prior.draftRevision ?? 0) + 1;
-        preview = { schemaVersion: "calenote-context-preview-1", title: s.slots.title.value!, details: resolution.details, occurrences: resolution.occurrences, prefix: "Bản nháp chưa lưu:\n" + formatLeadDurationRule(s.slots), suffix: `\nXác nhận ${token}\nTrả lời 2 để từ chối.` };
+        preview = { schemaVersion: "calenote-context-preview-1", title: s.slots.title.value!, details: resolution.details, occurrences: resolution.occurrences, prefix: "Bản nháp chưa lưu:\n" + formatLeadDurationRule(s.slots), suffix: successor ? "\nLưu lời nhắc này? Trả lời Có hoặc Không." : `\nXác nhận ${token}\nTrả lời 2 để từ chối.` };
         issue("SAVE_PREVIEW"); s.lifecycle = "AWAITING_CONFIRMATION"; s.pendingReminderQuestion = null; s.pendingQueryQuestion = null;
         s.pendingDecision!.previewId = outboundId; s.pendingDecision!.acceptedReplies = [...SAVE_APPROVAL_REPLIES];
         s.pendingDecision!.target.proposalId = resolution.occurrences.length > 1 ? proposalId : null;
         s.previewReceipt = { previewId: outboundId, requestId: s.requestId!, draftRevision: s.draftRevision!, draftHash: await previewHash(preview), ownerId: s.scope.ownerId, chatIdentityId: s.scope.chatIdentityId, chatId: s.scope.chatId, channel: input.channel, issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid }, expiresAt: expiry(s), deliveryState: "UNCERTAIN", replyReference: null };
-        outcome = { kind: "PREVIEW", preview, token };
+        outcome = { kind: "PREVIEW", preview, ...(!successor ? { token } : {}) };
       } else if (effective.kind === "ASK_FOR_FIELD" || effective.kind === "ASK_FOR_DISAMBIGUATION") {
         if (effective.field === "queryRange") return fail("SEMANTIC");
         const fallback = selectGuidance({ effectiveDirective: effective, directiveValidation: { status: "INVALID", reason: "DIRECTIVE_INVALID" }, replyProposal: { status: "VALID", value: null }, privacyValidation: { status: "VALID" }, language: "vi" });
@@ -279,8 +280,8 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
         const count = !progressed && prior?.pendingReminderQuestion?.field === field ? Math.min(3, prior.pendingReminderQuestion.noProgressCount + 1) : 0;
         s.pendingReminderQuestion = { scope: "REMINDER", field, questionId: outboundId, text: fallback.text!, decisionKind: null, reason: effective.kind === "ASK_FOR_FIELD" ? "MISSING" : effective.reason, noProgressCount: count, deliveryState: "UNCERTAIN", issuedAfterOrder: { receivedAt: s.inbound.receivedAt, rowid: s.inbound.rowid } };
         const alternatives = s.ambiguities.find(u => u.field === field)?.alternatives.map(a => formatPendingFact(field, a.value));
-        if (count >= 2) { if (count === 3) { issue("RESTART_PENDING"); s.pendingReminderQuestion!.decisionKind = "RESTART_PENDING"; } outcome = { kind: "RECOVERY", count: count as 2 | 3, question: fallback.text!, facts: recap(s), ...(count === 3 ? { token } : {}) }; guidance = undefined; }
-        else outcome = { kind: "QUESTION", field, question: fallback.text!, facts: recap(s), alternatives };
+        if (count >= 2) { if (count === 3) { issue("RESTART_PENDING"); s.pendingReminderQuestion!.decisionKind = "RESTART_PENDING"; } outcome = { kind: "RECOVERY", count: count as 2 | 3, question: fallback.text!, questionProvenance: "APPLICATION", facts: recap(s), naturalControls: successor, ...(count === 3 ? { token } : {}) }; guidance = undefined; }
+        else outcome = { kind: "QUESTION", field, question: fallback.text!, questionProvenance: "APPLICATION", facts: recap(s), alternatives };
       } else if (effective.kind === "EXPLAIN_UNSUPPORTED") outcome = { kind: "UNSUPPORTED", capability: effective.issue };
       else return fail("SEMANTIC", "UNKNOWN_DIRECTIVE");
     }
@@ -333,16 +334,17 @@ function adoptSelected(s: SelectedSnapshot, candidate: Candidate | CandidateV3):
   result.requestId = candidate.proposalId; result.draftRevision = (s.draftRevision ?? 0) + 1;
   result.draftCreatedAt = candidate.createdAt; result.draftExpiresAt = candidate.expiresAt;
   result.pendingReminderQuestion = null; result.pendingQueryQuestion = null; result.lifecycle = "CLARIFYING";
+  const resultSlots: ContextSlots = result.slots;
   for (const change of proposal.data.changes) {
     if (change.operation === "CLEAR") continue;
     const evidence = candidate.evidenceIndex.find(e => e.field === change.field)?.evidence;
     if (!evidence?.length) return null;
     const referenceTime = evidence.map(e => result.transcript.find(t => t.id === e.sourceTurnId)?.receivedAt).filter((t): t is string => !!t).sort().at(-1);
     if (!referenceTime) return null;
-    Object.assign(result.slots[change.field] ??= {state:"MISSING",value:null,fact:null,evidence:[],provenance:null,resolution:null,proposalRevision:result.draftRevision!}, { state: "RESOLVED", value: structuredClone(change.value), evidence: structuredClone(evidence), provenance: { kind: "EXPLICIT_USER" }, resolution: { method: "EXPLICIT_OPERAND", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies: [] } });
+    Object.assign(resultSlots[change.field] ??= {state:"MISSING",value:null,fact:null,evidence:[],provenance:null,resolution:null,proposalRevision:result.draftRevision!}, { state: "RESOLVED", value: structuredClone(change.value), evidence: structuredClone(evidence), provenance: { kind: "EXPLICIT_USER" }, resolution: { method: "EXPLICIT_OPERAND", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies: [] } });
   }
   const facts = V3_SLOT_NAMES.flatMap(field => {
-    const slot = result.slots[field]; if (!slot || slot.value === null) return [];
+    const slot = resultSlots[field]; if (!slot || slot.value === null) return [];
     slot.fact = `f${V3_SLOT_NAMES.indexOf(field) + 1}`;
     return [{ alias: slot.fact, scope: "REMINDER", field, value: slot.value, evidenceSlot: field, provenance: slot.provenance, sourceReferenceTime: slot.resolution!.referenceTime, dependencies: [] }];
   });

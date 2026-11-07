@@ -28,7 +28,7 @@ it("keeps greeting, abandonment and failure honest", () => {
   }
 });
 it.each([
-  { addressStyle: 'sep' as const, customDisplayName: null, expected: 'sếp' },
+  { addressStyle: 'sep' as const, customDisplayName: null, expected: 'Sếp' },
   { addressStyle: 'custom' as const, customDisplayName: 'Chị Tuyền', expected: 'Chị Tuyền' },
   { addressStyle: 'ong_tui' as const, customDisplayName: null, expected: 'ông' },
 ])('uses saved address in greeting and clarification: $addressStyle', preferences => {

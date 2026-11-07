@@ -77,7 +77,10 @@ export async function validateConfirmation(snapshot: ContextSnapshotV1 | Context
   const rendered = renderReminderDetails(preview.title, preview.details, preview.occurrences, preview.prefix.length + preview.suffix.length);
   if (!selected || selected.role !== "ASSISTANT" || selected.kind !== "PREVIEW" || selected.deliveryState !== "SENT"
     || selected.id !== p?.previewId || rendered.status !== "COMPLETE" || selected.text !== preview.prefix + rendered.text + preview.suffix) return false;
-  if (proof.response.kind === "TOKEN" && !selected.controlSpans.some(c => c.handle === snapshot.pendingDecision!.tokenHandle)) return false;
+  // A chat token must have appeared in its delivered legacy preview. The web
+  // session presents its opaque registry token through authenticated controls,
+  // and is already bound to the same owner, chat, revision and preview hash.
+  if (authority.kind === "CHAT" && proof.response.kind === "TOKEN" && !selected.controlSpans.some(c => c.handle === snapshot.pendingDecision!.tokenHandle)) return false;
   return !!p && p.deliveryState === "SENT" && p.previewId === snapshot.pendingDecision!.previewId
     && p.draftRevision === proof.draftRevision && p.draftHash === proof.draftHash
     && p.draftHash === await previewHash(preview) && Date.parse(p.expiresAt) > now;

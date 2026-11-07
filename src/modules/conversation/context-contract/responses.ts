@@ -19,10 +19,10 @@ export type FailureReason = "PROVIDER" | "CONFIG" | "BUDGET" | "CONTEXT" | "SIZE
 export type ReplyOutcome =
   | { kind: "QUESTION"; question: string; questionProvenance?: "APPLICATION"; facts: string[]; field: z.infer<typeof IssueFieldSchema>; alternatives?: string[] }
   | { kind: "PREVIEW"; preview: CanonicalPreview; token?: string }
-  | { kind: "DECISION"; decisionKind: PendingDecision["kind"]; token: string; facts: string[] }
+  | { kind: "DECISION"; decisionKind: PendingDecision["kind"]; token: string; facts: string[]; naturalControls?: boolean }
   | { kind: "UNSUPPORTED"; capability: string }
   | { kind: "QUERY"; resolution: QueryResolution; result?: ContextQueryResult; titles?: ReadonlyMap<string, string> }
-  | { kind: "RECOVERY"; count: 2 | 3; question: string; questionProvenance?: "APPLICATION"; facts: string[]; token?: string }
+  | { kind: "RECOVERY"; count: 2 | 3; question: string; questionProvenance?: "APPLICATION"; facts: string[]; token?: string; naturalControls?: boolean }
   | { kind: "FAILURE"; reason: FailureReason }
   | { kind: "MUTATION"; result: ConfirmationResult }
   | { kind: "NOTICE"; notice: "DECLINED" | "ABANDONED" | "RESTARTED" | "AMBIGUOUS_TARGET" | "AMBIGUOUS_SEMANTIC_TARGET" | "ESCAPE_REQUIRED" | "RESUME" | "CHECKING" | "HELP" | "GREET" | "DECISION_NOT_VISIBLE" };
@@ -41,7 +41,7 @@ const failures: Record<FailureReason, string> = {
 const notices = {
   DECLINED: "Đã từ chối lựa chọn này. Bản nháp còn hiệu lực vẫn được giữ nguyên.",
   ABANDONED: "Đã bỏ yêu cầu chưa lưu.", RESTARTED: "Bạn muốn được nhắc việc gì mới?",
-  AMBIGUOUS_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Trả lời 2 để từ chối đề xuất mới trước.",
+  AMBIGUOUS_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Trả lời Không để từ chối đề xuất mới trước.",
   AMBIGUOUS_SEMANTIC_TARGET: "Bạn muốn bỏ bản nháp hiện tại hay đề xuất mới? Chưa bỏ yêu cầu nào. Mình cần làm rõ yêu cầu bạn đang nói tới.",
   ESCAPE_REQUIRED: "Để bỏ yêu cầu chưa lưu hiện tại, hãy trả lời riêng Bỏ. Nếu đang có cả bản nháp và đề xuất mới, hãy chọn rõ đối tượng trước.",
   RESUME: "Bản nháp còn hiệu lực được giữ nguyên. Bạn có thể tiếp tục để xem lại câu hỏi.",
@@ -104,7 +104,9 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
     }
     case "DECISION":
       kind = "DECISION"; facts(outcome.facts); prose(decisionQuestion(outcome.decisionKind), "QUESTION");
-      add(`${outcome.decisionKind === "SAVE_PREVIEW" ? "Xác nhận" : "Đồng ý"} ${outcome.token}`, "CONTROL", outcome.token); add("Trả lời 2 để từ chối.", "CONTROL"); break;
+      if (outcome.naturalControls) add("Trả lời Có hoặc Không.", "CONTROL");
+      else { add(`${outcome.decisionKind === "SAVE_PREVIEW" ? "Xác nhận" : "Đồng ý"} ${outcome.token}`, "CONTROL", outcome.token); add("Trả lời 2 để từ chối.", "CONTROL"); }
+      break;
     case "UNSUPPORTED": {
       const explanations: Record<string, string> = {
         YEARLY: "Lặp hằng năm chưa được hỗ trợ. Có thể cân nhắc lời nhắc một lần bằng một lựa chọn riêng.",
@@ -127,7 +129,8 @@ export function composeContextReply(outcome: ReplyOutcome, guidance: GuidanceSel
     }
     case "RECOVERY":
       kind = "RECOVERY"; facts(outcome.facts); add(outcome.count === 2 ? `Thông tin đang giữ ở trên. ${outcome.question}` : "Bản nháp vẫn được giữ nguyên và không gia hạn. Bạn có thể trả lời Bỏ để hủy yêu cầu chưa lưu, hoặc đồng ý bắt đầu lại.", "QUESTION", undefined, outcome.count === 3 || outcome.questionProvenance === "APPLICATION" ? { provenance: "APPLICATION_PROSE" } : {});
-      if (outcome.count === 3 && outcome.token) add(`Đồng ý ${outcome.token}`, "CONTROL", outcome.token); break;
+      if (outcome.count === 3 && outcome.naturalControls) add("Trả lời Có để bắt đầu lại hoặc Không để giữ bản nháp.", "CONTROL");
+      else if (outcome.count === 3 && outcome.token) add(`Đồng ý ${outcome.token}`, "CONTROL", outcome.token); break;
     case "FAILURE": prose(failures[outcome.reason]); break;
     case "NOTICE":
       if (outcome.notice === "HELP" && guidance.source === "MODEL_GUIDANCE" && isEligibleGuidanceText(guidance.text)) {

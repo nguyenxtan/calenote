@@ -17,11 +17,12 @@ it('rejects a bare approval received before/equal delivery while preserving the 
  expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(1);
  expect(h.inputs).toHaveLength(1);
 });
-it('accepts an addressed token despite coarse or skewed provider timestamp, and permits cancellation',async()=>{
+it('does not let a hidden token bypass a coarse delivery timestamp, and permits cancellation',async()=>{
  const h=await harness([proposal(complete)]);h.deps.now=()=>now+100;
  expect(await h.turn(0,completeText)).toEqual({status:'DRAFT_CREATED'});
  const state=(await h.read(1))!;
- expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'REJECTED'});
+ expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(0);
  const cancel=await harness([proposal(complete)]);cancel.deps.now=()=>now+100;
  expect(await cancel.turn(0,completeText)).toEqual({status:'DRAFT_CREATED'});
  expect(await cancel.turn(1,'hủy')).toEqual({status:'CANCELLED'});
@@ -31,8 +32,7 @@ it('old snapshots without a delivery timestamp require an addressed proof rather
  const old=structuredClone((await h.read(1))!);delete (old.pendingDecision as typeof old.pendingDecision&{deliveredAt?:string}).deliveredAt;
  const scope=h.f.scope(1),observed=await h.deps.store.observe(scope);if('failure' in observed)throw Error(observed.failure);
  const authority={kind:'CHAT' as const,scope};
- const bare=selectControl('Có.',old.pendingDecision,authority,{snapshot:old,now:scope.now});if(bare.kind!=='APPROVE')throw Error('approval');
- expect(await createControlProof(old,observed.observation.inbound,'Có.',bare,authority,scope.now)).toBeNull();
+ expect(selectControl('Có.',old.pendingDecision,authority,{snapshot:old,now:scope.now})).toEqual({kind:'NONE'});
  const text=`xác nhận ${old.pendingDecision!.tokenHandle}`,addressed=selectControl(text,old.pendingDecision,authority,{snapshot:old,now:scope.now});if(addressed.kind!=='APPROVE')throw Error('addressed');
  expect(await createControlProof(old,observed.observation.inbound,text,addressed,authority,scope.now)).not.toBeNull();
 });
