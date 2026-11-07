@@ -24,8 +24,7 @@ async function created(proposals = [weekly()], texts = [weeklyText()]) {
   let turn = 0;
   for (const text of texts) {
     expect(await h.turn(turn, text), JSON.stringify(h.events)).toEqual({ status: "DRAFT_CREATED" });
-    const state = (await h.read(turn + 1))!;
-    expect(await h.turn(turn + 1, `xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
+    expect(await h.turn(turn + 1, "Có.")).toEqual({ status: "CONFIRMED" });
     turn += 2;
   }
   const store = new D1CanonicalSeriesStore(h.f.db, h.f.keyring);
@@ -176,7 +175,7 @@ it("a current snoozed reminder keeps completed roots manageable and visible",asy
  expect((await store.list(principal,at)).find(s=>s.publicId===publicId)).toMatchObject({state:'CANCELLED',currentReminders:[{status:'CANCELLED'}]});
 });
 async function untrackedCreated(){
- const h=await harness([weekly()]);expect(await h.turn(0,weeklyText())).toEqual({status:'DRAFT_CREATED'});const state=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ const h=await harness([weekly()]);expect(await h.turn(0,weeklyText())).toEqual({status:'DRAFT_CREATED'});expect(await h.turn(1,'Có.')).toEqual({status:'CONFIRMED'});
  // 0014 deliberately leaves pre-existing canonical reminders untracked.
  h.f.sqlite!.sqlite.exec(readFileSync('migrations/0014_reminder_follow_through.sql','utf8'));
  expect(await h.f.db.prepare('SELECT count(*) n FROM follow_through_items').first('n')).toBe(0);

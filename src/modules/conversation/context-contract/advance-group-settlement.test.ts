@@ -9,7 +9,7 @@ it.each([["DONE","PENDING"],["STOP","PENDING"],["DONE","CLAIMED"],["STOP","CLAIM
  for(const file of ["0014_reminder_follow_through.sql","0015_personal_assistant.sql","0016_personal_assistant_dispatch.sql","0022_advance_group_settlement.sql"]){if(existsSync(`migrations/${file}`))h.f.sqlite!.sqlite.exec(readFileSync(`migrations/${file}`,"utf8"));}
  h.deps.getReplyPreferences=async()=>({addressStyle:"sep",customDisplayName:null,advanceReminderDays:2,advanceReminderHours:3});
  expect(await h.turn(0,"Ngày 02/10/2026 lúc 15h có cuộc họp QA, nhắc giúp tôi.")).toEqual({status:"DRAFT_CREATED"});
- const s=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${s.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
+ expect(await h.turn(1,"Có.")).toEqual({status:"CONFIRMED"});
  const service=new D1FollowThroughService(h.f.db,h.f.keyring,{now:()=>h.f.scope(2).now});const scope={userId:"owner"};
  const tasks=(await service.list(scope)).items;expect(tasks).toHaveLength(2);
  if(siblingStatus.startsWith("CLAIMED")) await h.f.db.prepare("UPDATE reminders SET status='CLAIMED',claimed_at=? WHERE public_id=?").bind(h.f.scope(2).now,tasks[1].currentReminderPublicId).run();

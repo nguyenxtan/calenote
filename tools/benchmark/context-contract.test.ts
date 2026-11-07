@@ -59,7 +59,7 @@ it("live probe uses the production callable gateway and financial reservation wi
     expect(draft).toMatchObject({ status: "DRAFT_CREATED", actualDispatches: 1, mutations: 0, fullSchemaValid: true });
     expect(probe.events.find(e => e.event === "BUDGET_RESERVED")).toMatchObject({ maximumCostMicrounits: 105472 });
     expect(probe.events.find(e => e.event === "REQUEST_DISPATCHED")).toMatchObject({ mode: "LIVE" });
-    const confirmed = await probe.turn(`Xác nhận ${probe.issuedControlToken()}`, "2026-09-28T03:01:00Z");
+    const confirmed = await probe.turn("Có.", "2026-09-28T03:01:00Z");
     expect(confirmed).toMatchObject({ status: "CONFIRMED", dispatches: 0, mutations: 1, childCount: 1 });
     expect(confirmed.canonicalReminders?.[0]).toMatchObject({ location: "ở nhà", notes: "hỏi thăm sức khỏe" });
     expect(calls).toBe(1);
@@ -149,7 +149,7 @@ it("confirmed finite series commits exactly two complete children once and repla
   const probe = await createContextContractProbe({ sourceSha: "a".repeat(40), referenceNow: Date.parse(script.turns[0].receipt) }, input => frozenContextProposal(input, "R07", index));
   try {
     for (; index < script.turns.length; index++) await probe.turn(script.turns[index].text, script.turns[index].receipt);
-    const confirmed = await probe.turn(`Xác nhận ${probe.issuedControlToken()}`, "2026-09-28T03:04:00Z");
+    const confirmed = await probe.turn("Có.", "2026-09-28T03:04:00Z");
     expect(confirmed).toMatchObject({ status: "CONFIRMED", dispatches: 0, mutations: 2, transactionCommits: 1, childCount: 2, sendAttempts: 1 });
     expect(confirmed.canonicalReminders).toEqual(["2026-10-09 09:00", "2026-10-10 09:00"].map(scheduled => ({
       title: "đi thi", scheduled, location: "Quang Trung", notes: "nhớ mang giấy tờ", eventDate: "2026-10-11", eventTime: null, calendar: "GREGORIAN" })));
