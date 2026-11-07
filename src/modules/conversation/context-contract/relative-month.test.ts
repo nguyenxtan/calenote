@@ -65,6 +65,21 @@ it.each(['Không nhắc sau 4 tháng.','Nếu sau 4 tháng thì nhắc sửa má
  expect(validateEvidenceV3(semantic,built).status).toBe('VALID');
 });
 
+it.each([
+ ['Nhắc họp ngày 5 tháng sau lúc 9h.',5,5,'2026-12-05'],
+ ['Nhắc họp mùng 1 tháng tới lúc 9h.',1,1,'2026-12-01'],
+ ['Nhắc họp mồng 12 tháng sau lúc 9h.',12,12,'2026-12-12'],
+ ['Nhắc họp ngày mười một tháng sau lúc 9h.',11,11,'2026-12-11'],
+ ['Nhắc họp ngày hai mươi hai tháng sau lúc 9h.',22,2,'2026-12-22'],
+] as const)('keeps the day of next month distinct from a month duration: %s',(text,day,offsetMonths,expectedDate)=>{
+ const civil={kind:'CIVIL_DATE',calendar:'GREGORIAN',day,month:12,year:null,leapMonth:null};
+ const state=apply(text,{title:'họp',reminderDate:civil,reminderTime:{hour:9,minute:0,qualifier:'H24'}});
+ expect(resolveRequest(state,receipt,lunarCalendar)).toMatchObject({status:'READY',occurrences:[{localDate:expectedDate}]});
+ const built=build(text),evidence=[{kind:'USER_QUOTE',turn:0,quote:text,occurrence:1}];
+ const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'reminderDate',operation:'SET',value:{kind:'RELATIVE_MONTH',offsetMonths},evidence}],query:null,uncertainties:[]});
+ expect(validateEvidenceV3(semantic,built)).toEqual({status:'REFUSED',reason:'RELATIVE_MONTH_NOT_SUPPORTED'});
+});
+
 it('a replaced retained month cannot cover an omitted current authored month',()=>{
  const state=apply('Sau 4 tháng nhắc sửa máy lạnh.',{title:'sửa máy lạnh',reminderDate:month}),text='Đổi thành nhắc 4 tháng sau.',built=build(text,state,receipt+60000),evidence=[{kind:'USER_QUOTE',turn:built.input.currentTurn,quote:text,occurrence:1}];
  const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'CURRENT',evidence},changes:[{field:'reminderDate',operation:'REPLACE',value:{kind:'RELATIVE_DAY',offsetDays:0},evidence}],query:null,uncertainties:[]});

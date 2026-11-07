@@ -19,6 +19,10 @@ export function supportsRelativeMonthDate(value:unknown,sources:readonly SourceE
    const start=source.viewSpan.start+[...quote.slice(0,match.index)].length,end=start+[...match[0]].length;
    if(/[\p{L}\p{M}\p{N}_.,/:+-]/u.test(view[start-1]??'')||/[\p{L}\p{M}\p{N}_]/u.test(view[end]??''))continue;
    const prefix=view.slice(0,start).join('').split(/[;,.!?\n]/u).at(-1)??'',suffix=view.slice(end).join('').replace(/^[\s\p{P}]+/u,'');
+   // A day in another month ("ngày 5 tháng sau") does not author a
+   // five-month duration. Check the full source even if its quote starts at 5;
+   // word-number tails such as "mười một" must keep the same day ownership.
+   if(!/^sau\s/u.test(match[0])&&/(?:^|[^\p{L}\p{M}\p{N}_])(?:ngày|mùng|mồng)\s+(?:(?:mười|(?:hai|ba)\s+mươi)\s+)?$/u.test(prefix))continue;
    if(/(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|tên|chữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)||/^(?:thì\s+)?(?:không|ko|đừng|chẳng|chưa)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(suffix))continue;
    return true;
   }
