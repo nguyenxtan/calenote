@@ -222,7 +222,9 @@ async function transitionSelected(input: TransitionInput | TransitionInputV3, su
           const pending = merge.candidate.pendingSemanticCandidate, q = merge.candidate.pendingReminderQuestion;
           if (!pending || !q || pending.questionId !== q.questionId) return fail("CONTEXT");
           outboundId = q.questionId;
-          outcome = { kind: "QUESTION", field: "operation", question: q.text, facts: recap(s) };
+          // Retained question text may contain selected model prose or a prior
+          // display name. Rebuild the typed backend question before addressing.
+          outcome = { kind: "QUESTION", field: "operation", question: "Bạn muốn cập nhật yêu cầu hiện tại hay tạo yêu cầu mới?", questionProvenance: "APPLICATION", facts: recap(s) };
         }
       } else if (merge.status === "NEEDS_REPLACEMENT") {
         const candidate = candidateFromPatchV3(merge.proposed, proposalId);
