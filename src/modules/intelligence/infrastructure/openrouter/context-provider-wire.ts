@@ -1,7 +1,7 @@
 import { LegacyV2ConversationInterpretationSchema as ConversationInterpretationSchema, LegacyV2InterpretationJsonSchema as InterpretationJsonSchema, LegacyV2UncertaintySchema as UncertaintySchema, LegacyV2parseInterpretationSections as parseInterpretationSections, type LegacyV2InterpretationSections as InterpretationSections, type LegacyV2ConversationInterpretation as ConversationInterpretation } from "../../../conversation/context-contract/contracts";
 import { projectCanonicalValidation, projectControlEnum, projectWireValidation, projectDateOperandFailure, projectUncertaintyWireShape, projectCatalogueDiagnostic, type CatalogueDiagnostic, type DateOperandDiagnostic, type CanonicalValidationDiagnostics } from "../../../conversation/context-contract/validation-diagnostics";
 import { googleLiteEuProviderWireSchema } from "./provider-wire-schema";
-import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
+import { ConversationInterpretationV3Schema, DateOperandSchema, InterpretationJsonSchemaV3, HistoricalInterpretationJsonSchemaV3, HistoricalUncertaintyV3Schema, UncertaintyV3Schema, parseInterpretationSectionsV3, type ConversationInterpretationV3, type InterpretationSectionsV3 } from "../../../conversation/context-contract/contracts";
 import { CONTEXT_PROTOCOL_V3, isContextProtocolV3, type ContextProtocolV3 } from "../../../conversation/context-contract/protocol";
 import type { ProviderWireSchemaV3 } from "./provider-wire-schema";
 import {issueListTransport, type ContextGatewayInterpretation, type DecodedListCore, type ListPeriodProposal} from "../../../conversation/context-contract/list-period-transport";
@@ -22,6 +22,7 @@ export const UNCERTAINTY_FIELD_WIRE_CODE_V1 = Object.freeze({
   intent: 13, queryRange: 14, operation: 15,
 } as const satisfies Record<ConversationInterpretation["uncertainties"][number]["field"], number>);
 export const UNCERTAINTY_FIELD_WIRE_CODE_V2 = Object.freeze({...UNCERTAINTY_FIELD_WIRE_CODE_V1,leadOffsetHours:16,leadOffsetMinutes:17} as const);
+export const UNCERTAINTY_FIELD_WIRE_CODE_V3 = Object.freeze({...UNCERTAINTY_FIELD_WIRE_CODE_V2,leadOffsetWeeks:18} as const);
 const successorUncertaintyFieldByCode = new Map<number,string>(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).map(([field,code])=>[code,field]));
 const uncertaintyFieldByCode = new Map<number, string>(Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).map(([field, code]) => [code, field]));
 type Schema = { [key: string]: unknown; $ref?: string; type?: string; properties?: Record<string, Schema>; required?: string[]; additionalProperties?: boolean; $defs?: Record<string, Schema>; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; items?: Schema; enum?: unknown[]; const?: unknown; };
@@ -378,7 +379,8 @@ function omitOwnedV3(node: Schema): Schema {
   }
   return result;
 }
-const originalV3 = omitOwnedV3(googleLiteEuProviderWireSchema(InterpretationJsonSchemaV3).schema as Schema);
+const originalV3 = omitOwnedV3(googleLiteEuProviderWireSchema(HistoricalInterpretationJsonSchemaV3).schema as Schema);
+const activeOriginalV3 = omitOwnedV3(googleLiteEuProviderWireSchema(InterpretationJsonSchemaV3).schema as Schema);
 function semanticEvidenceSlots(root: Schema): Schema {
   const visit = (node: Schema): Schema => {
     const result = mapSchemas(node, visit);
@@ -569,20 +571,20 @@ const providerSchemaV3 = indexedReminderSchema(operationSchema(outgoingSemanticK
 /** Move only explicitly model-authored carrier data; order and ownership are
  * strict transport assertions, never an opportunity to repair a proposal. */
 const singletonChangeDefinitions=[{field:"title",root:"titleChange"},{field:"reminderDate",root:"reminderDateChange"},{field:"reminderTime",root:"reminderTimeChange"},{field:"eventDate",root:"eventDateChange"},{field:"eventTime",root:"eventTimeChange"},{field:"eventRelation",root:"eventRelationChange"},{field:"frequency",root:"frequencyChange"},{field:"occurrenceCount",root:"occurrenceCountChange"},{field:"endDate",root:"endDateChange"},{field:"location",root:"locationChange"}] as const;
-function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false,typedTransport=false):Record<string,unknown>{
+function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode",required=false,yearNullEventDate=false,typedTransport=false,activeSuccessor=false):Record<string,unknown>{
   const definitions=singletonChangeDefinitions;
   const own=(object:object,key:string,path:PropertyKey[])=>{const descriptor=Object.getOwnPropertyDescriptor(object,key);if(!descriptor)throw new WireShapeFailure(path,"REQUIRED_PROPERTY");if(!Object.hasOwn(descriptor,"value"))throw new WireShapeFailure(path,"object");return descriptor.value;};
   const ranks=new Set<number>(),ranked:Array<{rank:number;change:unknown}>=[];
   const wrapper=(value:unknown,path:PropertyKey[])=>{
     if(!value||typeof value!=="object"||Array.isArray(value))throw new WireShapeFailure(path,"object");
     requireWireKeys(value as Record<string,unknown>,["rank","change"],["rank","change"],path);
-    const rank=decodeAuthoredChangeRank(own(value,"rank",[...path,"rank"])),change=own(value,"change",[...path,"change"]);
+    const rawRank=own(value,"rank",[...path,"rank"]),rank=activeSuccessor&&rawRank===15?15:decodeAuthoredChangeRank(rawRank),change=own(value,"change",[...path,"change"]);
     if(rank===undefined||ranks.has(rank))throw new WireShapeFailure([...path,"rank"],"CHANGE_RANK");
     ranks.add(rank);return {rank,change};
   };
   const sourceChanges=own(raw,"changes",["changes"]);
   if(!Array.isArray(sourceChanges))throw new WireShapeFailure(["changes"],"array");
-  const length=own(sourceChanges,"length",["changes"]);if(!Number.isSafeInteger(length)||length<0||length>13)throw new WireShapeFailure(["changes"],"array");
+  const length=own(sourceChanges,"length",["changes"]);if(!Number.isSafeInteger(length)||length<0||length>(activeSuccessor?16:13))throw new WireShapeFailure(["changes"],"array");
   const ordinaryChanges:unknown[]=[];let prior=-1;
   for(let index=0;index<length;index++){const item=own(sourceChanges,String(index),["changes",index]);if(mode==="encode")ordinaryChanges.push(item);else{const entry=wrapper(item,["changes",index]);if(entry.rank<=prior)throw new WireShapeFailure(["changes",index,"rank"],"CHANGE_RANK");prior=entry.rank;ordinaryChanges.push(entry.change);ranked.push(entry);}}
   if(mode==="decode"){
@@ -593,7 +595,7 @@ function indexedChangeCarriers(raw:Record<string,unknown>,mode:"encode"|"decode"
   const emitted=new Map<string,unknown>();
   const fieldOf=(change:unknown,path:(string|number)[]=["changes"]):string=>{
     const field=change&&typeof change==="object"&&!Array.isArray(change)?Object.getOwnPropertyDescriptor(change,"field")?.value:undefined;
-    if(typeof field!=="string"||!(CHANGE_ORDER_FIELDS_V3 as readonly string[]).includes(field))throw new WireShapeFailure(path,"CONTROL_ENUM");
+    if(typeof field!=="string"||!(CHANGE_ORDER_FIELDS_V3 as readonly string[]).includes(field)&&!(activeSuccessor&&field==='leadOffsetWeeks'))throw new WireShapeFailure(path,"CONTROL_ENUM");
     return field;
   };
   ordinaryChanges.forEach((change,index)=>{const path=mode==="decode"?["changes",index,"change"]:["changes",index],field=fieldOf(change,[...path,"field"]);if(mode==="decode"&&change&&typeof change==="object")for(const key of ["field","operation","value","evidence"])own(change,key,[...path,key]);emitted.set(field,change);});
@@ -1007,7 +1009,7 @@ export function encodeGoogleLiteEuContextV3(canonical: ConversationInterpretatio
   if (parsed.query?.kind === "LIST") generated.query = Object.fromEntries(Object.entries(parsed.query).filter(([key]) => key !== "statusScope"));
   const output = codec(originalV3, generated, "encode", [], originalV3) as Record<string, unknown>;
   const encodedUncertainties=output.uncertainties as Array<{alternatives:Array<{evidence:unknown}>}>;
-  output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V2[item.field], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
+  output.uncertainties = parsed.uncertainties.map((item,index) => ({ fieldCode: UNCERTAINTY_FIELD_WIRE_CODE_V2[item.field as keyof typeof UNCERTAINTY_FIELD_WIRE_CODE_V2], reason: item.reason, alternatives: item.alternatives.map((alternative,position) => JSON.stringify({value:alternative.value,evidence:encodedUncertainties[index].alternatives[position].evidence})) }));
   return singletonJsonTransport(indexedChangeCarriers(operationValues(dateJsonOperands(output,"encode",!!input&&isInitialEventDateYearNullRequired(input)),"encode"),"encode"),"encode");
 }
 export function parseGoogleLiteEuContextSectionsV3(raw: unknown, selected: ContextProtocolV3, observeInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeWireInvalid?: Parameters<typeof parseInterpretationSectionsV3>[1], observeDecoded?: (value: unknown) => void): InterpretationSectionsV3 {
@@ -1066,6 +1068,9 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
         decoded[key] = key === "conversationDirective" ? { kind: "INVALID_PROVIDER_WIRE" } : object[key];
       }
     }
+    // Opaque uncertainty values predate the active date family. Keep their
+    // acceptance language frozen while preserving existing invalid-row diagnostics.
+    if (Array.isArray(decoded.uncertainties) && decoded.uncertainties.some(issue => UncertaintyV3Schema.safeParse(issue).success && !HistoricalUncertaintyV3Schema.safeParse(issue).success)) return {status:"REFUSED",reason:"SEMANTIC_PATCH_INVALID"};
     // Diagnostic observers receive a detached copy and cannot alter acceptance.
     // Runtime callers omit this hook; canonical predicates remain authoritative.
     if (observeDecoded) try { observeDecoded(structuredClone(decoded)); } catch { /* Observation is non-authoritative. */ }
@@ -1095,8 +1100,8 @@ function decodeContextSectionsV3(raw: unknown, selected: ContextProtocolV3, stag
  * Existing wire104 calls retain their default behavior and exact bytes. */
 export const contextTypedWirePrimitives = Object.freeze({
  selectedSchema:typedWireSchemaV3, originalSchema:originalV3,
- canonicalCodec:(raw:unknown,direction:"encode"|"decode")=>codec(originalV3,raw,direction,[],originalV3,false,true),
- indexedChanges:(raw:Record<string,unknown>,direction:"encode"|"decode",required=false)=>indexedChangeCarriers(raw,direction,required,false,true),
+ canonicalCodec:(raw:unknown,direction:"encode"|"decode",activeSuccessor=false)=>{const schema=activeSuccessor?activeOriginalV3:originalV3;return codec(schema,raw,direction,[],schema,false,true);},
+ indexedChanges:(raw:Record<string,unknown>,direction:"encode"|"decode",required=false,activeSuccessor=false)=>indexedChangeCarriers(raw,direction,required,false,true,activeSuccessor),
  canonicalField:(key:string,value:unknown)=>codec(originalV3.properties![key],value,"decode",[key],originalV3,false,true),
  operationValues, singletonChangeDefinitions,
 });

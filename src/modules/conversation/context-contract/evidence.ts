@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete, titleCoverageComplete, notesCoverageComplete, reminderDateCoverageComplete } from "./semantic-completeness";
+import {supportsRelativeMonthDate,relativeMonthDateCovered} from './relative-month-evidence';
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { supportsCadenceOperand, leadDistanceCovered, continuousClockCadenceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
@@ -436,6 +437,8 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if (!listRangeCandidate) checkYear(requested);
     if ((field === "leadOffsetHours" || field === "leadOffsetMinutes") && requested !== null && !firstFact
       && !supportsLeadDuration(field === "leadOffsetHours" ? "HOUR" : "MINUTE", requested, distinct, built.evidenceIndex)) fail("LEAD_DURATION_NOT_EXPLICIT");
+    if (["eventDate","reminderDate","endDate"].includes(field) && requested && typeof requested==='object' && 'kind' in requested && requested.kind==='RELATIVE_MONTH' && !firstFact
+      && !supportsRelativeMonthDate(requested,distinct,built.evidenceIndex)) fail('RELATIVE_MONTH_NOT_SUPPORTED');
     if (field === "leadOffsetWeeks" && requested !== null && !firstFact
       && !supportsLeadWeekOffset(requested, distinct, built.evidenceIndex, target?.kind === "CURRENT" && retainedSlots?.eventDate.state === "RESOLVED")) fail("LEAD_WEEK_OFFSET_NOT_SUPPORTED");
     if (field === "leadOffsetDays" && requested !== null && !firstFact
@@ -721,6 +724,8 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       value.requestTarget?.kind === "CURRENT" && retainedSlots?.leadOffsetDays.state !== "CONFLICT" ? retainedSlots?.leadOffsetDays.value : null,
       value.requestTarget?.kind === "CURRENT" && retainedSlots?.frequency.value === "DAILY" && retainedSlots?.frequency.state !== "CONFLICT" && retainedSlots?.occurrenceCount.state !== "CONFLICT" ? retainedSlots?.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
     if (value.intent === "CREATE_REMINDER" && !leadDurationCovered(currentTurn,keptChanges.map(p=>p.change))) fail("SEMANTIC_LEAD_DURATION_OMITTED");
+    if (value.intent === 'CREATE_REMINDER' && !relativeMonthDateCovered(currentTurn,keptChanges.map(p=>p.change),resolvedUncertainties.flatMap(issue=>issue.alternatives.map(alternative=>({field:issue.field,value:alternative.value}))),
+      value.requestTarget?.kind==='CURRENT' ? (['eventDate','reminderDate','endDate'] as const).filter(field=>retainedSlots?.[field].state!=='CONFLICT'&&!keptChanges.some(({change})=>change.field===field)).map(field=>retainedSlots?.[field].value) : [])) fail('SEMANTIC_RELATIVE_MONTH_OMITTED');
     if (value.intent === "CREATE_REMINDER" && !leadWeekOffsetCovered(currentTurn,
       keptChanges.map(p=>p.change), resolvedUncertainties.flatMap(u=>u.alternatives.map(a=>({field:u.field,value:a.value}))),
       value.requestTarget?.kind === "CURRENT" && retainedSlots?.leadOffsetWeeks?.state !== "CONFLICT" ? retainedSlots?.leadOffsetWeeks?.value : null,

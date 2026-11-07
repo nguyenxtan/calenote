@@ -5,7 +5,7 @@ type Scope=keyof typeof COMPACT_KEYS;
 const FIELD_KEYS={title:'title',location:'location',notes:'notes',eventDate:'event',eventTime:'e',reminderDate:'notify',reminderTime:'g',calendar:'h',frequency:'i',occurrenceCount:'j',eventRelation:'k',leadOffsetDays:'l',endDate:'until'} as const;
 // Duration owners retain their canonical field names when selected. Existing
 // compact codes and the public base prompt codebook remain byte-identical.
-const SELECTED_FIELD_KEYS={...FIELD_KEYS,leadOffsetHours:'leadOffsetHours',leadOffsetMinutes:'leadOffsetMinutes'} as const;
+const SELECTED_FIELD_KEYS={...FIELD_KEYS,leadOffsetHours:'leadOffsetHours',leadOffsetMinutes:'leadOffsetMinutes',leadOffsetWeeks:'leadOffsetWeeks'} as const;
 export const COMPACT_KEYS={
  root:{operation:'o',changes:'c',query:'q',uncertainties:'u',directive:'g',reply:'r',texts:'x',integers:'n',dates:'d',clocks:'k',periods:'p'},
  operation:{code:'c',targetEvidence:'e',query:'q'},

@@ -144,7 +144,7 @@ export function mergePatchV3(previous: ContextSnapshotV2 | null, patch: Validate
   for (const [index, change] of patch.resolvedChanges.entries()) {
     const slot = candidate.slots[change.field] ??= {state:"MISSING",value:null,fact:null,evidence:[],provenance:null,resolution:null,proposalRevision:candidate.draftRevision ?? 1}, bound = patch.changeEvidence[index];
     const date = change.value && typeof change.value === "object" && "kind" in change.value ? change.value : null;
-    const anchored = date && (date.kind === "RELATIVE_DAY" || date.kind === "WEEKDAY" || (date.kind === "CIVIL_DATE" && date.year === null));
+    const anchored = date && (date.kind === "RELATIVE_DAY" || date.kind === "RELATIVE_MONTH" || date.kind === "WEEKDAY" || (date.kind === "CIVIL_DATE" && date.year === null));
     const localDay = (at: string | undefined) => at ? new Date(Date.parse(at) + 7 * 3600000).toISOString().slice(0, 10) : null;
     const anchorChanged = anchored && localDay(slot.resolution?.referenceTime) !== localDay(bound.referenceTime);
     const sameValue = equal(slot.value, change.value);

@@ -12,7 +12,7 @@ import {orderedChangeSchema,attachOrderedChanges,projectOrderedSmallV3} from './
 import {operationQuerySchema,attachOperationQuery,expandOperationQuery} from './context-small-operation-query';
 import {smallGuidanceSchema} from './context-small-guidance';
 import {CONTEXT_OPERATION_WIRE_METADATA_V1} from './context-provider-wire';
-import {UNCERTAINTY_FIELD_WIRE_CODE_V2} from './context-provider-wire';
+import {UNCERTAINTY_FIELD_WIRE_CODE_V3} from './context-provider-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
 import {keyedNoteValuePattern} from './context-keyed-note-boundary';
 import {keyedClockCorrectionField,keyedClockNotationField,keyedBoundReminderClockRequired} from './context-keyed-clock-correction';
@@ -36,12 +36,12 @@ type Row=Record<string,unknown>;
 import {decodeGoogleLiteEuTypedOrderedContextTransportV3,googleLiteEuTypedOrderedContextValidationSchemaV3,encodeGoogleLiteEuTypedContextV3} from './context-provider-typed-wire';
 type Schema={type?:string;$ref?:string;$defs?:Record<string,Schema>;anyOf?:Schema[];properties?:Record<string,Schema>;items?:Schema;enum?:unknown[];minimum?:number;maximum?:number;minItems?:number;maxItems?:number;required?:string[];additionalProperties?:boolean;pattern?:string};
 const inactiveTables=['texts','integers','dates','clocks','periods'] as const;
-const reminderIssueCodes=new Set<number>(V3_SLOT_NAMES.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V2[field]));
+const reminderIssueCodes=new Set<number>(V3_SLOT_NAMES.map(field=>UNCERTAINTY_FIELD_WIRE_CODE_V3[field]));
 /** Preserve existing admission obligations when singleton carriers become owners.
  * Presence and operation permissions come from the strict policy, never inferred
  * from field eligibility or supplied by the decoder after generation. */
 function retainRequiredOwners(source:Schema,input:ContextInput){
- const policy=googleLiteEuTypedOrderedContextValidationSchemaV3(input),strict=policy.schema as Schema;
+ const policy=googleLiteEuTypedOrderedContextValidationSchemaV3(input,true),strict=policy.schema as Schema;
  const resolve=(node:Schema):Schema=>node.$ref?resolve(strict.$defs![node.$ref.slice('#/$defs/'.length)]):node;
  const leaves=(node:Schema):Schema[]=>{const body=resolve(node);return body.anyOf?body.anyOf.flatMap(leaves):[body];};
  const owners=source.properties!.changes.properties!.owners.properties!;
@@ -62,7 +62,7 @@ function retainRequiredOwners(source:Schema,input:ContextInput){
  const uncertaintyReasons=new Map<number,Set<string>>();
  for(const branch of leaves(strict.properties!.uncertainties.items!)){
   const reasons=resolve(branch.properties!.reason).enum;if(!reasons?.length||!reasons.every(reason=>typeof reason==='string'))throw Error('KEYED_UNCERTAINTY_POLICY');
-  for(const code of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V2))if(accepts(branch.properties!.fieldCode,code)){
+  for(const code of Object.values(UNCERTAINTY_FIELD_WIRE_CODE_V3))if(accepts(branch.properties!.fieldCode,code)){
    const existing=uncertaintyReasons.get(code)??new Set<string>();for(const reason of reasons)existing.add(reason as string);uncertaintyReasons.set(code,existing);
   }
  }
@@ -78,21 +78,21 @@ function retainRequiredOwners(source:Schema,input:ContextInput){
  };
  const rows:Schema[]=[];
  for(const branch of leaves(strict.properties!.uncertainties.items!))for(const[code,allowed]of uncertaintyReasons){
-  if(code===UNCERTAINTY_FIELD_WIRE_CODE_V2.operation||!accepts(branch.properties!.fieldCode,code))continue;
+  if(code===UNCERTAINTY_FIELD_WIRE_CODE_V3.operation||!accepts(branch.properties!.fieldCode,code))continue;
   const reasons=resolve(branch.properties!.reason).enum!.filter(reason=>allowed.has(reason as string));if(!reasons.length)continue;
   const row=inline(branch) as Schema;row.properties!.fieldCode={type:'integer',enum:[code]};row.properties!.reason={type:'string',enum:reasons};rows.push(row);
  }
  return {uncertaintyReasons,uncertaintyRows:rows};
 }
 function selected(input:ContextInput){
- const operations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(input).schema)),ordered=orderedChangeSchema(kindQuerySchema(operations));
+ const operations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(input,true).schema)),ordered=orderedChangeSchema(kindQuerySchema(operations));
  const source=smallGuidanceSchema(operationQuerySchema(changeOwnerSchema(ordered))) as {properties:Record<string,unknown>;required:string[]};
  const changes=source.properties.changes as {required:string[];properties:Record<string,unknown>};
  delete changes.properties.order;changes.required=['owners'];
  const {uncertaintyReasons,uncertaintyRows}=retainRequiredOwners(source as Schema,input),book=primaryEvidenceSourceCodebook(input);
  const materialPrimary=keyedMaterialDetailPrimary(input);
  if(materialPrimary){
-  const primaryOperations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(materialPrimary).schema));
+  const primaryOperations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(materialPrimary,true).schema));
   const primary=changeOwnerSchema(orderedChangeSchema(kindQuerySchema(primaryOperations))) as Schema;
   const owners=(source as Schema).properties!.changes.properties!.owners.properties!;
   const title=owners.title,primaryDate=primary.properties!.changes.properties!.owners.properties!.eventDate;
@@ -122,7 +122,7 @@ function selected(input:ContextInput){
   owner.minItems=1;write.minItems=1;write.items.properties.operation.enum=['SET'];value.enum=['DAILY'];
  }
  for(const key of inactiveTables){const table=source.properties[key] as Schema;if(table.type!=='array'||table.maxItems!==0)throw Error('KEYED_INACTIVE_TABLE_POLICY');delete source.properties[key];source.required=source.required.filter(name=>name!==key);}
- const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V2.operation;
+ const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V3.operation;
  const issues=source.properties.uncertainties as Schema;
  const omittedAlternatives=new Set<string>();
  for(const row of uncertaintyRows){
@@ -131,7 +131,7 @@ function selected(input:ContextInput){
   if(alternatives.maxItems===0){for(const reason of row.properties!.reason.enum!)omittedAlternatives.add(`${row.properties!.fieldCode.enum![0]}/${reason}`);delete row.properties!.alternatives;row.required=row.required!.filter(key=>key!=='alternatives');}
   else {if(alternatives.items?.type!=='object'||!alternatives.items.properties?.value||!alternatives.items.properties.evidence)throw Error('KEYED_TYPED_ALTERNATIVE_POLICY');alternatives.items.properties.evidence={type:'array',minItems:1,maxItems:3,items:{type:'string',enum:[...book.codes]}};}
  }
- const controlFields=new Set<number>([UNCERTAINTY_FIELD_WIRE_CODE_V2.intent,UNCERTAINTY_FIELD_WIRE_CODE_V2.queryRange]);
+ const controlFields=new Set<number>([UNCERTAINTY_FIELD_WIRE_CODE_V3.intent,UNCERTAINTY_FIELD_WIRE_CODE_V3.queryRange]);
  const controlRows=uncertaintyRows.filter(row=>controlFields.has(row.properties!.fieldCode.enum![0] as number)),fieldRows=uncertaintyRows.filter(row=>!controlFields.has(row.properties!.fieldCode.enum![0] as number));
  if(!uncertaintyRows.length)throw Error('KEYED_FIELD_UNCERTAINTY_POLICY');issues.maxItems=fieldRows.length?4:0;issues.items=fieldRows.length?{anyOf:fieldRows}:{type:'object',properties:{},required:[],additionalProperties:false};
  if(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input))issues.maxItems=0;
@@ -221,8 +221,8 @@ function selected(input:ContextInput){
 export function keyedSmallComparisonSchema(input:ContextInput){return selected(input).codec.schema;}
 export function encodeKeyedSmallComparison(value:ConversationInterpretationV3,input:ContextInput){
  const {codec,operations,ordered}=selected(input);
- const flat=attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(encodeInternalFlatV3(value,input)),operations)),value.changes,operations),ordered));
- const {owners}=flat.changes,typed=encodeGoogleLiteEuTypedContextV3(value,input) as Row;return codec.pack({...flat,changes:{owners},uncertainties:typed.uncertainties});
+ const flat=attachOperationQuery(attachChangeOwners(attachOrderedChanges(attachKindQueries(attachOperationValues(attachOwnedClocks(encodeInternalFlatV3(value,input,true)),operations)),value.changes,operations),ordered));
+ const {owners}=flat.changes,typed=encodeGoogleLiteEuTypedContextV3(value,input,true) as Row;return codec.pack({...flat,changes:{owners},uncertainties:typed.uncertainties});
 }
 export function decodeKeyedSmallComparison(raw:unknown,input:ContextInput){
  try{
@@ -230,7 +230,7 @@ export function decodeKeyedSmallComparison(raw:unknown,input:ContextInput){
   const {codec,ordered}=selected(input),value=raw as Record<string,unknown>,core={...value,directive:[],reply:[]},validation=z.fromJSONSchema(codec.schema as Parameters<typeof z.fromJSONSchema>[0]);
   const decoded=codec.unpack(validation.parse(core)),flat=decoded.value;
   for(const [alias,name] of [['directive','directive'],['reply','reply']] as const){try{if(!Object.hasOwn(value,alias))throw Error('ADVICE_MISSING');flat[name]=codec.unpack(validation.parse({...core,[alias]:value[alias]})).value[name];}catch{flat[name]=name==='directive'?[{kind:'INVALID_PROVIDER_WIRE'}]:[{invalid:true}];}}
-  const projected=projectOrderedSmallV3(expandChangeOwners({...expandOperationQuery(flat),changes:{owners:(flat.changes as {owners:Record<string,unknown[]>}).owners,order:V3_SLOT_NAMES.filter(field=>(flat.changes as {owners:Record<string,unknown[]>}).owners[field]?.length===1)}},ordered),input);
-  return decodeGoogleLiteEuTypedOrderedContextTransportV3({...projected,uncertainties:decoded.typedUncertainties},CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input);
+  const projected=projectOrderedSmallV3(expandChangeOwners({...expandOperationQuery(flat),changes:{owners:(flat.changes as {owners:Record<string,unknown[]>}).owners,order:V3_SLOT_NAMES.filter(field=>(flat.changes as {owners:Record<string,unknown[]>}).owners[field]?.length===1)}},ordered),input,true);
+  return decodeGoogleLiteEuTypedOrderedContextTransportV3({...projected,uncertainties:decoded.typedUncertainties},CONTEXT_TYPED_PROTOCOL_V3,undefined,undefined,input,true);
  }catch{return {status:'REFUSED' as const,reason:'SEMANTIC_PATCH_INVALID' as const};}
 }

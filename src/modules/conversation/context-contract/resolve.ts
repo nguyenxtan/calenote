@@ -1,4 +1,4 @@
-import { ClockOperandSchema, DateOperandSchema, SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, type DateOperand } from "./contracts";
+import { ClockOperandSchema, DateOperandV3Schema, SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, type DateOperandV3 } from "./contracts";
 import { encodeContextSnapshot, encodeContextSnapshotV2, type ContextSnapshotV2, type CanonicalDetailsV1, type ContextSlots, type ContextSnapshotV1, type SlotProvenance } from "./state";
 import type { LunarCalendarAdapter } from "../lunar-calendar";
 import { isValidSemanticLocalDate } from "@/modules/semantic/validation";
@@ -16,12 +16,18 @@ const civil = (midnight: number) => new Date(midnight + VN_OFFSET_MS).toISOStrin
 export type DateResolution = { status: "RESOLVED"; date: string; inferredYear: boolean; method: "EXPLICIT_OPERAND" | "POLICY_DEFAULT" | "CALENDAR_CONVERSION" } | { status: "CLARIFY"; reason: string };
 
 /** Calendar arithmetic over typed operands only; source receipt is mandatory. */
-export function resolveDateOperand(operand: DateOperand, receipt: number, calendar: LunarCalendarAdapter): DateResolution {
-  const parsed = DateOperandSchema.safeParse(operand);
+export function resolveDateOperand(operand: DateOperandV3, receipt: number, calendar: LunarCalendarAdapter): DateResolution {
+  const parsed = DateOperandV3Schema.safeParse(operand);
   const clarify = (reason: string): DateResolution => ({ status: "CLARIFY", reason });
   if (!parsed.success || !Number.isSafeInteger(receipt) || !Number.isFinite(new Date(receipt).getTime())) return clarify("INVALID_DATE");
   const value = parsed.data, today = localMidnight(receipt);
   if (value.kind === "RELATIVE_DAY") return { status: "RESOLVED", date: civil(today + value.offsetDays * DAY_MS), inferredYear: false, method: "POLICY_DEFAULT" };
+  if (value.kind === "RELATIVE_MONTH") {
+    const source = new Date(today + VN_OFFSET_MS), monthIndex = source.getUTCFullYear() * 12 + source.getUTCMonth() + value.offsetMonths;
+    const year = Math.floor(monthIndex / 12), month = monthIndex - year * 12 + 1;
+    const date = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(source.getUTCDate()).padStart(2, "0")}`;
+    return year >= 1 && year <= 9999 && isValidSemanticLocalDate(date) ? { status: "RESOLVED", date, inferredYear: false, method: "POLICY_DEFAULT" } : clarify("INVALID_DATE");
+  }
   if (value.kind === "WEEKDAY") {
     if (value.qualifier === "UNRESOLVED") return clarify("AMBIGUOUS_WEEK");
     const monday = today - ((new Date(today + VN_OFFSET_MS).getUTCDay() + 6) % 7) * DAY_MS;
@@ -39,16 +45,16 @@ export function resolveDateOperand(operand: DateOperand, receipt: number, calend
   return isValidSemanticLocalDate(date) ? { status: "RESOLVED", date, inferredYear: value.year === null, method: value.year === null ? "POLICY_DEFAULT" : "EXPLICIT_OPERAND" } : clarify(value.year === null ? "YEAR_REQUIRED_INVALID_DATE" : "INVALID_DATE");
 }
 
-export type RequestResolution = { status: "CLARIFY"; fields: string[]; reasons: string[]; invalidMonth?: string }
+export type RequestResolution<S extends ContextSnapshotV1 | ContextSnapshotV2 = ContextSnapshotV2> = { status: "CLARIFY"; fields: string[]; reasons: string[]; invalidMonth?: string }
   | { status: "UNSUPPORTED"; capability: string }
-  | { status: "READY"; resolvedSlots: ContextSlots; resolvedFacts: ContextSnapshotV1["facts"]; occurrences: SeriesOccurrence[]; details: CanonicalDetailsV1 };
+  | { status: "READY"; resolvedSlots: S["slots"]; resolvedFacts: S["facts"]; occurrences: SeriesOccurrence[]; details: CanonicalDetailsV1 };
 
 /** A resolved slot and its context fact are one projection. Returning both
  * prevents persistence consumers from retaining stale provenance/defaults. */
 // Successor extension facts are projected too; absence keeps legacy output.
 const PROJECTED_SLOT_NAMES = [...SLOT_NAMES, ...V3_EXTENSION_SLOT_NAMES] as const;
-function projectResolvedFacts(slots: ContextSlots, previous: ContextSnapshotV1["facts"]): ContextSnapshotV1["facts"] {
-  const facts: ContextSnapshotV1["facts"] = structuredClone(previous.filter(f => f.scope === "QUERY"));
+function projectResolvedFacts(slots: ContextSlots, previous: ContextSnapshotV2["facts"]): ContextSnapshotV2["facts"] {
+  const facts: ContextSnapshotV2["facts"] = structuredClone(previous.filter(f => f.scope === "QUERY"));
   const used = new Set(facts.map(f => f.alias));
   for (const field of PROJECTED_SLOT_NAMES) {
     const slot = slots[field]; if (!slot) continue;
@@ -61,13 +67,16 @@ function projectResolvedFacts(slots: ContextSlots, previous: ContextSnapshotV1["
     const slot = slots[field]; if (!slot?.fact) continue;
     const provenance = slot.provenance!;
     const dependencies = provenance.kind === "DERIVED_POLICY" ? provenance.dependencies.filter(d => d !== field).map(d => slots[d].fact).filter((d): d is string => d !== null) : [];
-    facts.push({ alias: slot.fact, scope: "REMINDER", field, value: slot.value, evidenceSlot: field, provenance: provenance.kind === "DERIVED_POLICY" ? { ...provenance, dependencies } : provenance, sourceReferenceTime: slot.resolution!.referenceTime, dependencies } as ContextSnapshotV1["facts"][number]);
+    facts.push({ alias: slot.fact, scope: "REMINDER", field, value: slot.value, evidenceSlot: field, provenance: provenance.kind === "DERIVED_POLICY" ? { ...provenance, dependencies } : provenance, sourceReferenceTime: slot.resolution!.referenceTime, dependencies } as ContextSnapshotV2["facts"][number]);
   }
   return facts;
 }
 
+export function resolveRequest(candidate: ContextSnapshotV1, now: number, calendar: LunarCalendarAdapter): RequestResolution<ContextSnapshotV1>;
+export function resolveRequest(candidate: ContextSnapshotV2, now: number, calendar: LunarCalendarAdapter): RequestResolution;
+export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2, now: number, calendar: LunarCalendarAdapter): RequestResolution<ContextSnapshotV1 | ContextSnapshotV2>;
 export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2, now: number, calendar: LunarCalendarAdapter): RequestResolution {
-  const slots = structuredClone(candidate.slots), fields: string[] = [], reasons: string[] = [];
+  const slots:ContextSlots = structuredClone(candidate.slots), fields: string[] = [], reasons: string[] = [];
   if (candidate.schemaVersion === "calenote-context-state-2" && (candidate.pendingSemanticCandidate || candidate.ambiguities.some(u => u.field === "operation"))) return { status: "CLARIFY", fields: ["operation"], reasons: ["AMBIGUOUS"] };
   const issue = (field: string, reason: string) => { if (!fields.includes(field)) fields.push(field); if (!reasons.includes(reason)) reasons.push(reason); };
   const clarification = (): RequestResolution => ({ status: "CLARIFY", fields, reasons });
@@ -75,8 +84,8 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   for (const field of SLOT_NAMES) if (slots[field].state === "CONFLICT") issue(field, "CONFLICT");
   for (const field of V3_EXTENSION_SLOT_NAMES) if (slots[field]?.state === "CONFLICT") issue(field, "CONFLICT");
   for (const u of candidate.ambiguities) if (PROJECTED_SLOT_NAMES.includes(u.field as typeof PROJECTED_SLOT_NAMES[number])) issue(u.field, u.reason);
-  const derive = (field: "frequency" | "calendar" | "occurrenceCount", value: unknown, dependencies: typeof SLOT_NAMES[number][] = []) => {
-    const referenceTime = dependencies.map(d => slots[d].resolution?.referenceTime).find(Boolean) ?? candidate.createdAt;
+  const derive = (field: "frequency" | "calendar" | "occurrenceCount", value: unknown, dependencies: (typeof SLOT_NAMES[number] | typeof V3_EXTENSION_SLOT_NAMES[number])[] = []) => {
+    const referenceTime = dependencies.map(d => slots[d]?.resolution?.referenceTime).find(Boolean) ?? candidate.createdAt;
     Object.assign(slots[field], { state: "RESOLVED", value, fact: null, evidence: [], provenance: { kind: "DERIVED_POLICY", policyVersion: RESOLUTION_VERSION, dependencies, referenceTime }, resolution: { method: field === "occurrenceCount" ? "FINITE_RANGE" : "POLICY_DEFAULT", version: RESOLUTION_VERSION, referenceTime, timezone: "Asia/Ho_Chi_Minh", dependencies } });
   };
   if (slots.frequency.value === null) derive("frequency", "ONCE");
@@ -93,12 +102,13 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   const advancePolicy = candidate.schemaVersion === "calenote-context-state-2" ? candidate.advanceReminders : undefined;
   // User-authored hour/minute lead. Backend-only arithmetic; never a reminder slot/fact.
   const leadHours = slots.leadOffsetHours?.value ?? null, leadMinutes = slots.leadOffsetMinutes?.value ?? null;
+  const leadWeeks = slots.leadOffsetWeeks?.value ?? null;
   const useDuration = leadHours !== null || leadMinutes !== null;
   const durationField = leadHours !== null ? "leadOffsetHours" : "leadOffsetMinutes";
   const useAdvance = !useDuration && !!advancePolicy && (advancePolicy.days !== null || advancePolicy.hours !== null)
     && frequency === "ONCE" && slots.frequency.provenance?.kind !== "EXPLICIT_USER"
     && slots.eventDate.value !== null && slots.eventTime.value !== null
-    && slots.reminderDate.value === null && slots.reminderTime.value === null && slots.leadOffsetDays.value === null
+    && slots.reminderDate.value === null && slots.reminderTime.value === null && slots.leadOffsetDays.value === null && leadWeeks === null
     && slots.eventRelation.value === null && slots.endDate.value === null && slots.occurrenceCount.value === null;
   const clock = (field: "reminderTime" | "eventTime") => {
     const value = slots[field].value;
@@ -144,7 +154,7 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
   };
   if (useDuration) {
     if (frequency !== "ONCE" || (slots.occurrenceCount.value !== null && slots.occurrenceCount.value !== 1) || slots.endDate.value !== null) issue(durationField, "COUNT_OFFSET_CONFLICT");
-    if (slots.leadOffsetDays.value !== null) issue(durationField, "DAY_DURATION_COMBINATION");
+    if (slots.leadOffsetDays.value !== null || leadWeeks !== null) issue(durationField, "DAY_DURATION_COMBINATION");
     if (slots.reminderTime.value !== null || slots.reminderDate.value !== null) issue("reminderTime", "CLOCK_DURATION_CONFLICT");
     if (slots.eventRelation.value === null) issue("eventRelation", "MISSING");
     else if (slots.eventRelation.value !== "BEFORE_EVENT") issue("eventRelation", "INCOMPATIBLE_RELATION");
@@ -170,6 +180,7 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     return finish(planned.occurrences);
   }
   const relation = slots.eventRelation.value;
+  if (leadWeeks !== null && frequency !== "ONCE" && frequency !== "DAILY") { issue("leadOffsetWeeks", "COUNT_OFFSET_CONFLICT"); return clarification(); }
   if (periodic) {
     if (relation !== null && relation !== "STARTING_ON") return { status: "UNSUPPORTED", capability: "PERIODIC_EVENT_RELATION" };
     if (relation === null) issue("eventRelation", "MISSING");
@@ -186,14 +197,26 @@ export function resolveRequest(candidate: ContextSnapshotV1 | ContextSnapshotV2,
     return finish(expanded.occurrences);
   }
   if (frequency === "DAILY" && recurrenceSourceProblem(frequency, dates.reminderDate ?? null, slots.frequency.evidence, candidate.transcript) === "MULTIPLE_PER_PERIOD") return { status: "UNSUPPORTED", capability: "MULTIPLE_PER_PERIOD" };
+  if (frequency === "ONCE" && slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY") derive("occurrenceCount",1,["frequency"]);
   let count = frequency === "ONCE" ? 1 : slots.occurrenceCount.provenance?.kind === "DERIVED_POLICY" ? null : slots.occurrenceCount.value;
   let start: number | null = null;
   const midnight = (value: string | undefined) => value ? Date.parse(`${value}T00:00:00+07:00`) : null;
   const event = midnight(dates.eventDate), reminder = midnight(dates.reminderDate), end = midnight(dates.endDate);
-  const lead = slots.leadOffsetDays.value;
+  const weekDays = leadWeeks === null ? null : leadWeeks * 7;
+  const lead = weekDays ?? slots.leadOffsetDays.value;
+  if (leadWeeks !== null) {
+    if (!Number.isSafeInteger(leadWeeks) || leadWeeks < 1 || leadWeeks > 52 || weekDays! > 366) issue("leadOffsetWeeks", "LIMIT");
+    if (slots.leadOffsetDays.value !== null) issue("leadOffsetWeeks", "DAY_DURATION_COMBINATION");
+    if (relation !== "BEFORE_EVENT") issue("eventRelation", "OFFSET_REQUIRES_BEFORE_EVENT");
+    if (frequency === "DAILY") {
+      if (count !== null && count !== weekDays) issue("occurrenceCount", "COUNT_RANGE_CONFLICT");
+      else if (count === null) { count = weekDays; derive("occurrenceCount", count, ["frequency","leadOffsetWeeks"]); }
+    }
+  }
   if (frequency === "ONCE" && slots.occurrenceCount.value !== null && slots.occurrenceCount.value !== 1) issue("occurrenceCount", "ONCE_COUNT_CONFLICT");
-  if (frequency === "DAILY" && lead !== null) issue("leadOffsetDays", "COUNT_OFFSET_CONFLICT");
+  if (frequency === "DAILY" && slots.leadOffsetDays.value !== null) issue("leadOffsetDays", "COUNT_OFFSET_CONFLICT");
   if (lead !== null && (!Number.isSafeInteger(lead) || lead < 1 || lead > 366)) issue("leadOffsetDays", "LIMIT");
+  if (frequency === "DAILY" && count === null && end === null) issue("occurrenceCount", "MISSING");
   if (relation === "BEFORE_EVENT" || relation === "INCLUDING_EVENT") {
     if (event === null) issue("eventDate", "MISSING");
     if (reminder !== null || end !== null) issue("reminderDate", "INCOMPATIBLE_ABSOLUTE_AND_RELATIVE");

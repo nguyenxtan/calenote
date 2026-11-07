@@ -1,7 +1,7 @@
 import type { BoundChatMessage, BoundChatContext } from "@/modules/reminders/command-service";
 import { LegacyV2ContextInputSchema as ContextInputSchema, SLOT_NAMES, V3_SLOT_NAMES, V3_EXTENSION_SLOT_NAMES, type LegacyV2ContextInput as ContextInput, type EvidenceRef } from "./contracts";
 import { ContextInputV2Schema, InterpretationJsonSchemaV3, type ContextInputV2 } from "./contracts";
-import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV2 } from "./state";
+import { ContextSnapshotV2Schema, encodeContextSnapshotV2, type ContextSnapshotV2, type ContextSlots } from "./state";
 import { ContextObservationBindingSchema, ContextSnapshotV1Schema, encodeContextSnapshot, type ContextObservation, type ContextSnapshotV1, type TranscriptEntry, type SourceEvidence } from "./state";
 import { measureLegacyV2EnvelopeReference, type EnvelopeMeasurement } from "./admission";
 import { containsForbiddenControl, projectSemanticView } from "./projection";
@@ -17,8 +17,8 @@ type AnyReadyContext = Omit<ReadyContext, "input" | "candidateSnapshot"> & { inp
  * compare a supplied operand to the internal value, or persist the supplied
  * placeholder as user content. Source spans do not depend on quote occurrences. */
 export interface BoundContextFact {
-  supplied: ContextInput["facts"][number];
-  internal: ContextSnapshotV1["facts"][number];
+  supplied: ContextInputV2["facts"][number];
+  internal: ContextSnapshotV2["facts"][number];
   sources: readonly SourceEvidence[];
   referenceTime: string;
 }
@@ -65,12 +65,13 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
   const stateResult = args.snapshot === null ? null : stateSchema.safeParse(args.snapshot);
   if (stateResult && !stateResult.success) return refused("CONTEXT_INVALID");
   const state = stateResult?.data ?? null;
+  const stateSlots:ContextSlots|undefined = state?.slots;
   if (state ? binding.data.observed.presence !== "PRESENT" || binding.data.observed.contextId !== state.id || binding.data.observed.contextRevision !== state.contextRevision : binding.data.observed.presence !== "ABSENT") return refused("CONTEXT_STALE");
   const later = (a: { receivedAt: string; rowid: number }, b: { receivedAt: string; rowid: number }) => Date.parse(a.receivedAt) > Date.parse(b.receivedAt) || (a.receivedAt === b.receivedAt && a.rowid > b.rowid);
   if (binding.data.lastTerminalOutcome && !later(inbound, binding.data.lastTerminalOutcome.order)) return refused("CONTEXT_STALE");
   if (state) {
     if (!same(scope, state.scope)) return refused("CONTEXT_SCOPE_MISMATCH");
-    if (state.requestId === null && (state.facts.some(f => f.scope === "REMINDER") || V3_SLOT_NAMES.some(field => state.slots[field] && state.slots[field]!.state !== "MISSING"))) return refused("CONTEXT_INVALID");
+    if (state.requestId === null && (state.facts.some(f => f.scope === "REMINDER") || V3_SLOT_NAMES.some(field => stateSlots![field] && stateSlots![field]!.state !== "MISSING"))) return refused("CONTEXT_INVALID");
     if (!later(inbound, state.inbound) || state.transcript.some(t => t.id === message.id)) return refused("CONTEXT_STALE");
     if (["COMPLETED", "CANCELLED", "EXPIRED", "INVALID"].includes(state.lifecycle)) return refused("CONTEXT_TERMINAL");
     if ([state.idleExpiresAt, state.absoluteExpiresAt, state.draftExpiresAt].some(t => t !== null && message.receivedAt >= Date.parse(t))) return refused("CONTEXT_EXPIRED");
@@ -110,8 +111,8 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
   };
   if (state) {
     try {
-      for (const field of SLOT_NAMES) state.slots[field].evidence = state.slots[field].evidence.map(remapSource);
-      for (const field of V3_EXTENSION_SLOT_NAMES) { const extension = state.slots[field]; if (extension) extension.evidence = extension.evidence.map(remapSource); }
+      for (const field of SLOT_NAMES) stateSlots![field].evidence = stateSlots![field].evidence.map(remapSource);
+      for (const field of V3_EXTENSION_SLOT_NAMES) { const extension = stateSlots![field]; if (extension) extension.evidence = extension.evidence.map(remapSource); }
       if (state.pendingDecision?.candidate) {
         state.pendingDecision.candidate.sourceEvidence = state.pendingDecision.candidate.sourceEvidence.map(remapSource);
         state.pendingDecision.candidate.evidenceIndex.forEach(e => { e.evidence = e.evidence.map(remapSource); });
@@ -188,7 +189,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     originalFacts.forEach(f => checkDependencies(f));
     const projectedFacts = originalFacts.map(f => {
       if (f.scope === "REMINDER") {
-        const slot = state!.slots[f.field];
+        const slot = stateSlots![f.field];
         if (!slot) fail("CONTEXT_FACT_INVALID");
         if (slot.state !== "RESOLVED" || slot.provenance?.kind !== f.provenance.kind) fail("CONTEXT_FACT_INVALID");
         if (f.provenance.kind === "EXPLICIT_USER" && !slot.evidence.some(e => state!.transcript.find(t => t.id === e.sourceTurnId)?.receivedAt === f.sourceReferenceTime)) fail("CONTEXT_FACT_INVALID");
@@ -202,8 +203,8 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
       const provenance = f.provenance.kind === "DERIVED_POLICY" ? { ...f.provenance, dependencies: f.provenance.dependencies.map(d => aliases.get(d) ?? fail("CONTEXT_FACT_INVALID")) } : f.provenance;
       return { alias, scope: f.scope, field: f.field, value: remapRefs(f.value, "PROVIDER"), provenance, sourceReferenceTime: f.sourceReferenceTime, dependencies };
     });
-    const active = state && ["CLARIFYING", "AWAITING_CONFIRMATION"].includes(state.lifecycle) ? { lifecycle: state.lifecycle, slots: Object.fromEntries((successor ? V3_SLOT_NAMES : SLOT_NAMES).filter(field=>state!.slots[field]).map(field => {
-      const slot = state.slots[field]!;
+    const active = state && ["CLARIFYING", "AWAITING_CONFIRMATION"].includes(state.lifecycle) ? { lifecycle: state.lifecycle, slots: Object.fromEntries((successor ? V3_SLOT_NAMES : SLOT_NAMES).filter(field=>stateSlots![field]).map(field => {
+      const slot = stateSlots![field]!;
       const fact = originalFacts.find(f => f.scope === "REMINDER" && f.field === field);
       if (slot.state === "RESOLVED" && !fact) fail("CONTEXT_FACT_INVALID");
       return [field, { state: slot.state, value: slot.value, fact: fact ? aliases.get(fact.alias) : null }];
@@ -273,7 +274,7 @@ function buildContext(args: ContextBuildArgs | ContextBuildArgsV2, successor: bo
     if (new TextEncoder().encode(candidateSnapshotJson).length > 16384) return refused("CONTEXT_SNAPSHOT_TOO_LARGE");
 
     for (const [index, original] of originalFacts.entries()) {
-      const sources = original.scope === "REMINDER" ? (state!.slots[original.field]?.evidence ?? [])
+      const sources = original.scope === "REMINDER" ? (stateSlots![original.field]?.evidence ?? [])
         : original.value.evidence.map(ref => ref.kind === "USER_QUOTE" ? sourceForRetainedQuote(ref) : fail("CONTEXT_FACT_INVALID"));
       const supplied = input.facts[index];
       facts.set(supplied.alias, freeze({
