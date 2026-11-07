@@ -1006,3 +1006,12 @@ it("retained numeric schema branches grant no NEW request fact authority", async
   expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED", reason: "EVIDENCE_INVALID" }) }));
   expect((await h.read(2))?.slots.occurrenceCount.value).toBe(2);
 });
+
+it("authored weeks and bound continuous clock expose only their own numeric fields", () => {
+ const context = input("Nhắc trước 1 tuần. Liên tục vào 8h sáng.");
+ const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:11,year:2026,leapMonth:null},fact:null};
+ context.activeRequest={lifecycle:"CLARIFYING",slots};
+ expect(deriveGenerationFieldCapability(context).allowedNumericFields).toEqual(["frequency", "leadOffsetWeeks"]);
+ expect(deriveGenerationFieldCapability(context).allowedClockFields).toContain("reminderTime");
+});

@@ -1,4 +1,5 @@
 import {hasLeadDurationEvidence,hasLeadDurationSourceCue} from "./lead-duration-evidence";
+import { hasLeadWeekOffsetEvidence } from "./lead-week-evidence";
 import type { SourceEvidence, TranscriptEntry } from "./state";
 import { hasCadenceCue } from "./recurrence-evidence";
 
@@ -16,7 +17,9 @@ const relationSourceCasefold=(text:string)=>[...text].map(c => {const lower = c.
 /** Conservative cue presence, not unique value support or execution authority. */
 export function hasEventRelationSourceCue(text:string):boolean {
   const folded=relationSourceCasefold(text);
-  return hasLeadDurationSourceCue(text) || patterns.some(([,pattern])=>!folded.matchAll(pattern).next().done);
+  const turn={id:"week-relation-source",role:"USER" as const,semanticView:text},length=[...text].length;
+  return hasLeadDurationSourceCue(text) || hasLeadWeekOffsetEvidence([{kind:"USER_QUOTE",sourceTurnId:turn.id,sourceMapTurnId:turn.id,quote:text,occurrence:1,sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"}],[turn])
+    || patterns.some(([,pattern])=>!folded.matchAll(pattern).next().done);
 }
 
 /** Narrow support verifier for an already proposed finite enum, not an intent,
@@ -55,5 +58,5 @@ export function supportsEventRelation(value: EventRelation, evidence: readonly S
       if (evidence.some(e => e.sourceTurnId === id && e.viewSpan.start <= start && e.viewSpan.end >= end)) covered = true;
     }
   }
-  return covered || (value === "BEFORE_EVENT" && hasLeadDurationEvidence(evidence,turns));
+  return covered || (value === "BEFORE_EVENT" && (hasLeadDurationEvidence(evidence,turns) || hasLeadWeekOffsetEvidence(evidence,turns,retainedEventContext)));
 }
