@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete, titleCoverageComplete, notesCoverageComplete, reminderDateCoverageComplete } from "./semantic-completeness";
-import {supportsRelativeMonthDate,relativeMonthDateCovered,monthEventReminderDateRolesSupported} from './relative-month-evidence';
+import {supportsRelativeMonthDate,relativeMonthDateCovered,monthEventReminderDateRolesSupported,historicalEventMonthReminderRolesSupported} from './relative-month-evidence';
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { supportsCadenceOperand, leadDistanceCovered, continuousClockCadenceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
@@ -711,6 +711,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     };
     const eventBinding=dateBinding('eventDate'),reminderBinding=dateBinding('reminderDate');
     if(!monthEventReminderDateRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
+    if(!historicalEventMonthReminderRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
     if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!reminderDateCoverageComplete(built.input,value)) fail("SEMANTIC_REMINDER_DATE_UNOWNED");
     const coverageTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];

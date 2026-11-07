@@ -88,6 +88,24 @@ it.each([['mười một',11,1],['mười hai',12,2]] as const)('keeps the whole
  expect(validateEvidenceV3(semantic,built)).toEqual({status:'REFUSED',reason:'RELATIVE_MONTH_NOT_SUPPORTED'});
 });
 
+it.each([
+ ['Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại.','sửa máy lạnh','REFUSED'],
+ ['Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc lúc 18h.','sửa máy lạnh','REFUSED'],
+ ['Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại nhắc lúc 18h.','sửa máy lạnh','REFUSED'],
+ ['Hôm nay họp. 4 tháng sau nhắc tôi gửi biên bản.','họp','VALID'],
+ ['Hôm nay họp. Sau 4 tháng, nhắc tôi gửi biên bản.','họp','VALID'],
+ ['Hôm nay họp, nhắc tôi gửi biên bản sau 4 tháng.','họp','VALID'],
+] as const)('requires the notification to own a future month beside a historical event: %s',(text,title,status)=>{
+ const built=build(text),evidence=[{kind:'USER_QUOTE',turn:0,quote:text,occurrence:1}];
+ const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'title',operation:'SET',value:title,evidence},{field:'eventDate',operation:'SET',value:{kind:'RELATIVE_DAY',offsetDays:0},evidence},{field:'reminderDate',operation:'SET',value:month,evidence}],query:null,uncertainties:[]});
+ expect(validateEvidenceV3(semantic,built)).toMatchObject(status==='VALID'?{status}:{status,reason:'REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED'});
+});
+
+it('does not apply the same-source month role guard to a separate retained event turn',()=>{
+ const original=apply('Hôm nay họp.',{title:'họp',eventDate:{kind:'RELATIVE_DAY',offsetDays:0}});
+ expect(apply('4 tháng sau.',{reminderDate:month},original,receipt+60000).slots.reminderDate.value).toEqual(month);
+});
+
 it('a replaced retained month cannot cover an omitted current authored month',()=>{
  const state=apply('Sau 4 tháng nhắc sửa máy lạnh.',{title:'sửa máy lạnh',reminderDate:month}),text='Đổi thành nhắc 4 tháng sau.',built=build(text,state,receipt+60000),evidence=[{kind:'USER_QUOTE',turn:built.input.currentTurn,quote:text,occurrence:1}];
  const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'CURRENT',evidence},changes:[{field:'reminderDate',operation:'REPLACE',value:{kind:'RELATIVE_DAY',offsetDays:0},evidence}],query:null,uncertainties:[]});

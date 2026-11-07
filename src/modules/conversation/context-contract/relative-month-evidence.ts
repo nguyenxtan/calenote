@@ -5,16 +5,16 @@ const words=['không','một','hai','ba','bốn','năm','sáu','bảy','tám','c
 const dateFields=new Set(['eventDate','reminderDate','endDate']);
 const lower=(text:string)=>[...text].map(c=>{const folded=c.toLocaleLowerCase('vi');return [...folded].length===1?folded:c;}).join('');
 
-/** Verify a model-authored month operand against its exact source. This never
- * returns a date, chooses a slot, or converts a month into a day count. */
-export function supportsRelativeMonthDate(value:unknown,sources:readonly SourceEvidence[],turns:readonly Turn[]):boolean {
- if(!value||typeof value!=='object'||!('kind'in value)||value.kind!=='RELATIVE_MONTH'||!('offsetMonths'in value)||typeof value.offsetMonths!=='number'||!Number.isSafeInteger(value.offsetMonths)||Math.abs(value.offsetMonths)>12)return false;
+/** Shared source checks for a model-authored month operand. Matches stay
+ * internal to reject-only verification; no date, amount or slot is generated. */
+function* supportedRelativeMonthOccurrences(value:unknown,sources:readonly SourceEvidence[],turns:readonly Turn[]) {
+ if(!value||typeof value!=='object'||!('kind'in value)||value.kind!=='RELATIVE_MONTH'||!('offsetMonths'in value)||typeof value.offsetMonths!=='number'||!Number.isSafeInteger(value.offsetMonths)||Math.abs(value.offsetMonths)>12)return;
  const amount=Math.abs(value.offsetMonths),token=`(?:${amount}|${words[amount]})`;
  const pattern=value.offsetMonths<0?new RegExp(`${token}\\s+tháng\\s+trước`,'gu'):new RegExp(`(?:sau\\s+${token}\\s+tháng|${token}\\s+tháng\\s+(?:sau|nữa|tới))`,'gu');
- return sources.some(source=>{
-  const turn=turns.find(t=>t.id===source.sourceTurnId);if(turn?.role!=='USER')return false;
+ for(const source of sources){
+  const turn=turns.find(t=>t.id===source.sourceTurnId);if(turn?.role!=='USER')continue;
   const text=lower(turn.semanticView),quote=lower(source.quote),view=[...text];
-  if(/["'“”‘’`]/u.test(text)||/(?:^|[^\p{L}\p{M}\p{N}_])(?:nếu|ví dụ|giả sử|cụm từ|từ ngữ|trích dẫn)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text))return false;
+  if(/["'“”‘’`]/u.test(text)||/(?:^|[^\p{L}\p{M}\p{N}_])(?:nếu|ví dụ|giả sử|cụm từ|từ ngữ|trích dẫn)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text))continue;
   for(const match of quote.matchAll(pattern)){
    const start=source.viewSpan.start+[...quote.slice(0,match.index)].length,end=start+[...match[0]].length;
    if(/[\p{L}\p{M}\p{N}_.,/:+-]/u.test(view[start-1]??'')||/[\p{L}\p{M}\p{N}_]/u.test(view[end]??''))continue;
@@ -24,10 +24,27 @@ export function supportsRelativeMonthDate(value:unknown,sources:readonly SourceE
    // Word numbers such as "mười một" also keep their whole authored amount.
    if(!/^sau\s/u.test(match[0])&&/(?:^|[^\p{L}\p{M}\p{N}_])(?:ngày|mùng|mồng|mười|mươi)\s+$/u.test(prefix))continue;
    if(/(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|tên|chữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)||/^(?:thì\s+)?(?:không|ko|đừng|chẳng|chưa)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(suffix))continue;
-   return true;
+   yield {prefix,view,end};
   }
-  return false;
- });
+ }
+}
+
+/** Verify the typed amount without choosing its field or calculating a date. */
+export function supportsRelativeMonthDate(value:unknown,sources:readonly SourceEvidence[],turns:readonly Turn[]):boolean {
+ for(const _match of supportedRelativeMonthOccurrences(value,sources,turns))return true;
+ return false;
+}
+
+/** A historical event and future month notification in the same source need
+ * an independently authored notification owner beside that month expression.
+ * This only refuses the submitted pair; it never moves either operand. */
+export function historicalEventMonthReminderRolesSupported(event:unknown,eventSources:readonly SourceEvidence[],reminder:unknown,reminderSources:readonly SourceEvidence[],turns:readonly Turn[]):boolean {
+ if(!event||typeof event!=='object'||!('kind'in event)||event.kind!=='RELATIVE_DAY'||!('offsetDays'in event)||typeof event.offsetDays!=='number'||!Number.isSafeInteger(event.offsetDays)||event.offsetDays>0)return true;
+ if(!reminder||typeof reminder!=='object'||!('kind'in reminder)||reminder.kind!=='RELATIVE_MONTH'||!('offsetMonths'in reminder)||typeof reminder.offsetMonths!=='number'||reminder.offsetMonths<=0)return true;
+ const shared=reminderSources.filter(source=>eventSources.some(eventSource=>eventSource.sourceTurnId===source.sourceTurnId));
+ return shared.every(source=>[...supportedRelativeMonthOccurrences(reminder,[source],turns)].some(({prefix,view,end})=>
+  /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)
+  || /^(?:[^\S\r\n]|,)*nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(view.slice(end).join(''))));
 }
 
 /** Reject-only coverage of a bounded positive relative-month expression.
