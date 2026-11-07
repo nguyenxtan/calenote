@@ -36,6 +36,14 @@ it.each(["Nhắc trước 1 tuần rưỡi.", "Nhắc trước 1,5 tuần.", "Nh
 it("continuous clock intent cannot be omitted into a single notification", () => {
   expect(check("Nhắc liên tục vào 8h sáng.", { reminderTime: { hour: 8, minute: 0, qualifier: "H24" } })).toEqual({ status: "REFUSED", reason: "SEMANTIC_CONTINUOUS_CADENCE_OMITTED" });
 });
+it("a fresh multi-sentence week request cannot omit DAILY into the backend ONCE default", () => {
+  const result=check("Ngày 20/12/2026 đi thi. Nhắc trước 1 tuần. Liên tục vào 8h sáng.", {
+    title:"đi thi",eventDate:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:12,year:2026,leapMonth:null},
+    leadOffsetWeeks:1,eventRelation:"BEFORE_EVENT",reminderTime:{hour:8,minute:0,qualifier:"H24"},
+  });
+  expect(result.status).toBe("REFUSED");
+  if(result.status==="REFUSED")expect(result.reason).toBe("SEMANTIC_CONTINUOUS_CADENCE_OMITTED");
+});
 it("continuous clock does not authorize a model-computed seven notification count", () => {
   expect(check("Nhắc trước 1 tuần, nhắc liên tục vào 8h sáng.", { leadOffsetWeeks: 1, frequency: "DAILY", occurrenceCount: 7, reminderTime: { hour: 8, minute: 0, qualifier: "H24" } })).toEqual({ status: "REFUSED", reason: "CADENCE_COUNT_NOT_SUPPORTED" });
 });

@@ -18,8 +18,11 @@ it.each(["Nhắc liên tục vào 8h sáng.", "Nhắc trước 1 tuần. Liên t
 it("an explicit reminder can author continuous clock cadence without retained context", () => {
   expect(grounded("Nhắc liên tục vào 8h sáng.").daily).toBe(true);
 });
+it.each(["Ngày 20/12/2026 đi thi. Nhắc trước 1 tuần. Liên tục vào 8h sáng.", "Liên tục vào 8h sáng."])("a fresh positive continuous clock clause authors cadence without CURRENT authority: %s", text => {
+  expect(grounded(text)).toEqual({daily:true,count:false});
+});
 it.each(["Đừng nhắc liên tục vào 8h sáng.", "Không liên tục vào 8h sáng.", '"Liên tục vào 8h sáng."', "Nếu liên tục vào 8h sáng.", "Ví dụ nhắc liên tục vào 8h sáng.", "Liên tục vào 8h sáng thì không.", "Liên tục vào 8h sáng?", "Máy chạy liên tục vào 8h sáng.", "Liên tục vào buổi sáng."])("continuous clock does not bypass instruction guards: %s", text => {
-  expect(grounded(text, true).daily).toBe(false);
+  for(const current of [false,true])expect(grounded(text, current).daily).toBe(false);
 });
 it("a quote cannot borrow continuous text outside its span", () => {
   expect(grounded("Nhắc liên tục vào 8h sáng; mang 7 bút.", true, "mang 7 bút").daily).toBe(false);

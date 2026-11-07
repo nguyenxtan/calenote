@@ -42,7 +42,9 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
   if (field === "frequency") return typeof value === "string" && !!cadencePatterns[value] && sources.some(s => matches(s, cadencePatterns[value])
     || value === "DAILY" && matches(s, continuousClock, (_match, prefix, full) => !full.includes("?")
       && (/(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)
-        || s.sourceTurnId === currentReminderTurnId && !prefix.trim())));
+        // A positive standalone cadence clause supplies its own meaning in
+        // fresh and retained requests. It supplies no action/target or count.
+        || !prefix.trim())));
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) return false;
   const sameNumber = (m: RegExpMatchArray) => (words[m[1]] ?? Number(m[1])) === value;
   const reminderOwned = (prefix: string) => /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix);
