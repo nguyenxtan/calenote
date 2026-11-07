@@ -203,8 +203,8 @@ describe("conditional burst request envelope", () => {
       { turn: 1, instant: "2026-11-05T17:00:00.000Z", localDate: "2026-11-06" },
     ] });
   });
-  it("all four independently captured request148 single-message request bodies stay byte-identical", async () => {
-    const rows = JSON.parse(readFileSync(new URL("../../intelligence/infrastructure/openrouter/__fixtures__/keyed148-request-hashes.json", import.meta.url), "utf8")) as Array<{ input: ContextInput; requestSha256: string }>;
+  it("all four independently captured request149 single-message request bodies stay byte-identical", async () => {
+    const rows = JSON.parse(readFileSync(new URL("../../intelligence/infrastructure/openrouter/__fixtures__/keyed149-request-hashes.json", import.meta.url), "utf8")) as Array<{ input: ContextInput; requestSha256: string }>;
     for (const row of rows) {
       let captured: unknown;
       const gateway = createKeyedContextContractGateway(async request => { captured = request; return { status: 500, body: "" }; }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 400000 });
