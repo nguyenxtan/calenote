@@ -80,6 +80,14 @@ it.each([
  expect(validateEvidenceV3(semantic,built)).toEqual({status:'REFUSED',reason:'RELATIVE_MONTH_NOT_SUPPORTED'});
 });
 
+it.each([['mười một',11,1],['mười hai',12,2]] as const)('keeps the whole authored month amount %s instead of its final word',(amount,offsetMonths,tail)=>{
+ const text=`${amount} tháng sau nhắc kiểm tra QA.`,value={kind:'RELATIVE_MONTH',offsetMonths};
+ expect(apply(text,{title:'kiểm tra QA',reminderDate:value}).slots.reminderDate.value).toEqual(value);
+ const built=build(text),evidence=[{kind:'USER_QUOTE',turn:0,quote:text,occurrence:1}];
+ const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence},changes:[{field:'reminderDate',operation:'SET',value:{kind:'RELATIVE_MONTH',offsetMonths:tail},evidence}],query:null,uncertainties:[]});
+ expect(validateEvidenceV3(semantic,built)).toEqual({status:'REFUSED',reason:'RELATIVE_MONTH_NOT_SUPPORTED'});
+});
+
 it('a replaced retained month cannot cover an omitted current authored month',()=>{
  const state=apply('Sau 4 tháng nhắc sửa máy lạnh.',{title:'sửa máy lạnh',reminderDate:month}),text='Đổi thành nhắc 4 tháng sau.',built=build(text,state,receipt+60000),evidence=[{kind:'USER_QUOTE',turn:built.input.currentTurn,quote:text,occurrence:1}];
  const semantic=SemanticPatchProposalV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'CURRENT',evidence},changes:[{field:'reminderDate',operation:'REPLACE',value:{kind:'RELATIVE_DAY',offsetDays:0},evidence}],query:null,uncertainties:[]});
