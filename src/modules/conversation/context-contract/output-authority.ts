@@ -74,6 +74,7 @@ for (const kind of ["LIST", "CALENDAR_DATE", "CAPABILITY"] as const) add([`query
 for (const prefix of ["changes[].value", "query.date", "query.period.date", "query.period.from", "query.period.through", "uncertainties[].alternatives[].value", "uncertainties[].alternatives[].value.date", "uncertainties[].alternatives[].value.from", "uncertainties[].alternatives[].value.through"]) {
   for (const kind of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 }
+add(["changes[].value{kind=RELATIVE_MONTH}", "uncertainties[].alternatives[].value{kind=RELATIVE_MONTH}"]);
 // Compact transport selections have the same untrusted authority as canonical
 // date kinds. The fixed mapping itself remains application-owned.
 for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through","eventDateChange.change.value","reminderDateChange.change.value"] as const){

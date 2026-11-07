@@ -5,7 +5,7 @@ import { createSemanticGateway, type SemanticJsonRequest } from "./semantic-gate
 import { CANONICAL_SEMANTIC_PROMPT, semanticReferenceWallClock, type SemanticInput } from "../../semantic-gateway";
 import { ModelSemanticInterpretationJsonSchema } from "../../../semantic/contracts";
 import * as gateways from "./semantic-gateway";
-import { ContextInputSchema, InterpretationJsonSchema } from "../../../conversation/context-contract/contracts";
+import { ContextInputSchema, InterpretationJsonSchema, HistoricalInterpretationJsonSchemaV3 } from "../../../conversation/context-contract/contracts";
 import { encodeFixtureV3 } from "../../../../../tools/benchmark/context-pointer-fixtures";
 import { CONTEXT_PROTOCOL_V3 } from "../../../conversation/context-contract/protocol";
 import { serializeContextRequest } from "../../../conversation/context-contract/wire";
@@ -421,6 +421,10 @@ describe("observable successor route", () => {
     expect(requests).toEqual([{ ...contextRequest(), response_format: { type: "json_schema", json_schema: {
       name: "calenote_context_3", strict: true, schema: expect.any(Object) } } }]);
     expect(createHash("sha256").update(JSON.stringify(InterpretationJsonSchema)).digest("hex"))
+      .toBe("ae0ccf1c23eefd86f2340653271eaf1e5fdb7ec8e3bb43e769fe2dc7e762a47e");
+    // Current application parsing and the historical provider contract retain
+    // separate identities; the old carrier schema is never relabeled.
+    expect(createHash("sha256").update(JSON.stringify(HistoricalInterpretationJsonSchemaV3)).digest("hex"))
       .toBe("b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26");
     expect(await attempt.dispatch()).toMatchObject({ status: "FAILURE" });
     expect(requests).toHaveLength(1);

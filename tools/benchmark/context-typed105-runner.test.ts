@@ -38,7 +38,8 @@ it.each([false,true])('typed105 frozen formal pilot uses typed application path 
  }});
  if(malformed){expect(result.status).toBe('STOP');expect(calls).toBe(1);expect(result.applicationEvidence[0].mutations).toBe(0);}
  else {expect(result.status,JSON.stringify(result.applicationEvidence.at(-1))).toBe('PASS');expect(result.score).toMatchObject({passedScripts:32,passedTurns:84,safetyFailures:0});expect(calls).toBe(76);expect(result.providerHttpRequests).toBe(76);expect(result.responses.every(row=>row.providerWireSchemaVersion===CONTEXT_TYPED_PROTOCOL_V3.wireVersion&&row.providerWireSchemaDigest===row.requestWireSchemaDigest)).toBe(true);expect(new Set(result.responses.map(row=>row.providerWireSchemaDigest)).size).toBeGreaterThan(1);}
- expect(result.responses[0].canonicalSchemaDigest).toBe('b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26');
+ // The frozen105 transport still enters the current canonical application parser.
+ expect(result.responses[0].canonicalSchemaDigest).toBe('ae0ccf1c23eefd86f2340653271eaf1e5fdb7ec8e3bb43e769fe2dc7e762a47e');
  }finally{rmSync(directory,{recursive:true,force:true});}
 },30000);
 it.each(['unbounded','full','single','prefix','replay'] as const)('typed105 rejects scope %s before any transport',async mode=>{
