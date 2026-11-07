@@ -1121,7 +1121,7 @@ describe("login delivery saved addressing", () => {
     expect(getReplyPreferences).toHaveBeenCalledWith(USER_ID);
     expect(text).toContain(`${code}. Mã có hiệu lực trong 10 phút.`);
     expect(text).not.toContain("của bạn:");
-    if (addressStyle === "sep") expect(text).toContain("của sếp:");
+    if (addressStyle === "sep") expect(text).toContain("của Sếp:");
     if (addressStyle === "custom") expect(text).toContain("của Bạn An:");
   });
 

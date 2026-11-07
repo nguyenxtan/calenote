@@ -48,7 +48,7 @@ it('addresses saved prose while preserving memory text and refreshing preference
   const prefs = vi.fn().mockResolvedValueOnce({ addressStyle: 'sep' }).mockResolvedValueOnce({ addressStyle: 'custom', customDisplayName: 'Lan' }).mockRejectedValueOnce(new Error('secret'));
   const handle = createPersonalMemoryChatHandler({ get: h.get }, prefs);
   const first = await handle(message('trí nhớ'), context);
-  expect(first.handled && first.text).toContain('Trí nhớ sếp đã lưu:\nBạn muốn mình: Bạn muốn mình');
+  expect(first.handled && first.text).toContain('Trí nhớ Sếp đã lưu:\nBạn muốn mình: Bạn muốn mình');
   const second = await handle(message('/memory missing'), context);
   expect(second.handled && second.text).toContain('Lan có thể');
   const fallback = await handle(message('/memory missing'), context);

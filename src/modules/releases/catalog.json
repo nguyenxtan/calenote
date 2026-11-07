@@ -23,12 +23,7 @@
         "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem.",
         "Xử lý đúng thứ tự và gom tối đa ba tin nhắn liên tiếp thành một yêu cầu, giữ riêng bằng chứng từng tin; xác nhận phải đến sau khi bản nháp được gửi.",
         "Tải lịch .ics riêng của tài khoản, gồm chuỗi và lịch hoãn; nhóm nhắc trước được xuất thành một sự kiện, thông báo giới hạn dữ liệu rõ ràng.",
-        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền.",
-        "Xác nhận bản nháp mới nhất đã gửi bằng Có/Không qua nhiều lượt hoặc sau khi sửa; giữ kiểm tra thời điểm nhận, quyền sở hữu và chống lưu trùng.",
-        "Ẩn mã xác nhận khỏi bản nháp chat, giữ điều khiển web trong phiên đăng nhập; xử lý mã cũ và bản nháp hết hạn bằng code.",
-        "Áp dụng cách xưng em–Sếp cho lời chào và câu hỏi do ứng dụng soạn; giữ nguyên nội dung người dùng và chọn câu hỏi chuẩn khi bỏ lời gợi ý từ mô hình.",
-        "Giữ đơn vị tháng lịch trong yêu cầu tương đối và tính ngày bằng backend từ thời điểm nhận gốc; hỏi lại nếu ngày đích không tồn tại.",
-        "Giữ nguyên số tuần được nói rõ; yêu cầu nhắc mỗi sáng trong tuần trước sự kiện được mở thành chuỗi hữu hạn, còn yêu cầu liên tục thiếu giới hạn sẽ được hỏi thêm."
+        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
