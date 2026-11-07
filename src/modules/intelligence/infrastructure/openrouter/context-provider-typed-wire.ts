@@ -123,6 +123,9 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput,ac
   const common:Record<string,Schema>={field:{type:'string',enum:['leadOffsetWeeks']},evidence};
   const change:Schema={anyOf:[{type:'object',properties:{...common,operation:{type:'string',enum:['SET','REPLACE']},value:jsonSchema(SlotValueSchemasV3.leadOffsetWeeks)},required:['field','operation','value','evidence'],additionalProperties:false},{type:'object',properties:{...common,operation:{type:'string',enum:['CLEAR']},value:{type:'null'}},required:['field','operation','value','evidence'],additionalProperties:false}]};
   schema.properties!.changes.items={anyOf:[schema.properties!.changes.items!,{type:'object',properties:{rank:{type:'integer'},change},required:['rank','change'],additionalProperties:false}]};
+  // The appended week owner consumes its own ordinary carrier, including
+  // when another permitted ordinary field such as notes is authored too.
+  schema.properties!.changes.maxItems=(schema.properties!.changes.maxItems as number)+1;
   const uncertainty:Schema={type:'object',properties:{fieldCode:{type:'integer',minimum:18,maximum:18},reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:{type:'array',maxItems:2,items:{type:'object',properties:{value:jsonSchema(SlotValueSchemasV3.leadOffsetWeeks),evidence},required:['value','evidence'],additionalProperties:false}}},required:['fieldCode','reason','alternatives'],additionalProperties:false};
   schema.properties!.uncertainties.items.anyOf!.push(uncertainty);
  }

@@ -150,3 +150,17 @@ it('roundtrips authored months through the actual selected keyed gateway and str
   expect(decodeKeyedSmallComparison(changed,input).status).toBe('REFUSED');
  }
 });
+
+it.each([false,true])('the actual keyed gateway accepts a complete month event, historical notes and daily week window; split=%s',async split=>{
+ const initialText='Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại.',initialValues={title:'sửa máy lạnh',notes:'Hôm nay sửa máy lạnh.',eventDate:month};
+ const previous=split?apply(initialText,initialValues):null,text=split?'Nhắc trước 1 tuần. Liên tục vào 8h sáng.':`${initialText} Nhắc trước 1 tuần. Liên tục vào 8h sáng.`,built=build(text,previous,split?receipt+60000:receipt);
+ const evidence=[{kind:'USER_QUOTE',turn:built.input.currentTurn,quote:text,occurrence:1}],values={...(split?{}:initialValues),leadOffsetWeeks:1,frequency:'DAILY',eventRelation:'BEFORE_EVENT',reminderTime:{hour:8,minute:0,qualifier:'H24'}};
+ const canonical=ConversationInterpretationV3Schema.parse({schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:split?'CURRENT':'NEW',evidence},changes:Object.entries(values).map(([field,value])=>({field,value,operation:'SET',evidence})),query:null,uncertainties:[],conversationDirective:null,replyProposal:null});
+ const wire=encodeKeyedSmallComparison(canonical,built.input),gateway=createKeyedContextContractGateway(async()=>({status:200,body:JSON.stringify({model:'openai/gpt-5-mini',provider:'Azure',usage:{cost:0,prompt_tokens:1,completion_tokens:1},choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}]})}),{status:'OBSERVABLE_CANARY',advertisedContextTokens:400000});
+ const prepared=gateway.prepare('PRIMARY',built.input);expect(prepared.status).toBe('READY');if(prepared.status!=='READY')return;
+ const result=await prepared.dispatch();expect(result.status).toBe('SUCCESS');if(result.status!=='SUCCESS'||!('semantic'in result.interpretation))return;
+ const checked=validateEvidenceV3(result.interpretation.semantic,built);expect(checked.status).toBe('VALID');if(checked.status!=='VALID')return;
+ const merged=mergePatchV3(previous,checked.patch);expect(merged.status).toBe('MERGED');if(merged.status!=='MERGED')return;
+ const resolved=resolveRequest(merged.candidate,split?receipt+60000:receipt,lunarCalendar);expect(resolved).toMatchObject({status:'READY',details:{eventDate:'2027-03-07',notes:'Hôm nay sửa máy lạnh.'}});if(resolved.status!=='READY')return;
+ expect(resolved.occurrences.map(occurrence=>occurrence.localDate)).toEqual(['2027-02-28','2027-03-01','2027-03-02','2027-03-03','2027-03-04','2027-03-05','2027-03-06']);
+});
