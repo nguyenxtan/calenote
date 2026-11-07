@@ -13,7 +13,7 @@ it('reads one actual event from a service-created advance group on real D1/worke
  const h=await harness([proposal({title:'họp QA',eventDate:date(2,10,2026),eventTime:time(15)})],undefined,false,db);
  h.deps.getReplyPreferences=async()=>({addressStyle:'sep',customDisplayName:null,advanceReminderDays:2,advanceReminderHours:3});
  expect(await h.turn(0,'Ngày02/10/2026 lúc15h có cuộc họp QA, nhắc giúp tôi.')).toEqual({status:'DRAFT_CREATED'});
- const state=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(1,'Có.')).toEqual({status:'CONFIRMED'});
  const result=await new D1CalendarExportStore(db,h.f.keyring).read({userId:'owner',sessionId:'session',expiresAt:now+1_000_000},now+3);
  expect(result).toMatchObject({skipped:0,truncated:false});expect(result.events).toHaveLength(1);expect(result.events[0]).toMatchObject({title:'họp QA',start:{kind:'UTC',timestamp:Date.UTC(2026,9,2,8)}});
 },30_000);

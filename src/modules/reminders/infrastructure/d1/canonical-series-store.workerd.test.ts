@@ -14,7 +14,7 @@ it('real workerd/D1 with all production migrations confirms and atomically cance
  expect(h.f.db).toBe(db);
  h.deps.getReplyPreferences=async()=>({addressStyle:'sep',customDisplayName:null,advanceReminderDays:2,advanceReminderHours:3});
  expect(await h.turn(0,'Ngày02/10/2026 lúc15h có cuộc họp QA, nhắc giúp tôi.')).toEqual({status:'DRAFT_CREATED'});
- const state=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(1,'Có.')).toEqual({status:'CONFIRMED'});
  const store=new D1CanonicalSeriesStore(db,h.f.keyring),principal={userId:'owner',sessionId:'session',expiresAt:now+1000000};const [series]=await store.list(principal,now+3);
  expect(series.occurrences).toHaveLength(2);
  await db.prepare("CREATE TRIGGER test_cancel_rollback BEFORE UPDATE ON reminder_series BEGIN SELECT RAISE(ABORT,'ROLLBACK_PROBE'); END").run();

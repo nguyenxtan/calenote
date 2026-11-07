@@ -1,4 +1,5 @@
 import {supportsLeadDuration} from "./lead-duration-evidence";
+import { supportsLeadWeekOffset } from "./lead-week-evidence";
 import type { ContextInput } from "./contracts";
 import {SLOT_NAMES} from './contracts';
 import type { SourceEvidence } from "./state";
@@ -327,7 +328,7 @@ export function isBoundMissingReminderClockWithoutCandidates(input: ContextInput
   return deriveGenerationFieldCapability(input).allowedClockFields.length === 0;
 }
 
-export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays", "leadOffsetHours", "leadOffsetMinutes"] as const;
+export const NUMERIC_PROPOSAL_FIELDS = ["frequency", "occurrenceCount", "leadOffsetDays", "leadOffsetHours", "leadOffsetMinutes", "leadOffsetWeeks"] as const;
 export type NumericProposalField = typeof NUMERIC_PROPOSAL_FIELDS[number];
 export const CLOCK_PROPOSAL_FIELDS = ["eventTime", "reminderTime"] as const;
 export type ClockProposalField = typeof CLOCK_PROPOSAL_FIELDS[number];
@@ -494,7 +495,8 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
       const words: Readonly<Record<string, number>> = { một: 1, hai: 2, ba: 3 };
       const numbers = [...text.toLocaleLowerCase("vi").matchAll(/\d+|một|hai|ba/gu)].map(m => words[m[0]] ?? Number(m[0]));
       for (const value of ["ONCE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"]) {
-        if (supportsCadenceOperand("frequency", value, [source], [turn]) && supportsCadenceOperand("frequency", value, [contextual], [fullTurn])) allowed.add("frequency");
+        if (supportsCadenceOperand("frequency", value, [source], [turn], undefined, input.activeRequest ? turn.id : undefined)
+          && supportsCadenceOperand("frequency", value, [contextual], [fullTurn], undefined, input.activeRequest ? fullTurn.id : undefined)) allowed.add("frequency");
       }
       for (const value of numbers) {
         if (supportsCadenceOperand("occurrenceCount", value, [source], [turn], pendingCount, input.activeRequest ? turn.id : undefined, undefined, frequency?.value)
@@ -511,6 +513,9 @@ export function deriveGenerationFieldCapability(input: ContextInput): Generation
           && supportsEventRelation("BEFORE_EVENT", [contextual], [fullTurn], false) && supportsLeadOffset(value, [contextual], [fullTurn]);
         const currentLead = leadScope && supportsLeadOffset(value, [source], [turn], seriesCount) && supportsLeadOffset(value, [contextual], [fullTurn], seriesCount);
         if (currentLead || newLead) allowed.add("leadOffsetDays");
+        const retainedEvent = !!input.activeRequest?.slots.eventDate.value;
+        if (supportsLeadWeekOffset(value, [source], [turn], retainedEvent)
+          && supportsLeadWeekOffset(value, [contextual], [fullTurn], retainedEvent)) allowed.add("leadOffsetWeeks");
         for (const [unit,field] of [["HOUR","leadOffsetHours"],["MINUTE","leadOffsetMinutes"]] as const) {
           if (supportsLeadDuration(unit,value,[source],[turn]) && supportsLeadDuration(unit,value,[contextual],[fullTurn])) allowed.add(field);
         }

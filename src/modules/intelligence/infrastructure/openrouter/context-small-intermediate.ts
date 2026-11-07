@@ -2,7 +2,7 @@
 import {projectWireValidation,type SmallTableDiagnostic} from "../../../conversation/context-contract/validation-diagnostics";
 import {z} from 'zod';
 import {deriveGenerationFieldCapability,NUMERIC_PROPOSAL_FIELDS,isBoundRelationUncertaintyAbsent,isBoundReminderClockAnswer,isInitialFiniteSeriesWithoutRelationSource} from '../../../conversation/context-contract/field-capability';
-import {ContextInputSchema,V3_SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
+import {ContextInputSchema,V3_SLOT_NAMES,HISTORICAL_V3_SLOT_NAMES,SlotValueSchemas,ClockOperandSchema,type ContextInput,type ConversationInterpretationV3} from '../../../conversation/context-contract/contracts';
 import {CONTEXT_SMALL_PROTOCOL_V3,isContextSmallProtocolV3} from '../../../conversation/context-contract/small-protocol';
 import {CONTEXT_TYPED_PROTOCOL_V3} from '../../../conversation/context-contract/typed-protocol';
 import {encodeGoogleLiteEuTypedContextV3,decodeGoogleLiteEuTypedContextTransportV3} from './context-provider-typed-wire';
@@ -28,7 +28,7 @@ type Family='texts'|'integers'|'dates'|'clocks'|'periods';
 function family(field:string):Family {
  if(['eventDate','reminderDate','endDate'].includes(field))return 'dates';
  if(['eventTime','reminderTime'].includes(field))return 'clocks';
- if(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'].includes(field))return 'integers';
+ if(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes','leadOffsetWeeks'].includes(field))return 'integers';
  if(field==='queryRange')return 'periods';
  if(fieldNames.includes(field))return 'texts';
  throw Error('SMALL_FIELD_INVALID');
@@ -43,14 +43,14 @@ function compilerNumericPrimitives(node:unknown):unknown {
  if(node&&typeof node==='object')return Object.fromEntries(Object.entries(node).filter(([key])=>!['minimum','maximum','exclusiveMinimum','exclusiveMaximum'].includes(key)).map(([key,value])=>[key,compilerNumericPrimitives(value)]));
  return node;
 }
-export function internalFlatSchemaV3(input:ContextInput){
+export function internalFlatSchemaV3(input:ContextInput,activeSuccessor=false){
  const parsed=ContextInputSchema.parse(input),book=primaryEvidenceSourceCodebook(parsed),codes=book.codes;
  const capability=deriveGenerationFieldCapability(parsed),numericFields=new Set<string>(NUMERIC_PROPOSAL_FIELDS),allowedNumeric=new Set<string>(capability.allowedNumericFields);
  const relationOnly=isBoundRelationUncertaintyAbsent(parsed),clockOnlyMutations=isBoundReminderClockAnswer(parsed),initialOnly=isInitialFiniteSeriesWithoutRelationSource(parsed);
- const initialFields=new Set<string>(['title','location','eventDate','eventTime','reminderTime','calendar','frequency','occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes']);
+ const initialFields=new Set<string>(['title','location','eventDate','eventTime','reminderTime','calendar','frequency','occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes',...(activeSuccessor?['leadOffsetWeeks']:[])]);
  // Project existing deterministic capabilities before generation. This is a
  // producer language, not permission to bypass canonical or evidence checks.
- const changeFields=V3_SLOT_NAMES.filter(field=>{
+ const changeFields=(activeSuccessor?V3_SLOT_NAMES:HISTORICAL_V3_SLOT_NAMES).filter(field=>{
   if(relationOnly)return field==='eventRelation';
   if(initialOnly&&!initialFields.has(field))return false;
   if(numericFields.has(field))return allowedNumeric.has(field);
@@ -62,7 +62,7 @@ export function internalFlatSchemaV3(input:ContextInput){
  });
  const evidence={...arr({type:'string',enum:[...codes]}),minItems:1,maxItems:3};
  const nil={type:'null'},empty={...arr(nil),maxItems:0};
- const date=obj({kind:{type:'string',enum:Object.keys(dateFields)},calendar:{type:['string','null'],enum:['GREGORIAN','LUNAR_VN',null]},day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:{type:['string','null'],enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED',null]}});
+ const date=obj({kind:{type:'string',enum:[...Object.keys(dateFields),...(activeSuccessor?['RELATIVE_MONTH']:[])]},calendar:{type:['string','null'],enum:['GREGORIAN','LUNAR_VN',null]},day:nullableInteger,month:nullableInteger,year:nullableInteger,leapMonth:{type:['boolean','null']},offsetDays:nullableInteger,weekday:nullableInteger,qualifier:{type:['string','null'],enum:['THIS_WEEK','NEXT_WEEK','UNRESOLVED',null]},...(activeSuccessor?{offsetMonths:nullableInteger}:{})});
  const dateCell={...arr(date),maxItems:1};
  const eventDate=capability.eventDateYearNullRequired?obj({...date.properties,kind:{type:'string',enum:['CIVIL_DATE']},year:nil}):date;
  const eventDateCell={...arr(eventDate),minItems:1,maxItems:1};
@@ -83,7 +83,7 @@ export function internalFlatSchemaV3(input:ContextInput){
  add(['eventDate'],ordinaryOperations,nil,nil,eventDateCell);
  add(['reminderDate','endDate'],ordinaryOperations,nil,nil,{...dateCell,minItems:1});
  add(['eventTime','reminderTime'],initialOnly?['SET']:['SET','REPLACE'],nil,nil,empty);
- add(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
+ add(['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes',...(activeSuccessor?['leadOffsetWeeks']:[])],ordinaryOperations,{type:'integer',minimum:1},nil,empty);
  for(const field of ['frequency','calendar','eventRelation'] as const)add([field],relationOnly?['SET']:ordinaryOperations,nil,{type:'string',enum:[...SlotValueSchemas[field].options]},empty);
  if(!rows.length)throw Error('SMALL_CHANGE_DOMAIN_EMPTY');
  // Keep identity required without a null-or-object union per field. KEEP is
@@ -133,11 +133,11 @@ function requireValue(valid:unknown,reason:SmallTableDiagnostic['reason']='INVAL
  if(!valid)throw new SmallTableError({reason,...(table?{table}:{})});
 }
 /** Offline authoring only. No repair/coercion helper is used for model data. */
-export function encodeInternalFlatV3(value:ConversationInterpretationV3,input:ContextInput):SmallContextWire {
- const raw=encodeGoogleLiteEuTypedContextV3(value,input) as Row,book=primaryEvidenceSourceCodebook(input);
- const selected=internalFlatSchemaV3(input).schema as unknown as {properties:{changes:{required:string[]}}};
+export function encodeInternalFlatV3(value:ConversationInterpretationV3,input:ContextInput,activeSuccessor=false):SmallContextWire {
+ const raw=encodeGoogleLiteEuTypedContextV3(value,input,activeSuccessor) as Row,book=primaryEvidenceSourceCodebook(input);
+ const selected=internalFlatSchemaV3(input,activeSuccessor).schema as unknown as {properties:{changes:{required:string[]}}};
  const out:SmallContextWire={operation:{code:raw.operationCode as string,targetEvidence:[]},changes:Object.fromEntries(selected.properties.changes.required.map(field=>[field,keepControl()])),query:[],uncertainties:[],directive:[],reply:[],texts:[],integers:[],dates:[],clocks:[],periods:[]};
- const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:null,weekday:null,qualifier:null,...value}];};
+ const date=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));return [{calendar:null,day:null,month:null,year:null,leapMonth:null,offsetDays:null,weekday:null,qualifier:null,...(activeSuccessor?{offsetMonths:null}:{}),...value}];};
  const period=(value:unknown):Row[]=>{if(value===null||value===undefined)return [];requireValue(record(value));const relative=['WEEK','MONTH','WEEKEND'].includes(String(value.kind));const kind=relative?Object.keys(relativePeriods).find(code=>relativePeriods[code].kind===value.kind&&relativePeriods[code].offset===value.offset):String(value.kind);requireValue(kind&&periodCodes.includes(kind));return [{kind,date:date(value.date),from:date(value.from),through:date(value.through),unsupportedKind:null}];};
  const save=(field:string,value:unknown):number=>{requireValue(family(field)==='integers');requireValue(typeof value==='number'&&Number.isSafeInteger(value),'INVALID_TABLE_VALUE','integers');return value;};
  const evidence=(value:unknown):string[]=>{requireValue(record(value)&&Array.isArray(value.additionalEvidence));return [String(value.primaryEvidence),...value.additionalEvidence.map(pointer=>book.encode(JSON.stringify(pointer)))];};

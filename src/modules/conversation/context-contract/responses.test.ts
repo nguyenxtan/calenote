@@ -9,6 +9,12 @@ describe("backend reply composition", () => {
     expect(formatPendingFact("reminderTime", { hour: 9, minute: 5, qualifier: "UNKNOWN" })).toBe("Giờ nhắc: 09:05 (chưa rõ sáng/chiều)");
     expect(formatPendingFact("eventDate", { kind: "CIVIL_DATE", calendar: "LUNAR_VN", day: 11, month: 10, year: null, leapMonth: null })).toBe("Ngày sự kiện: 11/10 (chưa có năm), âm lịch Việt Nam (chưa rõ tháng nhuận)");
   });
+  it("presents an authored relative month as months without inventing a day offset", () => {
+    expect(formatPendingFact("eventDate", { kind: "RELATIVE_MONTH", offsetMonths: 1 })).toBe("Ngày sự kiện: 1 tháng tính từ ngày nhận yêu cầu");
+  });
+  it("labels the authored week lead separately from day leads", () => {
+    expect(formatPendingFact("leadOffsetWeeks", 1)).toBe("Số tuần trước: 1");
+  });
   it("monthly query states scope, time, status and partiality without any model prose", () => {
     const result = composeContextReply({ kind: "QUERY", resolution: { status: "RANGE", start: 0, end: 1, label: "Tháng 2026-10 (gồm cả những ngày đã qua)", scopeLabel: "scope" }, result: { status: "RESULTS", rows: [{ id: "row", encryptedTitle: { ciphertext: new ArrayBuffer(0), iv: new ArrayBuffer(0) }, titleKeyVersion: 1, scheduledAt: Date.parse("2026-10-08T01:00:00Z"), status: "FAILED", statusLabel: "wrong label" }], hasMore: true, partialNotice: null, scopeLabel: "scope", calendarNotice: "Lịch dương" }, titles: new Map([["row", "đi thi"]]) }, model);
     expect(result).toMatchObject({ status: "READY", source: "BACKEND" });
@@ -82,19 +88,61 @@ describe("saved addressing on structured replies", () => {
       else expect(addressed.text.slice(span.start, span.end)).not.toContain("Bạn");
     }
   });
-  it("preserves preview payload and model guidance verbatim under saved sếp addressing", async () => {
+  it("preserves preview payload under saved sếp addressing", async () => {
     const { preview } = await confirmationFixture();
-    const inputs = [composeContextReply({ kind: "PREVIEW", preview }), composeContextReply({ kind: "QUESTION", question: "Bạn muốn lúc nào?", facts: ["Bạn 🧾"], field: "reminderTime" }, { source: "MODEL_GUIDANCE", text: "Bạn muốn được nhắc vào lúc nào?" })];
-    for (const plan of inputs) {
+    const plan = composeContextReply({ kind: "PREVIEW", preview });
+    if (plan.status !== "READY") throw new Error("render");
+    const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
+    if (result.status !== "READY") throw new Error("render");
+    expect(result.text).toBe("Sếp, " + plan.text);
+    expect(result.source).toBe(plan.source);
+    for (let i = 0; i < plan.spans.length; i++) expect(result.text.slice(result.spans[i].start, result.spans[i].end)).toBe(plan.text.slice(plan.spans[i].start, plan.spans[i].end));
+  });
+  it("addresses explicitly application-owned canonical questions without touching identical owner facts", () => {
+    const question = "Mình cần làm rõ thông tin này. Bạn muốn được nhắc lúc mấy giờ?";
+    const plan = composeContextReply({ kind: "QUESTION", question, questionProvenance: "APPLICATION", facts: [question, "Việc cần nhắc: bạn gọi mình"], field: "reminderTime", alternatives: ["Ghi chú: Bạn nhớ gọi mình"] });
+    if (plan.status !== "READY") throw new Error("render");
+    const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
+    if (result.status !== "READY") throw new Error("render");
+    expect(result.text).toBe(question + "\nViệc cần nhắc: bạn gọi mình\nGhi chú: Bạn nhớ gọi mình\nEm cần làm rõ thông tin này. Sếp muốn được nhắc lúc mấy giờ?");
+    for (const [index, span] of result.spans.entries()) {
+      if (span.kind === "FACT") expect(result.text.slice(span.start, span.end)).toBe(plan.text.slice(plan.spans[index].start, plan.spans[index].end));
+    }
+  });
+  it("drops model wording to the trusted canonical question for saved addressing", () => {
+    const plan = composeContextReply({ kind: "QUESTION", question: "Bạn muốn được nhắc lúc mấy giờ?", questionProvenance: "APPLICATION", facts: ["Việc cần nhắc: Bạn gọi mình"], field: "reminderTime" }, { source: "MODEL_GUIDANCE", text: "Bạn muốn mình nhắc vào lúc nào?" });
+    if (plan.status !== "READY") throw new Error("render");
+    expect(plan.source).toBe("MODEL_GUIDANCE");
+    const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
+    expect(result).toMatchObject({ status: "READY", source: "BACKEND", text: "Việc cần nhắc: Bạn gọi mình\nSếp muốn được nhắc lúc mấy giờ?" });
+  });
+  it("uses em and Sếp in canonical greeting, help, unsupported and recovery prose", () => {
+    const outcomes = [
+      { kind: "NOTICE", notice: "GREET" },
+      { kind: "NOTICE", notice: "HELP" },
+      { kind: "UNSUPPORTED", capability: "ASSISTANT_SCOPE" },
+      { kind: "RECOVERY", count: 2, question: "Bạn muốn mình nhắc gì?", questionProvenance: "APPLICATION", facts: [] },
+    ] satisfies ReplyOutcome[];
+    const expected = ["Chào Sếp! Em có thể giúp Sếp ghi nhớ việc gì?", "Sếp có thể mô tả việc cần nhắc và thời điểm mong muốn.", "Em hỗ trợ lịch và lời nhắc cá nhân. Yêu cầu này nằm ngoài phạm vi hiện tại.", "Thông tin đang giữ ở trên. Sếp muốn em nhắc gì?"];
+    for (const [index, outcome] of outcomes.entries()) {
+      const plan = composeContextReply(outcome);
+      if (plan.status !== "READY") throw new Error("render");
+      expect(addressContextReply(plan, { addressStyle: "sep", customDisplayName: null })).toMatchObject({ status: "READY", text: expected[index] });
+    }
+  });
+  it("drops optional model help and unsupported wording before applying saved addressing", () => {
+    for (const outcome of [{ kind: "NOTICE", notice: "HELP" }, { kind: "UNSUPPORTED", capability: "LUNAR_RECURRENCE" }] satisfies ReplyOutcome[]) {
+      const plan = composeContextReply(outcome, { source: "MODEL_GUIDANCE", text: "Bạn muốn mình giúp điều gì?" });
       if (plan.status !== "READY") throw new Error("render");
       const result = addressContextReply(plan, { addressStyle: "sep", customDisplayName: null });
       if (result.status !== "READY") throw new Error("render");
-      expect(result.text).toBe("Sếp, " + plan.text);
-      expect(result.source).toBe(plan.source);
-      for (let i = 0; i < plan.spans.length; i++) expect(result.text.slice(result.spans[i].start, result.spans[i].end)).toBe(plan.text.slice(plan.spans[i].start, plan.spans[i].end));
+      expect(result.source).toBe("BACKEND");
+      expect(result.text).not.toContain("Bạn");
+      expect(result.text).not.toContain("mình");
+      expect(result.text).toContain("Sếp");
     }
   });
-  it("addresses only exact canonical backend notices and decision questions", () => {
+  it("addresses trusted backend notices and decisions without trusting text equality", () => {
     for (const outcome of [{ kind: "NOTICE", notice: "HELP" }, { kind: "FAILURE", reason: "PROVIDER" }, { kind: "DECISION", decisionKind: "SAVE_PREVIEW", facts: [], token: "handle" }] satisfies ReplyOutcome[]) {
       const plan = composeContextReply(outcome);
       if (plan.status !== "READY") throw new Error("render");

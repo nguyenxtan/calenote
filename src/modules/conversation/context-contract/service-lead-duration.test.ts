@@ -15,10 +15,10 @@ it.each([
  expect(await h.turn(0,input),JSON.stringify({replies:h.replies,failures:h.events.filter(e=>e.event.includes("FAIL")||e.event.includes("REFUS"))})).toEqual({status:'DRAFT_CREATED'});
  const state=(await h.read(1))!;
  expect(state.slots.reminderTime.value).toBeNull();expect(state.slots.reminderDate.value).toBeNull();
- expect(await h.turn(1,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(1,"Có.")).toEqual({status:'CONFIRMED'});
  expect(await h.f.db.prepare('SELECT scheduled_at FROM reminders').first('scheduled_at')).toBe(Date.parse(`2026-11-10T${c.at}:00+07:00`));
  expect(await h.f.db.prepare('SELECT count(*) n FROM advance_notification_groups').first('n')).toBe(0);
- await h.turn(2,`xác nhận ${state.pendingDecision!.tokenHandle}`);expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(1);
+ await h.turn(2,"Có.");expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(1);
 });
 it('asks about an ambiguous bare before-hour phrase without paying for or inventing a duration/clock',async()=>{
  const h=await harness([proposal({...values,leadOffsetHours:8})]);
@@ -65,7 +65,7 @@ it('passes the actual production keyed gateway and source-bound duration across 
  expect(h.replies.at(-1)?.text).toContain('90 phút');
  expect(await h.turn(1,'Dời giờ sự kiện sang16h.'),JSON.stringify(h.replies)).toEqual({status:'DRAFT_CREATED'});
  const state=(await h.read(2))!;expect(state.slots.leadOffsetMinutes?.value).toBe(90);expect(state.slots.reminderTime.value).toBeNull();
- expect(await h.turn(2,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(2,"Có.")).toEqual({status:'CONFIRMED'});
  expect(await h.f.db.prepare('SELECT scheduled_at FROM reminders').first('scheduled_at')).toBe(Date.parse('2026-11-10T14:30:00+07:00'));
  expect(calls).toBe(2);
 });
@@ -79,6 +79,6 @@ it('clears a duration and its relation without retaining an obsolete fact or opt
  expect(await h.turn(0,'Ngày10/11/2026 lúc15h họp QA, nhắc trước 90 phút.')).toEqual({status:'DRAFT_CREATED'});
  expect(await h.turn(1,'Bỏ mốc nhắc trước 90 phút; nhắc ngày10/11/2026 lúc9h.'),JSON.stringify(h.replies)).toEqual({status:'DRAFT_CREATED'});
  const state=(await h.read(2))!;expect(state.slots.leadOffsetMinutes).toBeUndefined();expect(state.facts.some(f=>f.field==='leadOffsetMinutes')).toBe(false);
- expect(await h.turn(2,`xác nhận ${state.pendingDecision!.tokenHandle}`)).toEqual({status:'CONFIRMED'});
+ expect(await h.turn(2,"Có.")).toEqual({status:'CONFIRMED'});
  expect(await h.f.db.prepare('SELECT scheduled_at FROM reminders').first('scheduled_at')).toBe(Date.parse('2026-11-10T09:00:00+07:00'));
 });

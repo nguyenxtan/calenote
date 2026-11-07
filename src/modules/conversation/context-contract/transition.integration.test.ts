@@ -144,7 +144,7 @@ it.each([599999, 600000])("A4 selected D1 confirmation at original candidate age
   expect(preview.snapshot.draftExpiresAt).toBe(origin.expiresAt);
   expect(preview.snapshot.pendingDecision?.kind).toBe("SAVE_PREVIEW");
   const d = preview.snapshot.pendingDecision!, p = preview.snapshot.previewReceipt!;
-  const proof = { operationKey: `expiry-${age}`, contextId: preview.snapshot.id, contextRevision: preview.snapshot.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId, draftRevision: d.draftRevision, draftHash: p.draftHash, response: { kind: "TOKEN" as const, handle: d.tokenHandle! } };
+  const proof = { operationKey: `expiry-${age}`, contextId: preview.snapshot.id, contextRevision: preview.snapshot.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId, draftRevision: d.draftRevision, draftHash: p.draftHash, response: { kind: "BARE" as const, text: "Có." } };
   const scope = { ...h.f.scope(2), now: h.f.scope(0).now + age };
   await h.f.db.prepare("UPDATE inbound_updates SET received_at=? WHERE id=?").bind(scope.now, scope.sourceInboundId).run();
   const before = await h.f.db.prepare("SELECT revision,status FROM conversation_contexts").first();
@@ -182,7 +182,7 @@ it.each(["PROVIDER", "BUDGET", "SIZE"] as const)("A4 %s refusal retains accepted
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
 
-it("A4 new_request_yes_only_replaces_pending; fresh bound save is exactly once", async () => {
+it("A4 first Có replaces pending and the next Có saves exactly once", async () => {
   const h = await setupSuccessor();
   const a = await h.semantic(0, complete); await h.persist(a.turn, a.result);
   const b = await h.semantic(1, { ...complete, title: "gọi mẹ" });
@@ -193,9 +193,9 @@ it("A4 new_request_yes_only_replaces_pending; fresh bound save is exactly once",
   expect(preview.snapshot.pendingDecision?.kind).toBe("SAVE_PREVIEW");
   expect(preview.snapshot.slots.title.value).toBe("gọi mẹ");
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  const bare = await h.control(3, "Có."); expect(bare.result).not.toHaveProperty("confirmationProof");
-  const save = await h.control(4, s => `xác nhận ${s.pendingDecision!.tokenHandle}`);
+  const save = await h.control(3, "Có.");
   if (!("confirmationProof" in save.result) || !save.result.confirmationProof) throw new Error("fresh save proof");
+  expect(save.result.confirmationProof.response).toEqual({ kind: "BARE", text: "Có." });
   expect(await h.store.confirm(save.authority, save.result.confirmationProof)).toMatchObject({ status: "COMMITTED", childCount: 1 });
   expect(await h.store.confirm(save.authority, save.result.confirmationProof)).toMatchObject({ status: "IDEMPOTENT", childCount: 1 });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(1);
@@ -291,8 +291,9 @@ it.each([1, 2])( "A4 successor %i occurrence preview rejects stale proof and leg
   await h.persist(edited.turn, edited.result);
   expect(await h.store.confirm({ kind: "CHAT", scope: h.f.scope(2) }, stale)).toEqual({ status: "REJECTED" });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  const save = await h.control(2, s => `xác nhận ${s.pendingDecision!.tokenHandle}`);
+  const save = await h.control(2, "Có.");
   if (!("confirmationProof" in save.result) || !save.result.confirmationProof) throw new Error("current proof");
+  expect(save.result.confirmationProof.response).toEqual({ kind: "BARE", text: "Có." });
   expect(await h.store.confirm(save.authority, save.result.confirmationProof)).toMatchObject({ status: "COMMITTED", childCount: count });
   expect(await h.f.store.confirm(save.authority, save.result.confirmationProof)).not.toMatchObject({ status: "IDEMPOTENT" });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(count);

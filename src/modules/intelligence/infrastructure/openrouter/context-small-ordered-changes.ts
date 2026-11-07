@@ -1,8 +1,8 @@
 /** Ordered field-owned transport. No received rank coordinate or operand stream. */
 import {z} from 'zod';
-import {SlotValueSchemas,ClockOperandSchema,type ContextInput} from '../../../conversation/context-contract/contracts';
+import {SlotValueSchemas,SlotValueSchemasV3,ClockOperandSchema,type ContextInput} from '../../../conversation/context-contract/contracts';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
-import {UNCERTAINTY_FIELD_WIRE_CODE_V1} from './context-provider-wire';
+import {UNCERTAINTY_FIELD_WIRE_CODE_V1,UNCERTAINTY_FIELD_WIRE_CODE_V3} from './context-provider-wire';
 import {internalFlatSchemaV3} from './context-small-intermediate';
 import {ownedClockSchema} from './context-small-owned-clocks';
 import {operationValueSchema,expandOperationValues,type OperationValueWire} from './context-small-operation-values';
@@ -16,7 +16,7 @@ const empty=(v:unknown)=>Array.isArray(v)&&v.length===0;
 const dateKeys:Record<string,readonly string[]>={CIVIL_DATE:['kind','calendar','day','month','year','leapMonth'],RELATIVE_DAY:['kind','offsetDays'],WEEKDAY:['kind','weekday','qualifier']};
 const periodKeys:Record<string,readonly string[]>={DAY:['kind','date'],WEEK:['kind','offset'],MONTH:['kind','offset'],WEEKEND:['kind','offset'],REST_OF_MONTH:['kind'],NEXT_7_DAYS:['kind'],UPCOMING:['kind'],DATE_BOUNDS:['kind','from','through']};
 const relative=Object.fromEntries(['WEEK','MONTH','WEEKEND'].flatMap(kind=>[[-1,'PREVIOUS'],[0,'CURRENT'],[1,'NEXT']].map(([offset,label])=>[`${kind}_${label}`,{kind,offset:Number(offset)}])));
-const family=(field:string)=>['eventDate','reminderDate','endDate'].includes(field)?'date':['eventTime','reminderTime'].includes(field)?'clock':['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes'].includes(field)?'number':field==='queryRange'?'period':'text';
+const family=(field:string)=>['eventDate','reminderDate','endDate'].includes(field)?'date':['eventTime','reminderTime'].includes(field)?'clock':['occurrenceCount','leadOffsetDays','leadOffsetHours','leadOffsetMinutes','leadOffsetWeeks'].includes(field)?'number':field==='queryRange'?'period':'text';
 /** Copy each selected field's complete write/value/evidence domain, not a union of sibling properties. */
 export function orderedChangeSchema(source:unknown):Row {
  const schema=structuredClone(source) as {properties:Row},fields=(schema.properties.changes as {properties:Record<string,{items:{properties:Row}} >}).properties;
@@ -31,15 +31,16 @@ export function attachOrderedChanges<T extends Pick<OperationValueWire,'changes'
  return {...owned,changes};
 }
 /** Validate every owner and inactive operand before constructing the unindexed typed candidate. */
-export function projectOrderedSmallV3(raw:unknown,input:ContextInput):Row {
+export function projectOrderedSmallV3(raw:unknown,input:ContextInput,activeSuccessor=false):Row {
  check(record(raw)&&Array.isArray(raw.changes)&&raw.changes.length<=13);
- const schema=orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(input).schema))));
+ const schema=orderedChangeSchema(kindQuerySchema(operationValueSchema(ownedClockSchema(internalFlatSchemaV3(input,activeSuccessor).schema))));
  const checked=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]).parse({...raw,directive:[],reply:[]}) as unknown as OrderedChangeWire<KindQueryWire<OperationValueWire>>;
  check(new Set(checked.changes.map(change=>change.field)).size===checked.changes.length);
  const parsed=expandKindQueries(checked),book=primaryEvidenceSourceCodebook(input);
  check(parsed.uncertainties.length<=4);
  const active=(row:Row,keys:readonly string[])=>{for(const[key,value]of Object.entries(row))if(!keys.includes(key))check(value===null);return Object.fromEntries(keys.map(key=>[key,row[key]]));};
- const date=(row:Row):Row=>{const keys=dateKeys[String(row.kind)];check(keys);const value=active(row,keys);check(SlotValueSchemas.eventDate.safeParse(value).success);return value;};
+ const values=activeSuccessor?SlotValueSchemasV3:SlotValueSchemas;
+ const date=(row:Row):Row=>{const keys=activeSuccessor&&row.kind==='RELATIVE_MONTH'?['kind','offsetMonths']:dateKeys[String(row.kind)];check(keys);const value=active(row,keys);check(values.eventDate.safeParse(value).success);return value;};
  const dateCell=(rows:Row[]):Row|null=>{check(rows.length<=1);return rows.length?date(rows[0]):null;};
  const period=(rows:Row[],padded:boolean):Row|null=>{
   check(rows.length<=1);if(!rows.length)return null;const row=rows[0];
@@ -50,8 +51,8 @@ export function projectOrderedSmallV3(raw:unknown,input:ContextInput):Row {
   return padded?value:active(value,periodKeys[String(value.kind)]??Object.keys(value));
  };
  const evidence=(codes:string[])=>{check(codes.length>=1&&codes.length<=3);const pointers=codes.map(code=>{const json=book.decode(code);check(json!==undefined);return JSON.parse(json);});return {primaryEvidence:codes[0],additionalEvidence:pointers.slice(1)};};
- const writeValue=(field:string,value:unknown):unknown=>{const kind=family(field);if(kind==='date'){check(record(value));return date(value);}if(kind==='clock')check(ClockOperandSchema.safeParse(value).success);check(SlotValueSchemas[field as keyof typeof SlotValueSchemas]?.safeParse(value).success);return value;};
- const issueField=(code:number)=>{check(Number.isSafeInteger(code));const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,value])=>value===code);check(entry);return entry[0];};
+ const writeValue=(field:string,value:unknown):unknown=>{const kind=family(field);if(kind==='date'){check(record(value));return date(value);}if(kind==='clock')check(ClockOperandSchema.safeParse(value).success);check(values[field as keyof typeof values]?.safeParse(value).success);return value;};
+ const issueField=(code:number)=>{check(Number.isSafeInteger(code));const entry=Object.entries(activeSuccessor?UNCERTAINTY_FIELD_WIRE_CODE_V3:UNCERTAINTY_FIELD_WIRE_CODE_V1).find(([,value])=>value===code);check(entry);return entry[0];};
  const alternativeValue=(field:string,a:Row):unknown=>{
   const kind=family(field);check(Array.isArray(a.clock)&&a.clock.length===(kind==='clock'?1:0));
   if(kind==='clock'){check(a.value===null&&a.text===null&&empty(a.date)&&empty(a.period)&&ClockOperandSchema.safeParse(a.clock[0]).success);return a.clock[0];}

@@ -518,7 +518,7 @@ it("persists only sanitized HTTP failure diagnostics and stops after one synthet
       }) });
     expect(calls).toBe(1); expect(result.status).toBe("STOP");
     expect(result.responses[0]).toMatchObject({ category: "PROVIDER_FAILURE", failureDiagnostics: { httpStatus: 400, errorCode: 400 },
-      canonicalSchemaDigest: "b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26",
+      canonicalSchemaDigest: "ae0ccf1c23eefd86f2340653271eaf1e5fdb7ec8e3bb43e769fe2dc7e762a47e",
       providerWireSchemaDigest: "ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3",
       providerWireSchemaVersion: "google-gemini-2.5-flash-lite-vertex-eu-context-title-presence-104" });
     for (const file of ["responses.json", "report.json"]) {

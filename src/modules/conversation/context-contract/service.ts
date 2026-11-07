@@ -34,7 +34,7 @@ import { InterpretationJsonSchema } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
 import { projectSemanticView } from "./projection";
 import { createControlProof } from "./control-proof";
-import { isPreviewRecoveryResponse } from "./preview-control";
+import { isAddressedPreviewControl, isPreviewRecoveryResponse, normalizeControlText } from "./preview-control";
 import { SLOT_NAMES } from "./contracts";
 import { SlotsSchema, encodeContextSnapshotV2 } from "./state";
 import type { DecisionProof } from "./store";
@@ -56,10 +56,9 @@ export interface ContextContractServiceDependencies {
   processingFeedback?: () => void | Promise<void>;
   observe?: (event: ContextObservationEvent) => void;
 }
-const normalizedControl = (text: string) => text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
 const localWords = new Set(["có", "ok", "1", "xác nhận", "không", "2", "bỏ", "hủy", "huỷ"]);
 const helpWords = new Set(["help", "/help", "trợ giúp", "hướng dẫn"]);
-const greeting = /^(?:chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
+const greeting = /^(?:alo|a lô|chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
 export function createContextContractService(deps: ContextContractServiceDependencies) {
   if (!isContextProtocolV3(deps.store.protocol)) throw new TypeError("Selected context protocol required");
   if (!/^[0-9a-f]{40}$/u.test(deps.sourceSha)) throw new TypeError("Source SHA required");
@@ -179,7 +178,21 @@ export function createContextContractService(deps: ContextContractServiceDepende
           || Date.parse(observed.observation.inbound.receivedAt) !== message.receivedAt || context.timezone !== "Asia/Ho_Chi_Minh") return finish("CONTEXT");
         try { preferences = await deps.getReplyPreferences?.(context.userId); } catch { preferences = undefined; }
         const control = selectControl(message.text, prior?.pendingDecision ?? null, authority, { snapshot: prior ?? undefined, now: scope.now });
-        const normalized = normalizedControl(message.text);
+        const normalized = normalizeControlText(message.text);
+        const addressedControl = isAddressedPreviewControl(message.text);
+        if (!prior && observed.observation.lastTerminalOutcome?.status === "EXPIRED" && (localWords.has(normalized) || addressedControl)) {
+          emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
+          return finish("EXPIRED");
+        }
+        // An old application token is inert UI input, never source material
+        // for the model. Preserve any newer current decision and its receipt.
+        if (addressedControl && control.kind === "NONE") {
+          emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
+          if (!await deps.runtimeStore.complete({ ...scope, now: deps.now() })) return { status: "SUPERSEDED" };
+          const reply = composeContextReply({ kind: "FAILURE", reason: "STALE" });
+          if (reply.status === "READY") await send(address(reply));
+          return { status: "REJECTED" };
+        }
         // UI vocabulary without a decision is not authority over an active
         // clarification: e.g. "2" may be an occurrence count or offset.
         const staleControl = localWords.has(normalized) && !prior?.pendingReminderQuestion && !prior?.pendingQueryQuestion;
@@ -228,7 +241,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           if (control.kind !== "NONE" || recovery) transition = await transitionConversationV3({ snapshot: prior, received: built.candidateSnapshot,
             ...(recovery ? { previewRecoveryText: message.text } : {}), control, authority, now: scope.now, channel: deps.channel });
           else {
-            const reply = composeContextReply(staleControl ? { kind: "FAILURE", reason: "STALE" } : { kind: "NOTICE", notice: "HELP" });
+            const reply = composeContextReply(staleControl ? { kind: "FAILURE", reason: "STALE" } : { kind: "NOTICE", notice: greeting.test(normalized) ? "GREET" : "HELP" });
             if (reply.status !== "READY") return finish("CONTEXT");
             transition = await localTransition(prior, built.candidateSnapshot, reply);
           }

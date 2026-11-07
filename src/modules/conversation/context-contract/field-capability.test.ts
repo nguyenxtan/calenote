@@ -1006,3 +1006,30 @@ it("retained numeric schema branches grant no NEW request fact authority", async
   expect(h.events).toContainEqual(expect.objectContaining({ event: "POST_CANONICAL_STAGE", diagnostic: expect.objectContaining({ stage: "EVIDENCE", result: "REJECTED", reason: "EVIDENCE_INVALID" }) }));
   expect((await h.read(2))?.slots.occurrenceCount.value).toBe(2);
 });
+
+it("authored weeks and bound continuous clock expose only their own numeric fields", () => {
+ const context = input("Nhắc trước 1 tuần. Liên tục vào 8h sáng.");
+ const slots=Object.fromEntries(SLOT_NAMES.map(field=>[field,{state:"MISSING",value:null,fact:null}])) as NonNullable<ContextInput["activeRequest"]>["slots"];
+ slots.eventDate={state:"PROPOSED",value:{kind:"CIVIL_DATE",calendar:"GREGORIAN",day:20,month:11,year:2026,leapMonth:null},fact:null};
+ context.activeRequest={lifecycle:"CLARIFYING",slots};
+ expect(deriveGenerationFieldCapability(context).allowedNumericFields).toEqual(["frequency", "leadOffsetWeeks"]);
+ expect(deriveGenerationFieldCapability(context).allowedClockFields).toContain("reminderTime");
+});
+it("fresh positive continuous clock exposes DAILY alongside its independently authored week", () => {
+ const capability=deriveGenerationFieldCapability(input("Ngày 20/12/2026 đi thi. Nhắc trước 1 tuần. Liên tục vào 8h sáng."));
+ expect(capability.allowedNumericFields).toEqual(["frequency","leadOffsetWeeks"]);
+ expect(capability.allowedClockFields).toContain("reminderTime");
+});
+it("deferred NEW capabilities include authored week and continuous clock across every current burst member", () => {
+ const context=ContextInputSchema.parse({...input("Liên tục vào 8h sáng."),
+  reference:{instant:"2026-10-08T03:00:04.000Z",localDate:"2026-10-08",timezone:"Asia/Ho_Chi_Minh"},
+  turns:[{role:"USER",text:"Ngày 20/12/2026 đi thi."},{role:"USER",text:"Nhắc trước 1 tuần."},{role:"USER",text:"Liên tục vào 8h sáng."}],currentTurn:2,
+  currentBurstTurns:[0,1,2],currentBurstReferences:[
+   {turn:0,instant:"2026-10-08T03:00:00.000Z",localDate:"2026-10-08"},
+   {turn:1,instant:"2026-10-08T03:00:02.000Z",localDate:"2026-10-08"},
+   {turn:2,instant:"2026-10-08T03:00:04.000Z",localDate:"2026-10-08"},
+  ]});
+ const capability=deriveGenerationFieldCapability(context);
+ expect(capability.allowedNumericFields).toEqual(["frequency","leadOffsetWeeks"]);
+ expect(capability.allowedClockFields).toContain("reminderTime");
+});

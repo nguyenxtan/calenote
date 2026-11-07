@@ -1,4 +1,5 @@
 import {supportsLeadDuration,leadDurationCovered} from "./lead-duration-evidence";
+import { supportsLeadWeekOffset, leadWeekOffsetCovered } from "./lead-week-evidence";
 import { evidenceContextFor, type BoundContextFact, type ReadyContext } from "./context";
 import { LegacyV2SemanticPatchProposalSchema as SemanticPatchProposalSchema, LegacyV2FieldChangeSchema as FieldChangeSchema, QueryOperandSchema, LegacyV2UncertaintySchema as UncertaintySchema, V3_SLOT_NAMES, type LegacyV2SemanticPatchProposal as SemanticPatchProposal, type EvidenceRef, type LegacyV2FieldChange as FieldChange, type QueryOperand, type LegacyV2ContextInput as ContextInput } from "./contracts";
 import type { ContextObservation, ContextSnapshotV1, SourceEvidence, SlotProvenance } from "./state";
@@ -10,11 +11,12 @@ import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete, titleCoverageComplete, notesCoverageComplete, reminderDateCoverageComplete } from "./semantic-completeness";
+import {supportsRelativeMonthDate,relativeMonthDateCovered,monthEventReminderDateRolesSupported} from './relative-month-evidence';
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
-import { supportsCadenceOperand, leadDistanceCovered } from "./cadence-count-evidence";
+import { supportsCadenceOperand, leadDistanceCovered, continuousClockCadenceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
-import type { ContextSnapshotV2 } from "./state";
+import type { ContextSnapshotV2, ContextSlots } from "./state";
 import { currentRequestTurnIndexes } from "./burst-prompt";
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
@@ -102,7 +104,7 @@ function traceLeadOffsetResolution(field: string, refs: EvidenceRef[], requested
 function needsTemporalAnchor(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const object = value as Record<string, unknown>;
-  if (["RELATIVE_DAY", "WEEKDAY", "WEEK", "MONTH", "WEEKEND", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING"].includes(String(object.kind))) return true;
+  if (["RELATIVE_DAY", "RELATIVE_MONTH", "WEEKDAY", "WEEK", "MONTH", "WEEKEND", "REST_OF_MONTH", "NEXT_7_DAYS", "UPCOMING"].includes(String(object.kind))) return true;
   if (object.kind === "CIVIL_DATE" && object.year === null) return true;
   return Object.values(object).some(needsTemporalAnchor);
 }
@@ -137,6 +139,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
   };
   const internal = evidenceContextFor(built);
   if (!internal) return refused("CONTEXT_NOT_BUILT");
+  const retainedSlots: ContextSlots | undefined = internal.snapshot?.slots;
   const parsed = SemanticPatchProposalSchema.safeParse(proposal);
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
   if (containsForbiddenControl(parsed.data, internal.handles)) return refused("CONTROL_IN_PROPOSAL");
@@ -212,7 +215,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
     const current = refs.some(ref => ref.kind === "USER_QUOTE" && ref.turn === built.input.currentTurn);
     let provenance: EvidenceProvenance = { kind: "EXPLICIT_USER" };
     if (firstFact?.internal.scope === "REMINDER") {
-      const slot = internal.snapshot?.slots[firstFact.internal.field];
+      const slot = retainedSlots?.[firstFact.internal.field];
       if (!slot || slot.state !== "RESOLVED" || !equal(slot.value, firstFact.internal.value) || !slot.provenance) return fail("EVIDENCE_FACT_INVALID");
       provenance = slot.provenance;
     } else if (firstFact) provenance = firstFact.internal.provenance;
@@ -243,7 +246,7 @@ export function validateLegacyV2Evidence(proposal: unknown, built: ReadyContext,
   try {
     const resolvedChanges: FieldChange[] = [];
     const changeEvidence = value.changes.map((change, index) => {
-      const old = internal.snapshot?.slots[change.field]?.value ?? null;
+      const old = retainedSlots?.[change.field]?.value ?? null;
       const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && value.dialogueAct === "EDIT");
       const resolved = FieldChangeSchema.parse({ ...change, value: evidence.resolvedValue });
       if ((resolved.operation === "CLEAR" || (old !== null && !equal(old, resolved.value))) && !evidence.current) fail("CURRENT_USER_EVIDENCE_REQUIRED");
@@ -330,8 +333,9 @@ export function isValidatedPatchV3(value: unknown): value is ValidatedPatchV3 { 
 function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:EvidenceFailureDiagnostic)=>void,observe?:DownstreamObserver,target?:SemanticPatchProposalV3["requestTarget"],proposedFrequency?:unknown) {
   const internal=evidenceContextForV2(built);
   if(!internal) return fail("CONTEXT_NOT_BUILT");
-  const frequency = internal.snapshot?.slots.frequency;
-  const count = internal.snapshot?.slots.occurrenceCount;
+  const retainedSlots: ContextSlots | undefined = internal.snapshot?.slots;
+  const frequency = retainedSlots?.frequency;
+  const count = retainedSlots?.occurrenceCount;
   const seriesCount = target?.kind === "CURRENT" && frequency && count
     && ["PROPOSED", "RESOLVED"].includes(frequency.state) && frequency.value === "DAILY"
     && ["PROPOSED", "RESOLVED"].includes(count.state) && typeof count.value === "number"
@@ -408,7 +412,7 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     const current = refs.some(ref => ref.kind === "USER_QUOTE" && ref.turn === built.input.currentTurn);
     let provenance: EvidenceProvenance = { kind: "EXPLICIT_USER" };
     if (firstFact?.internal.scope === "REMINDER") {
-      const slot = internal.snapshot?.slots[firstFact.internal.field];
+      const slot = retainedSlots?.[firstFact.internal.field];
       if (!slot || slot.state !== "RESOLVED" || !equal(slot.value, firstFact.internal.value) || !slot.provenance) return fail("EVIDENCE_FACT_INVALID");
       provenance = slot.provenance;
     } else if (firstFact) provenance = firstFact.internal.provenance;
@@ -433,6 +437,10 @@ function createEvidenceResolverV3(built:ReadyContextV2,onFailure:(value:Evidence
     if (!listRangeCandidate) checkYear(requested);
     if ((field === "leadOffsetHours" || field === "leadOffsetMinutes") && requested !== null && !firstFact
       && !supportsLeadDuration(field === "leadOffsetHours" ? "HOUR" : "MINUTE", requested, distinct, built.evidenceIndex)) fail("LEAD_DURATION_NOT_EXPLICIT");
+    if (["eventDate","reminderDate","endDate"].includes(field) && requested && typeof requested==='object' && 'kind' in requested && requested.kind==='RELATIVE_MONTH' && !firstFact
+      && !supportsRelativeMonthDate(requested,distinct,built.evidenceIndex)) fail('RELATIVE_MONTH_NOT_SUPPORTED');
+    if (field === "leadOffsetWeeks" && requested !== null && !firstFact
+      && !supportsLeadWeekOffset(requested, distinct, built.evidenceIndex, target?.kind === "CURRENT" && retainedSlots?.eventDate.state === "RESOLVED")) fail("LEAD_WEEK_OFFSET_NOT_SUPPORTED");
     if (field === "leadOffsetDays" && requested !== null && !firstFact
       && !supportsLeadOffset(requested as number, distinct, built.candidateSnapshot.transcript, seriesCount)) fail("LEAD_OFFSET_NOT_SUPPORTED");
     // Reject-only fidelity check for a single explicit Gregorian civil source.
@@ -520,6 +528,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   };
   const internal = evidenceContextForV2(built);
   if (!internal) return refused("CONTEXT_NOT_BUILT");
+  const retainedSlots: ContextSlots | undefined = internal.snapshot?.slots;
   if (built.input.schemaVersion !== "calenote-context-input-2" || built.candidateSnapshot.schemaVersion !== "calenote-context-state-2") return refused("CONTEXT_PROTOCOL_MISMATCH");
   const parsed = SemanticPatchProposalV3Schema.safeParse(proposal);
   if (!parsed.success) return refused("PROPOSAL_SCHEMA_INVALID");
@@ -530,7 +539,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
   try {
     const resolvedChanges: FieldChangeV3[] = [];
     const changeEvidence = value.changes.map((change, index) => {
-      const old = internal.snapshot?.slots[change.field]?.value ?? null;
+      const old = retainedSlots?.[change.field]?.value ?? null;
       const evidence = resolve(change.evidence, "REMINDER", change.field, change.value, ["changes", index, "evidence"], old !== null && change.operation === "REPLACE");
       const resolved = FieldChangeV3Schema.parse({ ...change, value: evidence.resolvedValue });
       if (resolved.operation !== "SET" && !evidence.current) traceCurrentFailure(change.evidence[0],{field:change.field,path:["changes",index,"evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT",resolved.operation);
@@ -671,12 +680,12 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       if (field !== "eventRelation" || requested === null) return true;
       // Only the existing resolver's exact alias/scope/value check can grant
       // inherited authority. A same-valued USER_QUOTE does not become a fact.
-      const old = internal.snapshot?.slots.eventRelation;
+      const old = retainedSlots?.eventRelation;
       const inherited = value.requestTarget?.kind !== "NEW" && bound.factBound === true
         && old?.state === "RESOLVED" && equal(old.value, requested);
-      const retainedEvent = value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.eventDate.state === "RESOLVED";
+      const retainedEvent = value.requestTarget?.kind === "CURRENT" && retainedSlots?.eventDate.state === "RESOLVED";
       const cadence = resolvedChanges.find(c => c.field === "frequency" && c.operation !== "CLEAR")?.value
-        ?? (value.requestTarget?.kind === "CURRENT" ? internal.snapshot?.slots.frequency.value : undefined);
+        ?? (value.requestTarget?.kind === "CURRENT" ? retainedSlots?.frequency.value : undefined);
       return inherited || supportsEventRelation(requested as EventRelation, bound.sources, built.evidenceIndex, retainedEvent, cadence ?? "DAILY");
     };
     const keptChanges = resolvedChanges.map((change, index) => ({ change, bound: changeEvidence[index] }))
@@ -694,6 +703,14 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       return (rangeIssue || deterministicRange) && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
     });
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
+    const dateBinding=(field:'eventDate'|'reminderDate')=>{
+      const changed=keptChanges.find(({change})=>change.field===field);
+      if(changed)return {value:changed.change.value,sources:changed.bound.sources};
+      const retained=value.requestTarget?.kind==='CURRENT'?retainedSlots?.[field]:undefined;
+      return {value:retained?.state==='RESOLVED'?retained.value:null,sources:retained?.evidence??[]};
+    };
+    const eventBinding=dateBinding('eventDate'),reminderBinding=dateBinding('reminderDate');
+    if(!monthEventReminderDateRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
     if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!reminderDateCoverageComplete(built.input,value)) fail("SEMANTIC_REMINDER_DATE_UNOWNED");
     const coverageTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];
@@ -702,19 +719,29 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     const currentRequestMember = value.requestTarget?.kind === "NEW" && coverageTurns.length > 1;
     if (!titleCoverageComplete({ intent:value.intent,target:value.requestTarget,currentTurn,currentRequestMember,
       changes:keptChanges.map(p=>p.change),changeEvidence:keptChanges.map(p=>p.bound),uncertainties:resolvedUncertainties,alternativeEvidence:keptAlternativeEvidence,
-      retainedTitle:internal.snapshot?.slots.title.state==="RESOLVED" && typeof internal.snapshot.slots.title.value==="string" ? internal.snapshot.slots.title.value : null,
+      retainedTitle:retainedSlots?.title.state==="RESOLVED" && typeof retainedSlots?.title.value==="string" ? retainedSlots?.title.value : null,
     })) fail("SEMANTIC_TITLE_OMITTED");
     if (!locationCoverageComplete({ intent: value.intent, target: value.requestTarget,
       currentTurn, currentRequestMember,
       changes: keptChanges.map(p => p.change), changeEvidence: keptChanges.map(p => p.bound),
       uncertainties: resolvedUncertainties, alternativeEvidence: keptAlternativeEvidence,
-      retainedLocation: internal.snapshot?.slots.location.state === "RESOLVED" && typeof internal.snapshot.slots.location.value === "string" ? internal.snapshot.slots.location.value : null,
+      retainedLocation: retainedSlots?.location.state === "RESOLVED" && typeof retainedSlots?.location.value === "string" ? retainedSlots?.location.value : null,
     })) fail("SEMANTIC_LOCATION_OMITTED");
     if (value.intent === "CREATE_REMINDER" && !leadDistanceCovered(currentTurn,
       keptChanges.map(p => p.change), resolvedUncertainties.flatMap(u => u.alternatives.map(a => ({ field: u.field, value: a.value }))),
-      value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.leadOffsetDays.state !== "CONFLICT" ? internal.snapshot?.slots.leadOffsetDays.value : null,
-      value.requestTarget?.kind === "CURRENT" && internal.snapshot?.slots.frequency.value === "DAILY" && internal.snapshot.slots.frequency.state !== "CONFLICT" && internal.snapshot.slots.occurrenceCount.state !== "CONFLICT" ? internal.snapshot.slots.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
+      value.requestTarget?.kind === "CURRENT" && retainedSlots?.leadOffsetDays.state !== "CONFLICT" ? retainedSlots?.leadOffsetDays.value : null,
+      value.requestTarget?.kind === "CURRENT" && retainedSlots?.frequency.value === "DAILY" && retainedSlots?.frequency.state !== "CONFLICT" && retainedSlots?.occurrenceCount.state !== "CONFLICT" ? retainedSlots?.occurrenceCount.value ?? undefined : undefined)) fail("SEMANTIC_LEAD_OFFSET_OMITTED");
     if (value.intent === "CREATE_REMINDER" && !leadDurationCovered(currentTurn,keptChanges.map(p=>p.change))) fail("SEMANTIC_LEAD_DURATION_OMITTED");
+    if (value.intent === 'CREATE_REMINDER' && !relativeMonthDateCovered(currentTurn,keptChanges.map(p=>p.change),resolvedUncertainties.flatMap(issue=>issue.alternatives.map(alternative=>({field:issue.field,value:alternative.value}))),
+      value.requestTarget?.kind==='CURRENT' ? (['eventDate','reminderDate','endDate'] as const).filter(field=>retainedSlots?.[field].state!=='CONFLICT'&&!keptChanges.some(({change})=>change.field===field)).map(field=>retainedSlots?.[field].value) : [])) fail('SEMANTIC_RELATIVE_MONTH_OMITTED');
+    if (value.intent === "CREATE_REMINDER" && !leadWeekOffsetCovered(currentTurn,
+      keptChanges.map(p=>p.change), resolvedUncertainties.flatMap(u=>u.alternatives.map(a=>({field:u.field,value:a.value}))),
+      value.requestTarget?.kind === "CURRENT" && retainedSlots?.leadOffsetWeeks?.state !== "CONFLICT" ? retainedSlots?.leadOffsetWeeks?.value : null,
+      value.requestTarget?.kind === "CURRENT" && retainedSlots?.eventDate.state === "RESOLVED")) fail("SEMANTIC_LEAD_WEEK_OFFSET_OMITTED");
+    if (value.intent === "CREATE_REMINDER" && !continuousClockCadenceCovered(currentTurn,
+      keptChanges.map(p=>p.change), resolvedUncertainties.flatMap(u=>u.alternatives.map(a=>({field:u.field,value:a.value}))),
+      value.requestTarget?.kind === "CURRENT" && retainedSlots?.frequency.state !== "CONFLICT" ? retainedSlots?.frequency.value : null,
+      value.requestTarget?.kind === "CURRENT")) fail("SEMANTIC_CONTINUOUS_CADENCE_OMITTED");
     }
     const patch: ValidatedPatchV3 = freeze({
       [validatedPatchV3Brand]: true as const,

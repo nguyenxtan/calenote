@@ -11,13 +11,12 @@ it.each([
  const h=await harness([proposal({title:"kiểm tra QA",frequency:c.frequency,reminderDate:date(c.day,c.month,c.year),reminderTime:time(9),occurrenceCount:c.count,eventRelation:"STARTING_ON"})]);
  h.deps.getReplyPreferences=async()=>({addressStyle:"sep",customDisplayName:null});
  expect(await h.turn(0,c.text),JSON.stringify({replies:h.replies,events:h.events})).toEqual({status:"DRAFT_CREATED"});
- const state=(await h.read(1))!;expect(h.replies[0].text).toMatch(/^Sếp,/u);
- const token=state.pendingDecision!.tokenHandle;
- expect(await h.turn(1,`xác nhận ${token}`)).toEqual({status:"CONFIRMED"});
+ expect(h.replies[0].text).toMatch(/^Sếp,/u);
+ expect(await h.turn(1,"Có.")).toEqual({status:"CONFIRMED"});
  const rows=await h.f.db.prepare('SELECT scheduled_at FROM reminders ORDER BY scheduled_at').all<{scheduled_at:number}>();
  expect(rows.results.map(r=>r.scheduled_at)).toEqual(c.dates.map(d=>Date.parse(`${d}T09:00:00+07:00`)));
  expect(await h.f.db.prepare('SELECT count(*) n FROM advance_notification_groups').first('n')).toBe(0);
- await h.turn(2,`xác nhận ${token}`);expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(c.count);
+ await h.turn(2,"Có.");expect(await h.f.db.prepare('SELECT count(*) n FROM reminders').first('n')).toBe(c.count);
  expect(h.events.filter(e=>e.event==="REQUEST_DISPATCHED")).toHaveLength(1);
  const series=new D1SeriesStore(h.f.db,h.f.keyring);const principal={userId:"owner",sessionId:"session",expiresAt:now+1000000};
  expect(await series.listWeb(principal,now+3)).toEqual([]); // Canonical series controls require their own reader; preserve the fence.

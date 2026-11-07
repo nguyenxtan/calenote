@@ -475,7 +475,7 @@ describe("guarded conversation V2 integration", () => {
 it("reads changed address on the next turn without rewriting owner titles", async () => {
  const h=await harness();
  await h.db.prepare("INSERT INTO user_preferences(user_id,address_style,tone,updated_at) VALUES('one','sep','friendly',1)").run();
- expect((await h.send("chào")).reply).toContain("sếp");
+ expect((await h.send("chào")).reply).toContain("Sếp muốn em ghi nhớ");
  await h.db.prepare("UPDATE user_preferences SET address_style='custom',custom_display_name='Chị Tuyền' WHERE user_id='one'").run();
  expect((await h.send("chào")).reply).toContain("Chị Tuyền");
  const title="Bạn muốn mình gọi Mình Bạn";

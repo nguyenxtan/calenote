@@ -105,7 +105,7 @@ it("replacement_yes_never_saves_A_or_B through actual service", async () => {
   expect(b?.pendingDecision?.kind).toBe("SAVE_PREVIEW");
   expect(b?.draftRevision).toBeGreaterThan(1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  expect(await h.turn(3, `xác nhận ${b!.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
+  expect(await h.turn(3, "Có.")).toEqual({ status: "CONFIRMED" });
 });
 it("R02 R07 R08 CO-E progressive facts then mixed correction never confirms", async () => {
   const h = await harness([proposal(missingTime), proposal({ reminderTime: time() }, "CURRENT"), proposal({ reminderTime: time(9) }, "CURRENT", null, null, ["reminderTime"])]);
@@ -154,10 +154,9 @@ it("R13 delayed old edit loses to a later accepted abandon without stale outboun
 it("R14 duplicate confirmation after lost send creates exactly one set of children", async () => {
   const h = await harness([proposal({ ...missingTime, reminderTime: time() })]);
   await h.turn(0, `${missingTimeText} Nhắc lúc 8h.`); h.setDelivery({ status: "UNCERTAIN" });
-  const state = await h.read(1);
-  expect(await h.turn(1, `xác nhận ${state!.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
+  expect(await h.turn(1, "Có.")).toEqual({ status: "CONFIRMED" });
   const count = h.replies.length;
-  expect(await h.turn(1, `xác nhận ${state!.pendingDecision!.tokenHandle}`)).toEqual({ status: "SUPERSEDED" });
+  expect(await h.turn(1, "Có.")).toEqual({ status: "SUPERSEDED" });
   expect(h.replies).toHaveLength(count);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(2);
 });
@@ -376,7 +375,7 @@ it.each(["save", "abandon"])("local %s remains available after six retained USER
   for (let i = 0; i <= 5; i++) { const result = await h.turn(i, "đi thi giấy tờ Quang Trung 11/10 nhắc cùng ngày 8h"); expect(result).toEqual({ status: i === 5 ? "DRAFT_CREATED" : "CLARIFICATION_REQUESTED" }); }
   const before = (await h.read(6))!;
   expect(before.transcript.filter(t => t.role === "USER")).toHaveLength(6);
-  expect(await h.turn(6, operation === "save" ? `xác nhận ${before.pendingDecision!.tokenHandle}` : "Bỏ.")).toEqual({ status: operation === "save" ? "CONFIRMED" : "CANCELLED" });
+  expect(await h.turn(6, operation === "save" ? "Có." : "Bỏ.")).toEqual({ status: operation === "save" ? "CONFIRMED" : "CANCELLED" });
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(6);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(operation === "save" ? 1 : 0);
 });
@@ -400,7 +399,7 @@ it.each(["2", "không", "ambiguous then 2"])("I2 decline %s at six USER turns pr
   if (answer === "ambiguous then 2") {
     expect(await h.turn(index++, "Bỏ.")).toEqual({ status: "CLARIFICATION_REQUESTED" });
     expect((await h.read(index))?.pendingDecision?.candidate?.proposalId).toBe(before.pendingDecision?.candidate?.proposalId);
-    expect(h.replies.at(-1)?.text).toContain("2");
+    expect(h.replies.at(-1)?.text).toContain("Không");
   }
   expect(await h.turn(index++, answer === "ambiguous then 2" ? "2" : answer)).toEqual({ status: "CLARIFICATION_REQUESTED" });
   const declined = (await h.read(index))!;
@@ -413,7 +412,7 @@ it.each(["2", "không", "ambiguous then 2"])("I2 decline %s at six USER turns pr
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(6);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
 });
-it("I3 explicit response to uncertain preview re-presents before a separate bound confirmation", async () => {
+it("I3 response to uncertain preview re-presents before a separate visible Có confirmation", async () => {
   const h = await harness([proposal(complete)]); h.setDelivery({ status: "UNCERTAIN" });
   await h.turn(0, completeText); const before = (await h.read(1))!;
   expect(before.previewReceipt?.deliveryState).toBe("UNCERTAIN");
@@ -428,33 +427,25 @@ it("I3 explicit response to uncertain preview re-presents before a separate boun
   expect(recovered.draftExpiresAt).toBe(before.draftExpiresAt);
   expect(recovered.slots).toEqual(before.slots);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  const d = recovered.pendingDecision!;
-  expect(await h.f.store.confirm({ kind: "CHAT", scope: h.f.scope(2) }, { operationKey: "forged-bare-recovery", contextId: recovered.id,
-    contextRevision: recovered.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId,
-    draftRevision: d.draftRevision, draftHash: recovered.previewReceipt!.draftHash, response: { kind: "BARE", text: "Có." } })).toEqual({ status: "REJECTED" });
-  expect(await h.turn(2, "Có.")).toEqual({ status: "DRAFT_CREATED" });
-  expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  const current = (await h.read(3))!;
-  expect(await h.turn(3, `xác nhận ${current.pendingDecision!.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
+  expect(await h.turn(2, "Có.")).toEqual({ status: "CONFIRMED" });
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(1);
 });
-it("I3 bound-only recovery survives uncertain-preview eviction and six USER capacity", async () => {
+it("I3 latest delivered recovery accepts Có after uncertain-preview eviction and six USER capacity", async () => {
   const h = await harness([proposal(complete)]); h.setDelivery({ status: "UNCERTAIN" });
   await h.turn(0, completeText); const original = (await h.read(1))!;
-  h.setDelivery({ status: "SENT", messageRef: "recovery-ref" });
-  for (let i = 1; i <= 6; i++) expect(await h.turn(i, "Có."), `turn ${i}: ${h.replies.at(-1)?.text}`).toEqual({ status: "DRAFT_CREATED" });
-  const state = (await h.read(7))!, d = state.pendingDecision!;
+  for (let i = 1; i <= 6; i++) {
+    if (i === 6) h.setDelivery({ status: "SENT", messageRef: "recovery-ref" });
+    expect(await h.turn(i, "Có."), `turn ${i}: ${h.replies.at(-1)?.text}`).toEqual({ status: "DRAFT_CREATED" });
+  }
+  const state = (await h.read(7))!;
   expect(state.transcript.filter(t => t.role === "ASSISTANT")).toHaveLength(6);
   expect(state.transcript.some(t => t.id === original.previewReceipt!.previewId)).toBe(false);
   expect(state.transcript.filter(t => t.role === "USER")).toHaveLength(6);
   expect(state.draftRevision).toBe(original.draftRevision);
   expect(state.draftExpiresAt).toBe(original.draftExpiresAt);
-  expect(await h.f.store.confirm({ kind: "CHAT", scope: h.f.scope(7) }, { operationKey: "forged-bare-rollover", contextId: state.id,
-    contextRevision: state.contextRevision, decisionId: d.decisionId, kind: d.kind, requestId: d.target.requestId, proposalId: d.target.proposalId,
-    draftRevision: d.draftRevision, draftHash: state.previewReceipt!.draftHash, response: { kind: "BARE", text: "Có." } })).toEqual({ status: "REJECTED" });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(0);
-  expect(await h.turn(7, `xác nhận ${d.tokenHandle}`)).toEqual({ status: "CONFIRMED" });
+  expect(await h.turn(7, "Có.")).toEqual({ status: "CONFIRMED" });
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
 });
 
@@ -473,7 +464,7 @@ it("reads saved addressing once per authenticated turn and persists the exact di
   const outbound = snapshot?.transcript.at(-1);
   expect(outbound?.text).toBe(reply.text);
   expect(outbound?.semanticView).toContain("Sếp");
-  expect(reply.spans).toEqual([{ kind: "FACT", start: 0, end: reply.text.length }]);
+  expect(reply.spans).toEqual([{ kind: "FACT", start: 0, end: reply.text.length, provenance: "APPLICATION_PROSE" }]);
 });
 
 it("falls back to default wording when the saved preference read fails", async () => {

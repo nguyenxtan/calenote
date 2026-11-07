@@ -36,7 +36,8 @@ export const contextCampaignMaximumReservation = CONTEXT_FINANCIAL_RESERVATION_M
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 /** Offline-qualified identities, not values inferred from a received request.
  * The pre-duration record remains an immutable historical comparison. Current
- * execution accepts only successor106, including the fixed burst addendum. */
+ * The current canonical successor is explicitly attested separately; legacy
+ * provider carriers and their independently pinned prompts remain unchanged. */
 export const contextCampaignSchemaAttestations = Object.freeze({
   historical104: Object.freeze({ canonical: "43b6689ce9c4874c4d532652ea212b52aa7d7f222cddd55377e59d483f5c444b",
     providerWire: "5aaf9dcab9cc54dad77a60da14f31f986547ba9e4b8ae484bd79b574ca867421" }),
@@ -46,10 +47,16 @@ export const contextCampaignSchemaAttestations = Object.freeze({
     prompts: Object.freeze({ native: "e98457ad733559d8f14683389702daaa7004c6b0faf725b6aed10d1fc7c1d47b", typed: "688de54c26eaa7f27333bbfefd58e17abac2dcb09fc5f145909e3be838d43b05", small: "8d82de7f620cef785f443123774d6e249d763d017cfb5518c777dd1ba130e3b9" }),
     burstPrompts: Object.freeze({ native: "ac7905bdf774e6bef78d4e7f898b3ab53de55bcd003fbbd1a64474f185e3abba", typed: "5ce8edac1d0d9d0ea259f8e0c72af84fea0c61a217c3c8aed7828109adeca31a", small: "20948434c02ec6e28022a7846dbd0c35d4efca3cde43e8dad827dd4e13bafbfc" }),
   }),
+  successor148: Object.freeze({ version: "calendar-month-week-fields-3",
+    canonical: "ae0ccf1c23eefd86f2340653271eaf1e5fdb7ec8e3bb43e769fe2dc7e762a47e",
+    providerWire: "ea4a7fed97113235cdc2665fb427d66af53b31c9b8cf74d39df09a17737691b3",
+    prompts: Object.freeze({ native: "e98457ad733559d8f14683389702daaa7004c6b0faf725b6aed10d1fc7c1d47b", typed: "688de54c26eaa7f27333bbfefd58e17abac2dcb09fc5f145909e3be838d43b05", small: "8d82de7f620cef785f443123774d6e249d763d017cfb5518c777dd1ba130e3b9" }),
+    burstPrompts: Object.freeze({ native: "ac7905bdf774e6bef78d4e7f898b3ab53de55bcd003fbbd1a64474f185e3abba", typed: "5ce8edac1d0d9d0ea259f8e0c72af84fea0c61a217c3c8aed7828109adeca31a", small: "20948434c02ec6e28022a7846dbd0c35d4efca3cde43e8dad827dd4e13bafbfc" }),
+  }),
 });
 function qualifiedPromptDigest(wireProtocol: "TYPED_105" | "SMALL_106" | undefined, burst: boolean): string {
   const key = wireProtocol === "SMALL_106" ? "small" : wireProtocol === "TYPED_105" ? "typed" : "native";
-  const qualified = contextCampaignSchemaAttestations.successor106;
+  const qualified = contextCampaignSchemaAttestations.successor148;
   return (burst ? qualified.burstPrompts : qualified.prompts)[key];
 }
 interface ResponseEvidence { call: number; runId: string; fixtureId: string; turnIndex: number; status: string; httpStatus: number | null; rawResponseBytes: number | null; category?: string; usage: SemanticUsage | null; provider: SemanticProviderEvidence | null; requestDigest: string | null; failureDiagnostics?: SemanticFailureDiagnostics; canonicalValidationDiagnostics?: CanonicalResponseDiagnostics;
@@ -273,8 +280,8 @@ async function executeObservable(input: ObservableExecution, replayOnly = false,
     if (request.temperature !== 0) throw new Error("CONTEXT_SAMPLING_POLICY_CHANGED");
     outboundDigest = digest(JSON.stringify(request));
     if (digest(request.messages[0].content) !== qualifiedPromptDigest(input.wireProtocol, !!JSON.parse(request.messages[1].content).currentBurstTurns)
-      || canonicalSchemaDigest !== contextCampaignSchemaAttestations.successor106.canonical) throw new Error("CANONICAL_DIGEST_CHANGED");
-    if (providerWireSchemaDigest !== contextCampaignSchemaAttestations.successor106.providerWire) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
+      || canonicalSchemaDigest !== contextCampaignSchemaAttestations.successor148.canonical) throw new Error("CANONICAL_DIGEST_CHANGED");
+    if (providerWireSchemaDigest !== contextCampaignSchemaAttestations.successor148.providerWire) throw new Error("PROVIDER_WIRE_DIGEST_CHANGED");
     requestSchemaProof = verifyContextRequestSchema(request, input.wireProtocol);
     if (input.wireProtocol !== undefined) schemaProof = { canonicalSchemaDigest, providerWireSchemaDigest: requestSchemaProof.requestWireSchemaDigest!, providerWireSchemaVersion: input.wireProtocol === "SMALL_106" ? CONTEXT_SMALL_PROTOCOL_V3.wireVersion : CONTEXT_TYPED_PROTOCOL_V3.wireVersion };
     if (!input.httpRequestCount) providerHttpRequests++;

@@ -5,8 +5,8 @@ export type BotReplyPreferencesGetter = (ownerId:string)=>Promise<BotReplyPrefer
 function words(preferences:BotReplyPreferences){
  const custom=preferences.customDisplayName?.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f]/gu,' ').trim();
  const name=custom ? [...custom].slice(0,80).join('') : 'bạn';
- return {address:({ban:'bạn',anh_chi:'anh/chị',ong_tui:'ông',minh:'mình',sep:'sếp',custom:name})[preferences.addressStyle],
-  self:preferences.addressStyle==='ong_tui'?'tui':preferences.addressStyle==='minh'?'tớ':'mình'};
+ return {address:({ban:'bạn',anh_chi:'anh/chị',ong_tui:'ông',minh:'mình',sep:'Sếp',custom:name})[preferences.addressStyle],
+  self:preferences.addressStyle==='sep'?'em':preferences.addressStyle==='ong_tui'?'tui':preferences.addressStyle==='minh'?'tớ':'mình'};
 }
 /** Plain text, not HTML. Only apply to literal application-owned prose, never owner/model payload. */
 export function addressProse(text:string,preferences?:BotReplyPreferences):string{

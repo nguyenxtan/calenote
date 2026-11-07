@@ -7,6 +7,7 @@ const words: Readonly<Record<string, number>> = { một: 1, hai: 2, ba: 3 };
 const token = "(\\d+|một|hai|ba)";
 const boundary = /[\p{L}\p{M}\p{N}_]/u;
 const lower = (s: string) => [...s].map(c => { const l = c.toLocaleLowerCase("vi"); return [...l].length === 1 ? l : c; }).join("");
+const continuousClock = /liên tục\s+(?:(?:vào|lúc)\s+)?(?:[01]?\d|2[0-3])(?:h(?:[0-5]\d)?|:[0-5]\d)(?:\s+(?:sáng|trưa|chiều|tối|đêm))?/gu;
 const cadencePatterns: Readonly<Record<string, RegExp>> = {
   ONCE: /(?:một|1)\s+lần|duy nhất|once/gu,
   DAILY: /(?:mỗi|hàng|hằng)\s+ngày|ngày\s+(?:liên tiếp|liên tục|liền)|(?:liên tiếp|liên tục)\s+(?:\d+|một|hai|ba)\s+ngày|daily/gu,
@@ -38,7 +39,12 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
     }
     return false;
   };
-  if (field === "frequency") return typeof value === "string" && !!cadencePatterns[value] && sources.some(s => matches(s, cadencePatterns[value]));
+  if (field === "frequency") return typeof value === "string" && !!cadencePatterns[value] && sources.some(s => matches(s, cadencePatterns[value])
+    || value === "DAILY" && matches(s, continuousClock, (_match, prefix, full) => !full.includes("?")
+      && (/(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)
+        // A positive standalone cadence clause supplies its own meaning in
+        // fresh and retained requests. It supplies no action/target or count.
+        || !prefix.trim())));
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) return false;
   const sameNumber = (m: RegExpMatchArray) => (words[m[1]] ?? Number(m[1])) === value;
   const reminderOwned = (prefix: string) => /(?:^|[^\p{L}\p{M}\p{N}_])nhắc(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix);
@@ -68,6 +74,19 @@ export function supportsCadenceOperand(field: "frequency" | "occurrenceCount", v
     const whole = fullAnswer.match(bare);
     return sameNumber(m) && !!whole && sameNumber(whole);
   }));
+}
+
+/** Omission guard for the continuous-at-clock wording only. It proves that a
+ * model-authored DAILY operand is needed, without returning a cadence/count or
+ * changing the model's selected request target. */
+export function continuousClockCadenceCovered(turn: Turn, changes: readonly { field: string; value: unknown }[], alternatives: readonly { field: string; value: unknown }[], retainedFrequency: unknown, currentReminder = false): boolean {
+  if (turn.role !== "USER" || !new RegExp(continuousClock.source, "u").test(lower(turn.semanticView))) return true;
+  const length = [...turn.semanticView].length;
+  const source: SourceEvidence = { kind: "USER_QUOTE", sourceTurnId: turn.id, sourceMapTurnId: turn.id, quote: turn.semanticView, occurrence: 1,
+    sourceSpan: { start: 0, end: length }, viewSpan: { start: 0, end: length }, normalizationVersion: "nfc-codepoint-v1" };
+  return !supportsCadenceOperand("frequency", "DAILY", [source], [turn], undefined, currentReminder ? turn.id : undefined)
+    || retainedFrequency === "DAILY" && !changes.some(change => change.field === "frequency")
+    || [...changes, ...alternatives].some(change => change.field === "frequency" && change.value === "DAILY");
 }
 
 /** Boolean omission obligation for the existing bounded lead verifier. Never

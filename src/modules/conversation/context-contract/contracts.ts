@@ -7,7 +7,9 @@ export const SLOT_NAMES = ["title", "location", "notes", "eventDate", "eventTime
 export const SlotNameSchema = z.enum(SLOT_NAMES);
 /** Optional successor operands. Appended only; the 13 legacy names, their
  * wire codes and every historical codec remain byte-for-byte unchanged. */
-export const V3_EXTENSION_SLOT_NAMES = ["leadOffsetHours", "leadOffsetMinutes"] as const;
+export const HISTORICAL_V3_EXTENSION_SLOT_NAMES = ["leadOffsetHours", "leadOffsetMinutes"] as const;
+export const HISTORICAL_V3_SLOT_NAMES = [...SLOT_NAMES, ...HISTORICAL_V3_EXTENSION_SLOT_NAMES] as const;
+export const V3_EXTENSION_SLOT_NAMES = [...HISTORICAL_V3_EXTENSION_SLOT_NAMES, "leadOffsetWeeks"] as const;
 export type V3ExtensionSlotName = typeof V3_EXTENSION_SLOT_NAMES[number];
 export const V3_SLOT_NAMES = [...SLOT_NAMES, ...V3_EXTENSION_SLOT_NAMES] as const;
 export const V3SlotNameSchema = z.enum(V3_SLOT_NAMES);
@@ -23,6 +25,11 @@ export const DateOperandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("WEEKDAY"), weekday: z.number().int().min(1).max(7), qualifier: z.enum(["THIS_WEEK", "NEXT_WEEK", "UNRESOLVED"]) }),
 ]);
 export type DateOperand = z.infer<typeof DateOperandSchema>;
+/** Active successor only. Months remain calendar operands, never day counts. */
+export const DateOperandV3Schema = z.discriminatedUnion("kind", [...DateOperandSchema.options,
+  z.strictObject({ kind: z.literal("RELATIVE_MONTH"), offsetMonths: z.number().int().min(-12).max(12) }),
+]);
+export type DateOperandV3 = z.infer<typeof DateOperandV3Schema>;
 export const ClockOperandSchema = z.strictObject({ hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59), qualifier: z.enum(["H24", "AM", "PM", "UNKNOWN"]) })
   .refine(v => !["AM", "PM"].includes(v.qualifier) || (v.hour >= 1 && v.hour <= 12), canonicalConstraint("CLOCK_QUALIFIER_HOUR", "AM/PM hours must be 1–12"));
 export const EvidenceRefSchema = z.discriminatedUnion("kind", [
@@ -42,6 +49,7 @@ export const SlotValueSchemas = {
   leadOffsetHours: z.number().int().min(1).max(8784), leadOffsetMinutes: z.number().int().min(1).max(527040),
 };
 const values = SlotValueSchemas;
+export const SlotValueSchemasV3 = { ...values, eventDate: DateOperandV3Schema, reminderDate: DateOperandV3Schema, endDate: DateOperandV3Schema, leadOffsetWeeks: z.number().int().min(1).max(52) };
 // The generic helper preserves the field/value association in inferred TS types.
 function setBranch<K extends keyof typeof values>(field: K) {
   return z.strictObject({ field: z.literal(field), operation: z.literal("SET"), value: values[field], evidence });
@@ -152,6 +160,11 @@ export function contextFactSchema<M extends z.ZodRawShape>(metadata: M) {
     z.strictObject({ ...common, scope: z.literal("QUERY"), field: z.literal("queryRange"), value: QueryOperandSchema }),
   ]);
 }
+export function contextFactV3Schema<M extends z.ZodRawShape>(metadata: M) {
+  const common = { alias: factAlias, provenance, sourceReferenceTime: z.iso.datetime(), dependencies: z.array(factAlias).max(13), ...metadata };
+  const date = <K extends "eventDate" | "reminderDate" | "endDate">(field: K) => z.strictObject({ ...common, scope: z.literal("REMINDER"), field: z.literal(field), value: DateOperandV3Schema });
+  return z.union([...contextFactSchema(metadata).options, date("eventDate"), date("reminderDate"), date("endDate"), z.strictObject({ ...common, scope:z.literal("REMINDER"),field:z.literal("leadOffsetWeeks"),value:SlotValueSchemasV3.leadOffsetWeeks })]);
+}
 const slot = <T extends z.ZodType>(value: T) => z.strictObject({ state: z.enum(["MISSING", "PROPOSED", "RESOLVED", "CONFLICT"]), value: value.nullable(), fact: factAlias.nullable() }).refine(s => {
   const v = "value" in s ? s.value : undefined;
   return s.state === "MISSING" ? v === null && s.fact === null : s.state !== "RESOLVED" || (v !== null && s.fact !== null);
@@ -180,16 +193,17 @@ export const LegacyV2InterpretationJsonSchema = z.toJSONSchema(LegacyV2Conversat
 export const RequestTargetV3Schema = z.strictObject({ kind: z.enum(["CURRENT", "NEW", "UNRESOLVED"]), evidence });
 export type RequestTargetV3 = z.infer<typeof RequestTargetV3Schema>;
 export type FieldOperationV3 = "SET" | "REPLACE" | "CLEAR";
-function changeBranchV3<K extends keyof typeof values>(field: K) {
-  return z.strictObject({ field: z.literal(field), operation: z.enum(["SET", "REPLACE"]), value: values[field], evidence });
+function changeBranchV3<K extends keyof typeof SlotValueSchemasV3>(field: K) {
+  return z.strictObject({ field: z.literal(field), operation: z.enum(["SET", "REPLACE"]), value: SlotValueSchemasV3[field], evidence });
 }
 export const FieldChangeV3Schema = z.union([
-  changeBranchV3("title"), changeBranchV3("location"), changeBranchV3("notes"), changeBranchV3("eventDate"), changeBranchV3("eventTime"), changeBranchV3("reminderDate"), changeBranchV3("reminderTime"), changeBranchV3("calendar"), changeBranchV3("frequency"), changeBranchV3("occurrenceCount"), changeBranchV3("eventRelation"), changeBranchV3("leadOffsetDays"), changeBranchV3("endDate"), changeBranchV3("leadOffsetHours"), changeBranchV3("leadOffsetMinutes"),
+  changeBranchV3("title"), changeBranchV3("location"), changeBranchV3("notes"), changeBranchV3("eventDate"), changeBranchV3("eventTime"), changeBranchV3("reminderDate"), changeBranchV3("reminderTime"), changeBranchV3("calendar"), changeBranchV3("frequency"), changeBranchV3("occurrenceCount"), changeBranchV3("eventRelation"), changeBranchV3("leadOffsetDays"), changeBranchV3("endDate"), changeBranchV3("leadOffsetHours"), changeBranchV3("leadOffsetMinutes"), changeBranchV3("leadOffsetWeeks"),
   z.strictObject({ field: V3SlotNameSchema, operation: z.literal("CLEAR"), value: z.null(), evidence }),
 ]);
 export type FieldChangeV3 = z.infer<typeof FieldChangeV3Schema>;
+function slotUncertaintyV3<K extends keyof typeof SlotValueSchemasV3>(field: K) { return z.strictObject({ field: z.literal(field), reason, alternatives: z.array(z.strictObject({ value: SlotValueSchemasV3[field], evidence })).max(2) }); }
 export const UncertaintyV3Schema = z.union([
-  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"), slotUncertainty("leadOffsetHours"), slotUncertainty("leadOffsetMinutes"),
+  slotUncertaintyV3("title"), slotUncertaintyV3("location"), slotUncertaintyV3("notes"), slotUncertaintyV3("eventDate"), slotUncertaintyV3("eventTime"), slotUncertaintyV3("reminderDate"), slotUncertaintyV3("reminderTime"), slotUncertaintyV3("calendar"), slotUncertaintyV3("frequency"), slotUncertaintyV3("occurrenceCount"), slotUncertaintyV3("eventRelation"), slotUncertaintyV3("leadOffsetDays"), slotUncertaintyV3("endDate"), slotUncertaintyV3("leadOffsetHours"), slotUncertaintyV3("leadOffsetMinutes"), slotUncertaintyV3("leadOffsetWeeks"),
   z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
   z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
   z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(z.enum(["CURRENT", "NEW"]))).max(2) }),
@@ -197,7 +211,7 @@ export const UncertaintyV3Schema = z.union([
 export type UncertaintyV3 = z.infer<typeof UncertaintyV3Schema>;
 export const SemanticPatchProposalV3Schema = z.strictObject({
   schemaVersion: z.literal("calenote-context-3"), intent: IntentSchema, requestTarget: RequestTargetV3Schema.nullable(),
-  changes: z.array(FieldChangeV3Schema).max(15), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
+  changes: z.array(FieldChangeV3Schema).max(16), query: QueryOperandSchema.nullable(), uncertainties: z.array(UncertaintyV3Schema).max(4),
 }).superRefine((v, ctx) => {
   const fail = (id: CanonicalConstraintId, message: string, ownership = false) => {
     const state: OwnershipControlState | undefined = ownership ? {intent: v.intent, requestTargetKind: v.requestTarget?.kind ?? null,
@@ -248,11 +262,12 @@ export function parseInterpretationSectionsV3(raw: unknown, observeInvalid?: (va
   } };
 }
 const successorActiveRequest = LegacyV2ContextInputSchema.shape.activeRequest.unwrap();
-const successorInputSlots = successorActiveRequest.shape.slots.extend({leadOffsetHours: slot(values.leadOffsetHours).optional(), leadOffsetMinutes: slot(values.leadOffsetMinutes).optional()});
+const successorInputSlots = successorActiveRequest.shape.slots.extend({eventDate:slot(DateOperandV3Schema),reminderDate:slot(DateOperandV3Schema),endDate:slot(DateOperandV3Schema),leadOffsetHours: slot(values.leadOffsetHours).optional(), leadOffsetMinutes: slot(values.leadOffsetMinutes).optional(),leadOffsetWeeks:slot(SlotValueSchemasV3.leadOffsetWeeks).optional()});
 export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSchema.shape,
  currentBurstTurns:z.array(z.number().int().min(0).max(11)).min(2).max(3).optional(),
  currentBurstReferences:z.array(z.strictObject({turn:z.number().int().min(0).max(11),instant:z.iso.datetime(),localDate:z.iso.date()})).min(2).max(3).optional(),
  activeRequest: successorActiveRequest.extend({slots:successorInputSlots}).nullable(),
+ facts:z.array(contextFactV3Schema({})).max(26),
  pendingQuestion: LegacyV2ContextInputSchema.shape.pendingQuestion.unwrap().extend({field:z.enum([...V3_SLOT_NAMES,"intent","queryRange","operation"])}).nullable(),
  schemaVersion: z.literal("calenote-context-input-2"), ambiguities: z.array(UncertaintyV3Schema).max(4) }).superRefine((v, ctx) => {
   if (v.turns[v.currentTurn]?.role !== "USER" || v.currentTurn !== v.turns.length - 1 || v.turns.filter(t => t.role === "USER").length > 6 || v.turns.filter(t => t.role === "ASSISTANT").length > 6) ctx.addIssue({ code: "custom", ...canonicalConstraint("CONTEXT_CURRENT_USER_TURN", "Invalid current turn or role bounds") });
@@ -266,6 +281,22 @@ export const ContextInputV2Schema = z.strictObject({ ...LegacyV2ContextInputSche
 });
 export type ContextInputV2 = z.infer<typeof ContextInputV2Schema>;
 export const InterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema, { target: "draft-07", reused: "ref" });
+// Historical provider transports retain their original three date families.
+// Only the explicitly opted-in active keyed transport uses the successor date.
+const historicalChange = <K extends keyof typeof values>(field: K) => z.strictObject({ field: z.literal(field), operation: z.enum(["SET", "REPLACE"]), value: values[field], evidence });
+const HistoricalFieldChangeV3Schema = z.union([
+  historicalChange("title"), historicalChange("location"), historicalChange("notes"), historicalChange("eventDate"), historicalChange("eventTime"), historicalChange("reminderDate"), historicalChange("reminderTime"), historicalChange("calendar"), historicalChange("frequency"), historicalChange("occurrenceCount"), historicalChange("eventRelation"), historicalChange("leadOffsetDays"), historicalChange("endDate"), historicalChange("leadOffsetHours"), historicalChange("leadOffsetMinutes"),
+  z.strictObject({ field: z.enum(HISTORICAL_V3_SLOT_NAMES), operation: z.literal("CLEAR"), value: z.null(), evidence }),
+]);
+export const HistoricalUncertaintyV3Schema = z.union([
+  slotUncertainty("title"), slotUncertainty("location"), slotUncertainty("notes"), slotUncertainty("eventDate"), slotUncertainty("eventTime"), slotUncertainty("reminderDate"), slotUncertainty("reminderTime"), slotUncertainty("calendar"), slotUncertainty("frequency"), slotUncertainty("occurrenceCount"), slotUncertainty("eventRelation"), slotUncertainty("leadOffsetDays"), slotUncertainty("endDate"), slotUncertainty("leadOffsetHours"), slotUncertainty("leadOffsetMinutes"),
+  z.strictObject({ field: z.literal("intent"), reason, alternatives: z.array(alternative(IntentSchema)).max(2) }),
+  z.strictObject({ field: z.literal("queryRange"), reason, alternatives: z.array(alternative(QueryPeriodSchema)).max(2) }),
+  z.strictObject({ field: z.literal("operation"), reason, alternatives: z.array(alternative(z.enum(["CURRENT", "NEW"]))).max(2) }),
+]);
+const historicalDirectiveFields=z.enum([...HISTORICAL_V3_SLOT_NAMES,"intent","queryRange","operation"]);
+const historicalDirective=z.discriminatedUnion("kind",[SuccessorConversationDirectiveSchema.options[0].extend({field:historicalDirectiveFields}),SuccessorConversationDirectiveSchema.options[1].extend({field:historicalDirectiveFields}),ConversationDirectiveSchema.options[2],ConversationDirectiveSchema.options[3]]).nullable();
+export const HistoricalInterpretationJsonSchemaV3 = z.toJSONSchema(ConversationInterpretationV3Schema.safeExtend({ changes: z.array(HistoricalFieldChangeV3Schema).max(15), uncertainties: z.array(HistoricalUncertaintyV3Schema).max(4),conversationDirective:historicalDirective }), { target: "draft-07", reused: "ref" });
 
 // Application-selected successor aliases. LegacyV2 exports are isolated reference codecs.
 export const FieldChangeSchema = FieldChangeV3Schema;

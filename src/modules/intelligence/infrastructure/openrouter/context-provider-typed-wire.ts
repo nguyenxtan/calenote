@@ -1,8 +1,8 @@
 import {z} from "zod";
-import {ContextInputSchema,ConversationInterpretationV3Schema,DateOperandSchema,QueryPeriodSchema,IntentSchema,SlotValueSchemas,parseInterpretationSectionsV3,type ContextInput,type ConversationInterpretationV3} from "../../../conversation/context-contract/contracts";
+import {ContextInputSchema,ConversationInterpretationV3Schema,DateOperandSchema,DateOperandV3Schema,QueryPeriodSchema,IntentSchema,SlotValueSchemas,SlotValueSchemasV3,parseInterpretationSectionsV3,type ContextInput,type ConversationInterpretationV3} from "../../../conversation/context-contract/contracts";
 import {deriveGenerationFieldCapability} from "../../../conversation/context-contract/field-capability";
 import {CONTEXT_TYPED_PROTOCOL_V3,isContextTypedProtocolV3} from "../../../conversation/context-contract/typed-protocol";
-import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V2,WireShapeFailure} from "./context-provider-wire";
+import {contextTypedWirePrimitives as core,UNCERTAINTY_FIELD_WIRE_CODE_V2,UNCERTAINTY_FIELD_WIRE_CODE_V3,WireShapeFailure} from "./context-provider-wire";
 import {primaryEvidenceSourceCodebook,materializeTypedEvidencePointer,evidenceSourceCatalogue,EvidencePointerFailure} from "./evidence-pointer";
 import {projectCanonicalValidation,projectWireValidation} from "../../../conversation/context-contract/validation-diagnostics";
 import {CONTROL_PLACEHOLDER} from "../../../conversation/context-contract/projection";
@@ -78,14 +78,15 @@ function shareTypedDefinitions(root:Schema):Schema {
  return compact;
 }
 /** Full input-bound acceptance language. Never relax this for provider admission. */
-export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
+export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput,activeSuccessor=false) {
  const parsed=ContextInputSchema.parse(input),capability=deriveGenerationFieldCapability(parsed);
+ const dates=activeSuccessor?DateOperandV3Schema:DateOperandSchema,values=activeSuccessor?SlotValueSchemasV3:SlotValueSchemas,codes=activeSuccessor?UNCERTAINTY_FIELD_WIRE_CODE_V3:UNCERTAINTY_FIELD_WIRE_CODE_V2;
  let schema=core.selectedSchema(capability,parsed) as Schema;
  const transform=(node:Schema):Schema=>{
   const result=map(node,transform);
   if(result.properties){
    const field=result.properties.field,domain=field?.enum??(field?.const?[field.const]:[]);
-   if(domain.length&&domain.every(value=>["eventDate","reminderDate","endDate"].includes(String(value)))&&result.properties.value&&resolve(result.properties.value,schema).type==="string")result.properties.value=jsonSchema(DateOperandSchema);
+   if(domain.length&&domain.every(value=>["eventDate","reminderDate","endDate"].includes(String(value)))&&result.properties.value&&resolve(result.properties.value,schema).type==="string")result.properties.value=jsonSchema(dates);
    const date=(raw:Schema):Schema=>{const node=resolve(raw,schema);return node.type==="string"?jsonSchema(DateOperandSchema):node.anyOf?{...node,anyOf:node.anyOf.map(date)}:raw;};
    for(const key of ["date","from","through"])if(result.properties[key])result.properties[key]=date(result.properties[key]);
   }
@@ -98,9 +99,9 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
  const branches=(items.anyOf??[items]).flatMap(raw=>{
   const branch=resolve(raw,schema),field=resolve(branch.properties!.fieldCode,schema);
   const accepts=(code:number,node:Schema):boolean=>(!node.enum||node.enum.includes(code))&&(node.minimum===undefined||code>=node.minimum)&&(node.maximum===undefined||code<=node.maximum)&&(!node.anyOf||node.anyOf.some(child=>accepts(code,child)));
-  return Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).flatMap(([name,code])=>{
+  return Object.entries(codes).flatMap(([name,code])=>{
    if(!accepts(code,field))return [];
-   const result=structuredClone(branch);const value:Schema=name in SlotValueSchemas?jsonSchema(SlotValueSchemas[name as keyof typeof SlotValueSchemas]):name==="queryRange"?jsonSchema(QueryPeriodSchema):name==="intent"?jsonSchema(IntentSchema):{type:"string",enum:["CURRENT","NEW"]};
+   const result=structuredClone(branch);const value:Schema=name in values?jsonSchema(values[name as keyof typeof values]):name==="queryRange"?jsonSchema(QueryPeriodSchema):name==="intent"?jsonSchema(IntentSchema):{type:"string",enum:["CURRENT","NEW"]};
    result.properties!.fieldCode={type:"integer",minimum:code,maximum:code};
    result.properties!.alternatives={...resolve(result.properties!.alternatives,schema),items:{type:"object",properties:{value,evidence},required:["value","evidence"],additionalProperties:false}};
    return [result];
@@ -118,13 +119,23 @@ export function googleLiteEuTypedContextValidationSchemaV3(input:ContextInput) {
   else grouped.set(signature,{...branch,properties:{...branch.properties,reason:{type:"string",enum:[...domain]}}});
  }
  schema.properties!.uncertainties.items={anyOf:[...grouped.values()]};
+ if(activeSuccessor&&capability.allowedNumericFields.some(field=>String(field)==='leadOffsetWeeks')){
+  const common:Record<string,Schema>={field:{type:'string',enum:['leadOffsetWeeks']},evidence};
+  const change:Schema={anyOf:[{type:'object',properties:{...common,operation:{type:'string',enum:['SET','REPLACE']},value:jsonSchema(SlotValueSchemasV3.leadOffsetWeeks)},required:['field','operation','value','evidence'],additionalProperties:false},{type:'object',properties:{...common,operation:{type:'string',enum:['CLEAR']},value:{type:'null'}},required:['field','operation','value','evidence'],additionalProperties:false}]};
+  schema.properties!.changes.items={anyOf:[schema.properties!.changes.items!,{type:'object',properties:{rank:{type:'integer'},change},required:['rank','change'],additionalProperties:false}]};
+  // The appended week owner consumes its own ordinary carrier, including
+  // when another permitted ordinary field such as notes is authored too.
+  schema.properties!.changes.maxItems=(schema.properties!.changes.maxItems as number)+1;
+  const uncertainty:Schema={type:'object',properties:{fieldCode:{type:'integer',minimum:18,maximum:18},reason:{type:'string',enum:['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']},alternatives:{type:'array',maxItems:2,items:{type:'object',properties:{value:jsonSchema(SlotValueSchemasV3.leadOffsetWeeks),evidence},required:['value','evidence'],additionalProperties:false}}},required:['fieldCode','reason','alternatives'],additionalProperties:false};
+  schema.properties!.uncertainties.items.anyOf!.push(uncertainty);
+ }
  const enums=(node:Schema):Schema=>{const result=map(node,enums);delete result.$schema;if(typeof result.const==="string"){result.enum=[result.const];delete result.const;}return result;};
  return {version:CONTEXT_TYPED_PROTOCOL_V3.wireVersion,schema:shareTypedDefinitions(enums(schema))};
 }
 /** Full selected typed language with authored array order and no rank carriers.
  * This is an internal validation boundary, never a provider generation schema. */
-export function googleLiteEuTypedOrderedContextValidationSchemaV3(input:ContextInput) {
- const selected=googleLiteEuTypedContextValidationSchemaV3(input),schema=structuredClone(selected.schema) as Schema,branches:Schema[]=[],requiredChangeFields:string[]=[];
+export function googleLiteEuTypedOrderedContextValidationSchemaV3(input:ContextInput,activeSuccessor=false) {
+ const selected=googleLiteEuTypedContextValidationSchemaV3(input,activeSuccessor),schema=structuredClone(selected.schema) as Schema,branches:Schema[]=[],requiredChangeFields:string[]=[];
  const changeFields=(raw:Schema):string[]=>{
   const node=resolve(raw,schema);return [...new Set((node.anyOf??[node]).flatMap(rawBranch=>{const branch=resolve(rawBranch,schema),field=branch.properties?.field?resolve(branch.properties.field,schema):undefined;
    if(!field?.enum?.length||!field.enum.every(value=>typeof value==='string'))throw Error('TYPED_ORDERED_FIELD_DOMAIN');return field.enum as string[];
@@ -222,7 +233,7 @@ function mapEvidence(raw:unknown,transform:(evidence:unknown,path:Array<string|n
  return Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,key==="evidence"?transform(value,[...path,key]):mapEvidence(value,transform,[...path,key])]));
 }
 /** Offline authoring helper; never repairs or selects evidence for a provider. */
-function encodeTypedContext(canonical:ConversationInterpretationV3,input:ContextInput,ordered:boolean):unknown {
+function encodeTypedContext(canonical:ConversationInterpretationV3,input:ContextInput,ordered:boolean,activeSuccessor=false):unknown {
  const parsed=ConversationInterpretationV3Schema.parse(canonical),book=primaryEvidenceSourceCodebook(input);
  const pointer=(raw:unknown):Record<string,unknown>=>{
   if(!object(raw))throw Error("TYPED_EVIDENCE_INVALID");
@@ -242,23 +253,24 @@ function encodeTypedContext(canonical:ConversationInterpretationV3,input:Context
  };
  const generated:Record<string,unknown>=Object.fromEntries(Object.entries(parsed).filter(([key])=>key!=="schemaVersion"));
  if(parsed.query?.kind==="LIST")generated.query=Object.fromEntries(Object.entries(parsed.query).filter(([key])=>key!=="statusScope"));
- const stripDatePadding=(raw:unknown):unknown=>{if(Array.isArray(raw))return raw.map(stripDatePadding);if(!object(raw))return raw;const keys=raw.kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:raw.kind==="RELATIVE_DAY"?["kind","offsetDays"]:raw.kind==="WEEKDAY"?["kind","weekday","qualifier"]:Object.keys(raw);return Object.fromEntries(keys.map(key=>[key,stripDatePadding(raw[key])]));};
- let output=stripDatePadding(core.canonicalCodec(generated,"encode")) as Record<string,unknown>;
+ const stripDatePadding=(raw:unknown):unknown=>{if(Array.isArray(raw))return raw.map(stripDatePadding);if(!object(raw))return raw;const keys=raw.kind==="CIVIL_DATE"?["kind","calendar","day","month","year","leapMonth"]:raw.kind==="RELATIVE_DAY"?["kind","offsetDays"]:raw.kind==="RELATIVE_MONTH"?["kind","offsetMonths"]:raw.kind==="WEEKDAY"?["kind","weekday","qualifier"]:Object.keys(raw);return Object.fromEntries(keys.map(key=>[key,stripDatePadding(raw[key])]));};
+ let output=stripDatePadding(core.canonicalCodec(generated,"encode",activeSuccessor)) as Record<string,unknown>;
  output=mapEvidence(output,raw=>{if(!Array.isArray(raw)||!raw.length)throw Error("TYPED_EVIDENCE_INVALID");const refs=raw.map(pointer);return {primaryEvidence:book.encode(JSON.stringify(refs[0])),additionalEvidence:refs.slice(1)};}) as Record<string,unknown>;
- output.uncertainties=parsed.uncertainties.map((issue,index)=>({fieldCode:UNCERTAINTY_FIELD_WIRE_CODE_V2[issue.field],reason:issue.reason,alternatives:(output.uncertainties as Array<{alternatives:Record<string,unknown>[]}>)[index].alternatives.map((alternative,position)=>({...alternative,value:issue.alternatives[position].value}))}));
- return ordered?core.operationValues(output,"encode"):core.indexedChanges(core.operationValues(output,"encode"),"encode");
+ const codes=activeSuccessor?UNCERTAINTY_FIELD_WIRE_CODE_V3:UNCERTAINTY_FIELD_WIRE_CODE_V2;
+ output.uncertainties=parsed.uncertainties.map((issue,index)=>({fieldCode:codes[issue.field as keyof typeof codes],reason:issue.reason,alternatives:(output.uncertainties as Array<{alternatives:Record<string,unknown>[]}>)[index].alternatives.map((alternative,position)=>({...alternative,value:issue.alternatives[position].value}))}));
+ return ordered?core.operationValues(output,"encode"):core.indexedChanges(core.operationValues(output,"encode"),"encode",false,activeSuccessor);
 }
-export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {return encodeTypedContext(canonical,input,false);}
+export function encodeGoogleLiteEuTypedContextV3(canonical:ConversationInterpretationV3,input:ContextInput,activeSuccessor=false):unknown {return encodeTypedContext(canonical,input,false,activeSuccessor);}
 /** Trusted fixture authoring only. Canonical array order remains the sole order. */
 export function encodeGoogleLiteEuTypedOrderedContextV3(canonical:ConversationInterpretationV3,input:ContextInput):unknown {return encodeTypedContext(canonical,input,true);}
 export function decodeGoogleLiteEuTypedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {return decodeTypedContext(raw,selected,observeInvalid,observeWireInvalid,input,false);}
 /** Separately validated entry: no indexedChanges call, rank synthesis or sorting. */
-export function decodeGoogleLiteEuTypedOrderedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput) {return decodeTypedContext(raw,selected,observeInvalid,observeWireInvalid,input,true);}
-function decodeTypedContext(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput,ordered:boolean) {
+export function decodeGoogleLiteEuTypedOrderedContextTransportV3(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput,activeSuccessor=false) {return decodeTypedContext(raw,selected,observeInvalid,observeWireInvalid,input,true,activeSuccessor);}
+function decodeTypedContext(raw:unknown,selected:unknown,observeInvalid:Observer|undefined,observeWireInvalid:Observer|undefined,input:ContextInput,ordered:boolean,activeSuccessor=false) {
  if(!isContextTypedProtocolV3(selected))return {status:"REFUSED" as const,reason:"ENVELOPE_INVALID" as const};
  let stage:DecoderStage="SCHEMA";
  try {
-  const validation=ordered?googleLiteEuTypedOrderedContextValidationSchemaV3(input):googleLiteEuTypedContextValidationSchemaV3(input),schema=validation.schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+  const validation=ordered?googleLiteEuTypedOrderedContextValidationSchemaV3(input,activeSuccessor):googleLiteEuTypedContextValidationSchemaV3(input,activeSuccessor),schema=validation.schema,validator=z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
   if(!object(raw))throw Error("TYPED_ENVELOPE_INVALID");
   let candidate:Record<string,unknown>={...raw,conversationDirective:null,replyProposal:null};
   let unsupported:ListPeriodProposal|undefined;
@@ -288,9 +300,9 @@ function decodeTypedContext(raw:unknown,selected:unknown,observeInvalid:Observer
   stage="EVIDENCE";
   const evidenced=mapEvidence(unfolded,(raw,path)=>{if(!object(raw)||!Array.isArray(raw.additionalEvidence))throw Error("TYPED_EVIDENCE_INVALID");const primary=book.decode(raw.primaryEvidence);if(primary===undefined)throw Error("TYPED_EVIDENCE_INVALID");return [JSON.parse(primary),...raw.additionalEvidence].map((ref,index)=>materializeTypedEvidencePointer(ref,index===0?[...path,"primaryEvidence"]:[...path,"additionalEvidence",index-1],input));}) as Record<string,unknown>;
   stage="UNCERTAINTIES";
-  evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(UNCERTAINTY_FIELD_WIRE_CODE_V2).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
+  evidenced.uncertainties=(evidenced.uncertainties as Array<Record<string,unknown>>).map(issue=>{const entry=Object.entries(activeSuccessor?UNCERTAINTY_FIELD_WIRE_CODE_V3:UNCERTAINTY_FIELD_WIRE_CODE_V2).find(([,code])=>code===issue.fieldCode);if(!entry)throw Error("TYPED_FIELD_INVALID");return {field:entry[0],reason:issue.reason,alternatives:issue.alternatives};});
   stage="CANONICAL_CODEC";
-  const decoded=core.canonicalCodec(core.operationValues(evidenced,"decode"),"decode") as Record<string,unknown>;
+  const decoded=core.canonicalCodec(core.operationValues(evidenced,"decode"),"decode",activeSuccessor) as Record<string,unknown>;
   stage="INTERPRETATION";
   for(const key of ["conversationDirective","replyProposal"]){try{decoded[key]=core.canonicalField(key,raw[key]);}catch{decoded[key]=key==="conversationDirective"?{kind:"INVALID_PROVIDER_WIRE"}:raw[key];}}
   decoded.schemaVersion=selected.canonicalVersion;

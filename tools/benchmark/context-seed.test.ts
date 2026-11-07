@@ -74,7 +74,7 @@ it.each([["R01",1],["R02",1],["R05",2]] as const)("fixture-owned %s/%s checkpoin
       expect(actual.snapshot.modelAttemptBinding.promptDigest).toMatch(/^[a-f0-9]{64}$/u);
       expect(actual.snapshot.modelAttemptBinding.promptDigest).toBe(createHash("sha256").update(JSON.stringify(CONTEXT_CONTRACT_PROMPT)).digest("hex"));
       actual.snapshot.modelAttemptBinding.promptDigest=expected.snapshot.modelAttemptBinding.promptDigest;
-      expect(actual.snapshot.modelAttemptBinding.contractDigest).toBe("b523d057e822ceb9ddc64384a36f4382642dbf11085b76532e7ad2b36ea66e26");
+      expect(actual.snapshot.modelAttemptBinding.contractDigest).toBe("ae0ccf1c23eefd86f2340653271eaf1e5fdb7ec8e3bb43e769fe2dc7e762a47e");
       expect(actual.snapshot.modelAttemptBinding.inputDigest).toBe(createHash("sha256").update(JSON.stringify(probe.inputs.at(-1))).digest("hex"));
       actual.snapshot.modelAttemptBinding.contractDigest=expected.snapshot.modelAttemptBinding.contractDigest;
       actual.snapshot.modelAttemptBinding.inputDigest=expected.snapshot.modelAttemptBinding.inputDigest;

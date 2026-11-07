@@ -8,7 +8,7 @@ it.each([
  {text:"Ngày 10/11/2026 lúc 9h có buổi kiểm tra QA. Nhắc lúc 8h mỗi ngày trong 2 ngày liên tiếp trước buổi đó.",values:{title:"kiểm tra QA",eventDate:date(10,11,2026),eventTime:time(9),reminderTime:time(),frequency:"DAILY",occurrenceCount:2,eventRelation:"BEFORE_EVENT"},dates:["2026-11-08T08:00:00+07:00","2026-11-09T08:00:00+07:00"]},
 ])("complete recurring source reaches a confirmable exact preview: $text",async({text,values,dates})=>{
  const h=await harness([proposal(values)]);expect(await h.turn(0,text),JSON.stringify({replies:h.replies,events:h.events})).toEqual({status:"DRAFT_CREATED"});
- const s=(await h.read(1))!;expect(await h.turn(1,`xác nhận ${s.pendingDecision!.tokenHandle}`)).toEqual({status:"CONFIRMED"});
+ expect(await h.turn(1,"Có.")).toEqual({status:"CONFIRMED"});
  expect((await h.f.db.prepare("SELECT scheduled_at FROM reminders ORDER BY scheduled_at").all<{scheduled_at:number}>()).results.map(r=>r.scheduled_at)).toEqual(dates.map(x=>Date.parse(x)));
 });
 it("a grounded unsupported cadence asks no misleading once-or-daily question and creates nothing",async()=>{

@@ -42,7 +42,7 @@ for(const field of ["reminderDate","reminderTime","eventDate","eventTime","event
 add(["reminderTimeChange.change.value.hour","reminderTimeChange.change.value.minute","reminderTimeChange.change.value.qualifier"]);
 add(["eventTimeChange.change.value.hour","eventTimeChange.change.value.minute","eventTimeChange.change.value.qualifier"]);
 add(["changeOrder","changeOrder[]","operationCode", "intent", "requestTarget", "requestTarget.kind", "changes", "changes[]", "changes[].field", "changes[].operation", "changes[].value", "query", "query.kind", "query.outputCalendar", "query.topic", "uncertainties", "uncertainties[]", "uncertainties[].field", "uncertainties[].fieldCode", "uncertainties[].reason", "uncertainties[].alternatives", "uncertainties[].alternatives[]", "uncertainties[].alternatives[].value"]);
-const dateKeys = ["kind", "calendar", "day", "month", "year", "leapMonth", "offsetDays", "weekday", "qualifier"] as const;
+const dateKeys = ["kind", "calendar", "day", "month", "year", "leapMonth", "offsetDays", "offsetMonths", "weekday", "qualifier"] as const;
 function date(prefix: string) { add(dateKeys.map(key => `${prefix}.${key}` as OutputFieldPathV3)); }
 function refs(prefix: string) { add([prefix, `${prefix}[]`, ...["kind", "turn", "quote", "occurrence", "ref"].map(key => `${prefix}[].${key}`), ...["USER_QUOTE", "CONTEXT_FACT"].map(kind => `${prefix}[]{kind=${kind}}`)] as OutputFieldPathV3[]); }
 for (const prefix of ["requestTarget.evidence", "changes[].evidence", "query.evidence", "uncertainties[].alternatives[].evidence"]) refs(prefix);
@@ -66,7 +66,7 @@ export function decodeAuthoredChangeRank(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && !Object.is(value, -0)
     && value >= 0 && value < CHANGE_ORDER_FIELDS_V3.length ? value : undefined;
 }
-const fields = CHANGE_ORDER_FIELDS_V3;
+const fields = [...CHANGE_ORDER_FIELDS_V3,"leadOffsetWeeks"] as const;
 for (const field of fields) for (const operation of ["SET", "REPLACE", "CLEAR"] as const satisfies readonly FieldOperationV3[]) add([`changes[]{field=${field};operation=${operation}}`]);
 for (const field of [...fields, "intent", "queryRange", "operation"] as const) add([`uncertainties[]{field=${field}}`]);
 for (const kind of ["CURRENT", "NEW", "UNRESOLVED"] as const) add([`requestTarget{kind=${kind}}`]);
@@ -74,6 +74,7 @@ for (const kind of ["LIST", "CALENDAR_DATE", "CAPABILITY"] as const) add([`query
 for (const prefix of ["changes[].value", "query.date", "query.period.date", "query.period.from", "query.period.through", "uncertainties[].alternatives[].value", "uncertainties[].alternatives[].value.date", "uncertainties[].alternatives[].value.from", "uncertainties[].alternatives[].value.through"]) {
   for (const kind of ["CIVIL_DATE", "RELATIVE_DAY", "WEEKDAY"]) add([`${prefix}{kind=${kind}}` as OutputFieldPathV3]);
 }
+add(["changes[].value{kind=RELATIVE_MONTH}", "uncertainties[].alternatives[].value{kind=RELATIVE_MONTH}"]);
 // Compact transport selections have the same untrusted authority as canonical
 // date kinds. The fixed mapping itself remains application-owned.
 for(const prefix of ["changes[].value","query.date","query.period.date","query.period.from","query.period.through","eventDateChange.change.value","reminderDateChange.change.value"] as const){
