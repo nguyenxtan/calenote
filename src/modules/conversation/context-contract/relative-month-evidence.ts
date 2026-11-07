@@ -39,3 +39,34 @@ export function relativeMonthDateCovered(turn:Turn,changes:readonly {field:strin
  }
  return true;
 }
+
+/** Reject a historical receipt-relative date borrowed by a notification in
+ * the same source as an already-proposed future month event. No date, role or
+ * instruction is extracted: only this typed pair's source support is checked. */
+export function monthEventReminderDateRolesSupported(event:unknown,eventSources:readonly SourceEvidence[],reminder:unknown,reminderSources:readonly SourceEvidence[],turns:readonly Turn[]):boolean {
+ if(!event||typeof event!=='object'||!('kind'in event)||event.kind!=='RELATIVE_MONTH'||!('offsetMonths'in event)||typeof event.offsetMonths!=='number'||event.offsetMonths<=0)return true;
+ if(!reminder||typeof reminder!=='object'||!('kind'in reminder)||reminder.kind!=='RELATIVE_DAY'||!('offsetDays'in reminder)||typeof reminder.offsetDays!=='number'||!Number.isSafeInteger(reminder.offsetDays)||reminder.offsetDays>0)return true;
+ const shared=reminderSources.filter(source=>eventSources.some(eventSource=>eventSource.sourceTurnId===source.sourceTurnId));
+ if(!shared.length)return true;
+ const amount=Math.abs(reminder.offsetDays),token=`(?:${amount}${amount<words.length?`|${words[amount]}`:''})`;
+ const day=reminder.offsetDays===0?'hôm nay':reminder.offsetDays===-1?'hôm qua':`${token}\\s+ngày\\s+trước`;
+ const clock='\\d{1,2}(?:h(?:\\d{1,2})?|:\\d{2})(?:\\s+(?:sáng|trưa|chiều|tối))?';
+ const patterns=[
+  `nhắc(?:\\s+(?:tôi|mình|tui))?(?:\\s+(?:vào|trong|ngày))?\\s+(?<day>${day})`,
+  `nhắc(?:\\s+(?:tôi|mình|tui))?\\s+(?:lúc|vào)\\s+${clock}\\s+(?<day>${day})`,
+  `(?<day>${day})(?:\\s+(?:lúc|vào)\\s+${clock})?\\s+nhắc`,
+ ];
+ return shared.every(source=>{
+  const turn=turns.find(turn=>turn.id===source.sourceTurnId);if(turn?.role!=='USER')return false;
+  const text=lower(turn.semanticView);
+  if(/["'“”‘’`]/u.test(text)||/(?:^|[^\p{L}\p{M}\p{N}_])(?:nếu|ví dụ|giả sử|cụm từ|từ ngữ|trích dẫn)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(text))return false;
+  return patterns.some(pattern=>[...text.matchAll(new RegExp(pattern,'gu'))].some(match=>{
+   const start=match.index!,end=start+match[0].length;
+   if(/[\p{L}\p{M}\p{N}_]/u.test(text[start-1]??'')||/[\p{L}\p{M}\p{N}_]/u.test(text[end]??''))return false;
+   const prefix=text.slice(0,start).split(/[;,.!?\n]/u).at(-1)??'',suffix=text.slice(end).replace(/^[\s\p{P}]+/u,'');
+   if(/(?:^|[^\p{L}\p{M}\p{N}_])(?:không|ko|đừng|chẳng|chưa|tên|chữ)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(prefix)||/^(?:thì\s+)?(?:không|ko|đừng|chẳng|chưa)(?:$|[^\p{L}\p{M}\p{N}_])/u.test(suffix))return false;
+   const dayStart=[...text.slice(0,start+match[0].indexOf(match.groups!.day))].length,dayEnd=dayStart+[...match.groups!.day].length;
+   return source.viewSpan.start<=dayStart&&source.viewSpan.end>=dayEnd;
+  }));
+ });
+}

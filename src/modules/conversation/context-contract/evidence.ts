@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { classifyQuoteMismatch } from "./quote-classification";
 import { supportsLeadOffset } from "./lead-offset-evidence";
 import { locationCoverageComplete, titleCoverageComplete, notesCoverageComplete, reminderDateCoverageComplete } from "./semantic-completeness";
-import {supportsRelativeMonthDate,relativeMonthDateCovered} from './relative-month-evidence';
+import {supportsRelativeMonthDate,relativeMonthDateCovered,monthEventReminderDateRolesSupported} from './relative-month-evidence';
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { supportsCadenceOperand, leadDistanceCovered, continuousClockCadenceCovered } from "./cadence-count-evidence";
 import { evidenceContextForV2, type ReadyContextV2 } from "./context";
@@ -703,6 +703,14 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
       return (rangeIssue || deterministicRange) && u.field === "queryRange" ? [] : [UncertaintyV3Schema.parse({ ...u, alternatives })];
     });
     if (rangeIssue) resolvedUncertainties.push(rangeIssue);
+    const dateBinding=(field:'eventDate'|'reminderDate')=>{
+      const changed=keptChanges.find(({change})=>change.field===field);
+      if(changed)return {value:changed.change.value,sources:changed.bound.sources};
+      const retained=value.requestTarget?.kind==='CURRENT'?retainedSlots?.[field]:undefined;
+      return {value:retained?.state==='RESOLVED'?retained.value:null,sources:retained?.evidence??[]};
+    };
+    const eventBinding=dateBinding('eventDate'),reminderBinding=dateBinding('reminderDate');
+    if(!monthEventReminderDateRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
     if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!reminderDateCoverageComplete(built.input,value)) fail("SEMANTIC_REMINDER_DATE_UNOWNED");
     const coverageTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];
