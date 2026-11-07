@@ -1,6 +1,6 @@
 import type { ControlAuthority, PendingDecision } from "./state";
 import type { DecisionProof } from "./store";
-import { requiresBoundPreviewConfirmation } from "./preview-control";
+import { normalizeControlText, requiresBoundPreviewConfirmation } from "./preview-control";
 
 export type ControlSelection = { kind: "NONE" } | { kind: "AMBIGUOUS_TARGET" }
   | { kind: "ABANDON"; requestId: string | null; proposalId: string | null }
@@ -12,7 +12,6 @@ export interface ControlContext {
   replyReference?: string | null;
   now?: number;
 }
-const normalize = (text: string) => text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
 /** Exact UI vocabulary only. No prefix or general-language interpretation.
  * This selection is not authority: transition/store recheck the full proof. */
 export function selectControl(text: string, decision: PendingDecision | import("./state").ContextSnapshotV2["pendingDecision"], authority: ControlAuthority, context: ControlContext = {}): ControlSelection {
@@ -21,7 +20,7 @@ export function selectControl(text: string, decision: PendingDecision | import("
   const now = context.now ?? authority.scope.now;
   const target = decision?.target ?? context.snapshot?.scope;
   if (!target || target.ownerId !== authority.scope.ownerId || target.chatIdentityId !== authority.scope.chatIdentityId) return none;
-  const normalized = normalize(text);
+  const normalized = normalizeControlText(text);
   const requestId = decision?.target.requestId ?? context.snapshot?.requestId ?? null;
   const proposalId = decision?.candidate?.proposalId ?? (decision && ["REPLACE_PENDING", "ACCEPT_ONE_TIME_ALTERNATIVE"].includes(decision.kind) ? decision.target.proposalId : null)
     ?? (context.snapshot?.schemaVersion === "calenote-context-state-2" ? context.snapshot.pendingSemanticCandidate?.proposalId ?? null : null);
@@ -35,7 +34,7 @@ export function selectControl(text: string, decision: PendingDecision | import("
   if (decision.deliveryState !== "SENT") return none;
   let response: DecisionProof["response"] | null = null;
   const prefix = decision.kind === "SAVE_PREVIEW" ? "xác nhận" : "đồng ý";
-  if (decision.tokenHandle && normalized === normalize(`${prefix} ${decision.tokenHandle}`)) response = { kind: "TOKEN", handle: decision.tokenHandle };
+  if (decision.tokenHandle && normalized === normalizeControlText(`${prefix} ${decision.tokenHandle}`)) response = { kind: "TOKEN", handle: decision.tokenHandle };
   else if (decision.acceptedReplies.some(reply => reply === normalized)) {
     if (context.replyReference && context.replyReference === decision.replyReference) response = { kind: "REPLY", reference: context.replyReference };
     else if (decision.kind !== "SAVE_PREVIEW" || !requiresBoundPreviewConfirmation(context.snapshot)) response = { kind: "BARE", text };

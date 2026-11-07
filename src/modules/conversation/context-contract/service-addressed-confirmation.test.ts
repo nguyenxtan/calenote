@@ -3,14 +3,16 @@ import { expect, it } from "vitest";
 import { harness, proposal, complete, completeText } from "./service-test-support";
 import { date, time } from "./resolution-test-support";
 
-it.each(["sep", "custom"] as const)("saved %s addressing preserves one-off preview confirmation", async addressStyle => {
+it.each([
+  ["sep", "Có."], ["custom", "Có."], ["sep", "co"], ["custom", "co"],
+] as const)("saved %s addressing preserves one-off preview confirmation with %s", async (addressStyle, reply) => {
   const h = await harness([proposal(complete)]);
   h.deps.getReplyPreferences = async () => ({ addressStyle, customDisplayName: addressStyle === "custom" ? "<Tân 🧾>" : null });
   expect(await h.turn(0, completeText)).toEqual({ status: "DRAFT_CREATED" });
   const s = (await h.read(1))!;
   expect(s.transcript.at(-1)?.text).toBe(h.replies[0].text);
   expect(h.replies[0].text).toMatch(addressStyle === "sep" ? /^Sếp,/u : /^&lt;Tân 🧾&gt;,/u);
-  expect(await h.turn(1, "Có.")).toEqual({ status: "CONFIRMED" });
+  expect(await h.turn(1, reply)).toEqual({ status: "CONFIRMED" });
   expect(await h.f.db.prepare("SELECT count(*) n FROM reminders").first("n")).toBe(1);
   expect(h.events.filter(e => e.event === "REQUEST_DISPATCHED")).toHaveLength(1);
 });

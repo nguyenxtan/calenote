@@ -34,7 +34,7 @@ import { InterpretationJsonSchema } from "./contracts";
 import type { ContextSnapshotV2 } from "./state";
 import { projectSemanticView } from "./projection";
 import { createControlProof } from "./control-proof";
-import { isAddressedPreviewControl, isPreviewRecoveryResponse } from "./preview-control";
+import { isAddressedPreviewControl, isPreviewRecoveryResponse, normalizeControlText } from "./preview-control";
 import { SLOT_NAMES } from "./contracts";
 import { SlotsSchema, encodeContextSnapshotV2 } from "./state";
 import type { DecisionProof } from "./store";
@@ -56,7 +56,6 @@ export interface ContextContractServiceDependencies {
   processingFeedback?: () => void | Promise<void>;
   observe?: (event: ContextObservationEvent) => void;
 }
-const normalizedControl = (text: string) => text.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!]$/u, "");
 const localWords = new Set(["có", "ok", "1", "xác nhận", "không", "2", "bỏ", "hủy", "huỷ"]);
 const helpWords = new Set(["help", "/help", "trợ giúp", "hướng dẫn"]);
 const greeting = /^(?:alo|a lô|chào(?: bạn| calenote)?|xin chào(?: bạn| calenote)?|hello|hi)[!.\s]*$/u;
@@ -179,7 +178,7 @@ export function createContextContractService(deps: ContextContractServiceDepende
           || Date.parse(observed.observation.inbound.receivedAt) !== message.receivedAt || context.timezone !== "Asia/Ho_Chi_Minh") return finish("CONTEXT");
         try { preferences = await deps.getReplyPreferences?.(context.userId); } catch { preferences = undefined; }
         const control = selectControl(message.text, prior?.pendingDecision ?? null, authority, { snapshot: prior ?? undefined, now: scope.now });
-        const normalized = normalizedControl(message.text);
+        const normalized = normalizeControlText(message.text);
         const addressedControl = isAddressedPreviewControl(message.text);
         if (!prior && observed.observation.lastTerminalOutcome?.status === "EXPIRED" && (localWords.has(normalized) || addressedControl)) {
           emit({ event: "MODEL_BYPASSED", reason: "LOCAL_CONTROL" });
