@@ -74,7 +74,7 @@ it('requires explicit synthetic scope and refuses invalid input without transpor
  expect(gateway.prepare('PRIMARY',{...input,currentTurn:99})).toMatchObject({status:'FAILURE',category:'INVALID_INPUT'});expect(calls).toBe(0);
 });
 it.each(['model','provider','length','input-overflow','output-overflow','known-cost-overflow'] as const)('refuses %s while retaining independent known billing',async mode=>{
- const response=body();if(mode==='model')response.model='google/gemini-2.5-flash-lite';if(mode==='provider')response.provider='Google';if(mode==='length')response.choices[0].finish_reason='length';if(mode==='input-overflow')response.usage.prompt_tokens=12001;if(mode==='output-overflow')response.usage.completion_tokens=3073;if(mode==='known-cost-overflow')response.usage.cost=.2;
+ const response=body();if(mode==='model')response.model='google/gemini-2.5-flash-lite';if(mode==='provider')response.provider='Google';if(mode==='length')response.choices[0].finish_reason='length';if(mode==='input-overflow')response.usage.prompt_tokens=16001;if(mode==='output-overflow')response.usage.completion_tokens=3073;if(mode==='known-cost-overflow')response.usage.cost=.2;
  const gateway=createGptMiniComparisonGateway(async()=>({status:200,body:JSON.stringify(response)}),scope),attempt=gateway.prepare('PRIMARY',input);if(attempt.status!=='READY')throw Error('EXPECTED_READY');
  expect(await attempt.dispatch()).toMatchObject({status:'FAILURE',category:'SCHEMA_INVALID',usage:{costMicrounits:mode==='known-cost-overflow'?200000:4000}});
 });
