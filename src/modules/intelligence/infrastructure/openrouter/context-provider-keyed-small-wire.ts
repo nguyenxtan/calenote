@@ -107,6 +107,16 @@ function selected(input:ContextInput){
   title.minItems=1;title.items!.properties!.write.minItems=1;
   title.items!.properties!.write.items!.properties!.operation.enum=['SET'];
   owners.eventDate.items!.properties!.write.items!.properties!.value=structuredClone(primaryDate.items!.properties!.write.items!.properties!.value);
+  if(input.currentBurstTurns===undefined&&input.currentBurstReferences===undefined&&!/[\u0085\u2028\u2029\v\f]/u.test(input.turns[0].text)){
+   const reminder=owners.reminderDate,event=owners.eventDate,write=event.items!.properties!.write;
+   if(!reminder||(reminder.minItems??0)!==0||event.maxItems===0||!write.items!.properties!.operation.enum?.includes('SET'))throw Error('KEYED_MATERIAL_ROLE_POLICY');
+   // The existing whole-source certificate owns the sole date as an event.
+   // Restrict its carrier, leaving the actual date, notes and sources authored.
+   reminder.maxItems=0;event.minItems=1;event.maxItems=1;write.minItems=1;write.items!.properties!.operation.enum=['SET'];
+   const code=UNCERTAINTY_FIELD_WIRE_CODE_V3.reminderDate;
+   for(let i=uncertaintyRows.length-1;i>=0;i--)if(uncertaintyRows[i].properties!.fieldCode.enum!.includes(code))uncertaintyRows.splice(i,1);
+   uncertaintyReasons.delete(code);
+  }
  }
  const notePattern=currentBurstTurnIndexes(input).length?undefined:keyedNoteValuePattern(input),noteValue=(source as Schema).properties!.changes.properties!.owners.properties!.notes?.items?.properties?.write.items?.properties?.value;
  if(notePattern&&noteValue){if(noteValue.type!=='string')throw Error('KEYED_NOTE_VALUE_POLICY');noteValue.pattern=notePattern;}

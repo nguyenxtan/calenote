@@ -204,7 +204,7 @@ describe("conditional burst request envelope", () => {
     ] });
   });
   it("all four independently captured request149 single-message request bodies stay byte-identical", async () => {
-    const rows = JSON.parse(readFileSync(new URL("../../intelligence/infrastructure/openrouter/__fixtures__/keyed155-request-hashes.json", import.meta.url), "utf8")) as Array<{ input: ContextInput; requestSha256: string }>;
+    const rows = JSON.parse(readFileSync(new URL("../../intelligence/infrastructure/openrouter/__fixtures__/keyed156-request-hashes.json", import.meta.url), "utf8")) as Array<{ input: ContextInput; requestSha256: string }>;
     for (const row of rows) {
       let captured: unknown;
       const gateway = createKeyedContextContractGateway(async request => { captured = request; return { status: 500, body: "" }; }, { status: "OBSERVABLE_CANARY", advertisedContextTokens: 400000 });

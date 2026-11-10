@@ -17,7 +17,9 @@ it('proves only complete isolated material details and keeps source data unchang
  let covered=0;
  for(const date of ['11/10','12/9','11/10/2027'])for(const venue of ['Quang Trung','Hà Nội'])for(const verb of ['mang','đem','chuẩn bị'])for(const material of ['giấy tờ','hộ chiếu','bút và thẻ dự thi']){
   const input=sample();input.turns[0].text=`Ngày ${date} đi thi ở ${venue}, nhớ ${verb} ${material}.`;const before=JSON.stringify(input);
-  const primary=keyedMaterialDetailPrimary(input);expect(primary?.turns[0].text).toBe(`Ngày ${date} đi thi ở ${venue}`);expect(JSON.stringify(input)).toBe(before);covered++;
+  const primary=keyedMaterialDetailPrimary(input);expect(primary?.turns[0].text).toBe(`Ngày ${date} đi thi ở ${venue}`);expect(JSON.stringify(input)).toBe(before);
+  const owners=(keyedSmallComparisonSchema(input) as {properties:{changes:{properties:{owners:{properties:Record<string,{minItems?:number;maxItems?:number}>}}}}}).properties.changes.properties.owners.properties;
+  expect(owners).not.toHaveProperty('reminderDate');expect(owners.eventDate.minItems).toBe(1);expect(owners.eventDate.maxItems).toBe(1);expect(owners).toHaveProperty('notes');covered++;
  }
  expect(covered).toBe(54);
 });

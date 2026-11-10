@@ -1,0 +1,1627 @@
+{
+  "baselineSourceSha": "e9fdaba0880ed95edff1dc64c32a3e30318a96d6",
+  "baselineSourceDigest": "52ba7dacbdfab7385d048d4ac1522bd50faf6c3ae504aee195357afdd0f7b388",
+  "baselineFileSha256": "a313045f15467c5361b2ee4316f0b7ff0ee8aaf094b7752817a9f12ec279fe7e",
+  "cases": [
+    {
+      "id": "observed",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8",
+      "normalizedRoleSchemaSha256": "579dad16ad7a749d60b1a9f74746ac68fc6a6340ba36feb6a1f169f047b7c00f",
+      "eventValueSchemaSha256": "ce4384a72709fe7b00d38b69881ebd8e3213ef552d74dab4d72b15d17b3cf187"
+    },
+    {
+      "id": "date-place-passport",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 12/11 đi thi tại Lê Lợi; nhớ đem hộ chiếu."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8",
+      "normalizedRoleSchemaSha256": "579dad16ad7a749d60b1a9f74746ac68fc6a6340ba36feb6a1f169f047b7c00f",
+      "eventValueSchemaSha256": "ce4384a72709fe7b00d38b69881ebd8e3213ef552d74dab4d72b15d17b3cf187"
+    },
+    {
+      "id": "explicit-year-file",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 14/12/2026 đi thi ở Trần Phú, nhớ chuẩn bị hồ sơ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "5e5e15e0c96461a74c19a62ce23ce690d1ea2a8e8c4853d69fa023e6c585ebc0",
+      "normalizedRoleSchemaSha256": "579dad16ad7a749d60b1a9f74746ac68fc6a6340ba36feb6a1f169f047b7c00f",
+      "eventValueSchemaSha256": "93e5cbfb5e621dd7046fe6c2efe90586d9a690bc5edee0bea5bc5a0e9edcdf92"
+    },
+    {
+      "id": "two-materials",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 15/12 đi thi ở Nguyễn Du, nhớ mang bút và thẻ dự thi."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "d567b30243ecf54bb9a5163986c91e4aec7cb030fbf65f74ca54f1915badbd26",
+      "normalizedRoleSchemaSha256": "5ece0687944d0e3d3022da21d49b4dfb1423383b449f5a130e37319f976d3ac1",
+      "eventValueSchemaSha256": "ce4384a72709fe7b00d38b69881ebd8e3213ef552d74dab4d72b15d17b3cf187"
+    },
+    {
+      "id": "no-venue-id",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 16/12 đi thi, nhớ đem căn cước."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8",
+      "normalizedRoleSchemaSha256": "579dad16ad7a749d60b1a9f74746ac68fc6a6340ba36feb6a1f169f047b7c00f",
+      "eventValueSchemaSha256": "ce4384a72709fe7b00d38b69881ebd8e3213ef552d74dab4d72b15d17b3cf187"
+    },
+    {
+      "id": "casefold-materials",
+      "group": "EXISTING_MATERIAL_PRIMARY_POSITIVE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 17/12 đi thi tại Võ Thị Sáu, Nhớ chuẩn bị tài liệu và thẻ sinh viên."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8",
+      "normalizedRoleSchemaSha256": "579dad16ad7a749d60b1a9f74746ac68fc6a6340ba36feb6a1f169f047b7c00f",
+      "eventValueSchemaSha256": "ce4384a72709fe7b00d38b69881ebd8e3213ef552d74dab4d72b15d17b3cf187"
+    },
+    {
+      "id": "unknown-material",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang đồ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "e9b048cf299b0ecbc8e77d38ed6e9cde1919daef901d53480407cfd4681f4482"
+    },
+    {
+      "id": "unknown-primary",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đón khách ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "e9b048cf299b0ecbc8e77d38ed6e9cde1919daef901d53480407cfd4681f4482"
+    },
+    {
+      "id": "negated-primary",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Không đi thi ngày 11/10 ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "e9b048cf299b0ecbc8e77d38ed6e9cde1919daef901d53480407cfd4681f4482"
+    },
+    {
+      "id": "negated-detail",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, không nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "quoted",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "\"Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ.\""
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "newline",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ.\n"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "control",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ. [CONTROL]"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "aaff9eb03850b27afa4cb07ae903eeb371811da1ee48cddb9c2b574c0e1bf075"
+    },
+    {
+      "id": "ambiguity",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [
+          {
+            "field": "operation",
+            "reason": "AMBIGUOUS",
+            "alternatives": []
+          }
+        ],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "e9b048cf299b0ecbc8e77d38ed6e9cde1919daef901d53480407cfd4681f4482"
+    },
+    {
+      "id": "unicode-NEL",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung,nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "unicode-LS",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8"
+    },
+    {
+      "id": "unicode-PS",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8"
+    },
+    {
+      "id": "unicode-VT",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung,\u000bnhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8"
+    },
+    {
+      "id": "unicode-FF",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung,\fnhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "f599c9b2fc535e93993546a0c0bc0e5a69b5128c6843eb893a4f2575c92333a8"
+    },
+    {
+      "id": "empty-burst-turns",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstTurns": []
+      },
+      "inputSchemaValid": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "0ec85c63c4895ef5f3826695116cc08f8b3622908165e1adbb65ea31ea97ed9c"
+      }
+    },
+    {
+      "id": "empty-burst-references",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstReferences": []
+      },
+      "inputSchemaValid": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "9e6d5187b41dad1a3da0c2f5783110287e924ec7178f145af77604920765a15a"
+      }
+    },
+    {
+      "id": "empty-burst-both",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstTurns": [],
+        "currentBurstReferences": []
+      },
+      "inputSchemaValid": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "fd32c4022a9f2a276646a434f98450c2cd0eadcd427d6ff5d152b53fdbefef75"
+      }
+    },
+    {
+      "id": "valid-burst",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:01.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          },
+          {
+            "role": "USER",
+            "text": "Nhớ mang bút."
+          }
+        ],
+        "currentTurn": 1,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstTurns": [
+          0,
+          1
+        ],
+        "currentBurstReferences": [
+          {
+            "turn": 0,
+            "instant": "2026-09-28T03:00:00.000Z",
+            "localDate": "2026-09-28"
+          },
+          {
+            "turn": 1,
+            "instant": "2026-09-28T03:00:01.000Z",
+            "localDate": "2026-09-28"
+          }
+        ]
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "0986a0d61bef654c5012b797f01e33ba9798923fd846fc9d8ed715ff2843c76c"
+    },
+    {
+      "id": "current-context",
+      "group": "DECLINE_PROPOSED_156_OBLIGATION",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:01:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Việc cần nhắc: đi thi\nĐịa điểm: Quang Trung\nGhi chú: nhớ mang giấy tờ\nNgày sự kiện: 11/10 (chưa có năm), dương lịch\nBạn muốn được nhắc lúc mấy giờ?"
+          },
+          {
+            "role": "USER",
+            "text": "Ngày 11/10 đi thi ở Quang Trung, nhớ mang giấy tờ."
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "CLARIFYING",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "đi thi",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "RESOLVED",
+              "value": "Quang Trung",
+              "fact": "f2"
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "nhớ mang giấy tờ",
+              "fact": "f3"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "fact": "f4"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "frequency": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "đi thi"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "location",
+            "value": "Quang Trung"
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "nhớ mang giấy tờ"
+          },
+          {
+            "alias": "f4",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "CIVIL_DATE",
+              "calendar": "GREGORIAN",
+              "day": 11,
+              "month": 10,
+              "year": null,
+              "leapMonth": null
+            }
+          }
+        ],
+        "pendingQuestion": {
+          "text": "Bạn muốn được nhắc lúc mấy giờ?",
+          "scope": "REMINDER",
+          "field": "reminderTime",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-1",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY"
+          ],
+          "unsupported": [
+            "WEEKLY",
+            "MONTHLY",
+            "YEARLY",
+            "HOUR_OFFSET"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSchemaValid": true,
+      "schemaSha256": "a00641d4681a66de6e63da93a9bdce21333401611c504a3eb134de57b9fd35c0"
+    }
+  ],
+  "outsideFamilyFour": [
+    {
+      "fixture": "R01",
+      "turn": 0,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Có lịch nào ko?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSha256": "2995ab1940c14aed8c0f787d49cbadb2600cc665e75ca21845f5007225430981",
+      "requestSha256": "1b1119c733a98dbec2104504ed43137b49b31c42a43ddcf4ef1184966868b1ae",
+      "materialPrimaryAccepted": false,
+      "provenance": "src/modules/intelligence/infrastructure/openrouter/__fixtures__/keyed155-request-hashes.json"
+    },
+    {
+      "fixture": "R10",
+      "turn": 0,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 15/6 âm lịch hằng năm, nhắc ngày giỗ người thân."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSha256": "4e6d5999a14228d63190d8bcf3c6ee03b43ba27f9e8ba1f7f5944e4422639b33",
+      "requestSha256": "88d52a73300d8408d2b6d3f95f225eb90a825ad75ac8d91b1d9d71fb9489ab8b",
+      "materialPrimaryAccepted": false,
+      "provenance": "src/modules/intelligence/infrastructure/openrouter/__fixtures__/keyed155-request-hashes.json"
+    },
+    {
+      "fixture": "R01",
+      "turn": 1,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:01:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Có lịch nào ko?"
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Bạn muốn xem khoảng thời gian nào?"
+          },
+          {
+            "role": "USER",
+            "text": "Tháng này có lịch gì ko?"
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": null,
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "QUERY",
+            "field": "queryRange",
+            "value": {
+              "kind": "LIST",
+              "period": null,
+              "statusScope": "DEFAULT",
+              "evidence": [
+                {
+                  "kind": "USER_QUOTE",
+                  "turn": 0,
+                  "quote": "Có lịch nào ko?",
+                  "occurrence": 1
+                }
+              ]
+            }
+          }
+        ],
+        "pendingQuestion": {
+          "text": "Bạn muốn xem khoảng thời gian nào?",
+          "scope": "QUERY",
+          "field": "queryRange",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [
+          {
+            "field": "queryRange",
+            "reason": "MISSING",
+            "alternatives": []
+          }
+        ],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSha256": "27d59c9988c55748efbdd62c1c5ccf9bbdf5c5e0fbb006677615c3f96519c18f",
+      "requestSha256": "36bbebefe6bc6b2ad918587d5c6dc034758d4044f059e2aa0ca6938e8a29ad80",
+      "materialPrimaryAccepted": false,
+      "provenance": "src/modules/intelligence/infrastructure/openrouter/__fixtures__/keyed155-request-hashes.json"
+    },
+    {
+      "fixture": "R04",
+      "turn": 3,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:03:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Tôi thi ngày 11/10 lúc 8h."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "inputSha256": "e09293b75651eab0523d528a4026d704518a792b0bdf9335298664b2acffa29d",
+      "requestSha256": "487741cc27b022c49a9b7d759dd13fd24edf561f66875b09ee4a662542910cb5",
+      "bindingPromptDigest": "03410747f81feefd8f4575ab513f55e2e883c0427c67497b20ca54f77960f8b4",
+      "materialPrimaryAccepted": false,
+      "provenance": "artifacts/diagnostics/zalo-feedback-20261107/synthetic32-v17-requests-draft.json"
+    }
+  ]
+}
