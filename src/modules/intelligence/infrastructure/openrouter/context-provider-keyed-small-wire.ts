@@ -24,6 +24,7 @@ import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
 import {keyedRelativeMonthRoleTransitionClearRequired} from './context-keyed-month-role-transition';
+import {keyedRecurrenceEditPolicy} from './context-keyed-recurrence-edit';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
@@ -111,6 +112,20 @@ function selected(input:ContextInput){
  if(notePattern&&noteValue){if(noteValue.type!=='string')throw Error('KEYED_NOTE_VALUE_POLICY');noteValue.pattern=notePattern;}
  const correctionField=keyedClockCorrectionField(input);
  if(correctionField){const write=(source as Schema).properties!.changes.properties!.owners.properties![correctionField]?.items?.properties?.write,operation=write?.items?.properties?.operation;if(!write||!operation?.enum?.includes('REPLACE'))throw Error('KEYED_CLOCK_CORRECTION_POLICY');write.minItems=1;operation.enum=['REPLACE'];}
+ const recurrenceEdit=correctionField?undefined:keyedRecurrenceEditPolicy(input);
+ if(recurrenceEdit){
+  const owners=(source as Schema).properties!.changes.properties!.owners.properties!;
+  for(const field of recurrenceEdit.replaceOnly){
+   const owner=owners[field],write=owner?.items?.properties?.write,operation=write?.items?.properties?.operation;
+   if(!owner||!write||!operation?.enum?.includes('REPLACE'))throw Error('KEYED_RECURRENCE_EDIT_POLICY');
+   write.minItems=1;operation.enum=['REPLACE'];
+  }
+  if(recurrenceEdit.onceCountHidden){
+   const frequency=owners.frequency,count=owners.occurrenceCount;
+   if(!frequency||!count||(count.minItems??0)!==0)throw Error('KEYED_RECURRENCE_EDIT_POLICY');
+   frequency.minItems=1;frequency.items!.properties!.write.minItems=1;count.maxItems=0;
+  }
+ }
  if(keyedBoundReminderClockRequired(input)){
   const owner=(source as Schema).properties!.changes.properties!.owners.properties!.reminderTime,write=owner?.items?.properties?.write,operation=write?.items?.properties?.operation;
   if(!owner||!write||!operation?.enum?.includes('SET'))throw Error('KEYED_BOUND_CLOCK_POLICY');

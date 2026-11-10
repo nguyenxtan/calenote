@@ -1,0 +1,801 @@
+{
+  "baselineSourceSha": "7e6a7da1b52c97681323bbf147ed7e6df7efd49c",
+  "source": "SYNTHETIC_APP_GENERATED_PUBLIC_INPUT_NO_PROVIDER_TEXT",
+  "cases": [
+    {
+      "id": "M06_WEEK1_TO_WEEK2",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:01:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc trước 1 tuần. Liên tục vào 8h sáng."
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Bản nháp chưa lưu:\nsửa máy lạnh\nGhi chú: Hôm nay sửa máy lạnh.\nSự kiện: 2027-03-07 (chưa có giờ sự kiện)\nThông báo (Asia/Ho_Chi_Minh):\n2027-02-28 08:00\n2027-03-01 08:00\n2027-03-02 08:00\n2027-03-03 08:00\n2027-03-04 08:00\n2027-03-05 08:00\n2027-03-06 08:00\nLưu lời nhắc này? Trả lời Có hoặc Không."
+          },
+          {
+            "role": "USER",
+            "text": "Đổi thành nhắc trước 2 tuần. Liên tục vào 8h sáng."
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "AWAITING_CONFIRMATION",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "RESOLVED",
+              "value": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "fact": "f4"
+            },
+            "calendar": {
+              "state": "RESOLVED",
+              "value": "GREGORIAN",
+              "fact": "f5"
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "DAILY",
+              "fact": "f6"
+            },
+            "occurrenceCount": {
+              "state": "RESOLVED",
+              "value": 7,
+              "fact": "f7"
+            },
+            "eventRelation": {
+              "state": "RESOLVED",
+              "value": "BEFORE_EVENT",
+              "fact": "f8"
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "leadOffsetWeeks": {
+              "state": "RESOLVED",
+              "value": 1,
+              "fact": "f9"
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "Hôm nay sửa máy lạnh."
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "RELATIVE_MONTH",
+              "offsetMonths": 4
+            }
+          },
+          {
+            "alias": "f4",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "reminderTime",
+            "value": {
+              "hour": 8,
+              "minute": 0,
+              "qualifier": "H24"
+            }
+          },
+          {
+            "alias": "f5",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [
+                "f3"
+              ],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [
+              "f3"
+            ],
+            "scope": "REMINDER",
+            "field": "calendar",
+            "value": "GREGORIAN"
+          },
+          {
+            "alias": "f6",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "frequency",
+            "value": "DAILY"
+          },
+          {
+            "alias": "f7",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [
+                "f6",
+                "f9"
+              ],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [
+              "f6",
+              "f9"
+            ],
+            "scope": "REMINDER",
+            "field": "occurrenceCount",
+            "value": 7
+          },
+          {
+            "alias": "f8",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventRelation",
+            "value": "BEFORE_EVENT"
+          },
+          {
+            "alias": "f9",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "leadOffsetWeeks",
+            "value": 1
+          }
+        ],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "canonical": {
+        "schemaVersion": "calenote-context-3",
+        "intent": "CREATE_REMINDER",
+        "requestTarget": {
+          "kind": "CURRENT",
+          "evidence": [
+            {
+              "kind": "USER_QUOTE",
+              "turn": 2,
+              "quote": "Đổi thành nhắc trước 2 tuần. Liên tục vào 8h sáng.",
+              "occurrence": 1
+            }
+          ]
+        },
+        "changes": [
+          {
+            "field": "leadOffsetWeeks",
+            "operation": "REPLACE",
+            "value": 2,
+            "evidence": [
+              {
+                "kind": "USER_QUOTE",
+                "turn": 2,
+                "quote": "Đổi thành nhắc trước 2 tuần. Liên tục vào 8h sáng.",
+                "occurrence": 1
+              }
+            ]
+          }
+        ],
+        "query": null,
+        "uncertainties": [],
+        "conversationDirective": null,
+        "replyProposal": null
+      },
+      "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058",
+      "maskedSchemaSha256": "7faabfd92ebb789dd96d06762a8e8f15667152d16631c0a2b23e0c75ec500361",
+      "ownerInfo": {
+        "leadOffsetWeeks": {
+          "minItems": 0,
+          "maxItems": 1,
+          "valueSchemaSha256": "f0765dbf409c74f001806c446f2cf171d8c46b5b15779d54423dde921a4b0670"
+        }
+      },
+      "declines": [
+        {
+          "id": "quoted",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "hypothetical",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "negation",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "mixed",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "noEdit",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "newline",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "control",
+          "schemaSha256": "2a4723cd2946108a30b2a5a6a846cba22046570ad5877535775f1459693aa4e6"
+        },
+        {
+          "id": "clarifying",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "pending",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "ambiguity",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "conflict",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "history",
+          "schemaSha256": "6c938f7cc48684fa7e8002207493b0e2742673b285b6c4cfb416818fa60a42ba"
+        },
+        {
+          "id": "burst",
+          "schemaError": "[\n  {\n    \"origin\": \"array\",\n    \"code\": \"too_small\",\n    \"minimum\": 2,\n    \"inclusive\": true,\n    \"path\": [\n      \"currentBurstTurns\"\n    ],\n    \"message\": \"Too small: expected array to have >=2 items\"\n  },\n  {\n    \"code\": \"custom\",\n    \"message\": \"Invalid source-bound burst membership\",\n    \"path\": []\n  }\n]"
+        },
+        {
+          "id": "duplicateAlias",
+          "schemaError": "[\n  {\n    \"code\": \"custom\",\n    \"message\": \"Duplicate fact alias\",\n    \"params\": {\n      \"constraintId\": \"CONTEXT_UNIQUE_FACT_ALIAS\"\n    },\n    \"path\": []\n  }\n]"
+        },
+        {
+          "id": "futureReceipt",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "countExplicit",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "frequencyDerived",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "missingDependency",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "mismatchedDependencies",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "unknownDependency",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "aliasMismatch",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "differentClock",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "combinedOnceNewWeek",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        }
+      ]
+    },
+    {
+      "id": "M07_DAILY_TO_ONCE",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:01:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc trước 1 tuần. Liên tục vào 8h sáng."
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Bản nháp chưa lưu:\nsửa máy lạnh\nGhi chú: Hôm nay sửa máy lạnh.\nSự kiện: 2027-03-07 (chưa có giờ sự kiện)\nThông báo (Asia/Ho_Chi_Minh):\n2027-02-28 08:00\n2027-03-01 08:00\n2027-03-02 08:00\n2027-03-03 08:00\n2027-03-04 08:00\n2027-03-05 08:00\n2027-03-06 08:00\nLưu lời nhắc này? Trả lời Có hoặc Không."
+          },
+          {
+            "role": "USER",
+            "text": "Đổi thành nhắc một lần trước 1 tuần lúc 8h sáng."
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "AWAITING_CONFIRMATION",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "RESOLVED",
+              "value": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "fact": "f4"
+            },
+            "calendar": {
+              "state": "RESOLVED",
+              "value": "GREGORIAN",
+              "fact": "f5"
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "DAILY",
+              "fact": "f6"
+            },
+            "occurrenceCount": {
+              "state": "RESOLVED",
+              "value": 7,
+              "fact": "f7"
+            },
+            "eventRelation": {
+              "state": "RESOLVED",
+              "value": "BEFORE_EVENT",
+              "fact": "f8"
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "leadOffsetWeeks": {
+              "state": "RESOLVED",
+              "value": 1,
+              "fact": "f9"
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "Hôm nay sửa máy lạnh."
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "RELATIVE_MONTH",
+              "offsetMonths": 4
+            }
+          },
+          {
+            "alias": "f4",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "reminderTime",
+            "value": {
+              "hour": 8,
+              "minute": 0,
+              "qualifier": "H24"
+            }
+          },
+          {
+            "alias": "f5",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [
+                "f3"
+              ],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [
+              "f3"
+            ],
+            "scope": "REMINDER",
+            "field": "calendar",
+            "value": "GREGORIAN"
+          },
+          {
+            "alias": "f6",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "frequency",
+            "value": "DAILY"
+          },
+          {
+            "alias": "f7",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [
+                "f6",
+                "f9"
+              ],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [
+              "f6",
+              "f9"
+            ],
+            "scope": "REMINDER",
+            "field": "occurrenceCount",
+            "value": 7
+          },
+          {
+            "alias": "f8",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventRelation",
+            "value": "BEFORE_EVENT"
+          },
+          {
+            "alias": "f9",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "leadOffsetWeeks",
+            "value": 1
+          }
+        ],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "canonical": {
+        "schemaVersion": "calenote-context-3",
+        "intent": "CREATE_REMINDER",
+        "requestTarget": {
+          "kind": "CURRENT",
+          "evidence": [
+            {
+              "kind": "USER_QUOTE",
+              "turn": 2,
+              "quote": "Đổi thành nhắc một lần trước 1 tuần lúc 8h sáng.",
+              "occurrence": 1
+            }
+          ]
+        },
+        "changes": [
+          {
+            "field": "frequency",
+            "operation": "REPLACE",
+            "value": "ONCE",
+            "evidence": [
+              {
+                "kind": "USER_QUOTE",
+                "turn": 2,
+                "quote": "Đổi thành nhắc một lần trước 1 tuần lúc 8h sáng.",
+                "occurrence": 1
+              }
+            ]
+          }
+        ],
+        "query": null,
+        "uncertainties": [],
+        "conversationDirective": null,
+        "replyProposal": null
+      },
+      "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058",
+      "maskedSchemaSha256": "5d6179258e446968277e2fe62d0928fa538d746679d139cc6ff4051024a0f89c",
+      "ownerInfo": {
+        "frequency": {
+          "minItems": 0,
+          "maxItems": 1,
+          "valueSchemaSha256": "fe0ce980d1c30c43d809c0965f4381c5ef9fb9d1ded02728393c82a40349181f"
+        },
+        "occurrenceCount": {
+          "minItems": 0,
+          "maxItems": 1,
+          "valueSchemaSha256": "f0765dbf409c74f001806c446f2cf171d8c46b5b15779d54423dde921a4b0670"
+        }
+      },
+      "declines": [
+        {
+          "id": "quoted",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "hypothetical",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "negation",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "mixed",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "noEdit",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "newline",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "control",
+          "schemaSha256": "2a4723cd2946108a30b2a5a6a846cba22046570ad5877535775f1459693aa4e6"
+        },
+        {
+          "id": "clarifying",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "pending",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "ambiguity",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "conflict",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "history",
+          "schemaSha256": "6c938f7cc48684fa7e8002207493b0e2742673b285b6c4cfb416818fa60a42ba"
+        },
+        {
+          "id": "burst",
+          "schemaError": "[\n  {\n    \"origin\": \"array\",\n    \"code\": \"too_small\",\n    \"minimum\": 2,\n    \"inclusive\": true,\n    \"path\": [\n      \"currentBurstTurns\"\n    ],\n    \"message\": \"Too small: expected array to have >=2 items\"\n  },\n  {\n    \"code\": \"custom\",\n    \"message\": \"Invalid source-bound burst membership\",\n    \"path\": []\n  }\n]"
+        },
+        {
+          "id": "duplicateAlias",
+          "schemaError": "[\n  {\n    \"code\": \"custom\",\n    \"message\": \"Duplicate fact alias\",\n    \"params\": {\n      \"constraintId\": \"CONTEXT_UNIQUE_FACT_ALIAS\"\n    },\n    \"path\": []\n  }\n]"
+        },
+        {
+          "id": "futureReceipt",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "countExplicit",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "frequencyDerived",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "missingDependency",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "mismatchedDependencies",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "unknownDependency",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "aliasMismatch",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "differentClock",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        },
+        {
+          "id": "combinedOnceNewWeek",
+          "schemaSha256": "7a63d27a77481ccd7a1c86e939b05aa5852d554c41d339a30b43b860da2f2058"
+        }
+      ]
+    }
+  ]
+}
