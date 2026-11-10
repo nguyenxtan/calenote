@@ -12,6 +12,7 @@ import {lunarCalendar} from "../../conversation/lunar-calendar";
 import { extractTemporalEvidence } from "../../semantic/temporal-evidence";
 import { examTitleCoverage, isFirstPersonExamClockAssertion, isInitialIsolatedExamNotesFree, isInitialEventDateOnlySource, isEventDateOnlySourceText, isBoundRetainedSeriesNotesFree, isBareNumericClockAnswer, isBoundReminderClockAnswer } from "./semantic-completeness";
 import { currentBurstTurnIndexes } from "./burst-prompt";
+import { relativeMonthOccurrenceCount } from "./relative-month-evidence";
 
 /** Sufficient whole initial reminder source only; no operands or proposal output. */
 export function isInitialExplicitReminderIntentKnown(input:ContextInput):boolean {
@@ -43,6 +44,32 @@ export function isInitialFiniteSeriesWithoutRelationSource(input:ContextInput):b
  * declines. Original source/evidence text is never normalized or rewritten. */
 function hasCanonicalWholeSourceLayout(text:string):boolean {
   return !/[^\S ]| {2}/u.test(text);
+}
+
+/** A closed fresh month task has no independently grounded relation owner.
+ * Private source probes return only absence permission, never an operand. */
+export function isInitialRelationOwnerAbsent(input:ContextInput):boolean {
+  if(input.currentTurn!==0||input.turns.length!==1||input.turns[0]?.role!=="USER"
+    ||input.activeRequest!==null||input.facts.length||input.pendingQuestion!==null||input.ambiguities.length
+    ||input.currentBurstTurns!==undefined||input.currentBurstReferences!==undefined
+    ||!Number.isFinite(Date.parse(input.reference.instant))||!input.capabilities.calendars.includes("GREGORIAN"))return false;
+  const text=input.turns[0].text,clauses=text.split('.');
+  if(!hasCanonicalWholeSourceLayout(text)||!/^[\p{L}\p{M}\p{N} .]+$/u.test(text)
+    ||text.includes(CONTROL_PLACEHOLDER)||clauses.length!==2||clauses.some(clause=>!clause.trim()))return false;
+  // Every existing relation/lead production needs one of these absent cues.
+  // Decline unknown timing, combined actions and negation conservatively too.
+  if(/(?:^|[^\p{L}\p{M}\p{N}_])(?:nhắc|nhac|trước|truoc|sau khi|từ|kể|bắt đầu|cả|cùng|đúng|đó|ngày|tuần|giờ|tiếng|phút|lần|mỗi|hằng|hàng|liên tục|liên tiếp|sáng|trưa|chiều|tối|đêm|khuya|không|khong|ko|đừng|dung|chẳng|chưa|nếu|neu|ví dụ|vi du|giả sử|gia su|và|rồi|nhưng|hoặc|hay là|xóa|bỏ|hủy)(?:$|[^\p{L}\p{M}\p{N}_])/iu.test(text)
+    ||/\d\s*(?:h|:)/iu.test(text)
+    ||/(?:^|[^\p{L}\p{M}\p{N}_])hôm(?=$|[^\p{L}\p{M}\p{N}_])(?! nay(?:$|[^\p{L}\p{M}\p{N}_]))/iu.test(text)
+    ||[...text.matchAll(/(?:^|[^\p{L}\p{M}\p{N}_])(?:tháng|thang)(?=$|[^\p{L}\p{M}\p{N}_])/giu)].length!==1
+    ||hasEventRelationSourceCue(text))return false;
+  const id="initial-relation-absence",length=[...text].length,turn={id,role:"USER" as const,semanticView:text};
+  const source:SourceEvidence={kind:"USER_QUOTE",sourceTurnId:id,sourceMapTurnId:id,quote:text,occurrence:1,
+    sourceSpan:{start:0,end:length},viewSpan:{start:0,end:length},normalizationVersion:"nfc-codepoint-v1"};
+  if((["BEFORE_EVENT","INCLUDING_EVENT","STARTING_ON"] as const).some(value=>supportsEventRelation(value,[source],[turn])))return false;
+  let occurrences=0;
+  for(let offsetMonths=1;offsetMonths<=12;offsetMonths++)occurrences+=relativeMonthOccurrenceCount({kind:"RELATIVE_MONTH",offsetMonths},[source],[turn]);
+  return occurrences===1;
 }
 function hasConservativeWholeSourceEligibility(text:string):boolean {
   return hasCanonicalWholeSourceLayout(text)&&!/trước/iu.test(text);

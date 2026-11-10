@@ -1,0 +1,3117 @@
+{
+  "baseSourceSha": "75e2c8ffd343e63d1c5dfd9f7f8056dab94bc311",
+  "baseSourceDigest": "648e512e6fecafe14567eb2e8e25879d92336466d869b6f5e19ec525acaabc37",
+  "origin": "M01 exact frozen A14 static ContextInput; reconstructed finite semantic/wire values, NOT a retained raw provider response",
+  "baseInput": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-11-07T02:00:00.000Z",
+      "localDate": "2026-11-07",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+      }
+    ],
+    "currentTurn": 0,
+    "activeRequest": null,
+    "facts": [],
+    "pendingQuestion": null,
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-3",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "FINITE_WEEKLY",
+        "FINITE_MONTHLY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY",
+        "HOUR_OFFSET"
+      ],
+      "unsupported": [
+        "YEARLY"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  },
+  "proposal": {
+    "schemaVersion": "calenote-context-3",
+    "intent": "CREATE_REMINDER",
+    "requestTarget": {
+      "kind": "NEW",
+      "evidence": [
+        {
+          "kind": "USER_QUOTE",
+          "turn": 0,
+          "quote": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại",
+          "occurrence": 1
+        }
+      ]
+    },
+    "changes": [
+      {
+        "field": "title",
+        "operation": "SET",
+        "value": "sửa lại máy lạnh",
+        "evidence": [
+          {
+            "kind": "USER_QUOTE",
+            "turn": 0,
+            "quote": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại",
+            "occurrence": 1
+          }
+        ]
+      },
+      {
+        "field": "notes",
+        "operation": "SET",
+        "value": "Hôm nay sửa máy lạnh.",
+        "evidence": [
+          {
+            "kind": "USER_QUOTE",
+            "turn": 0,
+            "quote": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại",
+            "occurrence": 1
+          }
+        ]
+      },
+      {
+        "field": "reminderDate",
+        "operation": "SET",
+        "value": {
+          "kind": "RELATIVE_MONTH",
+          "offsetMonths": 4
+        },
+        "evidence": [
+          {
+            "kind": "USER_QUOTE",
+            "turn": 0,
+            "quote": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại",
+            "occurrence": 1
+          }
+        ]
+      }
+    ],
+    "query": null,
+    "uncertainties": [],
+    "conversationDirective": null,
+    "replyProposal": null
+  },
+  "badWire": {
+    "changes": {
+      "owners": {
+        "title": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "sửa lại máy lạnh"
+              }
+            ],
+            "evidence": [
+              "U0"
+            ]
+          }
+        ],
+        "location": [],
+        "notes": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "Hôm nay sửa máy lạnh."
+              }
+            ],
+            "evidence": [
+              "U0"
+            ]
+          }
+        ],
+        "eventDate": [],
+        "reminderDate": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": {
+                  "calendar": null,
+                  "day": null,
+                  "month": null,
+                  "year": null,
+                  "leapMonth": null,
+                  "offsetDays": null,
+                  "weekday": null,
+                  "qualifier": null,
+                  "offsetMonths": 4,
+                  "kind": "RELATIVE_MONTH"
+                }
+              }
+            ],
+            "evidence": [
+              "U0"
+            ]
+          }
+        ],
+        "eventRelation": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "INCLUDING_EVENT"
+              }
+            ],
+            "evidence": [
+              "U0"
+            ]
+          }
+        ],
+        "endDate": []
+      }
+    },
+    "uncertainties": [],
+    "directive": [],
+    "reply": [],
+    "operation": {
+      "code": "START_NEW_REMINDER",
+      "targetEvidence": [
+        "U0"
+      ]
+    }
+  },
+  "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+  "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139",
+  "positive": [
+    {
+      "id": "M01",
+      "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+      "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139"
+    },
+    {
+      "id": "wordFour",
+      "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+      "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139"
+    },
+    {
+      "id": "wordEleven",
+      "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+      "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139"
+    },
+    {
+      "id": "otherTask",
+      "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+      "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139"
+    },
+    {
+      "id": "monthPrefix",
+      "normalizedSchemaSha256": "ce91ddd36b556a323e9e359b14f4efd4da3a3113ec184c31613ff11ee88b4dc5",
+      "uncertaintiesSha256": "3fff6afc594cb9ec34709dcb3ea4d0dc9ab8608f4a837d7626affde81999f139"
+    }
+  ],
+  "cases": [
+    {
+      "id": "M01",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "wordFour",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt bốn tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "wordEleven",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt mười một tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "otherTask",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay kiểm tra cửa. Đặt 2 tháng sau kiểm tra lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "monthPrefix",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt sau 4 tháng sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": true,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "including",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau, nhắc cả ngày đó"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "sameDay",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau nhắc hôm đó"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "beforeDay",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau nhắc trước 3 ngày"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "c7bd0037d07e04dfa600b644a1b29786f6e39e13f7f291a1a8666011f166b55e"
+    },
+    {
+      "id": "backwardDay",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau nhắc 2 ngày trước"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "c7bd0037d07e04dfa600b644a1b29786f6e39e13f7f291a1a8666011f166b55e"
+    },
+    {
+      "id": "startingToday",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau bắt đầu từ hôm nay"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "startingDate",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau từ 12/3"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "twoMonth",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh sau 2 tháng. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "absoluteMonth",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt tháng 3 sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "unsupportedMonth",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 13 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "noMonth",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt mai sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "negative",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay không sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "unaccentedNegative",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay khong sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "hypothetical",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Nếu hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "quoted",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "“Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại”"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "question",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "afterTask",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau khi sửa xong"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "clock",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau lúc 8h"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "a52d9a62b5886c2a4e4aaca76eb438f87d375c9903153a51e542fb86f9d6e661"
+    },
+    {
+      "id": "eachMonth",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau mỗi tháng"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "ccca3af2e5840c16b4db3b653a0d023611a86db95862fb05c0c796d2721cd3f2"
+    },
+    {
+      "id": "count",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau 2 lần"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "thirdClause",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Alo"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "emptyFirst",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": ". Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "doubleSpace",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay  sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "newline",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh.\nĐặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "unicodeLS",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "unicodeNEL",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh.Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "yesterday",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm qua sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "otherDay",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm kia sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "clear",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay bỏ sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "conjunction",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh và kiểm tra cửa. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "M02_SCREEN_COMPLETE_WEEK",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc trước 1 tuần. Liên tục vào 8h sáng."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "0869619d0a6cb9b80bb5d9b1c702167448612321e875b2ec4810c9f2c350809f"
+    },
+    {
+      "id": "M04_READY_ONCE_FOLLOWUP",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:01:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc ngày đó lúc 8h sáng."
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Bản nháp chưa lưu:\nsửa máy lạnh\nGhi chú: Hôm nay sửa máy lạnh.\nSự kiện: 2027-03-07 (chưa có giờ sự kiện)\nThông báo (Asia/Ho_Chi_Minh):\n2027-03-07 08:00\nLưu lời nhắc này? Trả lời Có hoặc Không."
+          },
+          {
+            "role": "USER",
+            "text": "Nhắc trước 1 tuần. Liên tục vào 8h sáng"
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "AWAITING_CONFIRMATION",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "RESOLVED",
+              "value": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "fact": "f4"
+            },
+            "calendar": {
+              "state": "RESOLVED",
+              "value": "GREGORIAN",
+              "fact": "f5"
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "ONCE",
+              "fact": "f6"
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "RESOLVED",
+              "value": "INCLUDING_EVENT",
+              "fact": "f7"
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "Hôm nay sửa máy lạnh."
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "RELATIVE_MONTH",
+              "offsetMonths": 4
+            }
+          },
+          {
+            "alias": "f4",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "reminderTime",
+            "value": {
+              "hour": 8,
+              "minute": 0,
+              "qualifier": "H24"
+            }
+          },
+          {
+            "alias": "f5",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [
+                "f3"
+              ],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [
+              "f3"
+            ],
+            "scope": "REMINDER",
+            "field": "calendar",
+            "value": "GREGORIAN"
+          },
+          {
+            "alias": "f6",
+            "provenance": {
+              "kind": "DERIVED_POLICY",
+              "policyVersion": "context-resolution-1",
+              "dependencies": [],
+              "referenceTime": "2026-11-07T02:00:00.000Z"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "frequency",
+            "value": "ONCE"
+          },
+          {
+            "alias": "f7",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventRelation",
+            "value": "INCLUDING_EVENT"
+          }
+        ],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "884bb51ddaf5b6ec0ba49c6b0b212bc47126777e9028dce70833a3cb428e9643"
+    },
+    {
+      "id": "M05_EXPLICIT_ONCE_WEEK",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại. Nhắc một lần trước 1 tuần lúc 8h sáng."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "ba2142168f4654c51c2700c06a3982aeb6f5333ee093cea17937dd65afc24120"
+    },
+    {
+      "id": "M12_MONTH_RECEIPT_MIDNIGHT",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T17:01:00.000Z",
+          "localDate": "2026-11-08",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Việc cần nhắc: sửa máy lạnh\nGhi chú: Hôm nay sửa máy lạnh.\nNgày sự kiện: 4 tháng tính từ ngày nhận yêu cầu\nBạn muốn được nhắc lúc mấy giờ?"
+          },
+          {
+            "role": "USER",
+            "text": "Nhắc trước 1 tuần. Liên tục vào 8h sáng"
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "CLARIFYING",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "frequency": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T16:59:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T16:59:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "Hôm nay sửa máy lạnh."
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T16:59:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "RELATIVE_MONTH",
+              "offsetMonths": 4
+            }
+          }
+        ],
+        "pendingQuestion": {
+          "text": "Bạn muốn được nhắc lúc mấy giờ?",
+          "scope": "REMINDER",
+          "field": "reminderTime",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "daf03b4721b14583e37c96b032b3d12e8954b582021a3802689e7797662b6067"
+    },
+    {
+      "id": "M03_REPRESENTATIVE_NOT_ACTUAL_BODY",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:01:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          },
+          {
+            "role": "ASSISTANT",
+            "text": "Việc cần nhắc: sửa máy lạnh\nGhi chú: Hôm nay sửa máy lạnh.\nNgày nhắc: 4 tháng tính từ ngày nhận yêu cầu\nSếp muốn được nhắc lúc mấy giờ?"
+          },
+          {
+            "role": "USER",
+            "text": "Nhắc trước 1 tuần. Liên tục vào 8h sáng"
+          }
+        ],
+        "currentTurn": 2,
+        "activeRequest": {
+          "lifecycle": "CLARIFYING",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "frequency": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "notes",
+            "value": "Hôm nay sửa máy lạnh."
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "reminderDate",
+            "value": {
+              "kind": "RELATIVE_MONTH",
+              "offsetMonths": 4
+            }
+          }
+        ],
+        "pendingQuestion": {
+          "text": "Sếp muốn được nhắc lúc mấy giờ?",
+          "scope": "REMINDER",
+          "field": "reminderTime",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "7bd0c68eb97292aaa24bb4baebdadf478d264c6ee8eb5d32edfa971d73d8844f"
+    },
+    {
+      "id": "active",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": {
+          "lifecycle": "AWAITING_CONFIRMATION",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "sửa máy lạnh",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "RESOLVED",
+              "value": "Hôm nay sửa máy lạnh.",
+              "fact": "f2"
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "RELATIVE_MONTH",
+                "offsetMonths": 4
+              },
+              "fact": "f3"
+            },
+            "eventTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "RESOLVED",
+              "value": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "fact": "f4"
+            },
+            "calendar": {
+              "state": "RESOLVED",
+              "value": "GREGORIAN",
+              "fact": "f5"
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "ONCE",
+              "fact": "f6"
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "RESOLVED",
+              "value": "INCLUDING_EVENT",
+              "fact": "f7"
+            },
+            "leadOffsetDays": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "71db6abfe419a5c90b47014dadc75c06dea9c99ee18b43a461fcbe3c34be6a0b"
+    },
+    {
+      "id": "fact",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "sửa máy lạnh"
+          }
+        ],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "cf9da5b1d1ace4e7ea373df702e935a97e8f168ab0192ba69fe5a7b5a1693c19"
+    },
+    {
+      "id": "pending",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": {
+          "text": "Sếp muốn được nhắc lúc mấy giờ?",
+          "scope": "REMINDER",
+          "field": "reminderTime",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "ambiguity",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [
+          {
+            "field": "eventRelation",
+            "reason": "AMBIGUOUS",
+            "alternatives": []
+          }
+        ],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "burstTurns",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstTurns": []
+      },
+      "eligible": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "0ec85c63c4895ef5f3826695116cc08f8b3622908165e1adbb65ea31ea97ed9c"
+      }
+    },
+    {
+      "id": "burstReferences",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstReferences": []
+      },
+      "eligible": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "9e6d5187b41dad1a3da0c2f5783110287e924ec7178f145af77604920765a15a"
+      }
+    },
+    {
+      "id": "history",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Alo"
+          },
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 1,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "9dea943e642e7f4e5741016a28b39affd91aab8de028d6d34c4523c063b79e7d"
+    },
+    {
+      "id": "assistant",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "ASSISTANT",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "2dc9b3c8d2d62d904faefdf6464d9763d0afafa3ac4b9c4a0bb7a2cb4f727929"
+      }
+    },
+    {
+      "id": "badReference",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "not-a-date",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "4d3968d9fa42e54f955bbe36abfca1a4531c5fa3e537267a132eebfd56ff6a13"
+      }
+    },
+    {
+      "id": "lunarOnly",
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-11-07T02:00:00.000Z",
+          "localDate": "2026-11-07",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "eligible": false,
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    }
+  ]
+}

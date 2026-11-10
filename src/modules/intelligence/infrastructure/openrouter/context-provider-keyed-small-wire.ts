@@ -16,7 +16,7 @@ import {UNCERTAINTY_FIELD_WIRE_CODE_V3} from './context-provider-wire';
 import {primaryEvidenceSourceCodebook} from './evidence-pointer';
 import {keyedNoteValuePattern} from './context-keyed-note-boundary';
 import {keyedClockCorrectionField,keyedClockNotationField,keyedBoundReminderClockRequired} from './context-keyed-clock-correction';
-import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../../conversation/context-contract/field-capability';
+import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent,isInitialRelationOwnerAbsent} from '../../../conversation/context-contract/field-capability';
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
@@ -167,6 +167,12 @@ function selected(input:ContextInput){
   const owner=owners.eventRelation,write=owner?.items?.properties?.write,value=write?.items?.properties?.value;
   if(!owner||!write||!value?.enum?.includes('INCLUDING_EVENT')||!write.items?.properties?.operation.enum?.includes('SET')||!owners.reminderDate)throw Error('KEYED_SAME_DAY_RELATION_POLICY');
   owner.minItems=1;write.minItems=1;write.items.properties.operation.enum=['SET'];value.enum=['INCLUDING_EVENT'];owners.reminderDate.maxItems=0;
+ }
+ if(isInitialRelationOwnerAbsent(input)){
+  const owner=(source as Schema).properties!.changes.properties!.owners.properties!.eventRelation;
+  if(materialPrimary||pendingWindow||readyWindow||weekBundle||recurrenceEdit||correctionField
+   ||keyedSameDayEventRelationRequired(input)||!owner||(owner.minItems??0)>0)throw Error('KEYED_INITIAL_RELATION_ABSENT_POLICY');
+  owner.maxItems=0;
  }
  for(const key of inactiveTables){const table=source.properties[key] as Schema;if(table.type!=='array'||table.maxItems!==0)throw Error('KEYED_INACTIVE_TABLE_POLICY');delete source.properties[key];source.required=source.required.filter(name=>name!==key);}
  const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V3.operation;
