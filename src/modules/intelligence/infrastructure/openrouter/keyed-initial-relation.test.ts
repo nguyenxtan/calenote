@@ -10,6 +10,7 @@ import type {SourceEvidence} from '../../../conversation/context-contract/state'
 import {createContextContractProbe} from '../../../../../tools/benchmark/context-contract-probe';
 import {createKeyedContextContractGateway} from './keyed-context-gateway';
 import {decodeKeyedSmallComparison,encodeKeyedSmallComparison,keyedSmallComparisonSchema} from './context-provider-keyed-small-wire';
+import {isInitialRepeatedTaskTitleRequired} from '../../../conversation/context-contract/repeated-task-title-certificate';
 
 type Schema={properties:Record<string,Schema>;required?:string[];[key:string]:unknown};
 type Wire={changes:{owners:Record<string,unknown[]>};[key:string]:unknown};
@@ -22,6 +23,17 @@ const input=()=>ContextInputSchema.parse(structuredClone(before.baseInput));
 const absent=(value:ContextInput)=>{const fn=Reflect.get(capabilities,'isInitialRelationOwnerAbsent');expect(fn).toBeTypeOf('function');return (fn as (i:ContextInput)=>boolean)(value);};
 const envelope=(wire:unknown)=>({status:200,body:JSON.stringify({model:'openai/gpt-5-mini',provider:'Azure',usage:{cost:0,prompt_tokens:8000,completion_tokens:500},choices:[{finish_reason:'stop',message:{content:JSON.stringify(wire)}}]})});
 const admission={status:'OBSERVABLE_CANARY',advertisedContextTokens:400000} as const;
+
+// Source161 independently requires a supplied fresh repeated-task title. Keep
+// the historical relation fixture unchanged and compare every other byte.
+function historicalRelationSchema(value:ContextInput):Schema {
+ const schema=structuredClone(keyedSmallComparisonSchema(value)) as Schema;
+ if(isInitialRepeatedTaskTitleRequired(value)){
+  const title=schema.properties.changes.properties.owners.properties.title;
+  expect(title.minItems).toBe(1);delete title.minItems;
+ }
+ return schema;
+}
 
 it('refuses the extra unsupported relation instead of silently stripping the authored field',()=>{
  const value=input(),wire=structuredClone(before.badWire),original=JSON.stringify(wire);
@@ -44,7 +56,7 @@ it.each(['SET','REPLACE','CLEAR'])('does not expose an ungrounded fresh relation
 
 it.each(before.cases.filter(row=>row.eligible))('excludes only the relation owner in the proven $id frame',row=>{
  const original=JSON.stringify(row.input);expect(absent(row.input)).toBe(true);expect(JSON.stringify(row.input)).toBe(original);
- const schema=keyedSmallComparisonSchema(row.input) as Schema,owners=schema.properties.changes.properties.owners;
+ const schema=historicalRelationSchema(row.input),owners=schema.properties.changes.properties.owners;
  expect(owners.properties).not.toHaveProperty('eventRelation');expect(owners.required).not.toContain('eventRelation');
  const expected=before.positive.find(p=>p.id===row.id)!;
  expect(hash(schema)).toBe(expected.normalizedSchemaSha256);
@@ -56,7 +68,7 @@ it.each(before.cases.filter(row=>!row.eligible))('preserves source157 outside th
  if(row.schemaError){let error:unknown;try{keyedSmallComparisonSchema(row.input);}catch(e){error=e;}
   expect(error).toBeInstanceOf(Error);expect((error as Error).name).toBe(row.schemaError.name);
   expect(createHash('sha256').update((error as Error).message).digest('hex')).toBe(row.schemaError.messageSha256);
- }else expect(hash(keyedSmallComparisonSchema(row.input))).toBe(row.schemaSha256);
+ }else expect(hash(historicalRelationSchema(row.input))).toBe(row.schemaSha256);
 });
 
 it('does not grant relation authority to a smaller source quote in the certified initial turn',()=>{

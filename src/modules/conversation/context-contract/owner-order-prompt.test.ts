@@ -17,7 +17,7 @@ import {chat,message} from './context-test-fixtures';
 import {digest} from './confirmation';
 
 interface RequestVector {fixture:string;turn?:number;input:unknown;requestSha256:string}
-const vectors=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed160-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
+const vectors=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed161-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const predecessor=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed159-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const preceding=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed147-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const historical=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed146-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
@@ -84,7 +84,7 @@ it.each(vectors)('adds only the actual selected schema owner keys to the trusted
 });
 
 it('selects prompt160 and appended codebook3 while preserving wire137 and canonical protocol identities',()=>{
- expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).toBe('calenote-context-readable-keyed-160-list-query-operation-bound');
+ expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).toBe('calenote-context-readable-keyed-161-repeated-task-title-presence');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).not.toBe('calenote-context-readable-keyed-146-hour-minute-lead');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.wireVersion).toBe('calenote-context-readable-keyed-137');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.codebookVersion).toBe('context-uncertainty-fields-3');

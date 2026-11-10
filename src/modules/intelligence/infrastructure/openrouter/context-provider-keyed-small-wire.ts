@@ -22,6 +22,7 @@ import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {isInitialRelativeCalendarQuestion} from '../../../conversation/context-contract/relative-calendar-source';
 import {isCertifiedRetainedListQuestion} from '../../../conversation/context-contract/list-question-certificate';
+import {isInitialRepeatedTaskTitleRequired} from '../../../conversation/context-contract/repeated-task-title-certificate';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
@@ -316,6 +317,9 @@ function selected(input:ContextInput){
   });
   if(!rows.length)throw Error('KEYED_BOUND_WINDOW_EVIDENCE_EMPTY');owner.items=rows.length===1?rows[0]:{anyOf:rows};
  };
+ if(isInitialRepeatedTaskTitleRequired(input)){
+  const title=ownerPolicies.title;if(!title)throw Error('KEYED_REPEATED_TASK_TITLE_POLICY');setOnly(title,true);
+ }
  if(keyedInitialEventOperationRequired(input))for(const owner of Object.values(ownerPolicies))if(owner.maxItems!==0)setOnly(owner);
  if(roleClear){
   if(keyedSameDayEventRelationRequired(input))throw Error('KEYED_ROLE_CLEAR_POLICY');

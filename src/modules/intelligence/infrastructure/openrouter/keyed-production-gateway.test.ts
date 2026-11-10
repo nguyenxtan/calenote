@@ -9,7 +9,7 @@ import {encodeKeyedSmallComparison} from './context-provider-keyed-small-wire';
 import {frozenContextProposal} from '../../../../../tools/benchmark/context-contract-fixtures';
 import type {SemanticTransport} from './semantic-gateway';
 import type {SemanticGateway} from '../../semantic-gateway';
-const qualified=JSON.parse(readFileSync(new URL('./__fixtures__/keyed160-request-hashes.json',import.meta.url),'utf8')) as Array<{fixture:string;turn?:number;input:unknown;requestSha256:string}>;
+const qualified=JSON.parse(readFileSync(new URL('./__fixtures__/keyed161-request-hashes.json',import.meta.url),'utf8')) as Array<{fixture:string;turn?:number;input:unknown;requestSha256:string}>;
 type Factory=(transport:SemanticTransport,admission?:{status:'OBSERVABLE_CANARY';advertisedContextTokens:number})=>SemanticGateway;
 function factory(){const value=Reflect.get(gateways,'createKeyedContextContractGateway');expect(value).toBeTypeOf('function');return value as Factory;}
 it('refuses dispatch without exact route admission before exposing a reservation',()=>{
