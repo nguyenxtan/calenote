@@ -18,6 +18,11 @@ import {constrainComparisonDateSchema} from './context-comparison-date-schema';
 import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../src/modules/conversation/context-contract/field-capability';
 import {isUnreconciledListInterpretation,readListTransport} from '../../src/modules/conversation/context-contract/list-period-transport';
 import {keyedInitialEventOperationRequired} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-initial-event-operation';
+import {keyedMaterialDetailPrimary} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-material-detail';
+import {keyedPendingMonthWindowPolicy} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-month-role-transition';
+import {keyedWeekLeadSourceSupported} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-window-source';
+import {keyedReadyOnceWindowPolicy} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-recurrence-edit';
+import {UNCERTAINTY_FIELD_WIRE_CODE_V3 as uncertaintyCodes} from '../../src/modules/intelligence/infrastructure/openrouter/context-provider-wire';
 type AuditShape={properties?:Record<string,AuditShape>;anyOf?:AuditShape[];items?:AuditShape;$defs?:unknown;[key:string]:unknown};
 function noForcedEmpty(value:unknown):void {if(Array.isArray(value)){value.forEach(noForcedEmpty);return;}if(!value||typeof value!=='object')return;const node=value as Record<string,unknown>;expect(node.maxItems).not.toBe(0);for(const key of ['anyOf','oneOf'])if(Array.isArray(node[key]))expect(node[key].length).toBeGreaterThan(0);Object.values(node).forEach(noForcedEmpty);}
 const compileAuditShape=(schema:AuditShape)=>z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
@@ -43,9 +48,13 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
   const strict=policy.schema as AuditShape,strictIssues=compileAuditShape({$defs:strict.$defs,...strict.properties!.uncertainties.items!}),fieldIssues=selected.properties!.uncertainties?compileAuditShape(selected.properties!.uncertainties.items!):null;
   const controlSchemaRaw=selected.properties!.operation.anyOf!.find(branch=>branch.properties!.controlUncertainties)?.properties!.controlUncertainties.items,controlIssues=controlSchemaRaw?compileAuditShape(controlSchemaRaw):null,strictOperation=compileAuditShape({$defs:strict.$defs,...strict.properties!.operationCode}),controlsAllowed=Object.keys(KEYED_OPERATION_NAMES).some(code=>!['0','1','2'].includes(code)&&strictOperation.safeParse(code).success);
   const operationIssuesSchema=selected.properties!.operation.anyOf!.find(branch=>branch.properties!.operationUncertainties)?.properties!.operationUncertainties.items,operationIssues=operationIssuesSchema?compileAuditShape(operationIssuesSchema):null;
+  const generationExclusions=new Set<number>(),readyWindow=keyedReadyOnceWindowPolicy(input);
+  if(keyedMaterialDetailPrimary(input)&&input.currentBurstTurns===undefined&&input.currentBurstReferences===undefined&&!/[\u0085\u2028\u2029\v\f]/u.test(input.turns[0].text))generationExclusions.add(uncertaintyCodes.reminderDate);
+  if(keyedPendingMonthWindowPolicy(input)?.leadField==='leadOffsetWeeks'&&keyedWeekLeadSourceSupported(input)||readyWindow)generationExclusions.add(uncertaintyCodes.occurrenceCount);
+  if(readyWindow)generationExclusions.add(uncertaintyCodes.reminderTime);
   for(let fieldCode=0;fieldCode<=15;fieldCode++)for(const reason of ['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']){
    pairs++;const row={fieldCode,reason,alternatives:[]},actual=fieldCode===15?(operationIssues?.safeParse({reason,alternatives:[]}).success??false):[13,14].includes(fieldCode)?(controlIssues?.safeParse(row).success??false)||(controlIssues?.safeParse({fieldCode,reason}).success??false):(fieldIssues?.safeParse(row).success??false)||(fieldIssues?.safeParse({fieldCode,reason}).success??false);
-   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(fieldCode>=13||!(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input)))&&(!keyedInitialEventOperationRequired(input)||fieldCode<13));
+   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!generationExclusions.has(fieldCode)&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(fieldCode>=13||!(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input)))&&(!keyedInitialEventOperationRequired(input)||fieldCode<13));
   }
   const actual=decodeKeyedSmallComparison(wire,input),expected=decodeSmallContextV3(encodeSmallContextV3(sorted,input),CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
   if(actual.status==='PARSED'&&expected.status==='PARSED'&&isUnreconciledListInterpretation(actual.value)&&isUnreconciledListInterpretation(expected.value))expect(readListTransport(actual.value)).toEqual(readListTransport(expected.value));else expect(actual).toEqual(expected);

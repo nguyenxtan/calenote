@@ -17,14 +17,14 @@ import {chat,message} from './context-test-fixtures';
 import {digest} from './confirmation';
 
 interface RequestVector {fixture:string;turn?:number;input:unknown;requestSha256:string}
-const vectors=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed156-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
-const predecessor=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed155-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
+const vectors=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed157-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
+const predecessor=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed156-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const preceding=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed147-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const historical=JSON.parse(readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/keyed146-request-hashes.json',import.meta.url),'utf8')) as RequestVector[];
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const admission={status:'OBSERVABLE_CANARY',advertisedContextTokens:400000} as const;
 
-it.each(vectors)('emits the keyed156 $fixture/$turn golden request with preserved historical input',async vector=>{
+it.each(vectors)('emits the keyed157 $fixture/$turn golden request with preserved historical input',async vector=>{
  const input=ContextInputSchema.parse(vector.input),previous=predecessor.find(row=>row.fixture===vector.fixture&&(row.turn??0)===(vector.turn??0)),prior=preceding.find(row=>row.fixture===vector.fixture&&(row.turn??0)===(vector.turn??0)),original=historical.find(row=>row.fixture===vector.fixture&&(row.turn??0)===(vector.turn??0));
  expect(previous).toBeDefined();expect(prior).toBeDefined();expect(original).toBeDefined();expect(vector.input).toEqual(previous!.input);expect(vector.input).toEqual(prior!.input);expect(vector.input).toEqual(original!.input);
  let emitted:SemanticJsonRequest|undefined;
@@ -36,9 +36,8 @@ it.each(vectors)('emits the keyed156 $fixture/$turn golden request with preserve
  const ready=gateway.prepare('PRIMARY',input);expect(ready.status).toBe('READY');if(ready.status!=='READY')throw Error('Prepared keyed attempt required');
  expect(await ready.dispatch()).toMatchObject({status:'SUCCESS'});expect(emitted).toBeDefined();
  expect(hash(emitted)).toBe(vector.requestSha256);
- // The material-note event now excludes a reminder-date owner; the other historical requests remain byte-identical.
- if(vector.fixture==='R07'&&(vector.turn??0)===0)expect(hash(emitted)).not.toBe(previous!.requestSha256);
- else expect(hash(emitted)).toBe(previous!.requestSha256);
+ // These historical requests are outside the new bounded-window certificates.
+ expect(hash(emitted)).toBe(previous!.requestSha256);
 });
 
 it.each([
@@ -52,6 +51,7 @@ it.each([
  ['keyed153-request-hashes.json','9169e8cf4f005c0072c372a6190fc621f61fa7f34a4a3eeb6ab0166971f7cab2'],
  ['keyed154-request-hashes.json','9169e8cf4f005c0072c372a6190fc621f61fa7f34a4a3eeb6ab0166971f7cab2'],
  ['keyed155-request-hashes.json','9169e8cf4f005c0072c372a6190fc621f61fa7f34a4a3eeb6ab0166971f7cab2'],
+ ['keyed156-request-hashes.json','e06974b3ae5badd665ba82104474ec93a3e660ee55fb532ecbfcf8b73842e324'],
 ])('preserves the immutable historical %s qualification vector', (name,expected)=>{
  const bytes=readFileSync(new URL('../../intelligence/infrastructure/openrouter/__fixtures__/'+name,import.meta.url));
  expect(createHash('sha256').update(bytes).digest('hex')).toBe(expected);
@@ -80,8 +80,8 @@ it.each(vectors)('adds only the actual selected schema owner keys to the trusted
  expect(selected).not.toBeNull();expect(JSON.parse(selected![1])).toEqual(keys);
 });
 
-it('selects prompt156 and appended codebook3 while preserving wire137 and canonical protocol identities',()=>{
- expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).toBe('calenote-context-readable-keyed-156-material-date-role');
+it('selects prompt157 and appended codebook3 while preserving wire137 and canonical protocol identities',()=>{
+ expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).toBe('calenote-context-readable-keyed-157-bound-window');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.promptVersion).not.toBe('calenote-context-readable-keyed-146-hour-minute-lead');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.wireVersion).toBe('calenote-context-readable-keyed-137');
  expect(CONTEXT_KEYED_COMPARISON_PROTOCOL.codebookVersion).toBe('context-uncertainty-fields-3');

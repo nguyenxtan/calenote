@@ -94,8 +94,10 @@ it('refuses the observed current USER citation that cannot author the required e
 });
 
 type Schema={properties?:Record<string,Schema>;items?:Schema;anyOf?:Schema[];enum?:unknown[];[key:string]:unknown};
-it('subtracts only event-date evidence options while preserving the 153 value and CLEAR domains',()=>{
+it('preserves the historical event-date and CLEAR domains beside the complete-window obligations',()=>{
  const previous=JSON.parse(readFileSync(new URL('./__fixtures__/keyed153-month-role-source-before.json',import.meta.url),'utf8'));
+ const before=JSON.parse(readFileSync(new URL('./__fixtures__/keyed156-month-role-owners-before.json',import.meta.url),'utf8'));
+ expect(before.historicalNormalizedSchemaSha256).toBe(previous.normalizedSchemaSha256);
  const value=input(),schema=structuredClone(keyedSmallComparisonSchema(value)) as Schema;
  const historical=primaryEvidenceSourceCodebook(value).entries.filter(e=>e.kind!=='CONTEXT_FACT'&&typeof e.turn==='number'&&e.turn<value.currentTurn).map(e=>e.code);
  const owner=schema.properties!.changes.properties!.owners.properties!.eventDate;
@@ -103,7 +105,8 @@ it('subtracts only event-date evidence options while preserving the 153 value an
  expect(rows).toHaveLength(1);
  for(const row of rows){expect(row.properties!.evidence.items!.enum).toEqual(historical);delete row.properties!.evidence.items!.enum;}
  owner.items=rows[0];
- expect(hash(schema)).toBe(previous.normalizedSchemaSha256);
+ expect(hash(owner)).toBe(before.eventOwnerWithoutEvidenceEnumSha256);
+ expect(hash(schema.properties!.changes.properties!.owners.properties!.reminderDate)).toBe(before.clearOwnerSha256);
  const good=wire();
  expect(good.changes.owners.eventDate[0]).toHaveProperty('evidence',['U0']);
  expect(decodeKeyedSmallComparison(good,value).status).toBe('PARSED');

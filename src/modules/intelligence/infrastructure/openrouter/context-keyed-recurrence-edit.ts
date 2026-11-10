@@ -3,7 +3,7 @@ import type {SourceEvidence} from '../../../conversation/context-contract/state'
 import {CONTROL_PLACEHOLDER} from '../../../conversation/context-contract/projection';
 import {hasLeadWeekOffsetEvidence,supportsLeadWeekOffset} from '../../../conversation/context-contract/lead-week-evidence';
 import {supportsCadenceOperand} from '../../../conversation/context-contract/cadence-count-evidence';
-import {isBareNumericClockAnswer} from '../../../conversation/context-contract/semantic-completeness';
+import {keyedClosedDailyWindowSource,keyedWeekLeadSourceSupported,restatesKnownClock as restatesClock} from './context-keyed-window-source';
 
 type ExplicitField='title'|'eventDate'|'eventRelation'|'reminderTime'|'frequency'|'leadOffsetWeeks';
 export type RecurrenceEditPolicy={replaceOnly:readonly ('leadOffsetWeeks'|'frequency')[];onceCountHidden:boolean};
@@ -13,20 +13,6 @@ const prefix='^\\s*(?:đổi thành|đổi sang)\\s+nhắc(?:\\s+(?:tôi|mình|t
 const weeks='(?:\\d{1,2}|một|hai|ba)\\s+tuần';
 const daily=new RegExp(`${prefix}trước\\s+${weeks}[.,]?\\s+(?:liên tục|mỗi ngày|hằng ngày|hàng ngày)\\s+(?:vào|lúc)\\s+${clock}\\s*[.!]?\\s*$`,'iu');
 const once=new RegExp(`${prefix}(?:một|1)\\s+lần\\s+trước\\s+${weeks}[.,]?\\s+(?:vào|lúc)\\s+${clock}\\s*[.!]?\\s*$`,'iu');
-
-/** A private support check for the existing clock, never a newly extracted
- * clock. Combined clock edits retain the ordinary interpretation language. */
-function restatesClock(value:unknown,atom:string,morning:boolean,reference:string):boolean {
- if(!value||typeof value!=='object'||!('hour'in value)||!('minute'in value)||!('qualifier'in value))return false;
- const {hour,minute,qualifier}=value;
- if(typeof hour!=='number'||!Number.isInteger(hour)||hour<0||hour>23
-  ||typeof minute!=='number'||!Number.isInteger(minute)||minute<0||minute>59
-  ||qualifier!=='H24'&&qualifier!=='AM'||qualifier==='AM'&&(hour<1||hour>11)
-  ||morning&&(hour<1||hour>11)||!isBareNumericClockAnswer(atom,reference))return false;
- const h=String(hour),hh=h.padStart(2,'0'),m=String(minute).padStart(2,'0');
- const forms=[`${h}:${m}`,`${hh}:${m}`,`${h}h${m}`,`${hh}h${m}`,...(minute===0?[`${h}h`,`${hh}h`]:[])];
- return forms.includes(atom.toLocaleLowerCase('vi'));
-}
 
 /** Grammar and occupancy choose permissions only. No proposed value, count,
  * target, evidence code or mutation is returned or inserted into a response. */
@@ -75,4 +61,53 @@ export function keyedRecurrenceEditPolicy(input:ContextInput):RecurrenceEditPoli
  // The ONCE-only edit leaves the existing distance alone. This checks an
  // existing fact against the source; it does not extract a new week operand.
  if(onceMatch&&supportsCadenceOperand('frequency','ONCE',[source],[turn])&&supportsLeadWeekOffset(lead.value,[source],[turn],true))return {replaceOnly:['frequency'],onceCountHidden:true};
+}
+
+export type ReadyOnceWindowPolicy={replaceOnly:readonly ['frequency','eventRelation'];setOnly:'leadOffsetWeeks'};
+
+/** A complete bound window answer may replace occupied ONCE/INCLUDING slots.
+ * The already-restated clock stays retained. Only permission names escape. */
+export function keyedReadyOnceWindowPolicy(input:ContextInput):ReadyOnceWindowPolicy|undefined {
+ const active=input.activeRequest;
+ if(active?.lifecycle!=='AWAITING_CONFIRMATION'||input.pendingQuestion!==null||input.currentTurn!==2||input.turns.length!==3
+  ||input.turns[0]?.role!=='USER'||input.turns[1]?.role!=='ASSISTANT'||input.turns[2]?.role!=='USER'
+  ||input.ambiguities.length||Object.values(active.slots).some(s=>s.state==='CONFLICT')
+  ||input.currentBurstTurns!==undefined||input.currentBurstReferences!==undefined
+  ||!input.capabilities.supported.includes('ONCE')||!input.capabilities.supported.includes('FINITE_DAILY')
+  ||input.capabilities.limits.dailyCount!==30||input.facts.some(f=>f.scope!=='REMINDER'))return;
+ const reference=Date.parse(input.reference.instant),aliases=new Set(input.facts.map(f=>f.alias));
+ if(!Number.isFinite(reference)||aliases.size!==input.facts.length)return;
+ type Field='title'|'eventDate'|'reminderTime'|'eventRelation'|'frequency'|'notes'|'calendar';
+ const coherent=(field:Field)=>{
+  const slot=active.slots[field],facts=input.facts.filter(f=>f.field===field),fact=facts[0],at=Date.parse(fact?.sourceReferenceTime??'');
+  if(!slot||slot.state!=='RESOLVED'||slot.value===null||facts.length!==1||!fact||slot.fact!==fact.alias
+   ||JSON.stringify(slot.value)!==JSON.stringify(fact.value)||!Number.isFinite(at)||at>reference)return;
+  return fact;
+ };
+ const explicit=(field:Field)=>{const fact=coherent(field);return fact?.provenance.kind==='EXPLICIT_USER'&&fact.dependencies.length===0?fact:undefined;};
+ const title=explicit('title'),date=explicit('eventDate'),time=explicit('reminderTime'),relation=explicit('eventRelation'),frequency=coherent('frequency');
+ if(!title||typeof title.value!=='string'||!title.value.trim()||!date||!time||!relation||relation.value!=='INCLUDING_EVENT'
+  ||!frequency||frequency.value!=='ONCE'||frequency.dependencies.length)return;
+ if(frequency.provenance.kind==='DERIVED_POLICY'&&(frequency.provenance.policyVersion!=='context-resolution-1'
+  ||frequency.provenance.dependencies.length||frequency.provenance.referenceTime!==frequency.sourceReferenceTime))return;
+ const missing=(field:keyof typeof active.slots)=>{
+  const slot=active.slots[field],optional=['leadOffsetWeeks','leadOffsetHours','leadOffsetMinutes'].includes(field);
+  return (slot?slot.state==='MISSING'&&slot.value===null&&slot.fact===null:optional)&&!input.facts.some(f=>f.field===field);
+ };
+ for(const field of ['location','eventTime','reminderDate','endDate','occurrenceCount','leadOffsetDays','leadOffsetWeeks','leadOffsetHours','leadOffsetMinutes'] as const)if(!missing(field))return;
+ if(!missing('notes')&&!explicit('notes'))return;
+ if(!missing('calendar')){
+  const calendar=coherent('calendar');
+  if(!calendar||calendar.value!=='GREGORIAN'||calendar.provenance.kind!=='DERIVED_POLICY'
+   ||calendar.provenance.policyVersion!=='context-resolution-1'||calendar.provenance.referenceTime!==calendar.sourceReferenceTime
+   ||calendar.sourceReferenceTime!==date.sourceReferenceTime||calendar.dependencies.length!==1||calendar.dependencies[0]!==date.alias
+   ||calendar.provenance.dependencies.length!==1||calendar.provenance.dependencies[0]!==date.alias)return;
+ }
+ const allowed=new Set(['title','eventDate','reminderTime','eventRelation','frequency','notes','calendar']);
+ if(input.facts.some(f=>!allowed.has(f.field)))return;
+ const source=keyedClosedDailyWindowSource(input,time.value);
+ // DAILY plus a day offset is a different existing count contract. Do not
+ // change that language as part of the finite week-window policy.
+ if(source?.leadField!=='leadOffsetWeeks'||!keyedWeekLeadSourceSupported(input))return;
+ return {replaceOnly:['frequency','eventRelation'],setOnly:'leadOffsetWeeks'};
 }

@@ -23,8 +23,9 @@ import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
-import {keyedRelativeMonthRoleTransitionClearRequired} from './context-keyed-month-role-transition';
-import {keyedRecurrenceEditPolicy} from './context-keyed-recurrence-edit';
+import {keyedPendingMonthWindowPolicy} from './context-keyed-month-role-transition';
+import {keyedWeekLeadSourceSupported} from './context-keyed-window-source';
+import {keyedRecurrenceEditPolicy,keyedReadyOnceWindowPolicy} from './context-keyed-recurrence-edit';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
@@ -95,6 +96,7 @@ function selected(input:ContextInput){
  const changes=source.properties.changes as {required:string[];properties:Record<string,unknown>};
  delete changes.properties.order;changes.required=['owners'];
  const {uncertaintyReasons,uncertaintyRows}=retainRequiredOwners(source as Schema,input),book=primaryEvidenceSourceCodebook(input);
+ const pendingWindow=keyedPendingMonthWindowPolicy(input),roleClear=pendingWindow?.dateField==='reminderDate'?pendingWindow:undefined;
  const materialPrimary=keyedMaterialDetailPrimary(input);
  if(materialPrimary){
   const primaryOperations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(materialPrimary,true).schema));
@@ -135,6 +137,16 @@ function selected(input:ContextInput){
    if(!frequency||!count||(count.minItems??0)!==0)throw Error('KEYED_RECURRENCE_EDIT_POLICY');
    frequency.minItems=1;frequency.items!.properties!.write.minItems=1;count.maxItems=0;
   }
+ }
+ const readyWindow=keyedReadyOnceWindowPolicy(input),weekBundle=pendingWindow?.leadField==='leadOffsetWeeks'&&keyedWeekLeadSourceSupported(input);
+ if(readyWindow&&(pendingWindow||correctionField||recurrenceEdit))throw Error('KEYED_BOUND_WINDOW_POLICY');
+ if(weekBundle||readyWindow){
+  const owners=(source as Schema).properties!.changes.properties!.owners.properties!,count=owners.occurrenceCount;
+  if(count&&(count.minItems??0)>0)throw Error('KEYED_BOUND_WINDOW_POLICY');if(count)count.maxItems=0;
+  const hidden=new Set<number>([UNCERTAINTY_FIELD_WIRE_CODE_V3.occurrenceCount]);
+  if(readyWindow){const time=owners.reminderTime;if(time&&(time.minItems??0)>0)throw Error('KEYED_BOUND_WINDOW_POLICY');if(time)time.maxItems=0;hidden.add(UNCERTAINTY_FIELD_WIRE_CODE_V3.reminderTime);}
+  for(let i=uncertaintyRows.length-1;i>=0;i--)if(uncertaintyRows[i].properties!.fieldCode.enum!.some(code=>hidden.has(code as number)))uncertaintyRows.splice(i,1);
+  for(const code of hidden)uncertaintyReasons.delete(code);
  }
  if(keyedBoundReminderClockRequired(input)){
   const owner=(source as Schema).properties!.changes.properties!.owners.properties!.reminderTime,write=owner?.items?.properties?.write,operation=write?.items?.properties?.operation;
@@ -269,8 +281,15 @@ function selected(input:ContextInput){
   }
   if(required){owner.minItems=1;owner.maxItems=1;}
  };
+ const currentEvidenceOnly=(owner:Schema)=>{
+  const seen=new Set<string>(),rows=(owner.items!.anyOf??[owner.items!]).flatMap(row=>{
+   const selected=structuredClone(row),evidence=selected.properties!.evidence.items!;
+   evidence.enum=evidence.enum!.filter(code=>typeof code==='string'&&book.currentCodes.includes(code));
+   const key=JSON.stringify(selected);if(!evidence.enum.length||seen.has(key))return[];seen.add(key);return[selected];
+  });
+  if(!rows.length)throw Error('KEYED_BOUND_WINDOW_EVIDENCE_EMPTY');owner.items=rows.length===1?rows[0]:{anyOf:rows};
+ };
  if(keyedInitialEventOperationRequired(input))for(const owner of Object.values(ownerPolicies))if(owner.maxItems!==0)setOnly(owner);
- const roleClear=keyedRelativeMonthRoleTransitionClearRequired(input);
  if(roleClear){
   if(keyedSameDayEventRelationRequired(input))throw Error('KEYED_ROLE_CLEAR_POLICY');
   const reminder=ownerPolicies.reminderDate,event=ownerPolicies.eventDate;
@@ -294,6 +313,21 @@ function selected(input:ContextInput){
   });
   if(!kept.length)throw Error('KEYED_ROLE_EVENT_SOURCE_EMPTY');
   event.items=kept.length===1?kept[0]:{anyOf:kept};
+ }
+ if(weekBundle&&pendingWindow){
+  const fields=['frequency','eventRelation',pendingWindow.leadField,...(pendingWindow.clockRequired?['reminderTime']:[])];
+  for(const field of fields){const owner=ownerPolicies[field];if(!owner)throw Error('KEYED_ROLE_CLEAR_POLICY');setOnly(owner,true);currentEvidenceOnly(owner);}
+ }
+ if(readyWindow){
+  for(const field of readyWindow.replaceOnly){
+   const owner=ownerPolicies[field];if(!owner||owner.maxItems===0)throw Error('KEYED_BOUND_WINDOW_POLICY');
+   const rows=(owner.items!.anyOf??[owner.items!]).flatMap(row=>{
+    const operation=row.properties!.write.items!.properties!.operation;if(!operation.enum?.includes('REPLACE'))return[];
+    const selected=structuredClone(row);selected.properties!.write.minItems=1;selected.properties!.write.items!.properties!.operation.enum=['REPLACE'];return[selected];
+   });
+   if(!rows.length)throw Error('KEYED_BOUND_WINDOW_POLICY');owner.items=rows.length===1?rows[0]:{anyOf:rows};owner.minItems=1;owner.maxItems=1;currentEvidenceOnly(owner);
+  }
+  const lead=ownerPolicies[readyWindow.setOnly];if(!lead)throw Error('KEYED_BOUND_WINDOW_POLICY');setOnly(lead,true);currentEvidenceOnly(lead);
  }
  const fixed=fixedEmptyCarrierCodec(source,roleClear?{preserveEmptyArrays:['changes.owners.reminderDate[].write']}:undefined);
  return {operations,ordered,codec:{schema:fixed.schema,pack:(raw:unknown)=>fixed.encode(pack(raw)) as Row,unpack:(raw:unknown)=>unpack(fixed.decode(raw))}};
