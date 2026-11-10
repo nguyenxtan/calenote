@@ -6,7 +6,7 @@
       "commit": null,
       "releasedAt": null,
       "title": "Nhắc lịch, xác nhận Có/Không và trả lời ngày âm lịch",
-      "summary": "Xác nhận bản nháp bằng Có/Không, xưng em–Sếp nhất quán, tính tháng lịch và nhắc mỗi sáng trong tuần trước sự kiện; gồm các bổ sung lịch nhắc, mức dùng AI và xuất lịch.",
+      "summary": "Xác nhận bản nháp bằng Có/Không, xưng em–Sếp nhất quán, tính tháng lịch và nhắc mỗi sáng trong tuần trước sự kiện; gồm các bổ sung lịch nhắc, mức dùng AI và xuất lịch. Kiểm tra đúng ngày và loại lịch khi hỏi ngày âm/dương tương đối.",
       "kind": "Tính năng",
       "changes": [
         "Lưu lựa chọn nhắc trước1–7 ngày và1–24 giờ, mỗi mốc có thể tắt; hai mốc trùng nhau chỉ tạo một thông báo.",
@@ -23,8 +23,7 @@
         "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem.",
         "Xử lý đúng thứ tự và gom tối đa ba tin nhắn liên tiếp thành một yêu cầu, giữ riêng bằng chứng từng tin; xác nhận phải đến sau khi bản nháp được gửi.",
         "Tải lịch .ics riêng của tài khoản, gồm chuỗi và lịch hoãn; nhóm nhắc trước được xuất thành một sự kiện, thông báo giới hạn dữ liệu rõ ràng.",
-        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền.",
-        "Giới hạn cách diễn giải câu hỏi ngày âm/dương tương đối; từ chối ngày hoặc loại lịch không khớp bằng chứng, giữ phép đổi lịch ở backend."
+        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
