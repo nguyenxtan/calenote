@@ -22,6 +22,7 @@ import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
+import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
@@ -131,6 +132,14 @@ function selected(input:ContextInput){
  }
  for(const key of inactiveTables){const table=source.properties[key] as Schema;if(table.type!=='array'||table.maxItems!==0)throw Error('KEYED_INACTIVE_TABLE_POLICY');delete source.properties[key];source.required=source.required.filter(name=>name!==key);}
  const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V3.operation;
+ if(keyedInitialEventOperationRequired(input)){
+  operation.anyOf=operation.anyOf.flatMap(branch=>{
+   const codes=branch.properties!.code.enum!.filter(code=>code==='1');
+   if(!codes.length)return [];
+   const fresh=structuredClone(branch);fresh.properties!.code.enum=codes;return[fresh];
+  });
+  if(!operation.anyOf.length)throw Error('KEYED_INITIAL_EVENT_OPERATION_POLICY');
+ }
  const issues=source.properties.uncertainties as Schema;
  const omittedAlternatives=new Set<string>();
  for(const row of uncertaintyRows){
