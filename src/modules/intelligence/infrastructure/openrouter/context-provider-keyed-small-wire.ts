@@ -21,6 +21,7 @@ import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notific
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {isInitialRelativeCalendarQuestion} from '../../../conversation/context-contract/relative-calendar-source';
+import {isCertifiedRetainedListQuestion} from '../../../conversation/context-contract/list-question-certificate';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
@@ -98,7 +99,7 @@ function selected(input:ContextInput){
  delete changes.properties.order;changes.required=['owners'];
  const {uncertaintyReasons,uncertaintyRows}=retainRequiredOwners(source as Schema,input),book=primaryEvidenceSourceCodebook(input);
  const pendingWindow=keyedPendingMonthWindowPolicy(input),roleClear=pendingWindow?.dateField==='reminderDate'?pendingWindow:undefined;
- const materialPrimary=keyedMaterialDetailPrimary(input);
+ const materialPrimary=keyedMaterialDetailPrimary(input),listQuestion=isCertifiedRetainedListQuestion(input);
  if(materialPrimary){
   const primaryOperations=operationValueSchema(ownedClockSchema(internalFlatSchemaV3(materialPrimary,true).schema));
   const primary=changeOwnerSchema(orderedChangeSchema(kindQuerySchema(primaryOperations))) as Schema;
@@ -184,6 +185,15 @@ function selected(input:ContextInput){
    const fresh=structuredClone(branch);fresh.properties!.code.enum=codes;return[fresh];
   });
   if(!operation.anyOf.length)throw Error('KEYED_INITIAL_EVENT_OPERATION_POLICY');
+ }
+ if(listQuestion){
+  if(keyedInitialEventOperationRequired(input)||isInitialRelativeCalendarQuestion(input))throw Error('KEYED_LIST_QUESTION_OPERATION_POLICY');
+  operation.anyOf=operation.anyOf.flatMap(branch=>{
+   const codes=branch.properties!.code.enum!.filter(code=>code==='3');if(!codes.length)return [];
+   const selected=structuredClone(branch);selected.properties!.code.enum=codes;return[selected];
+  });
+  if(operation.anyOf.length!==1||operation.anyOf[0].properties!.code.enum!.length!==1
+   ||operation.anyOf[0].properties!.code.enum![0]!=='3'||!operation.anyOf[0].properties!.query)throw Error('KEYED_LIST_QUESTION_OPERATION_POLICY');
  }
  const issues=source.properties.uncertainties as Schema;
  const omittedAlternatives=new Set<string>();
@@ -346,6 +356,7 @@ function selected(input:ContextInput){
   }
   const lead=ownerPolicies[readyWindow.setOnly];if(!lead)throw Error('KEYED_BOUND_WINDOW_POLICY');setOnly(lead,true);currentEvidenceOnly(lead);
  }
+ if(listQuestion&&Object.values(ownerPolicies).some(owner=>(owner.minItems??0)>0))throw Error('KEYED_LIST_QUESTION_OPERATION_POLICY');
  const fixed=fixedEmptyCarrierCodec(source,roleClear?{preserveEmptyArrays:['changes.owners.reminderDate[].write']}:undefined);
  return {operations,ordered,codec:{schema:fixed.schema,pack:(raw:unknown)=>fixed.encode(pack(raw)) as Row,unpack:(raw:unknown)=>unpack(fixed.decode(raw))}};
 }

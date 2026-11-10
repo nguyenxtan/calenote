@@ -19,6 +19,7 @@ import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema
 import type { ContextSnapshotV2, ContextSlots } from "./state";
 import { currentRequestTurnIndexes } from "./burst-prompt";
 import { supportsInitialRelativeCalendarQuery } from './relative-calendar-source';
+import { isCertifiedRetainedListQuestion } from './list-question-certificate';
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -714,6 +715,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     const eventBinding=dateBinding('eventDate'),reminderBinding=dateBinding('reminderDate');
     if(!monthEventReminderDateRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
     if(!historicalEventMonthReminderRolesSupported(eventBinding.value,eventBinding.sources,reminderBinding.value,reminderBinding.sources,built.evidenceIndex))fail('REMINDER_DATE_SOURCE_ROLE_NOT_SUPPORTED');
+    if(value.intent==='CREATE_REMINDER'&&isCertifiedRetainedListQuestion(built.input))fail('SEMANTIC_LIST_QUESTION_MUTATION');
     if (!notesCoverageComplete(built.input,value)) fail("SEMANTIC_NOTES_UNOWNED");
     if (!reminderDateCoverageComplete(built.input,value)) fail("SEMANTIC_REMINDER_DATE_UNOWNED");
     const coverageTurns = value.requestTarget?.kind === "NEW" ? newRequestTurns : [built.input.currentTurn];
