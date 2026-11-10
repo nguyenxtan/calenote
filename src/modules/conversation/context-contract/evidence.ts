@@ -18,6 +18,7 @@ import { evidenceContextForV2, type ReadyContextV2 } from "./context";
 import { SemanticPatchProposalV3Schema, FieldChangeV3Schema, UncertaintyV3Schema, type SemanticPatchProposalV3, type FieldChangeV3 } from "./contracts";
 import type { ContextSnapshotV2, ContextSlots } from "./state";
 import { currentRequestTurnIndexes } from "./burst-prompt";
+import { supportsInitialRelativeCalendarQuery } from './relative-calendar-source';
 const validatedPatchBrand: unique symbol = Symbol("ValidatedPatch");
 type EvidenceProvenance = SlotProvenance | ContextInput["facts"][number]["provenance"];
 export interface ValidatedFieldEvidence {
@@ -549,6 +550,7 @@ export function validateEvidenceV3(proposal: SemanticPatchProposalV3, built: Rea
     let query = value.query ? resolve(value.query.evidence, "QUERY", "queryRange", value.query, ["query", "evidence"], false, value.query.kind === "LIST") : null;
     if (query && !query.current && !value.query!.evidence.some(e => e.kind === "CONTEXT_FACT")) traceCurrentFailure(value.query!.evidence[0],{field:"queryRange",path:["query","evidence"],referenceOrdinal:0},"REPRESENTATIVE_NO_CURRENT");
     let resolvedQuery = query ? QueryOperandSchema.parse(query.resolvedValue) : null;
+    if(query&&!supportsInitialRelativeCalendarQuery(resolvedQuery,built.input,query.sources,built.evidenceIndex[built.input.currentTurn].id))fail('CALENDAR_OPERAND_NOT_SUPPORTED');
     let deterministicRange = false;
     if (resolvedQuery?.kind === "LIST" && query?.current && value.intent === "LIST_REMINDERS") {
       const turn = built.evidenceIndex[built.input.currentTurn];

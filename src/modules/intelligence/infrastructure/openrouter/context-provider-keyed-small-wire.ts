@@ -20,6 +20,7 @@ import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesU
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
+import {isInitialRelativeCalendarQuestion} from '../../../conversation/context-contract/relative-calendar-source';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
@@ -221,6 +222,7 @@ function selected(input:ContextInput){
   return [selected];
  }));
  const branches=operation.anyOf,untargeted=new Set<string>();
+ const relativeCalendar=isInitialRelativeCalendarQuestion(input);let relativeCalendarBranches=0;
  for(const branch of branches){
   const codes=branch.properties!.code.enum as string[],evidence=branch.properties!.targetEvidence;
   // Canonical query intents always own a query object, including a genuine
@@ -233,10 +235,19 @@ function selected(input:ContextInput){
    const allowed=new Set([...book.currentCodes,...keyedQueryFactEvidenceCodes(input,kind)]);
    items.enum=items.enum.filter(code=>typeof code==='string'&&allowed.has(code));
    if(!items.enum.length)throw Error('KEYED_QUERY_EVIDENCE_EMPTY');
+   if(relativeCalendar&&kind==='CALENDAR_DATE'){
+    const date=query.items!.properties!.date;
+    if(!date?.items?.properties?.kind.enum?.includes('RELATIVE_DAY'))throw Error('KEYED_RELATIVE_CALENDAR_POLICY');
+    // Date cells share schema nodes across owners/periods. Clone the entire
+    // selected carrier before narrowing only this query's representation.
+    const narrowed=structuredClone(date);narrowed.items!.properties!.kind.enum=['RELATIVE_DAY'];
+    query.items!.properties!.date=narrowed;relativeCalendarBranches++;
+   }
   }
   branch.properties!.code.enum=codes.map(code=>KEYED_OPERATION_NAMES[code]);
   if(evidence.type==='array'&&evidence.maxItems===0){for(const code of branch.properties!.code.enum as string[])untargeted.add(code);delete branch.properties!.targetEvidence;branch.required=branch.required!.filter(name=>name!=='targetEvidence');}
  }
+ if(relativeCalendar&&relativeCalendarBranches!==1)throw Error('KEYED_RELATIVE_CALENDAR_POLICY');
  const translate=(value:unknown,forward:boolean):Row=>{
   const raw=value as Row,operation=raw.operation as {code:string;targetEvidence:unknown;operationUncertainties?:unknown};
   const map=forward?KEYED_OPERATION_NAMES:operationNumbers;

@@ -1,11 +1,11 @@
 {
-  "latestId": "2026-11-07-natural-confirmation-calendar",
+  "latestId": "2026-11-10-relative-calendar-source",
   "notes": [
     {
-      "id": "2026-11-07-natural-confirmation-calendar",
+      "id": "2026-11-10-relative-calendar-source",
       "commit": null,
       "releasedAt": null,
-      "title": "Xác nhận Có/Không, xưng hô và mốc nhắc theo lịch",
+      "title": "Nhắc lịch, xác nhận Có/Không và trả lời ngày âm lịch",
       "summary": "Xác nhận bản nháp bằng Có/Không, xưng em–Sếp nhất quán, tính tháng lịch và nhắc mỗi sáng trong tuần trước sự kiện; gồm các bổ sung lịch nhắc, mức dùng AI và xuất lịch.",
       "kind": "Tính năng",
       "changes": [
@@ -23,7 +23,8 @@
         "Hiển thị mức sử dụng AI theo ngày/tháng UTC, trung bình chi phí đã biết, các lượt chưa rõ chi phí và khoản chờ gửi; chỉ tài khoản sở hữu được xem.",
         "Xử lý đúng thứ tự và gom tối đa ba tin nhắn liên tiếp thành một yêu cầu, giữ riêng bằng chứng từng tin; xác nhận phải đến sau khi bản nháp được gửi.",
         "Tải lịch .ics riêng của tài khoản, gồm chuỗi và lịch hoãn; nhóm nhắc trước được xuất thành một sự kiện, thông báo giới hạn dữ liệu rõ ràng.",
-        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền."
+        "Chuẩn bị kết nối Google Calendar một chiều có kiểm tra quyền, chống gửi trùng và ngắt kết nối; chỉ hoạt động khi quản trị viên thiết lập rồi người dùng cấp quyền.",
+        "Giới hạn cách diễn giải câu hỏi ngày âm/dương tương đối; từ chối ngày hoặc loại lịch không khớp bằng chứng, giữ phép đổi lịch ở backend."
       ],
       "memberChanges": [
         "Chọn mốc nhắc trước trong Cài đặt; ví dụ 2 ngày và 3 giờ tạo hai thông báo riêng.",
@@ -39,9 +40,10 @@
         "Trả lời Có để lưu hoặc Không để từ chối bản nháp, kể cả sau khi đã sửa ngày giờ; không cần gõ mã dài.",
         "Khi chọn xưng hô Sếp, trợ lý xưng em trong lời chào và câu hỏi.",
         "Tính “sau 4 tháng” theo tháng lịch và hỏi lại nếu ngày đích không tồn tại.",
-        "Có thể nhắc mỗi sáng trong tuần trước sự kiện; trợ lý hiển thị các mốc trước khi lưu."
+        "Có thể nhắc mỗi sáng trong tuần trước sự kiện; trợ lý hiển thị các mốc trước khi lưu.",
+        "Hỏi ngày âm lịch hôm nay, hôm qua hoặc ngày mai; trợ lý kiểm tra đúng ngày và loại lịch trước khi trả lời."
       ],
-      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production. Kiểm tra giờ/phút, giữ đơn vị và bằng chứng, sửa/xóa, bản mã dữ liệu cũ, codec production và80 kịch bản với144 lượt diễn giải giả lập. Kiểm tra tổng hợp chi phí, biên kỳ UTC, quyền phiên/tài khoản, dữ liệu cũ thiếu metadata, phản hồi đến muộn và giao diện truy cập được. Kiểm tra thứ tự, lượt gửi chưa xong, xác nhận sớm, gom tin và nguồn từng mốc ngày/giờ; xuất lịch, quyền phiên, giới hạn và kết nối Google bằng transport giả lập với D1/Workerd. Google chưa được kích hoạt hoặc kiểm thử trên tài khoản thật. Kiểm tra hồi quy Có/Không nhiều lượt, sửa và thay thế bản nháp, xác nhận đến sớm, bản gửi chưa rõ kết quả, ngữ cảnh hết hạn, mã cũ, quyền web và cách xưng hô. Kiểm tra tháng tương đối, thời điểm nhận gốc, đơn vị tuần, chuỗi hữu hạn và các bản mã/codec lịch sử."
+      "verification": "Phạm vi kiểm thử: lựa chọn và lưu cài đặt; lịch nhắc trước, ưu tiên yêu cầu rõ ràng, mốc trùng/đã qua; xác nhận có xưng hô; quyền tạo thủ công trên D1; hoàn thành/dừng nhóm thông báo; bằng chứng lịch lặp. Phạm vi kiểm thử: tính lịch, bằng chứng hội thoại, xác nhận; quyền sở hữu, hủy nguyên tử, hoàn tác giao dịch và giao diện. Kiểm thử runtime D1/Workerd với toàn bộ migrations hiện có. Chưa kiểm thử trực tiếp trên production. Kiểm tra giờ/phút, giữ đơn vị và bằng chứng, sửa/xóa, bản mã dữ liệu cũ, codec production và80 kịch bản với144 lượt diễn giải giả lập. Kiểm tra tổng hợp chi phí, biên kỳ UTC, quyền phiên/tài khoản, dữ liệu cũ thiếu metadata, phản hồi đến muộn và giao diện truy cập được. Kiểm tra thứ tự, lượt gửi chưa xong, xác nhận sớm, gom tin và nguồn từng mốc ngày/giờ; xuất lịch, quyền phiên, giới hạn và kết nối Google bằng transport giả lập với D1/Workerd. Google chưa được kích hoạt hoặc kiểm thử trên tài khoản thật. Kiểm tra hồi quy Có/Không nhiều lượt, sửa và thay thế bản nháp, xác nhận đến sớm, bản gửi chưa rõ kết quả, ngữ cảnh hết hạn, mã cũ, quyền web và cách xưng hô. Kiểm tra tháng tương đối, thời điểm nhận gốc, đơn vị tuần, chuỗi hữu hạn và các bản mã/codec lịch sử. Kiểm tra kiểu ngày của câu hỏi lịch tương đối, trích dẫn nguồn, từ chối ngày/loại lịch sai và bảo toàn các truy vấn ngoài phạm vi."
     },
     {
       "id": "2026-11-03-cloudflare-ai-transport",

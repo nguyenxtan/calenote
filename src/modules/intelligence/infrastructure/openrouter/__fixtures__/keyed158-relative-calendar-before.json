@@ -1,0 +1,1844 @@
+{
+  "kind": "RECONSTRUCTED_SOURCE158_BASELINE_NOT_ACTUAL_PROVIDER_BODY",
+  "sourceSha": "e916c92578f6f0a419b7b1470ef59db064272c2b",
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-09-28T03:00:00.000Z",
+      "localDate": "2026-09-28",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Hôm nay là ngày mấy âm lịch?"
+      }
+    ],
+    "currentTurn": 0,
+    "activeRequest": null,
+    "facts": [],
+    "pendingQuestion": null,
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-3",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "FINITE_WEEKLY",
+        "FINITE_MONTHLY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY",
+        "HOUR_OFFSET"
+      ],
+      "unsupported": [
+        "YEARLY"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  },
+  "proposal": {
+    "schemaVersion": "calenote-context-3",
+    "intent": "CALENDAR_QUERY",
+    "requestTarget": null,
+    "changes": [],
+    "query": {
+      "kind": "CALENDAR_DATE",
+      "date": {
+        "kind": "RELATIVE_DAY",
+        "offsetDays": 0
+      },
+      "outputCalendar": "LUNAR_VN",
+      "evidence": [
+        {
+          "kind": "USER_QUOTE",
+          "turn": 0,
+          "quote": "Hôm nay là ngày mấy âm lịch?",
+          "occurrence": 1
+        }
+      ]
+    },
+    "uncertainties": [],
+    "conversationDirective": null,
+    "replyProposal": null
+  },
+  "badWire": {
+    "changes": {
+      "owners": {
+        "title": [],
+        "location": [],
+        "notes": [],
+        "eventDate": [],
+        "reminderDate": [],
+        "calendar": [],
+        "eventRelation": [],
+        "endDate": []
+      }
+    },
+    "uncertainties": [],
+    "directive": [],
+    "reply": [],
+    "operation": {
+      "code": "CALENDAR_QUERY",
+      "query": [
+        {
+          "date": [
+            {
+              "calendar": "GREGORIAN",
+              "day": 28,
+              "month": 9,
+              "year": 2026,
+              "leapMonth": null,
+              "offsetDays": null,
+              "weekday": null,
+              "qualifier": null,
+              "offsetMonths": null,
+              "kind": "CIVIL_DATE"
+            }
+          ],
+          "outputCalendar": "LUNAR_VN",
+          "evidence": [
+            "U0"
+          ]
+        }
+      ],
+      "operationUncertainties": [],
+      "controlUncertainties": []
+    }
+  },
+  "cases": [
+    {
+      "id": "positive-0",
+      "eligible": true,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416",
+      "expectedSchemaSha256": "d2afabf0501429d401fbc2f612526584349001340b6162bf558407992ed0647b"
+    },
+    {
+      "id": "positive-1",
+      "eligible": true,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "HÔM NAY LÀ NGÀY MẤY ÂM LỊCH?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416",
+      "expectedSchemaSha256": "d2afabf0501429d401fbc2f612526584349001340b6162bf558407992ed0647b"
+    },
+    {
+      "id": "positive-2",
+      "eligible": true,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm qua là ngày mấy âm lịch."
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416",
+      "expectedSchemaSha256": "d2afabf0501429d401fbc2f612526584349001340b6162bf558407992ed0647b"
+    },
+    {
+      "id": "positive-3",
+      "eligible": true,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày mai ngày bao nhiêu dương lịch!"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416",
+      "expectedSchemaSha256": "d2afabf0501429d401fbc2f612526584349001340b6162bf558407992ed0647b"
+    },
+    {
+      "id": "positive-4",
+      "eligible": true,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay ngày mấy dương lịch"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416",
+      "expectedSchemaSha256": "d2afabf0501429d401fbc2f612526584349001340b6162bf558407992ed0647b"
+    },
+    {
+      "id": "negative-0",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày 28/9 âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-1",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày 28/9/2026 là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-2",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay không phải ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "negative-3",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay và ngày mai là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-4",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch? Nhắc tôi lúc 8h"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "5c7ba0aedc81c41e3e3ba624b4c388a8af25c142f7513fdaaacd013e80188ba1"
+    },
+    {
+      "id": "negative-5",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "\"Hôm nay là ngày mấy âm lịch?\""
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "negative-6",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Tuần sau thứ hai là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-7",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-8",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm  nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-9",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm\tnay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-10",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?\n"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-11",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch? "
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-12",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch? "
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-13",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-14",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?\u000b"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-15",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?\f"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-16",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?​"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "negative-17",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Alo"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "b94703d6e0b7992bc8d38aa3a56f505f382d288f11939c4edede18d5cb51c579"
+    },
+    {
+      "id": "negative-18",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Ngày mai nhắc tôi lúc 8h"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "a52d9a62b5886c2a4e4aaca76eb438f87d375c9903153a51e542fb86f9d6e661"
+    },
+    {
+      "id": "non-NFC-invalid-context",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "fb35b2894c4e0ab869814309f42b780c3c08159c134fb1f0c08cdd8badcc3b0c"
+      }
+    },
+    {
+      "id": "burstTurns",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstTurns": []
+      },
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "fed5f8ffb2393e667cde58284ce1dda81fb218cbc3e98e51ef922dc9e40f5182"
+      }
+    },
+    {
+      "id": "burstReferences",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        },
+        "currentBurstReferences": []
+      },
+      "schemaError": {
+        "name": "ZodError",
+        "messageSha256": "fa1b3009a3a49edd9b228f9e423ba35e1e962c2b22a318a0ec2d75ecd89bf3c2"
+      }
+    },
+    {
+      "id": "active",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": {
+          "lifecycle": "CLARIFYING",
+          "slots": {
+            "title": {
+              "state": "RESOLVED",
+              "value": "đi thi",
+              "fact": "f1"
+            },
+            "location": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "notes": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventDate": {
+              "state": "RESOLVED",
+              "value": {
+                "kind": "CIVIL_DATE",
+                "calendar": "GREGORIAN",
+                "day": 11,
+                "month": 10,
+                "year": null,
+                "leapMonth": null
+              },
+              "fact": "f2"
+            },
+            "eventTime": {
+              "state": "RESOLVED",
+              "value": {
+                "hour": 8,
+                "minute": 0,
+                "qualifier": "H24"
+              },
+              "fact": "f3"
+            },
+            "reminderDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "reminderTime": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "calendar": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "frequency": {
+              "state": "RESOLVED",
+              "value": "ONCE",
+              "fact": "f4"
+            },
+            "occurrenceCount": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            },
+            "eventRelation": {
+              "state": "RESOLVED",
+              "value": "BEFORE_EVENT",
+              "fact": "f5"
+            },
+            "leadOffsetDays": {
+              "state": "RESOLVED",
+              "value": 2,
+              "fact": "f6"
+            },
+            "endDate": {
+              "state": "MISSING",
+              "value": null,
+              "fact": null
+            }
+          }
+        },
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "25931cc0f7826829450d0fb6b8ef0f4fdc1dfd3014b0a23244f99afcb1cd3a34"
+    },
+    {
+      "id": "facts",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [
+          {
+            "alias": "f1",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "title",
+            "value": "đi thi"
+          },
+          {
+            "alias": "f2",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventDate",
+            "value": {
+              "kind": "CIVIL_DATE",
+              "calendar": "GREGORIAN",
+              "day": 11,
+              "month": 10,
+              "year": null,
+              "leapMonth": null
+            }
+          },
+          {
+            "alias": "f3",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:00:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventTime",
+            "value": {
+              "hour": 8,
+              "minute": 0,
+              "qualifier": "H24"
+            }
+          },
+          {
+            "alias": "f4",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "frequency",
+            "value": "ONCE"
+          },
+          {
+            "alias": "f5",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "eventRelation",
+            "value": "BEFORE_EVENT"
+          },
+          {
+            "alias": "f6",
+            "provenance": {
+              "kind": "EXPLICIT_USER"
+            },
+            "sourceReferenceTime": "2026-09-28T03:01:00.000Z",
+            "dependencies": [],
+            "scope": "REMINDER",
+            "field": "leadOffsetDays",
+            "value": 2
+          }
+        ],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "77c8e8d5f506c2af8b2d995953995de2688ad2df433bb91802e23d171dca08fd"
+    },
+    {
+      "id": "pending",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": {
+          "text": "Bạn muốn được nhắc lúc mấy giờ?",
+          "scope": "REMINDER",
+          "field": "reminderTime",
+          "decisionKind": null,
+          "reason": "MISSING"
+        },
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    },
+    {
+      "id": "history",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Alo"
+          },
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 1,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "4ceb38cfcc70047694d96c3d833e1ed95372b43e21fc5777466b893b07c14cf3"
+    },
+    {
+      "id": "ambiguity",
+      "eligible": false,
+      "input": {
+        "schemaVersion": "calenote-context-input-2",
+        "reference": {
+          "instant": "2026-09-28T03:00:00.000Z",
+          "localDate": "2026-09-28",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "turns": [
+          {
+            "role": "USER",
+            "text": "Hôm nay là ngày mấy âm lịch?"
+          }
+        ],
+        "currentTurn": 0,
+        "activeRequest": null,
+        "facts": [],
+        "pendingQuestion": null,
+        "ambiguities": [
+          {
+            "field": "operation",
+            "reason": "AMBIGUOUS",
+            "alternatives": []
+          }
+        ],
+        "capabilities": {
+          "version": "capabilities-3",
+          "supported": [
+            "ONCE",
+            "FINITE_DAILY",
+            "FINITE_WEEKLY",
+            "FINITE_MONTHLY",
+            "LIST",
+            "CALENDAR_DATE",
+            "CAPABILITY",
+            "HOUR_OFFSET"
+          ],
+          "unsupported": [
+            "YEARLY"
+          ],
+          "calendars": [
+            "GREGORIAN",
+            "LUNAR_VN"
+          ],
+          "limits": {
+            "dailyCount": 30,
+            "horizonDays": 366
+          }
+        }
+      },
+      "schemaSha256": "9fed8115e020da7f2949cee765a2ff22a57becc3778984c110f4a17fff491416"
+    }
+  ]
+}
