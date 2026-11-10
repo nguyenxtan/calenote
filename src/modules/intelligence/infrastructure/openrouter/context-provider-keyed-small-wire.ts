@@ -258,6 +258,17 @@ function selected(input:ContextInput){
   reminder.items=structuredClone(clear[0]);reminder.minItems=1;reminder.maxItems=1;
   reminder.items.properties!.write.minItems=0;reminder.items.properties!.write.maxItems=0;
   setOnly(event,true);
+  // This predicate proves the closed current turn has no event date. Remove
+  // only those impossible sources; values and the surviving citation stay
+  // model-authored and undergo the unchanged backend evidence validation.
+  const historical=new Set(book.entries.filter(entry=>entry.kind!=='CONTEXT_FACT'&&typeof entry.turn==='number'&&entry.turn<input.currentTurn).map(entry=>entry.code));
+  const kept=(event.items!.anyOf??[event.items!]).flatMap(row=>{
+   const selected=structuredClone(row),evidence=selected.properties!.evidence.items!;
+   evidence.enum=evidence.enum!.filter(code=>typeof code==='string'&&historical.has(code)&&!book.currentCodes.includes(code));
+   return evidence.enum.length?[selected]:[];
+  });
+  if(!kept.length)throw Error('KEYED_ROLE_EVENT_SOURCE_EMPTY');
+  event.items=kept.length===1?kept[0]:{anyOf:kept};
  }
  const fixed=fixedEmptyCarrierCodec(source,roleClear?{preserveEmptyArrays:['changes.owners.reminderDate[].write']}:undefined);
  return {operations,ordered,codec:{schema:fixed.schema,pack:(raw:unknown)=>fixed.encode(pack(raw)) as Row,unpack:(raw:unknown)=>unpack(fixed.decode(raw))}};

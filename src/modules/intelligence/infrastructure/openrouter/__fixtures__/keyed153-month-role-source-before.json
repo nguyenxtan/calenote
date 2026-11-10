@@ -1,0 +1,15 @@
+{
+  "baselineSourceSha": "edf90be600effc9ffc456ea1dcc9fee288e09188",
+  "inputFixture": "keyed152-month-role-before.json",
+  "schemaSha256": "7c90072660f18c72495e03bbde7ab2eef4d7bc9a69539947318c9d9703fb54ff",
+  "normalizedSchemaSha256": "d6c7d66318d7ce387c5027f348b70f1913f340b6501e5d43c25b664623ac8325",
+  "eventEvidenceDomainsBefore": [
+    [
+      "U0",
+      "U2"
+    ],
+    [
+      "U2"
+    ]
+  ]
+}

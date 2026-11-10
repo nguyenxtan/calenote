@@ -1,12 +1,16 @@
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {z} from 'zod';
-import {ContextInputSchema,type ContextInput} from '../../../conversation/context-contract/contracts';
+import {ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../../conversation/context-contract/contracts';
 import {keyedRelativeMonthRoleTransitionClearRequired} from './context-keyed-month-role-transition';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
-import {decodeKeyedSmallComparison,keyedSmallComparisonSchema} from './context-provider-keyed-small-wire';
+import {decodeKeyedSmallComparison,encodeKeyedSmallComparison,keyedSmallComparisonSchema} from './context-provider-keyed-small-wire';
+import {primaryEvidenceSourceCodebook} from './evidence-pointer';
+import {createKeyedContextContractGateway} from './keyed-context-gateway';
+import {createContextContractProbe} from '../../../../../tools/benchmark/context-contract-probe';
+import * as evidenceValidation from '../../../conversation/context-contract/evidence';
 
 const baseline=JSON.parse(readFileSync(new URL('./__fixtures__/keyed152-month-role-before.json',import.meta.url),'utf8'));
 const input=()=>ContextInputSchema.parse(structuredClone(baseline.input));
@@ -69,6 +73,9 @@ const badWires:Record<string,(value:Wire)=>void>={
  missingEvent:value=>{value.changes.owners.eventDate=[];},
  replaceEvent:value=>{value.changes.owners.eventDate[0].write[0].operation='REPLACE';},
  clearEvent:value=>{value.changes.owners.eventDate[0].write=[];},
+ mixedEventCurrentLast:value=>{value.changes.owners.eventDate[0].evidence=['U0','U2'];},
+ mixedEventCurrentFirst:value=>{value.changes.owners.eventDate[0].evidence=['U2','U0'];},
+ eventFromNotificationFact:value=>{value.changes.owners.eventDate[0].evidence=['Ff2'];},
 };
 it.each(Object.keys(badWires))('refuses an incomplete or unauthorised transition without changing the response: %s',name=>{
  const value=input(),bad=wire();badWires[name](bad);const before=JSON.stringify(bad);
@@ -77,13 +84,74 @@ it.each(Object.keys(badWires))('refuses an incomplete or unauthorised transition
  expect(JSON.stringify(bad)).toBe(before);
 });
 
-it('leaves event values and USER source choice model-authored under the presence obligation',()=>{
+it('refuses the observed current USER citation that cannot author the required event date',()=>{
  const value=input(),authored=wire();
  authored.changes.owners.eventDate[0].evidence=['U2'];
- // The schema proves presence, not source semantics. The existing backend
- // relative-month verifier remains responsible for refusing this wrong quote.
- expect(z.fromJSONSchema(keyedSmallComparisonSchema(value) as Parameters<typeof z.fromJSONSchema>[0]).safeParse(authored).success).toBe(true);
- expect(decodeKeyedSmallComparison(authored,value).status).toBe('PARSED');
+ const before=JSON.stringify(authored);
+ expect(z.fromJSONSchema(keyedSmallComparisonSchema(value) as Parameters<typeof z.fromJSONSchema>[0]).safeParse(authored).success).toBe(false);
+ expect(decodeKeyedSmallComparison(authored,value).status).toBe('REFUSED');
+ expect(JSON.stringify(authored)).toBe(before);
+});
+
+type Schema={properties?:Record<string,Schema>;items?:Schema;anyOf?:Schema[];enum?:unknown[];[key:string]:unknown};
+it('subtracts only event-date evidence options while preserving the 153 value and CLEAR domains',()=>{
+ const previous=JSON.parse(readFileSync(new URL('./__fixtures__/keyed153-month-role-source-before.json',import.meta.url),'utf8'));
+ const value=input(),schema=structuredClone(keyedSmallComparisonSchema(value)) as Schema;
+ const historical=primaryEvidenceSourceCodebook(value).entries.filter(e=>e.kind!=='CONTEXT_FACT'&&typeof e.turn==='number'&&e.turn<value.currentTurn).map(e=>e.code);
+ const owner=schema.properties!.changes.properties!.owners.properties!.eventDate;
+ const rows=owner.items!.anyOf??[owner.items!];
+ expect(rows).toHaveLength(1);
+ for(const row of rows){expect(row.properties!.evidence.items!.enum).toEqual(historical);delete row.properties!.evidence.items!.enum;}
+ owner.items=rows[0];
+ expect(hash(schema)).toBe(previous.normalizedSchemaSha256);
+ const good=wire();
+ expect(good.changes.owners.eventDate[0]).toHaveProperty('evidence',['U0']);
+ expect(decodeKeyedSmallComparison(good,value).status).toBe('PARSED');
+ const absent=wire();delete (absent.changes.owners.eventDate[0] as {evidence?:string[]}).evidence;
+ expect(decodeKeyedSmallComparison(absent,value).status).toBe('REFUSED');
+});
+
+async function throughBackend(months:number,evidence=['U0']){
+ const fixture=input(),receipt='2026-11-07T02:00:00.000Z';
+ const factory=createKeyedContextContractGateway(async request=>{
+  const raw=JSON.parse(request.messages[1].content);
+  for(const key of ['evidenceSources','numericOwnership','fieldCapability'])delete raw[key];
+  const current=ContextInputSchema.parse(raw),quote=[{kind:'USER_QUOTE',turn:0,quote:fixture.turns[0].text,occurrence:1}];
+  const authored=current.currentTurn===0?encodeKeyedSmallComparison(ConversationInterpretationV3Schema.parse({
+   schemaVersion:'calenote-context-3',intent:'CREATE_REMINDER',requestTarget:{kind:'NEW',evidence:quote},
+   changes:[{field:'title',operation:'SET',value:'sửa máy lạnh',evidence:quote},{field:'reminderDate',operation:'SET',value:{kind:'RELATIVE_MONTH',offsetMonths:4},evidence:quote}],
+   query:null,uncertainties:[],conversationDirective:null,replyProposal:null,
+  }),current):wire();
+  if(current.currentTurn!==0){const event=(authored as Wire).changes.owners.eventDate[0];event.write[0].value={...(event.write[0].value as object),offsetMonths:months};event.evidence=evidence;}
+  expect(z.fromJSONSchema(keyedSmallComparisonSchema(current) as Parameters<typeof z.fromJSONSchema>[0]).safeParse(authored).success).toBe(true);
+  expect(decodeKeyedSmallComparison(authored,current).status).toBe('PARSED');
+  return {status:200,body:JSON.stringify({model:'openai/gpt-5-mini',provider:'Azure',usage:{cost:0,prompt_tokens:8000,completion_tokens:500},choices:[{finish_reason:'stop',message:{content:JSON.stringify(authored)}}]})};
+ },{status:'OBSERVABLE_CANARY',advertisedContextTokens:400000});
+ const probe=await createContextContractProbe({sourceSha:'a'.repeat(40),referenceNow:Date.parse(receipt),liveBudgetProfile:'GPT5_MINI_AZURE_SWEDEN',liveGateway:{...factory,contextWire:'KEYED_COMPARISON_137'}},()=>{throw Error('Unexpected offline substitution');});
+ try{
+  expect(await probe.turn(fixture.turns[0].text,receipt)).toMatchObject({status:'CLARIFICATION_REQUESTED',pendingField:'reminderTime'});
+  return await probe.turn(fixture.turns[2].text,'2026-11-07T02:01:00.000Z');
+ }finally{probe.dispose();}
+}
+
+it('keeps the original USER receipt and correct model-authored value executable through the backend',async()=>{
+ expect(await throughBackend(4)).toMatchObject({status:'DRAFT_CREATED',mutations:0,apiPreviews:1,fields:{eventDate:{kind:'RELATIVE_MONTH',offsetMonths:4}}});
+});
+
+it('still rejects a wrong model-authored month with the allowed historical source in backend evidence validation',async()=>{
+ // Observe the real entry point without replacing its implementation. The
+ // public downstream diagnostic intentionally projects this reason generically.
+ const validated=vi.spyOn(evidenceValidation,'validateEvidenceV3');
+ try{
+  const actual=await throughBackend(5);
+  expect(actual).toMatchObject({status:'REJECTED',mutations:0,apiPreviews:0});
+  expect(actual.downstreamDiagnostics).toContainEqual({stage:'EVIDENCE',result:'REJECTED',reason:'EVIDENCE_INVALID'});
+  expect(validated.mock.results.at(-1)?.value).toMatchObject({status:'REFUSED',reason:'RELATIVE_MONTH_NOT_SUPPORTED'});
+ }finally{validated.mockRestore();}
+});
+
+it('gains no additional authority from repeated copies of the same allowed historical source',async()=>{
+ expect(await throughBackend(4,['U0','U0'])).toMatchObject({status:'DRAFT_CREATED',mutations:0,apiPreviews:1,fields:{eventDate:{kind:'RELATIVE_MONTH',offsetMonths:4}}});
 });
 
 it.each(['nhắc','nhac','nhớ','báo','thông báo','hẹn giờ','remind','notify'])('does not force removal of a genuinely authored notification date: %s',verb=>{
