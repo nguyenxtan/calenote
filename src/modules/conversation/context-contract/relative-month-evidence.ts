@@ -35,6 +35,12 @@ export function supportsRelativeMonthDate(value:unknown,sources:readonly SourceE
  return false;
 }
 
+/** Lexical match count for fail-closed eligibility, never a proposed date,
+ * amount, role or source binding. Uses the same rejection rules as validation. */
+export function relativeMonthOccurrenceCount(value:unknown,sources:readonly SourceEvidence[],turns:readonly Turn[]):number {
+ return [...supportedRelativeMonthOccurrences(value,sources,turns)].length;
+}
+
 /** A historical event and future month notification in the same source need
  * an independently authored notification owner beside that month expression.
  * This only refuses the submitted pair; it never moves either operand. */

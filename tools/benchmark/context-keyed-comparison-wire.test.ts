@@ -17,13 +17,15 @@ import {openAiComparisonAdmissionSchema} from './context-openai-admission-schema
 import {constrainComparisonDateSchema} from './context-comparison-date-schema';
 import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesUncertaintyAbsent} from '../../src/modules/conversation/context-contract/field-capability';
 import {isUnreconciledListInterpretation,readListTransport} from '../../src/modules/conversation/context-contract/list-period-transport';
+import {keyedInitialEventOperationRequired} from '../../src/modules/intelligence/infrastructure/openrouter/context-keyed-initial-event-operation';
 type AuditShape={properties?:Record<string,AuditShape>;anyOf?:AuditShape[];items?:AuditShape;$defs?:unknown;[key:string]:unknown};
 function noForcedEmpty(value:unknown):void {if(Array.isArray(value)){value.forEach(noForcedEmpty);return;}if(!value||typeof value!=='object')return;const node=value as Record<string,unknown>;expect(node.maxItems).not.toBe(0);for(const key of ['anyOf','oneOf'])if(Array.isArray(node[key]))expect(node[key].length).toBeGreaterThan(0);Object.values(node).forEach(noForcedEmpty);}
 const compileAuditShape=(schema:AuditShape)=>z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
 it('preserves all 144 healthy canonical outcomes using typed keyed writes in the declared canonical field order',async()=>{
  const manifest:ContextManifest={version:'context-contract-corpus-1',cases:['regressions','development','heldout'].flatMap(n=>JSON.parse(readFileSync(`src/modules/conversation/context-contract/benchmark/${n}.json`,'utf8')).cases)};
- let count=0,pairs=0;
+ let count=0,pairs=0;const failures:unknown[]=[];
  await runContextFixtureCampaign(admitCanonicalCampaign(manifest,'FULL'),{sourceSha:'a'.repeat(40),referenceNow:Date.parse('2026-09-28T03:00:00Z'),wireProtocol:'SMALL_106'},(input,id,index)=>{
+  try{
   const raw=frozenContextProposal(input,id,index),canonical=ConversationInterpretationV3Schema.safeParse(raw);if(!canonical.success)return raw;
   count++;const sorted={...canonical.data,changes:[...canonical.data.changes].sort((a,b)=>V3_SLOT_NAMES.indexOf(a.field)-V3_SLOT_NAMES.indexOf(b.field))};
   expect(serializeKeyedSmallComparison(input).messages[1]).toEqual(serializeSmallContextRequest(input).messages[1]);
@@ -43,13 +45,15 @@ it('preserves all 144 healthy canonical outcomes using typed keyed writes in the
   const operationIssuesSchema=selected.properties!.operation.anyOf!.find(branch=>branch.properties!.operationUncertainties)?.properties!.operationUncertainties.items,operationIssues=operationIssuesSchema?compileAuditShape(operationIssuesSchema):null;
   for(let fieldCode=0;fieldCode<=15;fieldCode++)for(const reason of ['MISSING','AMBIGUOUS','CONFLICT','UNSUPPORTED_COMBINATION']){
    pairs++;const row={fieldCode,reason,alternatives:[]},actual=fieldCode===15?(operationIssues?.safeParse({reason,alternatives:[]}).success??false):[13,14].includes(fieldCode)?(controlIssues?.safeParse(row).success??false)||(controlIssues?.safeParse({fieldCode,reason}).success??false):(fieldIssues?.safeParse(row).success??false)||(fieldIssues?.safeParse({fieldCode,reason}).success??false);
-   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(fieldCode>=13||!(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input))));
+   expect(actual,`${id}/${index}/${fieldCode}/${reason}: selected uncertainty intersection`).toBe(strictIssues.safeParse(row).success&&!(fieldCode<13&&reason==='MISSING')&&(![13,14].includes(fieldCode)||controlsAllowed)&&(fieldCode>=13||!(isRetainedClosedRelationFieldUncertaintyAbsent(input)||isInitialClocklessSeriesUncertaintyAbsent(input)))&&(!keyedInitialEventOperationRequired(input)||fieldCode<13));
   }
   const actual=decodeKeyedSmallComparison(wire,input),expected=decodeSmallContextV3(encodeSmallContextV3(sorted,input),CONTEXT_SMALL_PROTOCOL_V3,undefined,undefined,input);
   if(actual.status==='PARSED'&&expected.status==='PARSED'&&isUnreconciledListInterpretation(actual.value)&&isUnreconciledListInterpretation(expected.value))expect(readListTransport(actual.value)).toEqual(readListTransport(expected.value));else expect(actual).toEqual(expected);
   const field=Object.keys(wire.changes.owners).find(key=>wire.changes.owners[key].length===1);if(field){const bad=structuredClone(wire);bad.changes.owners[field].push(bad.changes.owners[field][0]);const before=JSON.stringify(bad);expect(decodeKeyedSmallComparison(bad,input).status).toBe('REFUSED');expect(JSON.stringify(bad)).toBe(before);}
   return raw;
+  }catch(error){failures.push(error);return frozenContextProposal(input,id,index);}
  });
+ expect(failures).toEqual([]);
  expect(count).toBe(144);expect(pairs).toBe(9216);expect(CONTEXT_KEYED_COMPARISON_PROMPT).toContain('changes is exactly {owners:{...}}');
 },process.env.CI?240000:90000);
 it('refuses both observed owner/order failure shapes without reconstructing a missing write',()=>{

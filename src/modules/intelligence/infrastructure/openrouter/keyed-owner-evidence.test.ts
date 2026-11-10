@@ -100,3 +100,21 @@ it('retains same-field FACT SET through the real service with its original sourc
  expect(await h.f.db.prepare('SELECT scheduled_at FROM reminders').first('scheduled_at')).toBe(Date.parse('2027-03-07T08:00:00+07:00'));
  expect(h.inputs).toHaveLength(2);
 });
+
+it('requires an explicit notification-date CLEAR when switching the bound monthly date to relative event reminders',async()=>{
+ const {captures}=await dateChain(),captured=captures[1];
+ const missing=structuredClone(captured.wire) as {changes:{owners:Record<string,unknown[]>}};
+ missing.changes.owners.reminderDate=[];
+ const before=JSON.stringify(missing);
+ expect(z.fromJSONSchema(keyedSmallComparisonSchema(captured.input) as Parameters<typeof z.fromJSONSchema>[0]).safeParse(missing).success).toBe(false);
+ expect(decodeKeyedSmallComparison(missing,captured.input).status).toBe('REFUSED');
+ expect(JSON.stringify(missing)).toBe(before);
+});
+
+it('keeps the semantic CLEAR write explicit in the provider wire instead of reconstructing an omitted write',async()=>{
+ const {captures}=await dateChain(),captured=captures[1];
+ const wire=captured.wire as {changes:{owners:Record<string,Array<{write?:unknown[]}>>}};
+ expect(wire.changes.owners.reminderDate[0]).toHaveProperty('write',[]);
+ const omitted=structuredClone(wire);delete omitted.changes.owners.reminderDate[0].write;
+ expect(decodeKeyedSmallComparison(omitted,captured.input).status).toBe('REFUSED');
+});

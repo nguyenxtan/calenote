@@ -1,0 +1,48 @@
+{
+  "baselineSourceSha": "1ee26ef97a15135cca73c3a5bc49f5ad104c187b",
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-09-28T03:03:00Z",
+      "localDate": "2026-09-28",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Tôi thi ngày 11/10 lúc 8h."
+      }
+    ],
+    "currentTurn": 0,
+    "activeRequest": null,
+    "facts": [],
+    "pendingQuestion": null,
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-3",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "FINITE_WEEKLY",
+        "FINITE_MONTHLY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY",
+        "HOUR_OFFSET"
+      ],
+      "unsupported": [
+        "YEARLY"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  },
+  "schemaSha256": "170c0755f5ade6cee2139613c06dbc422a4243dcf2c5158db6f25c5eb8a06f67",
+  "normalizedSchemaSha256": "61f2a709a4ec1f88d7e4332bf02910c13f3cb233b27ac77594227f5534d4939a"
+}

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {z} from 'zod';
 import {ContextInputSchema,ConversationInterpretationV3Schema,type ContextInput} from '../../../conversation/context-contract/contracts';
@@ -98,4 +99,29 @@ it('retains backend source validation for a model-authored wrong event day',asyn
   expect(actual.status).toBe('REJECTED');expect(actual.mutations).toBe(0);
   expect(actual.downstreamDiagnostics).toContainEqual({stage:'EVIDENCE',result:'REJECTED',reason:'CIVIL_DATE_SOURCE_MISMATCH'});
  }finally{probe.dispose();}
+});
+
+it('does not offer replacement or CLEAR writes when the known new request has no prior values',()=>{
+ const input=fresh(),good=encodeKeyedSmallComparison(ConversationInterpretationV3Schema.parse(frozenContextProposal(input,'R04',3)),input) as {changes:{owners:Record<string,Array<{write:Array<{operation:string;value:unknown}>;evidence:string[]}>>}};
+ const schema=z.fromJSONSchema(keyedSmallComparisonSchema(input) as Parameters<typeof z.fromJSONSchema>[0]);
+ const replacement=structuredClone(good);replacement.changes.owners.eventDate[0].write[0].operation='REPLACE';
+ expect(schema.safeParse(replacement).success).toBe(false);
+ expect(decodeKeyedSmallComparison(replacement,input).status).toBe('REFUSED');
+ const clear=structuredClone(good);clear.changes.owners.location=[{write:[],evidence:['U0']}];
+ expect(schema.safeParse(clear).success).toBe(false);
+ expect(schema.safeParse(good).success).toBe(true);
+});
+
+it('limits the fresh-NEW schema delta to SET operations and nonempty authored writes',()=>{
+ const baseline=JSON.parse(readFileSync(new URL('./__fixtures__/keyed152-initial-event-schema-before.json',import.meta.url),'utf8'));
+ const schema=structuredClone(keyedSmallComparisonSchema(ContextInputSchema.parse(baseline.input))) as {properties:{changes:{properties:{owners:{properties:Record<string,{maxItems?:number;items?:{anyOf?:Array<{properties:{write:{minItems?:number;items:{properties:{operation:{enum?:string[]}}}}}}>};}>}}}}};
+ for(const owner of Object.values(schema.properties.changes.properties.owners.properties)){
+  if(owner.maxItems===0)continue;
+  for(const row of owner.items!.anyOf??[owner.items!]){
+   const write=(row as {properties:{write:{minItems?:number;items:{properties:{operation:{enum?:string[]}}}}}}).properties.write;
+   expect(write.minItems).toBe(1);expect(write.items.properties.operation.enum).toEqual(['SET']);
+   delete write.minItems;delete write.items.properties.operation.enum;
+  }
+ }
+ expect(createHash('sha256').update(JSON.stringify(schema)).digest('hex')).toBe(baseline.normalizedSchemaSha256);
 });

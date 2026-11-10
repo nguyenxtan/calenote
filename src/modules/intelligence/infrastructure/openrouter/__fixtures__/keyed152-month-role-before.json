@@ -1,0 +1,322 @@
+{
+  "baselineSourceSha": "1ee26ef97a15135cca73c3a5bc49f5ad104c187b",
+  "source": "OFFLINE_AUTHORED_RESPONSES_THROUGH_ACTUAL_SERVICE_NO_PROVIDER",
+  "input": {
+    "schemaVersion": "calenote-context-input-2",
+    "reference": {
+      "instant": "2026-11-07T02:01:00.000Z",
+      "localDate": "2026-11-07",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "turns": [
+      {
+        "role": "USER",
+        "text": "Hôm nay sửa máy lạnh. Đặt 4 tháng sau sửa lại"
+      },
+      {
+        "role": "ASSISTANT",
+        "text": "Việc cần nhắc: sửa máy lạnh\nNgày nhắc: 4 tháng tính từ ngày nhận yêu cầu\nBạn muốn được nhắc lúc mấy giờ?"
+      },
+      {
+        "role": "USER",
+        "text": "Nhắc trước 1 tuần. Liên tục vào 8h sáng."
+      }
+    ],
+    "currentTurn": 2,
+    "activeRequest": {
+      "lifecycle": "CLARIFYING",
+      "slots": {
+        "title": {
+          "state": "RESOLVED",
+          "value": "sửa máy lạnh",
+          "fact": "f1"
+        },
+        "location": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "notes": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "reminderDate": {
+          "state": "RESOLVED",
+          "value": {
+            "kind": "RELATIVE_MONTH",
+            "offsetMonths": 4
+          },
+          "fact": "f2"
+        },
+        "reminderTime": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "calendar": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "frequency": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "occurrenceCount": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "eventRelation": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "leadOffsetDays": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        },
+        "endDate": {
+          "state": "MISSING",
+          "value": null,
+          "fact": null
+        }
+      }
+    },
+    "facts": [
+      {
+        "alias": "f1",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "title",
+        "value": "sửa máy lạnh"
+      },
+      {
+        "alias": "f2",
+        "provenance": {
+          "kind": "EXPLICIT_USER"
+        },
+        "sourceReferenceTime": "2026-11-07T02:00:00.000Z",
+        "dependencies": [],
+        "scope": "REMINDER",
+        "field": "reminderDate",
+        "value": {
+          "kind": "RELATIVE_MONTH",
+          "offsetMonths": 4
+        }
+      }
+    ],
+    "pendingQuestion": {
+      "text": "Bạn muốn được nhắc lúc mấy giờ?",
+      "scope": "REMINDER",
+      "field": "reminderTime",
+      "decisionKind": null,
+      "reason": "MISSING"
+    },
+    "ambiguities": [],
+    "capabilities": {
+      "version": "capabilities-3",
+      "supported": [
+        "ONCE",
+        "FINITE_DAILY",
+        "FINITE_WEEKLY",
+        "FINITE_MONTHLY",
+        "LIST",
+        "CALENDAR_DATE",
+        "CAPABILITY",
+        "HOUR_OFFSET"
+      ],
+      "unsupported": [
+        "YEARLY"
+      ],
+      "calendars": [
+        "GREGORIAN",
+        "LUNAR_VN"
+      ],
+      "limits": {
+        "dailyCount": 30,
+        "horizonDays": 366
+      }
+    }
+  },
+  "wire": {
+    "changes": {
+      "owners": {
+        "title": [],
+        "location": [],
+        "notes": [],
+        "eventDate": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": {
+                  "calendar": null,
+                  "day": null,
+                  "month": null,
+                  "year": null,
+                  "leapMonth": null,
+                  "offsetDays": null,
+                  "weekday": null,
+                  "qualifier": null,
+                  "offsetMonths": 4,
+                  "kind": "RELATIVE_MONTH"
+                }
+              }
+            ],
+            "evidence": [
+              "U0"
+            ]
+          }
+        ],
+        "eventTime": [],
+        "reminderDate": [
+          {
+            "write": [],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ],
+        "reminderTime": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": {
+                  "hour": 8,
+                  "minute": 0,
+                  "qualifier": "AM"
+                }
+              }
+            ],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ],
+        "frequency": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "DAILY"
+              }
+            ],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ],
+        "eventRelation": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": "BEFORE_EVENT"
+              }
+            ],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ],
+        "endDate": [],
+        "leadOffsetWeeks": [
+          {
+            "write": [
+              {
+                "operation": "SET",
+                "value": 1
+              }
+            ],
+            "evidence": [
+              "U2"
+            ]
+          }
+        ]
+      }
+    },
+    "uncertainties": [],
+    "directive": [],
+    "reply": [],
+    "operation": {
+      "code": "CONTINUE_CURRENT_REMINDER",
+      "targetEvidence": [
+        "U2"
+      ]
+    }
+  },
+  "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad",
+  "declines": [
+    {
+      "id": "notification",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "twoMonths",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "differentMonths",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "monthDay",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "ownDate",
+      "schemaSha256": "79b4cd3091f702b6fe7306f990279670036b750872eb261702e0d27446faf012"
+    },
+    {
+      "id": "negated",
+      "schemaSha256": "84e6f47118ea7cf0fbfdce1ebeee3edab3e8efc0229f6190d2510485888a7e5e"
+    },
+    {
+      "id": "quoted",
+      "schemaSha256": "6b016dd9004b8bd383fe15e79e09579acee4e01c4a7dc5220cccd19b83103313"
+    },
+    {
+      "id": "history",
+      "schemaSha256": "998b2765e7b4415c3016a369754e830c4795a3ec0a06de1afca3f55e3f649bf0"
+    },
+    {
+      "id": "ambiguity",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "eventAlreadyPresent",
+      "schemaSha256": "5d2eda7064b660122b2a147a976742e561983d8972c0875bc6bfe3ead0e65df6"
+    },
+    {
+      "id": "clockAlreadyPresent",
+      "schemaSha256": "ee0c83a84696824e66e8fa8df8e7a51dba44d3168873f4b42d39bd1d2ea342ec"
+    },
+    {
+      "id": "oldDerivedDependency",
+      "schemaSha256": "e4f20a12abe17a6ecfd0f9e3f222343512da1334d2d35c93a4a2015ffa1ebaad"
+    },
+    {
+      "id": "badClock",
+      "schemaSha256": "79b4cd3091f702b6fe7306f990279670036b750872eb261702e0d27446faf012"
+    }
+  ]
+}

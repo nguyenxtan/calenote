@@ -21,7 +21,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: [...configDefaults.exclude, "docs/**/*.test.mjs", ".superpowers/**"],
+    // Ignored diagnostic receipts use their own Node test runner. They are
+    // not project Vitest suites and must remain immutable in their archive.
+    exclude: [...configDefaults.exclude, "docs/**/*.test.mjs", ".superpowers/**", "artifacts/**"],
     css: true,
   },
 });

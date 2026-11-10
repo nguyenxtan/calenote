@@ -23,6 +23,7 @@ import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
 import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
 import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {keyedInitialEventOperationRequired} from './context-keyed-initial-event-operation';
+import {keyedRelativeMonthRoleTransitionClearRequired} from './context-keyed-month-role-transition';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
@@ -234,7 +235,31 @@ function selected(input:ContextInput){
  };
  const ownerPolicies=(source as Schema).properties!.changes.properties!.owners.properties!;
  for(const field of V3_SLOT_NAMES){const owner=ownerPolicies[field];if(owner&&owner.maxItems!==0)owner.items=keyedOwnerEvidenceRows(input,field,owner.items!,book);}
- const fixed=fixedEmptyCarrierCodec(source);
+ const setOnly=(owner:Schema,required=false)=>{
+  if(owner.maxItems===0)throw Error('KEYED_ROLE_WRITE_POLICY');
+  for(const row of owner.items!.anyOf??[owner.items!]){
+   const write=row.properties!.write,operation=write.items!.properties!.operation;
+   if(!operation.enum?.includes('SET'))throw Error('KEYED_ROLE_WRITE_POLICY');
+   write.minItems=1;operation.enum=['SET'];
+  }
+  if(required){owner.minItems=1;owner.maxItems=1;}
+ };
+ if(keyedInitialEventOperationRequired(input))for(const owner of Object.values(ownerPolicies))if(owner.maxItems!==0)setOnly(owner);
+ const roleClear=keyedRelativeMonthRoleTransitionClearRequired(input);
+ if(roleClear){
+  if(keyedSameDayEventRelationRequired(input))throw Error('KEYED_ROLE_CLEAR_POLICY');
+  const reminder=ownerPolicies.reminderDate,event=ownerPolicies.eventDate;
+  if(!reminder||!event||reminder.maxItems===0)throw Error('KEYED_ROLE_CLEAR_POLICY');
+  const clear=(reminder.items!.anyOf??[reminder.items!]).filter(row=>{
+   const write=row.properties!.write,evidence=row.properties!.evidence.items!.enum;
+   return (write.minItems??0)===0&&evidence?.length&&evidence.every(code=>typeof code==='string'&&book.currentCodes.includes(code));
+  });
+  if(clear.length!==1)throw Error('KEYED_ROLE_CLEAR_POLICY');
+  reminder.items=structuredClone(clear[0]);reminder.minItems=1;reminder.maxItems=1;
+  reminder.items.properties!.write.minItems=0;reminder.items.properties!.write.maxItems=0;
+  setOnly(event,true);
+ }
+ const fixed=fixedEmptyCarrierCodec(source,roleClear?{preserveEmptyArrays:['changes.owners.reminderDate[].write']}:undefined);
  return {operations,ordered,codec:{schema:fixed.schema,pack:(raw:unknown)=>fixed.encode(pack(raw)) as Row,unpack:(raw:unknown)=>unpack(fixed.decode(raw))}};
 }
 export function keyedSmallComparisonSchema(input:ContextInput){return selected(input).codec.schema;}
