@@ -13,8 +13,8 @@ import {openAiComparisonAdmissionSchema} from './context-openai-admission-schema
 import {constrainComparisonDateSchema} from './context-comparison-date-schema';
 import {googleComparisonAdmissionSchema} from './context-google-admission-schema';
 
-export const GPT_MINI_COMPARISON=Object.freeze({model:'openai/gpt-5-mini',provider:'azure/swedencentral',maximumCostMicrounits:116759,maxInputTokens:12000,maxOutputTokens:3072,maxResponseBytes:32768,timeoutMs:45000,requireZdr:true,reasoning:true,promptPrice:.275,completionPrice:2.2});
-export const GPT_MINI_MEDIUM_COMPARISON=Object.freeze({...GPT_MINI_COMPARISON,reasoningEffort:'medium' as const,maximumCostMicrounits:119012,maxOutputTokens:4096,maxResponseBytes:65536,timeoutMs:45000});
+export const GPT_MINI_COMPARISON=Object.freeze({model:'openai/gpt-5-mini',provider:'azure/swedencentral',maximumCostMicrounits:116759,maxInputTokens:16000,maxOutputTokens:3072,maxResponseBytes:32768,timeoutMs:45000,requireZdr:true,reasoning:true,promptPrice:.275,completionPrice:2.2});
+export const GPT_MINI_MEDIUM_COMPARISON=Object.freeze({...GPT_MINI_COMPARISON,maxInputTokens:12000,reasoningEffort:'medium' as const,maximumCostMicrounits:119012,maxOutputTokens:4096,maxResponseBytes:65536,timeoutMs:45000});
 export const FLASH_COMPARISON=Object.freeze({model:'google/gemini-2.5-flash',provider:'google-ai-studio',maximumCostMicrounits:318413,maxInputTokens:12000,maxOutputTokens:1536,maxResponseBytes:32768,timeoutMs:30000,requireZdr:false,reasoning:false,promptPrice:.3,completionPrice:2.5});
 export const GPT41_COMPARISON=Object.freeze({model:'openai/gpt-4.1-mini',provider:'azure/swedencentral',maximumCostMicrounits:463637,maxInputTokens:12000,maxOutputTokens:1536,maxResponseBytes:32768,timeoutMs:30000,requireZdr:true,reasoning:false,promptPrice:.44,completionPrice:1.76});
 export const NANO54_COMPARISON=Object.freeze({model:'openai/gpt-5.4-nano',provider:'azure',maximumCostMicrounits:83840,maxInputTokens:12000,maxOutputTokens:3072,maxResponseBytes:32768,timeoutMs:30000,requireZdr:true,reasoning:true,promptPrice:.2,completionPrice:1.25});

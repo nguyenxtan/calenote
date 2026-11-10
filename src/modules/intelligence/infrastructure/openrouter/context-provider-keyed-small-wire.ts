@@ -20,6 +20,8 @@ import {isRetainedClosedRelationFieldUncertaintyAbsent,isInitialClocklessSeriesU
 import {keyedSingleNotificationCountAbsent} from './context-keyed-single-notification';
 import {keyedDailyCadenceRequired} from './context-keyed-daily-cadence';
 import {keyedQueryFactEvidenceCodes} from './context-keyed-query-evidence';
+import {keyedOwnerEvidenceRows} from './context-keyed-owner-evidence';
+import {keyedSameDayEventRelationRequired} from './context-keyed-same-day-relation';
 import {fixedEmptyCarrierCodec} from './context-fixed-empty-carriers';
 import {keyedMaterialDetailPrimary} from './context-keyed-material-detail';
 import {currentBurstTurnIndexes} from '../../../conversation/context-contract/burst-prompt';
@@ -121,6 +123,12 @@ function selected(input:ContextInput){
   if(!owner||!write||!value?.enum?.includes('DAILY')||!write.items?.properties?.operation.enum?.includes('SET'))throw Error('KEYED_DAILY_CADENCE_POLICY');
   owner.minItems=1;write.minItems=1;write.items.properties.operation.enum=['SET'];value.enum=['DAILY'];
  }
+ if(keyedSameDayEventRelationRequired(input)){
+  const owners=(source as Schema).properties!.changes.properties!.owners.properties!;
+  const owner=owners.eventRelation,write=owner?.items?.properties?.write,value=write?.items?.properties?.value;
+  if(!owner||!write||!value?.enum?.includes('INCLUDING_EVENT')||!write.items?.properties?.operation.enum?.includes('SET')||!owners.reminderDate)throw Error('KEYED_SAME_DAY_RELATION_POLICY');
+  owner.minItems=1;write.minItems=1;write.items.properties.operation.enum=['SET'];value.enum=['INCLUDING_EVENT'];owners.reminderDate.maxItems=0;
+ }
  for(const key of inactiveTables){const table=source.properties[key] as Schema;if(table.type!=='array'||table.maxItems!==0)throw Error('KEYED_INACTIVE_TABLE_POLICY');delete source.properties[key];source.required=source.required.filter(name=>name!==key);}
  const operation=source.properties.operation as {anyOf:Schema[]},operationCode=UNCERTAINTY_FIELD_WIRE_CODE_V3.operation;
  const issues=source.properties.uncertainties as Schema;
@@ -215,6 +223,8 @@ function selected(input:ContextInput){
   // authored typed issue travels separately into the same strict decoder.
   value.uncertainties=[];return {value,typedUncertainties};
  };
+ const ownerPolicies=(source as Schema).properties!.changes.properties!.owners.properties!;
+ for(const field of V3_SLOT_NAMES){const owner=ownerPolicies[field];if(owner&&owner.maxItems!==0)owner.items=keyedOwnerEvidenceRows(input,field,owner.items!,book);}
  const fixed=fixedEmptyCarrierCodec(source);
  return {operations,ordered,codec:{schema:fixed.schema,pack:(raw:unknown)=>fixed.encode(pack(raw)) as Row,unpack:(raw:unknown)=>unpack(fixed.decode(raw))}};
 }

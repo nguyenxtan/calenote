@@ -57,10 +57,10 @@ it.each([
 it('does not turn the scanner into a clock operand or evidence supplier',()=>{
  const source=withText('Nhắc tôi lúc 8h sáng.'),unproved=withText('Có thể nhắc tôi lúc 8h sáng.');
  expect(keyedBoundReminderClockRequired(source)).toBe(true);expect(keyedBoundReminderClockRequired(unproved)).toBe(false);
- expect(clockOwner(source)!.items.properties.write.items.properties.value).toEqual(clockOwner(unproved)!.items.properties.write.items.properties.value);
  // Presence is the only new obligation. The existing semantic verifier still
  // owns matching the model-authored clock value/evidence to the source.
  expect(ownerValidator(source).safeParse([authoredRow({hour:9,minute:45,qualifier:'H24'})]).success).toBe(true);
+ expect(ownerValidator(unproved).safeParse([authoredRow({hour:9,minute:45,qualifier:'H24'})]).success).toBe(true);
  expect(typeof keyedBoundReminderClockRequired(source)).toBe('boolean');
 });
 

@@ -37,7 +37,7 @@ describe("OpenRouter runtime configuration", () => {
     expect(config.vars).toMatchObject({AI_MODE:'privacy',OPENROUTER_PRIVACY_MODEL:'openai/gpt-5-mini',OPENROUTER_PRIVACY_PROVIDER:'azure/swedencentral',AI_TIMEOUT_MS:'45000',AI_MAX_OUTPUT_TOKENS:'3072',AI_MAX_PRIVACY_PRICE:'2.2',OWNER_DAILY_CALL_LIMIT:'50',OWNER_MONTHLY_COST_MICROUNITS:'500000',GLOBAL_DAILY_COST_MICROUNITS:'2000000'});
     expect(config.vars).not.toHaveProperty('OPENROUTER_API_KEY');expect(config.vars).not.toHaveProperty('OPENROUTER_FALLBACK_MODELS');expect(config.secrets.required).toContain('OPENROUTER_API_KEY');
     expect(parseKeyedContextRuntimeConfig(config.vars)).toEqual({status:'UNAVAILABLE'});
-    expect(parseKeyedContextRuntimeConfig({...config.vars,OPENROUTER_API_KEY:'synthetic-config-key'})).toMatchObject({status:'READY',model:'openai/gpt-5-mini',provider:'azure/swedencentral',budgetLimits:{ownerDailyFallbackLimit:50,ownerMonthlyCostMicrounits:500000,globalDailyCostMicrounits:2000000,maxInputTokens:12000,maxOutputTokens:3072,reservationInputTokenExposure:400000}});
+    expect(parseKeyedContextRuntimeConfig({...config.vars,OPENROUTER_API_KEY:'synthetic-config-key'})).toMatchObject({status:'READY',model:'openai/gpt-5-mini',provider:'azure/swedencentral',budgetLimits:{ownerDailyFallbackLimit:50,ownerMonthlyCostMicrounits:500000,globalDailyCostMicrounits:2000000,maxInputTokens:16000,maxOutputTokens:3072,reservationInputTokenExposure:400000}});
     expect(parseSemanticRuntimeConfig({...config.vars,OPENROUTER_API_KEY:'synthetic-config-key'})).toEqual({status:'UNAVAILABLE'});
   });
   it("allows tightening budgets and supplies the approved ceilings when omitted", () => {
