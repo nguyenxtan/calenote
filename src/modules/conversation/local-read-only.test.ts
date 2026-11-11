@@ -149,3 +149,14 @@ it.each([
  expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();
 });
 it.each(['đừng xem lịch hôm nay','mai có lịch gì rồi tạo nhắc gọi mẹ','nhắc tôi xem lịch hôm nay','"mai có lịch gì?"'])('rejects compound or mutation day query %s',text=>expect(localReadOnlyCommand(text)).toBeNull());
+
+it.each(['format ?', 'format', 'FORMAT?', 'format là gì?', 'format như thế nào?', 'cú pháp ?'])('answers syntax shorthand %s through the bound chat path without AI or draft writes',async text=>{
+ const h=harness(),service=createConversationService(h.deps);
+ h.deps.commandStore.findBoundContext=async()=>boundContext;
+ expect(localReadOnlyCommand(text)).toBe('HELP');
+ await processBoundChatMessage(localMessage(text),{store:h.deps.commandStore,keyring:h.deps.keyring,now:()=>receivedAt,reply:h.deps.reply,conversation:service});
+ expect(h.deps.reply).toHaveBeenCalledWith(expect.stringContaining('Không cần cú pháp cố định'));
+ expect(h.deps.gateway.prepare).not.toHaveBeenCalled();expect(h.deps.budgetStore.reservePaidCall).not.toHaveBeenCalled();
+ expect(h.deps.contextStore.load).not.toHaveBeenCalled();expect(h.deps.contextStore.save).not.toHaveBeenCalled();expect(h.deps.commandStore.createDraft).not.toHaveBeenCalled();expect(h.deps.seriesStore.propose).not.toHaveBeenCalled();
+});
+it.each(['nhắc tôi format máy tính', 'format rồi nhắc gọi mẹ', 'format ? nhắc lịch thi', 'đừng format', 'nếu format', '“format ?”', 'format; có'])('keeps non-help intent %s out of shorthand help',text=>expect(localReadOnlyCommand(text)).toBeNull());
